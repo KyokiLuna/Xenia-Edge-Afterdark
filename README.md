@@ -1,50 +1,91 @@
 <p align="center">
-    <a href="https://github.com/xenia-canary/xenia-canary/tree/canary_experimental/assets/icon">
-        <img height="256px" src="https://raw.githubusercontent.com/xenia-canary/xenia/master/assets/icon/256.png" />
-    </a>
-</p>
+  <img src="assets/icon/afterdark/generated/256.png" width="220" alt="Xenia Edge Afterdark logo — a luminous green X on a dark machined processor" />
+</p><h1 align="center">Xenia Edge Afterdark</h1>
+<p align="center"><strong>Rebuilding the Xbox 360 experience, not just running its games.</strong></p>
+<p align="center">
+  <a href="https://github.com/KyokiLuna/Xenia-Edge-Afterdark/releases">Releases</a> ·
+  <a href="#what-makes-afterdark-different">What changed</a> ·
+  <a href="#development-status">Development status</a> ·
+  <a href="#building-from-source">Build from source</a> ·
+  <a href="#contributing">Contributing</a>
+</p>[!IMPORTANT]
+Active development — V62 is available as a prerelease, not a stable release. The HDD gate checkpoint 62 is a Linux x86-64 testing build. This is an experimental emulator, and features described as goals or work in progress are not promises of current functionality.
 
-<h1 align="center">Xenia Edge - Xbox 360 Emulator</h1>
+What is Afterdark?
+Xenia Edge Afterdark is an independently maintained, experimental fork of Xenia Edge, itself built on the work of Xenia and Xenia Canary.
 
-Xenia Edge is yet another experimental fork of the Xenia emulator, originally based on [Xenia Canary](https://github.com/xenia-canary/xenia-canary). Edge builds have evolved far beyond Canary in many areas, starting from the UI and ranging to kernel emulation, networking, graphics backend features, JIT improvements, arm64 and macOS support, and many others. Exact differences are hard to pin down any longer due to how extensive they are and how much has been ported back into Canary over time to various degrees. In general Edge will run more games, and run them better, but this code is under active development and there are always regressions so YMMV. If something isn't working on Edge it's worth testing on Canary.
+Xenia Edge provides an extensive foundation of Xbox 360 CPU, GPU, kernel, user-interface, and networking emulation. Afterdark builds on that foundation with a more specific mission: reproduce the behavior of the Xbox 360 as a complete system, including its dashboard, Guide, storage, profiles, avatars, and eventually the services that games expect from the console.
 
-While there is no official compatibility tracker for Xenia Edge at the moment, all known games at least get to gameplay and should render more or less correctly and run at their target framerates or better. At least on sufficiently decent hardware (generally RTX 2xxx class and above). Some games require game-specific config changes, so make sure to check the [Canary compatibility page](https://github.com/xenia-canary/game-compatibility/issues) if something is wrong, the issue is likely already known and has a documented solution.
+This is not an official Xenia Edge release, a rename of Xenia Edge, or a Microsoft-affiliated project. The separate name and icon are intentional.
+What makes Afterdark different?
+Rather than presenting inherited Xenia Edge functionality as new work, these are the areas Afterdark is extending or prioritizing:
+Area	Afterdark direction
+Dashboard, Guide & XUI	Prioritize native Xbox 360 system UI behavior, controller/keyboard handoff, notifications, and correct return-to-title/dashboard lifecycles.
+HDD, content & profiles	Treat storage devices, content packages, local identities, gamer pictures, settings, and saves as persistent console systems rather than disconnected features.
+Avatars	Reconstruct the installed avatar resource and editing/rendering paths so dashboard, games, and local profiles agree on the same data.
+Xbox Live-like features	Work toward an independent, direct peer-to-peer social layer for friends, presence, messages, invites, sessions, parties, and voice; not access to Microsoft Xbox Live.
+XNA & system applications	Investigate correct XNA/Indie-game runtime loading and the system applications expected by the original console.
+Media & libraries	Develop the Xbox-style content/storage surfaces alongside host-side browsing and playback where the console contracts require them.
+Accuracy & performance	Fix underlying shared emulator behavior, measure regressions, and pursue constrained resource usage and Steam Deck-class performance without game-ID-specific hacks.
 
-## Status
 
-Build (Windows / Linux / macOS): [![CI](https://github.com/has207/xenia-edge/actions/workflows/CI.yml/badge.svg?branch=edge)](https://github.com/has207/xenia-edge/actions/workflows/CI.yml) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/cd506034fd8148309a45034925648499)](https://app.codacy.com/gh/has207/xenia-edge/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+Core rule: reproduce what the Xbox 360 does. Do not hide missing console behavior behind per-game shortcuts.
+Development status
+The project is built in staged, tested milestones. The [implementation roadmap](docs/research/17559-roadmap.md) and [gate/release policy](docs/research/17559-gate-releases.md) track the technical detail.
+Subsystem	Current state
+Guide / shared XUI & XAM foundation	Locally tested on Linux; remaining native scenes and service-dependent behavior still require integration.
+HDD, local profiles & saves	In progress. Local checkpoint testing includes creating a profile, reopening it, and retaining profile data across restart. The combined HDD gate is not finished.
+Avatar system	Stock appearance/preview data is present in local profile work; full 3D rendering, editing, and game consumption remain unfinished.
+XNA / Xbox Live Indie Games	Future integration and validation work; not a completed Afterdark feature.
+Direct P2P social / Live replacement	Planned and under research; not a working public Xbox Live replacement.
+Media, remaining system apps & online-service compatibility	Later milestones, dependent on the system foundation.
+Performance and broader compatibility	Ongoing research and regression testing; no game-wide FPS or compatibility guarantee.
 
-Releases
---------
-[Latest](https://github.com/has207/xenia-edge/releases/latest) ◦ [All](https://github.com/has207/xenia-edge/releases)
 
-FAQ
----
+The [V62 checkpoint notes](docs/research/17559-hdd-profile-checkpoint-v62.md) document Linux tests including local profile persistence and Call of Duty: Black Ops storage/control settings. V62 is now published as a public prerelease. The combined HDD gate remains unfinished; publishing a checkpoint does not make it stable.
+Project priorities
+- Console-first correctness: implement shared Xbox 360 interfaces and preserve authentic behavior, including failure cases.
+- Reliable persistent state: protect profiles, saves, installed content, and system files from regressions.
+- Measurable efficiency: keep memory and CPU/GPU overhead under discipline, with Steam Deck-oriented performance as a development target — not a proven promise for every game.
+- Independent networking: pursue direct peer connections without pretending to authenticate against Microsoft services.
+- No game-specific camouflage: prefer fixes that explain and repair the actual emulated system contract.
+Platforms & releases
+Available prerelease: HDD gate checkpoint 62 (V62)
+V62 is an experimental Linux x86-64 checkpoint for testing, not a stable release.
+- V62 prerelease page
+- Linux x86-64 AppImage
+- Matching source.zip
+- [V62 testing notes and SHA-256 hashes](docs/research/17559-hdd-profile-checkpoint-v62.md)
+Locally reported/tested behaviors include BO1 automatic storage selection, controls persisting across restarts, a corrected title mode-switch/exit path, and creating and reopening a local profile using installed stock assets. This does not establish full avatar rendering, the entire HDD/storage system, macOS functionality, or the P2P social layer.
 
-- Q: How to use systemlink?<br>
-  A: Systemlink is enabled by default and will work without further configuration with other Edge instances on the same network. If that's all you care about you can stop reading here. To connect to retail consoles you need an instance of [Xlink Kai](https://www.teamxlink.co.uk/) running somewhere on your network, most likely the same PC you're running Xenia but it's not necessary. On RGH/JTAG consoles you have to disable the Nova plugin in Aurora as that replaces normal systemlink on the console. If you plan to connect to console or users over the internet you will need to set ```systemlink_transport = "kai"``` in the Network settings. For remote connections you will need to add them as a friend in the Kai Engine interface once you started it, and they must do the same, or all of you need to be in the same Kai arena for the game. No other configuration should be needed. It's possible to use Kai locally with multiple Edge instances but it requires setting "Allow remote DDS connections" in the Kai settings and pointing the other Edge instances at your machine using ```systemlink_kai_engine = $IP_OF_PC_RUNNING_KAI```, but again you don't *need* Kai for local Xenia-only connections, those will work without any configuration changes using the default ```systemlink_transport = "tunnel"```.
+No stable release is available. Future release targets include:
+- Linux: additional tested x86-64 AppImage builds with matching source archives.
+- macOS: a target platform, with native execution and packaging still requiring validation.
+Windows releases are not planned for Afterdark. Windows-related files inherited from Xenia Edge may remain in the source tree; their presence does not indicate an Afterdark Windows distribution.
 
-- Q: How to run original Xbox games?<br>
-  A: OG Xbox games are supported in the same manner they are on a real console, more precisely an RGH/JTAG console, through ```xefu```. You will want to search for how to run them there, the same information applies here. Start [here](https://consolemods.org/wiki/Xbox_360:Original_Xbox_Games_Compatibility_List). In other words, you'll likely want the "patched" xefu builds that remove restrictions on what games they support. Keep in mind xefu is not a single executable but a "family" where ```xbox.xex``` is the console's dispatcher that selects the appropriately whitelisted ```xefuN.xex```. These have all been community patched to run other games, so you'll want to figure out how it's done on RGH/JTAG setups and mostly follow those instructions. Do not expect compatibility/performance to be quite as good as a real console quite yet, it is still a work in progress, but many games should be playable.
+Find all future builds on the Afterdark Releases page. Do not use upstream Xenia Edge release links as Afterdark downloads.
+Building from source
+For developers comfortable with an unstable work-in-progress checkout:
+git clone --recurse-submodules https://github.com/KyokiLuna/Xenia-Edge-Afterdark.git
+cd Xenia-Edge-Afterdark
+./xb slang
+./xb setup
+./xb build --config=release
+The project has substantial system dependencies. Read [the build prerequisites](docs/building.md) and inspect the [Linux build workflow](.github/workflows/build.yml). Some inherited documentation may still refer to the upstream repository; use this fork when checking out Afterdark.
 
-- Q: How to run Xbox Live Indie (XBLIG) games?<br>
-  A: XBLIG titles require an XNA runtime and launcher. The launcher is available in the system update you can download from MS when choosing the USB Update option [direct link](https://www.xbox.com/system-update-usb). Unzip and pull out ```Xna_TitleLauncher.xex``` and place it in its own directory (this step is important). Then add it to the library by running it with Edge, it will complain about a missing update but you want to do this so that it's added to the game list. As for the update, you will need to get it the same place you find XBLIG titles themselves, it contains the actual XNA runtime that's needed to launch them. Make sure to install the update file using ```Tools/Install Content...``` and confirm it shows up in the Content section of Xna_TitleLauncher. The titles are not proper game packages like everything else, and instead install as DLC content for the launcher, so they won't show up as individual games in the game list (for now). When you start the launcher any XBLIG titles you have installed will be shown in a prompt for you to select which one to start. They are also listed in the Content tab on the launcher's info pane. This experience will probably improve in the future so no need to tell me how awkward it is. I know.
-  
-- Q: How to tell what options a particular game might need?<br>
-  A: Many games that are not running well by default require one or two simple config changes that make them (near) perfect. To find out, check the Compatibility section in game details pane. If there is an existing compatibility page there will be a link to Master, Canary, or both. Prefer information on the Canary page, you will often find the answer there.
+Build success is not proof that a particular game, platform, native dashboard path, or network service works.
+Contributing
+Contributions should make the emulator behave more like an Xbox 360. Useful changes reproduce, document, or test an actual console interface or shared behavior. Please avoid title-ID conditionals, arbitrary compatibility hacks, fabricated service success, and changes that trade away correct state or lifecycle behavior to make one test pass.
 
-- Q: Why are translations into language X so bad?<br>
-  A: They're AI-generated, if you speak the language and want to help edit the relevant .po file in the assets directory and submit it. If you don't know how to use git then just open a bug and attach the fixed .po file. Best way to edit those is with a program called Poedit. Or just open a bug and tell me what translation is bad and how to improve it.
+Before proposing a change, provide a reproducible case, the console/system behavior being modeled, and relevant regression checks. Keep changes reviewable and follow the [existing contribution guide](.github/CONTRIBUTING.md) and [style guide](docs/style_guide.md). Do not submit information derived from Microsoft XDKs.
 
-- Q: Should I use the Windows build with wine/proton on Linux?<br>
-  A: The native build for Linux is quite competitive with Windows now and is recommended over wine/proton.
+Issues should include a concise reproduction, host OS, build/commit identity, expected versus actual behavior, and logs when useful. Do not upload copyrighted games, system binaries, private profile data, or credentials.
+Credits, licensing & artwork
+Afterdark depends on years of research and engineering by the original Xenia, Xenia Canary, and Xenia Edge contributors. Credit belongs to those projects for the functionality this fork inherits.
 
-- Q: Why is macOS build not as capable as Windows / Linux?<br>
-  A: macOS is the newest port, with a completely different CPU and GPU backends that have not had nearly the amount of testing of the other platforms. Many games will have issues on macOS that run and render fine on Windows and Linux. This is working as intended for now. No need to tell me about issues you find with the macOS port. I know.
+Source code is provided under the repository’s 3-clause BSD license, with third-party components retaining their own licenses.
 
-- Q: Can you add ARM64 Linux or Windows builds?<br>
-  A: Yes, and I choose not to, there is no need to send me PRs or requests for these builds. They will be made available when I'm ready to support them, in the meantime you can build from source if you really want to run them.
-  
-- Q: Will you accept donations of money or games/hardware for testing?<br>
-  A: No, this project is strictly a hobby and I would like to keep it that way. I pay for all games/hardware I test out of my own pocket and do not want to receive any compensation for my work on Xenia.
+The distinctive Afterdark icon adapts the existing Xenia/Edge artwork and is documented separately under CC BY-SA 4.0. See the [artwork credits and license](assets/icon/afterdark/README.md), icon license, and [source/provenance notes](assets/icon/afterdark/PROVENANCE.json).
 
+No Xbox 360 game, dashboard, firmware, user account, or Microsoft service is included or provided by this repository.
+<p align="center"><strong>Xenia Edge Afterdark</strong><br />Console behavior first. Everything else follows.</p>

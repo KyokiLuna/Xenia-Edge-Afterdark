@@ -20,8 +20,10 @@
 #include <vector>
 
 #include "xenia/base/byte_order.h"
+#include "xenia/base/host_storage.h"
 #include "xenia/base/math.h"
 #include "xenia/vfs/devices/host_path_device.h"
+#include "xenia/vfs/devices/null_device.h"
 #include "xenia/vfs/devices/stfs_xbox.h"
 #include "xenia/vfs/devices/xcontent_container_device.h"
 #include "xenia/vfs/entry.h"
@@ -540,7 +542,7 @@ TEST_CASE("Host path entry moves into the directory it is renamed into",
   std::filesystem::remove_all(dir);
 }
 
-TEST_CASE("Host path device reports the space of the host volume",
+TEST_CASE("Host path device reports host volume space with its allowance",
           "[vfs_space]") {
   const std::filesystem::path dir =
       std::filesystem::temp_directory_path() /
@@ -566,8 +568,14 @@ TEST_CASE("Host path device reports the space of the host volume",
 
     REQUIRE(total == units(before.capacity));
     // Other processes can move the free space between the queries.
-    REQUIRE(available >= units(std::min(before.available, after.available)));
-    REQUIRE(available <= units(std::max(before.available, after.available)));
+    const auto reserve = device.storage_space().reserve_bytes;
+    auto usable = [&](uintmax_t bytes) {
+      return bytes > reserve ? bytes - reserve : 0;
+    };
+    REQUIRE(available >=
+            units(usable(std::min(before.available, after.available))));
+    REQUIRE(available <=
+            units(usable(std::max(before.available, after.available))));
   }
 
   std::filesystem::remove_all(dir);
@@ -787,12 +795,17 @@ TEST_CASE("STFS package mounted from its host file or another device",
     REQUIRE_FALSE(device->Initialize());
   }
 
-  HostPathDevice disc("\\Device\\Disc", temporary.path, true);
-  REQUIRE(disc.Initialize());
+  // Nested readers retain their actual parent Device. A stack-local parent
+  // cannot provide File::retained_device(), unlike a real registered mount.
+  VirtualFileSystem parents;
+  auto disc = std::make_unique<HostPathDevice>(
+      "\\Device\\Disc", temporary.path, true);
+  REQUIRE(disc->Initialize());
+  REQUIRE(parents.RegisterDevice(std::move(disc)));
 
   SECTION("From a file on another device") {
     auto device = XContentContainerDevice::CreateContentDevice(
-        "\\Device\\Package", disc.ResolvePath("package"));
+        "\\Device\\Package", parents.ResolvePath("\\Device\\Disc\\package"));
     REQUIRE(device);
     REQUIRE(device->Initialize());
     REQUIRE(read(*device, "icon.png") == package.icon);
@@ -801,14 +814,14 @@ TEST_CASE("STFS package mounted from its host file or another device",
 
   SECTION("A file on another device that ends early does not mount") {
     auto device = XContentContainerDevice::CreateContentDevice(
-        "\\Device\\Package", disc.ResolvePath("short"));
+        "\\Device\\Package", parents.ResolvePath("\\Device\\Disc\\short"));
     REQUIRE(device);
     REQUIRE_FALSE(device->Initialize());
   }
 
   SECTION("A directory on another device is not a package") {
     REQUIRE_FALSE(XContentContainerDevice::CreateContentDevice(
-        "\\Device\\Package", disc.ResolvePath("dir")));
+        "\\Device\\Package", parents.ResolvePath("\\Device\\Disc\\dir")));
   }
 }
 
@@ -876,3 +889,277 @@ TEST_CASE("Host deletion waits for the last open handle", "[host_file]") {
 }
 
 }  // namespace xe::vfs::test
+
+#if !XE_PLATFORM_WIN32
+namespace xe::vfs::test {
+namespace {
+struct MountedRootFileCloser {
+  void operator()(File* file) const {
+    if (file) file->Destroy();
+  }
+};
+using MountedRootFile = std::unique_ptr<File, MountedRootFileCloser>;
+
+struct MountedRootFixture {
+  const std::filesystem::path path =
+      std::filesystem::temp_directory_path() /
+      ("xenia-vfs-mount-root-" +
+       std::to_string(std::chrono::steady_clock::now()
+                          .time_since_epoch().count()));
+  VirtualFileSystem fs;
+  Device* volume = nullptr;
+  Entry* root = nullptr;
+  static constexpr const char* kVolume = "\\Device\\Harddisk0\\Partition1";
+
+  explicit MountedRootFixture(bool legacy_partition_placeholder = false) {
+    REQUIRE(std::filesystem::create_directories(path / "hdd" / "Cache"));
+    std::ofstream(path / "hdd" / "Cache" / "child.bin") << "cache";
+    auto raw = legacy_partition_placeholder
+                   ? std::make_unique<NullDevice>(
+                         "\\Device\\Harddisk0",
+                         std::initializer_list<std::string>{
+                             "\\Partition0", "\\Cache0", "\\Partition1"})
+                   : std::make_unique<NullDevice>(
+                         "\\Device\\Harddisk0",
+                         std::initializer_list<std::string>{"\\Partition0",
+                                                            "\\Cache0"});
+    REQUIRE(raw->Initialize());
+    REQUIRE(fs.RegisterDevice(std::move(raw)));
+    volume = Mount(kVolume, path / "hdd", false);
+    root = volume->ResolvePath("");
+    REQUIRE(root);
+    REQUIRE(fs.RegisterSymbolicLink("HDD:", kVolume));
+  }
+  ~MountedRootFixture() {
+    fs.Clear();
+    std::error_code error;
+    std::filesystem::remove_all(path, error);
+  }
+  Device* Mount(std::string_view name, const std::filesystem::path& host,
+                bool read_only) {
+    std::error_code error;
+    auto storage = filesystem::HostStorageRoot::Open(host, read_only, error, 0);
+    REQUIRE(storage);
+    auto device = std::make_unique<HostPathDevice>(
+        name, host, read_only, false, "FATX", std::move(storage));
+    REQUIRE(device->Initialize());
+    auto* result = device.get();
+    REQUIRE(fs.RegisterDevice(std::move(device)));
+    return result;
+  }
+  MountedRootFile Open(Entry* relative_to, std::string_view name,
+                       FileDisposition disposition, uint32_t access,
+                       X_STATUS expected, bool directory = true,
+                       bool non_directory = false,
+                       FileAction expected_action = FileAction::kOpened) {
+    File* raw = nullptr;
+    FileAction action = FileAction::kSuperseded;
+    const auto status = fs.OpenFile(relative_to, name, disposition, access,
+                                    directory, non_directory, &raw, &action);
+    MountedRootFile file(raw);
+    REQUIRE(status == expected);
+    if (expected == X_STATUS_SUCCESS) {
+      REQUIRE(file);
+      CHECK(action == expected_action);
+    } else {
+      CHECK_FALSE(file);
+      if (expected == X_STATUS_OBJECT_NAME_COLLISION) {
+        CHECK(action == FileAction::kExists);
+      }
+    }
+    return file;
+  }
+};
+}  // namespace
+
+TEST_CASE("Exact folder roots admit NT and alias names with trailing separators",
+          "[vfs][mounted_root]") {
+  MountedRootFixture f;
+  const std::array<std::string, 7> paths{
+      f.kVolume, std::string(f.kVolume) + "\\",
+      std::string(f.kVolume) + "\\\\", "HDD:", "HDD:\\",
+      "\\??\\hdd:\\", "\\DosDevices\\HDD:\\"};
+  for (const auto& path : paths) {
+    CAPTURE(path);
+    auto file = f.Open(nullptr, path, FileDisposition::kOpen,
+                       FileAccess::kGenericRead, X_STATUS_SUCCESS);
+    CHECK(file->entry() == f.root);
+    CHECK(file->retained_device().get() == f.volume);
+  }
+  auto existing = f.Open(nullptr, f.kVolume, FileDisposition::kOpenIf,
+                         FileAccess::kFileReadData, X_STATUS_SUCCESS);
+  CHECK(existing->entry() == f.root);
+  auto child = f.Open(nullptr, std::string(f.kVolume) + "\\Cache\\child.bin",
+                      FileDisposition::kOpen, FileAccess::kGenericRead,
+                      X_STATUS_SUCCESS, false, true);
+  std::array<uint8_t, 5> data{};
+  size_t count = 0;
+  CHECK(child->ReadSync(data, 0, &count) == X_STATUS_SUCCESS);
+  CHECK(count == data.size());
+  CHECK(std::string(data.begin(), data.end()) == "cache");
+}
+
+TEST_CASE("Folder roots do not require a guest parent placeholder",
+          "[vfs][mounted_root]") {
+  MountedRootFixture f;
+  REQUIRE(std::filesystem::create_directory(f.path / "standalone"));
+  auto* standalone = f.Mount("\\Device\\Standalone", f.path / "standalone", false);
+  auto file = f.Open(nullptr, "\\Device\\Standalone\\", FileDisposition::kOpen,
+                     FileAccess::kFileReadData, X_STATUS_SUCCESS);
+  CHECK(file->entry()->device() == standalone);
+  // The normal HDD fixture above also proves a root under a NullDevice,
+  // unlike the existing nested-host-folder test.
+  CHECK(f.root->parent() == nullptr);
+  CHECK(f.fs.ResolvePath("\\Device\\Harddisk0")->device() != f.volume);
+}
+
+TEST_CASE("Creating an existing folder root reports a collision",
+          "[vfs][mounted_root]") {
+  MountedRootFixture f;
+  for (const auto& path : {std::string(f.kVolume),
+                           std::string(f.kVolume) + "\\", std::string("HDD:"),
+                           std::string("HDD:\\")}) {
+    CAPTURE(path);
+    auto file = f.Open(nullptr, path, FileDisposition::kCreate,
+                       FileAccess::kFileReadData,
+                       X_STATUS_OBJECT_NAME_COLLISION);
+    CHECK(f.fs.ResolvePath(f.kVolume) == f.root);
+    CHECK(std::filesystem::exists(f.path / "hdd" / "Cache" / "child.bin"));
+  }
+}
+
+TEST_CASE("Replacing a mounted or handle-relative root never destroys it",
+          "[vfs][mounted_root]") {
+  MountedRootFixture f;
+  for (auto disposition : {FileDisposition::kSuperscede,
+                            FileDisposition::kOverwrite,
+                            FileDisposition::kOverwriteIf}) {
+    CAPTURE(int(disposition));
+    for (const auto& path : {std::string(f.kVolume),
+                             std::string(f.kVolume) + "\\", std::string("HDD:"),
+                             std::string("HDD:\\")}) {
+      CAPTURE(path);
+      auto file = f.Open(nullptr, path, disposition, FileAccess::kFileReadData,
+                         X_STATUS_ACCESS_DENIED);
+    }
+    auto file = f.Open(f.root, "", disposition, FileAccess::kFileReadData,
+                       X_STATUS_ACCESS_DENIED);
+    CHECK(f.fs.ResolvePath(f.kVolume) == f.root);
+    CHECK(std::filesystem::is_directory(f.path / "hdd"));
+    CHECK(filesystem::ReadAllText(f.path / "hdd" / "Cache" / "child.bin") ==
+          "cache");
+  }
+}
+
+TEST_CASE("Read-only folder roots reject requested write rights without downgrade",
+          "[vfs][mounted_root]") {
+  MountedRootFixture f;
+  REQUIRE(std::filesystem::create_directory(f.path / "readonly"));
+  auto* readonly = f.Mount("\\Device\\ReadOnly", f.path / "readonly", true);
+  REQUIRE(f.fs.RegisterSymbolicLink("RO:", "\\Device\\ReadOnly"));
+  auto read = f.Open(nullptr, "RO:\\", FileDisposition::kOpen,
+                     FileAccess::kFileReadData, X_STATUS_SUCCESS);
+  CHECK(read->entry()->device() == readonly);
+  for (uint32_t rights : {FileAccess::kGenericWrite, FileAccess::kGenericAll,
+                           FileAccess::kFileWriteData,
+                           FileAccess::kFileAppendData,
+                           FileAccess::kFileWriteAttributes}) {
+    CAPTURE(rights);
+    for (const auto* name : {"\\Device\\ReadOnly", "RO:", "RO:\\"}) {
+      auto denied = f.Open(nullptr, name, FileDisposition::kOpen, rights,
+                           X_STATUS_ACCESS_DENIED);
+    }
+    auto denied = f.Open(read->entry(), "", FileDisposition::kOpen, rights,
+                         X_STATUS_ACCESS_DENIED);
+  }
+  CHECK(std::filesystem::is_empty(f.path / "readonly"));
+}
+
+TEST_CASE("Root-relative reopening and child lookup keep the supplied tree",
+          "[vfs][mounted_root]") {
+  MountedRootFixture f;
+  auto root = f.Open(nullptr, "HDD:", FileDisposition::kOpen,
+                     FileAccess::kFileReadData, X_STATUS_SUCCESS);
+  auto reopened = f.Open(root->entry(), "", FileDisposition::kOpen,
+                         FileAccess::kFileReadData, X_STATUS_SUCCESS);
+  CHECK(reopened->entry() == root->entry());
+  auto child = f.Open(root->entry(), "Cache\\child.bin", FileDisposition::kOpen,
+                      FileAccess::kFileReadData, X_STATUS_SUCCESS, false, true);
+  CHECK(child->entry()->device() == f.volume);
+  auto denied = f.Open(root->entry(), "HDD:", FileDisposition::kOpen,
+                       FileAccess::kFileReadData, X_STATUS_OBJECT_NAME_NOT_FOUND);
+  auto not_file = f.Open(nullptr, "HDD:", FileDisposition::kOpen,
+                         FileAccess::kFileReadData, X_STATUS_FILE_IS_A_DIRECTORY,
+                         false, true);
+}
+
+TEST_CASE("An opened mounted root pins its device and blocks normal unmount",
+          "[vfs][mounted_root]") {
+  MountedRootFixture f;
+  auto file = f.Open(nullptr, std::string(f.kVolume) + "\\",
+                     FileDisposition::kOpen, FileAccess::kFileReadData,
+                     X_STATUS_SUCCESS);
+  std::weak_ptr<Device> owner = file->retained_device();
+  REQUIRE_FALSE(owner.expired());
+  CHECK_FALSE(f.fs.UnregisterDevice(f.kVolume));
+  CHECK(f.fs.ResolvePath(f.kVolume) == file->entry());
+  f.fs.Clear();
+  CHECK_FALSE(owner.expired());
+  CHECK(file->entry()->device() == file->retained_device().get());
+  file.reset();
+  CHECK(owner.expired());
+}
+
+TEST_CASE("An exact folder mount supersedes a legacy raw placeholder",
+          "[vfs][mounted_root]") {
+  MountedRootFixture f(true);
+  auto* raw_parent = f.fs.ResolvePath("\\Device\\Harddisk0");
+  REQUIRE(raw_parent);
+  auto* placeholder = raw_parent->GetChild("Partition1");
+  REQUIRE(placeholder);
+  REQUIRE(dynamic_cast<NullDevice*>(placeholder->device()));
+  REQUIRE(placeholder != f.root);
+  for (const auto& path : {std::string(f.kVolume),
+                           std::string(f.kVolume) + "\\", std::string("HDD:"),
+                           std::string("HDD:\\")}) {
+    CAPTURE(path);
+    REQUIRE(f.fs.ResolvePath(path) == f.root);
+    auto file = f.Open(nullptr, path, FileDisposition::kOpen,
+                       FileAccess::kFileReadData, X_STATUS_SUCCESS);
+    CHECK(file->entry() == f.fs.ResolvePath(path));
+    CHECK(file->retained_device().get() == f.volume);
+  }
+  // Namespace authority does not delete or upgrade the old raw tree itself.
+  CHECK(raw_parent->GetChild("Partition1") == placeholder);
+  auto raw = f.Open(nullptr, "\\Device\\Harddisk0\\Partition0",
+                    FileDisposition::kOpen, FileAccess::kFileReadData,
+                    X_STATUS_SUCCESS, false, true);
+  CHECK(raw->entry() == raw_parent->GetChild("Partition0"));
+  CHECK(raw->entry()->device() == raw_parent->device());
+  // A relative handle still names its supplied raw tree, not global mounts.
+  auto relative = f.Open(raw_parent, "Partition1", FileDisposition::kOpen,
+                         FileAccess::kFileReadData, X_STATUS_SUCCESS, false,
+                         true);
+  CHECK(relative->entry() == placeholder);
+}
+
+TEST_CASE("Raw placeholders and missing partitions do not become folder roots",
+          "[vfs][mounted_root]") {
+  MountedRootFixture f;
+  auto raw = f.Open(nullptr, "\\Device\\Harddisk0\\Partition0",
+                    FileDisposition::kOpen, FileAccess::kFileReadData,
+                    X_STATUS_SUCCESS, false, true);
+  CHECK(dynamic_cast<NullDevice*>(raw->entry()->device()) != nullptr);
+  std::array<uint8_t, 1> byte{0xA5};
+  size_t count = 77;
+  CHECK(raw->ReadSync(byte, 0, &count) == X_STATUS_NOT_SUPPORTED);
+  CHECK(count == 0);
+  CHECK(byte[0] == 0xA5);
+  auto missing = f.Open(nullptr, "\\Device\\Harddisk0\\Partition77\\",
+                        FileDisposition::kOpen, FileAccess::kFileReadData,
+                        X_STATUS_OBJECT_NAME_NOT_FOUND);
+  CHECK(f.fs.ResolvePath("\\Device\\Harddisk0\\Partition77") == nullptr);
+  CHECK_FALSE(std::filesystem::exists(f.path / "hdd" / "Partition77"));
+}
+}  // namespace xe::vfs::test
+#endif  // !XE_PLATFORM_WIN32

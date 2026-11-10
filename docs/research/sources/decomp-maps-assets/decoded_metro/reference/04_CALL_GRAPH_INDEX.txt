@@ -1,0 +1,50 @@
+Ghidra function and call graph
+==============================
+
+functions.tsv and calls.tsv cover every successfully analyzed unique image/header pair.
+Identical packaged/loose images share a program; aliases are in ghidra_programs.tsv.
+Indirect unresolved calls, dynamic code and missed functions remain outside static coverage.
+186018 functions; 416884 call/tail-jump references; 54204 string references.
+
+AvatarEditor.xex: analyzed; functions=7785; program=b0c342082476_AvatarEditor.xex
+BiometricSetup.xex: analyzed; functions=6454; program=28ed96cca55b_BiometricSetup.xex
+Dash.FieldCalibration.lex: analyzed; functions=845; program=a2bead48fb77_Dash.FieldCalibration.lex
+Dash.Kiosk.lex: analyzed; functions=748; program=a798bb9567c7_Dash.Kiosk.lex
+Dash.NetworkStorage.lex: analyzed; functions=348; program=e0da9981295d_Dash.NetworkStorage.lex
+Dash.NuiTroubleshooter.lex: analyzed; functions=1152; program=0681e158e576_Dash.NuiTroubleshooter.lex
+Dash.Search.xex: analyzed; functions=2098; program=c789b81a8369_Dash.Search.xex
+Guide.AccountRecovery.xex: analyzed; functions=2361; program=1a558300d9ea_Guide.AccountRecovery.xex
+Guide.AvatarMiniCreator.xex: analyzed; functions=270; program=3baf79127906_Guide.AvatarMiniCreator.xex
+Guide.CSVTrans.xex: analyzed; functions=184; program=1023bdddf98b_Guide.CSVTrans.xex
+Guide.Fitness.xex: analyzed; functions=339; program=66a929dbb69a_Guide.Fitness.xex
+Guide.NuiTroubleshooter.xex: analyzed; functions=1868; program=78fdbdf37b5d_Guide.NuiTroubleshooter.xex
+Guide.TFA.xex: analyzed; functions=1974; program=86344162a452_Guide.TFA.xex
+PlayReady.xex: analyzed; functions=1610; program=8484c2145581_PlayReady.xex
+Title.Zune.xex: analyzed; functions=47094; program=61fd4d045147_Title.Zune.xex
+Xam.Community.xex: analyzed; functions=1215; program=3221d9b0eb11_Xam.Community.xex
+Xam.WordRegister.xex: analyzed; functions=216; program=93761ac7bb6d_Xam.WordRegister.xex
+Xna_TitleLauncher.xex: analyzed; functions=3060; program=4f30fcbba42d_Xna_TitleLauncher.xex
+dash.ClosedCaptionDll.xex: analyzed; functions=7915; program=7fbe943628cd_dash.ClosedCaptionDll.xex
+dash.ExtraAVCodecs.xex: analyzed; functions=2854; program=d6e852332fbd_dash.ExtraAVCodecs.xex
+dash.ExtraAVCodecs2.xex: analyzed; functions=1339; program=8f0c732a648c_dash.ExtraAVCodecs2.xex
+dash.natalpregame.xex: analyzed; functions=283; program=561aaf8bf09c_dash.natalpregame.xex
+dash.xex: analyzed; functions=31056; program=e335652273df_dash.xex
+dashnui.xex: analyzed; functions=6287; program=57cd12138f34_dashnui.xex
+natalsu.xex: analyzed; functions=124; program=0b25450a0e60_natalsu.xex
+nuihud.xex: analyzed; functions=270; program=e34bb6f36aed_nuihud.xex
+packages/su20076000_00000000/$flash_bootanim.xex: analyzed; functions=1004; program=2b74eaeae4dd__flash_bootanim.xex
+packages/su20076000_00000000/$flash_createprofile.xex: analyzed; functions=379; program=5a0e4fa7a221__flash_createprofile.xex
+packages/su20076000_00000000/$flash_dash.xex: analyzed; functions=31056; program=e7f6fdec2c4b__flash_dash.xex
+packages/su20076000_00000000/$flash_deviceselector.xex: analyzed; functions=248; program=c9065b410eab__flash_deviceselector.xex
+packages/su20076000_00000000/$flash_gamerprofile.xex: analyzed; functions=1029; program=236435bedc3f__flash_gamerprofile.xex
+packages/su20076000_00000000/$flash_hud.xex: analyzed; functions=930; program=5b103626df33__flash_hud.xex
+packages/su20076000_00000000/$flash_mfgbootlauncher.xex: analyzed; functions=314; program=26607eb44d82__flash_mfgbootlauncher.xex
+packages/su20076000_00000000/$flash_minimediaplayer.xex: analyzed; functions=469; program=e2998e3a4868__flash_minimediaplayer.xex
+packages/su20076000_00000000/$flash_signin.xex: analyzed; functions=638; program=ea0058886c9f__flash_signin.xex
+packages/su20076000_00000000/$flash_systemupdate.xex: analyzed; functions=2380; program=55b48149a86e__flash_systemupdate.xex
+packages/su20076000_00000000/$flash_systemupdate2pre.xex: analyzed; functions=2424; program=70e715a9fe2b__flash_systemupdate2pre.xex
+packages/su20076000_00000000/$flash_updater.xex: analyzed; functions=249; program=37ac69e7c6bc__flash_updater.xex
+packages/su20076000_00000000/$flash_vk.xex: analyzed; functions=312; program=9685a4dbb60f__flash_vk.xex
+packages/su20076000_00000000/$flash_xam.xex: analyzed; functions=13941; program=342c8fdca6d4__flash_xam.xex
+packages/su20076000_00000000/$flash_ximecore.xex: analyzed; functions=573; program=aeea1bcb1d1c__flash_ximecore.xex
+packages/su20076000_00000000/$install_extender.xex: analyzed; functions=323; program=9f8ed8dc0c3d__install_extender.xex

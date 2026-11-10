@@ -1,0 +1,18 @@
+{
+  "module": "AvatarEditor.xex",
+  "program": "f335e4f4548c_AvatarEditor.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "7fd71785ad87390d0cdd0a6fb038b8915be58b6c8d0673c0f90754eecb0165cf",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x92000400",
+  "functions": 7532,
+  "calls": 14467,
+  "strings": 3745,
+  "string_xrefs": 1843,
+  "independent_sha256": "a4ab7968de238bce9a0f4c6695892d103a99b694759efb720441c8e62a9a0b95",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

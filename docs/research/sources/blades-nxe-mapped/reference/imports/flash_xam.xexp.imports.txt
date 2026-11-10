@@ -1,0 +1,5 @@
+Import libraries for $flash_xam.xexp
+xex_load_address=0x81870000
+
+  (id=0x7FC  version=0.0.48411.220  version_min=0.0.8.0  count=7148)
+

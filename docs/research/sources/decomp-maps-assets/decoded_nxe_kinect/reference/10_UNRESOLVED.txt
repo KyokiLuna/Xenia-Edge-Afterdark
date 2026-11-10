@@ -1,0 +1,83 @@
+Unresolved items and coverage limits
+====================================
+
+$flash_aac.xexp: No same-dashboard base matching filename, source version and load address
+$flash_bootanim.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_bootanim.xexp: Delta reconstruction rejected: Invalid reconstructed format header
+$flash_createprofile.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_createprofile.xexp: Delta reconstruction rejected: Invalid reconstructed format header
+$flash_dash.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_deviceselector.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_deviceselector.xexp: Delta reconstruction rejected: Invalid reconstructed format header
+$flash_gamerprofile.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_gamerprofile.xexp: Delta reconstruction rejected: Invalid reconstructed format header
+$flash_hud.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_hud.xexp: Delta reconstruction rejected: Invalid reconstructed format header
+$flash_mfgbootlauncher.xex: independent raw decoder error: java.lang.ArrayIndexOutOfBoundsException: Index 28672 out of bounds for length 28672
+$flash_mfgbootlauncher.xexp: Delta reconstruction rejected: Invalid reconstructed format header
+$flash_minimediaplayer.xexp: Delta reconstruction rejected: Invalid reconstructed format header
+$flash_nomni.xexp: No same-dashboard base matching filename, source version and load address
+$flash_nomnifwm.xexp: No same-dashboard base matching filename, source version and load address
+$flash_signin.xexp: Delta reconstruction rejected: Reconstructed load-address fields disagree
+$flash_systemupdate.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_systemupdate2pre.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_updater.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_updater.xexp: Delta reconstruction rejected: Reconstructed load-address fields disagree
+$flash_vk.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_vk.xexp: Delta reconstruction rejected: Invalid reconstructed format header
+$flash_xam.xex: independent raw decoder error: java.lang.ArrayIndexOutOfBoundsException
+$flash_xam.xexp: Delta reconstruction rejected: Invalid reconstructed format header
+$flash_ximecore.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+$flash_ximedic.xexp: No same-dashboard base matching filename, source version and load address
+$install_extender.xex: independent raw decoder error: java.lang.ArrayIndexOutOfBoundsException
+AvatarEditor.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+AvatarMiniCreator.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+BiometricSetup.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Dash.AttractionScreen.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Dash.FieldCalibration.lex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Dash.MP.Offline.lex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Dash.NuiTroubleshooter.lex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Guide.AvatarMiniCreator.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Guide.NuiTroubleshooter.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+LivePack.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Native static analysis cannot prove runtime behavior or recover all indirect calls.
+Opaque avatar/media/font payloads are retained as binary originals; format conversion is not claimed.
+Party.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+VMX128 instructions unsupported by Capstone limit the bounded IPC helper search.
+XMsgr.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Xam.Community.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Xam.LiveMessenger.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+Xam.WordRegister.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+XimeDicCh.xex: decoded non-PE payload retained intact; internal data/firmware format not identified
+Xna_TitleLauncher.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+dash.ExtraAVCodecs.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+dash.NuiFirstUse.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+dash.firstuse.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+dash.natalpregame.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+dash.nuihub.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+dashnui.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+feedback.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+friends.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+marketplace.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+natalsu.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+nuihud.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_aac.xexp: No same-dashboard base matching filename, source version and load address
+packages/su20076000_00000000/$flash_bootanim.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_createprofile.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_dash.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_deviceselector.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_gamerprofile.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_hud.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_mfgbootlauncher.xex: independent raw decoder error: java.lang.ArrayIndexOutOfBoundsException: Index 28672 out of bounds for length 28672
+packages/su20076000_00000000/$flash_nomni.xexp: No same-dashboard base matching filename, source version and load address
+packages/su20076000_00000000/$flash_nomnifwm.xexp: No same-dashboard base matching filename, source version and load address
+packages/su20076000_00000000/$flash_systemupdate.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_systemupdate2pre.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_updater.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_vk.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_xam.xex: independent raw decoder error: java.lang.ArrayIndexOutOfBoundsException
+packages/su20076000_00000000/$flash_ximecore.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_ximedic.xexp: No same-dashboard base matching filename, source version and load address
+packages/su20076000_00000000/$install_extender.xex: independent raw decoder error: java.lang.ArrayIndexOutOfBoundsException
+quickchat.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+runtime/v3.0/runtimehost.xex: 2 native pseudocode functions could not be decompiled

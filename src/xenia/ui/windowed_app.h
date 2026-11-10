@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -52,6 +53,10 @@ class WindowedApp {
   // Human-readable title; defaults to GetName(). Used by the wx app for the
   // wxApp name (drives wxConfig storage path) and as the initial frame title.
   virtual std::string_view GetTitle() const { return name_; }
+  // Optional host desktop identity for icon lookup and taskbar grouping.
+  // Separate from GetTitle()/GetName(), which retain configuration/log paths.
+  // An empty ID preserves the platform defaults for other applications.
+  virtual std::string_view GetDesktopId() const { return {}; }
   const std::string& GetPositionalOptionsUsage() const {
     return positional_options_usage_;
   }

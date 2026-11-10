@@ -17,12 +17,15 @@
 #include "xenia/emulator.h"
 #include "xenia/kernel/info/file.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
+#include "xenia/kernel/util/io_request_completion.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_ob.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
 #include "xenia/kernel/xevent.h"
 #include "xenia/kernel/xfile.h"
+#include "xenia/kernel/xstfs_device.h"
 #include "xenia/kernel/xiocompletion.h"
 #include "xenia/kernel/xsymboliclink.h"
 #include "xenia/kernel/xthread.h"
@@ -110,43 +113,69 @@ static bool CompletesAsync(XFile* file, uint32_t length, uint64_t byte_offset,
 
 // Runs |transfer|, which returns a status and fills in the bytes moved, then
 // reports the completion. A request that pends runs on an I/O worker.
-static X_STATUS SubmitRequest(const object_ref<XFile>& file,
-                              const object_ref<XEvent>& ev,
-                              uint32_t apc_routine, uint32_t apc_context,
-                              X_IO_STATUS_BLOCK* status_block,
-                              uint32_t status_block_address, bool pends,
-                              std::function<X_STATUS(uint32_t*)> transfer) {
+static X_STATUS SubmitRequest(
+    const object_ref<XFile>& file, const object_ref<XEvent>& ev,
+    uint32_t apc_routine, uint32_t apc_context, X_IO_STATUS_BLOCK* status_block,
+    uint32_t status_block_address, bool pends,
+    std::function<X_STATUS(uint32_t*)> transfer,
+    std::function<X_STATUS(X_STATUS, uint32_t)> publish_status = {},
+    util::InlineIoFailurePolicy inline_failure =
+        util::InlineIoFailurePolicy::kRejectWithoutCompletion) {
   auto thread = retain_object(XThread::GetCurrentThread());
+  bool pending_published = false;
+  if (pends && publish_status &&
+      inline_failure == util::InlineIoFailurePolicy::kCompleteAdmitted) {
+    // A checked pending-store failure is still a pre-admission rejection:
+    // neither the file nor supplied event has been reset yet.
+    const auto published = publish_status(X_STATUS_PENDING, 0);
+    if (XFAILED(published)) {
+      return published;
+    }
+    pending_published = true;
+  }
   // Cleared at issue, so a wait cannot return on an earlier completion.
   if (ev) {
     ev->Reset();
   }
   file->ResetWaitState();
   auto complete = [file, ev, thread, apc_routine, apc_context, status_block,
-                   status_block_address, transfer = std::move(transfer)](
-                      bool posted, bool cancelled) {
-    uint32_t bytes = 0;
-    X_STATUS status = cancelled ? X_STATUS_CANCELLED : transfer(&bytes);
-    // A failure the caller was not told PENDING for completes nothing.
-    if (!posted && XFAILED(status)) {
-      return status;
-    }
-    if (status_block) {
-      WriteIoStatus(status_block, status, bytes);
-    }
-    if (QueuesApc(apc_routine, apc_context)) {
-      QueueIoApc(thread.get(), apc_routine, apc_context, status_block_address);
-    }
-    file->NotifyCompletion(status, bytes, apc_context);
-    if (ev) {
-      ev->Set(KernelState::kIoDiskIncrement, false);
-    }
-    return status;
+                   status_block_address, transfer = std::move(transfer),
+                   publish_status = publish_status,
+                   inline_failure](bool posted, bool cancelled) {
+    return util::CompleteIoRequest(
+        posted, cancelled, inline_failure, transfer,
+        [publish_status, status_block](X_STATUS status, uint32_t bytes) {
+          if (publish_status) {
+            return publish_status(status, bytes);
+          }
+          if (status_block) {
+            WriteIoStatus(status_block, status, bytes);
+          }
+          return X_STATUS_SUCCESS;
+        },
+        [file, ev, thread, apc_routine, apc_context, status_block_address](
+            X_STATUS status, uint32_t bytes) {
+          if (QueuesApc(apc_routine, apc_context)) {
+            QueueIoApc(thread.get(), apc_routine, apc_context,
+                       status_block_address);
+          }
+          file->NotifyCompletion(status, bytes, apc_context);
+          if (ev) {
+            ev->Set(KernelState::kIoDiskIncrement, false);
+          }
+        });
   };
   if (pends) {
-    if (status_block) {
-      status_block->status = X_STATUS_PENDING;
-      status_block->information = 0;
+    if (!pending_published) {
+      if (publish_status) {
+        const auto published = publish_status(X_STATUS_PENDING, 0);
+        if (XFAILED(published)) {
+          return published;
+        }
+      } else if (status_block) {
+        status_block->status = X_STATUS_PENDING;
+        status_block->information = 0;
+      }
     }
     file->PostIo(thread.get(),
                  [complete = std::move(complete)](bool cancelled) {
@@ -783,16 +812,33 @@ DECLARE_XBOXKRNL_EXPORT1(NtQueryDirectoryFile, kFileSystem, kImplemented);
 
 dword_result_t NtFlushBuffersFile_entry(
     dword_t file_handle, pointer_t<X_IO_STATUS_BLOCK> io_status_block_ptr) {
-  auto file = kernel_state()->object_table()->LookupObject<XFile>(file_handle);
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  auto* kernel = kernel_state();
+  if (!kernel) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  auto file = kernel->object_table()->LookupObject<XFile>(file_handle);
   if (!file) {
     return X_STATUS_INVALID_HANDLE;
   }
-  // Writes reach the host as they run. On an async handle the flush queues
-  // behind the handle's pending requests, so it completes after them.
-  return SubmitRequest(file, nullptr, 0, 0, io_status_block_ptr,
-                       io_status_block_ptr.guest_address(),
-                       !file->is_synchronous(),
-                       [](uint32_t*) { return X_STATUS_SUCCESS; });
+  const auto status_address = io_status_block_ptr.guest_address();
+  auto* memory = kernel->memory();
+  if (!status_address ||
+      !util::GuestIoRangeValid(*memory, status_address,
+                               sizeof(X_IO_STATUS_BLOCK), true)) {
+    return X_STATUS_ACCESS_VIOLATION;
+  }
+  // Keep the existing per-handle request ordering and cancellation. The
+  // admitted operation now reports actual backend flush failure.
+  return SubmitRequest(
+      file, nullptr, 0, 0, nullptr, status_address, !file->is_synchronous(),
+      [file](uint32_t*) { return file->Flush(); },
+      [memory, status_address](X_STATUS status, uint32_t count) {
+        return util::WriteGuestIoStatus(*memory, status_address, status, count);
+      },
+      util::InlineIoFailurePolicy::kCompleteAdmitted);
 }
 DECLARE_XBOXKRNL_EXPORT1(NtFlushBuffersFile, kFileSystem, kImplemented);
 
@@ -865,81 +911,96 @@ dword_result_t FscSetCacheElementCount_entry(dword_t unk_0, dword_t unk_1) {
 }
 DECLARE_XBOXKRNL_EXPORT1(FscSetCacheElementCount, kFileSystem, kStub);
 
-struct X_DRIVE_GEOMETRY {
-  xe::be<uint32_t> sector_count;
-  xe::be<uint32_t> sector_size;
-};
-static_assert_size(X_DRIVE_GEOMETRY, 0x8);
-
-struct X_PARTITION_INFO {
-  xe::be<uint64_t> unk;
-  xe::be<uint64_t> total_size;
-};
-static_assert_size(X_PARTITION_INFO, 0x10);
-
-// todo: this should fill in the io status block and queue the apc
 dword_result_t NtDeviceIoControlFile_entry(
     dword_t handle, dword_t event_handle, dword_t apc_routine,
     dword_t apc_context, pointer_t<X_IO_STATUS_BLOCK> io_status_block,
     dword_t io_control_code, lpvoid_t input_buffer, dword_t input_buffer_len,
     lpvoid_t output_buffer, dword_t output_buffer_len) {
-  // Called by XMountUtilityDrive cache-mounting code
-  // (checks if the returned values look valid, values below seem to pass the
-  // checks)
-  constexpr uint32_t cache_size = 0xFF000;
-
-  if (io_control_code == X_IOCTL_DISK_GET_DRIVE_GEOMETRY) {
-    if (output_buffer_len < sizeof(X_DRIVE_GEOMETRY)) {
-      assert_always();
-      return X_STATUS_BUFFER_TOO_SMALL;
-    }
-    auto buffer = output_buffer.as<X_DRIVE_GEOMETRY*>();
-    buffer->sector_count = cache_size / 0x200;
-    buffer->sector_size = 0x200;  // 0x200, 0x1000, 0x4000
-  } else if (io_control_code == X_IOCTL_DISK_GET_PARTITION_INFO) {
-    if (output_buffer_len < sizeof(X_PARTITION_INFO)) {
-      assert_always();
-      return X_STATUS_BUFFER_TOO_SMALL;
-    }
-    auto buffer = output_buffer.as<X_PARTITION_INFO*>();
-    buffer->unk = 0;
-    buffer->total_size = cache_size;
-  } else if (io_control_code == X_IOCTL_CDROM_AUTHENTICATE_DISC) {
-    // The game in the drive is always an authentic disc.
-  } else {
-    XELOGD("NtDeviceIoControlFile(0x{:X}) - unhandled IOCTL!",
-           uint32_t(io_control_code));
-    assert_always();
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  auto* kernel = kernel_state();
+  if (!kernel) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  auto file = kernel->object_table()->LookupObject<XFile>(handle);
+  if (!file) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  auto event = kernel->object_table()->LookupObject<XEvent>(event_handle);
+  if (event_handle && !event) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  if (apc_routine && file->HasCompletionPort()) {
     return X_STATUS_INVALID_PARAMETER;
   }
-
-  return X_STATUS_SUCCESS;
+  const uint32_t code = io_control_code;
+  const auto layout = file->DescribeDeviceControl(code);
+  // This includes unmodeled raw-sector controls and optical authentication:
+  // a folder or arbitrary handle never acquires those capabilities by name.
+  if (!layout) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  const auto access = file->file()->CheckDeviceControlAccess(code);
+  if (XFAILED(access)) {
+    return access;
+  }
+  if (input_buffer_len != layout->input_bytes) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  if (output_buffer_len < layout->output_bytes) {
+    return X_STATUS_BUFFER_TOO_SMALL;
+  }
+  const uint32_t input_address = input_buffer.guest_address();
+  const uint32_t output_address = output_buffer.guest_address();
+  const uint32_t status_address = io_status_block.guest_address();
+  const uint32_t input_length = input_buffer_len;
+  const uint32_t output_length = output_buffer_len;
+  auto* memory = kernel->memory();
+  if (!status_address ||
+      !util::GuestIoRangeValid(*memory, status_address,
+                               sizeof(X_IO_STATUS_BLOCK), true) ||
+      !util::GuestIoRangeValid(*memory, input_address, input_length, false) ||
+      !util::GuestIoRangeValid(*memory, output_address, output_length, true)) {
+    return X_STATUS_ACCESS_VIOLATION;
+  }
+  return SubmitRequest(
+      file, event, apc_routine, apc_context, nullptr, status_address,
+      !file->is_synchronous(),
+      [file, code, input_address, input_length, output_address,
+       output_length](uint32_t* count) {
+        return file->DeviceControl(code, input_address, input_length,
+                                   output_address, output_length, count);
+      },
+      [memory, status_address](X_STATUS status, uint32_t count) {
+        return util::WriteGuestIoStatus(*memory, status_address, status, count);
+      },
+      util::InlineIoFailurePolicy::kCompleteAdmitted);
 }
-DECLARE_XBOXKRNL_EXPORT1(NtDeviceIoControlFile, kFileSystem, kStub);
+DECLARE_XBOXKRNL_EXPORT1(NtDeviceIoControlFile, kFileSystem, kImplemented);
 
 // cache: is a host folder mounted for every title, so no STFS volume is made
 // over a cache partition and the caller's device object stays as it was.
 dword_result_t StfsCreateDevice_entry(lpvoid_t params, dword_t params_size) {
-  if (params_size != 0x58) {
-    return X_STATUS_INVALID_PARAMETER;
-  }
-  return X_STATUS_SUCCESS;
+  return XStfsDevice::Create(*kernel_state(), params.guest_address(), params_size);
 }
-DECLARE_XBOXKRNL_EXPORT1(StfsCreateDevice, kFileSystem, kStub);
+DECLARE_XBOXKRNL_EXPORT1(StfsCreateDevice, kFileSystem, kImplemented);
 
 dword_result_t StfsControlDevice_entry(lpvoid_t device, dword_t control_code,
                                        lpvoid_t buffer) {
-  if (control_code > 4) {
-    return X_STATUS_INVALID_DEVICE_REQUEST;
-  }
-  return X_STATUS_SUCCESS;
+  auto stfs = XStfsDevice::Lookup(*kernel_state(), device.guest_address());
+  return stfs ? stfs->Control(control_code) : X_STATUS_INVALID_PARAMETER;
 }
-DECLARE_XBOXKRNL_EXPORT1(StfsControlDevice, kFileSystem, kStub);
+DECLARE_XBOXKRNL_EXPORT1(StfsControlDevice, kFileSystem, kImplemented);
 
 // A volume is dismounted by the DismountVolume routine of its device's driver.
 // The XDK cache drive's routine closes an event and deletes the device. It
 // isn't called here. The drive leaves both behind each time it's closed.
 dword_result_t IoDismountVolume_entry(lpvoid_t device_object) {
+  if (auto stfs = XStfsDevice::Lookup(*kernel_state(),
+                                     device_object.guest_address())) {
+    return stfs->Dismount();
+  }
   if (!device_object) {
     return X_STATUS_INVALID_PARAMETER;
   }

@@ -360,12 +360,20 @@ void GuestScheduler::Shutdown() {
     xe::threading::Wait(thread.get(), false);
   }
   io_pool_threads_.clear();
-  // Free calls no worker is left to run.
+  // Settle explicitly owned unstarted work before parked fibers are
+  // abandoned/reclaimed. Legacy calls with no on_drop are still only freed.
+  // Callbacks and capture destruction must not run under either queue lock.
   auto drop_queued = [](std::mutex& queue_lock,
                         std::queue<BlockingCall*>& queue) {
-    std::lock_guard<std::mutex> lock(queue_lock);
-    for (; !queue.empty(); queue.pop()) {
-      delete queue.front();
+    std::queue<BlockingCall*> dropped;
+    {
+      std::lock_guard<std::mutex> lock(queue_lock);
+      dropped.swap(queue);
+    }
+    while (!dropped.empty()) {
+      std::unique_ptr<BlockingCall> call(dropped.front());
+      dropped.pop();
+      if (call->on_drop) { call->on_drop(HostCallDropReason::kQueuedShutdown); }
     }
   };
   drop_queued(io_lock_, io_queue_);
@@ -1103,11 +1111,17 @@ void GuestScheduler::WaitOnFence(xe::threading::Fence& fence) {
 }
 
 void GuestScheduler::PostHostCall(std::function<void()> fn,
-                                  BlockingCallClass call_class) {
+                                  BlockingCallClass call_class,
+                                  std::function<void(HostCallDropReason)> on_drop) {
   auto* call = new BlockingCall;
   call->fn = std::move(fn);
+  call->on_drop = std::move(on_drop);
   if (!EnqueueBlockingCall(call, call_class)) {
-    call->fn();
+    // Existing callers without a drop contract retain their inline behavior.
+    // Owned requests close admission truthfully instead of starting new IO.
+    if (call->on_drop) {
+      call->on_drop(HostCallDropReason::kAdmissionShutdown);
+    } else { call->fn(); }
     delete call;
   }
 }

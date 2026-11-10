@@ -1,0 +1,1486 @@
+va	data_type	text
+0x9a9e004d	string	!This program cannot be run in DOS mode.\r\r\n$
+0x9a9e01f0	string	.rdata
+0x9a9e0290	string	.edata
+0x9a9e02b7	string	@.idata
+0x9a9e0307	string	B.reloc
+0x9a9e07d0	unicode	segoer.ttf
+0x9a9e07e8	unicode	georgia.ttf
+0x9a9e0800	unicode	segoeuimt.ttf
+0x9a9e081c	unicode	cour.ttf
+0x9a9e0830	unicode	tahomasmcp.ttf
+0x9a9e0850	unicode	scriptmt.ttf
+0x9a9e086c	unicode	segoepr.ttf
+0x9a9e0884	unicode	ccfont://
+0x9a9e08b4	unicode	section://%X,%s#%s
+0x9a9e08e0	string	Dash.ClosedCaptionDll.xex
+0x9a9e08fc	unicode	ccfonts
+0x9a9e090c	unicode	Casual
+0x9a9e091c	unicode	Cursive
+0x9a9e092c	unicode	SmallCaps
+0x9a9e0940	unicode	MonospaceSerif
+0x9a9e0960	unicode	MonospaceSansSerif
+0x9a9e0988	unicode	ProportionalSerif
+0x9a9e09c8	unicode	.ttml
+0x9a9e09d4	unicode	.dfxp
+0x9a9e09e0	unicode	.xml
+0x9a9e09ec	string	invalid string position
+0x9a9e0a04	string	string too long
+0x9a9e0a14	string	Unknown exception
+0x9a9e0af8	unicode	Segoe Light
+0x9a9e0b10	unicode	ProportionalSansSerif
+0x9a9e0b3c	unicode	ccfont://Casual
+0x9a9e0b5c	unicode	ccfont://Cursive
+0x9a9e0b80	unicode	ccfont://SmallCaps
+0x9a9e0ba8	unicode	ccfont://MonospaceSerif
+0x9a9e0bd8	unicode	ccfont://MonospaceSansSerif
+0x9a9e0c10	unicode	ccfont://ProportionalSerif
+0x9a9e0c48	unicode	ccfont://ProportionalSansSerif
+0x9a9e0cd0	unicode	file://game:/SegoeXbox-Regular.ttf
+0x9a9e0d18	unicode	file://game:/segoeprCC.ttf
+0x9a9e0d50	unicode	file://game:/SCRIPTCCBL.ttf
+0x9a9e0d88	unicode	file://game:/TahomascCC.ttf
+0x9a9e0dc0	unicode	file://game:/cournewCC.ttf
+0x9a9e0df8	unicode	file://game:/SegoeUIMonoCC-Regular.ttf
+0x9a9e0e48	unicode	file://game:/georgiaCC.ttf
+0x9a9e0e80	unicode	ccfont://
+0x9a9e0e94	string	_UninitializeXuiFonts()
+0x9a9e0eac	string	XuiRenderDestroyDC(m_hXuiDC)
+0x9a9e0f58	string	not initialized
+0x9a9e1050	string	_ShowCaptionError(errorMessage.c_str())
+0x9a9e1136	string	mpevent creation failed
+0x9a9e1150	string	event acquisition failed
+0x9a9e116c	string	setting event failed
+0x9a9e1184	string	thread creation failed
+0x9a9e12e8	string	path must be absolute, i.e., start with '/'
+0x9a9e13cc	string	ios_base::eofbit set
+0x9a9e13e4	string	ios_base::failbit set
+0x9a9e13fc	string	ios_base::badbit set
+0x9a9e14d7	string	FretInterface must be non-NULL
+0x9a9e14f8	string	already deleted!
+0x9a9e150c	string	false
+0x9a9e1588	string	bad locale name
+0x9a9e1778	string	bad cast
+0x9a9e2298	unicode	Fatal Error: Uncaught Exception.
+0x9a9e22e0	unicode	Fatal Error: Uncaught Exception: 
+0x9a9e27c0	unicode	en-us
+0x9a9e2b10	unicode	GuiAppDriver::OnActivation 
+0x9a9e2e58	unicode	Request-URI
+0x9a9e3100	unicode	Content-Source
+0x9a9e3120	unicode	stream://timedtext
+0x9a9e3878	unicode	application/smx+xml
+0x9a9e38a0	unicode	http://www.microsoft.com/2003/smx/
+0x9a9e38e8	unicode	time=
+0x9a9e38f4	string	deque<T> too long
+0x9a9e3908	string	Performance timer not available
+0x9a9e3a28	string	vector<T> too long
+0x9a9e3b00	unicode	 notifications
+0x9a9e3b20	unicode	 warnings
+0x9a9e3b34	unicode	 errors
+0x9a9e3b4c	unicode	 fatal errors
+0x9a9e3b68	unicode	Error summary: 
+0x9a9e3bf8	unicode	TCP: 
+0x9a9e3c04	unicode	UTL: 
+0x9a9e3c10	unicode	XML: 
+0x9a9e3c1c	unicode	UNKNOWN: 
+0x9a9e3c30	unicode	PLG: 
+0x9a9e3c3c	unicode	CLP: 
+0x9a9e3c48	unicode	CSS: 
+0x9a9e3c54	unicode	MCP: 
+0x9a9e3c60	unicode	PLA: 
+0x9a9e3e28	unicode	media
+0x9a9e3e34	unicode	timeBase
+0x9a9e3e48	unicode	Time-Base
+0x9a9e3e5c	unicode	tickRate
+0x9a9e3e70	unicode	Tick-Rate
+0x9a9e3e88	unicode	subFrameRate
+0x9a9e3ea4	unicode	Sub-Frame-Rate
+0x9a9e3ec4	unicode	nonDrop
+0x9a9e3ed4	unicode	smpteMode
+0x9a9e3ee8	unicode	SMPTE-Mode
+0x9a9e3f00	unicode	pixelAspectRatio
+0x9a9e3f24	unicode	Pixel-Aspect-Ratio
+0x9a9e3f4c	unicode	continuous
+0x9a9e3f64	unicode	markerMode
+0x9a9e3f7c	unicode	Marker-Mode
+0x9a9e3f9c	unicode	frameRateMultiplier
+0x9a9e3fc4	unicode	Frame-Rate-Multiplier
+0x9a9e3ff8	unicode	frameRate
+0x9a9e400c	unicode	Frame-Rate
+0x9a9e402c	unicode	clockMode
+0x9a9e4040	unicode	Clock-Mode
+0x9a9e4058	unicode	32 15
+0x9a9e4064	unicode	cellResolution
+0x9a9e4084	unicode	Cell-Resolution
+0x9a9e4258	string	query interface failure
+0x9a9e4270	string	interface not supported
+0x9a9e4298	string	incompatible guid
+0x9a9e49a0	string	list<T> too long
+0x9a9e4a10	string	invalid state
+0x9a9e50f0	string	map/set<T> too long
+0x9a9e54d0	string	invalid map/set<T> iterator
+0x9a9e55f8	unicode	unknown platform exception
+0x9a9e5728	unicode	empty or invalid request URI parameter
+0x9a9e5778	unicode	request URI is a relative URI and no base URI parameter is provided
+0x9a9e5800	unicode	Content-Base
+0x9a9e5820	unicode	request URI is a relative URI, but base URI parameter is not a valid absolute URI
+0x9a9e58c8	unicode	unable to construct valid absolute URI from request and base URIs
+0x9a9e594c	unicode	<empty>
+0x9a9e595c	unicode	missing request URI parameter
+0x9a9e5d90	unicode	head
+0x9a9e5d9c	unicode	body
+0x9a9e5e60	unicode	layout
+0x9a9e5f08	unicode	640px 480px
+0x9a9e5f20	unicode	extent
+0x9a9e5f30	unicode	0px 0px
+0x9a9e5f40	unicode	origin
+0x9a9e5f50	unicode	transparent
+0x9a9e5f68	unicode	backgroundColor
+0x9a9e5f88	unicode	anonymous
+0x9a9e5fa0	unicode	http://www.w3.org/ns/ttml#style
+0x9a9e5fe0	unicode	region
+0x9a9e62f8	unicode	title
+0x9a9e63d0	unicode	lang
+0x9a9e64d0	string	Processor::Behavior ( /*[retval]*/ iptr<UTL::IBehavior> &behavior ) const
+0x9a9e6628	string	sink already present for specified request id
+0x9a9e68b8	string	profile not supported
+0x9a9e6a0c	unicode	[style="
+0x9a9e6a20	unicode	style
+0x9a9e6bd0	string	unknown or unsupported document type
+0x9a9e70a0	string	sink missing present for specified request id
+0x9a9e7298	unicode	value
+0x9a9e7610	unicode	http://www.microsoft.com/2003/smx#internal
+0x9a9e7668	unicode	:style-id
+0x9a9e767c	unicode	smx-internal
+0x9a9e788c	unicode	space
+0x9a9e7898	unicode	X-suppress:retain;
+0x9a9e78c0	unicode	X-collapse:false;
+0x9a9e78e4	unicode	X-space:preserve;
+0x9a9e7908	unicode	X-suppress:auto;
+0x9a9e792c	unicode	X-linefeed:treatasspace;
+0x9a9e7960	unicode	X-collapse:true;
+0x9a9e7988	unicode	X-space:ignoreifsurroundinglinefeed;
+0x9a9e79ec	unicode	X-linefeed:preserve;
+0x9a9e7a18	unicode	preserve
+0x9a9e7c48	unicode	begin
+0x9a9e80be	unicode	#feature
+0x9a9e80d0	unicode	xml:base
+0x9a9e81b8	unicode	extension
+0x9a9e8448	unicode	invalid root extent: 
+0x9a9e8474	string	length specification missing second length specification
+0x9a9e84b0	string	unexpected non-scalar value for root extent
+0x9a9e84dc	string	length specification missing units or is not pixel units
+0x9a9e8518	string	length specification is not positive, non-zero value
+0x9a9e8ce0	unicode	extensions
+0x9a9e8cf8	unicode	features
+0x9a9e9160	string	time sheet(s) and inline timing attributes cannot be used together
+0x9a9e9318	unicode	profile
+0x9a9e9598	unicode	StyleSheet-Type
+0x9a9e9d10	unicode	metadata
+0x9a9e9e78	unicode	No style element type specified, stylesheet will be ignored
+0x9a9e9ef0	unicode	", stylesheet will be ignored
+0x9a9e9f30	unicode	Unrecognized style element type "
+0x9a9e9f7c	unicode	text/css
+0x9a9e9f90	unicode	type
+0x9a9ea130	unicode	styling
+0x9a9ea47c	string	invalid string format
+0x9a9ea608	string	already initialized
+0x9a9ea630	string	XuiRenderGetDevice( dc, &pDevice )
+0x9a9ea7e0	unicode	METRIC
+0x9a9ea7f0	unicode	NUMBER_FRACTION
+0x9a9ea810	unicode	NUMBER
+0x9a9ea820	unicode	SEPARATOR
+0x9a9ea834	unicode	OTHER
+0x9a9ea840	unicode	NONE
+0x9a9eb010	string	0123456789abcdef
+0x9a9eb170	string	0123456789abcdefABCDEF
+0x9a9eb598	string	invalid media time token 
+0x9a9eb878	string	non-conformant media time expression
+0x9a9ebc64	unicode	TICK
+0x9a9ebc74	unicode	FRAME
+0x9a9ebc88	unicode	MILLISECOND
+0x9a9ebca0	unicode	SECOND
+0x9a9ebcb4	unicode	MINUTE
+0x9a9ebcc8	unicode	HOUR
+0x9a9ebcd4	unicode	UNKNOWN
+0x9a9eca48	unicode	stream
+0x9a9eca58	unicode	Content-Length
+0x9a9eca78	unicode	Content-Type
+0x9a9ecad0	unicode	stream does not exist or is inaccessible
+0x9a9ecc18	string	no parser
+0x9a9ecc24	unicode	application
+0x9a9ecc3c	unicode	when
+0x9a9ecc48	unicode	segments
+0x9a9ecc5c	unicode	entry
+0x9a9ecc68	unicode	defs
+0x9a9ecc84	unicode	#transformation
+0x9a9ecca4	unicode	#textOutline-unblurred
+0x9a9eccd4	unicode	#textOutline-blurred
+0x9a9ecd00	unicode	#presentation
+0x9a9ecd1c	unicode	#overflow-dynamic
+0x9a9ecd40	unicode	#overflow-visible
+0x9a9ecd64	unicode	#length-px
+0x9a9ecd7c	unicode	#zIndex
+0x9a9ecd8c	unicode	#writingMode
+0x9a9ecda8	unicode	#writingMode-vertical
+0x9a9ecdd4	unicode	#writingMode-horizontal
+0x9a9ece04	unicode	#writingMode-horizontal-rl
+0x9a9ece3c	unicode	#writingMode-horizontal-lr
+0x9a9ece74	unicode	#wrapOption
+0x9a9ece8c	unicode	#visibility
+0x9a9ecea4	unicode	#visibility-region
+0x9a9ececc	unicode	#visibility-inline
+0x9a9ecef4	unicode	#visibility-block
+0x9a9ecf18	unicode	#unicodeBidi
+0x9a9ecf34	unicode	#timeContainer
+0x9a9ecf54	unicode	#timeBase-smpte
+0x9a9ecf74	unicode	#timeBase-media
+0x9a9ecf94	unicode	#timeBase-clock
+0x9a9ecfb4	unicode	#time-offset-with-ticks
+0x9a9ecfe4	unicode	#time-offset-with-frames
+0x9a9ed018	unicode	#time-clock
+0x9a9ed030	unicode	#time-clock-with-frames
+0x9a9ed060	unicode	#tickRate
+0x9a9ed074	unicode	#textOutline
+0x9a9ed090	unicode	#textOutline-blur
+0x9a9ed0b4	unicode	#textDecoration
+0x9a9ed0d4	unicode	#textDecoration-under
+0x9a9ed100	unicode	#textDecoration-through
+0x9a9ed130	unicode	#textDecoration-over
+0x9a9ed15c	unicode	#textAlign
+0x9a9ed174	unicode	#textAlign-relative
+0x9a9ed19c	unicode	#textAlign-absolute
+0x9a9ed1c4	unicode	#subFrameRate
+0x9a9ed1e0	unicode	#styling
+0x9a9ed1f4	unicode	#styling-referential
+0x9a9ed220	unicode	#styling-nested
+0x9a9ed240	unicode	#styling-inline
+0x9a9ed260	unicode	#styling-inheritance-region
+0x9a9ed298	unicode	#styling-inheritance-content
+0x9a9ed2d4	unicode	#styling-chained
+0x9a9ed2f8	unicode	#smpteMode
+0x9a9ed310	unicode	#showBackground
+0x9a9ed330	unicode	#rollUp
+0x9a9ed340	unicode	#pixelAspectRatio
+0x9a9ed364	unicode	#padding
+0x9a9ed378	unicode	#padding-4
+0x9a9ed390	unicode	#padding-3
+0x9a9ed3a8	unicode	#padding-2
+0x9a9ed3c0	unicode	#padding-1
+0x9a9ed3d8	unicode	#overflow
+0x9a9ed3ec	unicode	#overflow-scroll
+0x9a9ed410	unicode	#origin
+0x9a9ed420	unicode	#opacity
+0x9a9ed434	unicode	#nested-span
+0x9a9ed450	unicode	#nested-div
+0x9a9ed468	unicode	#metadata
+0x9a9ed47c	unicode	#markerMode
+0x9a9ed494	unicode	#lineHeight
+0x9a9ed4ac	unicode	#lineBreak-uax14
+0x9a9ed4d0	unicode	#length
+0x9a9ed4e0	unicode	#length-real
+0x9a9ed4fc	unicode	#length-positive
+0x9a9ed520	unicode	#length-pixel
+0x9a9ed53c	unicode	#length-percentage
+0x9a9ed564	unicode	#length-negative
+0x9a9ed588	unicode	#length-em
+0x9a9ed5a0	unicode	#length-cell
+0x9a9ed5bc	unicode	#layout
+0x9a9ed5cc	unicode	#frameRateMultiplier
+0x9a9ed5f8	unicode	#frameRate
+0x9a9ed610	unicode	#fontWeight
+0x9a9ed628	unicode	#fontWeight-bold
+0x9a9ed64c	unicode	#fontStyle
+0x9a9ed664	unicode	#fontStyle-italic
+0x9a9ed688	unicode	#fontSize
+0x9a9ed69c	unicode	#fontSize-isomorphic
+0x9a9ed6c8	unicode	#fontSize-anisomorphic
+0x9a9ed6f8	unicode	#fontFamily
+0x9a9ed710	unicode	#fontFamily-non-generic
+0x9a9ed740	unicode	#fontFamily-generic
+0x9a9ed768	unicode	#extent
+0x9a9ed778	unicode	#dynamicFlow
+0x9a9ed794	unicode	#dynamicFlow-word
+0x9a9ed7b8	unicode	#dynamicFlow-teletext
+0x9a9ed7e4	unicode	#dynamicFlow-smooth
+0x9a9ed80c	unicode	#dynamicFlow-rollUp
+0x9a9ed834	unicode	#dynamicFlow-out
+0x9a9ed858	unicode	#dynamicFlow-line
+0x9a9ed87c	unicode	#dynamicFlow-jump
+0x9a9ed8a0	unicode	#dynamicFlow-in
+0x9a9ed8c0	unicode	#dynamicFlow-glyph
+0x9a9ed8e8	unicode	#dynamicFlow-fill
+0x9a9ed90c	unicode	#dynamicFlow-clear
+0x9a9ed934	unicode	#dynamicFlow-character
+0x9a9ed964	unicode	#displayAlign
+0x9a9ed980	unicode	#display
+0x9a9ed994	unicode	#display-region
+0x9a9ed9b4	unicode	#display-inline
+0x9a9ed9d4	unicode	#display-block
+0x9a9ed9f4	unicode	#direction
+0x9a9eda0c	unicode	#color
+0x9a9eda1c	unicode	#clockMode
+0x9a9eda34	unicode	#cellResolution
+0x9a9eda54	unicode	#bidi
+0x9a9eda60	unicode	#backgroundColor
+0x9a9eda84	unicode	#backgroundColor-region
+0x9a9edab4	unicode	#backgroundColor-inline
+0x9a9edae4	unicode	#backgroundColor-block
+0x9a9edb14	unicode	#animation
+0x9a9edb2c	unicode	#timing
+0x9a9edb3c	unicode	#time-offset
+0x9a9edb58	unicode	#structure
+0x9a9edb70	unicode	#profile
+0x9a9edb84	unicode	#core
+0x9a9edb90	unicode	#content
+0x9a9ee42c	string	immutable profile
+0x9a9ee4f8	string	invalid base uri syntax: '
+0x9a9ee514	string	invalid feature base: '
+0x9a9ee708	string	invalid feature designator syntax: 
+0x9a9ee72c	string	missing designation component
+0x9a9ee74c	string	missing designation token
+0x9a9ee768	string	bad namespace
+0x9a9ee988	string	invalid extension designator syntax: 
+0x9a9ee9b0	unicode	http://www.w3.org/ns/ttml
+0x9a9eebf8	string	unknown requirement value: 
+0x9a9ef3f0	unicode	http://www.w3.org/ns/ttml/profile/
+0x9a9ef438	unicode	http://www.w3.org/ns/ttml/feature/
+0x9a9ef480	unicode	http://www.w3.org/ns/ttml/extension/
+0x9a9ef4cc	unicode	dfxp-transformation
+0x9a9ef4f4	unicode	dfxp-presentation
+0x9a9ef518	unicode	dfxp-full
+0x9a9ef52c	unicode	optional
+0x9a9ef540	unicode	required
+0x9a9f03b0	unicode	Caught unknown exception in Processor::_DrawArea()
+0x9a9f1808	unicode	MCP::URI
+0x9a9f181c	unicode	MCP::StyleSheet
+0x9a9f1840	unicode	http://www.w3.org/ns/ttml#metadata
+0x9a9f1888	unicode	http://www.w3.org/ns/ttml#parameter
+0x9a9f18d0	unicode	http://www.w3.org/ns/ttml#styling
+0x9a9f1914	unicode	xml:id
+0x9a9f1928	unicode	http://www.w3.org/XML/1998/namespace
+0x9a9f1d10	unicode	data
+0x9a9f1d1c	unicode	data:
+0x9a9f1dc0	string	path segment ".." not permitted in first segment
+0x9a9f1df4	unicode	/../
+0x9a9f1e50	string	base does not have absolute path
+0x9a9f1ec8	string	unable to absolutize: no base supplied
+0x9a9f219c	unicode	smpte
+0x9a9f21a8	unicode	clock
+0x9a9f21b4	unicode	dropPAL
+0x9a9f21c4	unicode	dropNTSC
+0x9a9f21d8	unicode	discontinuous
+0x9a9f21f4	unicode	local
+0x9a9f2638	string	unknown clock mode
+0x9a9f2698	string	unknown marker mode
+0x9a9f26f8	string	unknown SMPTE mode
+0x9a9f2758	string	unknown time base
+0x9a9f27b8	string	unary operand not permitted on property expression term
+0x9a9f27f0	string	bad property expression: too many terms
+0x9a9f2818	string	bad property expression: missing term(s)
+0x9a9f28c8	string	expression binary operator mismatch
+0x9a9f2950	string	unexpected clock mode category property
+0x9a9f29e0	string	unexpected marker mode category property
+0x9a9f2a78	string	unexpected smpte mode category property
+0x9a9f2b08	string	unexpected time base category property
+0x9a9f2b98	string	integer numeric term does not permit units
+0x9a9f2bc4	string	unknown named units
+0x9a9f2bd8	string	integer numeric term must not be zero
+0x9a9f2c00	string	integer numeric term does not permit non-zero fraction part
+0x9a9f2da8	string	bad term: must be identifier term
+0x9a9f2e98	string	bad rate category property term
+0x9a9f2f80	string	bad ratio category property term
+0x9a9f30c8	string	unknown namespace '
+0x9a9f30dc	string	unknown property '
+0x9a9f30f0	string	empty name
+0x9a9f3220	string	duplicate property
+0x9a9f3234	string	bad parser
+0x9a9f3458	string	unexpected request id
+0x9a9f3470	string	multiple binding not permitted
+0x9a9f3490	string	multiple unbinding not permitted
+0x9a9f3610	string	ContentLoadSink::OnData ( CLP::IManager::RequestId, const iptr<XML::INode> & n )
+0x9a9f36a8	unicode	 xmlns= "
+0x9a9f36c0	unicode	Content unit: invalid root element <
+0x9a9f3710	unicode	Content unit: missing document element
+0x9a9f3760	unicode	TTML content unit: missing document
+0x9a9f3910	unicode	Content-Location
+0x9a9f4940	unicode	SCP::FormatState
+0x9a9f4a14	string	id must be positive
+0x9a9f4a28	string	rule id already set
+0x9a9f4a3c	string	stylesheet id already set
+0x9a9f4ec0	string	duplicate default or anonymous stylesheet
+0x9a9f4eec	string	rule already added to some stylesheet
+0x9a9f4f68	string	stylesheet already added to some StyleSheetSet
+0x9a9f52ac	unicode	smx-internal:style-id='
+0x9a9f5488	unicode	[@class='
+0x9a9f549c	unicode	default:
+0x9a9f54b4	unicode	*[@*:id='
+0x9a9f5c38	unicode	MCP::ComputedStyles
+0x9a9f5c60	unicode	MCP::AnimatedStyles
+0x9a9f5c88	unicode	FUNCTION
+0x9a9f5c9c	unicode	HASH
+0x9a9f5ca8	unicode	IDENT
+0x9a9f5cb4	unicode	STRING
+0x9a9f60b8	string	unknown unary operand
+0x9a9f68b8	unicode	expected delimiter: '
+0x9a9f6938	string	unterminated string or comment
+0x9a9f6aa8	string	bad encoded color length: must be 3, 4, 6, or 8 hex digits
+0x9a9f6ae4	string	bad encoded color: must be hex digit
+0x9a9f6b80	string	Parser::Behavior ( /*[retval]*/ iptr<UTL::IBehavior> &behavior ) const
+0x9a9f6c00	string	Parser::SetDefaultBase ( const tstring &base )
+0x9a9f6c68	string	Parser::DefaultBase ( /*[retval]*/ tstring &base ) const
+0x9a9f6ce0	string	Parser::SetDefaultEncoding ( const tstring &encoding )
+0x9a9f6d50	string	Parser::DefaultEncoding ( /*[retval]*/ tstring &encoding ) const
+0x9a9f6dd0	string	Parser::ParseIncremental ( tisstream &stream )
+0x9a9f6e80	unicode	*NONE*
+0x9a9f6f58	string	bad class selector: pseudo class parsing not supported
+0x9a9f6fc8	string	bad priority: expected "important"
+0x9a9f6fec	unicode	important
+0x9a9f70d0	string	function term must use comma operator as argument separator
+0x9a9f7204	unicode	* { foo : 
+0x9a9f72a8	string	bad unary operand argument: expected NUMBER
+0x9a9f7360	string	bad attribute selector: expected ']'
+0x9a9f7388	string	bad attribute selector: expected IDENT
+0x9a9f73b0	string	bad attribute selector: expected '='
+0x9a9f73d8	string	bad attribute selector: expected IDENT or STRING
+0x9a9f740c	string	bad attribute selector: expected '=' or ':'
+0x9a9f7670	string	bad identified element selector: expected IDENT after '#'
+0x9a9f7740	string	bad class selector: expected IDENT
+0x9a9f7830	string	bad term: expected '+', '-', FUNCTION, HASH, IDENT, STRING, NUMBER
+0x9a9f7a08	string	bad binary operator: semicolon operator not permited here
+0x9a9f7af0	string	bad selector: expected IDENT, HASH, '*', '[' or '.'
+0x9a9f7b24	string	bad selector: expected IDENT, HASH, '*' or '.'
+0x9a9f7ec0	unicode	X-displayCandidate#
+0x9a9f7ee8	unicode	zIndex
+0x9a9f7ef8	unicode	writingMode
+0x9a9f7f10	unicode	wrapOption
+0x9a9f7f28	unicode	visibility
+0x9a9f7f40	unicode	unicodeBidi
+0x9a9f7f58	unicode	textOutline
+0x9a9f7f70	unicode	textDecoration
+0x9a9f7f90	unicode	textAlign
+0x9a9f7fa4	unicode	showBackground
+0x9a9f7fc4	unicode	padding
+0x9a9f7fd4	unicode	overflow
+0x9a9f7fe8	unicode	opacity
+0x9a9f7ff8	unicode	lineHeight
+0x9a9f8010	unicode	fontWeight
+0x9a9f8028	unicode	fontStyle
+0x9a9f803c	unicode	fontSize
+0x9a9f8050	unicode	fontFamily
+0x9a9f8068	unicode	dynamicFlow
+0x9a9f8080	unicode	displayAlign
+0x9a9f809c	unicode	display
+0x9a9f80ac	unicode	direction
+0x9a9f80c0	unicode	color
+0x9a9f8348	string	bad unicode scalar value
+0x9a9f83ac	string	bad surrogate sequence
+0x9a9f8950	unicode	unknown exception
+0x9a9f8ac0	string	empty uri
+0x9a9f8c10	unicode	unsupported scheme: 
+0x9a9f8dc8	string	handler factory already present
+0x9a9f9040	unicode	X-suppress
+0x9a9f9058	unicode	X-space
+0x9a9f9068	unicode	X-linefeed
+0x9a9f9080	unicode	X-collapse
+0x9a9f90e0	unicode	ignoreifsurroundinglinefeed
+0x9a9f9118	unicode	ignoreifbeforelinefeed
+0x9a9f9148	unicode	ignoreifafterlinefeed
+0x9a9f9174	unicode	ignorebefore
+0x9a9f9190	unicode	ignorearound
+0x9a9f91ac	unicode	ignoreafter
+0x9a9f91c8	unicode	underline
+0x9a9f91dc	unicode	overline
+0x9a9f91f0	unicode	nounderline
+0x9a9f9208	unicode	nooverline
+0x9a9f9220	unicode	nolinethrough
+0x9a9f923c	unicode	linethrough
+0x9a9f9254	unicode	start
+0x9a9f9260	unicode	right
+0x9a9f926c	unicode	justify
+0x9a9f9288	unicode	static
+0x9a9f9298	unicode	relative
+0x9a9f92ac	unicode	fixed
+0x9a9f92b8	unicode	absolute
+0x9a9f92cc	unicode	visible
+0x9a9f92dc	unicode	dynamic
+0x9a9f92ec	unicode	maxheight
+0x9a9f9300	unicode	lineheight
+0x9a9f9318	unicode	fontheight
+0x9a9f9330	unicode	treataszerowidthspace
+0x9a9f935c	unicode	treatasspace
+0x9a9f9378	unicode	ignore
+0x9a9f9388	unicode	lighter
+0x9a9f9398	unicode	light
+0x9a9f93a4	unicode	bolder
+0x9a9f93b4	unicode	bold
+0x9a9f93c0	unicode	reverseoblique
+0x9a9f93e0	unicode	oblique
+0x9a9f93f0	unicode	italic
+0x9a9f9400	unicode	backslant
+0x9a9f9414	unicode	xxsmall
+0x9a9f9424	unicode	xxlarge
+0x9a9f9434	unicode	xsmall
+0x9a9f9444	unicode	xlarge
+0x9a9f9454	unicode	smaller
+0x9a9f9464	unicode	small
+0x9a9f9470	unicode	larger
+0x9a9f9480	unicode	large
+0x9a9f948c	unicode	smooth
+0x9a9f94c0	unicode	pixel
+0x9a9f94cc	unicode	paragraph
+0x9a9f94f8	unicode	character
+0x9a9f950c	unicode	within
+0x9a9f951c	unicode	reflow
+0x9a9f9534	unicode	fill
+0x9a9f9540	unicode	clear
+0x9a9f954c	unicode	center
+0x9a9f955c	unicode	before
+0x9a9f956c	unicode	after
+0x9a9f9578	unicode	inline
+0x9a9f9588	unicode	block
+0x9a9f9594	unicode	yellow
+0x9a9f95a4	unicode	white
+0x9a9f95bc	unicode	silver
+0x9a9f95d4	unicode	purple
+0x9a9f95e4	unicode	olive
+0x9a9f95fc	unicode	maroon
+0x9a9f960c	unicode	magenta
+0x9a9f9628	unicode	green
+0x9a9f9640	unicode	fuchsia
+0x9a9f9668	unicode	black
+0x9a9f9674	unicode	aqua
+0x9a9f968c	unicode	thick
+0x9a9f9698	unicode	medium
+0x9a9f96a8	unicode	solid
+0x9a9f96b4	unicode	none
+0x9a9f96c0	unicode	hidden
+0x9a9f96d0	unicode	normal
+0x9a9f96e0	unicode	embed
+0x9a9f96ec	unicode	bidioverride
+0x9a9f9708	unicode	smallcap
+0x9a9f971c	unicode	serif
+0x9a9f9728	unicode	sansserif
+0x9a9f973c	unicode	proportionalserif
+0x9a9f9760	unicode	proportionalsansserif
+0x9a9f978c	unicode	monospaceserif
+0x9a9f97ac	unicode	monospacesansserif
+0x9a9f97d4	unicode	monospace
+0x9a9f97e8	unicode	cursive
+0x9a9f97f8	unicode	casual
+0x9a9fa400	unicode	auto
+0x9a9fa448	unicode	inherit
+0x9a9fa5a8	string	unrecognized namespace
+0x9a9fa5c0	string	unknown named text alignment
+0x9a9fa650	string	unknown named text decoration
+0x9a9fa7c0	string	block or inline display not permitted on specified display property
+0x9a9fa950	string	invalid length numeric term: requires length units
+0x9a9fa984	string	invalid length numeric term: admit percent
+0x9a9fa9b0	string	invalid length numeric term: non-zero length requires length units
+0x9a9fa9f4	string	invalid length numeric term: unknown named units
+0x9a9fab18	string	color function arguments must all use same units
+0x9a9fab4c	string	color function argument must have no units or percent units
+0x9a9fac48	string	numeric font weight must not specify units
+0x9a9fadd8	string	opacity orientation must not specify units
+0x9a9faeb8	string	unexpected text decoration category property
+0x9a9faf50	string	unknown identifier term: used with 'showBackground'
+0x9a9faf84	unicode	whenactive
+0x9a9faf9c	unicode	always
+0x9a9fb038	string	unknown identifier term: used with 'wrapOption'
+0x9a9fb068	unicode	nowrap
+0x9a9fb078	unicode	wrap
+0x9a9fb128	string	duplicate text decoration identifier
+0x9a9fb150	string	unexpected text decoration value type
+0x9a9fb178	string	unexpected font decoration enumeration value
+0x9a9fb1a8	string	incompatible text decoration identifiers: 'none' must appear alone
+0x9a9fb290	string	unknown bidi control '
+0x9a9fb320	string	unknown named color '
+0x9a9fb390	string	unknown display '
+0x9a9fb420	string	unknown display alignment '
+0x9a9fb4b8	string	unknown generic font family '
+0x9a9fb568	string	unknown font size '
+0x9a9fb5f8	string	unknown font style '
+0x9a9fb6a0	string	unknown font weight '
+0x9a9fb730	string	unknown linefeed behavior '
+0x9a9fb7c8	string	unknown line stacking strategy '
+0x9a9fb868	string	unknown named text overflow '
+0x9a9fb918	string	unknown whitespace behavior '
+0x9a9fb9b0	string	unknown writing mode '
+0x9a9fba58	string	unknown boolean term value '
+0x9a9fba78	unicode	false
+0x9a9fba84	unicode	true
+0x9a9fbb08	string	unexpected alignment category property
+0x9a9fbba0	string	unexpected bidi category property
+0x9a9fbbc4	string	unknown bidi direction identifier term
+0x9a9fbc88	string	color function argument must be numeric
+0x9a9fbd50	string	unknown color function
+0x9a9fbd68	unicode	rgba
+0x9a9fbe88	string	unexpected display category property
+0x9a9fbeb0	string	unknown visibility identifier term '
+0x9a9fc118	string	unexpected line category property
+0x9a9fc13c	string	unknown identifier term: used with 'suppress-at-line-break'
+0x9a9fc178	unicode	retain
+0x9a9fc188	unicode	suppress
+0x9a9fc228	string	unexpected whitespace category property
+0x9a9fc2c0	string	unexpected writing category property
+0x9a9fc420	string	bad color term
+0x9a9fc588	string	bad extent or origin term
+0x9a9fc6c8	string	bad font family term
+0x9a9fc800	string	bad font size term
+0x9a9fc9a0	string	bad font weight term
+0x9a9fca80	string	bad line height property term '
+0x9a9fcaa0	string	bad line height property term
+0x9a9fcc10	string	bad opacity property term
+0x9a9fcd08	string	bad padding term
+0x9a9fcd1c	string	one, two, three, or four padding terms required
+0x9a9fd108	string	bad text outline blur thickness term
+0x9a9fd130	string	bad text outline thickness term
+0x9a9fd150	string	bad text outline color term
+0x9a9fd16c	string	bad text outline term
+0x9a9fd184	string	bad text outline property term '
+0x9a9fd1a8	string	bad text outline property term
+0x9a9fd398	string	bad z-order property term
+0x9a9fd770	unicode	out(line,smooth) clear(0.433s)
+0x9a9fd7e8	string	timesheet id already set
+0x9a9fdb50	string	rule already added to some TimeSheetSet
+0x9a9fe870	string	TimeSheetReader::LoadIncremental ( isstream &stream, /*[retval]*/ iptr<ITimeSheet> & doc  )
+0x9a9fe908	string	TimeSheetReader::LoadIncremental ( wisstream &stream, /*[retval]*/ iptr<ITimeSheet> & doc  )
+0x9a9feb00	unicode	style-id
+0x9a9fedf7	string	\nStyleLoadSink::OnData ( CLP::IManager::RequestId, const iptr<XML::INode> & n )
+0x9a9ff5cf	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9a9ff66b	string	PWorldViewProj
+0x9a9ff837	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9a9ff8e8	string	BorderSize
+0x9a9ff914	string	WorldViewProj
+0x9a9ffaeb	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9a9ffb9c	string	BorderSize
+0x9a9ffbc8	string	WorldViewProj
+0x9a9ffdb7	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9a9ffe68	string	BorderSize
+0x9a9ffe94	string	WorldViewProj
+0x9aa00083	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa00134	string	BorderSize
+0x9aa00160	string	WorldViewProj
+0x9aa00337	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa003e8	string	BorderSize
+0x9aa00414	string	WorldViewProj
+0x9aa005eb	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa0069c	string	BorderSize
+0x9aa006c8	string	WorldViewProj
+0x9aa0089f	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa00950	string	BorderSize
+0x9aa0097c	string	WorldViewProj
+0x9aa00b53	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa00c04	string	BorderSize
+0x9aa00c30	string	WorldViewProj
+0x9aa00e07	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa00ea3	string	PWorldViewProj
+0x9aa0106f	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa01120	string	BorderSize
+0x9aa0114c	string	WorldViewProj
+0x9aa01323	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa013bf	string	PWorldViewProj
+0x9aa0158b	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa0163c	string	BorderSize
+0x9aa01668	string	WorldViewProj
+0x9aa0183f	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa018f0	string	BorderSize
+0x9aa0191c	string	WorldViewProj
+0x9aa01af3	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa01ba4	string	BorderSize
+0x9aa01bd0	string	WorldViewProj
+0x9aa01da7	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa01e58	string	BorderSize
+0x9aa01e84	string	WorldViewProj
+0x9aa0205b	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa0210c	string	BorderSize
+0x9aa02138	string	WorldViewProj
+0x9aa02327	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa023d8	string	BorderSize
+0x9aa02404	string	WorldViewProj
+0x9aa025f3	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa026a4	string	BorderSize
+0x9aa026d0	string	WorldViewProj
+0x9aa028a7	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa02958	string	BorderSize
+0x9aa02984	string	WorldViewProj
+0x9aa02b5b	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa02bf7	string	PWorldViewProj
+0x9aa02dcb	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa02ea4	string	OpacityMultiplier
+0x9aa02ed8	string	TextColor
+0x9aa02ef4	string	TextTint
+0x9aa02efd	string	inputSampler
+0x9aa02fdb	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa030a0	string	LightTint
+0x9aa030cc	string	OpacityMultiplier
+0x9aa030f0	string	inputSampler
+0x9aa031c3	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa03288	string	LightTint
+0x9aa032b4	string	OpacityMultiplier
+0x9aa032d8	string	inputSampler
+0x9aa033ab	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa03470	string	LightTint
+0x9aa0349c	string	OpacityMultiplier
+0x9aa034c0	string	inputSampler
+0x9aa03593	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa03658	string	LightTint
+0x9aa03684	string	OpacityMultiplier
+0x9aa036a8	string	inputSampler
+0x9aa0377b	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa03840	string	LightTint
+0x9aa0386c	string	OpacityMultiplier
+0x9aa03890	string	inputSampler
+0x9aa03963	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa03a28	string	LightTint
+0x9aa03a54	string	OpacityMultiplier
+0x9aa03a78	string	inputSampler
+0x9aa03b4b	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa03c10	string	LightTint
+0x9aa03c3c	string	OpacityMultiplier
+0x9aa03c60	string	inputSampler
+0x9aa03d33	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa03df8	string	LightTint
+0x9aa03e24	string	OpacityMultiplier
+0x9aa03e48	string	inputSampler
+0x9aa03f1b	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa03ff4	string	OpacityMultiplier
+0x9aa04028	string	TextColor
+0x9aa04044	string	TextTint
+0x9aa0404d	string	inputSampler
+0x9aa0412b	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa041f0	string	DarkTint
+0x9aa0421c	string	OpacityMultiplier
+0x9aa04240	string	inputSampler
+0x9aa04313	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa043ec	string	OpacityMultiplier
+0x9aa04420	string	TextColor
+0x9aa0443c	string	TextTint
+0x9aa04445	string	inputSampler
+0x9aa04523	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa045e8	string	LightTint
+0x9aa04614	string	OpacityMultiplier
+0x9aa04638	string	inputSampler
+0x9aa0470b	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa047d0	string	LightTint
+0x9aa047fc	string	OpacityMultiplier
+0x9aa04820	string	inputSampler
+0x9aa048f3	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa049b8	string	LightTint
+0x9aa049e4	string	OpacityMultiplier
+0x9aa04a08	string	inputSampler
+0x9aa04adb	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa04ba0	string	DarkTint
+0x9aa04bcc	string	OpacityMultiplier
+0x9aa04bf0	string	inputSampler
+0x9aa04cc3	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa04d88	string	DarkTint
+0x9aa04db4	string	OpacityMultiplier
+0x9aa04dd8	string	inputSampler
+0x9aa04eab	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa04f70	string	DarkTint
+0x9aa04f9c	string	OpacityMultiplier
+0x9aa04fc0	string	inputSampler
+0x9aa05093	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa05158	string	DarkTint
+0x9aa05184	string	OpacityMultiplier
+0x9aa051a8	string	inputSampler
+0x9aa0527b	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa05340	string	DarkTint
+0x9aa0536c	string	OpacityMultiplier
+0x9aa05390	string	inputSampler
+0x9aa05463	string	he:\bt\1c10e6\core.obj.fre\private\flash\corelibs\captions\src\xbox\lib\gal\obj\xbox\CaptionFxShader.updb
+0x9aa0553c	string	OpacityMultiplier
+0x9aa05570	string	TextColor
+0x9aa0558c	string	TextTint
+0x9aa05595	string	inputSampler
+0x9aa057dc	string	WorldViewProj
+0x9aa057ea	string	LightTint
+0x9aa057f4	string	DarkTint
+0x9aa057fd	string	TextTint
+0x9aa05806	string	TextColor
+0x9aa05810	string	OpacityMultiplier
+0x9aa05822	string	BorderSize
+0x9aa0582d	string	inputSampler
+0x9aa0583a	string	NormalCaptions
+0x9aa0584c	string	OutlineCaptions
+0x9aa05874	string	DropShadowCaptions
+0x9aa05887	string	LoweredOrRaisedCaptions
+0x9aa0589f	string	D3DX9.1 Effect Compiler
+0x9aa071c4	string	XuiRenderBegin( dc_, D3DCOLOR_ARGB( 0, 0, 0, 0 ) )
+0x9aa071f8	string	XuiRenderPresent( dc_, NULL, NULL, NULL )
+0x9aa07224	string	XuiRenderEnd( dc_ )
+0x9aa072c0	string	invalid vector<T> subscript
+0x9aa073a8	string	_FillRect(xuiRect, cref)
+0x9aa073c4	string	XuiRenderSetTransform( dc_, &matXForm )
+0x9aa074c8	string	pDevice->CreateVertexDeclaration( vertexDecl, &m_pVertexDecl )
+0x9aa0752c	string	BorderSize
+0x9aa07538	string	OpacityMultiplier
+0x9aa0754c	string	WorldViewProj
+0x9aa0755c	string	LoweredOrRaisedCaptions
+0x9aa07574	string	DropShadowCaptions
+0x9aa07588	string	OutlineCaptions
+0x9aa07598	string	NormalCaptions
+0x9aa075a8	string	TextColor
+0x9aa075b4	string	TextTint
+0x9aa075c0	string	DarkTint
+0x9aa075cc	string	LightTint
+0x9aa075d8	string	FXLCreateEffect(pDevice.get(),&PrecompiledCaptionFx, NULL, &m_pCaptionEffects)
+0x9aa07628	string	XuiRenderGetDevice(dc_, &pDevice)
+0x9aa07740	string	_BlitRenderWindow(&renderWindow_, technique)
+0x9aa07780	string	_DrawGlyphsWithOutline ( dc_, font, rcdBaselineAdjust, glyphs, advances, decorations )
+0x9aa077e4	string	_CreateAndSetRenderWindow(rcd, &renderWindow_, bkgColor)
+0x9aa078f8	unicode	msxml
+0x9aa07910	unicode	http:://www.microsoft.com/2003/smx#xml|implementation
+0x9aa079dc	string	invalid animation state value
+0x9aa07a70	string	negative begin time 
+0x9aa07a88	string	 is later than end time 
+0x9aa07aa4	string	start time 
+0x9aa07ab0	string	negative end time 
+0x9aa07ac4	string	negative duration 
+0x9aa07ad8	unicode	expr
+0x9aa07ae4	unicode	xml:lang
+0x9aa09908	string	no paragraph formatter ancestor
+0x9aa09aa8	string	unexpected embed context
+0x9aa09ac4	string	embed must have parent formatter
+0x9aa0a658	string	unexpected flow type
+0x9aa0b310	string	no parent set
+0x9aa0b3a0	string	parent mismatch
+0x9aa0c6f0	string	Unknown timeContainer value '
+0x9aa0c780	unicode	DOM exception 
+0x9aa0c7a0	string	Unsupported time container type
+0x9aa0d520	unicode	animate
+0x9aa0d534	unicode	timeContainer
+0x9aa0d9c0	string	StyleSheetReader::LoadIncremental ( isstream &stream, /*[retval]*/ iptr<IStyleSheet> & doc  )
+0x9aa0da58	string	StyleSheetReader::LoadIncremental ( wisstream &stream, /*[retval]*/ iptr<IStyleSheet> & doc  )
+0x9aa0dfe8	string	XuiGetCharMetrics(font_, ch, &charMetrics)
+0x9aa0e360	string	design font doesn't support device escapements
+0x9aa0e448	string	can't convert units to points
+0x9aa0e4f0	string	can't create logical platform font
+0x9aa0e514	string	can't get outline text metrics
+0x9aa0e890	unicode	default
+0x9aa0e8a0	unicode	proportional
+0x9aa0f3c8	string	DocumentReadere::Behavior ( /*[retval]*/ iptr<UTL::IBehavior> &behavior ) const
+0x9aa0f450	string	DocumentReader::LoadIncremental ( isstream &stream, /*[retval]*/ iptr<IDocument> & doc  )
+0x9aa0f4e8	string	DocumentReader::LoadIncremental ( wisstream &stream, /*[retval]*/ iptr<IDocument> & doc  )
+0x9aa0f9f8	unicode	us-ascii
+0x9aa0fa0c	unicode	utf-8
+0x9aa0fa18	unicode	utf-16be
+0x9aa0fa2c	unicode	utf-16le
+0x9aa0fa40	unicode	utf-32
+0x9aa0fa50	unicode	unknown
+0x9aa10298	string	Parser::SetEntityResolver ( const iptr<IEntityResolver> &resolver )
+0x9aa10318	string	Parser::EntityResolver ( /*[retval]*/ iptr<IEntityResolver> &resolver ) const
+0x9aa103a0	string	Parser::AddSchema ( const tstring &nsUri, const tstring &schemaUri )
+0x9aa10420	string	Parser::AddSchema ( const tstring &nsUri, tistream &schemaStream )
+0x9aa104e0	unicode	XMB parser error 
+0x9aa11040	string	ExtractResolution internal error
+0x9aa12190	string	No default font manager available
+0x9aa126c8	string	unexpected value type, expected enumeration value type
+0x9aa12760	string	unexpected value type, expected scalar or auto value type
+0x9aa12810	string	unexpected flow component
+0x9aa12d20	string	cant open file
+0x9aa12e98	unicode	file
+0x9aa12fd8	unicode	file does not exist or is inaccessible
+0x9aa13310	string	missing 6-bit group(s)
+0x9aa13328	string	unexpected '=' in first or second 6-bit group
+0x9aa133b0	unicode	base64
+0x9aa13498	unicode	;base64
+0x9aa134a8	unicode	text/plain
+0x9aa134c0	unicode	text/plain;charset=us-ascii
+0x9aa13698	unicode	remove
+0x9aa136a8	unicode	hold
+0x9aa13930	string	interpolation property start/end count mismatch
+0x9aa13c70	string	unknown animation calculation mode value
+0x9aa14000	string	invalid attribute '
+0x9aa14014	string	' value
+0x9aa14200	string	unknown fill attribute value '
+0x9aa14460	string	non-conformant values expression '
+0x9aa14484	string	non-conformant to expression '
+0x9aa144a4	string	attribute '
+0x9aa144b0	string	' is not animateable
+0x9aa14f30	unicode	attributeName
+0x9aa14f54	unicode	values
+0x9aa14f64	unicode	select
+0x9aa15f28	string	invalid document
+0x9aa15f3c	string	invalid attribute
+0x9aa15fc8	string	invalid text
+0x9aa16050	string	invalid comment
+0x9aa160d8	string	invalid processing instruction
+0x9aa16348	string	invalid element
+0x9aa16724	unicode	UTF-16
+0x9aa16734	unicode	UTF-8
+0x9aa16740	unicode	DOMAttributeNameChanged
+0x9aa16770	unicode	DOMElementNameChanged
+0x9aa167a8	unicode	keydown
+0x9aa167b8	unicode	textInput
+0x9aa167cc	unicode	error
+0x9aa167d8	unicode	abort
+0x9aa167e4	unicode	unload
+0x9aa167f4	unicode	load
+0x9aa16800	unicode	DOMCharacterDataModified
+0x9aa16834	unicode	DOMAttrModified
+0x9aa16854	unicode	DOMNodeInsertedIntoDocument
+0x9aa1688c	unicode	DOMNodeRemovedFromDocument
+0x9aa168c4	unicode	DOMNodeRemoved
+0x9aa168e4	unicode	DOMNodeInserted
+0x9aa16904	unicode	DOMSubtreeModified
+0x9aa1692c	unicode	mouseout
+0x9aa16940	unicode	mousemove
+0x9aa16954	unicode	mouseover
+0x9aa16968	unicode	mouseup
+0x9aa16978	unicode	mousedown
+0x9aa1698c	unicode	click
+0x9aa16998	unicode	DOMFocusActivate
+0x9aa169bc	unicode	DOMFocusOut
+0x9aa169d4	unicode	DOMFocusIn
+0x9aa169f0	unicode	http://www.w3.org/2001/xml-events
+0x9aa173f0	string	unexpected traversal order
+0x9aa17f48	string	listener
+0x9aa17f54	string	event
+0x9aa18580	unicode	DOMFocusActivated
+0x9aa18730	unicode	Event-Mutation-Related
+0x9aa18760	unicode	Event-Mutation-Old-Value
+0x9aa18794	unicode	Event-Mutation-New-Value
+0x9aa18940	unicode	Event-Mouse-Screen-Y
+0x9aa1896c	unicode	Event-Mouse-Screen-X
+0x9aa189f0	unicode	Event-Mouse-Client-Y
+0x9aa18a1c	unicode	Event-Mouse-Client-X
+0x9aa18aa0	unicode	Event-Mouse-Transition
+0x9aa18b08	unicode	Event-Mouse-Button
+0x9aa18b68	unicode	Event-Key-Modifiers
+0x9aa18bc8	unicode	Event-Mouse-Clicks
+0x9aa18c28	unicode	Event-Key-Identifier
+0x9aa18c90	unicode	Event-Key-Location
+0x9aa18cf0	unicode	Event-Text
+0x9aa18e98	unicode	Event-Mutation-Old-Name-NS
+0x9aa18f08	unicode	Event-Mutation-Old-Name
+0x9aa1b638	unicode	encoding
+0x9aa1b654	unicode	version
+0x9aa1b66c	unicode	standalone
+0x9aa1c1f4	unicode	DOCTYPE
+0x9aa1c210	unicode	encoding
+0x9aa1c230	unicode	expat
+0x9aa1c28c	unicode	PUBLIC
+0x9aa1c2a8	unicode	standalone
+0x9aa1c2c0	unicode	SYSTEM
+0x9aa1c2e0	unicode	version
+0x9aa1c2f4	unicode	xerces
+0x9aa1c320	unicode	http://www.w3.org/XML/1998/namespace
+0x9aa1c36c	unicode	http://www.w3.org/2000/xmlns/
+0x9aa1c3b0	unicode	unexpected logic error
+0x9aa1c3e0	unicode	invalid argument
+0x9aa1c404	unicode	out of memory
+0x9aa1c420	unicode	not implemented
+0x9aa1c440	unicode	not supported
+0x9aa1c45c	unicode	input/output error
+0x9aa1c484	unicode	invalid syntax
+0x9aa1c4a4	unicode	invalid content
+0x9aa1c4c4	unicode	limit exceeded
+0x9aa1c4e4	unicode	read only
+0x9aa1c4f8	unicode	unknown error
+0x9aa1c514	unicode	end of file or i/o errror
+0x9aa1c548	unicode	unknown encoding
+0x9aa1c56c	unicode	invalid utf-8 prefix
+0x9aa1c598	unicode	invalid utf-8 byte sequence
+0x9aa1c5d0	unicode	invalid utf-16 sequence
+0x9aa1c600	unicode	invalid utf-16 surrogate
+0x9aa1c634	unicode	maximum name length exceeded
+0x9aa1c670	unicode	character value out of supported range
+0x9aa1c6c0	unicode	token character value out of supported range
+0x9aa1c71c	unicode	invalid lexical syntax
+0x9aa1c74c	unicode	unknown element type
+0x9aa1c778	unicode	maximum character buffer length exceeded
+0x9aa1c7cc	unicode	maximum element depth exceeded
+0x9aa1c80c	unicode	missing start or end tag
+0x9aa1c840	unicode	maximum attribute count exceeded
+0x9aa1c884	unicode	unknown attribute
+0x9aa1c8a8	unicode	maximum attribute value length exceeded
+0x9aa1c8f8	unicode	duplicate attribute
+0x9aa1c920	unicode	numeric character reference value not permitted or out of supported range
+0x9aa1c9b4	unicode	unknown named entity
+0x9aa1c9e0	unicode	unbound namespace prefix
+0x9aa1ca14	unicode	restricted character
+0x9aa1ca40	unicode	xml declaration not at start of entity
+0x9aa1ca90	unicode	xml declaration not well-formed
+0x9aa1cad0	unicode	processing instruction target not permitted
+0x9aa1cb28	unicode	xml version not 1.0 or 1.1
+0x9aa1cb60	unicode	xml encoding name not well-formed
+0x9aa1cba4	unicode	xml encoding not supported
+0x9aa1cbdc	unicode	string size exceeded
+0x9aa1cc08	unicode	xml input encoding doesn't match declared encoding
+0x9aa1cc70	unicode	index out of range
+0x9aa1cc98	unicode	invalid hierarchy request
+0x9aa1cccc	unicode	wrong document
+0x9aa1ccec	unicode	invalid character
+0x9aa1cd10	unicode	no data allowed
+0x9aa1cd30	unicode	no modification allowed
+0x9aa1cd60	unicode	not found
+0x9aa1cd74	unicode	not supported
+0x9aa1cd90	unicode	attribute in use
+0x9aa1cdb4	unicode	invalid state
+0x9aa1cdd0	unicode	invalid syntax
+0x9aa1cdf0	unicode	invalid modification
+0x9aa1ce1c	unicode	namespace error
+0x9aa1ce3c	unicode	invalid access
+0x9aa1ce5c	unicode	invalid xpath static syntax
+0x9aa1ce94	unicode	invalid xpath static type
+0x9aa1cec8	unicode	invalid xpath static context value
+0x9aa1cf10	unicode	invalid xpath dynamic context value
+0x9aa1cf58	unicode	empty xpath type
+0x9aa1cf80	unicode	missing type in xpath expression
+0x9aa1cfc8	unicode	missing value in xpath expression
+0x9aa1d010	unicode	unknown name in xpath expression
+0x9aa1d058	unicode	unknown axis in xpath expression
+0x9aa1d0a0	unicode	invalid xpath function prototype
+0x9aa1d0e4	unicode	mixed step in xpath expression
+0x9aa1d128	unicode	bad atomic value in xpath expression
+0x9aa1d178	unicode	bad context item in xpath expression
+0x9aa1d1c4	unicode	treat type in xpath expression
+0x9aa1d208	unicode	qname schema mismatch in xpath expression
+0x9aa1d260	unicode	bad type cast in xpath expression
+0x9aa1d308	unicode	core
+0x9aa1d338	unicode	http://www.w3.org/XML/1998/namespace
+0x9aa1d384	unicode	http://www.w3.org/2000/xmlns/
+0x9aa1d468	unicode	schema-element
+0x9aa1d488	unicode	schema-attribute
+0x9aa1d4ac	unicode	processing-instruction
+0x9aa1d4e8	unicode	element
+0x9aa1d4f8	unicode	document-node
+0x9aa1d514	unicode	comment
+0x9aa1d530	unicode	preceding-sibling
+0x9aa1d554	unicode	preceding
+0x9aa1d568	unicode	parent
+0x9aa1d578	unicode	namespace
+0x9aa1d58c	unicode	following-sibling
+0x9aa1d5b0	unicode	following
+0x9aa1d5c4	unicode	descendant-or-self
+0x9aa1d5ec	unicode	descendant
+0x9aa1d604	unicode	child
+0x9aa1d610	unicode	attribute
+0x9aa1d624	unicode	ancestor-or-self
+0x9aa1d648	unicode	ancestor
+0x9aa1f5e4	unicode	DOCTYPE
+0x9aa1f8c8	unicode	<?xml version="1.0"?>
+0x9aa1faf5	unicode	?xml version="1.0"?>
+0x9aa1fb20	unicode	<?xml version="1.0"?>
+0x9aa1fb78	string	<?xml version="1.0"?>
+0x9aa1fce8	string	Access violation - no RTTI data!
+0x9aa1fd0c	string	Bad dynamic_cast!
+0x9aa1fdc0	string	e+000
+0x9aa1fdc8	unicode	runtime error 
+0x9aa1fdec	unicode	TLOSS error\n
+0x9aa1fe08	unicode	SING error\n
+0x9aa1fe20	unicode	DOMAIN error\n
+0x9aa1fe40	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9aa20030	unicode	R6032\n- not enough space for locale information\n
+0x9aa20098	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9aa2015c	unicode	R6030\n- CRT not initialized\n
+0x9aa20198	unicode	R6028\n- unable to initialize heap\n
+0x9aa201e0	unicode	R6027\n- not enough space for lowio initialization\n
+0x9aa20248	unicode	R6026\n- not enough space for stdio initialization\n
+0x9aa202b0	unicode	R6025\n- pure virtual function call\n
+0x9aa202f8	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9aa20360	unicode	R6019\n- unable to open console device\n
+0x9aa203b0	unicode	R6018\n- unexpected heap error\n
+0x9aa203f0	unicode	R6017\n- unexpected multithread lock error\n
+0x9aa20448	unicode	R6016\n- not enough space for thread data\n
+0x9aa204a0	unicode	R6010\n- abort() has been called\n
+0x9aa204e8	unicode	R6009\n- not enough space for environment\n
+0x9aa20540	unicode	R6008\n- not enough space for arguments\n
+0x9aa20590	unicode	R6002\n- floating point support not loaded\n
+0x9aa20710	unicode	HH:mm:ss
+0x9aa20724	unicode	dddd, MMMM dd, yyyy
+0x9aa2074c	unicode	MM/dd/yy
+0x9aa20770	unicode	December
+0x9aa20784	unicode	November
+0x9aa20798	unicode	October
+0x9aa207a8	unicode	September
+0x9aa207bc	unicode	August
+0x9aa207cc	unicode	July
+0x9aa207d8	unicode	June
+0x9aa207e4	unicode	April
+0x9aa207f0	unicode	March
+0x9aa207fc	unicode	February
+0x9aa20810	unicode	January
+0x9aa20880	unicode	Saturday
+0x9aa20894	unicode	Friday
+0x9aa208a4	unicode	Thursday
+0x9aa208b8	unicode	Wednesday
+0x9aa208cc	unicode	Tuesday
+0x9aa208dc	unicode	Monday
+0x9aa208ec	unicode	Sunday
+0x9aa20934	string	HH:mm:ss
+0x9aa20940	string	dddd, MMMM dd, yyyy
+0x9aa20954	string	MM/dd/yy
+0x9aa20968	string	December
+0x9aa20974	string	November
+0x9aa20980	string	October
+0x9aa20988	string	September
+0x9aa20994	string	August
+0x9aa209ac	string	April
+0x9aa209b4	string	March
+0x9aa209bc	string	February
+0x9aa209c8	string	January
+0x9aa20a00	string	Saturday
+0x9aa20a0c	string	Friday
+0x9aa20a14	string	Thursday
+0x9aa20a20	string	Wednesday
+0x9aa20a2c	string	Tuesday
+0x9aa20a34	string	Monday
+0x9aa20a3c	string	Sunday
+0x9aa20a60	unicode	(null)
+0x9aa20ba8	string	floor
+0x9aa21440	string	 Complete Object Locator'
+0x9aa2145c	string	 Class Hierarchy Descriptor'
+0x9aa2147c	string	 Base Class Array'
+0x9aa21490	string	 Base Class Descriptor at (
+0x9aa214ac	string	 Type Descriptor'
+0x9aa214c0	string	`local static thread guard'
+0x9aa214dc	string	`managed vector copy constructor iterator'
+0x9aa21508	string	`vector vbase copy constructor iterator'
+0x9aa21534	string	`vector copy constructor iterator'
+0x9aa21558	string	`dynamic atexit destructor for '
+0x9aa2157c	string	`dynamic initializer for '
+0x9aa21598	string	`eh vector vbase copy constructor iterator'
+0x9aa215c4	string	`eh vector copy constructor iterator'
+0x9aa215ec	string	`managed vector destructor iterator'
+0x9aa21614	string	`managed vector constructor iterator'
+0x9aa2163c	string	`placement delete[] closure'
+0x9aa2165c	string	`placement delete closure'
+0x9aa21678	string	`omni callsig'
+0x9aa21688	string	 delete[]
+0x9aa21694	string	 new[]
+0x9aa2169c	string	`local vftable constructor closure'
+0x9aa216c0	string	`local vftable'
+0x9aa216d0	string	`RTTI
+0x9aa216dc	string	`udt returning'
+0x9aa216ec	string	`copy constructor closure'
+0x9aa21708	string	`eh vector vbase constructor iterator'
+0x9aa21730	string	`eh vector destructor iterator'
+0x9aa21750	string	`eh vector constructor iterator'
+0x9aa21774	string	`virtual displacement map'
+0x9aa21790	string	`vector vbase constructor iterator'
+0x9aa217b4	string	`vector destructor iterator'
+0x9aa217d4	string	`vector constructor iterator'
+0x9aa217f4	string	`scalar deleting destructor'
+0x9aa21814	string	`default constructor closure'
+0x9aa21834	string	`vector deleting destructor'
+0x9aa21854	string	`vbase destructor'
+0x9aa21868	string	`string'
+0x9aa21874	string	`local static guard'
+0x9aa2188c	string	`typeof'
+0x9aa21898	string	`vcall'
+0x9aa218a0	string	`vbtable'
+0x9aa218ac	string	`vftable'
+0x9aa21934	string	operator
+0x9aa2195c	string	 delete
+0x9aa2196c	string	__unaligned
+0x9aa21978	string	__restrict
+0x9aa21984	string	__ptr64
+0x9aa2198c	string	__eabi
+0x9aa21994	string	__clrcall
+0x9aa219a0	string	__fastcall
+0x9aa219ac	string	__thiscall
+0x9aa219b8	string	__stdcall
+0x9aa219c4	string	__pascal
+0x9aa219d0	string	__cdecl
+0x9aa219d8	string	__based(
+0x9aa21d0c	string	1#QNAN
+0x9aa21d14	string	1#INF
+0x9aa21d1c	string	1#IND
+0x9aa21d24	string	1#SNAN
+0x9aa21e70	string	generic
+0x9aa21e90	string	iostream
+0x9aa21eb4	string	system
+0x9aa21ed4	string	iostream stream error
+0x9aa220f0	string	0123456789abcdefghijklmnopqrstuvwxyz
+0x9aa22140	string	0123456789abcdefghijklmnopqrstuvwxyz
+0x9aa221a8	unicode	UCS-4
+0x9aa221c0	unicode	UTF-8
+0x9aa221cc	unicode	UTF-16
+0x9aa221dc	unicode	UTF-16LE
+0x9aa221f0	unicode	UTF-16BE
+0x9aa2223c	unicode	UNICODE
+0x9aa2228c	unicode	US-ASCII
+0x9aa22378	unicode	WINDOWS-1250
+0x9aa22394	unicode	WINDOWS-1251
+0x9aa223b0	unicode	WINDOWS-1252
+0x9aa223cc	unicode	WINDOWS-1253
+0x9aa223e8	unicode	WINDOWS-1254
+0x9aa22404	unicode	WINDOWS-1255
+0x9aa22420	unicode	WINDOWS-1256
+0x9aa2243c	unicode	WINDOWS-1257
+0x9aa22458	unicode	WINDOWS-1258
+0x9aa2247c	unicode	version
+0x9aa2248c	unicode	encoding
+0x9aa224a0	unicode	standalone
+0x9aa224d8	unicode	http://www.w3.org/XML/1998/namespace
+0x9aa22526	unicode	mlns
+0x9aa22530	unicode	http://www.w3.org/2000/xmlns/
+0x9aa2256c	unicode	space
+0x9aa22584	unicode	preserve
+0x9aa22598	unicode	default
+0x9aa225a8	unicode	PUBLIC
+0x9aa225b8	unicode	SYSTEM
+0x9aa225c8	unicode	ELEMENT
+0x9aa225d8	unicode	ENTITY
+0x9aa225e8	unicode	ENTITIES
+0x9aa225fc	unicode	ATTLIST
+0x9aa2260c	unicode	NOTATION
+0x9aa22620	unicode	NDATA
+0x9aa2262c	unicode	EMPTY
+0x9aa22640	unicode	#PCDATA
+0x9aa22650	unicode	CDATA
+0x9aa2265c	unicode	NMTOKEN
+0x9aa2266c	unicode	REQUIRED
+0x9aa22680	unicode	IMPLIED
+0x9aa22690	unicode	FIXED
+0x9aa2269c	unicode	INCLUDE
+0x9aa226ac	unicode	IGNORE
+0x9aa226d0	string	Visual C++ CRT: Not enough memory to complete call to strerror.
+0x9aa22710	string	Illegal byte sequence
+0x9aa22728	string	Directory not empty
+0x9aa2273c	string	Function not implemented
+0x9aa22758	string	No locks available
+0x9aa2276c	string	Filename too long
+0x9aa22780	string	Resource deadlock avoided
+0x9aa2279c	string	Result too large
+0x9aa227b0	string	Domain error
+0x9aa227c0	string	Broken pipe
+0x9aa227cc	string	Too many links
+0x9aa227dc	string	Read-only file system
+0x9aa227f4	string	Invalid seek
+0x9aa22804	string	No space left on device
+0x9aa2281c	string	File too large
+0x9aa2282c	string	Inappropriate I/O control operation
+0x9aa22850	string	Too many open files
+0x9aa22864	string	Too many open files in system
+0x9aa22884	string	Invalid argument
+0x9aa22898	string	Is a directory
+0x9aa228a8	string	Not a directory
+0x9aa228b8	string	No such device
+0x9aa228c8	string	Improper link
+0x9aa228d8	string	File exists
+0x9aa228e4	string	Resource device
+0x9aa228f4	string	Unknown error
+0x9aa22904	string	Bad address
+0x9aa22910	string	Permission denied
+0x9aa22924	string	Not enough space
+0x9aa22938	string	Resource temporarily unavailable
+0x9aa2295c	string	No child processes
+0x9aa22970	string	Bad file descriptor
+0x9aa22984	string	Exec format error
+0x9aa22998	string	Arg list too long
+0x9aa229ac	string	No such device or address
+0x9aa229c8	string	Input/output error
+0x9aa229dc	string	Interrupted function call
+0x9aa229f8	string	No such process
+0x9aa22a08	string	No such file or directory
+0x9aa22a24	string	Operation not permitted
+0x9aa22a3c	string	No error
+0x9aa22a60	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\dlls\closedcaptionmanager\dll\obj\xbox\dash.ClosedCaptionDll.pdb
+0x9ab453a0	string	.?AVbad_alloc@std@@
+0x9ab453bc	string	.?AVexception@std@@
+0x9ab453ec	string	.?AVlogic_error@std@@
+0x9ab45420	string	.?AVUriSyntaxException@UTL@TTML@@
+0x9ab4544c	string	.?AVUriException@UTL@TTML@@
+0x9ab45470	string	.?AVException@TTML@@
+0x9ab45490	string	.?AVinvalid_argument@std@@
+0x9ab454b4	string	.?AVnot_implemented_error@TTML@@
+0x9ab454e0	string	.?AVruntime_error@std@@
+0x9ab45514	string	.?AVfailure@ios_base@std@@
+0x9ab45538	string	.?AVsystem_error@std@@
+0x9ab45558	string	.?AVbad_cast@std@@
+0x9ab45598	string	.?AV?$Unknown@UIUserOverrides@UTL@TTML@@@UTL@TTML@@
+0x9ab455d4	string	.?AUIUserOverrides@UTL@TTML@@
+0x9ab455fc	string	.?AUIUnknown@UTL@TTML@@
+0x9ab4561c	string	.?AVUserOverrides@UTL@TTML@@
+0x9ab45678	string	.?AVUnknownProfileException@UTL@TTML@@
+0x9ab456a8	string	.?AVRelativeUriException@UTL@TTML@@
+0x9ab456d4	string	.?AVPropertyParserException@PRM@TTML@@
+0x9ab45704	string	.?AVPropertyParserException@CSS@TTML@@
+0x9ab45734	string	.?AVEmptyUriException@UTL@TTML@@
+0x9ab45790	string	.?AVParseException@TCP@TTML@@
+0x9ab457c8	string	.?AV?$Unknown@UIParameters@UTL@TTML@@@UTL@TTML@@
+0x9ab45804	string	.?AUIParameters@UTL@TTML@@
+0x9ab45828	string	.?AV?$Unknown@UIVariantParameters@UTL@TTML@@@UTL@TTML@@
+0x9ab45868	string	.?AUIVariantParameters@UTL@TTML@@
+0x9ab45894	string	.?AVParameters@UTL@TTML@@
+0x9ab458b8	string	.?AVVariantParameters@UTL@TTML@@
+0x9ab458f8	string	.?AUIVariant@UTL@TTML@@
+0x9ab45918	string	.?AUICloneable@UTL@TTML@@
+0x9ab4593c	string	.?AV?$Unknown@UIEnumVariant@UTL@TTML@@@UTL@TTML@@
+0x9ab45978	string	.?AUIEnumVariant@UTL@TTML@@
+0x9ab4599c	string	.?AV?$Unknown@UIInterfaceVariant@UTL@TTML@@@UTL@TTML@@
+0x9ab459dc	string	.?AUIInterfaceVariant@UTL@TTML@@
+0x9ab45a08	string	.?AVEnumVariant@UTL@TTML@@
+0x9ab45a2c	string	.?AVInterfaceVariant@UTL@TTML@@
+0x9ab45a98	string	.?AVfacet@locale@std@@
+0x9ab45ab8	string	.?AUctype_base@std@@
+0x9ab45ad8	string	.?AVios_base@std@@
+0x9ab45b10	string	.?AV?$basic_ostream@DU?$char_traits@D@std@@@std@@
+0x9ab45b4c	string	.?AV?$basic_ios@DU?$char_traits@D@std@@@std@@
+0x9ab45b88	string	.?AV?$Unknown@UIProfileRequirements@UTL@TTML@@@UTL@TTML@@
+0x9ab45bcc	string	.?AUIProfileRequirements@UTL@TTML@@
+0x9ab45bf8	string	.?AV?$Unknown@UIProfileSupport@UTL@TTML@@@UTL@TTML@@
+0x9ab45c38	string	.?AUIProfileSupport@UTL@TTML@@
+0x9ab45c7c	string	.?AV?$basic_streambuf@DU?$char_traits@D@std@@@std@@
+0x9ab45cb8	string	.?AV?$basic_stringbuf@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@
+0x9ab45d08	string	.?AV?$basic_ostringstream@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@
+0x9ab45d5c	string	.?AVProfileSupport@UTL@TTML@@
+0x9ab45d84	string	.?AVProfileRequirements@UTL@TTML@@
+0x9ab45db0	string	.?AVProfileException@UTL@TTML@@
+0x9ab45dd8	string	.?AVInvalidFeatureDesignatorException@UTL@TTML@@
+0x9ab45e14	string	.?AVInvalidExtensionDesignatorException@UTL@TTML@@
+0x9ab45e50	string	.?AVInvalidBaseException@UTL@TTML@@
+0x9ab45e7c	string	.?AVImmutableProfileException@UTL@TTML@@
+0x9ab45eb0	string	.?AVUnknownRequirementException@UTL@TTML@@
+0x9ab45f08	string	.?AV?$Unknown@UILocation@UTL@TTML@@@UTL@TTML@@
+0x9ab45f40	string	.?AUILocation@UTL@TTML@@
+0x9ab45f64	string	.?AV?$Unknown@UILexicalLocation@UTL@TTML@@@UTL@TTML@@
+0x9ab45fa4	string	.?AUILexicalLocation@UTL@TTML@@
+0x9ab45fcc	string	.?AVLocation@UTL@TTML@@
+0x9ab45fec	string	.?AVLexicalLocation@UTL@TTML@@
+0x9ab46038	string	.?AV?$Unknown@UIError@UTL@TTML@@@UTL@TTML@@
+0x9ab4608c	string	.?AVError@UTL@TTML@@
+0x9ab460c0	string	.?AV?$Unknown@UIUri@UTL@TTML@@@UTL@TTML@@
+0x9ab46190	string	.?AVParseException@CSS@TTML@@
+0x9ab461b8	string	.?AVExpectedDelimiterException@CSS@TTML@@
+0x9ab46230	string	.?AVCharacterEncodingException@UTL@TTML@@
+0x9ab46264	string	.?AVUnicodeScalarValueException@UTL@TTML@@
+0x9ab46298	string	.?AVUnicodeSurrogateSequenceException@UTL@TTML@@
+0x9ab462f8	string	.?AVUnsupportedSchemeException@CLP@TTML@@
+0x9ab4632c	string	.?AVDuplicateException@CLP@TTML@@
+0x9ab46500	string	.?AVDOMException@XML@TTML@@
+0x9ab46548	string	.?AVFontException@GAL@TTML@@
+0x9ab46580	string	.?AV?$Unknown@UIDocumentReader@XML@TTML@@@UTL@TTML@@
+0x9ab465c0	string	.?AUIDocumentReader@XML@TTML@@
+0x9ab465e8	string	.?AV?$Unknown@UIContentListener@XML@TTML@@@UTL@TTML@@
+0x9ab46628	string	.?AUIContentListener@XML@TTML@@
+0x9ab46650	string	.?AV?$Unknown@UIDeclarationListener@XML@TTML@@@UTL@TTML@@
+0x9ab46694	string	.?AUIDeclarationListener@XML@TTML@@
+0x9ab466c0	string	.?AV?$Unknown@UIErrorListener@UTL@TTML@@@UTL@TTML@@
+0x9ab466fc	string	.?AUIErrorListener@UTL@TTML@@
+0x9ab46728	string	.?AV?$Unknown@UIStateChangeListener@UTL@TTML@@@UTL@TTML@@
+0x9ab4676c	string	.?AUIStateChangeListener@UTL@TTML@@
+0x9ab46798	string	.?AVDocumentReader@XMB@XML@TTML@@
+0x9ab467d8	string	.?AV?$basic_ostream@_WU?$char_traits@_W@std@@@std@@
+0x9ab46814	string	.?AV?$basic_ios@_WU?$char_traits@_W@std@@@std@@
+0x9ab4684c	string	.?AV?$Unknown@UIBehavior@UTL@TTML@@@UTL@TTML@@
+0x9ab46884	string	.?AUIBehavior@UTL@TTML@@
+0x9ab468a8	string	.?AV?$Unknown@UIParser@XML@TTML@@@UTL@TTML@@
+0x9ab468e0	string	.?AUIParser@XML@TTML@@
+0x9ab46900	string	.?AV?$basic_streambuf@_WU?$char_traits@_W@std@@@std@@
+0x9ab46940	string	.?AV?$basic_stringbuf@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@
+0x9ab46990	string	.?AV?$num_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@
+0x9ab469e8	string	.?AV?$basic_ostringstream@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@
+0x9ab46a5c	string	.?AVdom_error@XMB@XML@TTML@@
+0x9ab46b18	string	.?AVInternalException@TCP@TTML@@
+0x9ab46b68	string	.?AV?$Unknown@UIEventTarget@XML@TTML@@@UTL@TTML@@
+0x9ab46ba4	string	.?AUIEventTarget@XML@TTML@@
+0x9ab46bc8	string	.?AV?$Unknown@UIDocument@XML@TTML@@@UTL@TTML@@
+0x9ab46c00	string	.?AUIDocument@XML@TTML@@
+0x9ab46c44	string	.?AVDocument@XMB@XML@TTML@@
+0x9ab46c68	string	.?AVEventTarget@XMB@XML@TTML@@
+0x9ab46c90	string	.?AV?$Node@UIDocument@XML@TTML@@@XMB@XML@TTML@@
+0x9ab46d10	string	.?AV?$Unknown@UIImplementation@XMB@XML@TTML@@@UTL@TTML@@
+0x9ab46d54	string	.?AUIImplementation@XMB@XML@TTML@@
+0x9ab46d80	string	.?AVImplementation@XMB@XML@TTML@@
+0x9ab46dc0	string	.?AV?$Unknown@UIRange@XML@TTML@@@UTL@TTML@@
+0x9ab46df4	string	.?AUIRange@XML@TTML@@
+0x9ab46e48	string	.?AV?$Unknown@UINodeTraverser@XML@TTML@@@UTL@TTML@@
+0x9ab46e84	string	.?AUINodeTraverser@XML@TTML@@
+0x9ab46eac	string	.?AVNodeTraverser@XMB@XML@TTML@@
+0x9ab46ee8	string	.?AV?$Unknown@UIUserAgentEvent@XML@TTML@@@UTL@TTML@@
+0x9ab46f28	string	.?AUIUserAgentEvent@XML@TTML@@
+0x9ab46f50	string	.?AUIEvent@XML@TTML@@
+0x9ab46f70	string	.?AV?$Unknown@UIFocusEvent@XML@TTML@@@UTL@TTML@@
+0x9ab46fac	string	.?AUIFocusEvent@XML@TTML@@
+0x9ab46fd0	string	.?AUIUIEvent@XML@TTML@@
+0x9ab46ff0	string	.?AV?$Unknown@UIMouseEvent@XML@TTML@@@UTL@TTML@@
+0x9ab4702c	string	.?AUIMouseEvent@XML@TTML@@
+0x9ab47050	string	.?AV?$Unknown@UIKeyboardEvent@XML@TTML@@@UTL@TTML@@
+0x9ab4708c	string	.?AUIKeyboardEvent@XML@TTML@@
+0x9ab470b4	string	.?AV?$Unknown@UITextEvent@XML@TTML@@@UTL@TTML@@
+0x9ab470ec	string	.?AUITextEvent@XML@TTML@@
+0x9ab47110	string	.?AV?$Unknown@UIMutationEvent@XML@TTML@@@UTL@TTML@@
+0x9ab4714c	string	.?AUIMutationEvent@XML@TTML@@
+0x9ab47178	string	.?AV?$Unknown@UINameMutationEvent@XML@TTML@@@UTL@TTML@@
+0x9ab471b8	string	.?AUINameMutationEvent@XML@TTML@@
+0x9ab471e4	string	.?AV?$Unknown@UICustomEvent@XML@TTML@@@UTL@TTML@@
+0x9ab47220	string	.?AUICustomEvent@XML@TTML@@
+0x9ab47244	string	.?AV?$Unknown@UIEventListener@XML@TTML@@@UTL@TTML@@
+0x9ab47280	string	.?AUIEventListener@XML@TTML@@
+0x9ab472a8	string	.?AVEventBase@XMB@XML@TTML@@
+0x9ab472d0	string	.?AVEventListener@XMB@XML@TTML@@
+0x9ab472fc	string	.?AV?$Event@UIMutationEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47340	string	.?AV?$Event@UINameMutationEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47384	string	.?AV?$Event@UIUserAgentEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab473c4	string	.?AV?$Event@UICustomEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47400	string	.?AV?$Event@UIFocusEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab4743c	string	.?AV?$Event@UIMouseEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47478	string	.?AV?$Event@UIKeyboardEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab474b8	string	.?AV?$Event@UITextEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab474f4	string	.?AVCustomEvent@XMB@XML@TTML@@
+0x9ab4751c	string	.?AV?$UIEvent@UIFocusEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab4755c	string	.?AV?$UIEvent@UIMouseEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab475a0	string	.?AV?$UIEvent@UIKeyboardEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab475e0	string	.?AV?$UIEvent@UITextEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab4761c	string	.?AVMouseEvent@XMB@XML@TTML@@
+0x9ab47644	string	.?AVKeyboardEvent@XMB@XML@TTML@@
+0x9ab47670	string	.?AVTextEvent@XMB@XML@TTML@@
+0x9ab47698	string	.?AVUserAgentEvent@XMB@XML@TTML@@
+0x9ab476c4	string	.?AVFocusEvent@XMB@XML@TTML@@
+0x9ab476f0	string	.?AV?$MutationEventBase@UIMutationEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47740	string	.?AV?$MutationEventBase@UINameMutationEvent@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47790	string	.?AVMutationEvent@XMB@XML@TTML@@
+0x9ab477bc	string	.?AVNameMutationEvent@XMB@XML@TTML@@
+0x9ab47800	string	.?AV?$Unknown@UIElement@XML@TTML@@@UTL@TTML@@
+0x9ab47838	string	.?AUIElement@XML@TTML@@
+0x9ab47858	string	.?AVElement@XMB@XML@TTML@@
+0x9ab4787c	string	.?AV?$Node@UIElement@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47900	string	.?AV?$Unknown@UIText@XML@TTML@@@UTL@TTML@@
+0x9ab47954	string	.?AV?$Unknown@UIComment@XML@TTML@@@UTL@TTML@@
+0x9ab4798c	string	.?AUIComment@XML@TTML@@
+0x9ab479b0	string	.?AV?$Unknown@UIProcessingInstruction@XML@TTML@@@UTL@TTML@@
+0x9ab479f4	string	.?AUIProcessingInstruction@XML@TTML@@
+0x9ab47a28	string	.?AV?$Unknown@UINamespaceDeclaration@XML@TTML@@@UTL@TTML@@
+0x9ab47a6c	string	.?AUINamespaceDeclaration@XML@TTML@@
+0x9ab47abc	string	.?AVComment@XMB@XML@TTML@@
+0x9ab47ae0	string	.?AVProcessingInstruction@XMB@XML@TTML@@
+0x9ab47b14	string	.?AV?$TextCore@UIText@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47ba4	string	.?AV?$TextCore@UIComment@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47be0	string	.?AV?$Node@UIComment@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47c18	string	.?AV?$TextCore@UIProcessingInstruction@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47c68	string	.?AV?$Node@UIProcessingInstruction@XML@TTML@@@XMB@XML@TTML@@
+0x9ab47cb0	string	.?AVNamespaceDeclaration@XMB@XML@TTML@@
+0x9ab47cf0	string	.?AV?$Unknown@UIAttribute@XML@TTML@@@UTL@TTML@@
+0x9ab47d28	string	.?AUIAttribute@XML@TTML@@
+0x9ab47d4c	string	.?AVAttribute@XMB@XML@TTML@@
+0x9ab47d74	string	.?AV?$Node@UIAttribute@XML@TTML@@@XMB@XML@TTML@@
+0x9ab484e8	string	.?AV__non_rtti_object@std@@
+0x9ab4850c	string	.?AVbad_typeid@std@@
+0x9ab48ce9	string	abcdefghijklmnopqrstuvwxyz
+0x9ab48d09	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9ab491cc	string	.?AVlength_error@std@@
+0x9ab491ec	string	.?AVout_of_range@std@@
+0x9ab49230	string	Copyright (c) 1992-2004 by P.J. Plauger, licensed by Dinkumware, Ltd. ALL RIGHTS RESERVED.
+0x9ab4e04a	string	dash.ClosedCaptionDll.xex
+0x9ab4e064	string	CreateClosedCaptionManager
+0x9ab4e07f	string	DllCanUnloadNow
+0x9ab4e08f	string	DllMain
+0x9ab4e130	string	georgia.ttf
+0x9ab4e144	string	scriptmt.ttf
+0x9ab4e159	string	tahomasmcp.ttf
+0x9ab4e170	string	segoepr.ttf
+0x9ab4e183	string	\nsegoer.ttf
+0x9ab4e196	string	\rsegoeuimt.ttf
+0x9ab4f953	string	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`a
+0x9ab564e8	unicode	ngArrunta
+0x9ab655ce	unicode	 is a trademark of Monotype Typography, Ltd which may be registered in certain jurisdictions.Script MT CC BoldRegularMonotype - Script MT Bold RegularVersion 1.01ScriptMTCCBoldYou may use this font as permitted by the EULA for the product in which this font is included to display and print content. You may only (i) embed this font in content as permitted by the embedding restrictions included in this font; and (ii) temporarily download this font to a printer or other output device to help print content.
+0x9ab698c0	string	PusRPus
+0x9ab6bbb2	unicode	NavadnoArrunta
+0x9ab6c7bb	string	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`a
+0x9ab7c970	unicode	 2012 Microsoft Corporation. All Rights Reserved.Segoe Xbox RegularVersion 1.01SegoeXbox-RegularSegoe is a trademark of the Microsoft group of companies.http://www.microsoft.com/typography/fonts/You may use this font as permitted by the EULA for the product in which this font is included to display and print content. You may only (i) embed this font in content as permitted by the embedding restrictions included in this font; and (ii) temporarily download this font to a printer or other output device to help print content.
+0x9ab821b0	unicode	lneNavadnoArrunta

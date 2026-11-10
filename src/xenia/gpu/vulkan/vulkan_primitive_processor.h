@@ -15,6 +15,7 @@
 
 #include "xenia/base/assert.h"
 #include "xenia/gpu/primitive_processor.h"
+#include "xenia/gpu/vulkan/vulkan_native_resource_epoch.h"
 #include "xenia/ui/vulkan/vulkan_upload_buffer_pool.h"
 
 namespace xe {
@@ -42,6 +43,13 @@ class VulkanPrimitiveProcessor final : public PrimitiveProcessor {
   void BeginFrame();
   void EndSubmission();
   void EndFrame();
+
+  // Host conversion cache lifetime is distinct from GPU buffer lifetime.
+  // Native pools never enter the title-frame number namespace.
+  bool BeginNativeResourceEpoch(VulkanNativeResourceEpoch epoch,
+                                uint64_t completed_epoch);
+  bool EndNativeResourceEpoch(VulkanNativeResourceEpoch epoch) noexcept;
+  void ReclaimNativeResourceEpochs(uint64_t completed_epoch);
 
   std::pair<VkBuffer, VkDeviceSize> GetBuiltinIndexBuffer(size_t handle) const {
     assert_not_null(builtin_index_buffer_);
@@ -78,6 +86,9 @@ class VulkanPrimitiveProcessor final : public PrimitiveProcessor {
   // submission (if the upload buffer exists at all).
   uint64_t builtin_index_buffer_upload_submission_ = UINT64_MAX;
 
+  bool native_resource_epoch_mode_ = false;
+  VulkanNativeResourceEpoch native_resource_epoch_;
+  uint64_t native_resource_epoch_completed_ = 0;
   std::unique_ptr<ui::vulkan::VulkanUploadBufferPool> frame_index_buffer_pool_;
   // Indexed by the backend handles.
   std::deque<std::pair<VkBuffer, VkDeviceSize>> frame_index_buffers_;

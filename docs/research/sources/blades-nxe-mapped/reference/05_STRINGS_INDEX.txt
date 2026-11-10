@@ -1,0 +1,66 @@
+Keyword-filtered string index
+================================
+Regenerate with: python3 _tool/build_05_strings.py
+
+Only strings matching a curated keyword list (avatar, gamer/profile,
+storage, content, title, XNA, XBLIG/XBLA, licensing, sign-in, device,
+marketplace, XNet/network, errors/status, paths, mount names, system
+apps, etc.) are indexed here to keep signal high - see build_05_strings.py
+KEYWORDS for the exact list. xrefs (which code loads a string's address)
+are only computed for PRIORITY_MODULES and are INFERRED, not CONFIRMED -
+the lis+addi/la/ori pattern match is a heuristic, not full data-flow - but
+they DO now cover every function build_04_calls.py's call graph knows about
+(exports, BFS-discovered internals, and callback descendants), not just
+exported functions.
+
+$flash_bootanim.xexp  ->  reference/strings/flash_bootanim.xexp.strings.txt  (55 matches)
+$flash_createprofile.xexp  ->  reference/strings/flash_createprofile.xexp.strings.txt  (92 matches)
+$flash_dash.xex  ->  reference/strings/flash_dash.xex.strings.txt  (11977 matches)
+$flash_deviceselector.xexp  ->  reference/strings/flash_deviceselector.xexp.strings.txt  (127 matches)
+$flash_gamerprofile.xexp  ->  reference/strings/flash_gamerprofile.xexp.strings.txt  (719 matches)
+$flash_hud.xexp  ->  reference/strings/flash_hud.xexp.strings.txt  (78 matches)
+$flash_huduiskin.xex  ->  reference/strings/flash_huduiskin.xex.strings.txt  (1196 matches)
+$flash_mfgbootlauncher.xexp  ->  reference/strings/flash_mfgbootlauncher.xexp.strings.txt  (58 matches)
+$flash_minimediaplayer.xexp  ->  reference/strings/flash_minimediaplayer.xexp.strings.txt  (151 matches)
+$flash_signin.xexp  ->  reference/strings/flash_signin.xexp.strings.txt  (641 matches)
+$flash_systemupdate.xex  ->  reference/strings/flash_systemupdate.xex.strings.txt  (312 matches)
+$flash_updater.xexp  ->  reference/strings/flash_updater.xexp.strings.txt  (117 matches)
+$flash_vk.xexp  ->  reference/strings/flash_vk.xexp.strings.txt  (105 matches)
+$flash_xam.xexp  ->  reference/strings/flash_xam.xexp.strings.txt  (875 matches)
+$flash_ximecore.xex  ->  reference/strings/flash_ximecore.xex.strings.txt  (75 matches)
+$install_extender.xex  ->  reference/strings/install_extender.xex.strings.txt  (156 matches)
+AvatarEditor.xex  ->  reference/strings/AvatarEditor.xex.strings.txt  (5359 matches)
+AvatarMiniCreator.xex  ->  reference/strings/AvatarMiniCreator.xex.strings.txt  (305 matches)
+Feedback.xex  ->  reference/strings/Feedback.xex.strings.txt  (413 matches)
+Friends.xex  ->  reference/strings/Friends.xex.strings.txt  (1269 matches)
+LivePack.xex  ->  reference/strings/LivePack.xex.strings.txt  (1380 matches)
+Marketplace.xex  ->  reference/strings/Marketplace.xex.strings.txt  (1770 matches)
+Party.xex  ->  reference/strings/Party.xex.strings.txt  (15 matches)
+Quickchat.xex  ->  reference/strings/Quickchat.xex.strings.txt  (345 matches)
+Voicemail.xex  ->  reference/strings/Voicemail.xex.strings.txt  (179 matches)
+WORDREGISTER.XEX  ->  reference/strings/WORDREGISTER.XEX.strings.txt  (10 matches)
+XIMEDIC.XEX  ->  reference/strings/XIMEDIC.XEX.strings.txt  (303 matches)
+XIMEDICCH.XEX  ->  reference/strings/XIMEDICCH.XEX.strings.txt  (831 matches)
+XIMEDICEX.XEX  ->  reference/strings/XIMEDICEX.XEX.strings.txt  (107 matches)
+XMsgr.xex  ->  reference/strings/XMsgr.xex.strings.txt  (85 matches)
+bootanim.xex  ->  reference/strings/bootanim.xex.strings.txt  (149 matches)
+createprofile.xex  ->  reference/strings/createprofile.xex.strings.txt  (264 matches)
+dash.xex  ->  reference/strings/dash.xex.strings.txt  (6649 matches)
+deviceselector.xex  ->  reference/strings/deviceselector.xex.strings.txt  (53 matches)
+gamerprofile.xex  ->  reference/strings/gamerprofile.xex.strings.txt  (468 matches)
+hostloader.dll  ->  reference/strings/hostloader.dll.strings.txt  (904 matches)
+hud.xex  ->  reference/strings/hud.xex.strings.txt  (525 matches)
+huduiskin.xex  ->  reference/strings/huduiskin.xex.strings.txt  (43 matches)
+mfgbootlauncher.xex  ->  reference/strings/mfgbootlauncher.xex.strings.txt  (61 matches)
+minimediaplayer.xex  ->  reference/strings/minimediaplayer.xex.strings.txt  (144 matches)
+runtime/v3.0/BackCompatShim.xex  ->  reference/strings/runtime__v3.0__BackCompatShim.xex.strings.txt  (337 matches)
+runtime/v3.0/netcfusermode.dll  ->  reference/strings/runtime__v3.0__netcfusermode.dll.strings.txt  (186 matches)
+runtime/v3.0/runtimehost.xex  ->  reference/strings/runtime__v3.0__runtimehost.xex.strings.txt  (1123 matches)
+runtime/v3.1/BackCompatShim.xex  ->  reference/strings/runtime__v3.1__BackCompatShim.xex.strings.txt  (391 matches)
+runtime/v3.1/netcfusermode.dll  ->  reference/strings/runtime__v3.1__netcfusermode.dll.strings.txt  (184 matches)
+runtime/v3.1/runtimehost.xex  ->  reference/strings/runtime__v3.1__runtimehost.xex.strings.txt  (1254 matches)
+signin.xex  ->  reference/strings/signin.xex.strings.txt  (401 matches)
+titlelauncher.xex  ->  reference/strings/titlelauncher.xex.strings.txt  (319 matches)
+updater.xex  ->  reference/strings/updater.xex.strings.txt  (59 matches)
+vk.xex  ->  reference/strings/vk.xex.strings.txt  (108 matches)
+xam.xex  ->  reference/strings/xam.xex.strings.txt  (943 matches)

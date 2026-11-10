@@ -1,0 +1,18 @@
+{
+  "module": "XMsgr.xex",
+  "program": "74d5af21f244_XMsgr.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "90d1f2319d8c513e4754914e2f95c50855c0e7ace0530cfb7e152b70aa28a4db",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x91720400",
+  "functions": 1100,
+  "calls": 4058,
+  "strings": 233,
+  "string_xrefs": 271,
+  "independent_sha256": "d54c772fe998fd3c291c2873c12192519a31fdd1f2ecb137f18ff78441b93706",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

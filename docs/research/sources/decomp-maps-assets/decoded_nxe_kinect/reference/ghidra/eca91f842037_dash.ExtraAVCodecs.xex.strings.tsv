@@ -1,0 +1,1354 @@
+va	data_type	text
+0x9c06098c	string	MS1RET_DATA_NOT_READY
+0x9c0609a4	string	MS1RET_NO_MORE_DATA
+0x9c0609b8	string	MS1RET_OK
+0x9c0609c4	string	MS1RET_ERROR
+0x9c0609d4	string	MS1RET_ERROR_BS_STARTCODE
+0x9c0609f0	string	MS1RET_ERROR_NALU
+0x9c060a04	string	MS1RET_ERROR_BS_LEADING0BITS
+0x9c060a24	string	MS1RET_ERROR_UNSUPPORTED_CODEC
+0x9c060a44	string	MS1RET_ERR0R_CAVLC_TABLE_INIT_FAILED
+0x9c060a6c	string	MS1RET_ERROR_VALID_CALLBACK_FCN_REQUIRED
+0x9c060a98	string	MS1RET_ERROR_INVALID_CONCEAL_MODE
+0x9c060abc	string	MS1RET_ERROR_CORRUPT_MACROBLOCK
+0x9c060adc	string	MS1RET_ERROR_INVALIDARG
+0x9c060af4	string	MS1RET_ERROR_D3DDEVICE_ALREADY_INITIALIZED
+0x9c060b20	string	MS1RET_ERROR_INVALID_BUFFER
+0x9c060bdc	string	Total Pooled Memory: %d\n
+0x9c060c4c	unicode	PRIVATE/VideoBitrate
+0x9c060c78	unicode	PRIVATE/TotalBitrate
+0x9c060ca4	unicode	PRIVATE/AudioSyncInfo
+0x9c060cd0	unicode	PRIVATE/VideoFourCC
+0x9c060cf8	unicode	PRIVATE/AudioFormat
+0x9c060d20	unicode	PRIVATE/VideoFormat
+0x9c060d48	unicode	PRIVATE/MP4moovAtomSize
+0x9c060e08	unicode	Duration
+0x9c060e1c	unicode	CurrentBitrate
+0x9c060e3c	unicode	FileSize
+0x9c060e50	unicode	WM/VideoHeight
+0x9c060e70	unicode	WM/VideoWidth
+0x9c060e8c	unicode	WM/VideoFrameRate
+0x9c060eb0	unicode	DeviceConformanceTemplate
+0x9c060f10	unicode	MP4_HasBFrames
+0x9c060f30	unicode	MP4_HasConstantFrameRate
+0x9c060fb4	unicode	(unknown)
+0x9c061020	unicode	CQTDataBuffer
+0x9c06105c	unicode	CMP4Descriptor
+0x9c0610ec	unicode	CQTAtom
+0x9c061484	unicode	CEnumAtoms
+0x9c0614fc	unicode	CQTMediaHandler
+0x9c061bd8	unicode	CQTUserData
+0x9c061cf8	string	\nThis program is protected under international and U.S. copyright laws as\nan unpublished work.  Do not copy.\n\nCopyright 2003-2006 Dolby Laboratories. All rights reserved.\n\nUSE OF THIS SOFTWARE IS SUBJECT TO A LEGAL AGREEMENT BETWEEN YOU AND DOLBY\nLABORATORIES. DO NOT USE THIS SOFTWARE UNLESS YOU AGREE TO THE TERMS AND \nCONDITIONS IN THE AGREEMENT.  BY USING THIS SOFTWARE, YOU ACKNOWLEDGE THAT \nYOU HAVE READ THE AGREEMENT AND THAT YOU AGREE TO BE BOUND BY ITS TERMS. \n\n
+0x9c062644	string	<unallocated>\n
+0x9c062654	string	  TotalSize   :%d\n
+0x9c062668	string	    unusedSize:%d\n
+0x9c06267c	string	    inUseSize : %d\n
+0x9c062690	string	OutputPictureBufferPool:\n
+0x9c0626ac	string	\tTotal YUVBuffer allocated:%d bytes\n
+0x9c0626e4	string	\t%s entry:%d:%d bytes\n
+0x9c0626fc	string	YUVBufferPool:\n
+0x9c0632a0	string	   : DeltaScale   
+0x9c0632b4	string	VUI: time_offset_length
+0x9c0632cc	string	VUI: dpb_output_delay_length_minus1
+0x9c0632f0	string	VUI: cpb_removal_delay_length_minus1
+0x9c063318	string	VUI: initial_cpb_removal_delay_length_minus1
+0x9c063348	string	VUI: bit_rate_value_minus1
+0x9c063364	string	VUI: cpb_size_value_minus1
+0x9c063380	string	VUI: cbr_flag
+0x9c063390	string	VUI: cpb_size_scale
+0x9c0633a4	string	VUI: bit_rate_scale
+0x9c0633b8	string	VUI: cpb_cnt_minus1
+0x9c0633cc	string	PPS: second_chroma_qp_index_offset
+0x9c0633f0	string	PPS: pic_scaling_list_present_flag
+0x9c063414	string	PPS: pic_scaling_matrix_present_flag
+0x9c06343c	string	PPS: transform_8x8_mode_flag
+0x9c06345c	string	PPS: redundant_pic_cnt_present_flag
+0x9c063480	string	PPS: constrained_intra_pred_flag
+0x9c0634a4	string	PPS: deblocking_filter_control_present_flag
+0x9c0634d0	string	PPS: chroma_qp_index_offset
+0x9c0634ec	string	PPS: pic_init_qs_minus26
+0x9c063508	string	PPS: pic_init_qp_minus26
+0x9c063524	string	PPS: weighted_bipred_idc
+0x9c063540	string	PPS: weighted prediction flag
+0x9c063560	string	PPS: num_ref_idx_l1_active_minus1
+0x9c063584	string	PPS: num_ref_idx_l0_active_minus1
+0x9c0635a8	string	PPS: slice_group_change_rate_minus1
+0x9c0635cc	string	PPS: slice_group_change_direction_flag
+0x9c0635f4	string	slice_group_id[i]
+0x9c063608	string	PPS: num_slice_group_map_units_minus1
+0x9c063630	string	PPS: top_left [i]
+0x9c063644	string	PPS: bottom_right [i]
+0x9c06365c	string	PPS: run_length_minus1 [i]
+0x9c063678	string	PPS: slice_group_map_type
+0x9c063694	string	PPS: num_slice_groups_minus1
+0x9c0636b4	string	PPS: pic_order_present_flag
+0x9c0636d0	string	PPS: entropy_coding_mode_flag
+0x9c0636f0	string	PPS: seq_parameter_set_id
+0x9c06370c	string	PPS: pic_parameter_set_id
+0x9c063728	string	VUI: max_dec_frame_buffering
+0x9c063748	string	VUI: num_reorder_frames
+0x9c063760	string	VUI: log2_max_mv_length_vertical
+0x9c063784	string	VUI: log2_max_mv_length_horizontal
+0x9c0637a8	string	VUI: max_bits_per_mb_denom
+0x9c0637c4	string	VUI: max_bytes_per_pic_denom
+0x9c0637e4	string	VUI: motion_vectors_over_pic_boundaries_flag
+0x9c063814	string	VUI: bitstream_restriction_flag
+0x9c063834	string	VUI: pic_struct_present_flag   
+0x9c063854	string	VUI: low_delay_hrd_flag
+0x9c06386c	string	VUI: vcl_hrd_parameters_present_flag
+0x9c063894	string	VUI: nal_hrd_parameters_present_flag
+0x9c0638bc	string	VUI: fixed_frame_rate_flag
+0x9c0638d8	string	VUI: time_scale
+0x9c0638e8	string	VUI: num_units_in_tick
+0x9c063900	string	VUI: timing_info_present_flag
+0x9c063920	string	VUI: chroma_sample_loc_type_bottom_field
+0x9c06394c	string	VUI: chroma_sample_loc_type_top_field
+0x9c063974	string	VUI: chroma_loc_info_present_flag
+0x9c063998	string	VUI: matrix_coefficients
+0x9c0639b4	string	VUI: transfer_characteristics
+0x9c0639d4	string	VUI: colour_primaries
+0x9c0639ec	string	VUI: color_description_present_flag
+0x9c063a10	string	VUI: video_full_range_flag
+0x9c063a2c	string	VUI: video_format
+0x9c063a40	string	VUI: video_signal_type_present_flag
+0x9c063a64	string	VUI: overscan_appropriate_flag
+0x9c063a84	string	VUI: overscan_info_present_flag
+0x9c063aa4	string	VUI: sar_height
+0x9c063ab4	string	VUI: sar_width
+0x9c063ac4	string	VUI: aspect_ratio_idc
+0x9c063adc	string	VUI: aspect_ratio_info_present_flag
+0x9c063b00	string	SPS: vui_parameters_present_flag
+0x9c063b24	string	SPS: frame_cropping_rect_bottom_offset
+0x9c063b4c	string	SPS: frame_cropping_rect_top_offset
+0x9c063b70	string	SPS: frame_cropping_rect_right_offset
+0x9c063b98	string	SPS: frame_cropping_rect_left_offset
+0x9c063bc0	string	SPS: frame_cropping_flag
+0x9c063bdc	string	SPS: direct_8x8_inference_flag
+0x9c063bfc	string	SPS: mb_adaptive_frame_field_flag
+0x9c063c20	string	SPS: frame_mbs_only_flag
+0x9c063c3c	string	SPS: pic_height_in_map_units_minus1
+0x9c063c60	string	SPS: pic_width_in_mbs_minus1
+0x9c063c80	string	SPS: gaps_in_frame_num_value_allowed_flag
+0x9c063cac	string	SPS: num_ref_frames
+0x9c063cc0	string	SPS: offset_for_ref_frame[i]
+0x9c063ce0	string	SPS: num_ref_frames_in_pic_order_cnt_cycle
+0x9c063d0c	string	SPS: offset_for_top_to_bottom_field
+0x9c063d30	string	SPS: offset_for_non_ref_pic
+0x9c063d4c	string	SPS: delta_pic_order_always_zero_flag
+0x9c063d74	string	SPS: log2_max_pic_order_cnt_lsb_minus4
+0x9c063d9c	string	SPS: pic_order_cnt_type
+0x9c063db4	string	SPS: log2_max_frame_num_minus4
+0x9c063dd4	string	SPS: seq_scaling_list_present_flag
+0x9c063df8	string	SPS: seq_scaling_matrix_present_flag
+0x9c063e20	string	SPS: lossless_qpprime_y_zero_flag
+0x9c063e44	string	SPS: bit_depth_chroma_minus8
+0x9c063e64	string	SPS: bit_depth_luma_minus8
+0x9c063e80	string	SPS: residue_transform_flag
+0x9c063e9c	string	SPS: chroma_format_idc
+0x9c063eb4	string	SPS: seq_parameter_set_id
+0x9c063ed0	string	SPS: level_idc
+0x9c063ee0	string	SPS: reserved_zero_4bits
+0x9c063efc	string	SPS: constrained_set3_flag
+0x9c063f18	string	SPS: constrained_set2_flag
+0x9c063f34	string	SPS: constrained_set1_flag
+0x9c063f50	string	SPS: constrained_set0_flag
+0x9c063f6c	string	SPS: profile_idc
+0x9c064040	string	 Panic: All zero data sequence in RBSP \n
+0x9c06406c	string	    pool total size:%d\n
+0x9c064084	string	    pool allocated elements:%d, max:%d\n
+0x9c0640ac	string	    pool structure size:%d\n
+0x9c0640c8	string	    Element size:%d\n
+0x9c0640e0	string	PictureFrameImgYUV
+0x9c0640f4	string	    Element type:%s\n
+0x9c06410c	string	PictureFrameImgYUVPool
+0x9c064124	string	Pool:%s\n
+0x9c064130	string	PictureDataFieldPointer
+0x9c064148	string	PictureDataFieldPointerPool
+0x9c064164	string	PictureDataFramePointer
+0x9c06417c	string	PictureDataFramePointerPool
+0x9c064198	string	PictureMBField
+0x9c0641a8	string	PictureMBFieldPool
+0x9c0641bc	string	PictureSliceIDFrame
+0x9c0641d0	string	PictureSliceIDFramePool
+0x9c0641e8	string	PictureRefIdxFrame
+0x9c0641fc	string	PictureRefIdxFramePool
+0x9c064214	string	PictureMVFrame
+0x9c064224	string	PictureMVFramePool
+0x9c064238	string	SPSHolder
+0x9c064244	string	SPSPool
+0x9c06424c	string	PPSHolder
+0x9c064258	string	PPSPool
+0x9c064260	string	PictureHolder
+0x9c064270	string	PicturePool
+0x9c06427c	string	SliceHolder
+0x9c064288	string	SliceHolderPool
+0x9c064298	string	SliceHolderArray
+0x9c0642ac	string	SliceHolderArrayPool
+0x9c0642c4	string	nmbMBAFFTable
+0x9c0642d4	string	nmbMBAFFPool
+0x9c0642e4	string	nmbTable
+0x9c0642f8	string	EntropyDecodeBufFragment
+0x9c064314	string	EntropyDecodeBufFragmentPool
+0x9c064334	string	ThreadedCompressedBuffer
+0x9c064350	string	ThreadedCompressedBufferPool
+0x9c064370	string	MBNumPosLevelBuf
+0x9c064384	string	MBNumPosLevelBufPool
+0x9c0643a4	string	MVDiffPool
+0x9c0643b0	string	RefIdxRemap
+0x9c0643bc	string	RefIdxRemapPool
+0x9c0643cc	string	SiBlockArray
+0x9c0643dc	string	SiBlockArrayPool
+0x9c0643f0	string	ProfileTimer
+0x9c064400	string	ProfileTimerPool
+0x9c064414	string	RefPicNumArrayStruct
+0x9c06442c	string	RefPicNumArrayStructPool
+0x9c064448	string	BsBase
+0x9c064450	string	BsBasePool
+0x9c06445c	string	BStrength
+0x9c064468	string	BStrengthPool
+0x9c064478	string	TaskNode
+0x9c064484	string	TaskNodePool
+0x9c064494	string	DependencyNode
+0x9c0644a4	string	DependencyNodePool
+0x9c0644b8	string	PanScanPocListNode
+0x9c0644cc	string	PanScanPocListNodePool
+0x9c0644e4	string	PanScanIdListNode
+0x9c0644f8	string	PanScanIdListNodePool
+0x9c064510	string	LFSlicePrecomputedRefPicNum
+0x9c06452c	string	LFSlicePrecomputedRefPicNumPool
+0x9c06454c	string	PictureNode
+0x9c064558	string	PictureNodePool
+0x9c064568	string	GPUEntropyBuffer
+0x9c06457c	string	GPUEntropyBufferPool
+0x9c064594	string	GPUDecodeBuffer
+0x9c0645a4	string	GPUDecodeBufferPool
+0x9c0645ec	string	\t\t%s:%d\n
+0x9c0645f8	string	pstFilmGrainParVar
+0x9c06460c	string	\t\tsize_x_cr:%d, size_y_cr:%d\n
+0x9c06462c	string	\t\tsize_x   :%d, size_y   :%d\n
+0x9c064650	string	PIC_FRAME_FROM_FRAME
+0x9c064668	string	PIC_FRAME_FROM_FIELD
+0x9c064680	string	PIC_FIELD_FROM_FRAME
+0x9c064698	string	PIC_FIELD_FROM_FIELD
+0x9c0646b0	string	NULL pointer\n
+0x9c0646c0	string	\n\tStorablePicture:
+0x9c0646d4	string	Normal Field Pictures\n
+0x9c0646ec	string	Split Field Pictures\n
+0x9c064704	string	Combined Frame Pictures\n
+0x9c064720	string	  unused\n
+0x9c06472c	string	inUse    :%d pictures, %d bytes\n
+0x9c064750	string	available:%d pictures, %d bytes\n
+0x9c064774	string	Normal Frame Pictures\n
+0x9c06478c	string	picaff codepath\n
+0x9c0647a0	string	mbaff codepath\n
+0x9c0647b0	string	progressive codepath\n
+0x9c0647c8	string	default codepath\n
+0x9c0647dc	string	\nStorablePicturePool:
+0x9c0653fa	string	333333element:%d, start:0x%x, size:%d\n
+0x9c065424	string	head allocation size with wrap: %d\n
+0x9c065448	string	head allocation size without wrap: %d\n
+0x9c065470	string	\nHEAD, extent:0x%x, %d bytes, max simul allocs:%d\n
+0x9c0654f8	string	\tTotal image allocation:%d\n
+0x9c065514	string	\tEach image: Y: %d, U: %d, V:%d\n
+0x9c065538	string	ImageArray, %d images.\n
+0x9c0655f0	unicode	CMSMetadataAtom
+0x9c065654	unicode	CMSMetadataCollection
+0x9c065680	unicode	Title
+0x9c06568c	unicode	Author
+0x9c06569c	unicode	WM/AlbumArtist
+0x9c0656bc	unicode	WM/AlbumTitle
+0x9c0656d8	unicode	WM/TrackNumber
+0x9c0656f8	unicode	WM/Composer
+0x9c065710	unicode	WM/Year
+0x9c065720	unicode	WM/BeatsPerMinute
+0x9c065744	unicode	WM/Genre
+0x9c065758	unicode	WM/Picture
+0x9c065770	unicode	Description
+0x9c065788	unicode	Synthpop
+0x9c06579c	unicode	Jpop
+0x9c0657a8	unicode	Anime
+0x9c0657b4	unicode	Trash Metal
+0x9c0657cc	unicode	Salsa
+0x9c0657d8	unicode	Merengue
+0x9c0657ec	unicode	Christian Rock
+0x9c06580c	unicode	Contemporary Christian
+0x9c06583c	unicode	Crossover
+0x9c065850	unicode	Black Metal
+0x9c065868	unicode	Heavy Metal
+0x9c065880	unicode	Christian Gangsta Rap
+0x9c0658ac	unicode	Beat
+0x9c0658b8	unicode	Polsk Punk
+0x9c0658d0	unicode	Negerpunk
+0x9c0658e4	unicode	BritPop
+0x9c0658f4	unicode	Indie
+0x9c065900	unicode	Terror
+0x9c065910	unicode	Hardcore
+0x9c065924	unicode	Club-House
+0x9c06593c	unicode	Drum & Bass
+0x9c06595c	unicode	Dance Hall
+0x9c065974	unicode	Euro-House
+0x9c06598c	unicode	A capella
+0x9c0659a0	unicode	Drum Solo
+0x9c0659b4	unicode	Punk Rock
+0x9c0659c8	unicode	Duet
+0x9c0659d4	unicode	Freestyle
+0x9c0659e8	unicode	Rhythmic Soul
+0x9c065a04	unicode	Power Ballad
+0x9c065a20	unicode	Ballad
+0x9c065a30	unicode	Folklore
+0x9c065a44	unicode	Samba
+0x9c065a50	unicode	Tango
+0x9c065a5c	unicode	Club
+0x9c065a68	unicode	Slow Jam
+0x9c065a7c	unicode	Satire
+0x9c065a8c	unicode	Porn Groove
+0x9c065aa4	unicode	Primus
+0x9c065ab4	unicode	Booty Bass
+0x9c065acc	unicode	Symphony
+0x9c065ae0	unicode	Sonata
+0x9c065af0	unicode	Chamber Music
+0x9c065b0c	unicode	Opera
+0x9c065b18	unicode	Chanson
+0x9c065b28	unicode	Speech
+0x9c065b38	unicode	Humour
+0x9c065b48	unicode	Acoustic
+0x9c065b5c	unicode	Easy Listening
+0x9c065b7c	unicode	Chorus
+0x9c065b8c	unicode	Big Band
+0x9c065ba0	unicode	Slow Rock
+0x9c065bb4	unicode	Symphonic Rock
+0x9c065bd4	unicode	Psychedelic Rock
+0x9c065bf8	unicode	Progressive Rock
+0x9c065c1c	unicode	Gothic Rock
+0x9c065c34	unicode	Avantgarde
+0x9c065c4c	unicode	Bluegrass
+0x9c065c60	unicode	Celtic
+0x9c065c70	unicode	Revival
+0x9c065c80	unicode	Latin
+0x9c065c8c	unicode	Bebob
+0x9c065c98	unicode	Fast Fusion
+0x9c065cb0	unicode	Swing
+0x9c065cbc	unicode	National Folk
+0x9c065cd8	unicode	Folk-Rock
+0x9c065cec	unicode	Folk
+0x9c065cf8	unicode	Hard Rock
+0x9c065d0c	unicode	Rock & Roll
+0x9c065d24	unicode	Musical
+0x9c065d34	unicode	Retro
+0x9c065d40	unicode	Polka
+0x9c065d4c	unicode	Acid Jazz
+0x9c065d60	unicode	Acid Punk
+0x9c065d74	unicode	Tribal
+0x9c065d84	unicode	Lo-Fi
+0x9c065d90	unicode	Trailer
+0x9c065da0	unicode	Showtunes
+0x9c065db4	unicode	Rave
+0x9c065dc0	unicode	Psychadelic
+0x9c065dd8	unicode	New Wave
+0x9c065dec	unicode	Cabaret
+0x9c065dfc	unicode	Native American
+0x9c065e1c	unicode	Jungle
+0x9c065e2c	unicode	Pop/Funk
+0x9c065e40	unicode	Christian Rap
+0x9c065e5c	unicode	Top 40
+0x9c065e6c	unicode	Gangsta
+0x9c065e7c	unicode	Cult
+0x9c065e88	unicode	Comedy
+0x9c065e98	unicode	Southern Rock
+0x9c065eb4	unicode	Dream
+0x9c065ec0	unicode	Eurodance
+0x9c065ed4	unicode	Pop-Folk
+0x9c065ee8	unicode	Electronic
+0x9c065f00	unicode	Techno-Industrial
+0x9c065f24	unicode	Darkwave
+0x9c065f38	unicode	Gothic
+0x9c065f48	unicode	Ethnic
+0x9c065f58	unicode	Instrumental Rock
+0x9c065f7c	unicode	Instrumental Pop
+0x9c065fa0	unicode	Meditative
+0x9c065fb8	unicode	Space
+0x9c065fc4	unicode	Punk
+0x9c065fd0	unicode	Soul
+0x9c065fdc	unicode	Bass
+0x9c065fe8	unicode	AlternRock
+0x9c066000	unicode	Noise
+0x9c06600c	unicode	Gospel
+0x9c06601c	unicode	Sound Clip
+0x9c066034	unicode	Game
+0x9c066040	unicode	House
+0x9c06604c	unicode	Acid
+0x9c066058	unicode	Instrumental
+0x9c066074	unicode	Classical
+0x9c066088	unicode	Trance
+0x9c066098	unicode	Fusion
+0x9c0660a8	unicode	Jazz+Funk
+0x9c0660bc	unicode	Vocal
+0x9c0660c8	unicode	Trip-Hop
+0x9c0660dc	unicode	Ambient
+0x9c0660ec	unicode	Euro-Techno
+0x9c066104	unicode	Soundtrack
+0x9c06611c	unicode	Pranks
+0x9c06612c	unicode	Death Metal
+0x9c06614c	unicode	Alternative
+0x9c066164	unicode	Industrial
+0x9c06617c	unicode	Techno
+0x9c06618c	unicode	Rock
+0x9c066198	unicode	Reggae
+0x9c0661c0	unicode	Other
+0x9c0661cc	unicode	Oldies
+0x9c0661dc	unicode	New Age
+0x9c0661ec	unicode	Metal
+0x9c0661f8	unicode	Jazz
+0x9c066204	unicode	Hip-Hop
+0x9c066214	unicode	Grunge
+0x9c066224	unicode	Funk
+0x9c066230	unicode	Disco
+0x9c06623c	unicode	Dance
+0x9c066248	unicode	Country
+0x9c066258	unicode	Classic Rock
+0x9c066274	unicode	Blues
+0x9c066338	unicode	CAppleMetadataCollection
+0x9c06636c	unicode	CQTAppleMetadataAtom
+0x9c066398	unicode	WM/AlbumArtist
+0x9c0663b8	unicode	Description
+0x9c066480	unicode	CMP4MetadataHAndler
+0x9c0666c3	string	WE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DummyPS.updb
+0x9c0667c3	string	WE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MemCopy.updb
+0x9c066878	string	dstBuffer
+0x9c066a63	string	VE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MemSet.updb
+0x9c066b18	string	dstBuffer
+0x9c066b34	string	srcValue
+0x9c066b50	string	stride
+0x9c066d9b	string	]E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_ReshuffleLuma.updb
+0x9c066e70	string	exportAddress
+0x9c066e7e	string	tileData
+0x9c06736b	string	cE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_ReshuffleLuma_mbaff.updb
+0x9c06746c	string	exportAddress
+0x9c06747a	string	exportAddress_YUVBuffer
+0x9c067492	string	fConst4_LfDimMB_YUVBuffer
+0x9c0674ac	string	tileData
+0x9c067c43	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_ReshuffleChroma.updb
+0x9c067d2c	string	exportAddress
+0x9c067d3a	string	offsetUV
+0x9c067d43	string	tileData
+0x9c0680f3	string	eE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_ReshuffleChroma_mbaff.updb
+0x9c06820c	string	exportAddress
+0x9c06821a	string	exportAddress_YUVBuffer
+0x9c068232	string	fConst4_LfDimMB_YUVBuffer
+0x9c06824c	string	offsetUV
+0x9c068255	string	tileData
+0x9c0687e3	string	lE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_LoopfilterMbaffHStrengthsGpu.updb
+0x9c0688fc	string	f4Array_BStrenABChrSh
+0x9c068924	string	fConst4_BStrenBParams
+0x9c06894c	string	fConst4_BStrenDimMB
+0x9c068960	string	fConst4_BStrenQPParams
+0x9c068977	string	linTex_BStrenMV
+0x9c068998	string	linTex_BStrenRefIdx0
+0x9c0689ad	string	vbExp_BStrenDestH
+0x9c06a69b	string	lE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_LoopfilterMbaffVStrengthsGpu.updb
+0x9c06a7b4	string	f4Array_BStrenABChrSh
+0x9c06a7dc	string	fConst4_BStrenBParams
+0x9c06a804	string	fConst4_BStrenDimMB
+0x9c06a818	string	fConst4_BStrenQPParams
+0x9c06a82f	string	linTex_BStrenMV
+0x9c06a850	string	linTex_BStrenRefIdx0
+0x9c06a865	string	vbExp_BStrenDestV
+0x9c06c9ab	string	eE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaVWaveMbaff.updb
+0x9c06cafc	string	exportTemp
+0x9c06cb18	string	f4Array_LfABChrSh
+0x9c06cb3c	string	f4Array_LfClipTable
+0x9c06cb60	string	fConst4_LfDimMB
+0x9c06cb70	string	fConst4_LfWaveData0
+0x9c06cb84	string	fConst4_LfWaveData1
+0x9c06cb98	string	linTex_LfInTexScratch
+0x9c06cbc0	string	linTex_LfTileDataY
+0x9c06cbd3	string	linTex_LfTileMap
+0x9c06cbe4	string	regSliceQP
+0x9c06df53	string	eE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaHWaveMbaff.updb
+0x9c06e090	string	exportTemp
+0x9c06e0ac	string	f4Array_LfABChrSh
+0x9c06e0d0	string	f4Array_LfClipTable
+0x9c06e0f4	string	fConst4_LfDimMB
+0x9c06e104	string	fConst4_LfWaveData0
+0x9c06e118	string	fConst4_LfWaveData1
+0x9c06e12c	string	linTex_LfInTexScratch
+0x9c06e154	string	linTex_LfInTexScratch4
+0x9c06e16b	string	regSliceQP
+0x9c070cdb	string	jE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaHWaveMbaffFrame.updb
+0x9c070e1c	string	exportTemp
+0x9c070e38	string	f4Array_LfABChrSh
+0x9c070e5c	string	f4Array_LfClipTable
+0x9c070e80	string	fConst4_LfDimMB
+0x9c070e90	string	fConst4_LfWaveData0
+0x9c070ea4	string	fConst4_LfWaveData1
+0x9c070eb8	string	linTex_LfInTexScratch
+0x9c070ee0	string	linTex_LfInTexScratch4
+0x9c070ef7	string	regSliceQP
+0x9c073523	string	jE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaHWaveMbaffField.updb
+0x9c073664	string	exportTemp
+0x9c073680	string	f4Array_LfABChrSh
+0x9c0736a4	string	f4Array_LfClipTable
+0x9c0736c8	string	fConst4_LfDimMB
+0x9c0736d8	string	fConst4_LfWaveData0
+0x9c0736ec	string	fConst4_LfWaveData1
+0x9c073700	string	linTex_LfInTexScratch
+0x9c073728	string	linTex_LfInTexScratch4
+0x9c07373f	string	regSliceQP
+0x9c075843	string	dE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaShufMbaff.updb
+0x9c07592c	string	exportTemp
+0x9c075948	string	fConst4_LfDimMB
+0x9c075958	string	fConst4_LfDimMB_YUVBuffer
+0x9c075972	string	linTex_LfInTexScratch4
+0x9c07599c	string	vbExp_LfDestination
+0x9c07656b	string	dE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaTLMbaff.updb
+0x9c0766e0	string	exportTemp
+0x9c0766fc	string	f4Array_LfChromaABChrSh
+0x9c076724	string	f4Array_LfChromaClipTable
+0x9c076750	string	fConst4_LfChromaDimMB
+0x9c076766	string	fConst4_LfChromaFieldLimits
+0x9c076782	string	fConst4_LfChromaQPParams
+0x9c07679b	string	fConst4_LfChromaScratchOff
+0x9c0767b6	string	inputScratch
+0x9c0767d4	string	linTex_LfChromaBsh
+0x9c0767e7	string	linTex_LfChromaBsv
+0x9c0767fa	string	regSliceQP
+0x9c076818	string	tex2D_LfChromaInput
+0x9c07851b	string	dE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaBLMbaff.updb
+0x9c07867c	string	exportTemp
+0x9c078698	string	f4Array_LfChromaABChrSh
+0x9c0786c0	string	f4Array_LfChromaClipTable
+0x9c0786ec	string	fConst4_LfChromaDimMB
+0x9c078702	string	fConst4_LfChromaFieldLimits
+0x9c07871e	string	fConst4_LfChromaQPParams
+0x9c078737	string	fConst4_LfChromaScratchOff
+0x9c078752	string	linTex_LfChromaBsh
+0x9c078778	string	linTex_LfChromaBsv
+0x9c07878b	string	regSliceQP
+0x9c0787a8	string	tex2D_LfChromaInput
+0x9c07b97b	string	gE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaShufTMbaff.updb
+0x9c07ba68	string	ScratchOff
+0x9c07ba84	string	exportTemp
+0x9c07ba8f	string	fConst4_LfDimMB
+0x9c07ba9f	string	fConst4_LfDimMB_YUVBuffer
+0x9c07bab9	string	vbExp_LfDestination
+0x9c07bec3	string	gE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaShufBMbaff.updb
+0x9c07bfc4	string	QPParams
+0x9c07bfe0	string	ScratchOff
+0x9c07bfeb	string	exportTemp
+0x9c07bff6	string	fConst4_LfDimMB
+0x9c07c006	string	fConst4_LfDimMB_YUVBuffer
+0x9c07c020	string	vbExp_LfDestination
+0x9c07c403	string	dE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaTRMbaff.updb
+0x9c07c564	string	exportTemp
+0x9c07c580	string	f4Array_LfChromaABChrSh
+0x9c07c5a8	string	f4Array_LfChromaClipTable
+0x9c07c5d4	string	fConst4_LfChromaDimMB
+0x9c07c5ea	string	fConst4_LfChromaFieldLimits
+0x9c07c606	string	fConst4_LfChromaQPParams
+0x9c07c61f	string	fConst4_LfChromaScratchOff
+0x9c07c63a	string	linTex_LfChromaBsh
+0x9c07c660	string	linTex_LfChromaBsv
+0x9c07c673	string	regSliceQP
+0x9c07c690	string	tex2D_LfChromaInput
+0x9c07f5fb	string	iE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaTRMbaffField.updb
+0x9c07f764	string	exportTemp
+0x9c07f780	string	f4Array_LfChromaABChrSh
+0x9c07f7a8	string	f4Array_LfChromaClipTable
+0x9c07f7d4	string	fConst4_LfChromaDimMB
+0x9c07f7ea	string	fConst4_LfChromaFieldLimits
+0x9c07f806	string	fConst4_LfChromaQPParams
+0x9c07f81f	string	fConst4_LfChromaScratchOff
+0x9c07f83a	string	linTex_LfChromaBsh
+0x9c07f860	string	linTex_LfChromaBsv
+0x9c07f873	string	regSliceQP
+0x9c07f890	string	tex2D_LfChromaInput
+0x9c0817db	string	iE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaTRMbaffFrame.updb
+0x9c081944	string	exportTemp
+0x9c081960	string	f4Array_LfChromaABChrSh
+0x9c081988	string	f4Array_LfChromaClipTable
+0x9c0819b4	string	fConst4_LfChromaDimMB
+0x9c0819ca	string	fConst4_LfChromaFieldLimits
+0x9c0819e6	string	fConst4_LfChromaQPParams
+0x9c0819ff	string	fConst4_LfChromaScratchOff
+0x9c081a1a	string	linTex_LfChromaBsh
+0x9c081a40	string	linTex_LfChromaBsv
+0x9c081a53	string	regSliceQP
+0x9c081a70	string	tex2D_LfChromaInput
+0x9c083163	string	jE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaVWaveMbaff1pass.updb
+0x9c083268	string	exportTemp
+0x9c083284	string	f4Array_LfABChrSh
+0x9c0832a8	string	f4Array_LfClipTable
+0x9c0832cc	string	fConst4_LfDimMB
+0x9c0832dc	string	regSliceQP
+0x9c0832f8	string	tex2D_LfInput
+0x9c084253	string	jE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaHWaveMbaff1pass.updb
+0x9c084358	string	exportTemp
+0x9c084374	string	f4Array_LfABChrSh
+0x9c084398	string	f4Array_LfClipTable
+0x9c0843bc	string	fConst4_LfDimMB
+0x9c0843cc	string	linTex_LfInTexScratch
+0x9c0843f4	string	regSliceQP
+0x9c085cbb	string	iE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaShufMbaff1pass.updb
+0x9c085dac	string	exportTemp
+0x9c085dc8	string	fConst4_LfDimMB
+0x9c085dd8	string	fConst4_LfDimMB_YUVBuffer
+0x9c085df2	string	linTex_LfInTexScratch
+0x9c085e18	string	vbExp_LfDestination
+0x9c0867b3	string	ZE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_BStrengthV.updb
+0x9c0868bc	string	f4Array_BStrenABChrSh
+0x9c0868e4	string	f4Array_BStrenClipTable
+0x9c08690c	string	fConst4_BStrenBParams
+0x9c086934	string	fConst4_BStrenDimMB
+0x9c086948	string	linTex_BStrenMV
+0x9c086968	string	linTex_BStrenRefIdx0
+0x9c08697d	string	vbExp_BStrenDestV
+0x9c0882c3	string	ZE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_BStrengthH.updb
+0x9c0883cc	string	f4Array_BStrenABChrSh
+0x9c0883f4	string	f4Array_BStrenClipTable
+0x9c08841c	string	fConst4_BStrenBParams
+0x9c088444	string	fConst4_BStrenDimMB
+0x9c088458	string	linTex_BStrenMV
+0x9c088478	string	linTex_BStrenRefIdx0
+0x9c08848d	string	vbExp_BStrenDestH
+0x9c089d43	string	`E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaVWave.updb
+0x9c089e3c	string	exportTemp
+0x9c089e58	string	fConst4_LfDimMB
+0x9c089e68	string	fConst4_LfWaveData0
+0x9c089e7c	string	fConst4_LfWaveData1
+0x9c089e90	string	linTex_LfTileDataY
+0x9c089eb4	string	linTex_LfTileMap
+0x9c08abeb	string	`E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaHWave.updb
+0x9c08acbc	string	exportTemp
+0x9c08acd8	string	fConst4_LfDimMB
+0x9c08ace8	string	fConst4_LfWaveData0
+0x9c08acfc	string	fConst4_LfWaveData1
+0x9c08bbd3	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockLumaShuf.updb
+0x9c08bc7c	string	fConst4_LfDimMB
+0x9c08bc9c	string	vbExp_LfDestination
+0x9c08c4a3	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaTL.updb
+0x9c08c600	string	ALPHABETACRSH_TABLE
+0x9c08c624	string	CLIP_TABLE
+0x9c08c640	string	QPParams
+0x9c08c65c	string	ScratchOff
+0x9c08c667	string	exportTemp
+0x9c08c672	string	fConst4_LfDimMB
+0x9c08c682	string	fConst4_LfFieldLimits
+0x9c08c698	string	linTex_LfBsh
+0x9c08c6b8	string	linTex_LfBsv
+0x9c08c6c5	string	regSliceQP
+0x9c08c6e0	string	tex2D_LfInput
+0x9c08d3ab	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaTR.updb
+0x9c08d508	string	ALPHABETACRSH_TABLE
+0x9c08d52c	string	CLIP_TABLE
+0x9c08d548	string	QPParams
+0x9c08d564	string	ScratchOff
+0x9c08d56f	string	exportTemp
+0x9c08d57a	string	fConst4_LfDimMB
+0x9c08d58a	string	fConst4_LfFieldLimits
+0x9c08d5a0	string	linTex_LfBsh
+0x9c08d5c0	string	linTex_LfBsv
+0x9c08d5cd	string	regSliceQP
+0x9c08d5e8	string	tex2D_LfInput
+0x9c08e1f3	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaBL.updb
+0x9c08e350	string	ALPHABETACRSH_TABLE
+0x9c08e374	string	CLIP_TABLE
+0x9c08e390	string	QPParams
+0x9c08e3ac	string	ScratchOff
+0x9c08e3b7	string	exportTemp
+0x9c08e3c2	string	fConst4_LfDimMB
+0x9c08e3d2	string	fConst4_LfFieldLimits
+0x9c08e3e8	string	linTex_LfBsh
+0x9c08e408	string	linTex_LfBsv
+0x9c08e415	string	regSliceQP
+0x9c08e430	string	tex2D_LfInput
+0x9c08f03b	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaBR.updb
+0x9c08f198	string	ALPHABETACRSH_TABLE
+0x9c08f1bc	string	CLIP_TABLE
+0x9c08f1d8	string	QPParams
+0x9c08f1f4	string	ScratchOff
+0x9c08f1ff	string	exportTemp
+0x9c08f20a	string	fConst4_LfDimMB
+0x9c08f21a	string	fConst4_LfFieldLimits
+0x9c08f230	string	linTex_LfBsh
+0x9c08f250	string	linTex_LfBsv
+0x9c08f25d	string	regSliceQP
+0x9c08f278	string	tex2D_LfInput
+0x9c08fdcb	string	bE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaShufT.updb
+0x9c08fe78	string	fConst4_LfDimMB
+0x9c08fe98	string	vbExp_LfDestination
+0x9c09019b	string	bE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DeblockChromaShufB.updb
+0x9c090248	string	fConst4_LfDimMB
+0x9c090268	string	vbExp_LfDestination
+0x9c090543	string	]E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_FilmGrainCopy.updb
+0x9c09062c	string	exportDest
+0x9c090637	string	fieldDup
+0x9c090640	string	inputValue
+0x9c090e33	string	YE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_ITrans4x4.updb
+0x9c090ed8	string	exportAddress
+0x9c090ef8	string	inputScratch
+0x9c09131b	string	YE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_ITrans8x8.updb
+0x9c0913ec	string	exportAddress
+0x9c0913fa	string	inputScratch
+0x9c092943	string	\E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_ITransChroma.updb
+0x9c0929e8	string	exportAddress
+0x9c092a08	string	inputScratch
+0x9c092ec3	string	WE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DummyPS.updb
+0x9c092fc3	string	`E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DequantDC_Chroma.updb
+0x9c0930d0	string	QP_SCALE_CR
+0x9c0930ec	string	QpChromaOffset
+0x9c09310c	string	Shift2Mul
+0x9c093128	string	exportAddress
+0x9c093136	string	inputRaw
+0x9c093150	string	normAdjust
+0x9c09316c	string	weightDCChroma
+0x9c093483	string	^E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DequantDC_Luma.updb
+0x9c093568	string	Shift2Mul
+0x9c093584	string	exportAddress
+0x9c0935a4	string	inputRaw
+0x9c0935c0	string	normAdjust
+0x9c0935dc	string	weightDCLuma
+0x9c093acb	string	aE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_Dequant4x4_Chroma.updb
+0x9c093bf0	string	QP_SCALE_CR
+0x9c093c0c	string	QpChromaOffset
+0x9c093c2c	string	Shift2Mul
+0x9c093c48	string	exportAddress
+0x9c093c56	string	inputACCoef
+0x9c093c74	string	inputDCCoef
+0x9c093c80	string	normAdjust
+0x9c093c9c	string	weightChroma
+0x9c094353	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_Dequant4x4_Luma.updb
+0x9c09444c	string	Shift2Mul
+0x9c094468	string	exportAddress
+0x9c094488	string	inputACCoef
+0x9c0944a4	string	inputDCCoef
+0x9c0944b0	string	normAdjust
+0x9c0944cc	string	weightLuma
+0x9c09492b	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_Dequant8x8_Luma.updb
+0x9c094a3c	string	Shift2Mul
+0x9c094a58	string	exportAddress
+0x9c094a66	string	inputACCoef
+0x9c094a84	string	normAdjust
+0x9c094aa0	string	weightLuma
+0x9c09510b	string	XE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IPCMLuma.updb
+0x9c0951fc	string	Blk4x4XYScan
+0x9c095230	string	exportAddress
+0x9c09523e	string	idxBuffer
+0x9c095258	string	srcBuffer
+0x9c095262	string	tileMap
+0x9c095723	string	ZE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IPCMChroma.updb
+0x9c09582c	string	Blk4x4XYScan
+0x9c095868	string	exportAddress
+0x9c095876	string	idxBuffer
+0x9c095890	string	srcBuffer
+0x9c09589a	string	tileMap
+0x9c09639b	string	WE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DummyPS.updb
+0x9c09649b	string	^E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IPCMLuma_Mbaff.updb
+0x9c096594	string	Blk4x4XYScan
+0x9c0965c8	string	exportAddress
+0x9c0965d6	string	idxBuffer
+0x9c0965f0	string	srcBuffer
+0x9c0965fa	string	tileMap
+0x9c096bc3	string	`E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IPCMChroma_Mbaff.updb
+0x9c096cd0	string	Blk4x4XYScan
+0x9c096d0c	string	exportAddress
+0x9c096d1a	string	idxBuffer
+0x9c096d34	string	srcBuffer
+0x9c096d3e	string	tileMap
+0x9c0972d8	string	SH: pic_parameter_set_id
+0x9c0972f4	string	SH: slice_type
+0x9c097304	string	SH: first_mb_in_slice
+0x9c09731c	string	SH: reordering_of_pic_nums_idc_l1
+0x9c097340	string	SH: abs_diff_pic_num_minus1_l1
+0x9c097360	string	SH: long_term_pic_idx_l1
+0x9c09737c	string	SH: ref_pic_list_reordering_flag_l1
+0x9c0973a0	string	SH: reordering_of_pic_nums_idc_l0
+0x9c0973c4	string	SH: abs_diff_pic_num_minus1_l0
+0x9c0973e4	string	SH: long_term_pic_idx_l0
+0x9c097400	string	SH: ref_pic_list_reordering_flag_l0
+0x9c097424	string	SH: luma_weight_flag_l1
+0x9c09743c	string	SH: luma_weight_l1
+0x9c097450	string	SH: luma_offset_l1
+0x9c097464	string	SH: chroma_weight_flag_l1
+0x9c097480	string	SH: chroma_weight_l1
+0x9c097498	string	SH: chroma_offset_l1
+0x9c0974b0	string	SH: luma_weight_flag_l0
+0x9c0974c8	string	SH: luma_weight_l0
+0x9c0974dc	string	SH: luma_offset_l0
+0x9c0974f0	string	SH: chroma_weight_flag_l0
+0x9c09750c	string	SH: chroma_weight_l0
+0x9c097524	string	SH: chroma_offset_l0
+0x9c09753c	string	SH: chroma_log2_weight_denom
+0x9c09755c	string	SH: pSliceHolder->stPredWeightTableVar.luma_log2_weight_denom
+0x9c09759c	string	SH: memory_management_control_operation
+0x9c0975c4	string	SH: difference_of_pic_nums_minus1
+0x9c0975e8	string	SH: long_term_pic_num
+0x9c097600	string	SH: long_term_frame_idx
+0x9c097618	string	SH: max_long_term_pic_idx_plus1
+0x9c097638	string	SH: adaptive_ref_pic_buffering_flag
+0x9c09765c	string	SH: long_term_reference_flag
+0x9c09767c	string	SH: no_output_of_prior_pics_flag
+0x9c0976a0	string	SH: slice_group_change_cycle
+0x9c0976c0	string	SH: slice_beta_offset_div2
+0x9c0976dc	string	SH: slice_alpha_c0_offset_div2
+0x9c0976fc	string	SH: disable_deblocking_filter_idc
+0x9c097720	string	SH: slice_qs_delta
+0x9c097734	string	SH: sp_for_switch_flag
+0x9c09774c	string	SH: slice_qp_delta
+0x9c097760	string	SH: cabac_init_idc
+0x9c097774	string	SH: num_ref_idx_l1_active_minus1
+0x9c097798	string	SH: num_ref_idx_l0_active_minus1
+0x9c0977bc	string	SH: num_ref_idx_override_flag
+0x9c0977dc	string	SH: direct_spatial_mv_pred_flag
+0x9c0977fc	string	SH: redundant_pic_cnt
+0x9c097814	string	SH: delta_pic_order_cnt[1]
+0x9c097830	string	SH: delta_pic_order_cnt[0]
+0x9c09784c	string	SH: delta_pic_order_cnt_bottom
+0x9c09786c	string	SH: pic_order_cnt_lsb
+0x9c097884	string	SH: idr_pic_id
+0x9c097894	string	SH: bottom_field_flag
+0x9c0978ac	string	SH: field_pic_flag
+0x9c0978c0	string	SH: frame_num
+0x9c0978df	string	^SEI: zero_run_length
+0x9c0978f8	string	SEI: delta_spare_frame_num
+0x9c097914	string	SEI: ref_area_indicator
+0x9c09792c	string	SEI: ref_mb_indicator
+0x9c097944	string	SEI: num_spare_pics_minus1
+0x9c097960	string	SEI: target_bottom_field_flag
+0x9c097980	string	SEI: spare_field_flag
+0x9c097998	string	SEI: target_frame_num
+0x9c0979b0	string	SEI: sub_seq_frame_num
+0x9c0979c8	string	SEI: sub_seq_frame_num_flag
+0x9c0979e4	string	SEI: last_pic_flag
+0x9c0979f8	string	SEI: leading_non_ref_pic_flag
+0x9c097a18	string	SEI: first_ref_pic_flag
+0x9c097a30	string	SEI: sub_seq_id
+0x9c097a40	string	SEI: sub_seq_layer_num
+0x9c097a58	string	SEI: accurate_statistics_flag
+0x9c097a78	string	SEI: average_bit_rate
+0x9c097a90	string	SEI: average_frame_rate
+0x9c097aa8	string	SEI: num_sub_layers_minus1
+0x9c097ac4	string	SEI: ref_sub_seq_layer_num
+0x9c097ae0	string	SEI: ref_sub_seq_id
+0x9c097af4	string	SEI: ref_sub_seq_direction
+0x9c097b10	string	SEI: num_referenced_subseqs
+0x9c097b2c	string	SEI: average_rate_flag
+0x9c097b44	string	SEI: duration_flag
+0x9c097b58	string	SEI: scene_transition_type
+0x9c097b74	string	SEI: scene_id
+0x9c097b84	string	SEI: pan_scan_rect_repetition_period
+0x9c097bac	string	SEI: pan_scan_rect_left_offset
+0x9c097bcc	string	SEI: pan_scan_rect_right_offset
+0x9c097bec	string	SEI: pan_scan_rect_top_offset
+0x9c097c0c	string	SEI: pan_scan_rect_bottom_offset
+0x9c097c30	string	SEI: pan_scan_cnt_minus1
+0x9c097c4c	string	SEI: pan_scan_rect_cancel_flag
+0x9c097c6c	string	SEI: pan_scan_rect_id
+0x9c097c84	string	SEI: changing_slice_group_idc
+0x9c097ca4	string	SEI: broken_link_flag
+0x9c097cbc	string	SEI: exact_match_flag
+0x9c097cd4	string	SEI: recovery_frame_cnt
+0x9c097cec	string	SEI: original_frame_num
+0x9c097d04	string	SEI: original_idr_flag
+0x9c097d1c	string	SEI: snapshot_id
+0x9c097d30	string	SEI: num_refinement_steps_minus1
+0x9c097d54	string	SEI: progressive_refinement_id
+0x9c097d74	string	SEI: pan_scan_rect_flag
+0x9c097d8c	string	SEI: slice_group_id
+0x9c097da0	string	SEI: num_slice_groups_minus1
+0x9c097dc0	string	SEI: deblocking_display_preference_repetition_period
+0x9c097df8	string	SEI: dec_frame_buffering_constraint_flag
+0x9c097e24	string	SEI: display_prior_to_deblocking_preferred_flag
+0x9c097e54	string	SEI: deblocking_display_preference_cancel_flag
+0x9c097e84	string	SEI: right_view_self_contained_flag
+0x9c097ea8	string	SEI: left_view_self_contained_flag
+0x9c097ecc	string	SEI: next_frame_is_second_view_flag
+0x9c097ef0	string	SEI: current_frame_is_left_view_flag
+0x9c097f18	string	SEI: top_field_is_left_view_flag
+0x9c097f3c	string	SEI: field_views_flags
+0x9c097f54	string	SEI: initial_cpb_removal_delay
+0x9c097f74	string	SEI: initial_cpb_removal_delay_offset
+0x9c097f9c	string	SEI: seq_parameter_set_id
+0x9c097fb8	string	SEI: clock_time_stamp_flag
+0x9c097fd4	string	SEI: ct_type
+0x9c097fe4	string	SEI: nuit_field_based_flag
+0x9c098000	string	SEI: counting_type
+0x9c098014	string	SEI: full_timestamp_flag
+0x9c098030	string	SEI: discontinuity_flag
+0x9c098048	string	SEI: cnt_dropped_flag
+0x9c098060	string	SEI: nframes
+0x9c098070	string	SEI: seconds_value
+0x9c098084	string	SEI: minutes_value
+0x9c098098	string	SEI: hours_value
+0x9c0980ac	string	SEI: seconds_flag
+0x9c0980c0	string	SEI: minutes_flag
+0x9c0980d4	string	SEI: hours_flag
+0x9c0980e4	string	SEI: time_offset
+0x9c0980f8	string	SEI: pic_struct
+0x9c098108	string	SEI: dpb_output_delay
+0x9c098120	string	SEI: cpb_removal_delay
+0x9c0a775c	string	#1@2$%&'3APB4567CQ`RDEFGSabTUVWcpqdefgrstuvw
+0x9c0a84e3	string	]E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IntraPredY4x4.updb
+0x9c0a85f0	string	BlkParams4x4
+0x9c0a8628	string	NeighborTable
+0x9c0a8648	string	exportTileDataY
+0x9c0a8658	string	inputMBStream
+0x9c0a8666	string	inputTileDataY
+0x9c0a8675	string	inputTileMap
+0x9c0aa643	string	]E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IntraPredY8x8.updb
+0x9c0aa764	string	BlkParams4x4
+0x9c0aa79c	string	NeighborTable
+0x9c0aa7bc	string	exportTileDataY
+0x9c0aa7cc	string	fieldLimits
+0x9c0aa7d8	string	inputMBStream
+0x9c0aa7e6	string	inputTileDataY
+0x9c0aa7f5	string	inputTileMap
+0x9c0ac18b	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IntraPredY16x16.updb
+0x9c0ac2ac	string	BlkParams4x4
+0x9c0ac2e4	string	NeighborTable
+0x9c0ac304	string	exportTileDataY
+0x9c0ac314	string	fieldLimits
+0x9c0ac320	string	inputMBStream
+0x9c0ac32e	string	inputTileDataY
+0x9c0ac33d	string	inputTileMap
+0x9c0ad59b	string	ZE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IntraPredC.updb
+0x9c0ad6f4	string	BlkParams4x4
+0x9c0ad72c	string	NeighborTable
+0x9c0ad74f	string	exportTileDataUV
+0x9c0ad760	string	fieldLimitsUV
+0x9c0ad76e	string	inputMBDataUVU
+0x9c0ad77d	string	inputMBDataUVV
+0x9c0ad78c	string	inputMBStreamUV
+0x9c0ad79c	string	inputTileDataUV
+0x9c0ad7ac	string	inputTileMapUV
+0x9c0ae6cb	string	cE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IntraPredY4x4_mbaff.updb
+0x9c0ae7dc	string	BlkParams4x4
+0x9c0ae814	string	NeighborTable
+0x9c0ae834	string	exportTileDataY
+0x9c0ae854	string	inputMBStream
+0x9c0ae862	string	inputTileDataY
+0x9c0ae871	string	inputTileMap
+0x9c0b0ccb	string	cE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IntraPredY8x8_mbaff.updb
+0x9c0b0ddc	string	BlkParams4x4
+0x9c0b0e14	string	NeighborTable
+0x9c0b0e34	string	exportTileDataY
+0x9c0b0e54	string	inputMBStream
+0x9c0b0e62	string	inputTileDataY
+0x9c0b0e71	string	inputTileMap
+0x9c0b2afb	string	eE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IntraPredY16x16_mbaff.updb
+0x9c0b2c10	string	BlkParams4x4
+0x9c0b2c48	string	NeighborTable
+0x9c0b2c68	string	exportTileDataY
+0x9c0b2c88	string	inputMBStream
+0x9c0b2c96	string	inputTileDataY
+0x9c0b2ca5	string	inputTileMap
+0x9c0b3e53	string	`E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_IntraPredC_mbaff.updb
+0x9c0b3f88	string	BlkParams4x4
+0x9c0b3fc0	string	NeighborTable
+0x9c0b3ff4	string	constrained_intra
+0x9c0b4006	string	exportTileDataUV
+0x9c0b4017	string	inputMBStreamUV
+0x9c0b4027	string	inputTileDataUV
+0x9c0b4037	string	inputTileMapUV
+0x9c0b52a3	string	WE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_DummyPS.updb
+0x9c0b5573	string	WE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaP.updb
+0x9c0b56dc	string	ApplyWeights
+0x9c0b5707	string	RefIdx
+0x9c0b5720	string	Residuals
+0x9c0b572a	string	SBtable
+0x9c0b5744	string	SliceWeights
+0x9c0b5764	string	SrcImage
+0x9c0b576d	string	exportAddress
+0x9c0b577b	string	fieldLimits
+0x9c0b5787	string	imageRefTable
+0x9c0b57a8	string	inputTileMap
+0x9c0b76fb	string	YE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB0.updb
+0x9c0b78b8	string	ApplyWeights
+0x9c0b78e3	string	ListSize
+0x9c0b78ec	string	RefIdx
+0x9c0b7904	string	Residuals
+0x9c0b790e	string	SBtable
+0x9c0b7928	string	SliceWeights
+0x9c0b7948	string	SliceWeights2
+0x9c0b7956	string	SrcImage
+0x9c0b795f	string	exportAddress
+0x9c0b796d	string	fieldLimits
+0x9c0b7979	string	imageRefTable
+0x9c0b7998	string	inputTileDataPB1
+0x9c0b79a9	string	inputTileMap
+0x9c0b79b6	string	inputTileMapPB1
+0x9c0b9d03	string	YE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB1.updb
+0x9c0b9e3e	string	SBtable
+0x9c0b9e58	string	SrcImage
+0x9c0b9e74	string	exportAddress
+0x9c0b9e82	string	fieldLimits
+0x9c0b9e8e	string	imageRefTable
+0x9c0b9eac	string	inputTileMapPB1
+0x9c0bba53	string	]E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaP_mbaff.updb
+0x9c0bbbc4	string	ApplyWeights
+0x9c0bbbef	string	RefIdx
+0x9c0bbc08	string	Residuals
+0x9c0bbc12	string	SBtable
+0x9c0bbc2c	string	SliceWeights
+0x9c0bbc4c	string	SrcImage
+0x9c0bbc55	string	exportAddress
+0x9c0bbc63	string	fieldLimits
+0x9c0bbc6f	string	imageRefTable
+0x9c0bbc90	string	inputTileMap
+0x9c0bdd4b	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB0_mbaff.updb
+0x9c0bdf20	string	ApplyWeights
+0x9c0bdf40	string	BiPredIdc
+0x9c0bdf55	string	ListSize
+0x9c0bdf5e	string	RefIdx
+0x9c0bdf78	string	Residuals
+0x9c0bdf82	string	SBtable
+0x9c0bdf9c	string	SliceWeights
+0x9c0bdfbc	string	SliceWeights2
+0x9c0bdfca	string	SrcImage
+0x9c0bdfd3	string	exportAddress
+0x9c0bdfe1	string	fieldLimits
+0x9c0bdfed	string	imageRefTable
+0x9c0be00c	string	inputTileDataPB1
+0x9c0be01d	string	inputTileMap
+0x9c0be02a	string	inputTileMapPB1
+0x9c0c05bb	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB1_mbaff.updb
+0x9c0c06fa	string	SBtable
+0x9c0c0714	string	SrcImage
+0x9c0c0730	string	exportAddress
+0x9c0c073e	string	fieldLimits
+0x9c0c074a	string	imageRefTable
+0x9c0c0768	string	inputTileMapPB1
+0x9c0c240b	string	YE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCChromaP.updb
+0x9c0c25a0	string	ApplyWeights
+0x9c0c25cb	string	MvAdjust
+0x9c0c25e4	string	RefIdx
+0x9c0c25fc	string	Residuals
+0x9c0c2606	string	SBtable
+0x9c0c2620	string	SliceWeights
+0x9c0c2640	string	SrcImage
+0x9c0c264c	string	exportAddress
+0x9c0c265a	string	fieldLimits
+0x9c0c2666	string	imageRefTable
+0x9c0c2684	string	inputTileMapUV
+0x9c0c30bb	string	[E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCChromaPB0.updb
+0x9c0c32a0	string	ApplyWeights
+0x9c0c32cb	string	ListSize
+0x9c0c32d4	string	MvAdjust
+0x9c0c32f0	string	RefIdx
+0x9c0c3308	string	Residuals
+0x9c0c3312	string	SBtable
+0x9c0c332c	string	SliceWeights
+0x9c0c334c	string	SliceWeights2
+0x9c0c335a	string	SrcImage
+0x9c0c3366	string	exportAddress
+0x9c0c3374	string	fieldLimits
+0x9c0c3380	string	imageRefTable
+0x9c0c33a0	string	inputTileDataPB1
+0x9c0c33b1	string	inputTileMapPB1
+0x9c0c33c1	string	inputTileMapUV
+0x9c0c40a3	string	[E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCChromaPB1.updb
+0x9c0c4206	string	MvAdjust
+0x9c0c4220	string	SBtable
+0x9c0c4238	string	SrcImage
+0x9c0c4257	string	exportAddress
+0x9c0c4265	string	fieldLimits
+0x9c0c4271	string	imageRefTable
+0x9c0c4290	string	inputTileMapPB1
+0x9c0c4a7b	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCChromaP_mbaff.updb
+0x9c0c4c14	string	ApplyWeights
+0x9c0c4c3f	string	RefIdx
+0x9c0c4c58	string	Residuals
+0x9c0c4c62	string	SBtable
+0x9c0c4c7c	string	SliceWeights
+0x9c0c4c9c	string	SrcImage
+0x9c0c4ca8	string	exportAddress
+0x9c0c4cb6	string	fieldLimits
+0x9c0c4cc2	string	imageRefTable
+0x9c0c4ce0	string	inputTileMapUV
+0x9c0c4cef	string	rgrgiFldChromaVecAdjust
+0x9c0c58c3	string	aE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCChromaPB0_mbaff.updb
+0x9c0c5ac4	string	ApplyWeights
+0x9c0c5ae4	string	BiPredIdc
+0x9c0c5af9	string	ListSize
+0x9c0c5b02	string	RefIdx
+0x9c0c5b1c	string	Residuals
+0x9c0c5b26	string	SBtable
+0x9c0c5b40	string	SliceWeights
+0x9c0c5b60	string	SliceWeights2
+0x9c0c5b6e	string	SrcImage
+0x9c0c5b7a	string	exportAddress
+0x9c0c5b88	string	fieldLimits
+0x9c0c5b94	string	imageRefTable
+0x9c0c5bb4	string	inputTileDataPB1
+0x9c0c5bc5	string	inputTileMapPB1
+0x9c0c5bd5	string	inputTileMapUV
+0x9c0c5be4	string	rgrgiFldChromaVecAdjust
+0x9c0c6b0b	string	aE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCChromaPB1_mbaff.updb
+0x9c0c6c76	string	SBtable
+0x9c0c6c90	string	SrcImage
+0x9c0c6caf	string	exportAddress
+0x9c0c6cbd	string	fieldLimits
+0x9c0c6cc9	string	imageRefTable
+0x9c0c6ce8	string	inputTileMapPB1
+0x9c0c6cf8	string	rgrgiFldChromaVecAdjust
+0x9c0c75e3	string	YE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPv1.updb
+0x9c0c7750	string	ApplyWeights
+0x9c0c777b	string	RefIdx
+0x9c0c7794	string	Residuals
+0x9c0c779e	string	SBtable
+0x9c0c77b8	string	SliceWeights
+0x9c0c77d8	string	SrcImage
+0x9c0c77e1	string	exportAddress
+0x9c0c77ef	string	fieldLimits
+0x9c0c77fb	string	imageRefTable
+0x9c0c781c	string	inputTileMap
+0x9c0c8073	string	[E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB0v1.updb
+0x9c0c8230	string	ApplyWeights
+0x9c0c825b	string	ListSize
+0x9c0c8264	string	RefIdx
+0x9c0c827c	string	Residuals
+0x9c0c8286	string	SBtable
+0x9c0c82a0	string	SliceWeights
+0x9c0c82c0	string	SliceWeights2
+0x9c0c82ce	string	SrcImage
+0x9c0c82d7	string	exportAddress
+0x9c0c82e5	string	fieldLimits
+0x9c0c82f1	string	imageRefTable
+0x9c0c8310	string	inputTileDataPB1
+0x9c0c8321	string	inputTileMap
+0x9c0c832e	string	inputTileMapPB1
+0x9c0c8ecb	string	[E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB1v1.updb
+0x9c0c9006	string	SBtable
+0x9c0c9020	string	SrcImage
+0x9c0c903c	string	exportAddress
+0x9c0c904a	string	fieldLimits
+0x9c0c9056	string	imageRefTable
+0x9c0c9074	string	inputTileMapPB1
+0x9c0c9573	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaP_mbaffv1.updb
+0x9c0c96e4	string	ApplyWeights
+0x9c0c970f	string	RefIdx
+0x9c0c9728	string	Residuals
+0x9c0c9732	string	SBtable
+0x9c0c974c	string	SliceWeights
+0x9c0c976c	string	SrcImage
+0x9c0c9775	string	exportAddress
+0x9c0c9783	string	fieldLimits
+0x9c0c978f	string	imageRefTable
+0x9c0c97b0	string	inputTileMap
+0x9c0ca1ab	string	aE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB0_mbaffv1.updb
+0x9c0ca384	string	ApplyWeights
+0x9c0ca3a4	string	BiPredIdc
+0x9c0ca3b9	string	ListSize
+0x9c0ca3c2	string	RefIdx
+0x9c0ca3dc	string	Residuals
+0x9c0ca3e6	string	SBtable
+0x9c0ca400	string	SliceWeights
+0x9c0ca420	string	SliceWeights2
+0x9c0ca42e	string	SrcImage
+0x9c0ca437	string	exportAddress
+0x9c0ca445	string	fieldLimits
+0x9c0ca451	string	imageRefTable
+0x9c0ca470	string	inputTileDataPB1
+0x9c0ca481	string	inputTileMap
+0x9c0ca48e	string	inputTileMapPB1
+0x9c0cb27b	string	aE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB1_mbaffv1.updb
+0x9c0cb3be	string	SBtable
+0x9c0cb3d8	string	SrcImage
+0x9c0cb3f4	string	exportAddress
+0x9c0cb402	string	fieldLimits
+0x9c0cb40e	string	imageRefTable
+0x9c0cb42c	string	inputTileMapPB1
+0x9c0cba1b	string	YE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPv2.updb
+0x9c0cbb88	string	ApplyWeights
+0x9c0cbbb3	string	RefIdx
+0x9c0cbbcc	string	Residuals
+0x9c0cbbd6	string	SBtable
+0x9c0cbbf0	string	SliceWeights
+0x9c0cbc10	string	SrcImage
+0x9c0cbc19	string	exportAddress
+0x9c0cbc27	string	fieldLimits
+0x9c0cbc33	string	imageRefTable
+0x9c0cbc54	string	inputTileMap
+0x9c0cd433	string	[E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB0v2.updb
+0x9c0cd5f0	string	ApplyWeights
+0x9c0cd61b	string	ListSize
+0x9c0cd624	string	RefIdx
+0x9c0cd63c	string	Residuals
+0x9c0cd646	string	SBtable
+0x9c0cd660	string	SliceWeights
+0x9c0cd680	string	SliceWeights2
+0x9c0cd68e	string	SrcImage
+0x9c0cd697	string	exportAddress
+0x9c0cd6a5	string	fieldLimits
+0x9c0cd6b1	string	imageRefTable
+0x9c0cd6d0	string	inputTileDataPB1
+0x9c0cd6e1	string	inputTileMap
+0x9c0cd6ee	string	inputTileMapPB1
+0x9c0cf2fb	string	[E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB1v2.updb
+0x9c0cf436	string	SBtable
+0x9c0cf450	string	SrcImage
+0x9c0cf46c	string	exportAddress
+0x9c0cf47a	string	fieldLimits
+0x9c0cf486	string	imageRefTable
+0x9c0cf4a4	string	inputTileMapPB1
+0x9c0d0a03	string	_E:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaP_mbaffv2.updb
+0x9c0d0b74	string	ApplyWeights
+0x9c0d0b9f	string	RefIdx
+0x9c0d0bb8	string	Residuals
+0x9c0d0bc2	string	SBtable
+0x9c0d0bdc	string	SliceWeights
+0x9c0d0bfc	string	SrcImage
+0x9c0d0c05	string	exportAddress
+0x9c0d0c13	string	fieldLimits
+0x9c0d0c1f	string	imageRefTable
+0x9c0d0c40	string	inputTileMap
+0x9c0d25fb	string	aE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB0_mbaffv2.updb
+0x9c0d27d4	string	ApplyWeights
+0x9c0d27f4	string	BiPredIdc
+0x9c0d2809	string	ListSize
+0x9c0d2812	string	RefIdx
+0x9c0d282c	string	Residuals
+0x9c0d2836	string	SBtable
+0x9c0d2850	string	SliceWeights
+0x9c0d2870	string	SliceWeights2
+0x9c0d287e	string	SrcImage
+0x9c0d2887	string	exportAddress
+0x9c0d2895	string	fieldLimits
+0x9c0d28a1	string	imageRefTable
+0x9c0d28c0	string	inputTileDataPB1
+0x9c0d28d1	string	inputTileMap
+0x9c0d28de	string	inputTileMapPB1
+0x9c0d46b3	string	aE:\bt\210435\core\private\del\codecs\h264\core\opt\x_nofgn\obj\xbox\Shader_MCLumaPB1_mbaffv2.updb
+0x9c0d47f6	string	SBtable
+0x9c0d4810	string	SrcImage
+0x9c0d482c	string	exportAddress
+0x9c0d483a	string	fieldLimits
+0x9c0d4846	string	imageRefTable
+0x9c0d4864	string	inputTileMapPB1
+0x9c0d907c	string	Unknown exception
+0x9c0d9098	string	bad allocation
+0x9c0d9264	unicode	HH:mm:ss
+0x9c0d9278	unicode	dddd, MMMM dd, yyyy
+0x9c0d92a0	unicode	MM/dd/yy
+0x9c0d92c4	unicode	December
+0x9c0d92d8	unicode	November
+0x9c0d92ec	unicode	October
+0x9c0d92fc	unicode	September
+0x9c0d9310	unicode	August
+0x9c0d9320	unicode	July
+0x9c0d932c	unicode	June
+0x9c0d9338	unicode	April
+0x9c0d9344	unicode	March
+0x9c0d9350	unicode	February
+0x9c0d9364	unicode	January
+0x9c0d93d4	unicode	Saturday
+0x9c0d93e8	unicode	Friday
+0x9c0d93f8	unicode	Thursday
+0x9c0d940c	unicode	Wednesday
+0x9c0d9420	unicode	Tuesday
+0x9c0d9430	unicode	Monday
+0x9c0d9440	unicode	Sunday
+0x9c0d9488	string	HH:mm:ss
+0x9c0d9494	string	dddd, MMMM dd, yyyy
+0x9c0d94a8	string	MM/dd/yy
+0x9c0d94bc	string	December
+0x9c0d94c8	string	November
+0x9c0d94d4	string	October
+0x9c0d94dc	string	September
+0x9c0d94e8	string	August
+0x9c0d9500	string	April
+0x9c0d9508	string	March
+0x9c0d9510	string	February
+0x9c0d951c	string	January
+0x9c0d9554	string	Saturday
+0x9c0d9560	string	Friday
+0x9c0d9568	string	Thursday
+0x9c0d9574	string	Wednesday
+0x9c0d9580	string	Tuesday
+0x9c0d9588	string	Monday
+0x9c0d9590	string	Sunday
+0x9c0d95b4	unicode	runtime error 
+0x9c0d95d8	unicode	TLOSS error\n
+0x9c0d95f4	unicode	SING error\n
+0x9c0d960c	unicode	DOMAIN error\n
+0x9c0d9628	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9c0d9818	unicode	R6032\n- not enough space for locale information\n
+0x9c0d9880	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9c0d9944	unicode	R6030\n- CRT not initialized\n
+0x9c0d9980	unicode	R6028\n- unable to initialize heap\n
+0x9c0d99c8	unicode	R6027\n- not enough space for lowio initialization\n
+0x9c0d9a30	unicode	R6026\n- not enough space for stdio initialization\n
+0x9c0d9a98	unicode	R6025\n- pure virtual function call\n
+0x9c0d9ae0	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9c0d9b48	unicode	R6019\n- unable to open console device\n
+0x9c0d9b98	unicode	R6018\n- unexpected heap error\n
+0x9c0d9bd8	unicode	R6017\n- unexpected multithread lock error\n
+0x9c0d9c30	unicode	R6016\n- not enough space for thread data\n
+0x9c0d9c88	unicode	R6010\n- abort() has been called\n
+0x9c0d9cd0	unicode	R6009\n- not enough space for environment\n
+0x9c0d9d28	unicode	R6008\n- not enough space for arguments\n
+0x9c0d9d78	unicode	R6002\n- floating point support not loaded\n
+0x9c0d9e90	string	_nextafter
+0x9c0d9ee8	string	floor
+0x9c0da8cc	string	 Complete Object Locator'
+0x9c0da8e8	string	 Class Hierarchy Descriptor'
+0x9c0da908	string	 Base Class Array'
+0x9c0da91c	string	 Base Class Descriptor at (
+0x9c0da938	string	 Type Descriptor'
+0x9c0da94c	string	`local static thread guard'
+0x9c0da968	string	`managed vector copy constructor iterator'
+0x9c0da994	string	`vector vbase copy constructor iterator'
+0x9c0da9c0	string	`vector copy constructor iterator'
+0x9c0da9e4	string	`dynamic atexit destructor for '
+0x9c0daa08	string	`dynamic initializer for '
+0x9c0daa24	string	`eh vector vbase copy constructor iterator'
+0x9c0daa50	string	`eh vector copy constructor iterator'
+0x9c0daa78	string	`managed vector destructor iterator'
+0x9c0daaa0	string	`managed vector constructor iterator'
+0x9c0daac8	string	`placement delete[] closure'
+0x9c0daae8	string	`placement delete closure'
+0x9c0dab04	string	`omni callsig'
+0x9c0dab14	string	 delete[]
+0x9c0dab20	string	 new[]
+0x9c0dab28	string	`local vftable constructor closure'
+0x9c0dab4c	string	`local vftable'
+0x9c0dab5c	string	`RTTI
+0x9c0dab68	string	`udt returning'
+0x9c0dab78	string	`copy constructor closure'
+0x9c0dab94	string	`eh vector vbase constructor iterator'
+0x9c0dabbc	string	`eh vector destructor iterator'
+0x9c0dabdc	string	`eh vector constructor iterator'
+0x9c0dac00	string	`virtual displacement map'
+0x9c0dac1c	string	`vector vbase constructor iterator'
+0x9c0dac40	string	`vector destructor iterator'
+0x9c0dac60	string	`vector constructor iterator'
+0x9c0dac80	string	`scalar deleting destructor'
+0x9c0daca0	string	`default constructor closure'
+0x9c0dacc0	string	`vector deleting destructor'
+0x9c0dace0	string	`vbase destructor'
+0x9c0dacf4	string	`string'
+0x9c0dad00	string	`local static guard'
+0x9c0dad18	string	`typeof'
+0x9c0dad24	string	`vcall'
+0x9c0dad2c	string	`vbtable'
+0x9c0dad38	string	`vftable'
+0x9c0dadc0	string	operator
+0x9c0dade8	string	 delete
+0x9c0dadf8	string	__unaligned
+0x9c0dae04	string	__restrict
+0x9c0dae10	string	__ptr64
+0x9c0dae18	string	__eabi
+0x9c0dae20	string	__clrcall
+0x9c0dae2c	string	__fastcall
+0x9c0dae38	string	__thiscall
+0x9c0dae44	string	__stdcall
+0x9c0dae50	string	__pascal
+0x9c0dae5c	string	__cdecl
+0x9c0dae64	string	__based(
+0x9c0db070	string	e:\bt\248805\core\private\xam\dash\dlls\extracodecs\dll\obj\xbox\dash.ExtraAVCodecs.pdb
+0x9c2404e8	string	.?AVbad_alloc@std@@
+0x9c240504	string	.?AVexception@std@@
+0x9c240d79	string	abcdefghijklmnopqrstuvwxyz
+0x9c240d99	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9c24b040	string	dash.ExtraAVCodecs.xex
+0x9c24b057	string	ExtraAVCodecsGetInterface
+0x9c24b071	string	ExtraAVCodecsInitialize

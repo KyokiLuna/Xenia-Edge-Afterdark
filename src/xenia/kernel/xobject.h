@@ -16,6 +16,7 @@
 #include <deque>
 #include <mutex>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "xenia/base/threading.h"
@@ -350,6 +351,9 @@ class XObject {
 
   // Creates the kernel object for guest code to use. Typically not needed.
   uint8_t* CreateNative(uint32_t size);
+  // Opaque typed body: no dispatcher bytes, no guest handle, borrowed kernel
+  // type. The caller must hold a separate strong owner through native rundown.
+  uint8_t* CreateNativeNonDispatch(uint32_t size, uint32_t object_type);
   void SetNativePointer(uint32_t native_ptr, bool uninitialized = false);
 
   template <typename T>
@@ -386,6 +390,7 @@ class XObject {
   // if we allocated it!
   uint32_t guest_object_ptr_ = 0;
   bool allocated_guest_object_ = false;
+  bool owns_guest_object_type_ = true;
 
   std::atomic<uint32_t> guest_object_type_ptr_{0};
 };
@@ -522,9 +527,13 @@ template <typename T>
 object_ref<T> XObject::GetNativeObject(KernelState* kernel_state,
                                        void* native_ptr, X_OBJECT_TYPES as_type,
                                        bool already_locked) {
-  return object_ref<T>(reinterpret_cast<T*>(
-      GetNativeObject(kernel_state, native_ptr, as_type, already_locked)
-          .release()));
+  auto object = GetNativeObject(kernel_state, native_ptr, as_type, already_locked);
+  if constexpr (!std::is_same_v<T, XObject>) {
+    // A registered opaque body must not be reinterpreted as a dispatcher just
+    // because the caller requested one. Its actual host type is authoritative.
+    if (object && object->type() != T::kObjectType) { return {}; }
+  }
+  return object_ref<T>(reinterpret_cast<T*>(object.release()));
 }
 
 }  // namespace kernel

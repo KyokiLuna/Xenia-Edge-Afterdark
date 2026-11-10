@@ -1,0 +1,18 @@
+{
+  "module": "Party.xex",
+  "program": "abe28672d49d_Party.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "551d2d7723f5d3d647889929533c2aa30aa1cff2b1ab029d977b93addc436584",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x91260400",
+  "functions": 1043,
+  "calls": 3371,
+  "strings": 2,
+  "string_xrefs": 2,
+  "independent_sha256": "a02719de77731bad3541ebccb9a06201c550361ca65389bf6e1a4f22ee7e94d1",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

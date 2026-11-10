@@ -1,0 +1,254 @@
+/**
+ ******************************************************************************
+ * Xenia : Xbox 360 Emulator Research Project                                 *
+ ******************************************************************************
+ * Copyright 2013 Ben Vanik. All rights reserved.                             *
+ * Released under the BSD license - see LICENSE in the root for more details. *
+ ******************************************************************************
+ */
+
+#include "xenia/base/lzx.h"
+
+#include <algorithm>
+#include <climits>
+#include <cstring>
+#include <cstdlib>
+
+#include "xenia/base/byte_order.h"
+#include "xenia/base/assert.h"
+#include "xenia/base/logging.h"
+#include "xenia/base/math.h"
+#include "xenia/base/memory.h"
+#include "xenia/kernel/util/xex2_info.h"
+
+#include "third_party/mspack/lzx.h"
+#include "third_party/mspack/mspack.h"
+
+typedef struct mspack_memory_file_t {
+  mspack_system sys;
+  void* buffer;
+  off_t buffer_size;
+  off_t offset;
+} mspack_memory_file;
+
+mspack_memory_file* mspack_memory_open(mspack_system* sys, void* buffer,
+                                       const size_t buffer_size) {
+  assert_true(buffer_size < INT_MAX);
+  if (buffer_size >= INT_MAX) {
+    return NULL;
+  }
+  auto memfile =
+      (mspack_memory_file*)std::calloc(1, sizeof(mspack_memory_file));
+  if (!memfile) {
+    return NULL;
+  }
+  memfile->buffer = buffer;
+  memfile->buffer_size = (off_t)buffer_size;
+  memfile->offset = 0;
+  return memfile;
+}
+
+void mspack_memory_close(mspack_memory_file* file) {
+  auto memfile = (mspack_memory_file*)file;
+  std::free(memfile);
+}
+
+int mspack_memory_read(mspack_file* file, void* buffer, int chars) {
+  auto memfile = (mspack_memory_file*)file;
+  const off_t remaining = memfile->buffer_size - memfile->offset;
+  const off_t total = std::min(static_cast<off_t>(chars), remaining);
+  std::memcpy(buffer, (uint8_t*)memfile->buffer + memfile->offset, total);
+  memfile->offset += total;
+  return (int)total;
+}
+
+int mspack_memory_write(mspack_file* file, void* buffer, int chars) {
+  auto memfile = (mspack_memory_file*)file;
+  const off_t remaining = memfile->buffer_size - memfile->offset;
+  const off_t total = std::min(static_cast<off_t>(chars), remaining);
+  std::memcpy((uint8_t*)memfile->buffer + memfile->offset, buffer, total);
+  memfile->offset += total;
+  return (int)total;
+}
+
+void* mspack_memory_alloc(mspack_system* sys, size_t chars) {
+  return std::calloc(chars, 1);
+}
+
+void mspack_memory_free(void* ptr) { std::free(ptr); }
+
+void mspack_memory_copy(void* src, void* dest, size_t chars) {
+  std::memcpy(dest, src, chars);
+}
+
+mspack_system* mspack_memory_sys_create() {
+  auto sys = (mspack_system*)std::calloc(1, sizeof(mspack_system));
+  if (!sys) {
+    return NULL;
+  }
+  sys->read = mspack_memory_read;
+  sys->write = mspack_memory_write;
+  sys->alloc = mspack_memory_alloc;
+  sys->free = mspack_memory_free;
+  sys->copy = mspack_memory_copy;
+  return sys;
+}
+
+void mspack_memory_sys_destroy(struct mspack_system* sys) { free(sys); }
+
+int lzx_decompress(const void* lzx_data, size_t lzx_len, void* dest,
+                   size_t dest_len, uint32_t window_size, void* window_data,
+                   size_t window_data_len) {
+  int result_code = 1;
+
+  uint32_t window_bits;
+  if (!xe::bit_scan_forward(window_size, &window_bits)) {
+    return result_code;
+  }
+
+  mspack_system* sys = mspack_memory_sys_create();
+  mspack_memory_file* lzxsrc =
+      mspack_memory_open(sys, (void*)lzx_data, lzx_len);
+  mspack_memory_file* lzxdst = mspack_memory_open(sys, dest, dest_len);
+  lzxd_stream* lzxd = lzxd_init(sys, (mspack_file*)lzxsrc, (mspack_file*)lzxdst,
+                                window_bits, 0, 0x8000, (off_t)dest_len, 0);
+
+  if (lzxd) {
+    if (window_data) {
+      // zero the window and then copy window_data to the end of it
+      auto padding_len = window_size - window_data_len;
+      std::memset(&lzxd->window[0], 0, padding_len);
+      std::memcpy(&lzxd->window[padding_len], window_data, window_data_len);
+      // TODO(gibbed): should this be set regardless if source window data is
+      // available or not?
+      lzxd->ref_data_size = window_size;
+    }
+
+    result_code = lzxd_decompress(lzxd, (off_t)dest_len);
+
+    lzxd_free(lzxd);
+    lzxd = NULL;
+  }
+
+  if (lzxsrc) {
+    mspack_memory_close(lzxsrc);
+    lzxsrc = NULL;
+  }
+
+  if (lzxdst) {
+    mspack_memory_close(lzxdst);
+    lzxdst = NULL;
+  }
+
+  if (sys) {
+    mspack_memory_sys_destroy(sys);
+    sys = NULL;
+  }
+
+  return result_code;
+}
+
+LzxFrameDecoder::LzxFrameDecoder(uint32_t window_size)
+    : system_(mspack_memory_sys_create()),
+      input_(mspack_memory_open(system_, NULL, 0)),
+      output_(mspack_memory_open(system_, NULL, 0)) {
+  xe::bit_scan_forward(window_size, &window_bits_);
+}
+
+LzxFrameDecoder::~LzxFrameDecoder() {
+  lzxd_free(stream_);
+  mspack_memory_close(output_);
+  mspack_memory_close(input_);
+  mspack_memory_sys_destroy(system_);
+}
+
+bool LzxFrameDecoder::Reset() {
+  lzxd_free(stream_);
+  stream_ = NULL;
+  if (input_ && output_) {
+    stream_ = lzxd_init(system_, (mspack_file*)input_, (mspack_file*)output_,
+                        window_bits_, 0, 0x8000, 0, 0);
+  }
+  return stream_ != NULL;
+}
+
+bool LzxFrameDecoder::Decompress(const void* source, size_t source_size,
+                                 void* dest, size_t dest_size) {
+  if (!stream_ || !dest_size || dest_size > LZX_FRAME_SIZE) {
+    return false;
+  }
+  input_->buffer = (void*)source;
+  input_->buffer_size = (off_t)source_size;
+  input_->offset = 0;
+  output_->buffer = dest;
+  output_->buffer_size = (off_t)dest_size;
+  output_->offset = 0;
+
+  // Drop what lzxd buffered past the end of the previous frame, including the
+  // padding it reads at the end of input.
+  stream_->i_ptr = stream_->i_end = stream_->inbuf;
+  stream_->bit_buffer = 0;
+  stream_->bits_left = 0;
+  stream_->input_end = 0;
+
+  // lzxd only ends a frame short at the length of the stream. Output that ends
+  // on a frame boundary makes it count an extra empty frame, which fails a
+  // later short frame, so the last byte is asked for on its own.
+  lzxd_set_output_length(stream_, stream_->offset + (off_t)dest_size);
+  return lzxd_decompress(stream_, (off_t)dest_size - 1) == MSPACK_ERR_OK &&
+         lzxd_decompress(stream_, 1) == MSPACK_ERR_OK;
+}
+
+int lzxdelta_apply_patch(xe::xex2_delta_patch* patch, size_t patch_len,
+                         uint32_t window_size, void* dest) {
+  void* patch_end = (char*)patch + patch_len;
+  auto* cur_patch = patch;
+
+  while (patch_end > cur_patch) {
+    int patch_sz = -4;  // 0 byte patches need us to remove 4 byte from next
+                        // patch addr because of patch_data field
+    if (cur_patch->compressed_len == 0 && cur_patch->uncompressed_len == 0 &&
+        cur_patch->new_addr == 0 && cur_patch->old_addr == 0) {
+      break;
+    }
+    switch (cur_patch->compressed_len) {
+      case 0:  // fill with 0
+        std::memset((char*)dest + cur_patch->new_addr, 0,
+                    cur_patch->uncompressed_len);
+        break;
+      case 1:  // copy from old -> new
+        // Both ends are inside the image being patched, and "this region
+        // moved" is exactly the case where they overlap, so this has to be a
+        // memmove. memcpy over an overlap is undefined, and the two differ in
+        // practice: glibc's x86-64 memcpy shares its implementation with
+        // memmove and copies backwards when the ranges overlap, while its
+        // aarch64 memcpy copies forwards in 16 byte chunks with no overlap
+        // check - the destination stomps source bytes it has not read yet and
+        // the result comes out periodic with period (new_addr - old_addr).
+        std::memmove((char*)dest + cur_patch->new_addr,
+                     (char*)dest + cur_patch->old_addr,
+                     cur_patch->uncompressed_len);
+        break;
+      default:  // delta patch
+        patch_sz =
+            cur_patch->compressed_len - 4;  // -4 because of patch_data field
+
+        int result = lzx_decompress(
+            cur_patch->patch_data, cur_patch->compressed_len,
+            (char*)dest + cur_patch->new_addr, cur_patch->uncompressed_len,
+            window_size, (char*)dest + cur_patch->old_addr,
+            cur_patch->uncompressed_len);
+
+        if (result) {
+          return result;
+        }
+        break;
+    }
+
+    cur_patch++;
+    cur_patch = (xe::xex2_delta_patch*)((char*)cur_patch +
+                                        patch_sz);  // TODO: make this less ugly
+  }
+
+  return 0;
+}

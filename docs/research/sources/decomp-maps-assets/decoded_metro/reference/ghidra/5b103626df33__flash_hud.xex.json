@@ -1,0 +1,18 @@
+{
+  "module": "packages/su20076000_00000000/$flash_hud.xex",
+  "program": "5b103626df33__flash_hud.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "a5b5e2fd260ce79600872979f019e9479f713be45aa54f90d5105fd6d73d2e61",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x913e0400",
+  "functions": 930,
+  "calls": 2075,
+  "strings": 569,
+  "string_xrefs": 709,
+  "independent_sha256": "33ebe903930e86248b53a3df6a767b208e21572a994d4f99c0f9c0fd607f1032",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

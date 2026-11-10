@@ -13,13 +13,14 @@
 #include <array>
 #include <memory>
 #include <optional>
-
 #include "xenia/kernel/xam/achievement_manager.h"
 #include "xenia/kernel/xam/app_manager.h"
 #include "xenia/kernel/xam/content_manager.h"
 #include "xenia/kernel/xam/profile_manager.h"
 #include "xenia/kernel/xam/user_tracker.h"
 #include "xenia/kernel/xam/xam.h"
+#include <mutex>
+#include "xenia/kernel/xam/tile_service.h"
 
 namespace xe {
 class Emulator;
@@ -48,7 +49,16 @@ class XamState {
   ProfileManager* profile_manager() const { return profile_manager_.get(); }
 
   UserTracker* user_tracker() const { return user_tracker_.get(); }
-  SpaInfo* spa_info() const { return spa_info_.get(); }
+  const auto& stock_tiles() const { return stock_tiles_; }
+  SpaInfo* spa_info() const {
+    std::lock_guard lock(spa_mutex_);
+    return spa_info_.get();
+  }
+  // Actual shared ownership for detached title metadata/achievement ingress.
+  // Published SPA objects are loaded before this pointer becomes visible.
+  std::shared_ptr<const SpaInfo> AcquireSpaInfo() const {
+    std::lock_guard lock(spa_mutex_);
+    return spa_info_; }
 
   UserProfile* GetUserProfile(uint32_t user_index) const;
   UserProfile* GetUserProfile(uint64_t xuid) const;
@@ -99,7 +109,9 @@ class XamState {
   std::unique_ptr<AchievementManager> achievement_manager_;
   std::unique_ptr<ProfileManager> profile_manager_;
 
-  std::unique_ptr<SpaInfo> spa_info_;
+  mutable std::mutex spa_mutex_;
+  std::shared_ptr<const TileService::StockProvider> stock_tiles_;
+  std::shared_ptr<SpaInfo> spa_info_;
 
   // Custom XAM stuff
   std::array<uint32_t, 0x12> language_fallback_address_{};

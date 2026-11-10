@@ -12,14 +12,17 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstring>
 #include <utility>
 
 #include "xenia/base/assert.h"
 #include "xenia/base/cvar.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/math.h"
+#include "xenia/base/mutex.h"
 #include "xenia/base/profiling.h"
 #include "xenia/gpu/gpu_flags.h"
+#include "xenia/gpu/native_frame_execution.h"
 #include "xenia/gpu/texture_info.h"
 #include "xenia/gpu/texture_util.h"
 #include "xenia/gpu/vulkan/deferred_command_buffer.h"
@@ -633,6 +636,49 @@ void VulkanTextureCache::RequestTextures(uint32_t used_texture_mask) {
   }
 }
 
+bool VulkanTextureCache::AreNativeTextureBindingsReady(
+    std::span<const VulkanShader::TextureBinding> bindings) const {
+  auto global_lock = global_critical_region::Acquire();
+  for (const auto& requested : bindings) {
+    const auto* binding = GetValidTextureBinding(requested.fetch_constant);
+    if (!binding ||
+        !AreDimensionsCompatible(requested.dimension, binding->key.dimension)) {
+      return false;
+    }
+    // The translated layout may contain both signedness variants. Require
+    // only the variant selected by the actual fetch's swizzled signs.
+    const bool used =
+        requested.is_signed
+            ? texture_util::IsAnySignSigned(binding->swizzled_signs)
+            : texture_util::IsAnySignNotSigned(binding->swizzled_signs);
+    if (!used) {
+      continue;
+    }
+    // A 3D-as-2D wrapper can need another GPU copy. It is outside the current
+    // bounded native profile; don't manufacture it from a readiness check.
+    if (requested.dimension == xenos::FetchOpDimension::k2D &&
+        binding->key.dimension == xenos::DataDimension::k3D) {
+      return false;
+    }
+    const Texture* texture =
+        requested.is_signed && IsSignedVersionSeparateForFormat(binding->key)
+            ? binding->texture_signed
+            : binding->texture;
+    if (!texture || texture->base_outdated(global_lock) ||
+        texture->mips_outdated(global_lock)) {
+      return false;
+    }
+    const auto& actual = vulkan_texture_bindings_[requested.fetch_constant];
+    // Unlike GetActiveBindingOrNullImageView these slots contain only the
+    // resource's real view, never one of the builtin cleared null images.
+    if ((requested.is_signed ? actual.image_view_signed
+                             : actual.image_view_unsigned) == VK_NULL_HANDLE) {
+      return false;
+    }
+  }
+  return true;
+}
+
 VkImageView VulkanTextureCache::GetActiveBindingOrNullImageView(
     uint32_t fetch_constant_index, xenos::FetchOpDimension dimension,
     bool is_signed) {
@@ -1054,6 +1100,83 @@ VkImageView VulkanTextureCache::RequestSwapTexture(
   return texture_view;
 }
 
+VkImageView VulkanTextureCache::RequestNativePresentationTexture(
+    const NativeFrameOutputLayout& layout, memory::PhysicalRange output,
+    memory::PhysicalRange written) {
+  if (!command_processor_.submission_open() || draw_resolution_scale_x() != 1 ||
+      draw_resolution_scale_y() != 1 ||
+      !command_processor_.GetVulkanDevice()
+           ->properties()
+           .imageViewFormatSwizzle ||
+      !ValidateNativeFrameOutputStorage(layout, output) ||
+      written.address != output.address ||
+      written.length < layout.required_bytes ||
+      uint64_t(written.address) + written.length >
+          uint64_t(output.address) + output.length) {
+    return VK_NULL_HANDLE;
+  }
+  xenos::xe_gpu_texture_fetch_t fetch;
+  std::memcpy(&fetch, layout.texture_fetch.data(), sizeof(fetch));
+  if (fetch.type != xenos::FetchConstantType::kTexture ||
+      fetch.dimension != xenos::DataDimension::k2DOrStacked || fetch.stacked ||
+      fetch.format != xenos::TextureFormat::k_8_8_8_8 || !fetch.tiled ||
+      fetch.endianness != xenos::Endian::kNone || fetch.mip_address ||
+      fetch.mip_min_level || fetch.mip_max_level || fetch.packed_mips ||
+      uint32_t(fetch.size_2d.width) + 1 != layout.width ||
+      uint32_t(fetch.size_2d.height) + 1 != layout.height ||
+      (uint32_t(fetch.pitch) << 5) != layout.pitch ||
+      (uint32_t(fetch.base_address) << 12) != output.address) {
+    return VK_NULL_HANDLE;
+  }
+  TextureKey key;
+  BindingInfoFromFetchConstant(fetch, key, nullptr);
+  if (!key.is_valid || key.format != xenos::TextureFormat::k_8_8_8_8 ||
+      key.GetDepthOrArraySize() != 1 || key.mip_page || key.mip_max_level) {
+    return VK_NULL_HANDLE;
+  }
+  auto* texture = static_cast<VulkanTexture*>(FindOrCreateTexture(key));
+  if (!texture || texture->key().scaled_resolve ||
+      !texture->GetGuestBaseSize() || texture->GetGuestMipsSize() ||
+      texture->GetGuestBaseSize() > layout.required_bytes) {
+    return VK_NULL_HANDLE;
+  }
+  {
+    auto global_lock = global_critical_region::Acquire();
+    if (!shared_memory().IsRangeValid(output.address,
+                                      texture->GetGuestBaseSize())) {
+      return VK_NULL_HANDLE;
+    }
+  }
+  // Deliberately bypass LoadTextureData's RequestRange CPU upload path. The
+  // checked resolve just made this frozen output resident; force a GPU reload
+  // for this version even if the cache key already existed. Its ordinary
+  // outdated/watch state is not used to authorize presentation.
+  if (!LoadTextureDataFromResidentMemoryImpl(*texture, true, false)) {
+    return VK_NULL_HANDLE;
+  }
+  VkImageView view = texture->GetView(
+      false, GuestToHostSwizzle(fetch.swizzle, GetHostFormatSwizzle(key)),
+      false);
+  if (view == VK_NULL_HANDLE) {
+    return VK_NULL_HANDLE;
+  }
+  texture->MarkAsUsed();
+  const auto old_usage =
+      texture->SetUsage(VulkanTexture::Usage::kNativePresentationSampled);
+  VkPipelineStageFlags old_stage;
+  VkAccessFlags old_access;
+  VkImageLayout old_layout;
+  GetTextureUsageMasks(old_usage, old_stage, old_access, old_layout);
+  // The presentation copy is COMPUTE sampled, unlike legacy kSwapSampled's
+  // fragment stage. Always emit its actual consumer dependency explicitly.
+  command_processor_.PushImageMemoryBarrier(
+      texture->image(), ui::vulkan::util::InitializeSubresourceRange(),
+      old_stage, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, old_access,
+      VK_ACCESS_SHADER_READ_BIT, old_layout,
+      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+  return view;
+}
+
 bool VulkanTextureCache::IsScaledResolveSupportedForFormat(
     TextureKey key) const {
   // Check if the format has a valid host format pair, meaning we can handle it
@@ -1413,7 +1536,7 @@ bool VulkanTextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture,
   uint32_t write_descriptor_set_count = 0;
   VkDescriptorSet descriptor_set_dest =
       command_processor_.AllocateSingleTransientDescriptor(
-          VulkanCommandProcessor::SingleTransientDescriptorLayout ::
+          VulkanCommandProcessor::SingleTransientDescriptorLayout::
               kStorageBuffer);
   if (!descriptor_set_dest) {
     return false;
@@ -1449,7 +1572,7 @@ bool VulkanTextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture,
     } else {
       descriptor_set_source_base =
           command_processor_.AllocateSingleTransientDescriptor(
-              VulkanCommandProcessor::SingleTransientDescriptorLayout ::
+              VulkanCommandProcessor::SingleTransientDescriptorLayout::
                   kStorageBuffer);
       if (!descriptor_set_source_base) {
         return false;
@@ -1538,7 +1661,7 @@ bool VulkanTextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture,
     } else {
       descriptor_set_source_mips =
           command_processor_.AllocateSingleTransientDescriptor(
-              VulkanCommandProcessor::SingleTransientDescriptorLayout ::
+              VulkanCommandProcessor::SingleTransientDescriptorLayout::
                   kStorageBuffer);
       if (!descriptor_set_source_mips) {
         return false;
@@ -2879,7 +3002,7 @@ bool VulkanTextureCache::Initialize() {
       {};
   VkDescriptorSetLayout load_descriptor_set_layout_storage_buffer =
       command_processor_.GetSingleTransientDescriptorLayout(
-          VulkanCommandProcessor::SingleTransientDescriptorLayout ::
+          VulkanCommandProcessor::SingleTransientDescriptorLayout::
               kStorageBuffer);
   assert_true(load_descriptor_set_layout_storage_buffer != VK_NULL_HANDLE);
   load_descriptor_set_layouts[kLoadDescriptorSetIndexDestination] =
@@ -3731,6 +3854,11 @@ void VulkanTextureCache::GetTextureUsageMasks(VulkanTexture::Usage usage,
       // fragment shader, and not during emulation, where it'd be used in other
       // stages.
       stage_mask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+      access_mask = VK_ACCESS_SHADER_READ_BIT;
+      layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+      break;
+    case VulkanTexture::Usage::kNativePresentationSampled:
+      stage_mask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
       access_mask = VK_ACCESS_SHADER_READ_BIT;
       layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
       break;

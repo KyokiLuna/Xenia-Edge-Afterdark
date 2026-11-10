@@ -770,6 +770,31 @@ class PosixCondition<Event> : public PosixConditionBase {
     signal_ = false;
   }
 
+  EventInfo Query() {
+    // Match NtQueryEvent: notification/manual=0, synchronization/auto=1.
+    EventInfo result{manual_reset_ ? 0u : 1u, 0u};
+#if XE_PLATFORM_MAC
+    auto lock = std::unique_lock(mutex_);
+#else
+    // Wait uses the same robust mutex. A query must recover ownership too,
+    // while an unrecoverable lock must never report an event as signaled.
+    auto native_mutex = static_cast<pthread_mutex_t*>(mutex_.native_handle());
+    const int lock_result = pthread_mutex_lock(native_mutex);
+    if (lock_result == EOWNERDEAD) {
+      if (pthread_mutex_consistent(native_mutex) != 0) {
+        pthread_mutex_unlock(native_mutex);
+        return result;
+      }
+    } else if (lock_result != 0) {
+      return result;
+    }
+    std::unique_lock lock(mutex_, std::adopt_lock);
+#endif
+    // Observation only: do not use Wait/post_execution or notify waiters.
+    result.state = signal_ ? 1u : 0u;
+    return result;
+  }
+
  private:
   [[nodiscard]] bool signaled() const override { return signal_; }
   void post_execution() override {
@@ -1618,11 +1643,7 @@ class PosixEvent final : public PosixConditionHandle<Event> {
   ~PosixEvent() override = default;
   void Set() override { handle_.Signal(); }
   void Reset() override { handle_.Reset(); }
-  EventInfo Query() override {
-    EventInfo result{};
-    assert_always();
-    return result;
-  }
+  EventInfo Query() override { return handle_.Query(); }
   void Pulse() override {
     using namespace std::chrono_literals;
     handle_.Signal();

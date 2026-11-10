@@ -1,0 +1,281 @@
+va	data_type	text
+0x9ac00590	string	body{t:item,offset:0,size:203077,loc:body}[?{t:item,offset:0,size:203077,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0},savedGames{t:item,offset:12,size:203000,loc:dom,max:500,itemsize:406,countoffset:8,countsize:4}[clientFileTime{t:datetime,offset:0,size:16,loc:dom},fileName{t:str,offset:16,size:43,loc:dom,max:43},displayName{t:wstr,offset:59,size:258,loc:dom,max:129},size{t:uint,offset:317,size:8,loc:dom},etag{t:str,offset:325,size:65,loc:dom,max:65},titleId{t:uint,offset:390,size:4,loc:dom},noCopy{t:bool,offset:394,size:4,loc:dom},otherHasLock{t:bool,offset:398,size:4,loc:dom},callerHasLock{t:bool,offset:402,size:4,loc:dom}],pagingInfo{t:item,offset:203012,size:65,loc:dom}[continuationToken{t:str,offset:0,size:65,loc:dom,max:65}]]]
+0x9ac008b8	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/files
+0x9ac00910	string	body{t:item,offset:0,size:1269,loc:body}[?{t:item,offset:0,size:1269,loc:dom}[titles{t:item,offset:4,size:1200,loc:dom,max:100,itemsize:12,countoffset:0,countsize:4}[id{t:uint,offset:0,size:4,loc:dom},usedBytes{t:uint,offset:4,size:8,loc:dom}],pagingInfo{t:item,offset:1204,size:65,loc:dom}[continuationToken{t:str,offset:0,size:65,loc:dom,max:65}]]]
+0x9ac00a70	string	xuid{t:xuid,offset:0,size:8,loc:url},continuationToken{t:str,offset:12,size:65,loc:qs,max:65,opt:8},maxItems{t:uint,offset:77,size:4,loc:qs}
+0x9ac00b00	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles
+0x9ac00b58	string	body{t:item,offset:0,size:24,loc:body}[?{t:item,offset:0,size:24,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0},quotaInfo{t:item,offset:8,size:16,loc:dom}[usedBytes{t:uint,offset:0,size:8,loc:dom},quotaBytes{t:uint,offset:8,size:8,loc:dom}]]]
+0x9ac00c88	string	xuid{t:xuid,offset:0,size:8,loc:url}
+0x9ac00cb0	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames
+0x9ac00d00	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}
+0x9ac00d60	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url},Content-Length{t:uint,offset:12,size:4,loc:hdr},Content-Type{t:str,offset:16,size:20,loc:hdr,max:20}
+0x9ac00e18	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/lock
+0x9ac00e80	string	body{t:item,offset:0,size:52,loc:body}[?{t:item,offset:0,size:52,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0},lastModifyTime{t:datetime,offset:8,size:16,loc:dom},usedBytes{t:uint,offset:24,size:8,loc:dom},hasNoCopyFiles{t:bool,offset:32,size:4,loc:dom},callerHasLockedFiles{t:bool,offset:36,size:4,loc:dom},otherHasLockedFiles{t:bool,offset:40,size:4,loc:dom},checkedOutByCaller{t:bool,offset:44,size:4,loc:dom},checkedOutByOther{t:bool,offset:48,size:4,loc:dom}]]
+0x9ac01090	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url}
+0x9ac010e0	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/metadata
+0x9ac01148	string	breakLock{t:bool,offset:0,size:4,loc:qs},Content-Length{t:uint,offset:4,size:4,loc:hdr},Content-Type{t:str,offset:8,size:20,loc:hdr,max:20},xuid{t:xuid,offset:28,size:8,loc:url},titleId{t:uint,offset:36,size:4,loc:url},filename{t:str,offset:40,size:86,loc:url,max:86,enc:url},prefix{t:str,offset:126,size:10,loc:url,max:10}
+0x9ac01290	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/files/{prefix}{filename}/lock
+0x9ac01310	string	ignoreLock{t:bool,offset:0,size:4,loc:qs},xuid{t:xuid,offset:4,size:8,loc:url},titleId{t:uint,offset:12,size:4,loc:url},filename{t:str,offset:16,size:86,loc:url,max:86,enc:url},prefix{t:str,offset:102,size:10,loc:url,max:10}
+0x9ac013f8	string	body{t:item,offset:0,size:8,loc:body}[?{t:item,offset:0,size:8,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0}]]
+0x9ac014a8	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url},filename{t:str,offset:12,size:86,loc:url,max:86,enc:url},prefix{t:str,offset:98,size:10,loc:url,max:10},request{t:item,offset:108,size:278,loc:part0,enc:json}[?{t:item,offset:0,size:278,loc:dom}[clientFileTime{t:datetime,offset:0,size:16,loc:dom},displayName{t:wstr,offset:16,size:258,loc:dom,max:129},noCopy{t:bool,offset:274,size:4,loc:dom}]],data{t:stream,offset:386,size:4,loc:part1,enc:binary},blockIndex{t:uint,offset:390,size:4,loc:qs},finalBlock{t:bool,offset:394,size:4,loc:qs},ignoreLock{t:bool,offset:398,size:4,loc:qs}
+0x9ac01708	string	ETag{t:str,offset:0,size:65,loc:hdr,max:65},body{t:stream,offset:65,size:4,loc:body,enc:binary}
+0x9ac01768	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url},filename{t:str,offset:12,size:86,loc:url,max:86,enc:url},prefix{t:str,offset:98,size:10,loc:url,max:10},Range{t:str,offset:108,size:32,loc:hdr,max:32},If-Match{t:str,offset:140,size:65,loc:hdr,max:65}
+0x9ac01880	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/files/{prefix}{filename}
+0x9ac018f8	string	body{t:item,offset:0,size:40677,loc:body}[?{t:item,offset:0,size:40677,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0},savedGames{t:item,offset:12,size:40600,loc:dom,max:100,itemsize:406,countoffset:8,countsize:4}[clientFileTime{t:datetime,offset:0,size:16,loc:dom},fileName{t:str,offset:16,size:43,loc:dom,max:43},displayName{t:wstr,offset:59,size:258,loc:dom,max:129},size{t:uint,offset:317,size:8,loc:dom},etag{t:str,offset:325,size:65,loc:dom,max:65},titleId{t:uint,offset:390,size:4,loc:dom},noCopy{t:bool,offset:394,size:4,loc:dom},otherHasLock{t:bool,offset:398,size:4,loc:dom},callerHasLock{t:bool,offset:402,size:4,loc:dom}],pagingInfo{t:item,offset:40612,size:65,loc:dom}[continuationToken{t:str,offset:0,size:65,loc:dom,max:65}]]]
+0x9ac01c18	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url},continuationToken{t:str,offset:16,size:65,loc:qs,max:65,opt:12},maxItems{t:uint,offset:81,size:4,loc:qs}
+0x9ac01cd0	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/files
+0x9ac01dcc	string	GetModel
+0x9ac01dd8	string	Xbox.NetworkStorageDash
+0x9ac01df0	string	Dash.NetworkStorage
+0x9ac01e04	unicode	section://%X,xzp
+0x9ac01e28	string	Xbox.Object.NetworkStorageDash
+0x9ac01e48	string	e:\bt\1c10e6\core\private\flash\xam\dash\apps\networkstorage\app\luanetworkstoragedash.cpp
+0x9ac01ea4	string	Unable to retrieve user quota
+0x9ac01ec4	string	Unable to retrieve user properties.
+0x9ac01ee8	string	Cloud storage is disabled.
+0x9ac01f04	string	Cannot check eligibility: User is offline.
+0x9ac01f78	string	LuaNetworkStorageDash object
+0x9ac01fb4	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\inc\LuaPub.h
+0x9ac01ff4	string	invalid arg
+0x9ac02000	string	unexpected function name
+0x9ac0201c	string	GetRequiredSpaceText
+0x9ac02034	string	GetFreeSpaceText
+0x9ac02048	string	GetBackingDeviceName
+0x9ac02060	string	UserHasPrivilege
+0x9ac02074	string	IsUserEligible
+0x9ac02084	string	DisableNetworkStorage
+0x9ac0209c	string	EnableNetworkStorage
+0x9ac020b4	string	IsNotConfigured
+0x9ac020c4	string	HasCacheDevice
+0x9ac020d4	string	__tostring
+0x9ac020e0	string	__index
+0x9ac02148	string	Unknown exception
+0x9ac02164	string	bad allocation
+0x9ac02288	unicode	runtime error 
+0x9ac022ac	unicode	TLOSS error\n
+0x9ac022c8	unicode	SING error\n
+0x9ac022e0	unicode	DOMAIN error\n
+0x9ac02300	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9ac024f0	unicode	R6032\n- not enough space for locale information\n
+0x9ac02558	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9ac0261c	unicode	R6030\n- CRT not initialized\n
+0x9ac02658	unicode	R6028\n- unable to initialize heap\n
+0x9ac026a0	unicode	R6027\n- not enough space for lowio initialization\n
+0x9ac02708	unicode	R6026\n- not enough space for stdio initialization\n
+0x9ac02770	unicode	R6025\n- pure virtual function call\n
+0x9ac027b8	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9ac02820	unicode	R6019\n- unable to open console device\n
+0x9ac02870	unicode	R6018\n- unexpected heap error\n
+0x9ac028b0	unicode	R6017\n- unexpected multithread lock error\n
+0x9ac02908	unicode	R6016\n- not enough space for thread data\n
+0x9ac02960	unicode	R6010\n- abort() has been called\n
+0x9ac029a8	unicode	R6009\n- not enough space for environment\n
+0x9ac02a00	unicode	R6008\n- not enough space for arguments\n
+0x9ac02a50	unicode	R6002\n- floating point support not loaded\n
+0x9ac02b60	string	e+000
+0x9ac02b8c	unicode	HH:mm:ss
+0x9ac02ba0	unicode	dddd, MMMM dd, yyyy
+0x9ac02bc8	unicode	MM/dd/yy
+0x9ac02bec	unicode	December
+0x9ac02c00	unicode	November
+0x9ac02c14	unicode	October
+0x9ac02c24	unicode	September
+0x9ac02c38	unicode	August
+0x9ac02c48	unicode	July
+0x9ac02c54	unicode	June
+0x9ac02c60	unicode	April
+0x9ac02c6c	unicode	March
+0x9ac02c78	unicode	February
+0x9ac02c8c	unicode	January
+0x9ac02cfc	unicode	Saturday
+0x9ac02d10	unicode	Friday
+0x9ac02d20	unicode	Thursday
+0x9ac02d34	unicode	Wednesday
+0x9ac02d48	unicode	Tuesday
+0x9ac02d58	unicode	Monday
+0x9ac02d68	unicode	Sunday
+0x9ac02db0	string	HH:mm:ss
+0x9ac02dbc	string	dddd, MMMM dd, yyyy
+0x9ac02dd0	string	MM/dd/yy
+0x9ac02de4	string	December
+0x9ac02df0	string	November
+0x9ac02dfc	string	October
+0x9ac02e04	string	September
+0x9ac02e10	string	August
+0x9ac02e28	string	April
+0x9ac02e30	string	March
+0x9ac02e38	string	February
+0x9ac02e44	string	January
+0x9ac02e7c	string	Saturday
+0x9ac02e88	string	Friday
+0x9ac02e90	string	Thursday
+0x9ac02e9c	string	Wednesday
+0x9ac02ea8	string	Tuesday
+0x9ac02eb0	string	Monday
+0x9ac02eb8	string	Sunday
+0x9ac02ee0	unicode	ull)
+0x9ac03a04	string	1#QNAN
+0x9ac03a0c	string	1#INF
+0x9ac03a14	string	1#IND
+0x9ac03a1c	string	1#SNAN
+0x9ac03a24	string	 Complete Object Locator'
+0x9ac03a40	string	 Class Hierarchy Descriptor'
+0x9ac03a60	string	 Base Class Array'
+0x9ac03a74	string	 Base Class Descriptor at (
+0x9ac03a90	string	 Type Descriptor'
+0x9ac03aa4	string	`local static thread guard'
+0x9ac03ac0	string	`managed vector copy constructor iterator'
+0x9ac03aec	string	`vector vbase copy constructor iterator'
+0x9ac03b18	string	`vector copy constructor iterator'
+0x9ac03b3c	string	`dynamic atexit destructor for '
+0x9ac03b60	string	`dynamic initializer for '
+0x9ac03b7c	string	`eh vector vbase copy constructor iterator'
+0x9ac03ba8	string	`eh vector copy constructor iterator'
+0x9ac03bd0	string	`managed vector destructor iterator'
+0x9ac03bf8	string	`managed vector constructor iterator'
+0x9ac03c20	string	`placement delete[] closure'
+0x9ac03c40	string	`placement delete closure'
+0x9ac03c5c	string	`omni callsig'
+0x9ac03c6c	string	 delete[]
+0x9ac03c78	string	 new[]
+0x9ac03c80	string	`local vftable constructor closure'
+0x9ac03ca4	string	`local vftable'
+0x9ac03cb4	string	`RTTI
+0x9ac03cc0	string	`udt returning'
+0x9ac03cd0	string	`copy constructor closure'
+0x9ac03cec	string	`eh vector vbase constructor iterator'
+0x9ac03d14	string	`eh vector destructor iterator'
+0x9ac03d34	string	`eh vector constructor iterator'
+0x9ac03d58	string	`virtual displacement map'
+0x9ac03d74	string	`vector vbase constructor iterator'
+0x9ac03d98	string	`vector destructor iterator'
+0x9ac03db8	string	`vector constructor iterator'
+0x9ac03dd8	string	`scalar deleting destructor'
+0x9ac03df8	string	`default constructor closure'
+0x9ac03e18	string	`vector deleting destructor'
+0x9ac03e38	string	`vbase destructor'
+0x9ac03e4c	string	`string'
+0x9ac03e58	string	`local static guard'
+0x9ac03e70	string	`typeof'
+0x9ac03e7c	string	`vcall'
+0x9ac03e84	string	`vbtable'
+0x9ac03e90	string	`vftable'
+0x9ac03f18	string	operator
+0x9ac03f40	string	 delete
+0x9ac03f50	string	__unaligned
+0x9ac03f5c	string	__restrict
+0x9ac03f68	string	__ptr64
+0x9ac03f70	string	__eabi
+0x9ac03f78	string	__clrcall
+0x9ac03f84	string	__fastcall
+0x9ac03f90	string	__thiscall
+0x9ac03f9c	string	__stdcall
+0x9ac03fa8	string	__pascal
+0x9ac03fb4	string	__cdecl
+0x9ac03fbc	string	__based(
+0x9ac041a8	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\apps\networkstorage\app\obj\xbox\Dash.NetworkStorage.pdb
+0x9ac150a8	string	.?AVbad_alloc@std@@
+0x9ac150c4	string	.?AVexception@std@@
+0x9ac15a09	string	abcdefghijklmnopqrstuvwxyz
+0x9ac15a29	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9ac1704a	string	Dash.NetworkStorage.xex
+0x9ac17062	string	PamInitializeDll
+0x9ac17073	string	PamInitializeState
+0x9ac17086	string	PamTerminateDll
+0x9ac1804a	string	string
+0x9ac1805c	string	table
+0x9ac18067	string	pairs
+0x9ac18081	string	\ttostring
+0x9ac18145	string	array
+0x9ac18157	string	result
+0x9ac1816a	string	(for generator)
+0x9ac18186	string	(for state)
+0x9ac1819e	string	(for control)
+0x9ac1903b	string	\nerrorCode
+0x9ac19241	string	hresult
+0x9ac19255	string	optionalMsg
+0x9ac1926d	string	optionalFrame
+0x9ac19286	string	\nerrorText
+0x9ac1930d	string	@App.Event.lua
+0x9ac193a5	string	module
+0x9ac193b0	string	\nApp.Event
+0x9ac193c0	string	package
+0x9ac193cd	string	seeall
+0x9ac193d9	string	import
+0x9ac193e5	string	App.Errors
+0x9ac193f5	string	_Event
+0x9ac19401	string	__index
+0x9ac1940e	string	__newindex
+0x9ac1941e	string	Create
+0x9ac19429	string	\nSubscribe
+0x9ac19439	string	Unsubscribe
+0x9ac1944a	string	Trigger
+0x9ac1948b	string	throw
+0x9ac1949f	string	Invalid property
+0x9ac1952f	string	\tHandlers
+0x9ac1953d	string	\rsetmetatable
+0x9ac19550	string	_Event
+0x9ac195a0	string	eventInstance
+0x9ac195fe	string	\tHandlers
+0x9ac19616	string	table
+0x9ac19621	string	insert
+0x9ac19671	string	handler
+0x9ac19727	string	\tfunction
+0x9ac19736	string	pairs
+0x9ac19740	string	\tHandlers
+0x9ac19750	string	number
+0x9ac197ed	string	handler
+0x9ac19801	string	(for generator)
+0x9ac1981d	string	(for state)
+0x9ac19835	string	(for control)
+0x9ac198b4	string	pairs
+0x9ac198be	string	\tHandlers
+0x9ac19925	string	(for generator)
+0x9ac19941	string	(for state)
+0x9ac19959	string	(for control)
+0x9ac19a1b	string	@App.Events.lua
+0x9ac19a9c	string	module
+0x9ac19aa8	string	App.Events
+0x9ac19ab8	string	package
+0x9ac19ac5	string	seeall
+0x9ac19ad1	string	import
+0x9ac19add	string	App.Errors
+0x9ac19aec	string	\nApp.Event
+0x9ac19afc	string	_Events
+0x9ac19b09	string	Declare
+0x9ac19b15	string	\nSubscribe
+0x9ac19b24	string	\rSubscribeAll
+0x9ac19b37	string	Trigger
+0x9ac19b98	string	pairs
+0x9ac19ba3	string	_Events
+0x9ac19bb9	string	Event
+0x9ac19bc4	string	Create
+0x9ac19c13	string	eventNames
+0x9ac19c2a	string	(for generator)
+0x9ac19c46	string	(for state)
+0x9ac19c5e	string	(for control)
+0x9ac19cc9	string	_Events
+0x9ac19cd5	string	\nSubscribe
+0x9ac19d07	string	\neventName
+0x9ac19d1d	string	\reventHandler
+0x9ac19d80	string	pairs
+0x9ac19d8a	string	\nSubscribe
+0x9ac19dd1	string	tableOfHandlers
+0x9ac19ded	string	(for generator)
+0x9ac19e09	string	(for state)
+0x9ac19e21	string	(for control)
+0x9ac19e8c	string	_Events
+0x9ac19e99	string	Trigger
+0x9ac19ec8	string	\neventName
+0x9ac19f63	string	@App.Extensions.lua
+0x9ac19fd4	string	module
+0x9ac19fe0	string	App.Extensions
+0x9ac19ff4	string	package
+0x9ac1a001	string	seeall
+0x9ac1a00d	string	import
+0x9ac1a019	string	App.Errors
+0x9ac1a029	string	_Extensions
+0x9ac1a03a	string	Declare
+0x9ac1a046	string	\tRegister
+0x9ac1a055	string	Invoke
+0x9ac1a090	string	extensionNames

@@ -1,0 +1,15 @@
+{
+  "module": "$install_extender.xex",
+  "program": "bd66d4514dca__install_extender.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "2bf6801a3042ea9ce3dd6994735c404b150263125c0855fca97fb63fc76a3142",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9f100400",
+  "functions": 222,
+  "calls": 470,
+  "strings": 78,
+  "string_xrefs": 55,
+  "independent_decode_error": "java.lang.ArrayIndexOutOfBoundsException"
+}

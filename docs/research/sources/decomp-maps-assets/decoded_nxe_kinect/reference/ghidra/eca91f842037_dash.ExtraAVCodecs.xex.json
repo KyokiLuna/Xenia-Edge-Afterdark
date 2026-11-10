@@ -1,0 +1,18 @@
+{
+  "module": "dash.ExtraAVCodecs.xex",
+  "program": "eca91f842037_dash.ExtraAVCodecs.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "47822fa4e708553c34ef0fe298e00b8fe0d1d5e3dc3da23ebc7dd037a65fb4f2",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9c060800",
+  "functions": 2181,
+  "calls": 5786,
+  "strings": 1353,
+  "string_xrefs": 414,
+  "independent_sha256": "b182b4520c647e8d4402aa68fb73ca95791760ec29221b1a88eb446dd17b525b",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

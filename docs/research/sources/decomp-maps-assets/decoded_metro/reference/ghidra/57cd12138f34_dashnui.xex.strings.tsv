@@ -1,0 +1,2142 @@
+va	data_type	text
+0x9e510a30	string	WRN: NUI_CAMERA_PROPERTY_AE_AWB_MODE_FACEBASED isn't enabled.\n
+0x9e510a70	string	WRN: Skeleton tracking must be enabled for NUI_CAMERA_PROPERTY_AE_AWB_MODE_FACEBASED to work.\n
+0x9e510ae8	string	NUI_IMAGE_RESOLUTION_640x480
+0x9e510b08	string	NUI_IMAGE_RESOLUTION_320x240
+0x9e510b28	string	NUI_IMAGE_RESOLUTION_80x60
+0x9e510b44	string	ColorYUV
+0x9e510b5c	string	ColorToDepth
+0x9e510b6c	string	Color
+0x9e510b74	string	DepthToColor
+0x9e510b84	string	Depth
+0x9e510b8c	string	NUI_IMAGE_TYPE_DEPTH_80x60
+0x9e510ba8	string	NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX_80x60
+0x9e510bd4	string	NUI_IMAGE_TYPE_COLOR_IN_DEPTH_SPACE
+0x9e510bf8	string	NUI_IMAGE_TYPE_DEPTH_IN_COLOR_SPACE
+0x9e510c1c	string	NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX_IN_COLOR_SPACE
+0x9e510c54	string	NUI_IMAGE_TYPE_DEPTH
+0x9e510c6c	string	NUI_IMAGE_TYPE_COLOR_YUV
+0x9e510c88	string	NUI_IMAGE_TYPE_COLOR
+0x9e510ca0	string	NUI_IMAGE_TYPE_DEPTH_AND_PLAYER_INDEX
+0x9e510dff	string	DNUIFITNESS1
+0x9e510e0c	string	NUITRUECOLOR1
+0x9e510e1c	string	BIOMETRIC0
+0x9e510e28	string	NUISHUTDN
+0x9e510e34	string	NUIINIT
+0x9e510e44	string	STFRAME3
+0x9e510e50	string	IDENTIFY5
+0x9e510e5c	string	HeadPosition.mshdf
+0x9e510e70	string	hands.gmsodf
+0x9e510e80	string	database.gmsodf
+0x9e511178	string	NuiHeadOrientation:\
+0x9e511190	string	headposition:\HeadPosition.mshdf
+0x9e5111b4	string	Placeholder Entry - avoiding zero entry arrays in headers
+0x9e5111f0	string	Floor Area
+0x9e5111fc	string	PropStats Core First Second Only
+0x9e511220	string	PropStats Core First Only
+0x9e51123c	string	PropStats Sum Core Proposals
+0x9e51125c	string	PropStats All First Second Only
+0x9e51127c	string	PropStats All First Only
+0x9e511298	string	PropStats Sum All Proposals
+0x9e5112b4	string	SeatedLockon NumFrames Without Motion Blobs
+0x9e5112e0	string	SeatedLockon Lockon Neck
+0x9e5112fc	string	SeatedLockon Blob Area
+0x9e511314	string	Neck Move Distance
+0x9e51136c	string	%d.%d.%d
+0x9e51137c	string	%d,%d,%d,%d,%d,%d,%s
+0x9e51139c	string	NuiIdCfgVer
+0x9e5113a8	string	1.5,3,53.0,0.19,0.43,50,0.5,0.5
+0x9e5113c8	string	%f,%d,%f,%f,%f,%d,%f,%f
+0x9e5113e0	string	NuiV1Ctrl
+0x9e5113ec	string	%x,%d,%d,%d,%d
+0x9e5113fc	string	NuiV1SkFilter
+0x9e51140c	string	7E,10,6,4,2
+0x9e511418	string	NuiV1ImgFilter
+0x9e511428	string	780,10,6,4,2
+0x9e511438	string	NuiV1LightFilter
+0x9e51144c	string	1800,2,2,5,3
+0x9e51145c	string	NuiV1FaceFilter
+0x9e51146c	string	1,10,6,4,2
+0x9e51148b	string	oNuiV1GuideUpPanCfg
+0x9e5114a0	string	45,80,30,1,1,0,033333333033333,033333303333,0333,0333033
+0x9e5114dc	string	NuiV1TitleUpPanCfg
+0x9e5114f0	string	80,80,30,1,1,0,033333333033333,033333303333,0333,0333033
+0x9e51152c	string	NuiV1GuidePanCfg
+0x9e511540	string	45,80,30,1,1,0,033333333333133,033333333133,0333,0333133
+0x9e51157c	string	NuiV1TitlePanCfg
+0x9e511590	string	80,80,30,1,1,0,033333333333133,033333333133,0333,0333133
+0x9e5115cc	string	NuiIdentity
+0x9e5115fc	string	NuiIdentityDbVersion.txt
+0x9e511618	string	NuiIdentity.bin.be
+0x9e511638	string	xam.xex
+0x9e51164c	string	XamFitnessInitialize: 0x%x\n
+0x9e511668	string	XamFitnessUnInitialize: 0x%x\n
+0x9e5116b0	string	0.1,0.16,0.20,0.20
+0x9e5116c4	string	%f,%f,%f,%f
+0x9e5116d0	string	NuiV1FaceEstSize
+0x9e5116e4	string	0.0397,3,0,8
+0x9e5116f4	string	%f,%d,%d,%d
+0x9e511700	string	NuiV1Outliers
+0x9e511710	string	%d,%d,%d,%d,%f
+0x9e511720	string	%f,%f,%f,%f,%f,%f
+0x9e511734	string	NuiV1FaceHiRes
+0x9e511744	string	0.038,0.0397,0.042,0.038,0.038,0.001
+0x9e51176c	string	NuiV1FaceLoRes
+0x9e51177c	string	0.0343,0.0397,0.042,0.037,0.037,0.001
+0x9e5117a4	string	NuiV1FaceSample
+0x9e5117b4	string	70,1,8,20,-1.5
+0x9e5117c4	string	NuiV1UpFaceHiRes
+0x9e5117d8	string	NuiV1UpFaceLoRes
+0x9e5117ec	string	NuiV1UpFaceSample
+0x9e511800	string	40,20
+0x9e511808	string	%d,%d
+0x9e511810	string	NuiV1QualClip
+0x9e511820	string	0.7071,0.7071,0.9,0.5
+0x9e511838	string	NuiV1QualPose
+0x9e511848	string	0.5,1.0,3.5,5.0
+0x9e511858	string	NuiV1QualDist
+0x9e511868	string	0,0,0
+0x9e511870	string	%d,%d,%d
+0x9e51187c	string	NuiV1BHSample
+0x9e51188c	string	0.08,3.0,0.95,0.05,0.04
+0x9e5118a4	string	%f,%f,%f,%f,%f
+0x9e5118b4	string	NuiV1BHThre
+0x9e5118d8	string	0,1,1
+0x9e5118e0	string	NuiV1ColorSample
+0x9e5118f4	string	0.45,0.80,0.4,0.80,0.75,1.65
+0x9e511914	string	NuiV1ColorThre
+0x9e51192c	string	%s\%4d%02d%02d_%02d%02d%02d_%016I64X_%03d
+0x9e511958	string	NuiIdentityPCA.bin.be
+0x9e511a14	string	NuiHeadOrientationDbVersion.txt
+0x9e511a80	string	pitch_pca_lda.bin.be
+0x9e511a98	string	pitch_knn.bin.be
+0x9e511aac	string	yaw_pca_lda.bin.be
+0x9e511ac0	string	yaw_knn.bin.be
+0x9e511ad0	string	roll_pca_lda.bin.be
+0x9e511ae4	string	roll_knn.bin.be
+0x9e511b74	string	RFRProgress
+0x9e511b80	string	PCAProgress
+0x9e511b8c	string	AdaBoostTrigger
+0x9e511bb8	string	Invalid duration.
+0x9e513000	string	Seated
+0x9e513008	string	Use Rotation Variant Feature
+0x9e513028	string	Number of Trees
+0x9e513038	string	Max Tree Depth
+0x9e513048	string	Cluster Threshold
+0x9e51305c	string	Weight Factor
+0x9e51306c	string	RFRTagMin
+0x9e513078	string	RFRTagMax
+0x9e51308c	string	PCA Compression Ratio
+0x9e5130a4	string	Cluster Range
+0x9e5130b4	string	Number Of Neighbors
+0x9e5130d8	string	Filter Results
+0x9e5130f3	string	\nNuiFitnessBodyPartWeights
+0x9e513110	string	NuiFitnessJointWeights
+0x9e513504	string	?fff@0
+0x9e52f4c0	string	TE\PLETPLPT\TP\\
+0x9e530020	string	LEXPAELPAPL\LPX\9
+0x9e5311f0	string	AEPTHEPL
+0x9e531950	string	VVidCVVdCdVrVdirLiVrV__i
+0x9e532070	string	iVrd_Vid_diridrr
+0x9e5323f0	string	_diriVrd
+0x9e533510	string	iLr__Li___iri_rr4
+0x9e5341b0	string	NuiIdentityNN.bin.be
+0x9e5347e0	string	%sUD.bin
+0x9e534b54	string	GestureDetectorFile
+0x9e535ae8	string	body{t:item,offset:0,size:15144,loc:body}[?{t:item,offset:0,size:15144,loc:dom}[AS/Results{t:item,offset:4,size:15140,loc:dom,max:10,itemsize:1514,countoffset:0,countsize:4}[Suggests{t:item,offset:4,size:1510,loc:dom,max:10,itemsize:151,countoffset:0,countsize:4}[Txt{t:str,offset:0,size:151,loc:dom,max:151}]]]]
+0x9e535c28	string	serverToken{t:str,offset:0,size:100,loc:url,max:100},q{t:wstr,offset:100,size:302,loc:qs,max:151},ds{t:str,offset:402,size:12,loc:qs,max:12},mkt{t:str,offset:414,size:7,loc:qs,max:7}
+0x9e535ce0	string	{serverToken}
+0x9e535cf0	string	body{t:stream,offset:0,size:4,loc:body,enc:binary}
+0x9e535d24	string	manifestUrl{t:str,offset:0,size:1024,loc:url,max:1024}
+0x9e535d5c	string	{manifestUrl}
+0x9e535d70	string	body{t:item,offset:0,size:1504791,loc:body}[?{t:item,offset:0,size:1504791,loc:dom}[Items/Item{t:item,offset:4,size:1504750,loc:dom,max:10,itemsize:150475,countoffset:0,countsize:4}[@type{t:str,offset:0,size:21,loc:dom,max:21},Name{t:str,offset:21,size:300,loc:dom,max:300},ID{t:str,offset:321,size:37,loc:dom,max:37},ParentItemType{t:str,offset:358,size:20,loc:dom,max:20},Image/Url{t:str,offset:378,size:1024,loc:dom,max:1024},Image/Width{t:int,offset:1402,size:4,loc:dom},Image/Height{t:int,offset:1406,size:4,loc:dom},KValue{t:int,offset:1410,size:4,loc:dom},KValueNamespace{t:str,offset:1414,size:64,loc:dom,max:64},VuiDisplayName{t:str,offset:1478,size:300,loc:dom,max:300},AverageUserRating{t:str,offset:1778,size:10,loc:dom,max:10},UserRatingCount{t:int,offset:1788,size:4,loc:dom},CriticRating{t:uint,offset:1792,size:4,loc:dom},ReleaseDate{t:datetime,offset:1796,size:16,loc:dom},EpisodeNumber{t:int,offset:1812,size:4,loc:dom},DetailsUrl{t:str,offset:1816,size:1024,loc:dom,max:1024},MergedMetaData{t:str,offset:2840,size:10,loc:dom,max:10},ParentId{t:str,offset:2850,size:37,loc:dom,max:37},ItemTypeId{t:int,offset:2887,size:4,loc:dom},ArtistName{t:str,offset:2891,size:300,loc:dom,max:300},Providers/Provider{t:item,offset:3195,size:147280,loc:dom,max:20,itemsize:7364,countoffset:3191,countsize:4}[Name{t:str,offset:0,size:64,loc:dom,max:64},ProductId{t:str,offset:64,size:1024,loc:dom,max:1024},Image/Url{t:str,offset:1088,size:1024,loc:dom,max:1024},KValue{t:int,offset:2112,size:4,loc:dom},KValueNamespace{t:str,offset:2116,size:64,loc:dom,max:64},PartnerApplicationLaunchInfos/PartnerApplicationLaunchInfo{t:item,offset:2184,size:5180,loc:dom,max:5,itemsize:1036,countoffset:2180,countsize:4}[ClientType{t:str,offset:0,size:8,loc:dom,max:8},DeepLinkInfo{t:str,offset:8,size:1024,loc:dom,max:1024},TitleId{t:uint,offset:1032,size:4,loc:dom}]]],ImpressionGuid{t:str,offset:1504754,size:37,loc:dom,max:37}]]
+0x9e5364f8	string	x-xbl-contract-version{t:str,offset:0,size:8,loc:hdr,max:8},serverToken{t:str,offset:8,size:100,loc:url,max:100},locale{t:str,offset:108,size:7,loc:url,max:7},itemType{t:str,offset:115,size:21,loc:url,max:21},id{t:str,offset:136,size:1024,loc:url,max:1024},clientContext{t:str,offset:1160,size:5,loc:qs,max:5},clientType{t:str,offset:1165,size:8,loc:qs,max:8},itemTypes{t:str,offset:1173,size:21,loc:qs,max:21},idspace{t:str,offset:1194,size:4,loc:qs,max:4},version{t:str,offset:1198,size:8,loc:qs,max:8},filterUnrated{t:bool,offset:1210,size:4,loc:qs,opt:1206},maxMovieItemRating{t:uint,offset:1218,size:4,loc:qs,opt:1214},maxTVItemRating{t:uint,offset:1226,size:4,loc:qs,opt:1222}
+0x9e5367a4	string	{serverToken}/{locale}/{itemType}/{id}/relatedItems
+0x9e5367d8	string	body{t:item,offset:0,size:201271,loc:body}[?{t:item,offset:0,size:201271,loc:dom}[Item{t:item,offset:0,size:201234,loc:dom}[@type{t:str,offset:0,size:100,loc:dom,max:100},Name{t:str,offset:100,size:300,loc:dom,max:300},ID{t:str,offset:400,size:37,loc:dom,max:37},ParentItemType{t:str,offset:437,size:20,loc:dom,max:20},Image/Url{t:str,offset:457,size:1024,loc:dom,max:1024},Image/Width{t:int,offset:1481,size:4,loc:dom},Image/Height{t:int,offset:1485,size:4,loc:dom},KValue{t:int,offset:1489,size:4,loc:dom},KValueNamespace{t:str,offset:1493,size:64,loc:dom,max:64},VuiDisplayName{t:str,offset:1557,size:300,loc:dom,max:300},AverageUserRating{t:str,offset:1857,size:10,loc:dom,max:10},UserRatingCount{t:int,offset:1867,size:4,loc:dom},CriticRating{t:uint,offset:1871,size:4,loc:dom},ReleaseDate{t:datetime,offset:1875,size:16,loc:dom},EpisodeNumber{t:int,offset:1891,size:4,loc:dom},DetailsUrl{t:str,offset:1895,size:1024,loc:dom,max:1024},MergedMetaData{t:str,offset:2919,size:10,loc:dom,max:10},ParentId{t:str,offset:2929,size:37,loc:dom,max:37},ItemTypeId{t:int,offset:2966,size:4,loc:dom},ArtistName{t:str,offset:2970,size:300,loc:dom,max:300},ParentalRating{t:str,offset:3270,size:100,loc:dom,max:100},Duration{t:str,offset:3370,size:100,loc:dom,max:100},PreviewUrl{t:str,offset:3470,size:1024,loc:dom,max:1024},Genres/Genre{t:item,offset:4498,size:2000,loc:dom,max:20,itemsize:100,countoffset:4494,countsize:4}[Name{t:str,offset:0,size:100,loc:dom,max:100}],Providers/Provider{t:item,offset:6502,size:190560,loc:dom,max:20,itemsize:9528,countoffset:6498,countsize:4}[Name{t:str,offset:0,size:64,loc:dom,max:64},ProductId{t:str,offset:64,size:1024,loc:dom,max:1024},Image/Url{t:str,offset:1088,size:1024,loc:dom,max:1024},KValue{t:int,offset:2112,size:4,loc:dom},KValueNamespace{t:str,offset:2116,size:64,loc:dom,max:64},PartnerApplicationLaunchInfos/PartnerApplicationLaunchInfo{t:item,offset:2184,size:5180,loc:dom,max:5,itemsize:1036,countoffset:2180,countsize:4}[ClientType{t:str,offset:0,size:8,loc:dom,max:8},DeepLinkInfo{t:str,offset:8,size:1024,loc:dom,max:1024},TitleId{t:uint,offset:1032,size:4,loc:dom}],ProviderContents/ProviderContent{t:item,offset:7368,size:2160,loc:dom,max:5,itemsize:432,countoffset:7364,countsize:4}[Device{t:str,offset:0,size:8,loc:dom,max:8},OfferInstances/OfferInstance{t:item,offset:12,size:420,loc:dom,max:20,itemsize:21,countoffset:8,countsize:4}[OfferType{t:str,offset:0,size:21,loc:dom,max:21}]]],Details{t:item,offset:197062,size:4172,loc:dom}[Description{t:str,offset:0,size:2048,loc:dom,max:2048},Directors/Person{t:item,offset:2052,size:192,loc:dom,max:3,itemsize:64,countoffset:2048,countsize:4}[Name{t:str,offset:0,size:64,loc:dom,max:64}],Writers/Person{t:item,offset:2248,size:640,loc:dom,max:10,itemsize:64,countoffset:2244,countsize:4}[Name{t:str,offset:0,size:64,loc:dom,max:64}],Actors/Person{t:item,offset:2892,size:1280,loc:dom,max:20,itemsize:64,countoffset:2888,countsize:4}[Name{t:str,offset:0,size:64,loc:dom,max:64}]]],ImpressionGuid{t:str,offset:201234,size:37,loc:dom,max:37}]]
+0x9e5373c0	string	x-xbl-contract-version{t:str,offset:0,size:8,loc:hdr,max:8},serverToken{t:str,offset:8,size:100,loc:url,max:100},detailsToken{t:str,offset:108,size:1024,loc:url,max:1024}
+0x9e53746c	string	{serverToken}{detailsToken}
+0x9e537488	string	body{t:item,offset:0,size:3761967,loc:body}[?{t:item,offset:0,size:3761967,loc:dom}[Items/Item{t:item,offset:4,size:3761875,loc:dom,max:25,itemsize:150475,countoffset:0,countsize:4}[@type{t:str,offset:0,size:21,loc:dom,max:21},Name{t:str,offset:21,size:300,loc:dom,max:300},ID{t:str,offset:321,size:37,loc:dom,max:37},ParentItemType{t:str,offset:358,size:20,loc:dom,max:20},Image/Url{t:str,offset:378,size:1024,loc:dom,max:1024},Image/Width{t:int,offset:1402,size:4,loc:dom},Image/Height{t:int,offset:1406,size:4,loc:dom},KValue{t:int,offset:1410,size:4,loc:dom},KValueNamespace{t:str,offset:1414,size:64,loc:dom,max:64},VuiDisplayName{t:str,offset:1478,size:300,loc:dom,max:300},AverageUserRating{t:str,offset:1778,size:10,loc:dom,max:10},UserRatingCount{t:int,offset:1788,size:4,loc:dom},CriticRating{t:uint,offset:1792,size:4,loc:dom},ReleaseDate{t:datetime,offset:1796,size:16,loc:dom},EpisodeNumber{t:int,offset:1812,size:4,loc:dom},DetailsUrl{t:str,offset:1816,size:1024,loc:dom,max:1024},MergedMetaData{t:str,offset:2840,size:10,loc:dom,max:10},ParentId{t:str,offset:2850,size:37,loc:dom,max:37},ItemTypeId{t:int,offset:2887,size:4,loc:dom},ArtistName{t:str,offset:2891,size:300,loc:dom,max:300},Providers/Provider{t:item,offset:3195,size:147280,loc:dom,max:20,itemsize:7364,countoffset:3191,countsize:4}[Name{t:str,offset:0,size:64,loc:dom,max:64},ProductId{t:str,offset:64,size:1024,loc:dom,max:1024},Image/Url{t:str,offset:1088,size:1024,loc:dom,max:1024},KValue{t:int,offset:2112,size:4,loc:dom},KValueNamespace{t:str,offset:2116,size:64,loc:dom,max:64},PartnerApplicationLaunchInfos/PartnerApplicationLaunchInfo{t:item,offset:2184,size:5180,loc:dom,max:5,itemsize:1036,countoffset:2180,countsize:4}[ClientType{t:str,offset:0,size:8,loc:dom,max:8},DeepLinkInfo{t:str,offset:8,size:1024,loc:dom,max:1024},TitleId{t:uint,offset:1032,size:4,loc:dom}]]],ImpressionGuid{t:str,offset:3761879,size:37,loc:dom,max:37},ContinuationToken{t:str,offset:3761916,size:51,loc:dom,max:51}]]
+0x9e537c50	string	x-xbl-contract-version{t:str,offset:0,size:8,loc:hdr,max:8},serverToken{t:str,offset:8,size:100,loc:url,max:100},collectionToken{t:str,offset:108,size:1024,loc:url,max:1024}
+0x9e537d00	string	{serverToken}{collectionToken}
+0x9e537d20	string	body{t:item,offset:0,size:3762121,loc:body}[?{t:item,offset:0,size:3762121,loc:dom}[TotalResultsCounters/ResultCounter{t:item,offset:4,size:150,loc:dom,max:6,itemsize:25,countoffset:0,countsize:4}[Count{t:uint,offset:0,size:4,loc:dom},ItemType{t:str,offset:4,size:21,loc:dom,max:21}],Items/Item{t:item,offset:158,size:3761875,loc:dom,max:25,itemsize:150475,countoffset:154,countsize:4}[@type{t:str,offset:0,size:21,loc:dom,max:21},Name{t:str,offset:21,size:300,loc:dom,max:300},ID{t:str,offset:321,size:37,loc:dom,max:37},ParentItemType{t:str,offset:358,size:20,loc:dom,max:20},Image/Url{t:str,offset:378,size:1024,loc:dom,max:1024},Image/Width{t:int,offset:1402,size:4,loc:dom},Image/Height{t:int,offset:1406,size:4,loc:dom},KValue{t:int,offset:1410,size:4,loc:dom},KValueNamespace{t:str,offset:1414,size:64,loc:dom,max:64},VuiDisplayName{t:str,offset:1478,size:300,loc:dom,max:300},AverageUserRating{t:str,offset:1778,size:10,loc:dom,max:10},UserRatingCount{t:int,offset:1788,size:4,loc:dom},CriticRating{t:uint,offset:1792,size:4,loc:dom},ReleaseDate{t:datetime,offset:1796,size:16,loc:dom},EpisodeNumber{t:int,offset:1812,size:4,loc:dom},DetailsUrl{t:str,offset:1816,size:1024,loc:dom,max:1024},MergedMetaData{t:str,offset:2840,size:10,loc:dom,max:10},ParentId{t:str,offset:2850,size:37,loc:dom,max:37},ItemTypeId{t:int,offset:2887,size:4,loc:dom},ArtistName{t:str,offset:2891,size:300,loc:dom,max:300},Providers/Provider{t:item,offset:3195,size:147280,loc:dom,max:20,itemsize:7364,countoffset:3191,countsize:4}[Name{t:str,offset:0,size:64,loc:dom,max:64},ProductId{t:str,offset:64,size:1024,loc:dom,max:1024},Image/Url{t:str,offset:1088,size:1024,loc:dom,max:1024},KValue{t:int,offset:2112,size:4,loc:dom},KValueNamespace{t:str,offset:2116,size:64,loc:dom,max:64},PartnerApplicationLaunchInfos/PartnerApplicationLaunchInfo{t:item,offset:2184,size:5180,loc:dom,max:5,itemsize:1036,countoffset:2180,countsize:4}[ClientType{t:str,offset:0,size:8,loc:dom,max:8},DeepLinkInfo{t:str,offset:8,size:1024,loc:dom,max:1024},TitleId{t:uint,offset:1032,size:4,loc:dom}]]],ImpressionGuid{t:str,offset:3762033,size:37,loc:dom,max:37},ContinuationToken{t:str,offset:3762070,size:51,loc:dom,max:51}]]
+0x9e5385b0	string	x-xbl-contract-version{t:str,offset:0,size:8,loc:hdr,max:8},clientContext{t:str,offset:8,size:5,loc:qs,max:5},clientType{t:str,offset:13,size:8,loc:qs,max:8},continuationToken{t:str,offset:25,size:51,loc:qs,max:51,opt:21},filterExplicitMusicItems{t:bool,offset:80,size:4,loc:qs,opt:76},filterUnrated{t:bool,offset:88,size:4,loc:qs,opt:84},impressionGuid{t:str,offset:96,size:37,loc:qs,max:37,opt:92},inputMethod{t:str,offset:133,size:11,loc:qs,max:11},isActionable{t:str,offset:144,size:6,loc:qs,max:6},itemTypes{t:str,offset:150,size:64,loc:qs,max:64},maxItems{t:uint,offset:214,size:4,loc:qs},maxMovieItemRating{t:uint,offset:222,size:4,loc:qs,opt:218},maxTVItemRating{t:uint,offset:230,size:4,loc:qs,opt:226},maxXboxGameItemRating{t:uint,offset:238,size:4,loc:qs,opt:234},providers{t:str,offset:242,size:100,loc:qs,max:100},q{t:wstr,offset:342,size:302,loc:qs,max:151},version{t:str,offset:644,size:8,loc:qs,max:8},serverToken{t:str,offset:652,size:100,loc:url,max:100},locale{t:str,offset:752,size:7,loc:url,max:7}
+0x9e5389ac	string	{serverToken}/{locale}/items
+0x9e5389d0	string	body{t:item,offset:0,size:2404,loc:body}[?{t:item,offset:0,size:2404,loc:dom}[SearchTerms/SearchTerm{t:item,offset:4,size:2400,loc:dom,max:20,itemsize:120,countoffset:0,countsize:4}[ItemType{t:str,offset:0,size:20,loc:dom,max:20},Value{t:str,offset:20,size:100,loc:dom,max:100}]]]
+0x9e538af0	string	x-xbl-contract-version{t:str,offset:0,size:8,loc:hdr,max:8},clientContext{t:str,offset:8,size:5,loc:qs,max:5},clientType{t:str,offset:13,size:8,loc:qs,max:8},version{t:str,offset:21,size:8,loc:qs,max:8},serverToken{t:str,offset:29,size:100,loc:url,max:100},locale{t:str,offset:129,size:7,loc:url,max:7}
+0x9e538c20	string	{serverToken}/{locale}/searchTerms
+0x9e538c48	string	serverUrl{t:str,offset:0,size:1024,loc:url,max:1024},Pragma{t:str,offset:1024,size:50,loc:hdr,max:50},version{t:str,offset:1074,size:64,loc:qs,max:64},grammars{t:str,offset:1138,size:100,loc:qs,max:100},locale{t:str,offset:1238,size:64,loc:qs,max:64},format{t:str,offset:1302,size:5,loc:qs,max:5},maxresults{t:uint,offset:1307,size:4,loc:qs},client{t:str,offset:1311,size:5,loc:qs,max:5},device.os{t:str,offset:1316,size:5,loc:qs,max:5},clientid{t:str,offset:1321,size:37,loc:qs,max:37},installid{t:str,offset:1358,size:37,loc:qs,max:37},requestid{t:str,offset:1395,size:37,loc:qs,max:37},catsearch.domain{t:str,offset:1436,size:10,loc:qs,max:10,opt:1432},test{t:str,offset:1450,size:2,loc:qs,max:2,opt:1446},nologs{t:uint,offset:1456,size:4,loc:qs,opt:1452},audiobytes{t:stream,offset:1460,size:4,loc:part0,enc:sirensr}
+0x9e538f80	string	body{t:item,offset:0,size:4393,loc:body}[?{t:item,offset:0,size:4393,loc:dom}[results/result{t:item,offset:4,size:4352,loc:dom,max:16,itemsize:272,countoffset:0,countsize:4}[name{t:str,offset:0,size:256,loc:dom,max:256},confidence{t:str,offset:256,size:16,loc:dom,max:16}],header/properties/property{t:str,offset:4356,size:37,loc:dom,max:37}]]
+0x9e5390d8	string	serverUrl{t:str,offset:0,size:1024,loc:url,max:1024},Pragma{t:str,offset:1024,size:50,loc:hdr,max:50},version{t:str,offset:1074,size:64,loc:qs,max:64},grammars{t:str,offset:1138,size:100,loc:qs,max:100},locale{t:str,offset:1238,size:64,loc:qs,max:64},format{t:str,offset:1302,size:5,loc:qs,max:5},maxresults{t:uint,offset:1307,size:4,loc:qs},client{t:str,offset:1311,size:5,loc:qs,max:5},device.os{t:str,offset:1316,size:5,loc:qs,max:5},clientid{t:str,offset:1321,size:37,loc:qs,max:37},installid{t:str,offset:1358,size:37,loc:qs,max:37},requestid{t:str,offset:1395,size:37,loc:qs,max:37},catsearch.domain{t:str,offset:1436,size:10,loc:qs,max:10,opt:1432},test{t:str,offset:1450,size:2,loc:qs,max:2,opt:1446},nologs{t:uint,offset:1456,size:4,loc:qs,opt:1452},audiobytes{t:stream,offset:1460,size:4,loc:part0,enc:wav16000}
+0x9e539410	string	{serverUrl}
+0x9e539498	string	music
+0x9e5394a8	string	video
+0x9e5394b0	string	ja-JP
+0x9e5394b8	string	fr-CH
+0x9e5394c0	string	de-CH
+0x9e5394c8	string	de-AT
+0x9e5394d0	string	pt-BR
+0x9e5394d8	string	en-NZ
+0x9e5394e0	string	en-IE
+0x9e5394e8	string	en-CA
+0x9e5394f0	string	en-AU
+0x9e5394f8	string	it-IT
+0x9e539500	string	de-DE
+0x9e539508	string	es-ES
+0x9e539510	string	fr-FR
+0x9e539518	string	es-MX
+0x9e539520	string	en-GB
+0x9e539528	string	fr-CA
+0x9e539530	string	en-US
+0x9e539560	string	%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x
+0x9e539594	string	00000000-0000-0000-0000-%s
+0x9e5395e4	string	builtin:catsearch
+0x9e5395fc	string	no-cache
+0x9e539608	string	http://fd-ppeint-api.m.bing.net/speechreco/xbox/takehome/query
+0x9e539648	string	game:\%d.wav
+0x9e539658	unicode	PrivacyPromptRegions
+0x9e53987c	string	UTTERANCES2
+0x9e539890	string	GRAMMAR2
+0x9e53989c	string	SESSION2
+0x9e5398a8	string	nuispeech
+0x9e539948	unicode	DisableHypotheses
+0x9e539970	unicode	CFGConfidenceRejectionThreshold
+0x9e5399b0	unicode	GarbageFramePenalty
+0x9e5399d8	unicode	AccuracyOverride
+0x9e5399fc	unicode	ComplexResponseSpeed
+0x9e539a28	unicode	HighConfidenceThreshold
+0x9e539a58	unicode	NormalConfidenceThreshold
+0x9e539a8c	unicode	LowConfidenceThreshold
+0x9e539abc	unicode	ResponseSpeed
+0x9e539adc	string	GAME:\nuisp%dp
+0x9e539aec	string	UPDATE:\nuisp%dp
+0x9e539c3c	unicode	out="%s";
+0x9e539cd4	unicode	VendorPreferred
+0x9e539d08	unicode	HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters
+0x9e539d84	unicode	Language=
+0x9e539db8	string	VoiceCollectionOverrideEnabled
+0x9e539ddc	string	%s\_speech_%0.16I64x%0.16I64x
+0x9e539e08	string	\Device\Harddisk0\
+0x9e539fc0	unicode	0123456789ABCDEF
+0x9e539fe4	string	NuiSpeech Event Handler Thread
+0x9e53a010	unicode	UXIsListening
+0x9e53c0ac	unicode	MSASR.ITN
+0x9e53c3c4	unicode	MSASR.ITN_J
+0x9e53db34	string	nuispeechdatacollection
+0x9e53db4c	string	%s%08x
+0x9e53db54	unicode	%s%08x
+0x9e53db64	unicode	Natal Audio Data Collection 
+0x9e53dba0	string	%s%08x:\_speech_%0.16I64x%0.16I64x
+0x9e53dbc4	string	%s%08x:\*
+0x9e53dbd0	unicode	meta.current().text
+0x9e53dbf8	unicode	return
+0x9e53dc08	unicode	function
+0x9e53dc50	unicode	$(SPEECHROOT)
+0x9e53dc6c	unicode	(default)
+0x9e53dcf0	unicode	HKEY_CURRENT_USER
+0x9e53dd14	unicode	HKEY_CLASSES_ROOT
+0x9e53dd38	unicode	HKEY_LOCAL_MACHINE
+0x9e53dd80	unicode	Attributes
+0x9e53dda0	unicode	CLSID
+0x9e53ddac	string	... Failed to create SpLexicon (%d).
+0x9e53ddd8	string	... Created SpLexicon containing user-lexicon and %d application lexicons.
+0x9e53de24	string	... Failed to set phonetic alphabet for lexicon [%d].
+0x9e53de5c	string	Failed to add application lexicon %d to SpLexicon
+0x9e53de90	unicode	HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\AppLexicons
+0x9e53df04	unicode	AppLexicons
+0x9e53df1c	unicode	Current User Lexicon
+0x9e53df48	unicode	HKEY_CURRENT_USER\SOFTWARE\Microsoft\Speech\CurrentUserLexicon
+0x9e53dfc8	string	Creating SpLexicon container lexicon object ...
+0x9e53dff8	string	Getting all %s and %s words from SpLexicon object%s
+0x9e53e02c	string	Non-User
+0x9e53e040	string	Non-Application
+0x9e53e050	string	Application
+0x9e53e060	string	 (continued) 
+0x9e53e070	string	30F1B4D6-EEDA-11d2-9C23-00C04F8EF87C
+0x9e53e0c0	unicode	AppLexicons\
+0x9e53e0dc	unicode	UserShortcuts\
+0x9e53e0fc	unicode	UserLexicons\
+0x9e53e118	string	Cannot set language id [%d] for alphabet converter
+0x9e53e14c	string	Failed to allocate a new dict node, hr = %X
+0x9e53e180	unicode	Generation
+0x9e53e198	unicode	-Mutex
+0x9e53e1a8	string	Creating empty lexicon file (%S).
+0x9e53e1cc	string	Failed to serialize lexicon, hr = 0x%.8X
+0x9e53e1f8	string	Finished serializing lexicon to file
+0x9e53e220	string	Cannot delete temp file %S, hr = 0x%.8X
+0x9e53e248	string	Failed to create temp file %S, hr = 0x%.8X
+0x9e53e27c	string	Begin serializing lexicon (GenId = %u) to file...
+0x9e53e2b0	string	Max lexicon file size = %d.
+0x9e53e2cc	string	Initializing lexicon {Filename: %S, New File: %d} ...
+0x9e53e304	string	non-App lex did not flush data properly.
+0x9e53e330	unicode	Datafile
+0x9e53e344	string	Recovering from user lexicon corruption.
+0x9e53e370	string	Lexicon file is corrupt. Ignoring: %S
+0x9e53e398	string	Lexicon file is corrupt. Recreating %S.
+0x9e53e3c0	string	%s a lexicon map with name %S
+0x9e53e3e0	string	Created
+0x9e53e3e8	string	Opened
+0x9e53e3f0	unicode	GLOBAL
+0x9e53e410	string	Lexicon file size is not obtainable or invalid. Recreate lexicon
+0x9e53e454	string	Cannot find lexicon file. Recreate lexicon
+0x9e53e480	string	Failed to init persistent info
+0x9e53e4b0	string	MapViewOfFile failed, error = 0x%X
+0x9e53e4d4	unicode	-Event-
+0x9e53e4e4	string	Cannot load lexicon to private memory, hr = 0x%X
+0x9e53e518	string	Failed to initialize custom lexicon, error = %X
+0x9e53e548	string	Initialized custom lexicon
+0x9e53e564	string	Initializing empty custom lexicon
+0x9e53e588	string	Initializing custom lexicon from stream
+0x9e53e5b0	string	Initializing custom lexicon from file %S
+0x9e53e5dc	string	Failed to load lexicon %S (%d)
+0x9e53e5fc	string	Lexicon (Words: %d, Size: %d bytes, Generation Id: %d)
+0x9e53e634	string	Reloaded lexicon file %S
+0x9e53e650	string	Reloading lexicon...
+0x9e53e668	string	Detected lexicon in unstable state
+0x9e53e68c	string	Failed to initialize lexicon, error = %X
+0x9e53e6b8	string	Initialized lexicon.
+0x9e53e6d0	string	Word [%S] added to lexicon.
+0x9e53e6ec	string	Failed to add word [%S] to lexicon (%d).
+0x9e53e718	string	... Failed to create lexicon (%d).
+0x9e53e73c	string	... Created application lexicon.
+0x9e53e760	string	... Created user shortcut.
+0x9e53e77c	string	... Created user lexicon.
+0x9e53e798	unicode	FlushRate
+0x9e53e7ac	string	Creating application lexicon (%S) ...
+0x9e53e7d4	string	Creating text normalizer shortcut (%S) ...
+0x9e53e800	unicode	HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\TextNormalizers
+0x9e53e87c	string	Creating user shortcut (%S) ...
+0x9e53e8a0	unicode	HKEY_CURRENT_USER\SOFTWARE\Microsoft\Speech\CurrentUserShortcut
+0x9e53e920	string	Creating user lexicon (%S) ...
+0x9e53e94f	string	|Initialized compressed lexicon.
+0x9e53e970	string	Failed to initialize compressed lexicon, error = %X
+0x9e53eb28	unicode	HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters\Tokens\Universal
+0x9e53ebc4	unicode	NumericPhones
+0x9e53ebe0	unicode	NoDelimiter
+0x9e53ebf8	unicode	PhoneMap
+0x9e53ec0c	unicode	DefaultTokenId
+0x9e53ec2c	unicode	DefaultDefaultTokenId
+0x9e53ec58	unicode	HKEY_CURRENT_USER\
+0x9e53ec80	unicode	HKEY_LOCAL_MACHINE\
+0x9e53eca8	unicode	HKEY_CLASSES_ROOT\
+0x9e53ed68	unicode	TokenEnums
+0x9e53ed80	unicode	Tokens
+0x9e53ed90	unicode	Language
+0x9e53eda4	unicode	Version
+0x9e53edb4	unicode	ProductLine
+0x9e53edcc	unicode	Vendor
+0x9e53eddc	unicode	Language=%x;VendorPreferred
+0x9e53ee14	unicode	VersionDefault
+0x9e53eec0	unicode	_value
+0x9e53eed0	string	Failed to convert pronunciation of phrase
+0x9e53ef0b	string	dThread Task destructor timed out
+0x9e53ef30	string	NuiSpeech Task %d
+0x9e53efcc	string	NuiSpeech Worker %d
+0x9e53efe8	unicode	.dat
+0x9e53effc	unicode	\Microsoft\Speech\Files\
+0x9e53f040	string	Failed to initialize object with token, object CLSID=%S, hr=0x%X
+0x9e53f084	string	Cannot QueryInterface for ISpObjectWithToken, object CLSID=%S
+0x9e53f0c4	string	Cannot CoCreate instance of object with token
+0x9e53f0f4	unicode	<NULL>
+0x9e53f10c	unicode	Files
+0x9e53f118	unicode	\TokenEnums\
+0x9e53f134	unicode	\Tokens\
+0x9e53f170	string	Failed to create wav file %S, hr=0x%X
+0x9e53f198	string	Wave stream closed
+0x9e53f1e4	string	Failed to open %S as wave file, hr=0x%X
+0x9e53f20c	string	Cannot write to file %S, hr=0x%X
+0x9e53f230	string	URLOpenBlockingStreamW failed, hr=0x%X
+0x9e53f258	unicode	.wav
+0x9e53f264	string	Engine response has invalid additional data.
+0x9e53f294	unicode	UPSPhoneSet
+0x9e53f2b0	string	Recognizer failed to PerformTask, eTask = %u, taskId = %u, Error = %X
+0x9e53f2f8	string	PerformTask timed out
+0x9e53f4f7	string	gResolving GrammarLibrary Uri: "%S" -> "%S"
+0x9e53f524	unicode	%s%04i\%s.grxml
+0x9e53f544	unicode	%s%s.grxml
+0x9e53f55c	unicode	grammar:dictation
+0x9e53f580	unicode	grammar:
+0x9e53f594	unicode	GrammarPath
+0x9e53f5b0	unicode	HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech
+0x9e53f60c	string	Release local copy %S
+0x9e53f628	string	CFGEngine is loading grammar from file %S, base uri=%S, sharing uri = %S, options=0x%X
+0x9e53f680	string	CFGEngine is loading grammar from memory, base uri=%S, sharing uri=%S, option=0x%X
+0x9e53f6d4	unicode	NULL
+0x9e53f6ec	string	CFGEngine is loading grammar (%S) from object
+0x9e53f750	unicode	ID = %ld
+0x9e53f764	unicode	VOID
+0x9e53f770	unicode	Need at least one rule!
+0x9e53f7a0	string	Warning: A rule cannot be marked as both Import and TopLevel/Active/Root.\n         TopLevel/Active/Root have been disabled.
+0x9e53f830	unicode	function _RecurseAddProp(prop, depth, _firstElement, _countOfElements)\n{\n    if(depth++ > 16 || prop == null || typeof prop == "function")\n    {\n        return;\n    }\n    if(typeof prop._attributes == "undefined")\n    {\n        prop._attributes = {};\n    }\n    \n    if(typeof prop._attributes == "object")\n    {\n        if(typeof prop._attributes._firstElement == "undefined")\n        {\n            prop._attributes._firstElement = _firstElement;\n        }\n        if(typeof prop._attributes._countOfElements == "undefined")\n        {\n            prop._attributes._countOfElements = _countOfElements;\n        }\n    }\n    for(child in prop)\n    {\n        if(child == "_attributes" || child == "_value")\n        {\n            continue;\n        }\n        _RecurseAddProp(prop[child], depth, _firstElement, _countOfElements);\n    }\n    return;\n}\n\nfunction _ShouldNotSerialize(parentObject, propName)\n{\n    return((typeof parentObject[propName] == "function") || !parentObject.propertyIsEnumerable(propName));\n}\n\n
+0x9e540018	unicode	function %s() {\n    var $ = {};\n    $._attributes = {};\n    var $$;\n    var $recognized = {};\n    $recognized.text = "%s";\n    $recognized.confidence = 1.0;\n    $recognized.unknownConfidence = "yes";\n    $recognized._firstElement = %d;\n    $recognized._countOfElements = %d;\n
+0x9e540240	unicode	\n    _RecurseAddProp($, 0, $recognized._firstElement, $recognized._countOfElements);\n\n
+0x9e5402f0	unicode	    var $%s = %s();\n    $$ = $%s;\n
+0x9e540338	unicode	    $ = $recognized.text;\n
+0x9e540370	unicode	\n    return $;\n}\n\n
+0x9e540398	unicode	function _ShouldNotSerialize(parentObject, propName)\n{\n    return((typeof parentObject[propName] == "function") || !parentObject.propertyIsEnumerable(propName));\n}\n\n
+0x9e5404e8	unicode	function %s()\n{\n    meta.current().text="%s";\n    meta.current()._firstElement = %d;\n    meta.current()._countOfElements = %d;\n
+0x9e5405ec	unicode	    out=meta.current().text;\n
+0x9e540628	unicode	    lastOut = rules.%s = %s();\n    meta.%s = __latest;\n
+0x9e540698	unicode	    return lastOut;\n}\n\n
+0x9e5406c8	unicode	    return out;\n}\n\n
+0x9e540768	string	RecoMaster::FinalRelease failed, error = %X
+0x9e540794	string	Failed to TerminateTaskGroup, error = %X
+0x9e5407c0	string	... Deleted recognition engine.
+0x9e5407e0	string	Deleting recognition engine ...
+0x9e540800	string	Deleted recognition engine.
+0x9e54081c	string	Backed out task eTask=%u, hr = 0x%X
+0x9e540840	string	Reco Master sends recognition event
+0x9e540864	string	Failed to notify event %u to one of the contexts.
+0x9e540898	string	Set input to the default %S.
+0x9e5408b8	unicode	HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\AudioInput
+0x9e540928	unicode	AlternatesCLSID
+0x9e540948	string	Semantic interpretation failed, hr = 0x%X
+0x9e540974	string	Queue a semantic interpretation task
+0x9e54099c	string	Failed to add event, eventId = %u.
+0x9e5409c0	string	Received unrecognized event, EventId = %u.
+0x9e5409ec	string	Non-zero stream offset while not in stream.
+0x9e540a18	string	Stream pos is invalid.
+0x9e540a30	string	Audio disabled due to session disconnect.
+0x9e540a5c	string	ActiveCategory=%S
+0x9e540a70	string	Reached pending task queue limit
+0x9e540b60	string	Performing synchronous task [task = %d]
+0x9e540b88	string	Setting bookmark [position = %I64d, time = %I64d, delayed = %d]
+0x9e540bc8	unicode	grammar:dynamic
+0x9e540be8	string	... Initialized recognition engine.
+0x9e540c0c	string	Querying for default audio token failed (0x%X).
+0x9e540c3c	string	... Initializing engine failed (0x%X).
+0x9e540c64	string	Initializing engine failed {SetRecoProfile} (0x%X).
+0x9e540c98	string	Failed to create/get the default reco profile
+0x9e540cc8	string	Default reco profile token id=%S
+0x9e540cec	unicode	DefaultProfile
+0x9e540d0c	string	Initializing engine failed {SetSite} (0x%X).
+0x9e540d3c	string	Creating engine failed (0x%X).
+0x9e540d5c	string	Initializing recognition engine [%S].
+0x9e540d84	string	Querying for default recognizer token failed (0x%X)
+0x9e540db8	unicode	HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers
+0x9e540e2c	string	SAPI: Using default token in registry for engine selection.
+0x9e540e68	string	Not starting sapisvr because SpeechUX disabled
+0x9e540e98	string	Initializing recognition engine ...
+0x9e540ebc	string	Set reco state to %u (Previous State = %u)
+0x9e540ee8	string	Failed to start recognition (%d).
+0x9e540f0c	string	Recognition finished with error (%d).
+0x9e540f34	string	Recognition finished.
+0x9e540f4c	string	Recognition started.
+0x9e540f64	unicode	SecondsForSMLTimeout
+0x9e540f90	unicode	SecondsPerRetainedAudioEvent
+0x9e540fcc	string	Reco Master incoming data thread terminated with code %X
+0x9e541008	string	Auto-pause upon recognition, current pause = %u
+0x9e541038	string	Recognized a rule with auto-pause
+0x9e54105c	string	RecoMaster sends recognition
+0x9e54107c	string	RecoMaster sends hypothesis
+0x9e541098	string	RecoMaster sends false recognition
+0x9e5410bc	string	RecoMaster sends empty false recognition
+0x9e541110	string	Removed grammar ID=%u
+0x9e5411dc	string	JJJJJJJJJJJJJJJJJJJJJ(J4Pause bookmark reached, current pause = %u
+0x9e541220	string	Firing bookmark [requested_position = %I64d, requested_time = %I64d] [actual_position = %I64d, actual_time = %I64d]
+0x9e541294	string	Released reco context, current pause = %u
+0x9e541364	string	... Reloading grammar from memory failed (%d).
+0x9e541394	string	... Reloaded grammar.
+0x9e5413ac	string	Reloading grammar ...
+0x9e5413c4	string	Unloaded grammar.
+0x9e5413d8	string	... Loading grammar from object failed (%d).
+0x9e541408	string	... Loaded grammar from object.
+0x9e541428	string	Loading grammar from object ...
+0x9e541448	string	... Loading grammar from file failed (%d).
+0x9e541474	string	... Loaded grammar from file.
+0x9e541494	string	Loading grammar from file (%S) ...
+0x9e5414b8	string	... Loading grammar from memory failed (%d).
+0x9e5414e8	string	... Loaded grammar from memory.
+0x9e541508	string	Loading grammar from memory (%S) ...
+0x9e541530	string	... Loading proprietary grammar failed (%d).
+0x9e541560	string	... Loaded proprietary grammar.
+0x9e541580	string	Loading proprietary grammar ...
+0x9e5415a0	string	... Unloading dictation failed (%d).
+0x9e5415c8	string	... Unloaded dictation.
+0x9e5415e0	string	Unloading dictation ...
+0x9e5415f8	string	... Loading dictation failed (%d).
+0x9e54161c	string	... Loaded dictation.
+0x9e541634	string	Loading dictation (%S) ...
+0x9e541658	string	Requested to pause recognition, current pause = %u
+0x9e54168c	string	Requested to resume recognition, current pause = %u
+0x9e5416c0	string	Backed out of resume recognition, current pause = %u
+0x9e541758	unicode	_%s%u
+0x9e541764	unicode	TopLevel
+0x9e541778	string	Cannot initialize JScript engine object to perform SISR, hr = 0x%X
+0x9e5417c0	unicode	Semantic interpretation timed out.
+0x9e541808	string	Terminating semantic intepretation because it has timed out
+0x9e541848	string	Error while evaluating semantic interpretation:\n  HRESULT:     0x%08X\n  Line:        %i\n  Source:      %S\n  Description: %S\n  Script:      %S\n
+0x9e5418d8	string	Successfully evaluated SISR script
+0x9e5418fc	string	Failed to evaluate SISR script, hr=0x%X
+0x9e541924	unicode	_ShouldNotSerialize
+0x9e54194c	string	Evaluating SISR script: %S
+0x9e541968	unicode	_firstElement
+0x9e541984	unicode	_countOfElements
+0x9e5419a8	unicode	_attributes
+0x9e5419d0	unicode	length
+0x9e5419e0	string	Error while evalutating semantic interpretation: Circular reference.\n
+0x9e541a28	unicode	Unknown error.
+0x9e541ccc	unicode	DataFile
+0x9e541ce0	unicode	TextNorm
+0x9e541cf4	unicode	Lookup
+0x9e541d2c	string	ignorewordboundary
+0x9e541d40	string	deucompoundword
+0x9e541d50	string	tntransducer
+0x9e541d60	string	console
+0x9e541d68	unicode	Models
+0x9e54265c	unicode	Standalone
+0x9e542674	unicode	StandaloneNoFinal
+0x9e542698	unicode	SegBound
+0x9e5426ac	unicode	Preposition
+0x9e5426c4	unicode	Compound
+0x9e543f58	unicode	aaaaaaaceeeeiiiidnooooo
+0x9e543f88	unicode	ouuuuydsaaaaaaaceeeeiiiidnooooo
+0x9e544038	unicode	.tpb
+0x9e544044	unicode	.tpc
+0x9e544050	unicode	.ngr
+0x9e54405c	unicode	.dld
+0x9e544068	unicode	.dlm
+0x9e544074	unicode	Adapted Accuracy
+0x9e544098	unicode	SR State
+0x9e5440b4	unicode	Server Mode
+0x9e5440cc	unicode	Autodetection
+0x9e5440e8	unicode	Model Characteristic 2
+0x9e544118	unicode	Model Characteristic 1
+0x9e544148	unicode	Persist Language Model Adaptation
+0x9e54418c	unicode	Cache CFG Word List
+0x9e5441b4	unicode	Background Adaptation
+0x9e5441e0	unicode	Accuracy
+0x9e5442a8	unicode	PRONUNCIATION
+0x9e5442c4	string	MSASR LMA Version Update
+0x9e5442e0	unicode	PreferredAudioRate
+0x9e544308	unicode	MSASR\
+0x9e544328	unicode	in StartCollectingAdaptationData\n
+0x9e544370	unicode	CSREngine::SendRecoResultToSAPI - missing result\n
+0x9e5443d8	unicode	CSREngine::SendRecoResultToSAPI - missing phrase\n
+0x9e544440	unicode	CSREngine::SendRecoResultToSAPI - Sending %s to SAPI\n
+0x9e5444ac	unicode	final result
+0x9e5444c8	unicode	false reco with phrase
+0x9e5444f8	unicode	hypothesis
+0x9e544510	unicode	too fast\n
+0x9e544524	unicode	too slow\n
+0x9e544538	unicode	SendRecognition hr %x\n
+0x9e544568	unicode	CSREngine::SendRecognition - no m_pRecoResult to send\n
+0x9e5445d8	unicode	CSREngine::SendRecognition - send this m_pRecoResult\n
+0x9e544648	unicode	CSREngine::RunDecoder - False Reco\n
+0x9e544690	unicode	SQM  ID:%d (%d)  %08x  %08x  %08x  %08x  %08x  %08x  %08x  %08x  %08x\n
+0x9e544720	unicode	Phrase start frame %d, offset 0x%I64x\n
+0x9e544770	unicode	CDecoderCallback::CacheOrSendRecoResult - Cache final result\n
+0x9e5447f0	unicode	CDecoderCallback::CacheOrSendRecoResult - Send hypothesis now\n
+0x9e544870	unicode	CDecoderCallback::CacheOrSendRecoResult - Phrase start was sent\n
+0x9e5448f8	unicode	CDecoderCallback::CacheOrSendRecoResult - Free unsent SAPI %S\n
+0x9e544978	unicode	result\n
+0x9e544988	unicode	CDecoderCallback::CacheOrSendRecoResult - Phrase start was NOT sent\n
+0x9e544a14	unicode	SecondPassAutoDetection
+0x9e544a44	unicode	ConstrainedSecondPass
+0x9e544a70	unicode	AllowSecondPass
+0x9e544a90	unicode	EngineThreadPriority
+0x9e544abc	unicode	TrumpingMethod
+0x9e544adc	unicode	AssumeCFGFromTrustedSource
+0x9e544b14	unicode	AdaptedAccuracy
+0x9e544b34	unicode	SLMSpeechFrameThreshold
+0x9e544b70	unicode	UserLMWeight
+0x9e544b90	unicode	PersistedLanguageModelAdaptation
+0x9e544bd4	unicode	PersistedBackgroundAdaptation
+0x9e544c10	unicode	AdaptationOn
+0x9e544c30	unicode	SetGrammarPrefix "%s" %s -> %s\n
+0x9e544c70	unicode	not required
+0x9e544c8c	unicode	required
+0x9e544ca0	unicode	SetRuleWeight(Rule=%08X, Context=%08X, Weight=%f)\n
+0x9e544d08	unicode	SetSLMWeight(Grammar=%08X, Weight=%f)\n
+0x9e544d58	unicode	SetTrainingState(fDoingTraining=%d, fAdaptFromTrainingData=%d)\n
+0x9e544dd8	unicode	ResetAcousticModelAdaptation\n
+0x9e544e14	unicode	FEConfigDataFile
+0x9e544e50	unicode	GetAlternates  Reco %08x  LatticeSize %d  SymbolsSize %d  HistoryDepth %d\n  Range %04x  SLM %04x  TB %04x  Replace %04x  Elements %d  Requested %d  Returned %d\n
+0x9e544f98	unicode	%d Alternates requested for elements %d - %d\n
+0x9e544ff8	unicode	Scores adjusted on commit\n  %7d -> %7d (lwid %d)\n  %7d -> %7d (lwid %d)\n
+0x9e545090	unicode	Engine thread priority changing. Was: %d  Now: %d...
+0x9e5450fc	unicode	FAILED\n
+0x9e54510c	unicode	SUCCEEDED\n
+0x9e545128	unicode	\CurrentVersion
+0x9e545150	unicode	WFSTDecoder
+0x9e545168	unicode	DisableHypotheses %d -> %d\n
+0x9e5451a0	unicode	NormalizeCFGTransitions
+0x9e5451d0	unicode	AccuracyUpdateIncrement
+0x9e545200	unicode	AccuracyUpdatePeriod
+0x9e54522c	unicode	LargeLatency
+0x9e545248	unicode	SmallLatency
+0x9e545264	unicode	AttachLattice
+0x9e545280	unicode	loggingverbositythreshold
+0x9e5452b4	unicode	m_iAccuracyOverride  %d -> %d\n
+0x9e545300	unicode	AddOn
+0x9e545320	unicode	LMList
+0x9e545338	unicode	Commit  Reco %08x  LatticeSize %d  SymbolsSize %d  HistoryDepth %d\n  Range %04x  SLM %04x  TB %04x  Replace %04x  Elements %d  Requested %d  NewElements %d%s\n
+0x9e545478	unicode	  CacheUnigramUpdated
+0x9e5454a8	unicode	CommitText  Reco %08x  LatticeSize %d  SymbolsSize %d  HistoryDepth %d\n  Range %04x  SLM %04x  TB %04x  Replace %04x  Elements %d  OOV %04x  NewElements %d%s%s%s%s\n
+0x9e5455f4	unicode	  AddedWordToLexicon
+0x9e545620	unicode	  DefiniteCorrection
+0x9e54564c	unicode	  UndoOperation
+0x9e54566c	unicode	(lwid=%d)%s [ 
+0x9e54568c	unicode	(pwid=%d)%s 
+0x9e5456e0	unicode	CommitText called replacing %d element(s) with "%s"\n
+0x9e545800	string	messrs
+0x9e545890	string	assoc
+0x9e5458a8	unicode	nineteenth
+0x9e5458c0	unicode	eighteenth
+0x9e5458d8	unicode	seventeenth
+0x9e5458f0	unicode	sixteenth
+0x9e545904	unicode	fifteenth
+0x9e545918	unicode	fourteenth
+0x9e545930	unicode	thirteenth
+0x9e545948	unicode	twelfth
+0x9e545958	unicode	eleventh
+0x9e54596c	unicode	tenth
+0x9e545978	unicode	ninth
+0x9e545984	unicode	seventh
+0x9e545994	unicode	sixth
+0x9e5459a0	unicode	fifth
+0x9e5459ac	unicode	fourth
+0x9e5459bc	unicode	third
+0x9e5459c8	unicode	second
+0x9e5459d8	unicode	first
+0x9e5459e4	unicode	ninety
+0x9e5459f4	unicode	eighty
+0x9e545a04	unicode	seventy
+0x9e545a14	unicode	sixty
+0x9e545a20	unicode	fifty
+0x9e545a2c	unicode	forty
+0x9e545a38	unicode	thirty
+0x9e545a48	unicode	twenty
+0x9e545a58	unicode	nineteen
+0x9e545a6c	unicode	eighteen
+0x9e545a80	unicode	seventeen
+0x9e545a94	unicode	sixteen
+0x9e545aa4	unicode	fifteen
+0x9e545ab4	unicode	fourteen
+0x9e545ac8	unicode	thirteen
+0x9e545adc	unicode	twelve
+0x9e545aec	unicode	eleven
+0x9e545b04	unicode	nine
+0x9e545b10	unicode	eight
+0x9e545b1c	unicode	seven
+0x9e545b30	unicode	five
+0x9e545b3c	unicode	four
+0x9e545b48	unicode	three
+0x9e545b64	unicode	zero
+0x9e545b70	unicode	~\tilde
+0x9e545b80	unicode	}\right-brace
+0x9e545b9c	unicode	|\vertical-bar
+0x9e545bbc	unicode	{\left-brace
+0x9e545bd8	unicode	`\back-quote
+0x9e545bf4	unicode	_\underscore
+0x9e545c10	unicode	^\circumflex
+0x9e545c2c	unicode	]\close-bracket
+0x9e545c4c	unicode	\\back-slash
+0x9e545c68	unicode	[\bracket
+0x9e545c7c	unicode	@\at-sign
+0x9e545c90	unicode	?\question-mark
+0x9e545cb0	unicode	>\greater-than
+0x9e545cd0	unicode	=\equals
+0x9e545ce4	unicode	<\less-than
+0x9e545cfc	unicode	;\semicolon
+0x9e545d14	unicode	:\colon
+0x9e545d24	unicode	/\slash
+0x9e545d34	unicode	.\period
+0x9e545d48	unicode	.\dot
+0x9e545d54	unicode	...\ellipsis
+0x9e545d70	unicode	-\hyphen
+0x9e545d84	unicode	--\double-dash
+0x9e545da4	unicode	,\comma
+0x9e545db4	unicode	+\plus
+0x9e545dc4	unicode	*\asterisk
+0x9e545ddc	unicode	)\close-paren
+0x9e545df8	unicode	(\paren
+0x9e545e08	unicode	'\quote
+0x9e545e18	unicode	'\end-quote
+0x9e545e30	unicode	&\ampersand
+0x9e545e48	unicode	%\percent
+0x9e545e5c	unicode	$\dollar
+0x9e545e70	unicode	#\pound-sign
+0x9e545e8c	unicode	"\quote
+0x9e545e9c	unicode	"\end-quote
+0x9e545eb4	unicode	!\exclamation-point
+0x9e545f50	unicode	NEW-LINE
+0x9e545f6c	unicode	hundred
+0x9e545f7c	unicode	hundredth
+0x9e545fa0	unicode	.\point
+0x9e545fb0	unicode	point
+0x9e545fbc	unicode	cents
+0x9e545fd4	unicode	dollars
+0x9e545fe4	unicode	dollar
+0x9e545ff4	unicode	thousandth
+0x9e54600c	unicode	million
+0x9e54601c	unicode	millionth
+0x9e546030	unicode	billion
+0x9e546040	unicode	billionth
+0x9e546084	unicode	thousand
+0x9e5460a0	unicode	o'clock
+0x9e5460d8	unicode	[HKEY_CLASSES_ROOT\SPDebug]\r\n"AssertSettingsReReadEachTime"=dword:00000000\r\n"FuncTraceMode"=dword:00000000\r\n"FuncTraceFile"="speech:\speech\spdebug.log"\r\n"DumpInfoMode"=dword:00000000\r\n"DumpInfoFile"="speech:\speech\spdebug.log"\r\n"AssertMode"=dword:00000004\r\n"AssertFile"="speech:\speech\spdebug.log"\r\n"HRFailMode"=dword:00000000\r\n"HRFailFile"="speech:\speech\spdebug.log"\r\n"DebugServerOnStart"=dword:00000000\r\n"DebugClientOnStart"=dword:00000000\r\n\r\n[HKEY_CLASSES_ROOT\CLSID]\r\n\r\n[HKEY_CLASSES_ROOT\CLSID\{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}]\r\n@="SREngine Class"\r\n\r\n[HKEY_CLASSES_ROOT\CLSID\{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}\InprocServer32]\r\n@="spsreng.dll"\r\n"ThreadingModel"="Both"\r\n\r\n[HKEY_CLASSES_ROOT\CLSID\{1B41066E-FB0C-447B-80B2-7F13EAD6BB3E}]\r\n@="TextNormMultiResult Class"\r\n\r\n[HKEY_CLASSES_ROOT\CLSID\{1B41066E-FB0C-447B-80B2-7F13EAD6BB3E}\Programmable]\r\n\r\n[HKEY_CLASSES_ROOT\CLSID\{1B41066E-FB0C-447B-80B2-7F13EAD6BB3E}\InprocServer32]\r\n@="spsreng.dll"\r\n"ThreadingModel"="Both"\r\n\r\n
+0x9e5468a8	unicode	[HKEY_CURRENT_USER\Software\Microsoft\Speech]\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\AppLexicons]\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\CurrentUserLexicon]\r\n"CLSID"="{C9E37C15-DF92-4727-85D6-72E5EEB6995A}"\r\n@="Current User Lexicon"\r\n"Generation"=dword:00000000\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\CurrentUserLexicon\AppLexicons]\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\CurrentUserLexicon\{C9E37C15-DF92-4727-85D6-72E5EEB6995A}]\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\CurrentUserLexicon\{C9E37C15-DF92-4727-85D6-72E5EEB6995A}\Files]\r\n"Datafile"="%1a%\Microsoft\Speech\Files\UserLexicons\SP_5FF077B1666D4B5CA701128801A34B2A.dat"\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\CurrentUserShortcut]\r\n"CLSID"="{C9E37C15-DF92-4727-85D6-72E5EEB6995A}"\r\n@="Current User Shortcut"\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\CurrentUserShortcut\{C9E37C15-DF92-4727-85D6-72E5EEB6995A}]\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\CurrentUserShortcut\{C9E37C15-DF92-4727-85D6-72E5EEB6995A}\Files]\r\n"Datafile"="%1a%\Microsoft\Speech\Files\UserShortcuts\SP_6633E17CDF6742B0B37203E824098C72.dat"\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\PhoneConverters]\r\n"DefaultTokenId"="HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters\Tokens\English"\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\Preferences]\r\n"FirstRunLowDate"=dword:41b42740\r\n"FirstRunHighDate"=dword:01c9750d\r\n"EnableDocumentHarvesting"=dword:00000001\r\n"en-US_CompletedSpeechConfiguration"=dword:00000001\r\n"TutorialTopicBookmark"=dword:00000001\r\n"LastHarvestLowDate"=dword:4c2cd7a0\r\n"LastHarvestHighDate"=dword:01c97515\r\n"MicrophoneUIX"=dword:00000313\r\n"MicrophoneUIY"=dword:00000000\r\n"LastExitedLowDate"=dword:74a84e80\r\n"LastExitedHighDate"=dword:01c97515\r\n"SpeechUsageLowTime"=dword:656cd030\r\n"SpeechUsageHighTime"=dword:00000000\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\Preferences\AppCompatDisableDictation]\r\n"dwm.exe"=""\r\n"tabtip.exe"=""\r\n"sapisvr.exe"=""\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\Preferences\AppCompatDisableMSAA]\r\n"taskmgr.exe"=""\r\n"devenv.exe"=""\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\RecoProfiles]\r\n\r\n[HKEY_CURRENT_USER\Software\Microsoft\Speech\RecoProfiles\Tokens]\r\n\r\n
+0x9e547a30	unicode	[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX]\r\n@="Microsoft Xbox Speech Recognition Language - GAME (pt-BR)"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Background Adaptation"=dword:00000000\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Language"="416"\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"Name"="MS-1046-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n"Device"=""\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX\LocaleHandler]\r\n@="SR Portuguese Locale Handler"\r\n"CLSID"="{D179D652-BC66-4c93-8F31-17FA2ABC8510}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX\Lookup]\r\n@="SR English Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\pt-BR\lsr1046.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX\Lts]\r\n@="SR Portuguese Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\pt-BR\r1046sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX\Models]\r\n@=""\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX\Models\1046]\r\n@="L1046"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX\Models\1046\L1046]\r\n@="$(SPEECHROOT)\speech\pt-BR\L1046"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX\Models\1046\L1046\AMs]\r\n@=""\r\n"AI031046"="$(SPEECHROOT)\speech\pt-BR\ai031046"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1046-XBOX\TextNorm]\r\n@="SR Engine (10.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\pt-BR\tn1046.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX]\r\n@="Microsoft Xbox Speech Recognition Language - GAME (de-AT)"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="c07"\r\n"AudioFormats"="4;6;16;18;20;22;41;45;49;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"Name"="MS-3079-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n"UPSPhoneSet"=""\r\n"Device"=""\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX\LocaleHandler]\r\n@="SR German Locale Handler"\r\n"CLSID"="{4521583E-FE86-4E58-A2BA-DA6C08D9F4C0}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX\Lookup]\r\n"Datafile"="$(SPEECHROOT)\speech\de-AT\lsr3079.lxa"\r\n@="SR German Lookup Lexicon"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX\Lts]\r\n@="SR German Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\de-AT\r3079sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX\Models]\r\n@=""\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX\Models\3079]\r\n@="L3079"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX\Models\3079\L3079]\r\n@="$(SPEECHROOT)\speech\de-AT\L3079"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX\Models\3079\L3079\AMs]\r\n@=""\r\n"AI033079"="$(SPEECHROOT)\speech\de-AT\ai033079"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3079-XBOX\TextNorm]\r\n@="SR Engine (10.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\de-AT\tn3079.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX]\r\n@="Microsoft Xbox Speech Recognition Language - GAME (de-CH)"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Language"="807"\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"Name"="MS-2055-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"WordSequences"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"Vendor"="Microsoft"\r\n"Device"=""\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX\LocaleHandler]\r\n@="SR German Locale Handler"\r\n"CLSID"="{4521583E-FE86-4E58-A2BA-DA6C08D9F4C0}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX\Lookup]\r\n@="SR German Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\de-CH\lsr2055.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX\Lts]\r\n@="SR German Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\de-CH\r2055sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX\Models]\r\n@=""\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX\Models\2055]\r\n@="L2055"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX\Models\2055\L2055]\r\n@="$(SPEECHROOT)\speech\de-CH\L2055"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX\Models\2055\L2055\AMs]\r\n@=""\r\n"AI032055"="$(SPEECHROOT)\speech\de-CH\ai032055"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2055-XBOX\TextNorm]\r\n@="SR Engine (10.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\de-CH\tn2055.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX]\r\n@="Microsoft Xbox Speech Recognition Language - GAME (fr-CH)"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Language"="100c"\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"Name"="MS-4108-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n"Device"=""\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX\LocaleHandler]\r\n@="SR French Locale Handler"\r\n"CLSID"="{D2ABF5A9-DA38-4B90-8EA6-51E0E5B048FB}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX\Lookup]\r\n@="SR French Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\fr-CH\lsr4108.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX\Lts]\r\n"Datafile"="$(SPEECHROOT)\speech\fr-CH\r4108sr.lxa"\r\n@="SR French Lts Lexicon"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX\Models]\r\n@=""\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX\Models\4108]\r\n@="L4108"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX\Models\4108\L4108]\r\n@="$(SPEECHROOT)\speech\fr-CH\L4108"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX\Models\4108\L4108\AMs]\r\n@=""\r\n"AI034108"="$(SPEECHROOT)\speech\fr-CH\ai034108"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-4108-XBOX\TextNorm]\r\n@="SR Engine (10.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\fr-CH\tn4108.bin"\r\n\r\n
+0x9e54bec0	unicode	[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\AppLexicons]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\AppLexicons\Tokens]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters\Tokens]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters\Tokens\English]\r\n@="English Phone Converter"\r\n"CLSID"="{9185F743-1143-4C28-86B5-BFF14F20E5C8}"\r\n"PhoneMap"="- 0001 ! 0002 & 0003 , 0004 . 0005 ? 0006 _ 0007 1 0008 2 0009 aa 000a ae 000b ah 000c ao 000d aw 000e ax 000f ay 0010 b 0011 ch 0012 d 0013 dh 0014 eh 0015 er 0016 ey 0017 f 0018 g 0019 h 001a ih 001b iy 001c jh 001d k 001e l 001f m 0020 n 0021 ng 0022 ow 0023 oy 0024 p 0025 r 0026 s 0027 sh 0028 t 0029 th 002a uh 002b uw 002c v 002d w 002e y 002f z 0030 zh 0031"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters\Tokens\English\Attributes]\r\n"Language"="409"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters\Tokens\Japanese]\r\n@="Japanese Phone Converter"\r\n"CLSID"="{9185F743-1143-4C28-86B5-BFF14F20E5C8}"\r\n"PhoneMap"="309C 309C 30A1 30A1 30A2 30A2 30A3 30A3 30A4 30A4 30A5 30A5 30A6 30A6 30A7 30A7 30A8 30A8 30A9 30A9 30AA 30AA 30AB 30AB 30AC 30AC 30AD 30AD 30AE 30AE 30AF 30AF 30B0 30B0 30B1 30B1 30B2 30B2 30B3 30B3 30B4 30B4 30B5 30B5 30B6 30B6 30B7 30B7 30B8 30B8 30B9 30B9 30BA 30BA 30BB 30BB 30BC 30BC 30BD 30BD 30BE 30BE 30BF 30BF 30C0 30C0 30C1 30C1 30C2 30C2 30C3 30C3 30C4 30C4 30C5 30C5 30C6 30C6 30C7 30C7 30C8 30C8 30C9 30C9 30CA 30CA 30CB 30CB 30CC 30CC 30CD 30CD 30CE 30CE 30CF 30CF 30D0 30D0 30D1 30D1 30D2 30D2 30D3 30D3 30D4 30D4 30D5 30D5 30D6 30D6 30D7 30D7 30D8 30D8 30D9 30D9 30DA 30DA 30DB 30DB 30DC 30DC 30DD 30DD 30DE 30DE 30DF 30DF 30E0 30E0 30E1 30E1 30E2 30E2 30E3 30E3 30E4 30E4 30E5 30E5 30E6 30E6 30E7 30E7 30E8 30E8 30E9 30E9 30EA 30EA 30EB 30EB 30EC 30EC 30ED 30ED 30EE 30EE 30EF 30EF 30F0 30F0 30F1 30F1 30F2 30F2 30F3 30F3 30F4 30F4 30F5 30F5 30F6 30F6 30F7 30F7 30F8 30F8 30F9 30F9 30FA 30FA 30FB 30FB 30FC 30FC 30FD 30FD 30FE 30FE 0021 0021 0027 0027 002B 002B 002E 002E 003F 003F 005F 005F 007C 007C"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters\Tokens\Japanese\Attributes]\r\n"Language"="411"\r\n"NoDelimiter"=""\r\n"NumericPhones"=""\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters\Tokens\Universal]\r\n@="Universal Phone Converter"\r\n"CLSID"="{9185F743-1143-4C28-86B5-BFF14F20E5C8}"\r\n"PhoneMap"="I 0069 Y 0079 IX 0268 YX 0289 UU 026F U 0075 IH 026A YH 028F UH 028A E 0065 EU 00F8 EX 0258 OX 0275 OU 0264 O 006F AX 0259 EH 025B OE 0153 ER 025C UR 025E AH 028C AO 0254 AE 00E6 AEX 0250 A 0061 AOE 0276 AA 0251 Q 0252 EI 006503610069 AU 00610361028A OI 025403610069 AI 006103610069 IYX 006903610259 UYX 007903610259 EHX 025B03610259 UWX 007503610259 OWX 006F03610259 AOX 025403610259 EN 00650303 AN 00610303 ON 006F0303 OEN 01530303 P 0070 B 0062 M 006D BB 0299 PH 0278 BH 03B2 MF 0271 F 0066 V 0076 VA 028B TH 03B8 DH 00F0 T 0074 D 0064 N 006E RR 0072 DX 027E S 0073 Z 007A LSH 026C LH 026E RA 0279 L 006C SH 0283 ZH 0292 TR 0288 DR 0256 NR 0273 DXR 027D SR 0282 ZR 0290 R 027B LR 026D CT 0063 JD 025F NJ 0272 C 00E7 CJ 029D J 006A LJ 028E W 0077 K 006B G 0067 NG 014B X 0078 GH 0263 GA 0270 GL 029F QT 0071 QD 0262 QN 0274 QQ 0280 QH 03C7 RH 0281 HH 0127 HG 0295 GT 0294 H 0068 WJ 0265 PF 007003610066 TS 007403610073 CH 007403610283 JH 006403610292 JJ 006A0361006A DZ 00640361007A CC 007403610255 JC 006403610291 TSR 007403610282 WH 028D ESH 029C EZH 02A2 ET 02A1 SC 0255 ZC 0291 LT 027A SHX 0267 HZ 0266 PCK 0298 TCK 01C0 NCK 0021 CCK 01C2 LCK 01C1 BIM 0253 DIM 0257 QIM 029B GIM 0260 JIM 0284 S1 02C8 S2 02CC . 002E _| 007C _|| 2016 lng 02D0 hlg 02D1 xsh 02D8 _^ 203F _! 0001 _& 0002 _, 0003 _s 0004 _. 2198 _? 2197 T5 030B T4 0301 T3 0304 T2 0300 T1 030F T- 2193 T+ 2191 vls 030A vcd 032C bvd 0324 cvd 0330 asp 02B0 mrd 0339 lrd 031C adv 031F ret 0331 cen 0308 mcn 033D syl 0329 nsy 032F rho 02DE lla 033C lab 02B7 pal 02B2 vel 02E0 phr 02E4 vph 0334 rai 031D low 031E atr 0318 rtr 0319 den 032A api 033A lam 033B nas 0303 nsr 207F lar 02E1 nar 031A ejc 02BC + 0361 bva 02B1 G2 0261 rte 0320 vsl 0325 LG 026B  NCK3 0297 NCK2 01C3 LCK2 0296 TCK2 0287 JC2 02A5 CC2 02A8 DZ2 02A3 TS2 02A6 JH2 02A4 CH2 02A7 SHC 0286 rhz 02B4 QOM 02A0 xst 0306 T= 2192 ERR 025D AXR 025A ZHJ 0293"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\PhoneConverters\Tokens\Universal\Attributes]\r\n"Language"="436;41c;401;801;c01;1001;1401;1801;1c01;2001;2401;2801;2c01;3001;3401;3801;3c01;4001;42b;42c;82c;42d;423;402;455;403;c04;1004;1404;41a;405;406;465;413;813;809;c09;1009;1409;1809;1c09;2009;2409;2809;2c09;3009;3409;425;438;429;40b;80c;c0c;100c;140c;180c;456;437;807;c07;1007;1407;408;447;40d;439;40e;40f;421;410;810;44b;457;412;812;440;426;427;827;42f;43e;83e;44e;450;414;814;415;416;816;446;418;419;44f;c1a;81a;41b;424;80a;100a;140a;180a;1c0a;200a;240a;280a;2c0a;300a;340a;380a;3c0a;400a;440a;480a;4c0a;500a;430;441;41d;81d;45a;449;444;44a;41e;41f;422;420;820;443;843;42a;540a"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX]\r\n@="Microsoft English (U.S.) v10.0"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="409"\r\n"Desktop"=""\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-1033-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX\LocaleHandler]\r\n@="SR Default Locale Handler"\r\n"CLSID"="{288DFCEF-7DAF-4EEF-9BB4-952DD7B4D13A}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX\Lookup]\r\n@="SR English Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\en-us\lsr1033.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX\Lts]\r\n@="SR English Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\en-us\r1033sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX\Models\1033]\r\n@="L1033"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX\Models\1033\L1033]\r\n@="$(SPEECHROOT)\speech\en-us\L1033"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX\Models\1033\L1033\AMs]\r\n@=""\r\n"AI031033"="$(SPEECHROOT)\speech\en-us\ai031033"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1033-XBOX\TextNorm]\r\n@="SR Engine (8.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\en-us\tn1033.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX]\r\n@="Microsoft French (Canada) v10.0"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="C0C"\r\n"Desktop"=""\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-3084-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX\LocaleHandler]\r\n@="SR French Locale Handler"\r\n"CLSID"="{BC1F5191-B643-494A-840C-3B0DFCD6D9D4}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX\Lookup]\r\n@="SR French Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\fr-ca\lsr3084.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX\Lts]\r\n@="SR French Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\fr-ca\r3084sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX\Models\3084]\r\n@="L3084"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX\Models\3084\L3084]\r\n@="$(SPEECHROOT)\speech\fr-ca\L3084"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX\Models\3084\L3084\AMs]\r\n@=""\r\n"AI033084"="$(SPEECHROOT)\speech\fr-ca\ai033084"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3084-XBOX\TextNorm]\r\n@="SR Engine (9.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\fr-ca\tn3084.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX]\r\n@="Microsoft English (U.K.) v10.0"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="809"\r\n"Desktop"=""\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-2057-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX\LocaleHandler]\r\n@="SR English Locale Handler"\r\n"CLSID"="{A603BDD6-7D24-42A9-B84C-8C8F04D4C042}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX\Lookup]\r\n@="SR English Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\en-gb\lsr2057.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX\Lts]\r\n@="SR English Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\en-gb\r2057sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX\Models\2057]\r\n@="L2057"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX\Models\2057\L2057]\r\n@="$(SPEECHROOT)\speech\en-gb\L2057"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX\Models\2057\L2057\AMs]\r\n@=""\r\n"AI032057"="$(SPEECHROOT)\speech\en-gb\ai032057"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2057-XBOX\TextNorm]\r\n@="SR Engine (9.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\en-gb\tn2057.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX]\r\n@="Microsoft English (Australia) v10.0"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Language"="C09"\r\n"Desktop"=""\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-3081-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX\LocaleHandler]\r\n@="SR English Locale Handler"\r\n"CLSID"="{A603BDD6-7D24-42A9-B84C-8C8F04D4C042}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX\Lookup]\r\n@="SR English Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\en-au\lsr3081.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX\Lts]\r\n@="SR English Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\en-au\r3081sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX\Models\3081]\r\n@="L3081"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX\Models\3081\L3081]\r\n@="$(SPEECHROOT)\speech\en-au\L3081"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX\Models\3081\L3081\AMs]\r\n@=""\r\n"AI033081"="$(SPEECHROOT)\speech\en-au\ai033081"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3081-XBOX\TextNorm]\r\n@="SR Engine (9.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\en-au\tn3081.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX]\r\n@="Microsoft Spanish (Mexico) v10.0"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="80A"\r\n"Desktop"=""\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-2058-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX\LocaleHandler]\r\n@="SR Spanish Locale Handler"\r\n"CLSID"="{D1E2AFE4-C21E-4288-AE93-76EBFBC93C47}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX\Lookup]\r\n@="SR Spanish Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\es-mx\lsr2058.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX\Lts]\r\n@="SR Spanish Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\es-mx\r2058sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX\Models\2058]\r\n@="L2058"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX\Models\2058\L2058]\r\n@="$(SPEECHROOT)\speech\es-mx\L2058"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX\Models\2058\L2058\AMs]\r\n@=""\r\n"AI032058"="$(SPEECHROOT)\speech\es-mx\ai032058"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-2058-XBOX\TextNorm]\r\n@="SR Engine (9.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\es-mx\tn2058.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX]\r\n@="Microsoft German (Germany) v10.0"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="407"\r\n"Desktop"=""\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-1031-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX\LocaleHandler]\r\n@="SR German Locale Handler"\r\n"CLSID"="{4521583E-FE86-4E58-A2BA-DA6C08D9F4C0}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX\Lookup]\r\n@="SR German Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\de-de\lsr1031.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX\Lts]\r\n@="SR German Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\de-de\r1031sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX\Models\1031]\r\n@="L1031"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX\Models\1031\L1031]\r\n@="$(SPEECHROOT)\speech\de-de\L1031"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX\Models\1031\L1031\AMs]\r\n@=""\r\n"AI031031"="$(SPEECHROOT)\speech\de-de\ai031031"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1031-XBOX\TextNorm]\r\n@="SR Engine (9.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\de-de\tn1031.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX]\r\n@="Microsoft Spanish (Spain) v10.0"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="C0A;40A"\r\n"Desktop"=""\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-3082-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX\LocaleHandler]\r\n@="SR Spanish Locale Handler"\r\n"CLSID"="{869B032F-2B57-438A-920C-CFC01DE2867A}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX\Lookup]\r\n@="SR Spanish Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\es-es\lsr3082.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX\Lts]\r\n@="SR Spanish Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\es-es\r3082sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX\Models\3082]\r\n@="L3082"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX\Models\3082\L3082]\r\n@="$(SPEECHROOT)\speech\es-es\L3082"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX\Models\3082\L3082\AMs]\r\n@=""\r\n"AI033082"="$(SPEECHROOT)\speech\es-es\ai033082"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-3082-XBOX\TextNorm]\r\n@="SR Engine (9.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\es-es\tn3082.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX]\r\n@="Microsoft French (France) v10.0"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="40C"\r\n"Desktop"=""\r\n"AudioFormats"="16;18;20;22;45;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-1036-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX\LocaleHandler]\r\n@="SR French Locale Handler"\r\n"CLSID"="{D2ABF5A9-DA38-4B90-8EA6-51E0E5B048FB}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX\Lookup]\r\n@="SR French Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\fr-fr\lsr1036.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX\Lts]\r\n@="SR French Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\fr-fr\r1036sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX\Models\1036]\r\n@="L1036"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX\Models\1036\L1036]\r\n@="$(SPEECHROOT)\speech\fr-fr\L1036"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX\Models\1036\L1036\AMs]\r\n@=""\r\n"AI031036"="$(SPEECHROOT)\speech\fr-fr\ai031036"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1036-XBOX\TextNorm]\r\n@="SR Engine (9.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\fr-fr\tn1036.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX]\r\n@="Microsoft Speech Recognizer 9.0 for Microsoft Speech Server (Italian - Italy)"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="410"\r\n"Desktop"=""\r\n"AudioFormats"="4;6;16;18;20;22;41;45;49;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-1040-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"UPSPhoneSet"=""\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX\LocaleHandler]\r\n@="SR Italian Locale Handler"\r\n"CLSID"="{EBE54541-AC13-4B4B-A9D5-19AC5B84953E}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX\Lookup]\r\n@="SR Italian Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\it-it\lsr1040.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX\Lts]\r\n@="SR Italian Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\it-it\r1040sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX\Models\1040]\r\n@="L1040"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX\Models\1040\L1040]\r\n@="$(SPEECHROOT)\speech\it-it\L1040"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX\Models\1040\L1040\AMs]\r\n@=""\r\n"AI031040"="$(SPEECHROOT)\speech\it-it\ai031040"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1040-XBOX\TextNorm]\r\n@="SR Engine (9.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\it-it\tn1040.bin"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX]\r\n@="Microsoft Speech Recognizer 9.0 for Microsoft Speech Server (ja-JP)"\r\n"Persist Language Model Adaptation"=dword:00000000\r\n"Background Adaptation"=dword:00000000\r\n"RecoExtension"="{69EAE6BE-F3A7-4EE0-B132-916BB1A019AB}"\r\n"Autodetection"=dword:00000000\r\n"Server Mode"=dword:00000000\r\n"AlternatesCLSID"="{0C03E67F-A0E6-4D78-BB70-A6C0B240387B}"\r\n"CLSID"="{FEBD04CD-06E2-46BC-8C13-B8C32E591ED9}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX\Attributes]\r\n"VendorPreferred"=""\r\n"CommandAndControl"=""\r\n"Version"="8.0"\r\n"Language"="411"\r\n"Desktop"=""\r\n"AudioFormats"="4;6;16;18;20;22;41;45;49;53;{6F50E21C-E30E-4B50-95E9-21E8F23D15BD}"\r\n"SpeakingStyle"="Discrete;Continuous"\r\n"WildcardInCFG"="Anywhere;Trailing"\r\n"Dictation"=""\r\n"Hypotheses"=""\r\n"Alternates"="CC;Dictation"\r\n"windowsV6compatible"=""\r\n"Name"="MS-1041-XBOX"\r\n"DictationInCFG"="Anywhere;Trailing"\r\n"WordSequences"="Anywhere;Trailing"\r\n"Vendor"="Microsoft"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX\LocaleHandler]\r\n@="SR Japanese Locale Handler"\r\n"CLSID"="{C1D1978B-EE15-4077-AD8A-28D7EE16EE83}"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX\Lookup]\r\n@="SR Japanese Lookup Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\ja-jp\lsr1041.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX\Lts]\r\n@="SR Japanese Lts Lexicon"\r\n"Datafile"="$(SPEECHROOT)\speech\ja-jp\r1041sr.lxa"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX\Models]\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX\Models\1041]\r\n@="L1041"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX\Models\1041\L1041]\r\n@="$(SPEECHROOT)\speech\ja-jp\L1041"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX\Models\1041\L1041\AMs]\r\n@=""\r\n"AI031041"="$(SPEECHROOT)\speech\ja-jp\ai031041"\r\n\r\n[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Recognizers\Tokens\MS-1041-XBOX\TextNorm]\r\n@="SR Engine (9.0) Text Normalization"\r\n"DataFile"="$(SPEECHROOT)\speech\ja-jp\tn1041.bin"\r\n\r\n
+0x9e559390	unicode	Default Speech User
+0x9e5593b8	unicode	file
+0x9e5593c4	unicode	https
+0x9e5593d0	unicode	http
+0x9e5593dc	string	CreateDefaultRecoProfileIfNotExist
+0x9e559400	unicode	HKEY_CURRENT_USER\SOFTWARE\Microsoft\Speech\RecoProfiles
+0x9e559474	unicode	SpeechCLSID
+0x9e559490	unicode	HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\UX
+0x9e5594f0	string	Cannot create a UPS phone converter (error=0x%X)
+0x9e559528	string	Cannot create a phone converter (error=0x%X) for LANGID=0x%X, ReqAttribs=%S, OptAttribs=%S
+0x9e559584	unicode	file://
+0x9e559594	unicode	file:///
+0x9e559664	string	Failed to delete reco context, error = %X
+0x9e559828	unicode	RecoExtension
+0x9e559940	string	CRecoCtxt::RecognitionNotify adding reco event to queue: %I64u : Event ID %u
+0x9e559990	string	Timeouts: RecognitionTask = %u, IPC Message = %u, Sapisvr Start/Stop = %u, AudioBuffer = %u
+0x9e5599ec	unicode	AudioBufferTimeout
+0x9e559a14	unicode	SetSapisvrTimeout
+0x9e559a38	unicode	DisableIpcMessageTimeout
+0x9e559a6c	unicode	DisableTimeouts
+0x9e559a90	unicode	HKEY_CURRENT_USER\SOFTWARE\Microsoft\Speech\Debug
+0x9e559af4	string	Failed to delete category, error = %X
+0x9e559bd0	string	Grammar options (%X) disallow the semantic format (%X)
+0x9e559c08	string	Grammar options (%X) disallow any semantic format (%X)
+0x9e559c40	string	Grammar options disallow SRGS grammars
+0x9e559c68	string	Grammar options disallow SAPI grammars
+0x9e559c90	string	The rule is not a top-level rule
+0x9e559cb4	string	Activate Rule - %S
+0x9e559cc8	string	Deactivate Rule - %S
+0x9e559d38	string	The language of the grammar is not supported by the current SR engine
+0x9e559d80	string	Rule name : %S.
+0x9e559d90	string	Failed to import from grammar: %S.
+0x9e559db4	string	Rule name: %S.
+0x9e559dc4	string	Imported grammar: %S.
+0x9e559ddc	string	OnUnloadCFG failed, hr=0x%X
+0x9e559df8	string	Failed to add rules (hr=0x%X). Unloading CFG
+0x9e559e28	string	Failed to load CFG or add words, hr=0x%X
+0x9e559e58	string	The SR engine does not need CFG word information. Discard word entry table
+0x9e559ea4	string	The SR engine does not support OnLoadCFG
+0x9e559ed0	string	Left recursion is not allowed in the CFG grammar
+0x9e559f04	unicode	Dictation
+0x9e559f2c	string	Cannot resolve import rule name %S
+0x9e559f5c	unicode	SAPI5OBJECT:
+0x9e559f96	string	xoThe number of transitions is too large
+0x9e559fe8	unicode	ConstructParseTreeTimeout
+0x9e55a01c	string	The recognized parse does not reach the end
+0x9e55a080	string	Failed to compile CFG grammar, hr = 0x%X
+0x9e55a0ac	string	Grammar is in compiled CFG format
+0x9e55a0d0	string	Grammar is in compiled CFG++ format (with engine data)
+0x9e55a108	string	Resource loader returned local path %S
+0x9e55a130	string	Getting local path from the resource loader for grammar %S
+0x9e55a16c	string	Sharing Grammar (Count=%i)
+0x9e55a228	unicode	\Volume
+0x9e55a238	unicode	NoFormatConversion
+0x9e55a260	unicode	 {%d, %d, %d, %d, %d, %d, %d}
+0x9e55a29c	unicode	{Wave Format}
+0x9e55a2b8	string	Failed to set audio format (%d).
+0x9e55a2e0	string	Set-up audio formats. Input stream data passing directly to engine using format [%S]
+0x9e55a338	string	Closest engine format {given input stream format} is [%S]
+0x9e55a378	string	Didn't change input stream format. Engine format {given input stream format} is [%S]
+0x9e55a3d0	string	Changed input stream format to [%S]
+0x9e55a3f4	string	Default engine format is [%S]
+0x9e55a414	string	Original input stream format is [%S]
+0x9e55a4a8	string	%d.%d.%d.%d
+0x9e55a520	unicode	Datafile does not have xml or bin extension.
+0x9e55a58c	unicode	Wordparse
+0x9e55a958	unicode	TransducerNetwork: Memory mode: 
+0x9e55a9f4	unicode	TransducerNetwork: File mode: 
+0x9e55adb4	string	false
+0x9e55aef0	unicode	OverallToplevel
+0x9e55b0dc	unicode	<sil/>
+0x9e55b0ec	unicode	</s>
+0x9e55b114	unicode	_uh_
+0x9e55b138	unicode	Failed to write to file!
+0x9e55b16c	unicode	Failed to read from file!
+0x9e55b1e8	unicode	Failed to load binary file. Expected EOF
+0x9e55b23c	unicode	Failed to open binary file: %s
+0x9e55b348	unicode	<SPELL>
+0x9e55b460	unicode	Wrong binary file version when attempting to deserialize
+0x9e55b568	unicode	Literal
+0x9e55b5c0	unicode	INITCAP
+0x9e55b618	unicode	<nospace/>
+0x9e55b630	unicode	<titlecaps/>
+0x9e55b64c	unicode	<allcaps/>
+0x9e55b664	unicode	<nocaps/>
+0x9e55b688	unicode	Messrs.
+0x9e55b6bc	unicode	'\APOSTROPHE-SIGN
+0x9e55b6e0	unicode	's\APOSTROPHES-SIGN
+0x9e55b710	unicode	new-paragraph
+0x9e55b730	unicode	new-line
+0x9e55b798	unicode	\spell
+0x9e55b7a8	unicode	INSERT-SPACE
+0x9e55b7c4	unicode	NEW-PARAGRAPH
+0x9e55b9c4	unicode	%04x 
+0x9e55b9d0	unicode	%04x
+0x9e55c2d0	string	0T0X0c
+0x9e55c368	string	0W0a0X0c
+0x9e55c3b0	string	0j0j0X0c
+0x9e55c400	string	0o0a0X0c
+0x9e55c5d8	unicode	Latency
+0x9e55c5e8	unicode	WindowAdvance
+0x9e55c604	unicode	WindowSize
+0x9e55c61c	unicode	FEInput
+0x9e55c62c	unicode	FEOutput
+0x9e55c640	unicode	IOFrameRatio
+0x9e55c6a0	unicode	Sound Start: %d (+%d), CurrentFrame = %d, Best Ci = %S, (after %d non-silence frames, ticks = %u)\n
+0x9e55c768	unicode	Barge-In: %d (+%d), CurrentFrame = %d, Best Ci = %S, (after %d non-silence frames, ticks = %u)\n
+0x9e55c828	string	skipfactor
+0x9e55c834	string	nskip
+0x9e55c83c	string	logcdmodelbeam
+0x9e55c84c	string	logmodelbeam
+0x9e55c85c	string	logrwbeam
+0x9e55c868	string	lognwbeam
+0x9e55c874	string	logbeam
+0x9e55c87c	string	speed
+0x9e55c884	string	fastbeams_2ndpass
+0x9e55c898	string	beams_2ndpass
+0x9e55c8a8	string	fastbeams
+0x9e55c8bc	string	WFSTDecoder
+0x9e55c8c8	string	SecondPassAutoDetection
+0x9e55c8e0	string	ConstrainedSecondPass
+0x9e55c8f8	string	AllowSecondPass
+0x9e55c908	string	RejectStaleResults
+0x9e55c91c	string	DisableHypotheses
+0x9e55c930	string	ApplyITNToCFGResults
+0x9e55c948	string	speechdetectthreshstopping
+0x9e55c964	string	speechdetectthreshrunning
+0x9e55c980	string	speechdetectthreshunknown
+0x9e55c99c	string	maxphonesearchtarget
+0x9e55c9b4	string	alternateswitches
+0x9e55c9c8	string	AccuracyOverride
+0x9e55c9dc	string	SLMSpeechFrameThreshold
+0x9e55c9f4	string	CFGConfidenceRejectionThreshold
+0x9e55ca14	string	adFrames
+0x9e55ca20	string	adWeightedFrames
+0x9e55ca34	string	loggingverbositythreshold
+0x9e55ca50	string	complexresponsespeed
+0x9e55ca68	string	responsespeed
+0x9e55ca78	string	OneFrameAtATime
+0x9e55ca88	string	crossLMbo
+0x9e55ca94	string	RequireTrailingSilence
+0x9e55caac	string	singleutt
+0x9e55cab8	string	soundstartthreshold
+0x9e55cacc	string	labeamscale
+0x9e55cad8	string	SeparateSLMBeam
+0x9e55cae8	string	AdaptSil
+0x9e55caf4	string	RCWeight
+0x9e55cb00	string	lookaheadweightcross
+0x9e55cb18	string	lookaheadweightinner
+0x9e55cb30	string	lookaheadweightsenone
+0x9e55cb48	string	lookahead
+0x9e55cb54	string	loggbgframepen
+0x9e55cb64	string	loggbgpen
+0x9e55cb70	string	logsilpen
+0x9e55cb7c	string	logcfgip
+0x9e55cb88	string	logslmip
+0x9e55cb94	unicode	m_iAdaptedAccuracy  %d -> %d\n
+0x9e55cbd0	unicode	NO audio backlog\n
+0x9e55cbf4	unicode	SMALL audio backlog\n
+0x9e55cc20	unicode	LARGE audio backlog\n
+0x9e55cc50	unicode	Recognizing with Enhanced Accuracy set to %d%%
+0x9e55ccb8	unicode	In UpdateAdaptedAccuracy, m_ServerMode == MSAM_USAGE_SERVER, m_iAdaptedAccuracy %d -> 
+0x9e55cd68	unicode	In UpdateAdaptedAccuracy, !m_fRealTimeAudio, m_iAdaptedAccuracy %d -> 100\n
+0x9e55ce00	unicode	In UpdateAdaptedAccuracy, m_iAccuracyOverride > -1, m_iAdaptedAccuracy %d -> %d\n
+0x9e55cea8	unicode	In UpdateAdaptedAccuracy, m_fValidFrameFound == false, m_iAdaptedAccuracy %d -> 100\n
+0x9e55cf58	unicode	In UpdateAdaptedAccuracy, m_fSimulate == true, m_iAdaptedAccuracy %d -> 100\n
+0x9e55cff8	unicode	m_iSoftChannelLimit  %d -> 
+0x9e55d030	unicode	m_iCurrentAccuracy  %d -> %d\n
+0x9e55d070	unicode	In UpdateCurrentAccuracy, no update necessary, m_iAdaptedAccuracy %d\n
+0x9e55d100	unicode	in search_restart_autodetect, m_fAutodetecting = %s  (m_iADModels == %d)\n
+0x9e55d194	unicode	FALSE
+0x9e55d1a0	unicode	TRUE
+0x9e55d1ac	unicode	Forcing min accuracy\n
+0x9e55d1e0	unicode	m_cChans %d  m_iSoftChannelLimit %d  m_cidMaxActive %d  Excess channels %d\n
+0x9e55d278	unicode	in WriteAdaptationUnits_DoAutoDetection, done, m_fAutodetecting = false\n
+0x9e55d310	unicode	SetChannelLimit committing %d channels\n
+0x9e55d360	unicode	resize_channels committing %d channels\n
+0x9e55d3b0	unicode	in search_initialize, m_fAutodetecting = FALSE\n
+0x9e55d410	unicode	[%S] %s CF:%d LF:%d FPID:%d(%d) PID:%d(%d) PC:%d PidC:%d final:%d SCR:%d(%d) LM_IDX:%d, CFG_Unq:%s\n
+0x9e55d4f0	unicode	false
+0x9e55d508	string	clear out leading noise)
+0x9e55d524	unicode	Leading noise 
+0x9e55d544	string	clear out garbage
+0x9e55d558	string	Drop dead
+0x9e55d564	string	SLM silence
+0x9e55d570	unicode	SLM complete %s\n
+0x9e55d594	unicode	utterance
+0x9e55d5a8	unicode	sentence
+0x9e55d5bc	string	SLM silence (checked)
+0x9e55d5d4	unicode	SLM pause after %d\n
+0x9e55d600	string	ResponseSpeed + ComplexResponseSpeed frames of silence (incomplete CFG)
+0x9e55d648	string	ComplexResponseSpeed frames of silence (complete ambiguous CFG)
+0x9e55d688	unicode	CFG pause 
+0x9e55d6a0	string	ResponseSpeed frames of silence (complete unique CFG)
+0x9e55d6d8	unicode	Complete unique 
+0x9e55d6fc	unicode	dueling hypotheses\n
+0x9e55d724	string	long time in utterance without path
+0x9e55d748	unicode	Changing Ambiguous Phrase Timeout to %d
+0x9e55d798	string	soft reset
+0x9e55d7a4	unicode	SoftResetRequest 
+0x9e55d7c8	unicode	Emulate word %s, %d extensions\n
+0x9e55d808	unicode	Emulate final, %d extensions\n
+0x9e55d844	unicode	Trumping Method = NO_TRUMPING.
+0x9e55d888	unicode	Trumping Method = PRIORITY_THEN_ACTIVATION.
+0x9e55d8e0	unicode	Trumping Method = PRIORITY_THEN_LIKELIHOOD.
+0x9e55d95c	unicode	++hmm++
+0x9e55d96c	unicode	++ah++
+0x9e55da40	unicode	CCFGLM AddRule[%d].pEngGrm = %p\n
+0x9e55da88	unicode	CCFGLM RemoveRule[%d].pEngGrm = %p\n
+0x9e55dad4	unicode	CCFGLM SetRuleWeight[%d]\n
+0x9e55db10	unicode	CCFGLM::GarbageCollect: CFG State Cache size = %i bytes for %i states. Max is %i bytes.\n
+0x9e55dbc8	unicode	CCFGLM SetRulePriority[%d] = [%d]\n
+0x9e55dc10	unicode	Trumping original rule %d (pri %d) (weight %f) with rule %d (pri %d) (weight %f) (probability %d)\n
+0x9e55dcd8	unicode	CCFGLM ActivateRule[%d]\n
+0x9e55dd0c	unicode	CCFGLM %p DeactivateRules[%d]\n
+0x9e55dd50	unicode	>>> pSymbols->Add(%s)(%d chars)(SAPI TB)[words %d-%d] at [%d]\n
+0x9e55ddd0	unicode	>>> pSymbols.Add(%s) (a subset TB) at [%d]\n
+0x9e55de28	unicode	>>> pSymbols.Add(%s) (an int TB) at [%d]\n
+0x9e55de7c	string	adfmaplrfactor
+0x9e55de8c	string	adminfrm
+0x9e55dea4	string	adDecayFact
+0x9e55deb0	string	adDecayInterval
+0x9e55dec0	string	adIncreaseFact
+0x9e55ded0	string	adInitTime
+0x9e55dedc	string	adFMllrMapStats
+0x9e55deec	string	adFMllrIters
+0x9e55defc	string	adFMllrBlocks
+0x9e55df14	string	admapMixMin
+0x9e55df20	string	admapMeanMin
+0x9e55df30	string	taufact
+0x9e55df38	string	htkrtree
+0x9e55df44	string	adMllrVarLower
+0x9e55df54	string	adMllrVarLimit
+0x9e55df64	string	adMllrMeanLimit
+0x9e55df74	string	admap
+0x9e55df7c	string	admllrFeature
+0x9e55df98	string	admllrMean
+0x9e55dfa4	string	adviterbi
+0x9e55dfb0	string	adclsVarthreshold
+0x9e55dfc4	string	adclsthreshold
+0x9e55dfd4	string	adwindow
+0x9e55dfec	unicode	%s.am
+0x9e55e000	unicode	%s.%s
+0x9e55e034	string	backupprofile
+0x9e55e058	unicode	in InitAM, m_fAutoDetecting = %s  (because CanDoAlign == FALSE)\n
+0x9e55e0e0	unicode	in InitAM, m_fAutoDetecting = %s\n
+0x9e55e860	unicode	WaveFormatEx
+0x9e55e87c	unicode	SCOutput
+0x9e55e890	unicode	SCInput
+0x9e55e8b8	unicode	>>> is first:  iFirstTBChar == %d\n
+0x9e55e900	unicode	>>> is last:  iLastTBChar == %d\n
+0x9e55e944	unicode	>>> add word:  [%s]\n
+0x9e55e978	unicode	>>> m_Symbols.Add(pron) at [%d]\n
+0x9e55e9c0	unicode	>>> m_Symbols.Add(%s) (a word) at [%d]\n
+0x9e55ea10	unicode	orig node %d -> sorted node %d (path %d)\n
+0x9e55ea68	unicode	>>> call SetupLatNode on %d  (path %d)\n
+0x9e55eab8	unicode	Noise event\n
+0x9e55ead4	unicode	Too Quiet event\n
+0x9e55eb04	unicode	Prepare %d alternates\n
+0x9e55eb38	unicode	Lattice decoder contributed %i alternates.\n
+0x9e55eb90	unicode	CropAlternate on alt %d returned %x\n
+0x9e55ebe0	unicode	CropAlternate left nothing of alt %d\n
+0x9e55ec30	unicode	Lattice alt %d is unique (%d in the final list)\n
+0x9e55ec98	unicode	Lattice alt %d duplicates %d in the final list\n
+0x9e55ecf8	unicode	try for %d alts\n
+0x9e55ed1c	unicode	SLM path\n
+0x9e55ed30	unicode	CFG path\n
+0x9e55ed8c	string	CFGSubStateThreshold
+0x9e55ede0	string	NormalizeCFGTransitions
+0x9e55edf8	string	BargeInOnsetAdjustment
+0x9e55ee10	string	tryAlternateFEs
+0x9e55ee20	string	LMAWindowThreshold
+0x9e55ee34	string	LMAWindowLength
+0x9e55ee44	string	ApproximateLMAFilterCoefficients
+0x9e55ee68	string	LMAfiltercoefficientsN
+0x9e55ee80	string	LMAfiltercoefficientsD
+0x9e55ee98	string	lmAgingCountReduction
+0x9e55eeb0	string	lmAgingNumWordsToCheck
+0x9e55eec8	string	lmNumWordsToLM
+0x9e55eed8	string	lmHashBuckWord
+0x9e55eee8	string	lmHashBuckTri
+0x9e55eef8	string	lmMaxBytesWord
+0x9e55ef08	string	lmMaxBytesTri
+0x9e55ef18	string	lmUserNgram
+0x9e55ef24	string	lmamru
+0x9e55ef2c	string	phrate
+0x9e55ef34	string	constDIw
+0x9e55ef7c	unicode	Phrase Start Threshold
+0x9e55efb8	unicode	LocaleHandler
+0x9e55efd4	unicode	UserLex
+0x9e55f00c	unicode	HowDoI
+0x9e55f024	unicode	Spelling
+0x9e55f038	unicode	Pronunciation
+0x9e55f0a4	unicode	%d:%d
+0x9e55f1a8	unicode	Wave[NoHeader]
+0x9e55f268	string	Loading static grammar %S
+0x9e55f284	string	Loading dynamic grammar %S
+0x9e55f320	unicode	spell
+0x9e55f32c	unicode	DoubleQuoting
+0x9e55f348	unicode	SingleQuoting
+0x9e55f364	unicode	NextCap
+0x9e55f374	unicode	MutualExclusiveAct
+0x9e55f39c	unicode	Numeralize
+0x9e55f3b4	unicode	FullStopTrailingSpace
+0x9e55f3e0	unicode	NoCaps
+0x9e55f3f0	unicode	AllCaps
+0x9e55f400	unicode	Capitalize
+0x9e55f418	unicode	IsLexicalEqualSpellAndNotEqualDisplay
+0x9e55f538	unicode	Failing to serialize state variable with id %d
+0x9e55f710	unicode	Bad symbol type in virtual Deserializer
+0x9e55f7d0	string	AddPhone
+0x9e55f7dc	string	NoPhone
+0x9e55f7e4	string	AddState
+0x9e55f7f0	string	NoState
+0x9e55f7f8	string	PhoneClass
+0x9e55f804	string	NoPhoneClass
+0x9e55f864	unicode	EvalOrder
+0x9e55f878	unicode	MaxProcess
+0x9e55f890	unicode	Wave
+0x9e55f8c8	unicode	Binary
+0x9e55f8d8	unicode	Text
+0x9e55f8e4	unicode	Packet
+0x9e55f90c	unicode	BinaryData
+0x9e55f924	unicode	FEType
+0x9e55f934	unicode	FEString
+0x9e55f948	unicode	FEGUID
+0x9e55f958	unicode	Boolean
+0x9e55f998	unicode	Double
+0x9e55f9a8	unicode	Float
+0x9e55f9fc	unicode	Int32
+0x9e55fa08	unicode	Int16
+0x9e55fa14	string	vtlnoptmode
+0x9e55fa3c	unicode	Add Entry(%s %f)\n
+0x9e55fa74	unicode	Final Confusable Phrases:\n
+0x9e55fbb8	unicode	  id = %2d   val = %12.2f\n
+0x9e55fbf0	unicode	 For unit %2d:\n
+0x9e55fc10	unicode	  conf = %4.2f\n
+0x9e55fc30	unicode	Getting scores from %s classifier.\n
+0x9e55fc78	unicode	PredSlmWord
+0x9e55fc90	unicode	G_word
+0x9e55fca0	unicode	G_OtherTag
+0x9e55fcec	unicode	NoHeader
+0x9e55fd3c	unicode	BinaryCCEncoderModel
+0x9e55fd68	unicode	MaxFramesPerPacket
+0x9e55fd90	unicode	BinaryCCDecoderModel
+0x9e55fe34	unicode	SoftDeNoise
+0x9e55fe50	unicode	DeNoiseThresholdFullSuppressIfAbove
+0x9e55fe98	unicode	DeNoiseThresholdNoSuppressIfBelow
+0x9e55fedc	unicode	DeNoiseGainSmoother
+0x9e55ff04	unicode	DeNoiseMinGain
+0x9e55ff24	unicode	DeNoisePriorSNRFloor
+0x9e55ff50	unicode	DeNoisePriorProbSmoother
+0x9e55ff84	unicode	DeNoiseNoiseTrackerRatio
+0x9e55ffb8	unicode	DeNoiseNoiseTrackerUpdateLength
+0x9e55fff8	unicode	DeNoiseNoiseTrackerSigPowerSmoother
+0x9e560040	unicode	DeNoiseNoisePowerSmoother
+0x9e560074	unicode	DeNoiseSNRSmoother
+0x9e56009c	unicode	UseDeNoiser
+0x9e5600b4	unicode	VocalTractLengthWarpFactor
+0x9e5600fc	unicode	C0offset
+0x9e560110	unicode	LowFilterBankFreq
+0x9e560134	unicode	HighFilterBankFreq
+0x9e56015c	unicode	NumChannels
+0x9e560174	unicode	SamplingRate
+0x9e560190	unicode	FFTSize
+0x9e5601cc	unicode	C0_ns_vars
+0x9e5601e4	unicode	C0_ns_means
+0x9e5601fc	unicode	C0_sp_vars
+0x9e560214	unicode	C0_sp_means
+0x9e56022c	unicode	C0_ns_alpha
+0x9e560244	unicode	C0_sp_alpha
+0x9e56025c	unicode	C0_ns_ceil
+0x9e560274	unicode	C0_ns_floor
+0x9e56028c	unicode	ComputeDeltas
+0x9e5602a8	unicode	AdaptFixedMeanDiff
+0x9e5602f0	unicode	AdaptMeans
+0x9e560308	unicode	AdaptVariances
+0x9e560328	unicode	ZeroEnergyThreshold
+0x9e560360	unicode	InitNoiseFrames
+0x9e560380	unicode	InitTargetMax
+0x9e56039c	unicode	DeltaMax
+0x9e5603b0	unicode	MaxNSFrames
+0x9e5603c8	unicode	MinMax
+0x9e5603d8	unicode	Decay
+0x9e5603e4	unicode	MaxUpRate
+0x9e5603f8	unicode	Rate
+0x9e560438	unicode	DefNoiseMean
+0x9e560454	unicode	DefSpeechMean
+0x9e560470	unicode	NoiseTimeConstant
+0x9e560494	unicode	SpeechTimeConstant
+0x9e5604bc	unicode	HardUpdate
+0x9e5604d4	unicode	NormalizationType
+0x9e56050a	unicode	2ReduceCMNLookAhead
+0x9e56054c	unicode	Offset
+0x9e56055c	unicode	Scaling
+0x9e57099c	string	Semantic_THreshold
+0x9e5709b0	string	X_OFFSET
+0x9e5709bc	string	X_FACTOR
+0x9e5709c8	string	CONF_FLOOR
+0x9e5709d4	string	LLRFactor
+0x9e570aa8	unicode	Wrong pronunciation for: %s [%s]
+0x9e570af0	unicode	Number of pronunciation for this word (%s) is zero
+0x9e570c08	string	Error failed to lookup index %d\n
+0x9e570c2c	string	BuildIdTables ... \n
+0x9e571270	string	Error: CVocabSimple::Delete failed!!!\n
+0x9e571bb0	string	Unknown exception
+0x9e571bcc	string	bad allocation
+0x9e571d54	string	_nextafter
+0x9e571dac	string	floor
+0x9e572050	unicode	runtime error 
+0x9e572070	unicode	TLOSS error\n
+0x9e57208c	unicode	SING error\n
+0x9e5720a4	unicode	DOMAIN error\n
+0x9e5720c0	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9e5722b0	unicode	R6032\n- not enough space for locale information\n
+0x9e572318	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9e5723dc	unicode	R6030\n- CRT not initialized\n
+0x9e572418	unicode	R6028\n- unable to initialize heap\n
+0x9e572460	unicode	R6027\n- not enough space for lowio initialization\n
+0x9e5724c8	unicode	R6026\n- not enough space for stdio initialization\n
+0x9e572530	unicode	R6025\n- pure virtual function call\n
+0x9e572578	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9e5725e0	unicode	R6019\n- unable to open console device\n
+0x9e572630	unicode	R6018\n- unexpected heap error\n
+0x9e572670	unicode	R6017\n- unexpected multithread lock error\n
+0x9e5726c8	unicode	R6016\n- not enough space for thread data\n
+0x9e572720	unicode	R6010\n- abort() has been called\n
+0x9e572768	unicode	R6009\n- not enough space for environment\n
+0x9e5727c0	unicode	R6008\n- not enough space for arguments\n
+0x9e572810	unicode	R6002\n- floating point support not loaded\n
+0x9e572930	unicode	HH:mm:ss
+0x9e572944	unicode	dddd, MMMM dd, yyyy
+0x9e57296c	unicode	MM/dd/yy
+0x9e572990	unicode	December
+0x9e5729a4	unicode	November
+0x9e5729b8	unicode	October
+0x9e5729c8	unicode	September
+0x9e5729dc	unicode	August
+0x9e5729ec	unicode	July
+0x9e5729f8	unicode	June
+0x9e572a04	unicode	April
+0x9e572a10	unicode	March
+0x9e572a1c	unicode	February
+0x9e572a30	unicode	January
+0x9e572aa0	unicode	Saturday
+0x9e572ab4	unicode	Friday
+0x9e572ac4	unicode	Thursday
+0x9e572ad8	unicode	Wednesday
+0x9e572aec	unicode	Tuesday
+0x9e572afc	unicode	Monday
+0x9e572b0c	unicode	Sunday
+0x9e572b54	string	HH:mm:ss
+0x9e572b60	string	dddd, MMMM dd, yyyy
+0x9e572b74	string	MM/dd/yy
+0x9e572b88	string	December
+0x9e572b94	string	November
+0x9e572ba0	string	October
+0x9e572ba8	string	September
+0x9e572bb4	string	August
+0x9e572bcc	string	April
+0x9e572bd4	string	March
+0x9e572bdc	string	February
+0x9e572be8	string	January
+0x9e572c20	string	Saturday
+0x9e572c2c	string	Friday
+0x9e572c34	string	Thursday
+0x9e572c40	string	Wednesday
+0x9e572c4c	string	Tuesday
+0x9e572c54	string	Monday
+0x9e572c5c	string	Sunday
+0x9e5736a0	string	 Complete Object Locator'
+0x9e5736bc	string	 Class Hierarchy Descriptor'
+0x9e5736dc	string	 Base Class Array'
+0x9e5736f0	string	 Base Class Descriptor at (
+0x9e57370c	string	 Type Descriptor'
+0x9e573720	string	`local static thread guard'
+0x9e57373c	string	`managed vector copy constructor iterator'
+0x9e573768	string	`vector vbase copy constructor iterator'
+0x9e573794	string	`vector copy constructor iterator'
+0x9e5737b8	string	`dynamic atexit destructor for '
+0x9e5737dc	string	`dynamic initializer for '
+0x9e5737f8	string	`eh vector vbase copy constructor iterator'
+0x9e573824	string	`eh vector copy constructor iterator'
+0x9e57384c	string	`managed vector destructor iterator'
+0x9e573874	string	`managed vector constructor iterator'
+0x9e57389c	string	`placement delete[] closure'
+0x9e5738bc	string	`placement delete closure'
+0x9e5738d8	string	`omni callsig'
+0x9e5738e8	string	 delete[]
+0x9e5738f4	string	 new[]
+0x9e5738fc	string	`local vftable constructor closure'
+0x9e573920	string	`local vftable'
+0x9e573930	string	`RTTI
+0x9e57393c	string	`udt returning'
+0x9e57394c	string	`copy constructor closure'
+0x9e573968	string	`eh vector vbase constructor iterator'
+0x9e573990	string	`eh vector destructor iterator'
+0x9e5739b0	string	`eh vector constructor iterator'
+0x9e5739d4	string	`virtual displacement map'
+0x9e5739f0	string	`vector vbase constructor iterator'
+0x9e573a14	string	`vector destructor iterator'
+0x9e573a34	string	`vector constructor iterator'
+0x9e573a54	string	`scalar deleting destructor'
+0x9e573a74	string	`default constructor closure'
+0x9e573a94	string	`vector deleting destructor'
+0x9e573ab4	string	`vbase destructor'
+0x9e573ac8	string	`string'
+0x9e573ad4	string	`local static guard'
+0x9e573aec	string	`typeof'
+0x9e573af8	string	`vcall'
+0x9e573b00	string	`vbtable'
+0x9e573b0c	string	`vftable'
+0x9e573b8c	string	operator
+0x9e573bb0	string	 delete
+0x9e573bc0	string	__unaligned
+0x9e573bcc	string	__restrict
+0x9e573bd8	string	__ptr64
+0x9e573be0	string	__eabi
+0x9e573be8	string	__clrcall
+0x9e573bf4	string	__fastcall
+0x9e573c00	string	__thiscall
+0x9e573c0c	string	__stdcall
+0x9e573c18	string	__pascal
+0x9e573c24	string	__cdecl
+0x9e573c2c	string	__based(
+0x9e573ebc	string	NUIAUD_LOWFREQ
+0x9e573ecc	string	NUIAUD_SESSION
+0x9e573f30	string	MicArrayCalibrate:\MicArrayCalibrate.data
+0x9e573f5c	string	MicArrayCalibrate:\MicArrayCalibrateLowLatency.data
+0x9e573f90	string	MicArrayCalibrate
+0x9e573fa4	string	MicArrayCalibrate.mec
+0x9e5c856b	string	se:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelExemplarClassifyHeadDetection.updb
+0x9e5c868c	string	g_ExemplarParams2
+0x9e5c86b0	string	g_ExemplarParams8
+0x9e5c86c2	string	g_ForestInfo
+0x9e5c86cf	string	g_SamplerHeadDatabase
+0x9e5c86f8	string	g_SamplerHeadDepth
+0x9e5c871c	string	g_fMemExportStreamConstant
+0x9e5c8b1b	string	be:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadeVertexPassThrough.updb
+0x9e5c8c53	string	ie:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelDownsampleDepth4To1.updb
+0x9e5c8d30	string	g_DownsampleDepthParams
+0x9e5c8d58	string	g_SrcDepthSampler
+0x9e5c8d7c	string	g_fMemExportStreamConstant
+0x9e5c976b	string	[e:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadeVertexPassThru.updb
+0x9e5c998b	string	be:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadeVertexPassThruPosOnly.updb
+0x9e5c9ac3	string	be:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelColorConvertUYVY.updb
+0x9e5c9b70	string	g_SamplerRawColor
+0x9e5c9b94	string	g_fMemExportStreamConstant
+0x9e5c9f53	string	ce:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelColorConvertBayer.updb
+0x9e5ca000	string	g_SamplerRawColor
+0x9e5ca024	string	g_fMemExportStreamConstant
+0x9e5caa9b	string	he:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelColorConvertBayerAlpha.updb
+0x9e5cab4c	string	g_SamplerRawColor
+0x9e5cab70	string	g_fMemExportStreamConstant
+0x9e5cb6fb	string	^e:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelColorToDepth.updb
+0x9e5cb87f	string	g_SamplerColorInput
+0x9e5cb8a4	string	g_SamplerRawDepth
+0x9e5cb8c8	string	g_SensorDepthToRegistrationXShift
+0x9e5cb8ea	string	g_fMemExportStreamConstant
+0x9e5cc103	string	^e:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelDepthToColor.updb
+0x9e5cc273	string	g_SamplerDepthSegInput
+0x9e5cc29c	string	g_SensorDepthToRegistrationXShift
+0x9e5cc2d0	string	g_fMemExportStreamConstant
+0x9e5cc62b	string	ce:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelDepthToColorClear.updb
+0x9e5cc6c4	string	g_fMemExportStreamConstant
+0x9e5cc85b	string	Ze:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelUpfilter.updb
+0x9e5cc950	string	g_SamplerFullLineDepth
+0x9e5cc978	string	g_SamplerShiftToDepth
+0x9e5cc98e	string	g_SamplerTileLayout
+0x9e5cc9b4	string	g_SamplerVoxelSegDepth
+0x9e5cc9cb	string	g_fMemExportStreamConstant
+0x9e5cc9f8	string	g_fMemExportTileStreamConstant
+0x9e5cd00b	string	[e:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelDepthOnly.updb
+0x9e5cd0c4	string	g_SamplerFullLineDepth
+0x9e5cd0ec	string	g_SamplerShiftToDepth
+0x9e5cd102	string	g_fMemExportStreamConstant
+0x9e5cd433	string	be:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelSegmentationOnly.updb
+0x9e5cd4cc	string	g_SamplerFullDepth
+0x9e5cd673	string	_e:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelColorCopyUYVY.updb
+0x9e5cd71c	string	g_SamplerRawColor
+0x9e5cd740	string	g_fMemExportStreamConstant
+0x9e5cd9d3	string	me:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelColorConvertUYVYToLuminance.updb
+0x9e5cda8c	string	g_SamplerRawColor
+0x9e5cdab0	string	g_fMemExportStreamConstant
+0x9e5cdce3	string	ie:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelColorConvertBayerToUYVY.updb
+0x9e5cdd98	string	g_SamplerRawColor
+0x9e5cddbc	string	g_fMemExportStreamConstant
+0x9e5ce98b	string	ne:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelColorConvertBayerToLuminance.updb
+0x9e5cea44	string	g_SamplerRawColor
+0x9e5cea68	string	g_fMemExportStreamConstant
+0x9e5cf473	string	\e:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\cdrp\xbox\obj\xbox\ShadePixelSpockDepth.updb
+0x9e5cf554	string	g_SamplerFullLineDepth
+0x9e5cf57c	string	g_SamplerShiftToDepth
+0x9e5cf592	string	g_SamplerTileLayout
+0x9e5cf5b8	string	g_fMemExportStreamConstant
+0x9e5cf5e4	string	g_fMemExportTileStreamConstant
+0x9e5cfe74	string	Ground Plane
+0x9e5cfe84	string	Right Ankle
+0x9e5cfe90	string	Left Ankle
+0x9e5cfe9c	string	Right Wrist
+0x9e5cfea8	string	Left Wrist
+0x9e5cfeb4	string	Right Knee
+0x9e5cfec0	string	Left Knee
+0x9e5cfecc	string	Right Elbow
+0x9e5cfed8	string	Left Elbow
+0x9e5cfee4	string	Right Shoulder
+0x9e5cfef4	string	Left Shoulder
+0x9e5cff04	string	Right Lower Head
+0x9e5cff18	string	Left Lower Head
+0x9e5cff28	string	Right Foot
+0x9e5cff34	string	Left Foot
+0x9e5cff40	string	Right Lower Leg
+0x9e5cff50	string	Left Lower Leg
+0x9e5cff60	string	Right Hand
+0x9e5cff6c	string	Right Upper Leg
+0x9e5cff7c	string	Left Upper Leg
+0x9e5cff8c	string	Left Hand
+0x9e5cff98	string	Right Lower Arm
+0x9e5cffa8	string	Right Torso
+0x9e5cffb4	string	Left Torso
+0x9e5cffc0	string	Left Lower Arm
+0x9e5cffd0	string	Right Upper Arm
+0x9e5cffe0	string	Right Chest
+0x9e5cffec	string	Left Chest
+0x9e5cfff8	string	Left Upper Arm
+0x9e5d0010	string	Right Upper Head
+0x9e5d0024	string	Left Upper Head
+0x9e5d0063	string	be:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelCentroidAcc0.updb
+0x9e5d01d8	string	g_CentroidAcc0ActivePlayer
+0x9e5d0204	string	g_CentroidAcc0OutputScale0
+0x9e5d021f	string	g_CentroidAcc0OutputScale1
+0x9e5d023a	string	g_CentroidAcc0Params0
+0x9e5d0250	string	g_CentroidAcc0Params1
+0x9e5d0266	string	g_CentroidAcc0Params2
+0x9e5d027c	string	g_CentroidAcc0Params3
+0x9e5d0292	string	g_SamplerCentroidAcc0ClassData
+0x9e5d02c4	string	g_SamplerCentroidAcc0Depth
+0x9e5d02df	string	g_SamplerCentroidAcc0FGData
+0x9e5d02fb	string	g_SamplerCentroidAdd0Tolerances
+0x9e5d031b	string	g_UnpackDepthPlayerParams
+0x9e5d0703	string	be:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelCentroidAcc1.updb
+0x9e5d0850	string	g_CentroidAcc1Params0
+0x9e5d0878	string	g_CentroidAcc1Params1
+0x9e5d088e	string	g_CentroidAcc1Params2
+0x9e5d08a4	string	g_CentroidAcc1Params3
+0x9e5d08ba	string	g_CentroidAcc1Params4
+0x9e5d08d0	string	g_CentroidAcc1ScaleBias
+0x9e5d08e8	string	g_SamplerCentroid0
+0x9e5d090c	string	g_SamplerCentroid0Sq
+0x9e5d0921	string	g_SamplerCentroid1
+0x9e5d0934	string	g_SamplerCentroid1Sq
+0x9e5d0ef3	string	be:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelCentroidAcc2.updb
+0x9e5d1018	string	g_CentroidAcc1Params0
+0x9e5d1040	string	g_CentroidAcc1Params1
+0x9e5d1056	string	g_CentroidAcc1Params4
+0x9e5d106c	string	g_CentroidAcc1ScaleBias
+0x9e5d1084	string	g_SamplerCentroid0
+0x9e5d10a8	string	g_SamplerCentroid0Sq
+0x9e5d10bd	string	g_SamplerCentroid1
+0x9e5d10d0	string	g_SamplerCentroid1Sq
+0x9e5d1423	string	ge:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelCentroidNormalize.updb
+0x9e5d1560	string	g_CentroidNormParams0
+0x9e5d1588	string	g_CentroidNormParams1
+0x9e5d159e	string	g_CentroidNormParams2
+0x9e5d15b4	string	g_SamplerCentroidNormCentroid0
+0x9e5d15e4	string	g_SamplerCentroidNormCentroid0Sq
+0x9e5d1605	string	g_SamplerCentroidNormCentroid1
+0x9e5d1624	string	g_SamplerCentroidNormCentroid1Sq
+0x9e5d1645	string	g_SamplerCentroidNormRoughSize
+0x9e5d1664	string	g_SamplerCentroidNormThreshold
+0x9e5d199b	string	oe:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelExemplarClassifyInvariant.updb
+0x9e5d1b44	string	g_ExemplarLoop
+0x9e5d1b64	string	g_ExemplarParams0
+0x9e5d1b88	string	g_ExemplarParams2
+0x9e5d1b9a	string	g_ExemplarParams3
+0x9e5d1bac	string	g_ExemplarParams4
+0x9e5d1bbe	string	g_ExemplarParams5
+0x9e5d1bd0	string	g_ExemplarParams6
+0x9e5d1be2	string	g_ExemplarParams7
+0x9e5d1bf4	string	g_ExemplarParams8
+0x9e5d1c06	string	g_SamplerExemplarDepth
+0x9e5d1c30	string	g_SamplerExemplarDistIndex
+0x9e5d1c4b	string	g_SamplerExemplarFGData
+0x9e5d1c63	string	g_SamplerExemplarNodeData
+0x9e5d1c7d	string	g_UnpackDepthPlayerParams
+0x9e5d20c3	string	oe:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelExemplarClassifyWallDepth.updb
+0x9e5d226c	string	g_ExemplarLoop
+0x9e5d228c	string	g_ExemplarParams0
+0x9e5d22b0	string	g_ExemplarParams2
+0x9e5d22c2	string	g_ExemplarParams3
+0x9e5d22d4	string	g_ExemplarParams4
+0x9e5d22e6	string	g_ExemplarParams5
+0x9e5d22f8	string	g_ExemplarParams6
+0x9e5d230a	string	g_ExemplarParams7
+0x9e5d231c	string	g_ExemplarParams8
+0x9e5d232e	string	g_SamplerExemplarDepth
+0x9e5d2358	string	g_SamplerExemplarDistIndex
+0x9e5d2373	string	g_SamplerExemplarFGData
+0x9e5d238b	string	g_SamplerExemplarNodeData
+0x9e5d23a5	string	g_UnpackDepthPlayerParams
+0x9e5d2813	string	he:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelExemplarDistribute.updb
+0x9e5d28c4	string	g_SamplerDistributionCoords
+0x9e5d28f0	string	g_SamplerDistributionData
+0x9e5d2b63	string	ie:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelStencilFillClassify.updb
+0x9e5d2c18	string	g_SamplerExemplarDepth
+0x9e5d2c40	string	g_UnpackDepthPlayerParams
+0x9e5d2d9b	string	ke:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelStencilFillDistribute.updb
+0x9e5d2e50	string	g_SamplerExemplarDepth
+0x9e5d2e78	string	g_UnpackDepthPlayerParams
+0x9e5d2feb	string	ce:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadeVertexBodyPartBase.updb
+0x9e5d3110	string	g_BodyPartBaseFGDataHiScaleBias0
+0x9e5d3144	string	g_BodyPartBaseFGDataHiScaleBias1
+0x9e5d3165	string	g_BodyPartBaseFGDataHiScaleBias3
+0x9e5d3186	string	g_BodyPartBaseFGDataHiScaleBias4
+0x9e5d31a7	string	g_BodyPartBasePlayerMaskScale
+0x9e5d31c5	string	g_BodyPartBaseQNaN
+0x9e5d31d8	string	g_SamplerBodyPartBaseFGDataHi
+0x9e5d3208	string	g_SamplerBodyPartBaseFGDataHiLastFrame
+0x9e5d3543	string	be:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelBodyPartBase.updb
+0x9e5d3730	string	g_BodyPartBaseActivePlayer
+0x9e5d375c	string	g_BodyPartBaseCamera0
+0x9e5d3772	string	g_BodyPartBaseCamera1
+0x9e5d3788	string	g_BodyPartBaseCamera2
+0x9e5d379e	string	g_BodyPartBasePackZDensity
+0x9e5d37b9	string	g_BodyPartBaseParams0
+0x9e5d37cf	string	g_BodyPartBaseParams1
+0x9e5d37e5	string	g_BodyPartBaseParams4
+0x9e5d37fb	string	g_BodyPartBaseParams5
+0x9e5d3811	string	g_BodyPartBaseParams6
+0x9e5d3827	string	g_BodyPartBaseThresholds0
+0x9e5d3841	string	g_BodyPartCameraParams
+0x9e5d3858	string	g_BodyPartDensityParams0
+0x9e5d3871	string	g_BodyPartDensityParams1
+0x9e5d388a	string	g_SamplerBodyPartBaseClassData
+0x9e5d38bc	string	g_SamplerBodyPartBaseDepth
+0x9e5d38d7	string	g_SamplerBodyPartRelativeThreshold
+0x9e5d38fa	string	g_UnpackDepthPlayerParams
+0x9e5d41c3	string	ae:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelBodyPartDS0.updb
+0x9e5d42e8	string	g_BodyPartBaseUnpackZDensity
+0x9e5d4318	string	g_BodyPartCameraParams
+0x9e5d432f	string	g_BodyPartDensityParams0
+0x9e5d4348	string	g_BodyPartDensityParams1
+0x9e5d4361	string	g_BodyPartUnaryResidence1
+0x9e5d437b	string	g_SamplerBodyPartCentroidBase
+0x9e5d43ac	string	g_SamplerBodyPartConfidenceThreshold
+0x9e5d43d1	string	g_SamplerBodyPartRelativeThreshold
+0x9e5d4feb	string	ce:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelBodyPartDS0_2.updb
+0x9e5d5110	string	g_BodyPartCameraParams
+0x9e5d5138	string	g_BodyPartDensityParams0
+0x9e5d5151	string	g_BodyPartDensityParams1
+0x9e5d516a	string	g_BodyPartUnaryResidence1
+0x9e5d5184	string	g_SamplerBodyPartCentroid
+0x9e5d51b0	string	g_SamplerBodyPartConfidenceThreshold
+0x9e5d51e8	string	g_SamplerBodyPartRelativeThreshold
+0x9e5d520b	string	g_SamplerBodyPartResidence
+0x9e5d5f0b	string	ae:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelBodyPartDS1.updb
+0x9e5d6080	string	g_BodyPartCameraParams
+0x9e5d60a8	string	g_BodyPartDS1Params0
+0x9e5d60bd	string	g_BodyPartDS1Params3
+0x9e5d60d2	string	g_BodyPartDS1Params4
+0x9e5d60e7	string	g_BodyPartDensityParams0
+0x9e5d6100	string	g_BodyPartDensityParams1
+0x9e5d6119	string	g_BodyPartThresholdScaleBias
+0x9e5d6136	string	g_BodyPartUnaryResidence0
+0x9e5d6150	string	g_BodyPartUnaryResidence1
+0x9e5d616a	string	g_SamplerBodyPartCentroid
+0x9e5d6194	string	g_SamplerBodyPartConfidenceThreshold
+0x9e5d61cc	string	g_SamplerBodyPartRelativeThreshold
+0x9e5d6853	string	ae:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelBodyPartDS2.updb
+0x9e5d698c	string	g_BodyPartDS2Params0
+0x9e5d69b4	string	g_BodyPartDS2Params1
+0x9e5d69c9	string	g_BodyPartDS2Params2
+0x9e5d69de	string	g_BodyPartDS2Params3
+0x9e5d69f3	string	g_BodyPartDS2Params4
+0x9e5d6a08	string	g_BodyPartDS2Params5
+0x9e5d6a1d	string	g_SamplerBodyPartCentroid
+0x9e5d6a48	string	g_SamplerBodyPartDirective
+0x9e5d6a74	string	g_SamplerBodyPartResidence
+0x9e5d6f73	string	ce:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadeVertexCentroidAcc0.updb
+0x9e5d7048	string	g_CentroidAcc0FGDataHiScaleBias
+0x9e5d7078	string	g_CentroidAcc0FGDataQNaN
+0x9e5d7091	string	g_CentroidAcc0FGPlayer
+0x9e5d70a8	string	g_SamplerCentroidAcc0FGDataHi
+0x9e5d731b	string	_e:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadeVertexExemplar.updb
+0x9e5d7463	string	ge:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadeVertexExemplarClassify.updb
+0x9e5d75b3	string	be:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadeVertexStencilFill.updb
+0x9e5d7713	string	ce:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadeVertexStencilFill2.updb
+0x9e5d784b	string	ee:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelSegmentationDS0.updb
+0x9e5d7910	string	g_SamplerSegmentation
+0x9e5d7938	string	g_SegmentationDSParams0
+0x9e5d7960	string	g_SegmentationDSParams1
+0x9e5d7b93	string	ee:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelSegmentationDS1.updb
+0x9e5d7c58	string	g_SamplerSegmentation
+0x9e5d7c80	string	g_SegmentationDSParams0
+0x9e5d7ca8	string	g_SegmentationDSParams1
+0x9e5d7e2b	string	ee:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelSegmentationDS2.updb
+0x9e5d7ef0	string	g_SamplerSegmentationDS
+0x9e5d7f18	string	g_SegmentationDSParams0
+0x9e5d7f40	string	g_SegmentationDSParams3
+0x9e5d809b	string	ee:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelSegmentationDS3.updb
+0x9e5d819c	string	g_SamplerSegmentation
+0x9e5d81c4	string	g_SamplerSegmentationDS
+0x9e5d81dc	string	g_SegmentationDSParams0
+0x9e5d8204	string	g_SegmentationDSParams1
+0x9e5d821c	string	g_SegmentationDSParams2
+0x9e5d8234	string	g_SegmentationDSParams3
+0x9e5d83fb	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelBodyPartClearRT1.updb
+0x9e5d84e8	string	g_BodyPartClearParams0
+0x9e5d8510	string	g_BodyPartClearParams1
+0x9e5d8527	string	g_BodyPartClearPlayerMask
+0x9e5d8541	string	g_SamplerBodyPartClearExclusive
+0x9e5d8574	string	g_SamplerBodyPartClearInclusive
+0x9e5d870b	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelBodyPartClearRT2.updb
+0x9e5d87f8	string	g_BodyPartClearParams0
+0x9e5d8820	string	g_BodyPartClearParams1
+0x9e5d8837	string	g_BodyPartClearPlayerMask
+0x9e5d8851	string	g_SamplerBodyPartClearExclusive
+0x9e5d8884	string	g_SamplerBodyPartClearInclusive
+0x9e5d8a23	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\analog\st\exemplar\xbox\obj\xbox\ShadePixelBodyPartClearRT4.updb
+0x9e5d8b10	string	g_BodyPartClearParams0
+0x9e5d8b38	string	g_BodyPartClearParams1
+0x9e5d8b4f	string	g_BodyPartClearPlayerMask
+0x9e5d8b69	string	g_SamplerBodyPartClearExclusive
+0x9e5d8b9c	string	g_SamplerBodyPartClearInclusive
+0x9e5d8e5c	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\dlls\dashnui\obj\xbox\dashnui.pdb
+0x9e64cd98	string	}d(P}k
+0x9e6e6b90	string	}*Kx}\tCx9
+0x9e806978	string	.?AV?$CComObjectNoLock@VCComClassFactory@ATL@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8069cc	string	.?AVCComClassFactory@ATL@NUISPEECH@@
+0x9e8069fc	string	.?AUIClassFactory@@
+0x9e806a18	string	.?AUIUnknown@@
+0x9e806a30	string	.?AV?$CComObjectRootEx@VCComMultiThreadModel@ATL@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e806a88	string	.?AVCComObjectRootBase@ATL@NUISPEECH@@
+0x9e806ab8	string	.?AV?$CComObject@VCRecoExt@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e806af8	string	.?AVCRecoExt@NUISPEECH@@
+0x9e806b20	string	.?AV?$CComCoClass@VCRecoExt@NUISPEECH@@$1?CLSID_RecoExt@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e806b7c	string	.?AUIMsasrRecoExt@@
+0x9e806b98	string	.?AUISpDisplayAlternates@@
+0x9e806bbc	string	.?AUISpDisplayAlternatesPrivate@@
+0x9e806be8	string	.?AUISpEnginePronunciation@@
+0x9e806c10	string	.?AV?$CComAggObject@VCRecoExt@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e806c58	string	.?AV?$CComObjectRootEx@VCComMultiThreadModelNoCS@ATL@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e806cb8	string	.?AV?$CComContainedObject@VCRecoExt@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e806f88	string	.?AVIEngineDataFileName@NUISPEECH@@
+0x9e806fb4	string	.?AVIDecoderCallback@NUISPEECH@@
+0x9e806fe0	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerDEU@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807038	string	.?AVCEngineLocaleHandlerDEU@NUISPEECH@@
+0x9e807068	string	.?AV?$CComCoClass@VCEngineLocaleHandlerDEU@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerDEU@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e8070e4	string	.?AVCEngineLocaleHandler@NUISPEECH@@
+0x9e807114	string	.?AUIMSASRLocaleHandler@@
+0x9e807138	string	.?AUISpObjectWithToken@@
+0x9e80715c	string	.?AVCVendorPhoneConverterSAPI2SR@NUISPEECH@@
+0x9e807194	string	.?AVCVendorPhoneConverter@NUISPEECH@@
+0x9e8071c4	string	.?AUISpPhoneConverter@@
+0x9e8071e8	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerESP@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807240	string	.?AVCEngineLocaleHandlerESP@NUISPEECH@@
+0x9e807270	string	.?AV?$CComCoClass@VCEngineLocaleHandlerESP@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerESP@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e8072f0	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerITA@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807348	string	.?AVCEngineLocaleHandlerITA@NUISPEECH@@
+0x9e807378	string	.?AV?$CComCoClass@VCEngineLocaleHandlerITA@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerITA@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e8073f8	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerJPN@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807450	string	.?AVCEngineLocaleHandlerJPN@NUISPEECH@@
+0x9e807480	string	.?AV?$CComCoClass@VCEngineLocaleHandlerJPN@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerJPN@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e8074fc	string	.?AVCVendorPhoneConverterSAPI2SR_JPN@NUISPEECH@@
+0x9e807538	string	.?AVCLTSLexiconHybrid@NUISPEECH@@
+0x9e807564	string	.?AVCLTSLexicon@NUISPEECH@@
+0x9e807588	string	.?AVCShareable@NUISPEECH@@
+0x9e8075ac	string	.?AVCBackgroundThread@NUISPEECH@@
+0x9e8075d8	string	.?AVCVendorPhoneConverterSAPI2SR_DEU@NUISPEECH@@
+0x9e807618	string	.?AV?$CComObject@VCEngineLocaleHandlerDEU@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807668	string	.?AV?$CComObject@VCEngineLocaleHandlerESP@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8076b8	string	.?AV?$CComObject@VCEngineLocaleHandlerITA@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807708	string	.?AV?$CComObject@VCEngineLocaleHandlerJPN@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807758	string	.?AVCDecoderCallback@NUISPEECH@@
+0x9e807784	string	.?AVCLTSLexiconENX@NUISPEECH@@
+0x9e8077ac	string	.?AVCLTSLexiconDEU@@
+0x9e8077cc	string	.?AVCLTSLexiconESP@@
+0x9e8077ec	string	.?AVCLTSLexiconITA@@
+0x9e807810	string	.?AV?$CComObject@VCAlternates@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807854	string	.?AVCAlternates@NUISPEECH@@
+0x9e807878	string	.?AV?$CComCoClass@VCAlternates@NUISPEECH@@$1?CLSID_Alternates@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e8078dc	string	.?AUISpSRAlternates2@@
+0x9e8078fc	string	.?AUISpSRAlternates@@
+0x9e807920	string	.?AV?$CComAggObject@VCAlternates@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807968	string	.?AV?$CComAggObject@VCTextNormMultiResult@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8079b8	string	.?AV?$CComAggObject@VCEngineLocaleHandlerDEU@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807a10	string	.?AV?$CComAggObject@VCEngineLocaleHandlerESP@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807a68	string	.?AV?$CComAggObject@VCEngineLocaleHandlerITA@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807ac0	string	.?AV?$CComAggObject@VCEngineLocaleHandlerJPN@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807b18	string	.?AV?$CComContainedObject@VCAlternates@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807b68	string	.?AV?$CComContainedObject@VCSREngine@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807bb4	string	.?AVCSREngine@NUISPEECH@@
+0x9e807bd8	string	.?AV?$CComCoClass@VCSREngine@NUISPEECH@@$1?CLSID_SREngine@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e807c38	string	.?AUISpSREngine2@@
+0x9e807c54	string	.?AUISpSREngine@@
+0x9e807c70	string	.?AUISpSerializeState@@
+0x9e807c90	string	.?AV?$CComContainedObject@VCTextNormMultiResult@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807ce4	string	.?AVCTextNormMultiResult@NUISPEECH@@
+0x9e807d18	string	.?AV?$CComCoClass@VCTextNormMultiResult@NUISPEECH@@$1?CLSID_TextNormMultiResult@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e807d8c	string	.?AUITextNormMultiResult@@
+0x9e807db0	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerFRA@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807e08	string	.?AVCEngineLocaleHandlerFRA@NUISPEECH@@
+0x9e807e38	string	.?AV?$CComCoClass@VCEngineLocaleHandlerFRA@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerFRA@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e807eb4	string	.?AVCVendorPhoneConverterSAPI2SR_FRA@NUISPEECH@@
+0x9e807ef0	string	.?AVCLTSLexiconFRA@@
+0x9e807f10	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerFRC@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e807f68	string	.?AVCEngineLocaleHandlerFRC@NUISPEECH@@
+0x9e807f98	string	.?AV?$CComCoClass@VCEngineLocaleHandlerFRC@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerFRC@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e808014	string	.?AVCVendorPhoneConverterSAPI2SR_FRC@NUISPEECH@@
+0x9e808050	string	.?AVCLTSLexiconFRC@@
+0x9e808070	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerEST@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8080c8	string	.?AVCEngineLocaleHandlerEST@NUISPEECH@@
+0x9e8080f8	string	.?AV?$CComCoClass@VCEngineLocaleHandlerEST@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerEST@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e808174	string	.?AVCVendorPhoneConverterSAPI2SR_EST@@
+0x9e8081a4	string	.?AVCLTSLexiconEST@@
+0x9e8081c8	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerGEN@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808220	string	.?AVCEngineLocaleHandlerGEN@NUISPEECH@@
+0x9e808250	string	.?AV?$CComCoClass@VCEngineLocaleHandlerGEN@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerGEN@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e8082cc	string	.?AVCVendorPhoneConverterSAPI2SR_GEN@NUISPEECH@@
+0x9e808308	string	.?AVCLTSLexiconGEN@@
+0x9e808328	string	.?AV?$CComObject@VCSREngine@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808368	string	.?AV?$CComAggObject@VCSREngine@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8083b0	string	.?AV?$CComObject@VCTextNormMultiResult@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808400	string	.?AV?$CComObject@VCEngineLocaleHandlerFRA@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808450	string	.?AV?$CComAggObject@VCEngineLocaleHandlerFRA@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8084a8	string	.?AV?$CComObject@VCEngineLocaleHandlerFRC@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8084f8	string	.?AV?$CComAggObject@VCEngineLocaleHandlerFRC@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808550	string	.?AV?$CComObject@VCEngineLocaleHandlerEST@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8085a0	string	.?AV?$CComAggObject@VCEngineLocaleHandlerEST@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8085f8	string	.?AV?$CComObject@VCEngineLocaleHandlerGEN@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808648	string	.?AV?$CComAggObject@VCEngineLocaleHandlerGEN@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8086a0	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerENG@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8086f8	string	.?AVCEngineLocaleHandlerENG@NUISPEECH@@
+0x9e808728	string	.?AV?$CComCoClass@VCEngineLocaleHandlerENG@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerENG@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e8087a4	string	.?AVCEngineLocaleHandlerENX@NUISPEECH@@
+0x9e8087d4	string	.?AVCVendorPhoneConverterSAPI2SR_ENG@NUISPEECH@@
+0x9e808810	string	.?AVCTextNormalizerENG@NUISPEECH@@
+0x9e80883c	string	.?AVCTextNormalizerENX@NUISPEECH@@
+0x9e808868	string	.?AVCTextNormalizer@NUISPEECH@@
+0x9e808890	string	.?AV?$CComContainedObject@VCEngineLocaleHandlerENU@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e8088e8	string	.?AVCEngineLocaleHandlerENU@NUISPEECH@@
+0x9e808918	string	.?AV?$CComCoClass@VCEngineLocaleHandlerENU@NUISPEECH@@$1?CLSID_MSASRLocaleHandlerENU@@3U_GUID@@B@ATL@NUISPEECH@@
+0x9e808994	string	.?AVCTextNormalizerENU@NUISPEECH@@
+0x9e8089c0	string	.?AV?$CComObject@VCEngineLocaleHandlerENG@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808a10	string	.?AV?$CComAggObject@VCEngineLocaleHandlerENG@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808a68	string	.?AV?$CComObject@VCEngineLocaleHandlerENU@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808ab8	string	.?AV?$CComAggObject@VCEngineLocaleHandlerENU@NUISPEECH@@@ATL@NUISPEECH@@
+0x9e808f78	string	.?AV?$CLmHash@UHashEntryTypeSAPIIdPron@NUISPEECH@@VHashBucketBase@2@@@
+0x9e808fc8	string	.?AV?$CLmHash@UHashEntryTypeSRLabel@NUISPEECH@@VHashBucketBase@2@@@
+0x9e809014	string	.?AVPHN_DICT@NUISPEECH@@
+0x9e809078	string	.?AVCAffineTransform@NUISPEECH@@
+0x9e8090a4	string	.?AVIMatrixTransform@NUISPEECH@@
+0x9e8090d0	string	.?AVITransform@NUISPEECH@@
+0x9e8090f4	string	.?AV?$CAllocOnSpecificHeap@$0A@@NUISPEECH@@
+0x9e809128	string	.?AVCAllocOnSpecificHeapBase@NUISPEECH@@
+0x9e80915c	string	.?AVCLinearTransform@NUISPEECH@@
+0x9e809188	string	.?AVCSLM@NUISPEECH@@
+0x9e8091a8	string	.?AVCLM@NUISPEECH@@
+0x9e8091c4	string	.?AVCSRTopicCFG@NUISPEECH@@
+0x9e8091e8	string	.?AVICSRTopic@NUISPEECH@@
+0x9e80920c	string	.?AVCBuilderCallBack@NUISPEECH@@
+0x9e8092a0	string	.?AVCSSCompiler@NUISPEECH@@
+0x9e8092c4	string	.?AV?$CHash@UTRIPH@NUISPEECH@@G@NUISPEECH@@
+0x9e8092f8	string	.?AV?$CHash@PBDPAD@NUISPEECH@@
+0x9e809320	string	.?AVCSharedUserLex@NUISPEECH@@
+0x9e809348	string	.?AV?$CSimpleHash@UTRIPH@NUISPEECH@@G@NUISPEECH@@
+0x9e809384	string	.?AV?$CStringHashT@DPAD@NUISPEECH@@
+0x9e8093b0	string	.?AVCTriphoneHash@NUISPEECH@@
+0x9e8093d8	string	.?AV?$CStringHash@PAD@NUISPEECH@@
+0x9e809414	string	.?AVCSRTopicSLM@NUISPEECH@@
+0x9e809438	string	.?AVCShareableFileMapping@NUISPEECH@@
+0x9e809468	string	.?AVCSequentialRead@NUISPEECH@@
+0x9e809490	string	.?AVCSequentialReadMem@NUISPEECH@@
+0x9e8094bc	string	.?AVCFrontEndWrapper@NUISPEECH@@
+0x9e8094e8	string	.?AVCSRFrontEnd@NUISPEECH@@
+0x9e80950c	string	.?AVCRUXWORD@NUISPEECH@@
+0x9e809530	string	.?AVCClassModel@NUISPEECH@@
+0x9e809554	string	.?AVCClassModelSimple@NUISPEECH@@
+0x9e809754	string	.?AVCSequentialReadFile@NUISPEECH@@
+0x9e809780	string	.?AVCSpCfgInst@NUISPEECH@@
+0x9e8097a4	string	.?AVCSpCfgInstRT@NUISPEECH@@
+0x9e8097cc	string	.?AVCSpCfgInstRTSer@NUISPEECH@@
+0x9e8097f4	string	.?AVCStateBuilder@NUISPEECH@@
+0x9e80981c	string	.?AVCStateBuilderRT@NUISPEECH@@
+0x9e809860	string	.?AVCSenoneMap@NUISPEECH@@
+0x9e809bf8	string	.?AVbad_alloc@std@@
+0x9e809c14	string	.?AVexception@std@@
+0x9e80a781	string	abcdefghijklmnopqrstuvwxyz
+0x9e80a7a1	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9e84e324	string	dashnui.xex
+0x9e84e330	string	CreateCursorManagerEx
+0x9e84e346	string	CreateHandleManagerEx
+0x9e84e35c	string	CreateNuiSwipeEx
+0x9e84e36d	string	CreateScourChapterInfoEx
+0x9e84e386	string	CreateScourLogicEx
+0x9e84e399	string	NuiTransformSmooth
+0x9e84e3ac	string	NuiCameraAdjustTilt
+0x9e84e3c0	string	NuiCameraElevationSetAngle
+0x9e84e3db	string	NuiCameraGetColorImageViewArea
+0x9e84e3fa	string	NuiCameraGetExposureRegionOfInterest
+0x9e84e41f	string	NuiCameraGetProperty
+0x9e84e434	string	NuiCameraGetPropertyF
+0x9e84e44a	string	NuiCameraSetColorImageViewArea
+0x9e84e469	string	NuiCameraSetExposureRegionOfInterest
+0x9e84e48e	string	NuiCameraSetProperty
+0x9e84e4a3	string	NuiCameraSetPropertyF
+0x9e84e4b9	string	NuiGestureInit
+0x9e84e4c8	string	NuiGestureUninit
+0x9e84e4d9	string	NuiGestureUpdate
+0x9e84e4ea	string	NuiHandlesGetRayFromScreenPosition
+0x9e84e50d	string	NuiHandlesGetScreenPositionFromRay
+0x9e84e530	string	NuiIdentityAbort
+0x9e84e541	string	NuiIdentityEnroll
+0x9e84e553	string	NuiIdentityGetEnrollmentInformation
+0x9e84e577	string	NuiIdentityIdentify
+0x9e84e58b	string	NuiIdentityUnenroll
+0x9e84e59f	string	NuiImageStreamGetNextFrame
+0x9e84e5ba	string	NuiImageStreamOpen
+0x9e84e5cd	string	NuiImageStreamReleaseFrame
+0x9e84e5e8	string	NuiSetFrameEndEvent
+0x9e84e5fc	string	NuiShutdown
+0x9e84e608	string	NuiSkeletonGetNextFrame
+0x9e84e620	string	NuiSkeletonSetTrackedSkeletons
+0x9e84e63f	string	NuiSkeletonTrackingDisable
+0x9e84e65a	string	NuiSkeletonTrackingEnable
+0x9e84e674	string	NuiSpeechAddRuleTransition
+0x9e84e68f	string	NuiSpeechAddWordTransition
+0x9e84e6aa	string	NuiSpeechClearRule
+0x9e84e6bd	string	NuiSpeechCommitGrammar
+0x9e84e6d4	string	NuiSpeechCreateGrammar
+0x9e84e6eb	string	NuiSpeechCreateRule
+0x9e84e6ff	string	NuiSpeechCreateState
+0x9e84e714	string	NuiSpeechDestroyEvent
+0x9e84e72a	string	NuiSpeechDisable
+0x9e84e73b	string	NuiSpeechGetEvents
+0x9e84e74e	string	NuiSpeechGetGrammarState
+0x9e84e767	string	NuiSpeechGetProperty
+0x9e84e77c	string	NuiSpeechLoadGrammarFromMemory
+0x9e84e79b	string	NuiSpeechProcessWaveInput
+0x9e84e7b5	string	NuiSpeechSetDataCollectionContext
+0x9e84e7d7	string	NuiSpeechSetEventInterest
+0x9e84e7f1	string	NuiSpeechSetGrammarState
+0x9e84e80a	string	NuiSpeechSetProperty
+0x9e84e81f	string	NuiSpeechSetRuleState
+0x9e84e835	string	NuiSpeechSetRuleWeight
+0x9e84e84c	string	NuiSpeechStartRecognition
+0x9e84e866	string	NuiSpeechStopRecognition
+0x9e84e87f	string	NuiSpeechUnloadGrammar
+0x9e84e896	string	NuipBuildXamNuiFrameData
+0x9e84e8af	string	NuipForceReinitialize
+0x9e84e8c5	string	NuipIdentityGetBiometricMatchXuid
+0x9e84e8e7	string	NuipInitialize
+0x9e84e8f6	string	NuipSpeechDestroyRuntimeGrammarInfo
+0x9e84e91a	string	NuipSpeechEnable
+0x9e84e92b	string	NuipSpeechGetRuntimeGrammarInfo
+0x9e84e94b	string	NuipSpeechSetKinectDataCallback
+0x9e84e96b	string	SpeechOnlineCancelRecognition
+0x9e84e989	string	SpeechOnlineDestroyRecognition
+0x9e84e9a8	string	SpeechOnlineDisable
+0x9e84e9bc	string	SpeechOnlineEnable
+0x9e84e9cf	string	SpeechOnlineGetShouldShowPrivacyDialog
+0x9e84e9f6	string	SpeechOnlineRecognize
+0x9e84ea0c	string	SpeechOnlineRecognizeWaveFile
+0x9e84ea2a	string	SpeechOnlineSetPrivacyDialogShown
+0x9e84ea4c	string	SpeechOnlineSetProperty
+0x9e84ea64	string	SpeechOnlineSetRecognitionStateCallback
+0x9e84f007	string	ko-kr\VuiBarScene43.xus
+0x9e84f027	string	ko-kr\VuiCommand.xus
+0x9e84f044	string	ko-kr\VuiGlobalCommand.xus
+0x9e84f067	string	ko-kr\VuiInstructions.xus
+0x9e84f089	string	ko-kr\VuiMeter.xus
+0x9e84f0a4	string	ko-kr\VuiMic.xus
+0x9e84f0bd	string	ja-jp\speechstrings.xus
+0x9e84f0dd	string	ja-jp\VuiBarScene.xus
+0x9e84f0fb	string	ja-jp\VuiBarScene43.xus
+0x9e84f11b	string	ja-jp\VuiCommand.xus
+0x9e84f138	string	ja-jp\VuiGlobalCommand.xus
+0x9e84f15b	string	ja-jp\VuiInstructions.xus
+0x9e84f17d	string	ja-jp\VuiMeter.xus
+0x9e84f198	string	ja-jp\VuiMic.xus
+0x9e84f1b1	string	pl-pl\speechstrings.xus
+0x9e84f1d1	string	pl-pl\VuiBarScene.xus
+0x9e84f1ef	string	pl-pl\VuiBarScene43.xus
+0x9e84f20f	string	pl-pl\VuiCommand.xus
+0x9e84f22c	string	pl-pl\VuiGlobalCommand.xus
+0x9e84f24f	string	pl-pl\VuiInstructions.xus
+0x9e84f271	string	pl-pl\VuiMeter.xus
+0x9e84f28c	string	pl-pl\VuiMic.xus
+0x9e84f2a5	string	pt-br\speechstrings.xus
+0x9e84f2c5	string	pt-br\VuiBarScene.xus
+0x9e84f2e3	string	pt-br\VuiBarScene43.xus
+0x9e84f303	string	pt-br\VuiCommand.xus
+0x9e84f320	string	pt-br\VuiGlobalCommand.xus
+0x9e84f343	string	pt-br\VuiInstructions.xus
+0x9e84f365	string	pt-br\VuiMeter.xus
+0x9e84f380	string	pt-br\VuiMic.xus
+0x9e84f399	string	ru-ru\speechstrings.xus
+0x9e84f3b9	string	ru-ru\VuiBarScene.xus
+0x9e84f3d7	string	ru-ru\VuiBarScene43.xus
+0x9e84f3f7	string	ru-ru\VuiCommand.xus
+0x9e84f414	string	ru-ru\VuiGlobalCommand.xus
+0x9e84f437	string	ru-ru\VuiInstructions.xus
+0x9e84f459	string	ru-ru\VuiMeter.xus
+0x9e84f474	string	ru-ru\VuiMic.xus
+0x9e84f48d	string	zh-tw\speechstrings.xus
+0x9e84f4ad	string	zh-tw\VuiBarScene.xus
+0x9e84f4cb	string	zh-tw\VuiBarScene43.xus
+0x9e850000	string	sambiguation
+0x9e85000d	string	EndEnterDisambiguation
+0x9e850024	string	ExitDisambiguation
+0x9e850037	string	EndExitDisambiguation
+0x9e85004d	string	VuiMeterAndCommands
+0x9e850061	string	VuiMeterPlaceholder
+0x9e850075	string	XuiImage
+0x9e85007e	string	VuiCommands
+0x9e85008a	string	CommandTextDis
+0x9e850099	string	XuiText
+0x9e8500a1	string	VuiMicPlaceholder
+0x9e8500b3	string	Padding
+0x9e8500bb	string	ConfirmCommandAndFadeOut
+0x9e850480	string	VuiMeterScene
+0x9e85048e	string	Column1
+0x9e850496	string	VuiMeter_progress
+0x9e8504a8	string	XuiProgressBar
+0x9e8504f7	string	Column10
+0x9e850500	string	Column11
+0x9e850509	string	Column12
+0x9e850512	string	Column13
+0x9e85051b	string	Column14
+0x9e850524	string	Column15
+0x9e85052d	string	Column16
+0x9e850536	string	Default
+0x9e85053e	string	LowVolume
+0x9e850548	string	LowVolumeLoop
+0x9e850556	string	ActiveListening
+0x9e850566	string	ActiveListeningLoop
+0x9e85057a	string	XuiScene
+0x9e850583	string	XuiCanvas
+0x9e850b1a	string	qNAME
+0x9e850b39	string	VuiMicScene
+0x9e850b45	string	VuiMic
+0x9e850b56	string	common://ico_32x_mic.png
+0x9e850b6f	string	XuiImage
+0x9e850b78	string	XuiScene
+0x9e850b81	string	TooSoftArrow
+0x9e850b8e	string	ico_arrow.png
+0x9e850b9c	string	TooLoudArrow
+0x9e850ba9	string	Default
+0x9e850bb1	string	FadeIn
+0x9e850bb8	string	FadeInEnd
+0x9e850bc2	string	TooSoft
+0x9e850bca	string	TooSoftEnd
+0x9e850bd5	string	TooLoud
+0x9e850bdd	string	TooLoudEnd
+0x9e850be8	string	FadeOut
+0x9e850bf0	string	FadeOutEnd
+0x9e850bfb	string	XuiCanvas
+0x9e850e17	string	ANAME
+0x9e850e36	string	VuiCommandScene
+0x9e850e46	string	XuiFigure
+0x9e850e50	string	CommandText
+0x9e850e5c	string	XuiText
+0x9e850e64	string	Default
+0x9e850e6c	string	FadeInWithMaximumWait
+0x9e850e82	string	FadeInWaitForVuiBar
+0x9e850e96	string	FadeIn
+0x9e850e9d	string	FadeInEnd
+0x9e850ea7	string	Select
+0x9e850eae	string	SelectEnd
+0x9e850eb8	string	FadeOut
+0x9e850ec0	string	FadeOutEnd
+0x9e850ecb	string	SelectNoFade
+0x9e850ed8	string	SelectNoFadeEnd
+0x9e850ee8	string	ScrollUp
+0x9e850ef1	string	ScrollUpEnd
+0x9e850efd	string	XuiScene
+0x9e850f06	string	XuiCanvas
+0x9e851140	string	VuiGlobalCommandScene
+0x9e851156	string	XuiFigure
+0x9e851160	string	CommandText
+0x9e85116c	string	XuiText
+0x9e851174	string	Default
+0x9e85117c	string	FadeInWithMaximumWait
+0x9e851192	string	FadeInWaitForVuiBar
+0x9e8511a6	string	FadeIn
+0x9e8511ad	string	FadeInEnd
+0x9e8511b7	string	Select
+0x9e8511be	string	SelectEnd
+0x9e8511c8	string	FadeOut
+0x9e8511d0	string	FadeOutEnd
+0x9e8511db	string	SelectNoFade
+0x9e8511e8	string	SelectNoFadeEnd
+0x9e8511f8	string	XuiScene
+0x9e851201	string	XuiCanvas
+0x9e851403	string	ANAME
+0x9e851422	string	VuiInstructionsScene
+0x9e851437	string	XuiFigure
+0x9e851441	string	CommandText
+0x9e85144d	string	XuiText
+0x9e851455	string	Default
+0x9e85145d	string	FadeInWithMaximumWait
+0x9e851473	string	FadeInWaitForVuiBar
+0x9e851487	string	FadeIn
+0x9e85148e	string	FadeInEnd
+0x9e851498	string	Select
+0x9e85149f	string	SelectEnd
+0x9e8514a9	string	FadeOut
+0x9e8514b1	string	FadeOutEnd
+0x9e8514bc	string	SelectNoFade
+0x9e8514c9	string	SelectNoFadeEnd
+0x9e8514d9	string	ScrollUp
+0x9e8514e2	string	ScrollUpEnd
+0x9e8514ee	string	XuiScene
+0x9e8514f7	string	XuiCanvas
+0x9e851767	string	EElement 1
+0x9e851772	string	Element eins
+0x9e85177f	string	Element 2
+0x9e851789	string	Element zwei
+0x9e851796	string	Element 3
+0x9e8517a0	string	Element drei
+0x9e8517ad	string	Element 4
+0x9e8517b7	string	Element vier
+0x9e8517c4	string	Element 5
+0x9e8517dc	string	Element 6
+0x9e8517e6	string	Element sechs
+0x9e8517f4	string	Element 7
+0x9e8517fe	string	Element sieben
+0x9e85180d	string	Element 8
+0x9e851817	string	Element acht
+0x9e851824	string	Welches?
+0x9e85182d	string	Nachdenken ...
+0x9e851850	string	ck gehen
+0x9e85185e	string	ck gehen
+0x9e851867	string	Zur Startseite ...
+0x9e85187a	string	Zur Startseite?
+0x9e85188a	string	Zur Startseite
+0x9e851899	string	Zur Startseite
+0x9e8518a8	string	Weiter
+0x9e8518af	string	Weiter
+0x9e8518c6	string	Abbrechen
+0x9e8518d0	string	Abbrechen
+0x9e8518da	string	Weitere Optionen ...
+0x9e8518ef	string	Weitere Optionen
+0x9e851901	string	Schneller Vorlauf
+0x9e851913	string	Schneller Vorlauf
+0x9e851925	string	Schneller
+0x9e85192f	string	Schneller
+0x9e851939	string	Weiter
+0x9e851940	string	Weiter
+0x9e851948	string	Pause
+0x9e85194e	string	Abspielen
+0x9e851958	string	abspielen
+0x9e851962	string	Abspielen
+0x9e85196c	string	abspielen
+0x9e85198b	string	ckspulen
+0x9e851999	string	ckspulen
+0x9e8519a7	string	llige Wiedergabe
+0x9e8519bd	string	llige Wiedergabe
+0x9e8519ce	string	Langsamer
+0x9e8519d8	string	Langsamer
+0x9e851a05	string	Bing (Ihre Suche)
+0x9e851a63	string	ter erneut.
+0x9e851a71	string	%1!s! wird gestartet ...
+0x9e851a93	string	tigen jetzt einen Controller. Fortfahren?
+0x9e851b1c	string	EElemento 1
+0x9e851b28	string	elemento uno
+0x9e851b35	string	Elemento 2
+0x9e851b40	string	elemento dos
+0x9e851b4d	string	Elemento 3
+0x9e851b58	string	elemento tres
+0x9e851b66	string	Elemento 4
+0x9e851b71	string	elemento cuatro
+0x9e851b81	string	Elemento 5
+0x9e851b8c	string	elemento cinco
+0x9e851b9b	string	Elemento 6
+0x9e851ba6	string	elemento seis
+0x9e851bb4	string	Elemento 7
+0x9e851bbf	string	elemento siete
+0x9e851bce	string	Elemento 8
+0x9e851bd9	string	elemento ocho
+0x9e851bf0	string	Pensando...
+0x9e851c2b	string	gina de inicio...
+0x9e851c3f	string	Ir a inicio?
+0x9e851c4c	string	Ir a inicio
+0x9e851c58	string	ir a inicio
+0x9e851c64	string	Siguiente
+0x9e851c6e	string	siguiente
+0x9e851c78	string	Anterior
+0x9e851c81	string	anterior
+0x9e851c8a	string	Cancelar
+0x9e851c93	string	cancelar
+0x9e851c9f	string	s opciones...
+0x9e851cb0	string	s opciones
+0x9e851cbc	string	Adelanta
+0x9e851cc5	string	adelanta
+0x9e851ce8	string	Siguiente
+0x9e851cf2	string	siguiente
+0x9e851cfc	string	Pausar
+0x9e851d03	string	pausar
+0x9e851d0a	string	Reproducir
+0x9e851d15	string	reproducir
+0x9e851d20	string	Reproducir
+0x9e851d2b	string	reproducir
+0x9e851d36	string	Anterior
+0x9e851d3f	string	anterior
+0x9e851d48	string	Retrocede
+0x9e851d52	string	retrocede
+0x9e851d5c	string	Aleatorio
+0x9e851d66	string	aleatorio
+0x9e851d73	string	s lento
+0x9e851d7e	string	s lento
+0x9e851d86	string	Detente
+0x9e851d8e	string	detente
+0x9e851d96	string	detente
+0x9e851dfb	string	s tarde.
+0x9e851e04	string	Aceptar
+0x9e851e0d	string	Iniciando %1!s!...
+0x9e851e3f	string	Deseas continuar?
+0x9e851ed1	string	ment 2
+0x9e851edd	string	ment deux
+0x9e851eec	string	ment 3
+0x9e851ef8	string	ment trois
+0x9e851f08	string	ment 4
+0x9e851f14	string	ment quatre
+0x9e851f25	string	ment 5
+0x9e851f31	string	ment cinq
+0x9e851f4c	string	ment six
+0x9e851f66	string	ment sept
+0x9e851f75	string	ment 8
+0x9e851f81	string	ment huit
+0x9e851f9f	string	chis...
+0x9e851fa7	string	Retour ?
+0x9e851fb0	string	Retour
+0x9e851fb7	string	Retour
+0x9e851fcc	string	accueil...
+0x9e85201c	string	Suivant
+0x9e852024	string	Suivant
+0x9e852044	string	Annuler
+0x9e85204c	string	Annuler
+0x9e85205d	string	options...
+0x9e852071	string	options
+0x9e85207a	string	Avance rapide
+0x9e852088	string	Avance rapide
+0x9e852096	string	Plus vite
+0x9e8520a0	string	Plus vite
+0x9e8520aa	string	Suivant
+0x9e8520b2	string	Suivant
+0x9e8520c6	string	Regarder
+0x9e8520cf	string	regarder
+0x9e8520f0	string	Retour rapide
+0x9e8520fe	string	Retour rapide
+0x9e852118	string	atoire
+0x9e85212b	string	atoire
+0x9e852132	string	Moins vite
+0x9e85213d	string	Moins vite
+0x9e852174	string	Bing (votre recherche)
+0x9e8521d8	string	rieurement.
+0x9e8521e9	string	marrage de %1!s!...
+0x9e85229e	string	EElemento 1
+0x9e8522aa	string	Elemento uno
+0x9e8522b7	string	Elemento 2
+0x9e8522c2	string	Elemento due
+0x9e8522cf	string	Elemento 3
+0x9e8522da	string	Elemento tre
+0x9e8522e7	string	Elemento 4
+0x9e8522f2	string	Elemento quattro
+0x9e852303	string	Elemento 5
+0x9e85230e	string	Elemento cinque
+0x9e85231e	string	Elemento 6
+0x9e852329	string	Elemento sei
+0x9e852336	string	Elemento 7
+0x9e852341	string	Elemento sette
+0x9e852350	string	Elemento 8
+0x9e85235b	string	Elemento otto
+0x9e852369	string	Quale di questi?
+0x9e85237a	string	Elaborazione in corso...
+0x9e852393	string	Tornare indietro?
+0x9e8523a5	string	Torna indietro
+0x9e8523b4	string	Torna indietro
+0x9e8523c3	string	Ritorno all'inizio...
+0x9e8523d9	string	Tornare all'inizio?
+0x9e8523ed	string	Vai all'inizio
+0x9e8523fc	string	Vai all'inizio
+0x9e85240b	string	Successivo
+0x9e852416	string	Successivo
+0x9e852421	string	Precedente
+0x9e85242c	string	Precedente
+0x9e852437	string	Annulla
+0x9e85243f	string	Annulla
+0x9e852447	string	Altre opzioni...
+0x9e852458	string	Altre opzioni
+0x9e852467	string	Avanti veloce
+0x9e852475	string	Avanti veloce
+0x9e852487	string	 veloce
+0x9e852493	string	 veloce
+0x9e85249b	string	Successivo
+0x9e8524a6	string	Successivo
+0x9e8524b1	string	Pausa
+0x9e8524b7	string	Pausa
+0x9e8524bd	string	Riproduci
+0x9e8524c7	string	riproduci
+0x9e8524d1	string	Riproduci
+0x9e8524db	string	riproduci
+0x9e8524e5	string	Precedente
+0x9e8524f0	string	Precedente
+0x9e85250f	string	Riproduzione casuale
+0x9e852524	string	Riproduzione casuale
+0x9e852539	string	Piu lento
+0x9e852543	string	Piu lento
+0x9e85254d	string	Interrompi
+0x9e852558	string	Interrompi
+0x9e852563	string	Interrompi
+0x9e852579	string	Bing (la tua ricerca)
+0x9e852590	string	Impossibile elaborare ora le informazioni per il riconoscimento vocale. Riprova in seguito.
+0x9e8525ee	string	Avvio di %1!s! in corso...
+0x9e85260f	string	 necessario un controller. Continuare?
+0x9e853161	string	EElement 1
+0x9e85316d	string	Element 2
+0x9e853178	string	Element 3
+0x9e853183	string	Element 4
+0x9e85318e	string	Element 5
+0x9e853199	string	Element 6
+0x9e8531a4	string	Element 7
+0x9e8531af	string	Element 8
+0x9e8531be	string	ry element?
+0x9e8531ca	string	Analizowanie...
+0x9e85326f	string	Do przodu
+0x9e8532d7	string	Bing (Twoje wyszukiwanie)
+0x9e85334a	string	Uruchamianie %1!s!...
+0x9e8533f8	string	item um
+0x9e853401	string	item dois
+0x9e853418	string	item quatro
+0x9e853425	string	item cinco
+0x9e853431	string	item seis
+0x9e85343c	string	item sete
+0x9e853447	string	item oito
+0x9e853457	string	Processando...
+0x9e85346e	string	Voltar
+0x9e853475	string	voltar
+0x9e8534dc	string	Anterior
+0x9e8534e5	string	anterior
+0x9e8534ee	string	Cancelar
+0x9e8534f7	string	cancelar
+0x9e85355e	string	Pausar
+0x9e853565	string	pausar
+0x9e85356c	string	Iniciar
+0x9e853574	string	iniciar
+0x9e85357c	string	Iniciar
+0x9e853584	string	Iniciar
+0x9e85358c	string	Anterior
+0x9e853595	string	anterior
+0x9e85359e	string	Retroceder
+0x9e8535a9	string	Retroceder
+0x9e8535ca	string	Mais Lento
+0x9e8535d5	string	mais lento
+0x9e8535e0	string	Parar
+0x9e8535e6	string	parar
+0x9e8535ec	string	parar
+0x9e853605	string	Bing (sua pesquisa)
+0x9e853635	string	vel processar a voz no momento. Tente novamente mais tarde.
+0x9e853673	string	Iniciando %1!s!...
+0x9e85369c	string	 de um controle. Continuar?

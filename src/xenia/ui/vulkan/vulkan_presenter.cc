@@ -9,13 +9,17 @@
 
 #include "xenia/ui/vulkan/vulkan_presenter.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 
 #include "xenia/base/assert.h"
 #include "xenia/base/cvar.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/math.h"
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/base/platform.h"
+#include "xenia/ui/native_ui_plane_handoff.h"
 #include "xenia/ui/vulkan/vulkan_util.h"
 
 #if XE_PLATFORM_ANDROID
@@ -73,6 +77,7 @@ namespace shaders {
 #include "xenia/ui/shaders/bytecode/vulkan_spirv/guest_output_ffx_fsr_rcas_dither_ps.h"
 #include "xenia/ui/shaders/bytecode/vulkan_spirv/guest_output_ffx_fsr_rcas_ps.h"
 #include "xenia/ui/shaders/bytecode/vulkan_spirv/guest_output_triangle_strip_rect_vs.h"
+#include "xenia/ui/shaders/bytecode/vulkan_spirv/native_ui_plane_ps.h"
 }  // namespace shaders
 
 VulkanPresenter::PaintContext::Submission::~Submission() {
@@ -136,6 +141,16 @@ bool VulkanPresenter::PaintContext::Submission::Initialize() {
 }
 
 VulkanPresenter::~VulkanPresenter() {
+  if (native_gpu_cohort_epoch_ && !native_ui_plane_stopped_) {
+    // A native image may still be sampled by an actual paint submission.
+    // Destruction cannot replace the required sealed device-stop boundary.
+    try {
+      XELOGE("Native UI Presenter destroyed without its backend stop proof");
+      xe::FlushLog();
+    } catch (...) {
+    }
+    std::quick_exit(EXIT_FAILURE);
+  }
   // Destroy the swapchain after its images are not used for drawing anymore.
   // This is a confusing part in Vulkan, as vkQueuePresentKHR doesn't signal a
   // fence clearly indicating when it's safe to destroy a swapchain, so we
@@ -156,6 +171,8 @@ VulkanPresenter::~VulkanPresenter() {
 
   const VulkanDevice::Functions& dfn = vulkan_device_->functions();
   const VkDevice device = vulkan_device_->device();
+
+  DestroyNativeUiPlaneResources();
 
   if (paint_context_.swapchain_render_pass != VK_NULL_HANDLE) {
     dfn.vkDestroyRenderPass(device, paint_context_.swapchain_render_pass,
@@ -241,6 +258,12 @@ Surface::TypeFlags VulkanPresenter::GetSupportedSurfaceTypes() const {
 }
 
 bool VulkanPresenter::CaptureGuestOutput(RawImage& image_out) {
+  std::lock_guard submission_lock(submission_mutex_);
+  // This legacy helper lacks strict failed-submit/wait resource quarantine.
+  // Native diagnostics use the checked source readback path instead.
+  if (submissions_sealed_ || native_gpu_cohort_epoch_) {
+    return false;
+  }
   std::shared_ptr<GuestOutputImage> guest_output_image;
   {
     uint32_t guest_output_mailbox_index;
@@ -392,6 +415,7 @@ bool VulkanPresenter::CaptureGuestOutput(RawImage& image_out) {
       const VkResult submit_result = completion_timeline.AcquireFenceAndSubmit(
           vulkan_device_->queue_family_graphics_compute(), 0, 1, &submit_info);
       if (submit_result != VK_SUCCESS) {
+        legacy_capture_failed_ = true;
         XELOGE(
             "VulkanPresenter: Failed to submit the guest output capturing "
             "command buffer: {}",
@@ -401,7 +425,14 @@ bool VulkanPresenter::CaptureGuestOutput(RawImage& image_out) {
         dfn.vkFreeMemory(device, buffer_memory, nullptr);
         return false;
       }
-      // Destroying the completion timeline causes the submission to be awaited.
+      completion_timeline.AwaitAllSubmissions();
+      if (completion_timeline.last_completion_error() != VK_SUCCESS ||
+          completion_timeline.GetCompletedSubmissionFromLastUpdate() <
+              completion_timeline.GetUpcomingSubmission() - 1) {
+        // Preserve legacy recovery, but do not admit a native cohort after an
+        // unproven capture prefix. The submission gate drains this entire call.
+        legacy_capture_failed_ = true;
+      }
     }
 
     dfn.vkDestroyCommandPool(device, command_pool, nullptr);
@@ -436,6 +467,10 @@ bool VulkanPresenter::CaptureGuestOutput(RawImage& image_out) {
 }
 
 VkCommandBuffer VulkanPresenter::AcquireUISetupCommandBufferFromUIThread() {
+  std::lock_guard submission_lock(submission_mutex_);
+  if (submissions_sealed_) {
+    return VK_NULL_HANDLE;
+  }
   if (paint_context_.ui_setup_command_buffer_current_index != SIZE_MAX) {
     return paint_context_
         .ui_setup_command_buffers[paint_context_
@@ -530,6 +565,10 @@ VulkanPresenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(
     Surface& new_surface, uint32_t new_surface_width,
     uint32_t new_surface_height, bool was_paintable,
     bool& is_vsync_implicit_out) {
+  std::lock_guard submission_lock(submission_mutex_);
+  if (submissions_sealed_ || !AwaitNativeUiPlanePaintRetirementLocked()) {
+    return SurfacePaintConnectResult::kFailure;
+  }
   const VulkanInstance* const vulkan_instance =
       vulkan_device_->vulkan_instance();
   const VulkanInstance::Functions& ifn = vulkan_instance->functions();
@@ -903,6 +942,11 @@ VulkanPresenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(
 }
 
 void VulkanPresenter::DisconnectPaintingFromSurfaceFromUIThreadImpl() {
+  std::lock_guard submission_lock(submission_mutex_);
+  if (!AwaitNativeUiPlanePaintRetirementLocked()) {
+    // Keep all native/WSI references until the sealed device-stop path.
+    return;
+  }
   paint_context_.DestroySwapchainAndVulkanSurface();
 }
 
@@ -911,6 +955,10 @@ bool VulkanPresenter::RefreshGuestOutputImpl(
     uint32_t frontbuffer_height,
     std::function<bool(GuestOutputRefreshContext& context)> refresher,
     bool& is_8bpc_out_ref) {
+  std::lock_guard submission_lock(submission_mutex_);
+  if (submissions_sealed_) {
+    return false;
+  }
   assert_not_zero(frontbuffer_width);
   assert_not_zero(frontbuffer_height);
   VkExtent2D max_framebuffer_extent =
@@ -946,10 +994,7 @@ bool VulkanPresenter::RefreshGuestOutputImpl(
       is_8bpc_out_ref, image_instance.image->image(),
       image_instance.image->view(), image_instance.version,
       image_instance.ever_successfully_refreshed);
-  bool refresher_succeeded = refresher(context);
-  if (refresher_succeeded) {
-    image_instance.ever_successfully_refreshed = true;
-  }
+  const bool refresher_succeeded = refresher(context);
   // Even if the refresher has returned false, it still might have submitted
   // some commands referencing the image. It's better to put an excessive
   // signal and wait slightly longer, for nothing important, while shutting down
@@ -969,6 +1014,10 @@ bool VulkanPresenter::RefreshGuestOutputImpl(
         "VulkanPresenter: Failed to submit the guest output image refresh "
         "fence signal: {}",
         vk::to_string(vk::Result(submit_result)));
+    return false;
+  }
+  if (refresher_succeeded) {
+    image_instance.ever_successfully_refreshed = true;
   }
   return refresher_succeeded;
 }
@@ -1469,768 +1518,957 @@ bool VulkanPresenter::GuestOutputImage::Initialize() {
 
 Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(
     bool execute_ui_drawers) {
-  // Begin the submission in place of the one not currently potentially used on
-  // the GPU.
-  const uint64_t current_paint_submission_index =
-      paint_context_.completion_timeline.GetUpcomingSubmission();
-  uint64_t paint_submission_count = uint64_t(paint_context_.submissions.size());
-  paint_context_.completion_timeline
-      .AwaitMaxSubmissionsPendingAndUpdateCompleted(paint_submission_count);
-  const PaintContext::Submission& paint_submission =
-      *paint_context_.submissions[current_paint_submission_index %
-                                  paint_submission_count];
-
-  const VulkanDevice::Functions& dfn = vulkan_device_->functions();
-  const VkDevice device = vulkan_device_->device();
-
-  VkCommandPool draw_command_pool = paint_submission.draw_command_pool();
-  if (dfn.vkResetCommandPool(device, draw_command_pool, 0) != VK_SUCCESS) {
-    XELOGE(
-        "VulkanPresenter: Failed to reset a command buffer for drawing to the "
-        "swapchain");
-    return PaintResult::kNotPresented;
-  }
-
-  VkCommandBuffer draw_command_buffer = paint_submission.draw_command_buffer();
-  VkCommandBufferBeginInfo command_buffer_begin_info;
-  command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  command_buffer_begin_info.pNext = nullptr;
-  command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  command_buffer_begin_info.pInheritanceInfo = nullptr;
-  if (dfn.vkBeginCommandBuffer(draw_command_buffer,
-                               &command_buffer_begin_info) != VK_SUCCESS) {
-    XELOGE(
-        "VulkanPresenter: Failed to being recording the command buffer for "
-        "drawing to the swapchain");
-    return PaintResult::kNotPresented;
-  }
-  // vkResetCommandPool resets from both initial and recording states, still
-  // safe to return early from this function in case of an error.
-
-  VkSemaphore acquire_semaphore = paint_submission.acquire_semaphore();
-
-  uint32_t swapchain_image_index;
-  VkResult acquire_result = dfn.vkAcquireNextImageKHR(
-      device, paint_context_.swapchain, UINT64_MAX, acquire_semaphore,
-      VK_NULL_HANDLE, &swapchain_image_index);
-  switch (acquire_result) {
-    case VK_SUCCESS:
-    case VK_SUBOPTIMAL_KHR:
-      break;
-    case VK_ERROR_DEVICE_LOST:
-      XELOGE(
-          "VulkanPresenter: Failed to acquire the swapchain image as the "
-          "device has been lost");
-      return PaintResult::kGpuLostResponsible;
-    case VK_ERROR_OUT_OF_DATE_KHR:
-    case VK_ERROR_SURFACE_LOST_KHR:
-    case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
-      // Not an error, reporting just as info (may normally occur while resizing
-      // on some platforms).
-      XELOGI(
-          "VulkanPresenter: Presentation to the swapchain image has been "
-          "dropped as the swapchain or the surface has become outdated");
-      return PaintResult::kNotPresentedConnectionOutdated;
-    default:
-      XELOGE("VulkanPresenter: Failed to acquire the swapchain image");
-      return PaintResult::kNotPresented;
-  }
-
-  // Non-zero extents needed for both the viewport (width must not be zero) and
-  // the guest output rectangle.
-  assert_not_zero(paint_context_.swapchain_extent.width);
-  assert_not_zero(paint_context_.swapchain_extent.height);
-
-  bool swapchain_image_clear_needed = true;
-  VkClearAttachment swapchain_image_clear_attachment;
-  swapchain_image_clear_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  swapchain_image_clear_attachment.colorAttachment = 0;
-  swapchain_image_clear_attachment.clearValue.color.float32[0] = 0.0f;
-  swapchain_image_clear_attachment.clearValue.color.float32[1] = 0.0f;
-  swapchain_image_clear_attachment.clearValue.color.float32[2] = 0.0f;
-  swapchain_image_clear_attachment.clearValue.color.float32[3] = 1.0f;
-
-  VkRenderPassBeginInfo swapchain_render_pass_begin_info;
-  swapchain_render_pass_begin_info.sType =
-      VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  swapchain_render_pass_begin_info.pNext = nullptr;
-  swapchain_render_pass_begin_info.renderPass =
-      paint_context_.swapchain_render_pass;
-  swapchain_render_pass_begin_info.framebuffer =
-      paint_context_.swapchain_framebuffers[swapchain_image_index].framebuffer;
-  swapchain_render_pass_begin_info.renderArea.offset.x = 0;
-  swapchain_render_pass_begin_info.renderArea.offset.y = 0;
-  swapchain_render_pass_begin_info.renderArea.extent =
-      paint_context_.swapchain_extent;
-  swapchain_render_pass_begin_info.clearValueCount = 0;
-  swapchain_render_pass_begin_info.pClearValues = nullptr;
-  if (paint_context_.swapchain_render_pass_clear_load_op) {
-    swapchain_render_pass_begin_info.clearValueCount = 1;
-    swapchain_render_pass_begin_info.pClearValues =
-        &swapchain_image_clear_attachment.clearValue;
-    swapchain_image_clear_needed = false;
-  }
-
-  bool swapchain_image_pass_begun = false;
-
-  GuestOutputProperties guest_output_properties;
-  GuestOutputPaintConfig guest_output_paint_config;
-  std::shared_ptr<GuestOutputImage> guest_output_image;
+  auto native_visibility = SnapshotNativeUiPlaneVisibility();
+  NativeUiPlaneImageSelection::Preflight native_probe;
   {
-    uint32_t guest_output_mailbox_index;
-    std::unique_lock<std::mutex> guest_output_consumer_lock(
-        ConsumeGuestOutput(guest_output_mailbox_index, &guest_output_properties,
-                           &guest_output_paint_config));
-    if (guest_output_mailbox_index != UINT32_MAX) {
-      assert_true(guest_output_images_[guest_output_mailbox_index]
-                      .ever_successfully_refreshed);
-      guest_output_image =
-          guest_output_images_[guest_output_mailbox_index].image;
-    }
-    // Incremented the reference count of the guest output image - safe to leave
-    // the consumer critical section now as everything here either will be using
-    // the new reference or is exclusively owned by main target painting (and
-    // multiple threads can't paint the main target at the same time).
+    std::lock_guard lock(submission_mutex_);
+    native_probe = native_ui_plane_selection_.Prepare(native_visibility);
   }
-
-  if (guest_output_image) {
-    VkExtent2D max_framebuffer_extent =
-        util::GetMax2DFramebufferExtent(vulkan_device_->properties());
-    GuestOutputPaintFlow guest_output_flow = GetGuestOutputPaintFlow(
-        guest_output_properties, paint_context_.swapchain_extent.width,
-        paint_context_.swapchain_extent.height, max_framebuffer_extent.width,
-        max_framebuffer_extent.height, guest_output_paint_config);
-    if (guest_output_flow.effect_count) {
-      // Store the main target reference to the guest output image so it's not
-      // destroyed while it's still potentially in use by main target painting
-      // queued on the GPU.
-      size_t guest_output_image_paint_ref_index = SIZE_MAX;
-      size_t guest_output_image_paint_ref_new_index = SIZE_MAX;
-      // Try to find the existing reference to the same image, or an already
-      // released (or a taken, but never actually used) slot.
-      for (size_t i = 0;
-           i < paint_context_.guest_output_image_paint_refs.size(); ++i) {
-        const std::pair<uint64_t, std::shared_ptr<GuestOutputImage>>&
-            guest_output_image_paint_ref =
-                paint_context_.guest_output_image_paint_refs[i];
-        if (guest_output_image_paint_ref.second == guest_output_image) {
-          guest_output_image_paint_ref_index = i;
+  // Authority/epoch checks may inspect actual native host metadata. No backend
+  // lock may be held; the locked selection below rechecks snapshot identities
+  // and atomic revocation before any image can be sampled.
+  native_probe.CheckLiveness();
+  std::lock_guard submission_lock(submission_mutex_);
+  if (submissions_sealed_) {
+    return PaintResult::kNotPresented;
+  }
+  try {
+    PollNativeUiPlaneCompletionsLocked();
+    if (native_ui_plane_failed_) {
+      return PaintResult::kGpuLostResponsible;
+    }
+    // Begin the submission in place of the one not currently potentially used
+    // on the GPU.
+    const uint64_t current_paint_submission_index =
+        paint_context_.completion_timeline.GetUpcomingSubmission();
+    uint64_t paint_submission_count =
+        uint64_t(paint_context_.submissions.size());
+    paint_context_.completion_timeline
+        .AwaitMaxSubmissionsPendingAndUpdateCompleted(paint_submission_count);
+    if (native_gpu_cohort_epoch_ &&
+        (paint_context_.completion_timeline.last_completion_error() !=
+             VK_SUCCESS ||
+         (current_paint_submission_index > paint_submission_count &&
+          paint_context_.completion_timeline
+                  .GetCompletedSubmissionFromLastUpdate() <
+              current_paint_submission_index - paint_submission_count))) {
+      FailNativeUiPlane();
+      return PaintResult::kGpuLostResponsible;
+    }
+    const PaintContext::Submission& paint_submission =
+        *paint_context_.submissions[current_paint_submission_index %
+                                    paint_submission_count];
+    const uint32_t native_slot = uint32_t(current_paint_submission_index %
+                                          PaintContext::kSubmissionCount);
+    native_ui_plane_paint_refs_[native_slot].reset();
+    native_visibility = SnapshotNativeUiPlaneVisibility();
+    NativeUiPlaneImageReference desired_native;
+    if (native_visibility.visible && native_visibility.image_permission) {
+      for (auto it = native_ui_plane_publications_.rbegin();
+           it != native_ui_plane_publications_.rend(); ++it) {
+        if ((*it)->image.identity ==
+            native_visibility.image_permission->image()) {
+          desired_native = NativePlaneReference(*it);
           break;
         }
-        if (guest_output_image_paint_ref_new_index == SIZE_MAX &&
-            (!guest_output_image_paint_ref.second ||
-             !guest_output_image_paint_ref.first)) {
-          guest_output_image_paint_ref_new_index = i;
-        }
       }
-      if (guest_output_image_paint_ref_index == SIZE_MAX) {
-        // New image - store the reference and create the descriptors.
-        if (guest_output_image_paint_ref_new_index == SIZE_MAX) {
-          // Replace the earliest used reference.
-          guest_output_image_paint_ref_new_index = 0;
-          for (size_t i = 1;
-               i < paint_context_.guest_output_image_paint_refs.size(); ++i) {
-            if (paint_context_.guest_output_image_paint_refs[i].first <
-                paint_context_
-                    .guest_output_image_paint_refs
-                        [guest_output_image_paint_ref_new_index]
-                    .first) {
-              guest_output_image_paint_ref_new_index = i;
-            }
-          }
-          // Await the completion of the usage of the old guest output image and
-          // its descriptors.
-          paint_context_.completion_timeline.AwaitSubmissionAndUpdateCompleted(
-              paint_context_
-                  .guest_output_image_paint_refs
-                      [guest_output_image_paint_ref_new_index]
-                  .first);
-        }
-        guest_output_image_paint_ref_index =
-            guest_output_image_paint_ref_new_index;
-        // The actual submission index will be set if the image is actually
-        // used, not dropped due to some error.
-        paint_context_
-            .guest_output_image_paint_refs[guest_output_image_paint_ref_index] =
-            std::make_pair(uint64_t(0), guest_output_image);
-        // Create the descriptors of the new image.
-        VkDescriptorImageInfo guest_output_image_descriptor_image_info;
-        guest_output_image_descriptor_image_info.sampler = VK_NULL_HANDLE;
-        guest_output_image_descriptor_image_info.imageView =
-            guest_output_image->view();
-        guest_output_image_descriptor_image_info.imageLayout =
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        VkWriteDescriptorSet guest_output_image_descriptor_write;
-        guest_output_image_descriptor_write.sType =
-            VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        guest_output_image_descriptor_write.pNext = nullptr;
-        guest_output_image_descriptor_write.dstSet =
-            paint_context_.guest_output_descriptor_sets
-                [PaintContext::kGuestOutputDescriptorSetGuestOutput0Sampled +
-                 guest_output_image_paint_ref_index];
-        guest_output_image_descriptor_write.dstBinding = 0;
-        guest_output_image_descriptor_write.dstArrayElement = 0;
-        guest_output_image_descriptor_write.descriptorCount = 1;
-        guest_output_image_descriptor_write.descriptorType =
-            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        guest_output_image_descriptor_write.pImageInfo =
-            &guest_output_image_descriptor_image_info;
-        guest_output_image_descriptor_write.pBufferInfo = nullptr;
-        guest_output_image_descriptor_write.pTexelBufferView = nullptr;
-        dfn.vkUpdateDescriptorSets(
-            device, 1, &guest_output_image_descriptor_write, 0, nullptr);
-      }
+    }
+    const auto native_selection = native_ui_plane_selection_.Select(
+        native_probe, native_visibility, desired_native,
+        NativePlaneReference(native_ui_plane_current_));
+    auto native_publication =
+        std::static_pointer_cast<NativeUiPlanePublication>(
+            native_selection.reference.publication);
+    bool native_plane_recorded = false;
+    if (native_publication) {
+      static xe::NativeSystemUiTraceLimiter limiter;
+      limiter.EmitTransition(
+          native_visibility.revision, "presentation", "ui_paint_selection",
+          {{"kernel_epoch",
+            native_publication->image.identity.owner.kernel_epoch},
+           {"runtime_module_generation",
+            native_publication->image.identity.owner.module_generation},
+           {"owner_session_id",
+            native_publication->image.identity.owner.session_id},
+           {"source_serial", native_publication->image.identity.source_serial},
+           {"backend_epoch", native_publication->image.backend_epoch},
+           {"presentation_backend_epoch",
+            native_ui_plane_completions_.backend_epoch()},
+           {"image_version", native_publication->image.version},
+           {"visible", native_visibility.visible},
+           {"visibility_revision", native_visibility.revision},
+           {"authority_matches",
+            native_visibility.authority == native_publication->image.authority},
+           {"paint_submission", current_paint_submission_index}});
+    }
 
-      // Make sure intermediate textures of the needed size are available, and
-      // unneeded intermediate textures are destroyed.
-      for (size_t i = 0; i < kMaxGuestOutputPaintEffects - 1; ++i) {
-        std::pair<uint32_t, uint32_t> intermediate_needed_size(0, 0);
-        if (i + 1 < guest_output_flow.effect_count) {
-          intermediate_needed_size = guest_output_flow.effect_output_sizes[i];
-        }
-        std::unique_ptr<GuestOutputImage>& intermediate_image_ptr_ref =
-            paint_context_.guest_output_intermediate_images[i];
-        VkExtent2D intermediate_current_extent(
-            intermediate_image_ptr_ref ? intermediate_image_ptr_ref->extent()
-                                       : VkExtent2D{});
-        if (intermediate_current_extent.width !=
-                intermediate_needed_size.first ||
-            intermediate_current_extent.height !=
-                intermediate_needed_size.second) {
-          if (intermediate_needed_size.first &&
-              intermediate_needed_size.second) {
-            // Need to replace immediately as a new image with the requested
-            // size is needed.
-            if (intermediate_image_ptr_ref) {
-              paint_context_.completion_timeline
-                  .AwaitSubmissionAndUpdateCompleted(
-                      paint_context_
-                          .guest_output_intermediate_image_last_submission);
-              intermediate_image_ptr_ref.reset();
-              util::DestroyAndNullHandle(
-                  dfn.vkDestroyFramebuffer, device,
-                  paint_context_.guest_output_intermediate_framebuffers[i]);
-            }
-            // Image.
-            intermediate_image_ptr_ref = GuestOutputImage::Create(
-                vulkan_device_, intermediate_needed_size.first,
-                intermediate_needed_size.second);
-            if (!intermediate_image_ptr_ref) {
-              // Don't display the guest output, and don't try to create more
-              // intermediate textures (only destroy them).
-              guest_output_flow.effect_count = 0;
-              continue;
-            }
-            // Framebuffer.
-            VkImageView intermediate_framebuffer_attachment =
-                intermediate_image_ptr_ref->view();
-            VkFramebufferCreateInfo intermediate_framebuffer_create_info;
-            intermediate_framebuffer_create_info.sType =
-                VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            intermediate_framebuffer_create_info.pNext = nullptr;
-            intermediate_framebuffer_create_info.flags = 0;
-            intermediate_framebuffer_create_info.renderPass =
-                guest_output_intermediate_render_pass_;
-            intermediate_framebuffer_create_info.attachmentCount = 1;
-            intermediate_framebuffer_create_info.pAttachments =
-                &intermediate_framebuffer_attachment;
-            intermediate_framebuffer_create_info.width =
-                intermediate_needed_size.first;
-            intermediate_framebuffer_create_info.height =
-                intermediate_needed_size.second;
-            intermediate_framebuffer_create_info.layers = 1;
-            if (dfn.vkCreateFramebuffer(
-                    device, &intermediate_framebuffer_create_info, nullptr,
-                    &paint_context_
-                         .guest_output_intermediate_framebuffers[i]) !=
-                VK_SUCCESS) {
-              XELOGE(
-                  "VulkanPresenter: Failed to create a guest output "
-                  "intermediate framebuffer");
-              // Don't display the guest output, and don't try to create more
-              // intermediate textures (only destroy them).
-              guest_output_flow.effect_count = 0;
-              continue;
-            }
-            // Descriptors.
-            VkDescriptorImageInfo intermediate_descriptor_image_info;
-            intermediate_descriptor_image_info.sampler = VK_NULL_HANDLE;
-            intermediate_descriptor_image_info.imageView =
-                intermediate_image_ptr_ref->view();
-            intermediate_descriptor_image_info.imageLayout =
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            VkWriteDescriptorSet intermediate_descriptor_write;
-            intermediate_descriptor_write.sType =
-                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            intermediate_descriptor_write.pNext = nullptr;
-            intermediate_descriptor_write.dstSet =
-                paint_context_.guest_output_descriptor_sets
-                    [PaintContext ::
-                         kGuestOutputDescriptorSetIntermediate0Sampled +
-                     i];
-            intermediate_descriptor_write.dstBinding = 0;
-            intermediate_descriptor_write.dstArrayElement = 0;
-            intermediate_descriptor_write.descriptorCount = 1;
-            intermediate_descriptor_write.descriptorType =
-                VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-            intermediate_descriptor_write.pImageInfo =
-                &intermediate_descriptor_image_info;
-            intermediate_descriptor_write.pBufferInfo = nullptr;
-            intermediate_descriptor_write.pTexelBufferView = nullptr;
-            dfn.vkUpdateDescriptorSets(
-                device, 1, &intermediate_descriptor_write, 0, nullptr);
-          } else {
-            // Was previously needed, but not anymore - destroy when possible.
-            if (intermediate_image_ptr_ref &&
-                paint_context_.completion_timeline
-                        .UpdateAndGetCompletedSubmission() >=
-                    paint_context_
-                        .guest_output_intermediate_image_last_submission) {
-              intermediate_image_ptr_ref.reset();
-              util::DestroyAndNullHandle(
-                  dfn.vkDestroyFramebuffer, device,
-                  paint_context_.guest_output_intermediate_framebuffers[i]);
-            }
-          }
-        }
-      }
+    const VulkanDevice::Functions& dfn = vulkan_device_->functions();
+    const VkDevice device = vulkan_device_->device();
 
+    VkCommandPool draw_command_pool = paint_submission.draw_command_pool();
+    if (dfn.vkResetCommandPool(device, draw_command_pool, 0) != VK_SUCCESS) {
+      XELOGE(
+          "VulkanPresenter: Failed to reset a command buffer for drawing to "
+          "the "
+          "swapchain");
+      return PaintResult::kNotPresented;
+    }
+
+    VkCommandBuffer draw_command_buffer =
+        paint_submission.draw_command_buffer();
+    VkCommandBufferBeginInfo command_buffer_begin_info;
+    command_buffer_begin_info.sType =
+        VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    command_buffer_begin_info.pNext = nullptr;
+    command_buffer_begin_info.flags =
+        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    command_buffer_begin_info.pInheritanceInfo = nullptr;
+    if (dfn.vkBeginCommandBuffer(draw_command_buffer,
+                                 &command_buffer_begin_info) != VK_SUCCESS) {
+      XELOGE(
+          "VulkanPresenter: Failed to being recording the command buffer for "
+          "drawing to the swapchain");
+      return PaintResult::kNotPresented;
+    }
+    // vkResetCommandPool resets from both initial and recording states, still
+    // safe to return early from this function in case of an error.
+
+    VkSemaphore acquire_semaphore = paint_submission.acquire_semaphore();
+
+    uint32_t swapchain_image_index;
+    VkResult acquire_result = dfn.vkAcquireNextImageKHR(
+        device, paint_context_.swapchain, UINT64_MAX, acquire_semaphore,
+        VK_NULL_HANDLE, &swapchain_image_index);
+    switch (acquire_result) {
+      case VK_SUCCESS:
+      case VK_SUBOPTIMAL_KHR:
+        break;
+      case VK_ERROR_DEVICE_LOST:
+        XELOGE(
+            "VulkanPresenter: Failed to acquire the swapchain image as the "
+            "device has been lost");
+        return PaintResult::kGpuLostResponsible;
+      case VK_ERROR_OUT_OF_DATE_KHR:
+      case VK_ERROR_SURFACE_LOST_KHR:
+      case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
+        // Not an error, reporting just as info (may normally occur while
+        // resizing on some platforms).
+        XELOGI(
+            "VulkanPresenter: Presentation to the swapchain image has been "
+            "dropped as the swapchain or the surface has become outdated");
+        return PaintResult::kNotPresentedConnectionOutdated;
+      default:
+        XELOGE("VulkanPresenter: Failed to acquire the swapchain image");
+        return PaintResult::kNotPresented;
+    }
+
+    // Non-zero extents needed for both the viewport (width must not be zero)
+    // and the guest output rectangle.
+    assert_not_zero(paint_context_.swapchain_extent.width);
+    assert_not_zero(paint_context_.swapchain_extent.height);
+
+    bool swapchain_image_clear_needed = true;
+    VkClearAttachment swapchain_image_clear_attachment;
+    swapchain_image_clear_attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    swapchain_image_clear_attachment.colorAttachment = 0;
+    swapchain_image_clear_attachment.clearValue.color.float32[0] = 0.0f;
+    swapchain_image_clear_attachment.clearValue.color.float32[1] = 0.0f;
+    swapchain_image_clear_attachment.clearValue.color.float32[2] = 0.0f;
+    swapchain_image_clear_attachment.clearValue.color.float32[3] = 1.0f;
+
+    VkRenderPassBeginInfo swapchain_render_pass_begin_info;
+    swapchain_render_pass_begin_info.sType =
+        VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    swapchain_render_pass_begin_info.pNext = nullptr;
+    swapchain_render_pass_begin_info.renderPass =
+        paint_context_.swapchain_render_pass;
+    swapchain_render_pass_begin_info.framebuffer =
+        paint_context_.swapchain_framebuffers[swapchain_image_index]
+            .framebuffer;
+    swapchain_render_pass_begin_info.renderArea.offset.x = 0;
+    swapchain_render_pass_begin_info.renderArea.offset.y = 0;
+    swapchain_render_pass_begin_info.renderArea.extent =
+        paint_context_.swapchain_extent;
+    swapchain_render_pass_begin_info.clearValueCount = 0;
+    swapchain_render_pass_begin_info.pClearValues = nullptr;
+    if (paint_context_.swapchain_render_pass_clear_load_op) {
+      swapchain_render_pass_begin_info.clearValueCount = 1;
+      swapchain_render_pass_begin_info.pClearValues =
+          &swapchain_image_clear_attachment.clearValue;
+      swapchain_image_clear_needed = false;
+    }
+
+    bool swapchain_image_pass_begun = false;
+
+    GuestOutputProperties guest_output_properties;
+    GuestOutputPaintConfig guest_output_paint_config;
+    std::shared_ptr<GuestOutputImage> guest_output_image;
+    {
+      uint32_t guest_output_mailbox_index;
+      std::unique_lock<std::mutex> guest_output_consumer_lock(
+          ConsumeGuestOutput(guest_output_mailbox_index,
+                             &guest_output_properties,
+                             &guest_output_paint_config));
+      if (guest_output_mailbox_index != UINT32_MAX) {
+        assert_true(guest_output_images_[guest_output_mailbox_index]
+                        .ever_successfully_refreshed);
+        guest_output_image =
+            guest_output_images_[guest_output_mailbox_index].image;
+      }
+      // Incremented the reference count of the guest output image - safe to
+      // leave the consumer critical section now as everything here either will
+      // be using the new reference or is exclusively owned by main target
+      // painting (and multiple threads can't paint the main target at the same
+      // time).
+    }
+
+    if (guest_output_image) {
+      VkExtent2D max_framebuffer_extent =
+          util::GetMax2DFramebufferExtent(vulkan_device_->properties());
+      GuestOutputPaintFlow guest_output_flow = GetGuestOutputPaintFlow(
+          guest_output_properties, paint_context_.swapchain_extent.width,
+          paint_context_.swapchain_extent.height, max_framebuffer_extent.width,
+          max_framebuffer_extent.height, guest_output_paint_config);
       if (guest_output_flow.effect_count) {
-        // Check if all the intermediate effects are supported by the
-        // implementation.
-        for (size_t i = 0; i + 1 < guest_output_flow.effect_count; ++i) {
-          if (paint_context_
-                  .guest_output_paint_pipelines[size_t(
-                      guest_output_flow.effects[i])]
-                  .intermediate_pipeline == VK_NULL_HANDLE) {
-            guest_output_flow.effect_count = 0;
+        // Store the main target reference to the guest output image so it's not
+        // destroyed while it's still potentially in use by main target painting
+        // queued on the GPU.
+        size_t guest_output_image_paint_ref_index = SIZE_MAX;
+        size_t guest_output_image_paint_ref_new_index = SIZE_MAX;
+        // Try to find the existing reference to the same image, or an already
+        // released (or a taken, but never actually used) slot.
+        for (size_t i = 0;
+             i < paint_context_.guest_output_image_paint_refs.size(); ++i) {
+          const std::pair<uint64_t, std::shared_ptr<GuestOutputImage>>&
+              guest_output_image_paint_ref =
+                  paint_context_.guest_output_image_paint_refs[i];
+          if (guest_output_image_paint_ref.second == guest_output_image) {
+            guest_output_image_paint_ref_index = i;
             break;
           }
-        }
-        // Ensure the pipeline exists for the final effect drawing to the
-        // swapchain, for the render pass with the up-to-date image format.
-        GuestOutputPaintEffect swapchain_effect =
-            guest_output_flow.effects[guest_output_flow.effect_count - 1];
-        PaintContext::GuestOutputPaintPipeline& swapchain_effect_pipeline =
-            paint_context_
-                .guest_output_paint_pipelines[size_t(swapchain_effect)];
-        if (swapchain_effect_pipeline.swapchain_pipeline != VK_NULL_HANDLE &&
-            swapchain_effect_pipeline.swapchain_format !=
-                paint_context_.swapchain_render_pass_format) {
-          paint_context_.completion_timeline.AwaitSubmissionAndUpdateCompleted(
-              paint_context_.guest_output_image_paint_last_submission);
-          util::DestroyAndNullHandle(
-              dfn.vkDestroyPipeline, device,
-              swapchain_effect_pipeline.swapchain_pipeline);
-        }
-        if (swapchain_effect_pipeline.swapchain_pipeline == VK_NULL_HANDLE) {
-          assert_true(CanGuestOutputPaintEffectBeFinal(swapchain_effect));
-          assert_true(guest_output_paint_fs_[size_t(swapchain_effect)] !=
-                      VK_NULL_HANDLE);
-          swapchain_effect_pipeline.swapchain_pipeline =
-              CreateGuestOutputPaintPipeline(
-                  swapchain_effect, paint_context_.swapchain_render_pass);
-          if (swapchain_effect_pipeline.swapchain_pipeline == VK_NULL_HANDLE) {
-            guest_output_flow.effect_count = 0;
+          if (guest_output_image_paint_ref_new_index == SIZE_MAX &&
+              (!guest_output_image_paint_ref.second ||
+               !guest_output_image_paint_ref.first)) {
+            guest_output_image_paint_ref_new_index = i;
           }
         }
-      }
-
-      if (guest_output_flow.effect_count) {
-        // Actually draw the guest output.
-        paint_context_
-            .guest_output_image_paint_refs[guest_output_image_paint_ref_index]
-            .first = current_paint_submission_index;
-        paint_context_.guest_output_image_paint_last_submission =
-            current_paint_submission_index;
-        VkViewport guest_output_viewport;
-        guest_output_viewport.x = 0.0f;
-        guest_output_viewport.y = 0.0f;
-        guest_output_viewport.minDepth = 0.0f;
-        guest_output_viewport.maxDepth = 1.0f;
-        VkRect2D guest_output_scissor;
-        guest_output_scissor.offset.x = 0;
-        guest_output_scissor.offset.y = 0;
-        if (guest_output_flow.effect_count > 1) {
-          paint_context_.guest_output_intermediate_image_last_submission =
-              current_paint_submission_index;
+        if (guest_output_image_paint_ref_index == SIZE_MAX) {
+          // New image - store the reference and create the descriptors.
+          if (guest_output_image_paint_ref_new_index == SIZE_MAX) {
+            // Replace the earliest used reference.
+            guest_output_image_paint_ref_new_index = 0;
+            for (size_t i = 1;
+                 i < paint_context_.guest_output_image_paint_refs.size(); ++i) {
+              if (paint_context_.guest_output_image_paint_refs[i].first <
+                  paint_context_
+                      .guest_output_image_paint_refs
+                          [guest_output_image_paint_ref_new_index]
+                      .first) {
+                guest_output_image_paint_ref_new_index = i;
+              }
+            }
+            // Await the completion of the usage of the old guest output image
+            // and its descriptors.
+            paint_context_.completion_timeline
+                .AwaitSubmissionAndUpdateCompleted(
+                    paint_context_
+                        .guest_output_image_paint_refs
+                            [guest_output_image_paint_ref_new_index]
+                        .first);
+          }
+          guest_output_image_paint_ref_index =
+              guest_output_image_paint_ref_new_index;
+          // The actual submission index will be set if the image is actually
+          // used, not dropped due to some error.
+          paint_context_.guest_output_image_paint_refs
+              [guest_output_image_paint_ref_index] =
+              std::make_pair(uint64_t(0), guest_output_image);
+          // Create the descriptors of the new image.
+          VkDescriptorImageInfo guest_output_image_descriptor_image_info;
+          guest_output_image_descriptor_image_info.sampler = VK_NULL_HANDLE;
+          guest_output_image_descriptor_image_info.imageView =
+              guest_output_image->view();
+          guest_output_image_descriptor_image_info.imageLayout =
+              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+          VkWriteDescriptorSet guest_output_image_descriptor_write;
+          guest_output_image_descriptor_write.sType =
+              VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+          guest_output_image_descriptor_write.pNext = nullptr;
+          guest_output_image_descriptor_write.dstSet =
+              paint_context_.guest_output_descriptor_sets
+                  [PaintContext::kGuestOutputDescriptorSetGuestOutput0Sampled +
+                   guest_output_image_paint_ref_index];
+          guest_output_image_descriptor_write.dstBinding = 0;
+          guest_output_image_descriptor_write.dstArrayElement = 0;
+          guest_output_image_descriptor_write.descriptorCount = 1;
+          guest_output_image_descriptor_write.descriptorType =
+              VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+          guest_output_image_descriptor_write.pImageInfo =
+              &guest_output_image_descriptor_image_info;
+          guest_output_image_descriptor_write.pBufferInfo = nullptr;
+          guest_output_image_descriptor_write.pTexelBufferView = nullptr;
+          dfn.vkUpdateDescriptorSets(
+              device, 1, &guest_output_image_descriptor_write, 0, nullptr);
         }
-        for (size_t i = 0; i < guest_output_flow.effect_count; ++i) {
-          bool is_final_effect = i + 1 >= guest_output_flow.effect_count;
 
-          int32_t effect_rect_x, effect_rect_y;
-          std::pair<uint32_t, uint32_t> effect_rect_size =
-              guest_output_flow.effect_output_sizes[i];
-          if (is_final_effect) {
-            effect_rect_x = guest_output_flow.output_x;
-            effect_rect_y = guest_output_flow.output_y;
-            dfn.vkCmdBeginRenderPass(draw_command_buffer,
-                                     &swapchain_render_pass_begin_info,
-                                     VK_SUBPASS_CONTENTS_INLINE);
-            swapchain_image_pass_begun = true;
-            guest_output_viewport.width =
-                float(paint_context_.swapchain_extent.width);
-            guest_output_viewport.height =
-                float(paint_context_.swapchain_extent.height);
-            guest_output_scissor.extent.width =
-                paint_context_.swapchain_extent.width;
-            guest_output_scissor.extent.height =
-                paint_context_.swapchain_extent.height;
-          } else {
-            effect_rect_x = 0;
-            effect_rect_y = 0;
-            VkRenderPassBeginInfo intermediate_render_pass_begin_info;
-            intermediate_render_pass_begin_info.sType =
-                VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            intermediate_render_pass_begin_info.pNext = nullptr;
-            intermediate_render_pass_begin_info.renderPass =
-                guest_output_intermediate_render_pass_;
-            intermediate_render_pass_begin_info.framebuffer =
-                paint_context_.guest_output_intermediate_framebuffers[i];
-            intermediate_render_pass_begin_info.renderArea.offset.x = 0;
-            intermediate_render_pass_begin_info.renderArea.offset.y = 0;
-            intermediate_render_pass_begin_info.renderArea.extent.width =
-                effect_rect_size.first;
-            intermediate_render_pass_begin_info.renderArea.extent.height =
-                effect_rect_size.second;
-            intermediate_render_pass_begin_info.clearValueCount = 0;
-            intermediate_render_pass_begin_info.pClearValues = nullptr;
-            dfn.vkCmdBeginRenderPass(draw_command_buffer,
-                                     &intermediate_render_pass_begin_info,
-                                     VK_SUBPASS_CONTENTS_INLINE);
-            guest_output_viewport.width = float(effect_rect_size.first);
-            guest_output_viewport.height = float(effect_rect_size.second);
-            guest_output_scissor.extent.width = effect_rect_size.first;
-            guest_output_scissor.extent.height = effect_rect_size.second;
+        // Make sure intermediate textures of the needed size are available, and
+        // unneeded intermediate textures are destroyed.
+        for (size_t i = 0; i < kMaxGuestOutputPaintEffects - 1; ++i) {
+          std::pair<uint32_t, uint32_t> intermediate_needed_size(0, 0);
+          if (i + 1 < guest_output_flow.effect_count) {
+            intermediate_needed_size = guest_output_flow.effect_output_sizes[i];
           }
-          dfn.vkCmdSetViewport(draw_command_buffer, 0, 1,
-                               &guest_output_viewport);
-          dfn.vkCmdSetScissor(draw_command_buffer, 0, 1, &guest_output_scissor);
-
-          GuestOutputPaintEffect effect = guest_output_flow.effects[i];
-
-          const PaintContext::GuestOutputPaintPipeline& effect_pipeline =
-              paint_context_.guest_output_paint_pipelines[size_t(effect)];
-          VkPipeline effect_vulkan_pipeline =
-              is_final_effect ? effect_pipeline.swapchain_pipeline
-                              : effect_pipeline.intermediate_pipeline;
-          assert_true(effect_vulkan_pipeline != VK_NULL_HANDLE);
-          dfn.vkCmdBindPipeline(draw_command_buffer,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                effect_vulkan_pipeline);
-
-          GuestOutputPaintPipelineLayoutIndex
-              guest_output_paint_pipeline_layout_index =
-                  GetGuestOutputPaintPipelineLayoutIndex(effect);
-          VkPipelineLayout guest_output_paint_pipeline_layout =
-              guest_output_paint_pipeline_layouts_
-                  [guest_output_paint_pipeline_layout_index];
-
-          PaintContext::GuestOutputDescriptorSet effect_src_descriptor_set;
-          if (i) {
-            effect_src_descriptor_set = PaintContext::GuestOutputDescriptorSet(
-                PaintContext::kGuestOutputDescriptorSetIntermediate0Sampled +
-                (i - 1));
-          } else {
-            effect_src_descriptor_set = PaintContext::GuestOutputDescriptorSet(
-                PaintContext::kGuestOutputDescriptorSetGuestOutput0Sampled +
-                guest_output_image_paint_ref_index);
+          std::unique_ptr<GuestOutputImage>& intermediate_image_ptr_ref =
+              paint_context_.guest_output_intermediate_images[i];
+          VkExtent2D intermediate_current_extent(
+              intermediate_image_ptr_ref ? intermediate_image_ptr_ref->extent()
+                                         : VkExtent2D{});
+          if (intermediate_current_extent.width !=
+                  intermediate_needed_size.first ||
+              intermediate_current_extent.height !=
+                  intermediate_needed_size.second) {
+            if (intermediate_needed_size.first &&
+                intermediate_needed_size.second) {
+              // Need to replace immediately as a new image with the requested
+              // size is needed.
+              if (intermediate_image_ptr_ref) {
+                paint_context_.completion_timeline
+                    .AwaitSubmissionAndUpdateCompleted(
+                        paint_context_
+                            .guest_output_intermediate_image_last_submission);
+                intermediate_image_ptr_ref.reset();
+                util::DestroyAndNullHandle(
+                    dfn.vkDestroyFramebuffer, device,
+                    paint_context_.guest_output_intermediate_framebuffers[i]);
+              }
+              // Image.
+              intermediate_image_ptr_ref = GuestOutputImage::Create(
+                  vulkan_device_, intermediate_needed_size.first,
+                  intermediate_needed_size.second);
+              if (!intermediate_image_ptr_ref) {
+                // Don't display the guest output, and don't try to create more
+                // intermediate textures (only destroy them).
+                guest_output_flow.effect_count = 0;
+                continue;
+              }
+              // Framebuffer.
+              VkImageView intermediate_framebuffer_attachment =
+                  intermediate_image_ptr_ref->view();
+              VkFramebufferCreateInfo intermediate_framebuffer_create_info;
+              intermediate_framebuffer_create_info.sType =
+                  VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+              intermediate_framebuffer_create_info.pNext = nullptr;
+              intermediate_framebuffer_create_info.flags = 0;
+              intermediate_framebuffer_create_info.renderPass =
+                  guest_output_intermediate_render_pass_;
+              intermediate_framebuffer_create_info.attachmentCount = 1;
+              intermediate_framebuffer_create_info.pAttachments =
+                  &intermediate_framebuffer_attachment;
+              intermediate_framebuffer_create_info.width =
+                  intermediate_needed_size.first;
+              intermediate_framebuffer_create_info.height =
+                  intermediate_needed_size.second;
+              intermediate_framebuffer_create_info.layers = 1;
+              if (dfn.vkCreateFramebuffer(
+                      device, &intermediate_framebuffer_create_info, nullptr,
+                      &paint_context_
+                           .guest_output_intermediate_framebuffers[i]) !=
+                  VK_SUCCESS) {
+                XELOGE(
+                    "VulkanPresenter: Failed to create a guest output "
+                    "intermediate framebuffer");
+                // Don't display the guest output, and don't try to create more
+                // intermediate textures (only destroy them).
+                guest_output_flow.effect_count = 0;
+                continue;
+              }
+              // Descriptors.
+              VkDescriptorImageInfo intermediate_descriptor_image_info;
+              intermediate_descriptor_image_info.sampler = VK_NULL_HANDLE;
+              intermediate_descriptor_image_info.imageView =
+                  intermediate_image_ptr_ref->view();
+              intermediate_descriptor_image_info.imageLayout =
+                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+              VkWriteDescriptorSet intermediate_descriptor_write;
+              intermediate_descriptor_write.sType =
+                  VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+              intermediate_descriptor_write.pNext = nullptr;
+              intermediate_descriptor_write.dstSet =
+                  paint_context_.guest_output_descriptor_sets
+                      [PaintContext::
+                           kGuestOutputDescriptorSetIntermediate0Sampled +
+                       i];
+              intermediate_descriptor_write.dstBinding = 0;
+              intermediate_descriptor_write.dstArrayElement = 0;
+              intermediate_descriptor_write.descriptorCount = 1;
+              intermediate_descriptor_write.descriptorType =
+                  VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+              intermediate_descriptor_write.pImageInfo =
+                  &intermediate_descriptor_image_info;
+              intermediate_descriptor_write.pBufferInfo = nullptr;
+              intermediate_descriptor_write.pTexelBufferView = nullptr;
+              dfn.vkUpdateDescriptorSets(
+                  device, 1, &intermediate_descriptor_write, 0, nullptr);
+            } else {
+              // Was previously needed, but not anymore - destroy when possible.
+              if (intermediate_image_ptr_ref &&
+                  paint_context_.completion_timeline
+                          .UpdateAndGetCompletedSubmission() >=
+                      paint_context_
+                          .guest_output_intermediate_image_last_submission) {
+                intermediate_image_ptr_ref.reset();
+                util::DestroyAndNullHandle(
+                    dfn.vkDestroyFramebuffer, device,
+                    paint_context_.guest_output_intermediate_framebuffers[i]);
+              }
+            }
           }
-          dfn.vkCmdBindDescriptorSets(
-              draw_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-              guest_output_paint_pipeline_layout, 0, 1,
-              &paint_context_
-                   .guest_output_descriptor_sets[effect_src_descriptor_set],
-              0, nullptr);
+        }
 
-          GuestOutputPaintRectangleConstants effect_rect_constants;
-          float effect_x_to_ndc = 2.0f / guest_output_viewport.width;
-          float effect_y_to_ndc = 2.0f / guest_output_viewport.height;
-          effect_rect_constants.x =
-              -1.0f + float(effect_rect_x) * effect_x_to_ndc;
-          effect_rect_constants.y =
-              -1.0f + float(effect_rect_y) * effect_y_to_ndc;
-          effect_rect_constants.width =
-              float(effect_rect_size.first) * effect_x_to_ndc;
-          effect_rect_constants.height =
-              float(effect_rect_size.second) * effect_y_to_ndc;
-          dfn.vkCmdPushConstants(
-              draw_command_buffer, guest_output_paint_pipeline_layout,
-              VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(effect_rect_constants),
-              &effect_rect_constants);
-
-          uint32_t effect_constants_size = 0;
-          union {
-            BilinearConstants bilinear;
-            CasSharpenConstants cas_sharpen;
-            CasResampleConstants cas_resample;
-            FsrEasuConstants fsr_easu;
-            FsrRcasConstants fsr_rcas;
-          } effect_constants;
-          switch (guest_output_paint_pipeline_layout_index) {
-            case kGuestOutputPaintPipelineLayoutIndexBilinear: {
-              effect_constants_size = sizeof(effect_constants.bilinear);
-              effect_constants.bilinear.Initialize(guest_output_flow, i);
-            } break;
-            case kGuestOutputPaintPipelineLayoutIndexCasSharpen: {
-              effect_constants_size = sizeof(effect_constants.cas_sharpen);
-              effect_constants.cas_sharpen.Initialize(
-                  guest_output_flow, i, guest_output_paint_config);
-            } break;
-            case kGuestOutputPaintPipelineLayoutIndexCasResample: {
-              effect_constants_size = sizeof(effect_constants.cas_resample);
-              effect_constants.cas_resample.Initialize(
-                  guest_output_flow, i, guest_output_paint_config);
-            } break;
-            case kGuestOutputPaintPipelineLayoutIndexFsrEasu: {
-              effect_constants_size = sizeof(effect_constants.fsr_easu);
-              effect_constants.fsr_easu.Initialize(guest_output_flow, i);
-            } break;
-            case kGuestOutputPaintPipelineLayoutIndexFsrRcas: {
-              effect_constants_size = sizeof(effect_constants.fsr_rcas);
-              effect_constants.fsr_rcas.Initialize(guest_output_flow, i,
-                                                   guest_output_paint_config);
-            } break;
-            default:
+        if (guest_output_flow.effect_count) {
+          // Check if all the intermediate effects are supported by the
+          // implementation.
+          for (size_t i = 0; i + 1 < guest_output_flow.effect_count; ++i) {
+            if (paint_context_
+                    .guest_output_paint_pipelines[size_t(
+                        guest_output_flow.effects[i])]
+                    .intermediate_pipeline == VK_NULL_HANDLE) {
+              guest_output_flow.effect_count = 0;
               break;
+            }
           }
-          if (effect_constants_size) {
+          // Ensure the pipeline exists for the final effect drawing to the
+          // swapchain, for the render pass with the up-to-date image format.
+          GuestOutputPaintEffect swapchain_effect =
+              guest_output_flow.effects[guest_output_flow.effect_count - 1];
+          PaintContext::GuestOutputPaintPipeline& swapchain_effect_pipeline =
+              paint_context_
+                  .guest_output_paint_pipelines[size_t(swapchain_effect)];
+          if (swapchain_effect_pipeline.swapchain_pipeline != VK_NULL_HANDLE &&
+              swapchain_effect_pipeline.swapchain_format !=
+                  paint_context_.swapchain_render_pass_format) {
+            paint_context_.completion_timeline
+                .AwaitSubmissionAndUpdateCompleted(
+                    paint_context_.guest_output_image_paint_last_submission);
+            util::DestroyAndNullHandle(
+                dfn.vkDestroyPipeline, device,
+                swapchain_effect_pipeline.swapchain_pipeline);
+          }
+          if (swapchain_effect_pipeline.swapchain_pipeline == VK_NULL_HANDLE) {
+            assert_true(CanGuestOutputPaintEffectBeFinal(swapchain_effect));
+            assert_true(guest_output_paint_fs_[size_t(swapchain_effect)] !=
+                        VK_NULL_HANDLE);
+            swapchain_effect_pipeline.swapchain_pipeline =
+                CreateGuestOutputPaintPipeline(
+                    swapchain_effect, paint_context_.swapchain_render_pass);
+            if (swapchain_effect_pipeline.swapchain_pipeline ==
+                VK_NULL_HANDLE) {
+              guest_output_flow.effect_count = 0;
+            }
+          }
+        }
+
+        if (guest_output_flow.effect_count) {
+          // Actually draw the guest output.
+          paint_context_
+              .guest_output_image_paint_refs[guest_output_image_paint_ref_index]
+              .first = current_paint_submission_index;
+          paint_context_.guest_output_image_paint_last_submission =
+              current_paint_submission_index;
+          VkViewport guest_output_viewport;
+          guest_output_viewport.x = 0.0f;
+          guest_output_viewport.y = 0.0f;
+          guest_output_viewport.minDepth = 0.0f;
+          guest_output_viewport.maxDepth = 1.0f;
+          VkRect2D guest_output_scissor;
+          guest_output_scissor.offset.x = 0;
+          guest_output_scissor.offset.y = 0;
+          if (guest_output_flow.effect_count > 1) {
+            paint_context_.guest_output_intermediate_image_last_submission =
+                current_paint_submission_index;
+          }
+          for (size_t i = 0; i < guest_output_flow.effect_count; ++i) {
+            bool is_final_effect = i + 1 >= guest_output_flow.effect_count;
+
+            int32_t effect_rect_x, effect_rect_y;
+            std::pair<uint32_t, uint32_t> effect_rect_size =
+                guest_output_flow.effect_output_sizes[i];
+            if (is_final_effect) {
+              effect_rect_x = guest_output_flow.output_x;
+              effect_rect_y = guest_output_flow.output_y;
+              dfn.vkCmdBeginRenderPass(draw_command_buffer,
+                                       &swapchain_render_pass_begin_info,
+                                       VK_SUBPASS_CONTENTS_INLINE);
+              swapchain_image_pass_begun = true;
+              guest_output_viewport.width =
+                  float(paint_context_.swapchain_extent.width);
+              guest_output_viewport.height =
+                  float(paint_context_.swapchain_extent.height);
+              guest_output_scissor.extent.width =
+                  paint_context_.swapchain_extent.width;
+              guest_output_scissor.extent.height =
+                  paint_context_.swapchain_extent.height;
+            } else {
+              effect_rect_x = 0;
+              effect_rect_y = 0;
+              VkRenderPassBeginInfo intermediate_render_pass_begin_info;
+              intermediate_render_pass_begin_info.sType =
+                  VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+              intermediate_render_pass_begin_info.pNext = nullptr;
+              intermediate_render_pass_begin_info.renderPass =
+                  guest_output_intermediate_render_pass_;
+              intermediate_render_pass_begin_info.framebuffer =
+                  paint_context_.guest_output_intermediate_framebuffers[i];
+              intermediate_render_pass_begin_info.renderArea.offset.x = 0;
+              intermediate_render_pass_begin_info.renderArea.offset.y = 0;
+              intermediate_render_pass_begin_info.renderArea.extent.width =
+                  effect_rect_size.first;
+              intermediate_render_pass_begin_info.renderArea.extent.height =
+                  effect_rect_size.second;
+              intermediate_render_pass_begin_info.clearValueCount = 0;
+              intermediate_render_pass_begin_info.pClearValues = nullptr;
+              dfn.vkCmdBeginRenderPass(draw_command_buffer,
+                                       &intermediate_render_pass_begin_info,
+                                       VK_SUBPASS_CONTENTS_INLINE);
+              guest_output_viewport.width = float(effect_rect_size.first);
+              guest_output_viewport.height = float(effect_rect_size.second);
+              guest_output_scissor.extent.width = effect_rect_size.first;
+              guest_output_scissor.extent.height = effect_rect_size.second;
+            }
+            dfn.vkCmdSetViewport(draw_command_buffer, 0, 1,
+                                 &guest_output_viewport);
+            dfn.vkCmdSetScissor(draw_command_buffer, 0, 1,
+                                &guest_output_scissor);
+
+            GuestOutputPaintEffect effect = guest_output_flow.effects[i];
+
+            const PaintContext::GuestOutputPaintPipeline& effect_pipeline =
+                paint_context_.guest_output_paint_pipelines[size_t(effect)];
+            VkPipeline effect_vulkan_pipeline =
+                is_final_effect ? effect_pipeline.swapchain_pipeline
+                                : effect_pipeline.intermediate_pipeline;
+            assert_true(effect_vulkan_pipeline != VK_NULL_HANDLE);
+            dfn.vkCmdBindPipeline(draw_command_buffer,
+                                  VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                  effect_vulkan_pipeline);
+
+            GuestOutputPaintPipelineLayoutIndex
+                guest_output_paint_pipeline_layout_index =
+                    GetGuestOutputPaintPipelineLayoutIndex(effect);
+            VkPipelineLayout guest_output_paint_pipeline_layout =
+                guest_output_paint_pipeline_layouts_
+                    [guest_output_paint_pipeline_layout_index];
+
+            PaintContext::GuestOutputDescriptorSet effect_src_descriptor_set;
+            if (i) {
+              effect_src_descriptor_set =
+                  PaintContext::GuestOutputDescriptorSet(
+                      PaintContext::
+                          kGuestOutputDescriptorSetIntermediate0Sampled +
+                      (i - 1));
+            } else {
+              effect_src_descriptor_set =
+                  PaintContext::GuestOutputDescriptorSet(
+                      PaintContext::
+                          kGuestOutputDescriptorSetGuestOutput0Sampled +
+                      guest_output_image_paint_ref_index);
+            }
+            dfn.vkCmdBindDescriptorSets(
+                draw_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                guest_output_paint_pipeline_layout, 0, 1,
+                &paint_context_
+                     .guest_output_descriptor_sets[effect_src_descriptor_set],
+                0, nullptr);
+
+            GuestOutputPaintRectangleConstants effect_rect_constants;
+            float effect_x_to_ndc = 2.0f / guest_output_viewport.width;
+            float effect_y_to_ndc = 2.0f / guest_output_viewport.height;
+            effect_rect_constants.x =
+                -1.0f + float(effect_rect_x) * effect_x_to_ndc;
+            effect_rect_constants.y =
+                -1.0f + float(effect_rect_y) * effect_y_to_ndc;
+            effect_rect_constants.width =
+                float(effect_rect_size.first) * effect_x_to_ndc;
+            effect_rect_constants.height =
+                float(effect_rect_size.second) * effect_y_to_ndc;
             dfn.vkCmdPushConstants(
                 draw_command_buffer, guest_output_paint_pipeline_layout,
-                VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(effect_rect_constants),
-                effect_constants_size, &effect_constants);
-          }
+                VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(effect_rect_constants),
+                &effect_rect_constants);
 
-          dfn.vkCmdDraw(draw_command_buffer, 4, 1, 0, 0);
-
-          if (is_final_effect) {
-            // Clear the letterbox around the guest output if the guest output
-            // doesn't cover the entire swapchain image.
-            if (swapchain_image_clear_needed &&
-                guest_output_flow.letterbox_clear_rectangle_count) {
-              VkClearRect letterbox_clear_vulkan_rectangles
-                  [GuestOutputPaintFlow::kMaxClearRectangles];
-              for (size_t i = 0;
-                   i < guest_output_flow.letterbox_clear_rectangle_count; ++i) {
-                VkClearRect& letterbox_clear_vulkan_rectangle =
-                    letterbox_clear_vulkan_rectangles[i];
-                const GuestOutputPaintFlow::ClearRectangle&
-                    letterbox_clear_rectangle =
-                        guest_output_flow.letterbox_clear_rectangles[i];
-                letterbox_clear_vulkan_rectangle.rect.offset.x =
-                    int32_t(letterbox_clear_rectangle.x);
-                letterbox_clear_vulkan_rectangle.rect.offset.y =
-                    int32_t(letterbox_clear_rectangle.y);
-                letterbox_clear_vulkan_rectangle.rect.extent.width =
-                    letterbox_clear_rectangle.width;
-                letterbox_clear_vulkan_rectangle.rect.extent.height =
-                    letterbox_clear_rectangle.height;
-                letterbox_clear_vulkan_rectangle.baseArrayLayer = 0;
-                letterbox_clear_vulkan_rectangle.layerCount = 1;
-              }
-              dfn.vkCmdClearAttachments(
-                  draw_command_buffer, 1, &swapchain_image_clear_attachment,
-                  uint32_t(guest_output_flow.letterbox_clear_rectangle_count),
-                  letterbox_clear_vulkan_rectangles);
+            uint32_t effect_constants_size = 0;
+            union {
+              BilinearConstants bilinear;
+              CasSharpenConstants cas_sharpen;
+              CasResampleConstants cas_resample;
+              FsrEasuConstants fsr_easu;
+              FsrRcasConstants fsr_rcas;
+            } effect_constants;
+            switch (guest_output_paint_pipeline_layout_index) {
+              case kGuestOutputPaintPipelineLayoutIndexBilinear: {
+                effect_constants_size = sizeof(effect_constants.bilinear);
+                effect_constants.bilinear.Initialize(guest_output_flow, i);
+              } break;
+              case kGuestOutputPaintPipelineLayoutIndexCasSharpen: {
+                effect_constants_size = sizeof(effect_constants.cas_sharpen);
+                effect_constants.cas_sharpen.Initialize(
+                    guest_output_flow, i, guest_output_paint_config);
+              } break;
+              case kGuestOutputPaintPipelineLayoutIndexCasResample: {
+                effect_constants_size = sizeof(effect_constants.cas_resample);
+                effect_constants.cas_resample.Initialize(
+                    guest_output_flow, i, guest_output_paint_config);
+              } break;
+              case kGuestOutputPaintPipelineLayoutIndexFsrEasu: {
+                effect_constants_size = sizeof(effect_constants.fsr_easu);
+                effect_constants.fsr_easu.Initialize(guest_output_flow, i);
+              } break;
+              case kGuestOutputPaintPipelineLayoutIndexFsrRcas: {
+                effect_constants_size = sizeof(effect_constants.fsr_rcas);
+                effect_constants.fsr_rcas.Initialize(guest_output_flow, i,
+                                                     guest_output_paint_config);
+              } break;
+              default:
+                break;
             }
-            swapchain_image_clear_needed = false;
-          } else {
-            // Still need the swapchain pass to be open for UI drawing.
-            dfn.vkCmdEndRenderPass(draw_command_buffer);
+            if (effect_constants_size) {
+              dfn.vkCmdPushConstants(
+                  draw_command_buffer, guest_output_paint_pipeline_layout,
+                  VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(effect_rect_constants),
+                  effect_constants_size, &effect_constants);
+            }
+
+            dfn.vkCmdDraw(draw_command_buffer, 4, 1, 0, 0);
+
+            if (is_final_effect) {
+              // Clear the letterbox around the guest output if the guest output
+              // doesn't cover the entire swapchain image.
+              if (swapchain_image_clear_needed &&
+                  guest_output_flow.letterbox_clear_rectangle_count) {
+                VkClearRect letterbox_clear_vulkan_rectangles
+                    [GuestOutputPaintFlow::kMaxClearRectangles];
+                for (size_t i = 0;
+                     i < guest_output_flow.letterbox_clear_rectangle_count;
+                     ++i) {
+                  VkClearRect& letterbox_clear_vulkan_rectangle =
+                      letterbox_clear_vulkan_rectangles[i];
+                  const GuestOutputPaintFlow::ClearRectangle&
+                      letterbox_clear_rectangle =
+                          guest_output_flow.letterbox_clear_rectangles[i];
+                  letterbox_clear_vulkan_rectangle.rect.offset.x =
+                      int32_t(letterbox_clear_rectangle.x);
+                  letterbox_clear_vulkan_rectangle.rect.offset.y =
+                      int32_t(letterbox_clear_rectangle.y);
+                  letterbox_clear_vulkan_rectangle.rect.extent.width =
+                      letterbox_clear_rectangle.width;
+                  letterbox_clear_vulkan_rectangle.rect.extent.height =
+                      letterbox_clear_rectangle.height;
+                  letterbox_clear_vulkan_rectangle.baseArrayLayer = 0;
+                  letterbox_clear_vulkan_rectangle.layerCount = 1;
+                }
+                dfn.vkCmdClearAttachments(
+                    draw_command_buffer, 1, &swapchain_image_clear_attachment,
+                    uint32_t(guest_output_flow.letterbox_clear_rectangle_count),
+                    letterbox_clear_vulkan_rectangles);
+              }
+              swapchain_image_clear_needed = false;
+            } else {
+              // Still need the swapchain pass to be open for UI drawing.
+              dfn.vkCmdEndRenderPass(draw_command_buffer);
+            }
           }
         }
       }
     }
-  }
 
-  // Release main target guest output image references that aren't needed
-  // anymore (this is done after various potential guest-output-related main
-  // target completion timeline waits so the completed submission index is the
-  // most actual).
-  uint64_t completed_paint_submission =
-      paint_context_.completion_timeline.UpdateAndGetCompletedSubmission();
-  for (std::pair<uint64_t, std::shared_ptr<GuestOutputImage>>&
-           guest_output_image_paint_ref :
-       paint_context_.guest_output_image_paint_refs) {
-    if (!guest_output_image_paint_ref.second ||
-        guest_output_image_paint_ref.second == guest_output_image) {
-      continue;
+    // Release main target guest output image references that aren't needed
+    // anymore (this is done after various potential guest-output-related main
+    // target completion timeline waits so the completed submission index is the
+    // most actual).
+    uint64_t completed_paint_submission =
+        paint_context_.completion_timeline.UpdateAndGetCompletedSubmission();
+    for (std::pair<uint64_t, std::shared_ptr<GuestOutputImage>>&
+             guest_output_image_paint_ref :
+         paint_context_.guest_output_image_paint_refs) {
+      if (!guest_output_image_paint_ref.second ||
+          guest_output_image_paint_ref.second == guest_output_image) {
+        continue;
+      }
+      if (completed_paint_submission >= guest_output_image_paint_ref.first) {
+        guest_output_image_paint_ref.second.reset();
+      }
     }
-    if (completed_paint_submission >= guest_output_image_paint_ref.first) {
-      guest_output_image_paint_ref.second.reset();
+
+    // If hasn't presented the guest output, begin the pass to clear and, if
+    // needed, to draw the UI.
+    if (!swapchain_image_pass_begun) {
+      dfn.vkCmdBeginRenderPass(draw_command_buffer,
+                               &swapchain_render_pass_begin_info,
+                               VK_SUBPASS_CONTENTS_INLINE);
     }
-  }
+    if (swapchain_image_clear_needed) {
+      VkClearRect swapchain_image_clear_rectangle;
+      swapchain_image_clear_rectangle.rect.offset.x = 0;
+      swapchain_image_clear_rectangle.rect.offset.y = 0;
+      swapchain_image_clear_rectangle.rect.extent =
+          paint_context_.swapchain_extent;
+      swapchain_image_clear_rectangle.baseArrayLayer = 0;
+      swapchain_image_clear_rectangle.layerCount = 1;
+      dfn.vkCmdClearAttachments(draw_command_buffer, 1,
+                                &swapchain_image_clear_attachment, 1,
+                                &swapchain_image_clear_rectangle);
+      swapchain_image_clear_needed = false;
+    }
 
-  // If hasn't presented the guest output, begin the pass to clear and, if
-  // needed, to draw the UI.
-  if (!swapchain_image_pass_begun) {
-    dfn.vkCmdBeginRenderPass(draw_command_buffer,
-                             &swapchain_render_pass_begin_info,
-                             VK_SUBPASS_CONTENTS_INLINE);
-  }
-  if (swapchain_image_clear_needed) {
-    VkClearRect swapchain_image_clear_rectangle;
-    swapchain_image_clear_rectangle.rect.offset.x = 0;
-    swapchain_image_clear_rectangle.rect.offset.y = 0;
-    swapchain_image_clear_rectangle.rect.extent =
-        paint_context_.swapchain_extent;
-    swapchain_image_clear_rectangle.baseArrayLayer = 0;
-    swapchain_image_clear_rectangle.layerCount = 1;
-    dfn.vkCmdClearAttachments(draw_command_buffer, 1,
-                              &swapchain_image_clear_attachment, 1,
-                              &swapchain_image_clear_rectangle);
-    swapchain_image_clear_needed = false;
-  }
+    if (native_publication && NativeUiPlaneImageSelection::CanRecord(
+                                  native_visibility, native_selection)) {
+      if (!RecordNativeUiPlane(
+              draw_command_buffer, current_paint_submission_index,
+              native_visibility, native_selection, native_publication)) {
+        FailNativeUiPlane();
+        return PaintResult::kGpuLostResponsible;
+      }
+      native_plane_recorded =
+          native_ui_plane_paint_refs_[native_slot] == native_publication;
+    }
 
-  if (execute_ui_drawers) {
-    // Draw the UI.
-    VulkanUIDrawContext ui_draw_context(
-        *this, paint_context_.swapchain_extent.width,
-        paint_context_.swapchain_extent.height, draw_command_buffer,
-        ui_completion_timeline_.GetUpcomingSubmission(),
-        ui_completion_timeline_.UpdateAndGetCompletedSubmission(),
-        paint_context_.swapchain_render_pass,
-        paint_context_.swapchain_render_pass_format);
-    ExecuteUIDrawersFromUIThread(ui_draw_context);
-  }
+    if (execute_ui_drawers) {
+      // Draw the UI.
+      VulkanUIDrawContext ui_draw_context(
+          *this, paint_context_.swapchain_extent.width,
+          paint_context_.swapchain_extent.height, draw_command_buffer,
+          ui_completion_timeline_.GetUpcomingSubmission(),
+          ui_completion_timeline_.UpdateAndGetCompletedSubmission(),
+          paint_context_.swapchain_render_pass,
+          paint_context_.swapchain_render_pass_format);
+      ExecuteUIDrawersFromUIThread(ui_draw_context);
+    }
 
-  dfn.vkCmdEndRenderPass(draw_command_buffer);
+    dfn.vkCmdEndRenderPass(draw_command_buffer);
 
-  dfn.vkEndCommandBuffer(draw_command_buffer);
+    const VkResult end_result = dfn.vkEndCommandBuffer(draw_command_buffer);
+    if (end_result != VK_SUCCESS && native_gpu_cohort_epoch_) {
+      FailNativeUiPlane();
+      return PaintResult::kGpuLostResponsible;
+    }
 
-  VkPipelineStageFlags acquire_semaphore_wait_stage =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  VkCommandBuffer command_buffers[2];
-  uint32_t command_buffer_count = 0;
-  // UI setup command buffers must be accessed only if execute_ui_drawers is not
-  // null, to identify the UI thread.
-  size_t ui_setup_command_buffer_index =
-      execute_ui_drawers ? paint_context_.ui_setup_command_buffer_current_index
-                         : SIZE_MAX;
-  if (ui_setup_command_buffer_index != SIZE_MAX) {
-    PaintContext::UISetupCommandBuffer& ui_setup_command_buffer =
-        paint_context_.ui_setup_command_buffers[ui_setup_command_buffer_index];
-    dfn.vkEndCommandBuffer(ui_setup_command_buffer.command_buffer);
-    command_buffers[command_buffer_count++] =
-        ui_setup_command_buffer.command_buffer;
-    // Release the current UI setup command buffer regardless of submission
-    // result. Failed submissions (if the UI submission index wasn't incremented
-    // since the previous draw) should be handled by UI drawers themselves by
-    // retrying all the failed work if needed.
-    paint_context_.ui_setup_command_buffer_current_index = SIZE_MAX;
-  }
-  command_buffers[command_buffer_count++] = draw_command_buffer;
-  VkSemaphore present_semaphore =
-      paint_context_.swapchain_image_present_semaphores[swapchain_image_index];
-  VkSubmitInfo submit_info;
-  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submit_info.pNext = nullptr;
-  submit_info.waitSemaphoreCount = 1;
-  submit_info.pWaitSemaphores = &acquire_semaphore;
-  submit_info.pWaitDstStageMask = &acquire_semaphore_wait_stage;
-  submit_info.commandBufferCount = command_buffer_count;
-  submit_info.pCommandBuffers = command_buffers;
-  submit_info.signalSemaphoreCount = 1;
-  submit_info.pSignalSemaphores = &present_semaphore;
-  const VkResult submit_result =
-      paint_context_.completion_timeline.AcquireFenceAndSubmit(
-          vulkan_device_->queue_family_graphics_compute(), 0, 1, &submit_info);
-  if (submit_result != VK_SUCCESS) {
-    XELOGE(
-        "VulkanPresenter: Failed to submit the presentation command buffer: {} "
-        "- submission: {} (completed: {}, in-flight: {}), swapchain "
-        "image_index: {}, ui_setup_buffer_index: {}, execute_ui_drawers: {}",
-        vk::to_string(vk::Result(submit_result)),
-        paint_context_.completion_timeline.GetUpcomingSubmission(),
-        paint_context_.completion_timeline
-            .GetCompletedSubmissionFromLastUpdate(),
-        paint_context_.completion_timeline.pending_submission_count(),
-        swapchain_image_index,
-        ui_setup_command_buffer_index == SIZE_MAX
-            ? -1
-            : int64_t(ui_setup_command_buffer_index),
-        execute_ui_drawers);
+    VkPipelineStageFlags acquire_semaphore_wait_stage =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkCommandBuffer command_buffers[2];
+    uint32_t command_buffer_count = 0;
+    // UI setup command buffers must be accessed only if execute_ui_drawers is
+    // not null, to identify the UI thread.
+    size_t ui_setup_command_buffer_index =
+        execute_ui_drawers
+            ? paint_context_.ui_setup_command_buffer_current_index
+            : SIZE_MAX;
     if (ui_setup_command_buffer_index != SIZE_MAX) {
-      // If failed to submit, make the UI setup command buffer available for
-      // immediate reuse, as the completed submission index won't be updated to
-      // the current index, and failing submissions with setup command buffer
-      // over and over will result in never reusing the setup command buffers.
-      paint_context_.ui_setup_command_buffers[ui_setup_command_buffer_index]
-          .last_usage_submission_index = 0;
+      PaintContext::UISetupCommandBuffer& ui_setup_command_buffer =
+          paint_context_
+              .ui_setup_command_buffers[ui_setup_command_buffer_index];
+      dfn.vkEndCommandBuffer(ui_setup_command_buffer.command_buffer);
+      command_buffers[command_buffer_count++] =
+          ui_setup_command_buffer.command_buffer;
+      // Release the current UI setup command buffer regardless of submission
+      // result. Failed submissions (if the UI submission index wasn't
+      // incremented since the previous draw) should be handled by UI drawers
+      // themselves by retrying all the failed work if needed.
+      paint_context_.ui_setup_command_buffer_current_index = SIZE_MAX;
     }
-    if (submit_result == VK_ERROR_DEVICE_LOST) {
-      XELOGE("VulkanPresenter: VK_ERROR_DEVICE_LOST - GPU crashed or hung");
-    } else if (submit_result == VK_ERROR_OUT_OF_HOST_MEMORY) {
-      XELOGE("VulkanPresenter: VK_ERROR_OUT_OF_HOST_MEMORY");
-    } else if (submit_result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
-      XELOGE("VulkanPresenter: VK_ERROR_OUT_OF_DEVICE_MEMORY");
-    }
-    // The image is in an acquired state - but now, it will be in it forever.
-    // To avoid that, recreate the swapchain - don't return just kNotPresented.
-    return PaintResult::kNotPresentedConnectionOutdated;
-  }
-  if (execute_ui_drawers) {
-    // Also update the completion timeline providing submission indices to UI
-    // draw callbacks if submission is successful.
-    const VkResult ui_signal_submit_result =
-        ui_completion_timeline_.AcquireFenceAndSubmit(
-            vulkan_device_->queue_family_graphics_compute(), 0, 0, nullptr);
-    if (ui_signal_submit_result != VK_SUCCESS) {
+    command_buffers[command_buffer_count++] = draw_command_buffer;
+    VkSemaphore present_semaphore =
+        paint_context_
+            .swapchain_image_present_semaphores[swapchain_image_index];
+    VkSubmitInfo submit_info;
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.pNext = nullptr;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = &acquire_semaphore;
+    submit_info.pWaitDstStageMask = &acquire_semaphore_wait_stage;
+    submit_info.commandBufferCount = command_buffer_count;
+    submit_info.pCommandBuffers = command_buffers;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = &present_semaphore;
+    const VkResult submit_result =
+        paint_context_.completion_timeline.AcquireFenceAndSubmit(
+            vulkan_device_->queue_family_graphics_compute(), 0, 1,
+            &submit_info);
+    if (submit_result != VK_SUCCESS) {
+      if (native_gpu_cohort_epoch_) {
+        FailNativeUiPlane();
+        // Keep the per-slot image reference even though no successful timeline
+        // marker was minted. Actual device stop is the remaining safe boundary.
+        return PaintResult::kGpuLostResponsible;
+      }
       XELOGE(
-          "VulkanPresenter: Failed to submit the UI drawing fence signal: {}",
-          vk::to_string(vk::Result(ui_signal_submit_result)));
-    }
-  }
-
-  VkPresentInfoKHR present_info;
-  present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  present_info.pNext = nullptr;
-  present_info.waitSemaphoreCount = 1;
-  present_info.pWaitSemaphores = &present_semaphore;
-  present_info.swapchainCount = 1;
-  present_info.pSwapchains = &paint_context_.swapchain;
-  present_info.pImageIndices = &swapchain_image_index;
-  present_info.pResults = nullptr;
-  VkResult present_result;
-  {
-    const VulkanDevice::Queue::Acquisition queue_acquisition =
-        vulkan_device_->AcquireQueue(paint_context_.present_queue_family, 0);
-    present_result =
-        dfn.vkQueuePresentKHR(queue_acquisition.queue(), &present_info);
-  }
-  switch (present_result) {
-    case VK_SUCCESS:
-      return PaintResult::kPresented;
-    case VK_SUBOPTIMAL_KHR:
-      return PaintResult::kPresentedSuboptimal;
-    case VK_ERROR_DEVICE_LOST:
-      XELOGE(
-          "VulkanPresenter: Failed to present the swapchain image as the "
-          "device has been lost (image_index: {}, paint submission: {} "
-          "completed: {}, in-flight: {})",
-          swapchain_image_index,
+          "VulkanPresenter: Failed to submit the presentation command buffer: "
+          "{} "
+          "- submission: {} (completed: {}, in-flight: {}), swapchain "
+          "image_index: {}, ui_setup_buffer_index: {}, execute_ui_drawers: {}",
+          vk::to_string(vk::Result(submit_result)),
           paint_context_.completion_timeline.GetUpcomingSubmission(),
           paint_context_.completion_timeline
               .GetCompletedSubmissionFromLastUpdate(),
-          paint_context_.completion_timeline.pending_submission_count());
-      return PaintResult::kGpuLostResponsible;
-    case VK_ERROR_OUT_OF_DATE_KHR:
-    case VK_ERROR_SURFACE_LOST_KHR:
-    case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
-      // Not an error, reporting just as info (may normally occur while resizing
-      // on some platforms).
-      XELOGI(
-          "VulkanPresenter: Presentation to the swapchain image has been "
-          "dropped as the swapchain or the surface has become outdated");
-      // Note that the semaphore wait (followed by reset) has been enqueued,
-      // however, this should have no effect on anything here likely.
-      return PaintResult::kNotPresentedConnectionOutdated;
-    default:
-      XELOGE("VulkanPresenter: Failed to present the swapchain image");
+          paint_context_.completion_timeline.pending_submission_count(),
+          swapchain_image_index,
+          ui_setup_command_buffer_index == SIZE_MAX
+              ? -1
+              : int64_t(ui_setup_command_buffer_index),
+          execute_ui_drawers);
+      if (ui_setup_command_buffer_index != SIZE_MAX) {
+        // If failed to submit, make the UI setup command buffer available for
+        // immediate reuse, as the completed submission index won't be updated
+        // to the current index, and failing submissions with setup command
+        // buffer over and over will result in never reusing the setup command
+        // buffers.
+        paint_context_.ui_setup_command_buffers[ui_setup_command_buffer_index]
+            .last_usage_submission_index = 0;
+      }
+      if (submit_result == VK_ERROR_DEVICE_LOST) {
+        XELOGE("VulkanPresenter: VK_ERROR_DEVICE_LOST - GPU crashed or hung");
+      } else if (submit_result == VK_ERROR_OUT_OF_HOST_MEMORY) {
+        XELOGE("VulkanPresenter: VK_ERROR_OUT_OF_HOST_MEMORY");
+      } else if (submit_result == VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+        XELOGE("VulkanPresenter: VK_ERROR_OUT_OF_DEVICE_MEMORY");
+      }
       // The image is in an acquired state - but now, it will be in it forever.
       // To avoid that, recreate the swapchain - don't return just
       // kNotPresented.
       return PaintResult::kNotPresentedConnectionOutdated;
+    }
+    gpu::GpuCompletion native_paint_completion;
+    if (native_plane_recorded) {
+      static xe::NativeSystemUiTraceLimiter limiter;
+      limiter.Emit(
+          "presentation", "ui_plane_submit_success",
+          {{"kernel_epoch",
+            native_publication->image.identity.owner.kernel_epoch},
+           {"runtime_module_generation",
+            native_publication->image.identity.owner.module_generation},
+           {"owner_session_id",
+            native_publication->image.identity.owner.session_id},
+           {"source_serial", native_publication->image.identity.source_serial},
+           {"backend_epoch", native_publication->image.backend_epoch},
+           {"presentation_backend_epoch",
+            native_ui_plane_completions_.backend_epoch()},
+           {"image_version", native_publication->image.version},
+           {"paint_submission", current_paint_submission_index},
+           {"vk_result", uint32_t(submit_result)}});
+      native_paint_completion =
+          native_ui_plane_completions_.TrackNativeFrameSubmitted(
+              current_paint_submission_index,
+              native_publication->image.identity);
+      native_publication->last_paint_submission =
+          current_paint_submission_index;
+    }
+    if (execute_ui_drawers) {
+      // Also update the completion timeline providing submission indices to UI
+      // draw callbacks if submission is successful.
+      const VkResult ui_signal_submit_result =
+          ui_completion_timeline_.AcquireFenceAndSubmit(
+              vulkan_device_->queue_family_graphics_compute(), 0, 0, nullptr);
+      if (ui_signal_submit_result != VK_SUCCESS) {
+        if (native_gpu_cohort_epoch_) {
+          // The paint submit succeeded, but UI upload retirement has no valid
+          // signal marker. Keep all resources and stop before any reuse.
+          FailNativeUiPlane();
+          return PaintResult::kGpuLostResponsible;
+        }
+        XELOGE(
+            "VulkanPresenter: Failed to submit the UI drawing fence signal: {}",
+            vk::to_string(vk::Result(ui_signal_submit_result)));
+      }
+    }
+
+    VkPresentInfoKHR present_info;
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.pNext = nullptr;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores = &present_semaphore;
+    present_info.swapchainCount = 1;
+    present_info.pSwapchains = &paint_context_.swapchain;
+    present_info.pImageIndices = &swapchain_image_index;
+    present_info.pResults = nullptr;
+    VkResult present_result;
+    {
+      const VulkanDevice::Queue::Acquisition queue_acquisition =
+          vulkan_device_->AcquireQueue(paint_context_.present_queue_family, 0);
+      present_result =
+          dfn.vkQueuePresentKHR(queue_acquisition.queue(), &present_info);
+    }
+    if (native_plane_recorded) {
+      static xe::NativeSystemUiTraceLimiter limiter;
+      limiter.Emit(
+          "presentation", "ui_present_result",
+          {{"kernel_epoch",
+            native_publication->image.identity.owner.kernel_epoch},
+           {"runtime_module_generation",
+            native_publication->image.identity.owner.module_generation},
+           {"owner_session_id",
+            native_publication->image.identity.owner.session_id},
+           {"source_serial", native_publication->image.identity.source_serial},
+           {"backend_epoch", native_publication->image.backend_epoch},
+           {"presentation_backend_epoch",
+            native_ui_plane_completions_.backend_epoch()},
+           {"image_version", native_publication->image.version},
+           {"paint_submission", current_paint_submission_index},
+           {"completion_status", uint32_t(native_paint_completion.status())},
+           {"vk_result", uint32_t(present_result)}});
+    }
+    switch (present_result) {
+      case VK_SUCCESS:
+        if (native_plane_recorded &&
+            !native_publication->status.presenter_accepted) {
+          native_publication->status.presenter_accepted = true;
+          native_publication->status.paint_submission =
+              current_paint_submission_index;
+          native_publication->status.paint_completion = native_paint_completion;
+        }
+        return PaintResult::kPresented;
+      case VK_SUBOPTIMAL_KHR:
+        if (native_plane_recorded &&
+            !native_publication->status.presenter_accepted) {
+          native_publication->status.presenter_accepted = true;
+          native_publication->status.paint_submission =
+              current_paint_submission_index;
+          native_publication->status.paint_completion = native_paint_completion;
+        }
+        return PaintResult::kPresentedSuboptimal;
+      case VK_ERROR_DEVICE_LOST:
+        XELOGE(
+            "VulkanPresenter: Failed to present the swapchain image as the "
+            "device has been lost (image_index: {}, paint submission: {} "
+            "completed: {}, in-flight: {})",
+            swapchain_image_index,
+            paint_context_.completion_timeline.GetUpcomingSubmission(),
+            paint_context_.completion_timeline
+                .GetCompletedSubmissionFromLastUpdate(),
+            paint_context_.completion_timeline.pending_submission_count());
+        return PaintResult::kGpuLostResponsible;
+      case VK_ERROR_OUT_OF_DATE_KHR:
+      case VK_ERROR_SURFACE_LOST_KHR:
+      case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
+        // Not an error, reporting just as info (may normally occur while
+        // resizing on some platforms).
+        XELOGI(
+            "VulkanPresenter: Presentation to the swapchain image has been "
+            "dropped as the swapchain or the surface has become outdated");
+        // Note that the semaphore wait (followed by reset) has been enqueued,
+        // however, this should have no effect on anything here likely.
+        return PaintResult::kNotPresentedConnectionOutdated;
+      default:
+        XELOGE("VulkanPresenter: Failed to present the swapchain image");
+        // The image is in an acquired state - but now, it will be in it
+        // forever. To avoid that, recreate the swapchain - don't return just
+        // kNotPresented.
+        return PaintResult::kNotPresentedConnectionOutdated;
+    }
+  } catch (...) {
+    if (!native_gpu_cohort_epoch_) {
+      throw;
+    }
+    FailNativeUiPlane();
+    return PaintResult::kGpuLostResponsible;
   }
 }
 
@@ -2582,8 +2820,452 @@ bool VulkanPresenter::InitializeSurfaceIndependent() {
   return InitializeCommonSurfaceIndependent();
 }
 
+bool VulkanPresenter::BeginNativeGpuCohort(uint64_t backend_epoch) {
+  std::lock_guard lock(submission_mutex_);
+  if (!backend_epoch || submissions_sealed_ || legacy_capture_failed_ ||
+      (native_gpu_cohort_epoch_ && native_gpu_cohort_epoch_ != backend_epoch)) {
+    return false;
+  }
+  native_gpu_cohort_epoch_ = backend_epoch;
+  return true;
+}
+
+bool VulkanPresenter::PublishNativeUiPlane(NativeUiPlaneImage image) {
+  const auto authority =
+      GetNativeUiPlaneAuthority(image.identity.owner, image.backend_epoch);
+  const auto tag = image.producer_completion.native_frame_identity();
+  if (!authority || authority != image.authority ||
+      image.device != vulkan_device_ || !image.identity.valid() ||
+      !image.version || !image.width || !image.height || !image.image ||
+      !image.view || !image.lifetime || !tag || *tag != image.identity ||
+      image.producer_completion.backend_epoch() != image.backend_epoch ||
+      image.producer_completion.status() !=
+          gpu::GpuCompletionStatus::kComplete) {
+    return false;
+  }
+  auto publication = std::make_shared<NativeUiPlanePublication>();
+  publication->status.identity = image.identity;
+  publication->status.producer_backend_epoch = image.backend_epoch;
+  publication->status.presentation_backend_epoch =
+      native_ui_plane_completions_.backend_epoch();
+  publication->status.image_version = image.version;
+  publication->status.image_ready = true;
+  publication->image = std::move(image);
+  {
+    std::lock_guard lock(submission_mutex_);
+    if (submissions_sealed_ || native_ui_plane_failed_ ||
+        native_gpu_cohort_epoch_ != publication->image.backend_epoch ||
+        SnapshotNativeUiPlaneVisibility().authority != authority) {
+      return false;
+    }
+    native_ui_plane_publications_.push_back(publication);
+    native_ui_plane_current_ = std::move(publication);
+    PollNativeUiPlaneCompletionsLocked();
+  }
+  RequestNativeUiPlaneRepaint();
+  return true;
+}
+
+void VulkanPresenter::FailNativeUiPlane() noexcept {
+  static xe::NativeSystemUiTraceLimiter limiter;
+  limiter.Emit("presentation", "ui_plane_failed",
+               {{"backend_epoch", native_gpu_cohort_epoch_},
+                {"presentation_backend_epoch",
+                 native_ui_plane_completions_.backend_epoch()}});
+  native_ui_plane_failed_ = true;
+  submissions_sealed_ = true;
+  for (const auto& publication : native_ui_plane_publications_) {
+    publication->status.failed = true;
+  }
+  try {
+    native_ui_plane_completions_.FailPending();
+  } catch (...) {
+    // Image references are retained independently of this metadata queue.
+    // No exception may unwind recording after possible native sampling.
+  }
+}
+
+bool VulkanPresenter::AwaitNativeUiPlanePaintRetirementLocked() {
+  if (!native_gpu_cohort_epoch_ || native_ui_plane_stopped_) {
+    return true;
+  }
+  paint_context_.completion_timeline.AwaitAllSubmissions();
+  if (paint_context_.completion_timeline.last_completion_error() !=
+          VK_SUCCESS ||
+      paint_context_.completion_timeline
+              .GetCompletedSubmissionFromLastUpdate() <
+          paint_context_.completion_timeline.GetUpcomingSubmission() - 1) {
+    FailNativeUiPlane();
+    return false;
+  }
+  PollNativeUiPlaneCompletionsLocked();
+  return !native_ui_plane_failed_;
+}
+
+NativeUiPlaneImageReference VulkanPresenter::NativePlaneReference(
+    const std::shared_ptr<NativeUiPlanePublication>& publication) const {
+  if (!publication || !publication->image.lifetime ||
+      !publication->image.view) {
+    return {};
+  }
+  return {publication->image.identity, publication->image.authority,
+          publication->image.backend_epoch, publication};
+}
+
+void VulkanPresenter::PollNativeUiPlaneCompletionsLocked() {
+  if (!native_gpu_cohort_epoch_ || native_ui_plane_failed_) {
+    return;
+  }
+  paint_context_.completion_timeline.UpdateCompletedSubmission();
+  if (paint_context_.completion_timeline.last_completion_error() !=
+          VK_SUCCESS ||
+      vulkan_device_->IsLost()) {
+    FailNativeUiPlane();
+    return;
+  }
+  const uint64_t completed =
+      paint_context_.completion_timeline.GetCompletedSubmissionFromLastUpdate();
+  native_ui_plane_completions_.CompleteThrough(completed);
+  for (auto& reference : native_ui_plane_paint_refs_) {
+    if (reference && reference->last_paint_submission <= completed) {
+      reference.reset();
+    }
+  }
+  const auto desired_visibility = SnapshotNativeUiPlaneVisibility();
+  for (auto& publication : native_ui_plane_publications_) {
+    if (publication->status.paint_submission &&
+        publication->status.paint_completion.status() ==
+            gpu::GpuCompletionStatus::kComplete) {
+      static xe::NativeSystemUiTraceLimiter limiter;
+      limiter.Emit(
+          "presentation", "ui_paint_fence_complete",
+          {{"kernel_epoch", publication->image.identity.owner.kernel_epoch},
+           {"runtime_module_generation",
+            publication->image.identity.owner.module_generation},
+           {"owner_session_id", publication->image.identity.owner.session_id},
+           {"source_serial", publication->image.identity.source_serial},
+           {"backend_epoch", publication->image.backend_epoch},
+           {"presentation_backend_epoch",
+            publication->status.presentation_backend_epoch},
+           {"image_version", publication->image.version},
+           {"paint_submission", publication->status.paint_submission},
+           {"completed_submission", completed}});
+    }
+    const bool desired =
+        desired_visibility.visible && desired_visibility.image_permission &&
+        !desired_visibility.image_permission->IsRevoked() &&
+        desired_visibility.authority == publication->image.authority &&
+        desired_visibility.image_permission->image() ==
+            publication->image.identity;
+    if (publication != native_ui_plane_current_ &&
+        publication != native_ui_plane_selection_.retained_publication() &&
+        !desired && publication->last_paint_submission <= completed) {
+      publication->image.lifetime.reset();
+      publication->image.image = VK_NULL_HANDLE;
+      publication->image.view = VK_NULL_HANDLE;
+    }
+  }
+  // A long-lived qualified image may precede many skipped pending receipts.
+  // It must not pin all later dead metadata merely by occupying the front.
+  for (auto it = native_ui_plane_publications_.begin();
+       native_ui_plane_publications_.size() > 64 &&
+       it != native_ui_plane_publications_.end();) {
+    if (!(*it)->image.lifetime) {
+      it = native_ui_plane_publications_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+NativeUiPlaneStatus VulkanPresenter::GetNativeUiPlaneStatus(
+    const gpu::NativeFrameSubmissionIdentity& identity,
+    uint64_t image_version) {
+  const auto visibility = SnapshotNativeUiPlaneVisibility();
+  NativeUiPlaneImageSelection::Preflight probe;
+  {
+    std::lock_guard lock(submission_mutex_);
+    probe = native_ui_plane_selection_.Prepare(visibility);
+  }
+  probe.CheckLiveness();
+  std::lock_guard lock(submission_mutex_);
+  if (!submissions_sealed_) {
+    PollNativeUiPlaneCompletionsLocked();
+  }
+  const auto current_visibility = SnapshotNativeUiPlaneVisibility();
+  const auto selected = native_ui_plane_selection_.Current(
+      probe, current_visibility,
+      NativePlaneReference(native_ui_plane_current_));
+  for (const auto& publication : native_ui_plane_publications_) {
+    if (publication->image.identity == identity &&
+        publication->image.version == image_version) {
+      auto status = publication->status;
+      status.failed |= native_ui_plane_failed_;
+      status.visibility_revision = current_visibility.revision;
+      status.visible = selected.reference.publication == publication;
+      return status;
+    }
+  }
+  return {};
+}
+
+bool VulkanPresenter::SealForBackendStop() {
+  // Withdraw first; no new publication/acquisition may race the drain. The
+  // mutex then waits every active paint, refresh callback and capture submit.
+  SealNativeUiPlanePublication();
+  std::lock_guard lock(submission_mutex_);
+  submissions_sealed_ = true;
+  native_ui_plane_selection_.Reset();
+  native_ui_plane_current_.reset();
+  return true;
+}
+
+bool VulkanPresenter::ReleaseNativeUiPlaneAfterBackendStopped(
+    const gpu::GpuBackendStopProof& proof) {
+  std::lock_guard lock(submission_mutex_);
+  if (!submissions_sealed_ || !proof.stopped() || !proof.backend_epoch() ||
+      (proof.evidence() !=
+           gpu::GpuBackendStopProof::Evidence::kExplicitGpuStopped &&
+       proof.evidence() !=
+           gpu::GpuBackendStopProof::Evidence::kDeviceLostWaitIdle)) {
+    return false;
+  }
+  if (native_gpu_cohort_epoch_ &&
+      proof.backend_epoch() != native_gpu_cohort_epoch_) {
+    return false;
+  }
+  for (const auto& publication : native_ui_plane_publications_) {
+    if (publication->image.device != vulkan_device_ ||
+        publication->image.backend_epoch != proof.backend_epoch()) {
+      return false;
+    }
+  }
+  if (proof.evidence() ==
+      gpu::GpuBackendStopProof::Evidence::kDeviceLostWaitIdle) {
+    native_ui_plane_completions_.ReleaseAfterDeviceLostWaitIdle();
+  } else {
+    native_ui_plane_completions_.CompleteThrough(
+        paint_context_.completion_timeline.GetUpcomingSubmission() - 1);
+    native_ui_plane_completions_.ReleaseAfterGpuStopped();
+  }
+  native_ui_plane_paint_refs_ = {};
+  native_ui_plane_selection_.Reset();
+  native_ui_plane_current_.reset();
+  native_ui_plane_publications_.clear();
+  native_ui_plane_stopped_ = true;
+  return true;
+}
+
+bool VulkanPresenter::EnsureNativeUiPlanePipeline() {
+  const auto& dfn = vulkan_device_->functions();
+  const auto device = vulkan_device_->device();
+  VkFormatProperties format;
+  vulkan_device_->vulkan_instance()
+      ->functions()
+      .vkGetPhysicalDeviceFormatProperties(
+          vulkan_device_->physical_device(),
+          paint_context_.swapchain_render_pass_format, &format);
+  if (!(format.optimalTilingFeatures &
+        VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT)) {
+    return false;
+  }
+  vulkan_device_->vulkan_instance()
+      ->functions()
+      .vkGetPhysicalDeviceFormatProperties(vulkan_device_->physical_device(),
+                                           VK_FORMAT_R8G8B8A8_UNORM, &format);
+  if (!(format.optimalTilingFeatures &
+        VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
+    return false;
+  }
+  if (!native_ui_plane_fs_) {
+    VkShaderModuleCreateInfo info = {
+        VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    info.codeSize = sizeof(shaders::native_ui_plane_ps);
+    info.pCode = shaders::native_ui_plane_ps;
+    if (dfn.vkCreateShaderModule(device, &info, nullptr,
+                                 &native_ui_plane_fs_) != VK_SUCCESS) {
+      return false;
+    }
+  }
+  if (!native_ui_plane_pipeline_layout_) {
+    static_assert(sizeof(GuestOutputPaintRectangleConstants) == 16);
+    static_assert(sizeof(NativeUiPlanePaintConstants) == 20);
+    static_assert(offsetof(NativeUiPlanePaintConstants, opacity) == 16);
+    const VkPushConstantRange ranges[] = {
+        {VK_SHADER_STAGE_VERTEX_BIT, 0,
+         sizeof(GuestOutputPaintRectangleConstants)},
+        {VK_SHADER_STAGE_FRAGMENT_BIT,
+         sizeof(GuestOutputPaintRectangleConstants),
+         sizeof(NativeUiPlanePaintConstants)}};
+    VkPipelineLayoutCreateInfo info = {
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    info.setLayoutCount = 1;
+    info.pSetLayouts = &guest_output_paint_image_descriptor_set_layout_;
+    info.pushConstantRangeCount = 2;
+    info.pPushConstantRanges = ranges;
+    if (dfn.vkCreatePipelineLayout(device, &info, nullptr,
+                                    &native_ui_plane_pipeline_layout_) !=
+        VK_SUCCESS) {
+      return false;
+    }
+  }
+  if (!native_ui_plane_descriptor_pool_) {
+    const VkDescriptorPoolSize sizes[] = {
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, PaintContext::kSubmissionCount},
+        {VK_DESCRIPTOR_TYPE_SAMPLER, PaintContext::kSubmissionCount}};
+    VkDescriptorPoolCreateInfo info = {
+        VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    info.maxSets = PaintContext::kSubmissionCount;
+    info.poolSizeCount = 2;
+    info.pPoolSizes = sizes;
+    if (dfn.vkCreateDescriptorPool(device, &info, nullptr,
+                                   &native_ui_plane_descriptor_pool_) !=
+        VK_SUCCESS) {
+      return false;
+    }
+    std::array<VkDescriptorSetLayout, PaintContext::kSubmissionCount> layouts;
+    layouts.fill(guest_output_paint_image_descriptor_set_layout_);
+    VkDescriptorSetAllocateInfo allocation = {
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    allocation.descriptorPool = native_ui_plane_descriptor_pool_;
+    allocation.descriptorSetCount = PaintContext::kSubmissionCount;
+    allocation.pSetLayouts = layouts.data();
+    if (dfn.vkAllocateDescriptorSets(device, &allocation,
+                                     native_ui_plane_descriptor_sets_.data()) !=
+        VK_SUCCESS) {
+      return false;
+    }
+  }
+  auto& pipeline =
+      native_ui_plane_pipelines_[paint_context_.swapchain_render_pass_format];
+  if (!pipeline) {
+    pipeline = CreateGuestOutputPaintPipeline(
+        GuestOutputPaintEffect::kBilinear, paint_context_.swapchain_render_pass,
+        true);
+  }
+  return pipeline != VK_NULL_HANDLE;
+}
+
+bool VulkanPresenter::RecordNativeUiPlane(
+    VkCommandBuffer command_buffer, uint64_t paint_submission,
+    const NativeUiPlaneVisibility& visibility,
+    const NativeUiPlaneImageSelection::Selection& selection,
+    const std::shared_ptr<NativeUiPlanePublication>& publication) {
+  const auto current = SnapshotNativeUiPlaneVisibility();
+  if (selection.reference.publication != publication ||
+      !CanRecordNativeUiPlaneAfterHandoff(
+          visibility, current, selection)) {
+    return true;
+  }
+  if (!publication->image.view || !publication->image.lifetime ||
+      !publication->image.width || !publication->image.height ||
+      publication->image.producer_completion.status() !=
+          gpu::GpuCompletionStatus::kComplete) {
+    return false;
+  }
+  const auto extent = paint_context_.swapchain_extent;
+  NativeUiPlanePaintProjection projection;
+  // Selection may intentionally retain an older qualified image while a new
+  // one is pending. Use that image's immutable placement/opacity, never the
+  // latest desired permission's geometry.
+  if (selection.permission && selection.permission->presentation()) {
+    const auto projected = ProjectNativeUiPlanePresentation(
+        *selection.permission->presentation(), extent.width, extent.height);
+    if (!projected) {
+      return false;
+    }
+    projection = *projected;
+    if (!projection.drawable()) {
+      return true;  // No sampling reference or new paint-completion receipt.
+    }
+  } else {
+    // Existing modal and legacy nonmodal profile: preserve its integer fit.
+    uint32_t width = extent.width;
+    uint32_t height = uint32_t(uint64_t(width) * publication->image.height /
+                               publication->image.width);
+    if (height > extent.height) {
+      height = extent.height;
+      width = uint32_t(uint64_t(height) * publication->image.width /
+                       publication->image.height);
+    }
+    if (!width || !height) {
+      return false;
+    }
+    projection.scissor_x = (extent.width - width) / 2;
+    projection.scissor_y = (extent.height - height) / 2;
+    projection.scissor_width = width;
+    projection.scissor_height = height;
+    projection.x = float(projection.scissor_x);
+    projection.y = float(projection.scissor_y);
+    projection.width = float(width);
+    projection.height = float(height);
+  }
+  if (!EnsureNativeUiPlanePipeline()) {
+    return false;
+  }
+  const uint32_t slot =
+      uint32_t(paint_submission % PaintContext::kSubmissionCount);
+  // Retain before commands/descriptor writes can reference the image. A failed
+  // submit leaves this slot retained until an actual sealed device stop.
+  native_ui_plane_paint_refs_[slot] = publication;
+  const auto& dfn = vulkan_device_->functions();
+  VkDescriptorImageInfo image = {VK_NULL_HANDLE, publication->image.view,
+                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+  write.dstSet = native_ui_plane_descriptor_sets_[slot];
+  write.dstBinding = 0;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  write.pImageInfo = &image;
+  dfn.vkUpdateDescriptorSets(vulkan_device_->device(), 1, &write, 0, nullptr);
+  VkViewport viewport = {0.0f, 0.0f, float(extent.width), float(extent.height),
+                         0.0f, 1.0f};
+  VkRect2D scissor = {
+      {int32_t(projection.scissor_x), int32_t(projection.scissor_y)},
+      {projection.scissor_width, projection.scissor_height}};
+  dfn.vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+  dfn.vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+  dfn.vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        native_ui_plane_pipelines_.at(
+                            paint_context_.swapchain_render_pass_format));
+  const auto layout = native_ui_plane_pipeline_layout_;
+  dfn.vkCmdBindDescriptorSets(
+      command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
+      &native_ui_plane_descriptor_sets_[slot], 0, nullptr);
+  GuestOutputPaintRectangleConstants rectangle;
+  rectangle.x = -1.0f + projection.x * 2.0f / float(extent.width);
+  rectangle.y = -1.0f + projection.y * 2.0f / float(extent.height);
+  rectangle.width = projection.width * 2.0f / float(extent.width);
+  rectangle.height = projection.height * 2.0f / float(extent.height);
+  const NativeUiPlanePaintConstants constants = {
+      {projection.x, projection.y},
+      {1.0f / projection.width, 1.0f / projection.height}, projection.opacity};
+  dfn.vkCmdPushConstants(command_buffer, layout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                         sizeof(rectangle), &rectangle);
+  dfn.vkCmdPushConstants(command_buffer, layout, VK_SHADER_STAGE_FRAGMENT_BIT,
+                         16, sizeof(constants), &constants);
+  dfn.vkCmdDraw(command_buffer, 4, 1, 0, 0);
+  return true;
+}
+
+void VulkanPresenter::DestroyNativeUiPlaneResources() {
+  const auto& dfn = vulkan_device_->functions();
+  const auto device = vulkan_device_->device();
+  for (auto& entry : native_ui_plane_pipelines_) {
+    util::DestroyAndNullHandle(dfn.vkDestroyPipeline, device, entry.second);
+  }
+  native_ui_plane_pipelines_.clear();
+  util::DestroyAndNullHandle(dfn.vkDestroyPipelineLayout, device,
+                             native_ui_plane_pipeline_layout_);
+  util::DestroyAndNullHandle(dfn.vkDestroyDescriptorPool, device,
+                             native_ui_plane_descriptor_pool_);
+  util::DestroyAndNullHandle(dfn.vkDestroyShaderModule, device,
+                             native_ui_plane_fs_);
+}
+
 VkPipeline VulkanPresenter::CreateGuestOutputPaintPipeline(
-    GuestOutputPaintEffect effect, VkRenderPass render_pass) {
+    GuestOutputPaintEffect effect, VkRenderPass render_pass,
+    bool native_plane) {
   VkPipelineShaderStageCreateInfo stages[2] = {};
   for (uint32_t i = 0; i < 2; ++i) {
     VkPipelineShaderStageCreateInfo& stage = stages[i];
@@ -2592,7 +3274,8 @@ VkPipeline VulkanPresenter::CreateGuestOutputPaintPipeline(
     stage.pName = "main";
   }
   stages[0].module = guest_output_paint_vs_;
-  stages[1].module = guest_output_paint_fs_[size_t(effect)];
+  stages[1].module = native_plane ? native_ui_plane_fs_
+                                  : guest_output_paint_fs_[size_t(effect)];
   assert_true(stages[1].module != VK_NULL_HANDLE);
 
   VkPipelineVertexInputStateCreateInfo vertex_input_state = {};
@@ -2623,6 +3306,17 @@ VkPipeline VulkanPresenter::CreateGuestOutputPaintPipeline(
   multisample_state.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
   VkPipelineColorBlendAttachmentState color_blend_attachment_state = {};
+  if (native_plane) {
+    color_blend_attachment_state.blendEnable = VK_TRUE;
+    color_blend_attachment_state.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    color_blend_attachment_state.dstColorBlendFactor =
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    color_blend_attachment_state.colorBlendOp = VK_BLEND_OP_ADD;
+    color_blend_attachment_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    color_blend_attachment_state.dstAlphaBlendFactor =
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    color_blend_attachment_state.alphaBlendOp = VK_BLEND_OP_ADD;
+  }
   color_blend_attachment_state.colorWriteMask =
       VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
       VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -2657,8 +3351,10 @@ VkPipeline VulkanPresenter::CreateGuestOutputPaintPipeline(
   pipeline_create_info.pDepthStencilState = nullptr;
   pipeline_create_info.pColorBlendState = &color_blend_state;
   pipeline_create_info.pDynamicState = &dynamic_state;
-  pipeline_create_info.layout = guest_output_paint_pipeline_layouts_
-      [GetGuestOutputPaintPipelineLayoutIndex(effect)];
+  pipeline_create_info.layout =
+      native_plane ? native_ui_plane_pipeline_layout_
+                   : guest_output_paint_pipeline_layouts_
+                         [GetGuestOutputPaintPipelineLayoutIndex(effect)];
   pipeline_create_info.renderPass = render_pass;
   pipeline_create_info.subpass = 0;
   pipeline_create_info.basePipelineHandle = VK_NULL_HANDLE;

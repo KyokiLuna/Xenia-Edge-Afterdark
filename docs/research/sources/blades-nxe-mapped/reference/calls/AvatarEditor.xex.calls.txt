@@ -1,0 +1,2964 @@
+Call graph for AvatarEditor.xex
+xex_load_address=0x92000000
+0 exported functions (boundary = next export's VA), 242 BFS-discovered internal functions (boundary = hard cap/return, capped at 250) - see each function's discovery= line for exactly how it was found (entry-point reachability vs. callback-registration provenance are tracked separately and honestly, not collapsed).
+Neither boundary method is verified prologue/epilogue analysis - see per-function confidence tags below.
+======================================================================
+
+sub_0x9205E5E0  [bfs_reachable]  va=0x9205E5E0
+    discovery: bfs (reached from 0x920A05B8 via 0x92110868)
+    disassembled 14 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92110868
+    internal_callees:
+      0x9205E5F8 -> 0x920F2040  (sub_0x920F2040)
+      0x9205E604 -> 0x9210FAC8  (sub_0x9210FAC8)
+
+sub_0x920603D0  [bfs_reachable]  va=0x920603D0
+    discovery: bfs (reached from 0x920A05B8 via 0x920617D0)
+    disassembled 51 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920617D0, 0x92061890
+    internal_callees:
+      0x920603F0 -> 0x920A6D50  (sub_0x920A6D50)
+    imported_callees:
+      0x920603F8 -> xam.xex!XGetVideoMode
+
+sub_0x92060658  [bfs_reachable]  va=0x92060658
+    discovery: bfs (reached from 0x920A05B8 via 0x92062B70)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062B70
+    internal_callees:
+      0x92060678 -> 0x9209EE98  (sub_0x9209EE98)
+      0x92060690 -> 0x9209EE60  (sub_0x9209EE60)
+
+sub_0x92060910  [bfs_reachable]  va=0x92060910
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 22 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+    internal_callees:
+      0x92060938 -> 0x92103CC8  (sub_0x92103CC8)
+      0x9206094C -> 0x921057E0  (sub_0x921057E0)
+
+sub_0x920609D8  [bfs_reachable]  va=0x920609D8
+    discovery: bfs (reached from 0x920A05B8 via 0x92062078)
+    disassembled 61 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062078
+    internal_callees:
+      0x920609DC -> 0x920A5B68  (sub_0x920A5B68)
+      0x92060A0C -> 0x92136020  (sub_0x92136020)
+      0x92060A40 -> 0x92100BC8  (sub_0x92100BC8)
+      0x92060A50 -> 0x921360D0  (sub_0x921360D0)
+      0x92060A5C -> 0x92060AC4
+      0x92060A9C -> 0x92060AC4
+      0x92060ABC -> 0x92060A8C
+    tail_calls:
+      0x92060AC8 -> 0x920A5BB8
+
+sub_0x92060AD0  [bfs_reachable]  va=0x92060AD0
+    discovery: bfs (reached from 0x920A05B8 via 0x920617D0)
+    disassembled 37 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920617D0
+    internal_callees:
+      0x92060AF8 -> 0x920FCFB8  (sub_0x920FCFB8)
+      0x92060B2C -> 0x921360D0  (sub_0x921360D0)
+      0x92060B40 -> 0x920FFB28  (sub_0x920FFB28)
+      0x92060B44 -> 0x92135ED0  (sub_0x92135ED0)
+
+sub_0x92060B68  [bfs_reachable]  va=0x92060B68
+    discovery: bfs (reached from 0x920A05B8 via 0x92062B70)
+    disassembled 26 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062B70
+    internal_callees:
+      0x92060B7C -> 0x92060BAC
+      0x92060BA8 -> 0x92101188  (sub_0x92101188)
+
+sub_0x92060D20  [bfs_reachable]  va=0x92060D20
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 86 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+    internal_callees:
+      0x92060D24 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x92060D68 -> 0x92060DB8
+      0x92060D70 -> 0x92107CE8  (sub_0x92107CE8)
+      0x92060D88 -> 0x921080E8  (sub_0x921080E8)
+      0x92060D98 -> 0x920FCFB8  (sub_0x920FCFB8)
+      0x92060DA0 -> 0x92060DB8
+      0x92060DBC -> 0x920A5BBC
+      0x92060DE4 -> 0x92060E64
+      0x92060E04 -> 0x92135FB8  (sub_0x92135FB8)
+      0x92060E1C -> 0x920FCF48  (sub_0x920FCF48)
+      0x92060E54 -> 0x92105590  (sub_0x92105590)
+
+sub_0x92060F08  [bfs_reachable]  va=0x92060F08
+    discovery: bfs (reached from 0x920A05B8 via 0x920617D0)
+    disassembled 59 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920617D0
+    internal_callees:
+      0x92060F34 -> 0x920BA9B8  (sub_0x920BA9B8)
+      0x92060F58 -> 0x920BB738  (sub_0x920BB738)
+      0x92060F60 -> 0x920BAA00
+      0x92060F84 -> 0x920BB460  (sub_0x920BB460)
+      0x92060F98 -> 0x920BCA40
+      0x92060FAC -> 0x920BCA40
+      0x92060FC0 -> 0x920BCA40
+      0x92060FD4 -> 0x920BCA40
+
+sub_0x92061080  [bfs_reachable]  va=0x92061080
+    discovery: bfs (reached from 0x920A05B8 via 0x920617D0)
+    disassembled 225 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920617D0, 0x92061890
+    internal_callees:
+      0x92061084 -> 0x920A5B50  (sub_0x920A5B50)
+      0x920610C0 -> 0x920610D0
+      0x9206111C -> 0x92060FF8
+      0x92061158 -> 0x920B5188
+      0x92061198 -> 0x920B7C90
+      0x920611B0 -> 0x920611E0
+      0x920611D8 -> 0x920B5188
+      0x920611F8 -> 0x920B4F78  (sub_0x920B4F78)
+      0x92061208 -> 0x920A5BA0
+      0x9206122C -> 0x92060E78
+      0x9206124C -> 0x920B7C90
+      0x92061280 -> 0x920B7B70
+      0x920612B4 -> 0x920B7B70
+      0x920612D4 -> 0x920BB738  (sub_0x920BB738)
+      0x920612E0 -> 0x920BB460  (sub_0x920BB460)
+      0x920612E4 -> 0x920611E0
+      0x920612EC -> 0x920A5B58  (sub_0x920A5B58)
+      0x92061318 -> 0x9209EDD0
+      0x9206133C -> 0x920A6D50  (sub_0x920A6D50)
+      0x92061388 -> 0x9209E028  (sub_0x9209E028)
+      0x920613A0 -> 0x920613B0
+      0x920613D0 -> 0x9213A448
+    tail_calls:
+      0x92061400 -> 0x920A5BA8
+
+sub_0x920617D0  [bfs_reachable]  va=0x920617D0
+    discovery: bfs (reached from 0x920A05B8 via 0x92062B70)
+    disassembled 68 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062B70
+    internal_callees:
+      0x920617D4 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x920617F0 -> 0x9206DF70  (sub_0x9206DF70)
+      0x920617F8 -> 0x92060AD0  (sub_0x92060AD0)
+      0x92061804 -> 0x9209DFF0  (sub_0x9209DFF0)
+      0x9206181C -> 0x92060F08  (sub_0x92060F08)
+      0x9206182C -> 0x920BB738  (sub_0x920BB738)
+      0x92061838 -> 0x920BB460  (sub_0x920BB460)
+      0x92061840 -> 0x920B4F78  (sub_0x920B4F78)
+      0x92061858 -> 0x920A6D50  (sub_0x920A6D50)
+      0x9206188C -> 0x920A5BBC
+      0x920618B0 -> 0x920603D0  (sub_0x920603D0)
+      0x920618C4 -> 0x92061080  (sub_0x92061080)
+    imported_callees:
+      0x92061870 -> xam.xex!XamLoaderSetLaunchData
+      0x92061884 -> xam.xex!XamLoaderLaunchTitleEx
+
+sub_0x92061890  [bfs_reachable]  va=0x92061890
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+    internal_callees:
+      0x920618B0 -> 0x920603D0  (sub_0x920603D0)
+      0x920618C4 -> 0x92061080  (sub_0x92061080)
+
+sub_0x920618E0  [bfs_reachable]  va=0x920618E0
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 89 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+    internal_callees:
+      0x920618E4 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x92061974 -> 0x920F1B28  (sub_0x920F1B28)
+      0x920619A8 -> 0x920619F4
+      0x920619BC -> 0x920619F4
+      0x920619E0 -> 0x920619F4
+      0x92061A20 -> 0x9210B600  (sub_0x9210B600)
+      0x92061A38 -> 0x9213B3C0  (sub_0x9213B3C0)
+    imported_callees:
+      0x92061918 -> xboxkrnl.exe!XexGetModuleHandle
+      0x92061934 -> xboxkrnl.exe!XexGetProcedureAddress
+      0x92061954 -> xam.xex!XGetLanguage
+    tail_calls:
+      0x92061A40 -> 0x920A5BBC
+
+sub_0x92061A48  [bfs_reachable]  va=0x92061A48
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 46 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+    internal_callees:
+      0x92061AA0 -> 0x9213F2E0  (sub_0x9213F2E0)
+      0x92061AE0 -> 0x92136250  (sub_0x92136250)
+
+sub_0x92061DB8  [bfs_reachable]  va=0x92061DB8
+    discovery: bfs (reached from 0x920A05B8 via 0x92062B70)
+    disassembled 158 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062B70
+    internal_callees:
+      0x92061DBC -> 0x920A5B30  (sub_0x920A5B30)
+      0x92061F60 -> 0x9209DFA0  (sub_0x9209DFA0)
+      0x92061F74 -> 0x9209EED8  (sub_0x9209EED8)
+      0x92061F88 -> 0x9209EE98  (sub_0x9209EE98)
+      0x92061FA8 -> 0x9209DFF0  (sub_0x9209DFF0)
+      0x92061FB4 -> 0x920A5B80
+      0x92061FE4 -> 0x9209EF40  (sub_0x9209EF40)
+      0x92061FEC -> 0x9209EF20  (sub_0x9209EF20)
+
+sub_0x92061FB8  [bfs_reachable]  va=0x92061FB8
+    discovery: bfs (reached from 0x920A05B8 via 0x920622D8)
+    disassembled 30 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920622D8
+    internal_callees:
+      0x92061FE4 -> 0x9209EF40  (sub_0x9209EF40)
+      0x92061FEC -> 0x9209EF20  (sub_0x9209EF20)
+
+sub_0x92062078  [bfs_reachable]  va=0x92062078
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 26 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+    internal_callees:
+      0x920620A0 -> 0x92138080  (sub_0x92138080)
+      0x920620B4 -> 0x920609D8  (sub_0x920609D8)
+      0x920620C0 -> 0x92135ED0  (sub_0x92135ED0)
+
+sub_0x92062120  [bfs_reachable]  va=0x92062120
+    discovery: bfs (reached from 0x920A05B8 via 0x92062B70)
+    disassembled 19 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062B70
+    internal_callees:
+      0x92062140 -> 0x92103CC8  (sub_0x92103CC8)
+
+sub_0x920622D8  [bfs_reachable]  va=0x920622D8
+    discovery: bfs (reached from 0x920A05B8 via 0x92062B70)
+    disassembled 40 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062B70
+    internal_callees:
+      0x920622EC -> 0x92061FB8  (sub_0x92061FB8)
+      0x92062300 -> 0x9209EF78  (sub_0x9209EF78)
+      0x9206235C -> 0x920A6D50  (sub_0x920A6D50)
+
+sub_0x920623C8  [bfs_reachable]  va=0x920623C8
+    discovery: bfs (reached from 0x920A05B8 via 0x92062B70)
+    disassembled 81 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062B70
+    internal_callees:
+      0x92062420 -> 0x92101328  (sub_0x92101328)
+      0x92062434 -> 0x9209DFA0  (sub_0x9209DFA0)
+      0x92062444 -> 0x92061890  (sub_0x92061890)
+      0x92062468 -> 0x92062078  (sub_0x92062078)
+      0x92062478 -> 0x920618E0  (sub_0x920618E0)
+      0x92062484 -> 0x920F19C0  (sub_0x920F19C0)
+      0x92062490 -> 0x92061A48  (sub_0x92061A48)
+      0x92062498 -> 0x92102AF0  (sub_0x92102AF0)
+      0x920624A4 -> 0x920B8A90  (sub_0x920B8A90)
+      0x920624B0 -> 0x920B8AD0  (sub_0x920B8AD0)
+      0x920624D0 -> 0x9209E028  (sub_0x9209E028)
+      0x920624DC -> 0x92060910  (sub_0x92060910)
+      0x920624E8 -> 0x920F1B50  (sub_0x920F1B50)
+      0x920624F4 -> 0x92072170  (sub_0x92072170)
+    imported_callees:
+      0x920623E0 -> xam.xex!XamBackgroundDownloadSetMode
+      0x92062404 -> xboxkrnl.exe!ExGetXConfigSetting
+
+sub_0x92062510  [bfs_reachable]  va=0x92062510
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 247 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+    internal_callees:
+      0x92062514 -> 0x920A5B68  (sub_0x920A5B68)
+      0x92062534 -> 0x920F13E0  (sub_0x920F13E0)
+      0x9206254C -> 0x921703F8  (sub_0x921703F8)
+      0x92062558 -> 0x921703F8  (sub_0x921703F8)
+      0x92062564 -> 0x921703F8  (sub_0x921703F8)
+      0x92062570 -> 0x921703F8  (sub_0x921703F8)
+      0x920625A8 -> 0x920808D0  (sub_0x920808D0)
+      0x920625B4 -> 0x921703F8  (sub_0x921703F8)
+      0x920625BC -> 0x92062778
+      0x920625C4 -> 0x920808D0  (sub_0x920808D0)
+      0x920625D0 -> 0x92062784
+      0x920625D8 -> 0x920918A8  (sub_0x920918A8)
+      0x9206263C -> 0x920808D0  (sub_0x920808D0)
+      0x92062648 -> 0x921703F8  (sub_0x921703F8)
+      0x92062650 -> 0x920808D0  (sub_0x920808D0)
+      0x9206265C -> 0x92062784
+      0x92062684 -> 0x9206263C
+      0x9206268C -> 0x920808D0  (sub_0x920808D0)
+      0x92062698 -> 0x921703F8  (sub_0x921703F8)
+      0x920626A0 -> 0x920808D0  (sub_0x920808D0)
+      0x920626AC -> 0x921703F8  (sub_0x921703F8)
+      0x920626B8 -> 0x920D70E0  (sub_0x920D70E0)
+      0x920626CC -> 0x920D73D8  (sub_0x920D73D8)
+      0x920626DC -> 0x920808D0  (sub_0x920808D0)
+      0x920626E8 -> 0x921703F8  (sub_0x921703F8)
+      0x920626FC -> 0x920808D0  (sub_0x920808D0)
+      0x92062708 -> 0x92062784
+      0x92062710 -> 0x920808D0  (sub_0x920808D0)
+      0x9206271C -> 0x921703F8  (sub_0x921703F8)
+      0x92062724 -> 0x920808D0  (sub_0x920808D0)
+      0x92062730 -> 0x921703F8  (sub_0x921703F8)
+      0x92062738 -> 0x920918A8  (sub_0x920918A8)
+      0x92062778 -> 0x920808D0  (sub_0x920808D0)
+      0x92062784 -> 0x921703F8  (sub_0x921703F8)
+      0x92062790 -> 0x920918F0  (sub_0x920918F0)
+      0x920627A0 -> 0x92091878  (sub_0x92091878)
+      0x920627C4 -> 0x920808D0  (sub_0x920808D0)
+      0x920627D0 -> 0x921703F8  (sub_0x921703F8)
+      0x920627DC -> 0x920918F0  (sub_0x920918F0)
+      0x920627EC -> 0x92091878  (sub_0x92091878)
+      0x92062810 -> 0x920808D0  (sub_0x920808D0)
+      0x9206281C -> 0x921703F8  (sub_0x921703F8)
+      0x9206282C -> 0x920808D0  (sub_0x920808D0)
+      0x92062838 -> 0x921703F8  (sub_0x921703F8)
+      0x92062844 -> 0x9216C450  (sub_0x9216C450)
+      0x9206284C -> 0x920A5BB8
+      0x9206285C -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9206287C -> 0x9209ED78  (sub_0x9209ED78)
+      0x9206288C -> 0x92076958  (sub_0x92076958)
+      0x92062894 -> 0x9206289C
+      0x920628AC -> 0x920628BC
+      0x920628C0 -> 0x920A5BBC
+      0x920628D8 -> 0x920A5B20  (sub_0x920A5B20)
+
+sub_0x920628F0  [bfs_reachable]  va=0x920628F0
+    discovery: bfs (reached from 0x920A05B8 via 0x92062B70)
+    disassembled 119 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062B70
+    internal_callees:
+      0x920628F4 -> 0x920A5B68  (sub_0x920A5B68)
+      0x92062920 -> 0x9209E028  (sub_0x9209E028)
+      0x9206292C -> 0x92108BD0  (sub_0x92108BD0)
+      0x9206293C -> 0x9206294C
+      0x9206296C -> 0x9209E028  (sub_0x9209E028)
+      0x9206298C -> 0x92060D20  (sub_0x92060D20)
+      0x920629A8 -> 0x9216D7B0  (sub_0x9216D7B0)
+      0x920629BC -> 0x9216D7B0  (sub_0x9216D7B0)
+      0x920629D0 -> 0x9216D7B0  (sub_0x9216D7B0)
+      0x920629E4 -> 0x9216D7B0  (sub_0x9216D7B0)
+      0x92062A08 -> 0x9209E028  (sub_0x9209E028)
+      0x92062A20 -> 0x92107CE8  (sub_0x92107CE8)
+      0x92062A3C -> 0x920F15A8  (sub_0x920F15A8)
+      0x92062A4C -> 0x92108F40  (sub_0x92108F40)
+      0x92062A5C -> 0x92109160  (sub_0x92109160)
+      0x92062A70 -> 0x920F4AE8  (sub_0x920F4AE8)
+      0x92062A78 -> 0x92109510  (sub_0x92109510)
+      0x92062A84 -> 0x92102D60  (sub_0x92102D60)
+      0x92062A9C -> 0x92091788  (sub_0x92091788)
+      0x92062AA8 -> 0x92062510  (sub_0x92062510)
+      0x92062AAC -> 0x92062AC0
+      0x92062AB4 -> 0x920FCFB8  (sub_0x920FCFB8)
+    tail_calls:
+      0x92062AC8 -> 0x920A5BB8
+
+sub_0x92062B70  [bfs_reachable]  va=0x92062B70
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 49 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+    internal_callees:
+      0x92062B8C -> 0x920622D8  (sub_0x920622D8)
+      0x92062B98 -> 0x920623C8  (sub_0x920623C8)
+      0x92062BA8 -> 0x920628F0  (sub_0x920628F0)
+      0x92062BE8 -> 0x92061DB8  (sub_0x92061DB8)
+      0x92062BF4 -> 0x92060B68  (sub_0x92060B68)
+      0x92062BFC -> 0x920617D0  (sub_0x920617D0)
+      0x92062C0C -> 0x92060658  (sub_0x92060658)
+      0x92062C14 -> 0x92062120  (sub_0x92062120)
+
+sub_0x9206DF70  [bfs_reachable]  va=0x9206DF70
+    discovery: bfs (reached from 0x920A05B8 via 0x920617D0)
+    disassembled 75 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920617D0
+    internal_callees:
+      0x9206DF74 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9206DF94 -> 0x9209EFE0
+      0x9206DFD0 -> 0x920769D0
+      0x9206DFDC -> 0x920FCFB8  (sub_0x920FCFB8)
+      0x9206DFF0 -> 0x920A5B28
+      0x9206E000 -> 0x920BCA40
+      0x9206E014 -> 0x920A5B28
+      0x9206E020 -> 0x92063120
+      0x9206E02C -> 0x9209B8C8
+      0x9206E044 -> 0x9209C708
+      0x9206E04C -> 0x9209B2E8
+      0x9206E058 -> 0x9209B8C8
+      0x9206E068 -> 0x9209C708
+      0x9206E070 -> 0x9209B2E8
+      0x9206E07C -> 0x920693E0
+      0x9206E088 -> 0x92099200
+      0x9206E08C -> 0x920D8298
+      0x9206E090 -> 0x9207DA78
+    tail_calls:
+      0x9206E098 -> 0x920A5BBC
+
+sub_0x92072170  [bfs_reachable]  va=0x92072170
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 24 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+    internal_callees:
+      0x92072198 -> 0x9209FAB8  (sub_0x9209FAB8)
+      0x920721A4 -> 0x9209F3D0  (sub_0x9209F3D0)
+      0x920721B8 -> 0x920721C0
+
+sub_0x92076958  [bfs_reachable]  va=0x92076958
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 30 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+
+sub_0x920808D0  [bfs_reachable]  va=0x920808D0
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+    tail_calls:
+      0x920808E0 -> 0x92103D18
+
+sub_0x92091788  [bfs_reachable]  va=0x92091788
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 13 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+
+sub_0x92091878  [bfs_reachable]  va=0x92091878
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 4 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+
+sub_0x920918A8  [bfs_reachable]  va=0x920918A8
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 4 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+
+sub_0x920918F0  [bfs_reachable]  va=0x920918F0
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 14 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+
+sub_0x9209DFA0  [bfs_reachable]  va=0x9209DFA0
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061DB8, 0x920623C8
+    imported_callees:
+      0x9209DFBC -> xboxkrnl.exe!RtlInitAnsiString
+      0x9209DFC8 -> xboxkrnl.exe!RtlInitAnsiString
+      0x9209DFD4 -> xboxkrnl.exe!ObCreateSymbolicLink
+
+sub_0x9209DFF0  [bfs_reachable]  va=0x9209DFF0
+    discovery: bfs (reached from 0x920A05B8 via 0x92061DB8)
+    disassembled 13 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920617D0, 0x92061DB8
+    imported_callees:
+      0x9209E004 -> xboxkrnl.exe!RtlInitAnsiString
+      0x9209E00C -> xboxkrnl.exe!ObDeleteSymbolicLink
+
+sub_0x9209E028  [bfs_reachable]  va=0x9209E028
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 47 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061080, 0x920623C8, 0x920628F0
+    internal_callees:
+      0x9209E064 -> 0x9209E06C
+      0x9209E084 -> 0x9209E0B4
+      0x9209E098 -> 0x9209E0A0
+      0x9209E0C4 -> 0x9209E0D0
+    imported_callees:
+      0x9209E080 -> xboxkrnl.exe!_snwprintf
+      0x9209E0B0 -> xboxkrnl.exe!_snwprintf
+
+sub_0x9209ED78  [bfs_reachable]  va=0x9209ED78
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 22 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+    internal_callees:
+      0x9209ED90 -> 0x9209EDA4
+      0x9209ED98 -> 0x920A8C18  (sub_0x920A8C18)
+      0x9209EDA8 -> 0x920A7988  (sub_0x920A7988)
+
+sub_0x9209EDD8  [bfs_reachable]  va=0x9209EDD8
+    discovery: bfs (reached from 0x920A05B8 via 0x92101188)
+    disassembled 4 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92101148, 0x92101188, 0x92130200
+
+sub_0x9209EE60  [bfs_reachable]  va=0x9209EE60
+    discovery: bfs (reached from 0x920A05B8 via 0x92060658)
+    disassembled 14 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060658
+    internal_callees:
+      0x9209EE78 -> 0x920A07A0  (sub_0x920A07A0)
+      0x9209EE80 -> 0x9209EE88
+    imported_callees:
+      0x9209EE6C -> xboxkrnl.exe!XexUnloadImage
+
+sub_0x9209EE98  [bfs_reachable]  va=0x9209EE98
+    discovery: bfs (reached from 0x920A05B8 via 0x92061DB8)
+    disassembled 15 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060658, 0x92061DB8
+    internal_callees:
+      0x9209EEB4 -> 0x920A07A0  (sub_0x920A07A0)
+      0x9209EEBC -> 0x9209EEC4
+    imported_callees:
+      0x9209EEA8 -> xboxkrnl.exe!XexGetProcedureAddress
+
+sub_0x9209EED8  [bfs_reachable]  va=0x9209EED8
+    discovery: bfs (reached from 0x920A05B8 via 0x92061DB8)
+    disassembled 17 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061DB8
+    internal_callees:
+      0x9209EEFC -> 0x920A07A0  (sub_0x920A07A0)
+      0x9209EF04 -> 0x9209EF0C
+    imported_callees:
+      0x9209EEF0 -> xboxkrnl.exe!XexLoadImage
+
+sub_0x9209EF20  [bfs_reachable]  va=0x9209EF20
+    discovery: bfs (reached from 0x920A05B8 via 0x92061DB8)
+    disassembled 7 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061DB8, 0x92061FB8
+
+sub_0x9209EF40  [bfs_reachable]  va=0x9209EF40
+    discovery: bfs (reached from 0x920A05B8 via 0x92061DB8)
+    disassembled 13 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061DB8, 0x92061FB8
+    imported_callees:
+      0x9209EF54 -> xboxkrnl.exe!KeQueryPerformanceFrequency
+
+sub_0x9209EF78  [bfs_reachable]  va=0x9209EF78
+    discovery: bfs (reached from 0x920A05B8 via 0x920622D8)
+    disassembled 15 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920622D8
+    internal_callees:
+      0x9209EF94 -> 0x920A07C0  (sub_0x920A07C0)
+      0x9209EF9C -> 0x9209EFA4
+    imported_callees:
+      0x9209EF88 -> xboxkrnl.exe!XexGetModuleHandle
+
+sub_0x9209F008  [bfs_reachable]  va=0x9209F008
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DD18)
+    disassembled 37 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DB88, 0x9210DCD8, 0x9210DD18
+    internal_callees:
+      0x9209F00C -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9209F058 -> 0x920A0860
+      0x9209F078 -> 0x920A6D50  (sub_0x920A6D50)
+      0x9209F07C -> 0x9209F090
+      0x9209F088 -> 0x920A0818
+    tail_calls:
+      0x9209F098 -> 0x920A5BBC
+
+sub_0x9209F0A0  [bfs_reachable]  va=0x9209F0A0
+    discovery: bfs (reached from 0x920A05B8 via 0x92101148)
+    disassembled 7 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920B4F78, 0x92101148, 0x92101188, 0x9210DD00, 0x9210DD18
+    internal_callees:
+      0x9209F0B0 -> 0x920A08F0
+      0x9209F0B4 -> 0x920A0900
+
+sub_0x9209F0C0  [bfs_reachable]  va=0x9209F0C0
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DD18)
+    disassembled 48 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DB88, 0x9210DCD8, 0x9210DD18
+    internal_callees:
+      0x9209F0C8 -> 0x920A08E8
+      0x9209F0CC -> 0x920A0948
+      0x9209F0D4 -> 0x920A0980
+      0x9209F11C -> 0x9209F0D0  (sub_0x9209F0D0)
+      0x9209F120 -> 0x9209F128
+      0x9209F134 -> 0x920A09E8  (sub_0x920A09E8)
+      0x9209F138 -> 0x9209F164
+      0x9209F15C -> 0x9209F168
+      0x9209F160 -> 0x920A07C0  (sub_0x920A07C0)
+
+sub_0x9209F0D0  [bfs_reachable]  va=0x9209F0D0
+    discovery: bfs (reached from 0x920A05B8 via 0x9209F880)
+    disassembled 44 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9209F0C0, 0x9209F0D0, 0x9209F880
+    internal_callees:
+      0x9209F0D4 -> 0x920A0980
+      0x9209F11C -> 0x9209F0D0  (sub_0x9209F0D0)
+      0x9209F120 -> 0x9209F128
+      0x9209F134 -> 0x920A09E8  (sub_0x920A09E8)
+      0x9209F138 -> 0x9209F164
+      0x9209F15C -> 0x9209F168
+      0x9209F160 -> 0x920A07C0  (sub_0x920A07C0)
+
+sub_0x9209F3D0  [bfs_reachable]  va=0x9209F3D0
+    discovery: bfs (reached from 0x920A05B8 via 0x9209F880)
+    disassembled 1 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92072170, 0x9209F880, 0x920A5AC0, 0x920A9018
+    tail_calls:
+      0x9209F3D0 -> 0x920A07F8
+
+sub_0x9209F880  [bfs_reachable]  va=0x9209F880
+    discovery: bfs (reached from 0x920A05B8 via 0x920A0290)
+    disassembled 38 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A0290
+    internal_callees:
+      0x9209F8C0 -> 0x9209F0D0  (sub_0x9209F0D0)
+      0x9209F8C4 -> 0x9209F8CC
+      0x9209F8D8 -> 0x9209F900
+      0x9209F8E4 -> 0x9209F3D0  (sub_0x9209F3D0)
+      0x9209F8E8 -> 0x9209F900
+
+sub_0x9209FAB8  [bfs_reachable]  va=0x9209FAB8
+    discovery: bfs (reached from 0x920A05B8 via 0x92072170)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92072170
+    tail_calls:
+      0x9209FAC0 -> 0x920A0AD8
+
+sub_0x920A00D0  [bfs_reachable]  va=0x920A00D0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 36 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+    internal_callees:
+      0x920A010C -> 0x920A0114
+
+sub_0x920A0290  [bfs_reachable]  va=0x920A0290
+    discovery: bfs (reached from 0x920A05B8 via 0x920A03D0)
+    disassembled 79 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A03D0
+    internal_callees:
+      0x920A0294 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x920A02BC -> 0x920A6D50  (sub_0x920A6D50)
+      0x920A0334 -> 0x9209F880  (sub_0x9209F880)
+      0x920A0344 -> 0x920A5BBC
+      0x920A03AC -> 0x920A03B8
+    imported_callees:
+      0x920A02DC -> xboxkrnl.exe!NtCreateEvent
+      0x920A0318 -> xam.xex!XamShowMessageBoxUIEx
+      0x920A033C -> xboxkrnl.exe!NtClose
+
+sub_0x920A0348  [bfs_reachable]  va=0x920A0348
+    discovery: bfs (reached from 0x920A05B8 via 0x920A03D0)
+    disassembled 33 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A03D0
+    internal_callees:
+      0x920A03AC -> 0x920A03B8
+
+sub_0x920A03D0  [bfs_reachable]  va=0x920A03D0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 120 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+    internal_callees:
+      0x920A049C -> 0x920A6D50  (sub_0x920A6D50)
+      0x920A04B0 -> 0x920A6D50  (sub_0x920A6D50)
+      0x920A0568 -> 0x920A0348  (sub_0x920A0348)
+      0x920A057C -> 0x920A0348  (sub_0x920A0348)
+      0x920A058C -> 0x920A0290  (sub_0x920A0290)
+    imported_callees:
+      0x920A03F0 -> xboxkrnl.exe!XexCheckExecutablePrivilege
+      0x920A03FC -> xam.xex!XGetAVPack
+      0x920A0434 -> xboxkrnl.exe!ExGetXConfigSetting
+      0x920A0464 -> xboxkrnl.exe!ExGetXConfigSetting
+      0x920A0484 -> xam.xex!XGetLanguage
+
+entry_point  [bfs_root]  va=0x920A05B8
+    discovery: bfs (entry point)
+    disassembled 122 insns, INFERRED (boundary-truncated/BFS)
+    internal_callees:
+      0x920A05BC -> 0x920A5B68  (sub_0x920A5B68)
+      0x920A05EC -> 0x920A2048  (sub_0x920A2048)
+      0x920A05F4 -> 0x920A1E98  (sub_0x920A1E98)
+      0x920A05F8 -> 0x920A03D0  (sub_0x920A03D0)
+      0x920A060C -> 0x920A9290  (sub_0x920A9290)
+      0x920A0610 -> 0x920A1E20  (sub_0x920A1E20)
+      0x920A0618 -> 0x920A1D40  (sub_0x920A1D40)
+      0x920A0640 -> 0x920A1D30  (sub_0x920A1D30)
+      0x920A0698 -> 0x920A0660
+      0x920A06D4 -> 0x920A06E4
+      0x920A0740 -> 0x920A074C
+      0x920A0750 -> 0x92062B70  (sub_0x92062B70)
+      0x920A0758 -> 0x920A8ED0  (sub_0x920A8ED0)
+      0x920A0788 -> 0x920A00D0  (sub_0x920A00D0)
+    imported_callees:
+      0x920A0604 -> xam.xex!XamLoaderTerminateTitle
+      0x920A0768 -> xboxkrnl.exe!DbgPrint
+      0x920A0778 -> xam.xex!XamLoaderTerminateTitle
+
+sub_0x920A07A0  [bfs_reachable]  va=0x920A07A0
+    discovery: bfs (reached from 0x920A05B8 via 0x9209EED8)
+    disassembled 1 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9209EE60, 0x9209EE98, 0x9209EED8
+    tail_calls:
+      0x920A07A0 -> 0x920A07C0  (sub_0x920A07C0)
+
+sub_0x920A07C0  [bfs_reachable]  va=0x920A07C0
+    discovery: bfs (reached from 0x920A05B8 via 0x9209EF78)
+    disassembled 13 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9209EF78, 0x9209F0C0, 0x9209F0D0, 0x920A07A0
+    imported_callees:
+      0x920A07CC -> xboxkrnl.exe!RtlNtStatusToDosError
+
+sub_0x920A09E8  [bfs_reachable]  va=0x920A09E8
+    discovery: bfs (reached from 0x920A05B8 via 0x920AF4E0)
+    disassembled 1 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9209F0C0, 0x9209F0D0, 0x920A9018, 0x920AF4E0
+    tail_calls:
+      0x920A09E8 -> 0x920A07A8
+
+sub_0x920A1D30  [bfs_reachable]  va=0x920A1D30
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+
+sub_0x920A1D40  [bfs_reachable]  va=0x920A1D40
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 56 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+
+sub_0x920A1E20  [bfs_reachable]  va=0x920A1E20
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 29 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+
+sub_0x920A1E98  [bfs_reachable]  va=0x920A1E98
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 53 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+    internal_callees:
+      0x920A1E9C -> 0x920A5B68  (sub_0x920A5B68)
+      0x920A1EFC -> 0x920A5BB8
+      0x920A1F04 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x920A1F48 -> 0x920A1F5C
+    imported_callees:
+      0x920A1EB4 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x920A1EF4 -> xboxkrnl.exe!RtlLeaveCriticalSection
+      0x920A1F20 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x920A1F60 -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x920A1F68 -> 0x920A5BBC
+
+sub_0x920A1F00  [bfs_reachable]  va=0x920A1F00
+    discovery: bfs (reached from 0x920A05B8 via 0x920A9290)
+    disassembled 27 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A9290
+    internal_callees:
+      0x920A1F04 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x920A1F48 -> 0x920A1F5C
+    imported_callees:
+      0x920A1F20 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x920A1F60 -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x920A1F68 -> 0x920A5BBC
+
+sub_0x920A1F70  [bfs_reachable]  va=0x920A1F70
+    discovery: bfs (reached from 0x920A05B8 via 0x920A2048)
+    disassembled 53 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A2048
+    internal_callees:
+      0x920A1FC4 -> 0x920A202C
+      0x920A2014 -> 0x920A3888  (sub_0x920A3888)
+    imported_callees:
+      0x920A1FA8 -> xboxkrnl.exe!RtlImageXexHeaderField
+
+sub_0x920A2048  [bfs_reachable]  va=0x920A2048
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 22 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+    internal_callees:
+      0x920A2054 -> 0x920A1F70  (sub_0x920A1F70)
+    imported_callees:
+      0x920A208C -> xboxkrnl.exe!HalReturnToFirmware
+
+sub_0x920A20A0  [bfs_reachable]  va=0x920A20A0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A2260)
+    disassembled 112 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A2260
+    internal_callees:
+      0x920A2144 -> 0x920A2208
+      0x920A217C -> 0x920A2248
+      0x920A21C4 -> 0x920A2178
+      0x920A2218 -> 0x920A2228
+    imported_callees:
+      0x920A211C -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A216C -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A21A0 -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A21C0 -> xboxkrnl.exe!NtFreeVirtualMemory
+
+sub_0x920A2260  [bfs_reachable]  va=0x920A2260
+    discovery: bfs (reached from 0x920A05B8 via 0x920A3178)
+    disassembled 235 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A3178
+    internal_callees:
+      0x920A2264 -> 0x920A5B68  (sub_0x920A5B68)
+      0x920A22F0 -> 0x920A22F8
+      0x920A2308 -> 0x920A20A0  (sub_0x920A20A0)
+      0x920A2348 -> 0x920A5BB8
+      0x920A237C -> 0x920A2344
+      0x920A2384 -> 0x920A5B5C  (sub_0x920A5B5C)
+      0x920A23F0 -> 0x920A5BAC
+      0x920A2418 -> 0x920A2438
+      0x920A24A0 -> 0x920A24B0
+      0x920A24F0 -> 0x920A2500
+      0x920A254C -> 0x920A255C
+      0x920A258C -> 0x920A259C
+      0x920A25E4 -> 0x920A2600
+    imported_callees:
+      0x920A2434 -> xboxkrnl.exe!NtAllocateVirtualMemory
+    tail_calls:
+      0x920A2608 -> 0x920A23EC
+
+sub_0x920A2380  [bfs_reachable]  va=0x920A2380
+    discovery: bfs (reached from 0x920A05B8 via 0x920A3178)
+    disassembled 163 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A3178
+    internal_callees:
+      0x920A2384 -> 0x920A5B5C  (sub_0x920A5B5C)
+      0x920A23F0 -> 0x920A5BAC
+      0x920A2418 -> 0x920A2438
+      0x920A24A0 -> 0x920A24B0
+      0x920A24F0 -> 0x920A2500
+      0x920A254C -> 0x920A255C
+      0x920A258C -> 0x920A259C
+      0x920A25E4 -> 0x920A2600
+    imported_callees:
+      0x920A2434 -> xboxkrnl.exe!NtAllocateVirtualMemory
+    tail_calls:
+      0x920A2608 -> 0x920A23EC
+
+sub_0x920A2610  [bfs_reachable]  va=0x920A2610
+    discovery: bfs (reached from 0x920A05B8 via 0x920A3178)
+    disassembled 257 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A3178, 0x920A4700
+    internal_callees:
+      0x920A2614 -> 0x920A5B5C  (sub_0x920A5B5C)
+    imported_callees:
+      0x920A2708 -> xboxkrnl.exe!RtlCompareMemoryUlong
+      0x920A27B4 -> xboxkrnl.exe!RtlCompareMemoryUlong
+      0x920A28F4 -> xboxkrnl.exe!RtlCompareMemoryUlong
+      0x920A29C0 -> xboxkrnl.exe!RtlCompareMemoryUlong
+    tail_calls:
+      0x920A2A10 -> 0x920A5BAC
+
+sub_0x920A2A18  [bfs_reachable]  va=0x920A2A18
+    discovery: bfs (reached from 0x920A05B8 via 0x920A3178)
+    disassembled 77 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A3178, 0x920A3E30, 0x920A4700
+    internal_callees:
+      0x920A2A1C -> 0x920A5B68  (sub_0x920A5B68)
+      0x920A2A48 -> 0x920A2B34
+      0x920A2A6C -> 0x920A2A78
+      0x920A2AD8 -> 0x920A2B00
+      0x920A2AE4 -> 0x920A2AF8
+    tail_calls:
+      0x920A2B48 -> 0x920A5BB8
+
+sub_0x920A3178  [bfs_reachable]  va=0x920A3178
+    discovery: bfs (reached from 0x920A05B8 via 0x920A3888)
+    disassembled 233 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A3178, 0x920A3888
+    internal_callees:
+      0x920A317C -> 0x920A5B50  (sub_0x920A5B50)
+      0x920A31C0 -> 0x920A31C8
+      0x920A31EC -> 0x920A32D8
+      0x920A3290 -> 0x920A2260  (sub_0x920A2260)
+      0x920A32D0 -> 0x920A2A18  (sub_0x920A2A18)
+      0x920A32DC -> 0x920A5BA0
+      0x920A32E4 -> 0x920A5B64  (sub_0x920A5B64)
+      0x920A3354 -> 0x920A2380  (sub_0x920A2380)
+      0x920A3378 -> 0x920A2610  (sub_0x920A2610)
+      0x920A338C -> 0x920A2A18  (sub_0x920A2A18)
+      0x920A3394 -> 0x920A3514
+      0x920A34D0 -> 0x920A3178  (sub_0x920A3178)
+      0x920A34F4 -> 0x920A3514
+    imported_callees:
+      0x920A3214 -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A340C -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A3450 -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A34A0 -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A350C -> xboxkrnl.exe!NtFreeVirtualMemory
+    tail_calls:
+      0x920A3518 -> 0x920A5BB4
+
+sub_0x920A3888  [bfs_reachable]  va=0x920A3888
+    discovery: bfs (reached from 0x920A05B8 via 0x920A1F70)
+    disassembled 360 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A1F70
+    internal_callees:
+      0x920A388C -> 0x920A5B4C  (sub_0x920A5B4C)
+      0x920A3908 -> 0x920A93C0  (sub_0x920A93C0)
+      0x920A391C -> 0x920A3938
+      0x920A3944 -> 0x920A3E14
+      0x920A3A1C -> 0x920A3A30
+      0x920A3A4C -> 0x920A3A8C
+      0x920A3A78 -> 0x920A3A30
+      0x920A3A84 -> 0x920A3A8C
+      0x920A3AE0 -> 0x920A6D50  (sub_0x920A6D50)
+      0x920A3AE4 -> 0x920A3B84
+      0x920A3B2C -> 0x920A6D50  (sub_0x920A6D50)
+      0x920A3B78 -> 0x920A3B84
+      0x920A3B90 -> 0x920A3BE0
+      0x920A3C30 -> 0x920A3940
+      0x920A3D7C -> 0x920A3178  (sub_0x920A3178)
+      0x920A3E18 -> 0x920A5B9C
+    imported_callees:
+      0x920A3AF4 -> xboxkrnl.exe!NtQueryVirtualMemory
+      0x920A3B4C -> xboxkrnl.exe!NtQueryVirtualMemory
+      0x920A3BB4 -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A3C04 -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A3C2C -> xboxkrnl.exe!NtFreeVirtualMemory
+      0x920A3D04 -> xboxkrnl.exe!KeGetCurrentProcessType
+      0x920A3D50 -> xboxkrnl.exe!RtlInitializeCriticalSection
+
+sub_0x920A3E30  [bfs_reachable]  va=0x920A3E30
+    discovery: bfs (reached from 0x920A05B8 via 0x920ABAA0)
+    disassembled 561 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A7988, 0x920ABAA0
+    internal_callees:
+      0x920A3E34 -> 0x920A5B50  (sub_0x920A5B50)
+      0x920A3F9C -> 0x920A4530
+      0x920A3FEC -> 0x920A40E8
+      0x920A3FFC -> 0x920A405C
+      0x920A401C -> 0x920A405C
+      0x920A403C -> 0x920A405C
+      0x920A40D8 -> 0x920A4188
+      0x920A4140 -> 0x920A4118
+      0x920A4148 -> 0x920A32E0
+      0x920A41F0 -> 0x920A451C
+      0x920A426C -> 0x920A431C
+      0x920A42B0 -> 0x920A4288
+      0x920A4340 -> 0x920A44E0
+      0x920A4380 -> 0x920A4358
+      0x920A447C -> 0x920A44C0
+      0x920A44BC -> 0x920A4494
+      0x920A44E4 -> 0x920A44F4
+      0x920A44F0 -> 0x920A2A18  (sub_0x920A2A18)
+      0x920A4564 -> 0x920A6D50  (sub_0x920A6D50)
+      0x920A4568 -> 0x920A466C
+      0x920A45C4 -> 0x920A6D50  (sub_0x920A6D50)
+      0x920A4634 -> 0x920A466C
+      0x920A4674 -> 0x920A46AC
+      0x920A4680 -> 0x920A5BA0
+      0x920A46A8 -> 0x920A46C8
+    imported_callees:
+      0x920A3E70 -> xboxkrnl.exe!KeGetCurrentProcessType
+      0x920A3E94 -> xboxkrnl.exe!KeBugCheckEx
+      0x920A3ED4 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x920A4544 -> xboxkrnl.exe!RtlLeaveCriticalSection
+      0x920A45AC -> xboxkrnl.exe!NtAllocateVirtualMemory
+      0x920A4664 -> xboxkrnl.exe!RtlRaiseException
+      0x920A46D4 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x920A4700  [bfs_reachable]  va=0x920A4700
+    discovery: bfs (reached from 0x920A05B8 via 0x920A5AC0)
+    disassembled 186 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A5AC0
+    internal_callees:
+      0x920A4704 -> 0x920A5B5C  (sub_0x920A5B5C)
+      0x920A4774 -> 0x920A4970
+      0x920A47C4 -> 0x920A2610  (sub_0x920A2610)
+      0x920A484C -> 0x920A48F4
+      0x920A4874 -> 0x920A3520
+      0x920A4878 -> 0x920A4960
+      0x920A48CC -> 0x920A489C
+      0x920A48F8 -> 0x920A4960
+      0x920A4900 -> 0x920A2A18  (sub_0x920A2A18)
+      0x920A4904 -> 0x920A4960
+      0x920A4968 -> 0x920A49A0
+      0x920A4974 -> 0x920A5BAC
+      0x920A499C -> 0x920A49BC
+    imported_callees:
+      0x920A4740 -> xboxkrnl.exe!KeGetCurrentProcessType
+      0x920A4764 -> xboxkrnl.exe!KeBugCheckEx
+      0x920A4794 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x920A492C -> xboxkrnl.exe!RtlLeaveCriticalSection
+      0x920A4950 -> xboxkrnl.exe!NtFreeVirtualMemory
+      0x920A49C8 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x920A52D0  [bfs_reachable]  va=0x920A52D0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A5AC0)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A5AC0, 0x920A7988, 0x920ABAA0
+
+sub_0x920A5AC0  [bfs_reachable]  va=0x920A5AC0
+    discovery: bfs (reached from 0x920A05B8 via 0x920AF1F0)
+    disassembled 23 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A5B20, 0x920A9018, 0x920AF1F0, 0x920AF270
+    internal_callees:
+      0x920A5ADC -> 0x920A52D0  (sub_0x920A52D0)
+      0x920A5AE8 -> 0x920A4700  (sub_0x920A4700)
+      0x920A5AF4 -> 0x920A94F0  (sub_0x920A94F0)
+      0x920A5AFC -> 0x9209F3D0  (sub_0x9209F3D0)
+      0x920A5B00 -> 0x920A9480  (sub_0x920A9480)
+
+sub_0x920A5B20  [bfs_reachable]  va=0x920A5B20
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 1 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+    tail_calls:
+      0x920A5B20 -> 0x920A5AC0  (sub_0x920A5AC0)
+
+sub_0x920A5B30  [bfs_reachable]  va=0x920A5B30
+    discovery: bfs (reached from 0x920A05B8 via 0x92061DB8)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061DB8
+
+sub_0x920A5B3C  [bfs_reachable]  va=0x920A5B3C
+    discovery: bfs (reached from 0x920A05B8 via 0x92100BC8)
+    disassembled 17 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92100BC8
+
+sub_0x920A5B4C  [bfs_reachable]  va=0x920A5B4C
+    discovery: bfs (reached from 0x920A05B8 via 0x920A3888)
+    disassembled 13 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A3888, 0x920FC798, 0x9210D248
+
+sub_0x920A5B50  [bfs_reachable]  va=0x920A5B50
+    discovery: bfs (reached from 0x920A05B8 via 0x92061080)
+    disassembled 12 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061080, 0x920A3178, 0x920A3E30, 0x92121398
+
+sub_0x920A5B54  [bfs_reachable]  va=0x920A5B54
+    discovery: bfs (reached from 0x920A05B8 via 0x9212C790)
+    disassembled 11 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92105C00, 0x9212C790
+
+sub_0x920A5B58  [bfs_reachable]  va=0x920A5B58
+    discovery: bfs (reached from 0x920A05B8 via 0x92107818)
+    disassembled 10 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061080, 0x92107818, 0x9210D248, 0x9210D5D0
+
+sub_0x920A5B5C  [bfs_reachable]  va=0x920A5B5C
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 9 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A2260, 0x920A2380, 0x920A2610, 0x920A4700, 0x920F15A8, 0x921087F0, 0x92108BD0, 0x9210C768, 0x9210D998
+
+sub_0x920A5B60  [bfs_reachable]  va=0x920A5B60
+    discovery: bfs (reached from 0x920A05B8 via 0x920F8098)
+    disassembled 8 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F8098, 0x9210C768, 0x92130200, 0x921376B0
+
+sub_0x920A5B64  [bfs_reachable]  va=0x920A5B64
+    discovery: bfs (reached from 0x920A05B8 via 0x92107CE8)
+    disassembled 7 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A3178, 0x920F44E0, 0x921057E0, 0x92107818, 0x92107CE8, 0x921089B8, 0x9210DD18, 0x9210DDA8, 0x92130200, 0x92130E98
+
+sub_0x920A5B68  [bfs_reachable]  va=0x920A5B68
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 6 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920609D8, 0x92062510, 0x920628F0, 0x920A05B8, 0x920A1E98, 0x920A2260, 0x920A2A18, 0x920A7988, 0x920A9018, 0x920ABAA0, 0x920AF1F0, 0x920F1A18, 0x920F4AE8, 0x92101148, 0x92101188, 0x921080E8, 0x9210B2F8, 0x9210B400, 0x9210B600, 0x9210CF48, 0x9210D1C8, 0x9210DB88, 0x92121398, 0x9212D2D0, 0x9212D4C8
+
+sub_0x920A5B6C  [bfs_reachable]  va=0x920A5B6C
+    discovery: bfs (reached from 0x920A05B8 via 0x920A1E98)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060D20, 0x920617D0, 0x920618E0, 0x92062510, 0x9206DF70, 0x9209F008, 0x920A0290, 0x920A1E98, 0x920A1F00, 0x920A9290, 0x920D73D8, 0x920F2198, 0x920F44E0, 0x92101148, 0x92105AF8, 0x92109160, 0x9210B2F8, 0x9210C910, 0x9210D248, 0x9210D5D0, 0x9210DD18, 0x9210DDA8, 0x92110868, 0x92121398, 0x9212D188, 0x9212D428, 0x92138080, 0x9213B3C0
+
+sub_0x920A62F0  [bfs_reachable]  va=0x920A62F0
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DD18)
+    disassembled 55 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A7988, 0x920A9290, 0x920A93C0, 0x9210DD18, 0x9212C790
+    internal_callees:
+      0x920A633C -> 0x920A6354
+
+sub_0x920A6D50  [bfs_reachable]  va=0x920A6D50
+    discovery: bfs (reached from 0x920A05B8 via 0x920A03D0)
+    disassembled 40 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920603D0, 0x92061080, 0x920617D0, 0x920622D8, 0x9209F008, 0x920A0290, 0x920A03D0, 0x920A3888, 0x920A3E30, 0x920FC798, 0x9210FAC8, 0x921300B0
+    internal_callees:
+      0x920A6D5C -> 0x920A6D6C
+
+sub_0x920A6F78  [bfs_reachable]  va=0x920A6F78
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 17 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F15A8, 0x92108BD0, 0x9210CF48, 0x9210D248, 0x9210D5D0, 0x92130200
+    internal_callees:
+      0x920A6F78 -> 0x920A6F8C
+      0x920A6FA8 -> 0x920A6FB4
+
+sub_0x920A7098  [bfs_reachable]  va=0x920A7098
+    discovery: bfs (reached from 0x920A05B8 via 0x9210CC58)
+    disassembled 30 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210C768, 0x9210CC58
+
+sub_0x920A75D0  [bfs_reachable]  va=0x920A75D0
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 56 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F1A18, 0x92105C00, 0x92108BD0, 0x92109160, 0x9210C768
+    internal_callees:
+      0x920A75F0 -> 0x920A94F0  (sub_0x920A94F0)
+      0x920A7610 -> 0x920AB7C0  (sub_0x920AB7C0)
+      0x920A7618 -> 0x920A769C
+      0x920A762C -> 0x920A94F0  (sub_0x920A94F0)
+      0x920A764C -> 0x920AB7C0  (sub_0x920AB7C0)
+      0x920A7654 -> 0x920A769C
+      0x920A768C -> 0x920A94F0  (sub_0x920A94F0)
+      0x920A7694 -> 0x920A7634
+
+sub_0x920A7988  [bfs_reachable]  va=0x920A7988
+    discovery: bfs (reached from 0x920A05B8 via 0x9209ED78)
+    disassembled 83 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9209ED78
+    internal_callees:
+      0x920A798C -> 0x920A5B68  (sub_0x920A5B68)
+      0x920A79A8 -> 0x920A52D0  (sub_0x920A52D0)
+      0x920A79B4 -> 0x920AB770  (sub_0x920AB770)
+      0x920A79BC -> 0x920AB728  (sub_0x920AB728)
+      0x920A79C4 -> 0x920A8CE8
+      0x920A79D8 -> 0x920A52D0  (sub_0x920A52D0)
+      0x920A79E4 -> 0x920A3E30  (sub_0x920A3E30)
+      0x920A7A04 -> 0x920A8C18  (sub_0x920A8C18)
+      0x920A7A10 -> 0x920A7A1C
+      0x920A7A14 -> 0x920A94F0  (sub_0x920A94F0)
+      0x920A7A1C -> 0x920A94F0  (sub_0x920A94F0)
+      0x920A7A28 -> 0x920A7A48
+      0x920A7A30 -> 0x920A8C18  (sub_0x920A8C18)
+      0x920A7A34 -> 0x920A94F0  (sub_0x920A94F0)
+      0x920A7A4C -> 0x920A5BB8
+      0x920A7A7C -> 0x920A62F0  (sub_0x920A62F0)
+      0x920A7AB8 -> 0x92176E70
+
+sub_0x920A7D88  [bfs_reachable]  va=0x920A7D88
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 9 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F1A18, 0x92105C00, 0x92108BD0, 0x92109160, 0x9210C768, 0x9210DD18, 0x9210DDA8, 0x92130E98
+
+sub_0x920A8C08  [bfs_reachable]  va=0x920A8C08
+    discovery: bfs (reached from 0x920A05B8 via 0x920A8ED0)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A8ED0, 0x920A8EE0
+
+sub_0x920A8C18  [bfs_reachable]  va=0x920A8C18
+    discovery: bfs (reached from 0x920A05B8 via 0x920ABAA0)
+    disassembled 17 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9209ED78, 0x920A7988, 0x920ABAA0
+
+sub_0x920A8ED0  [bfs_reachable]  va=0x920A8ED0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 27 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+    internal_callees:
+      0x920A8EDC -> 0x920A8D60
+      0x920A8EF0 -> 0x920A8C08  (sub_0x920A8C08)
+      0x920A8EF8 -> 0x920AF4A0  (sub_0x920AF4A0)
+      0x920A8F00 -> 0x920AB7B0  (sub_0x920AB7B0)
+      0x920A8F08 -> 0x920AB7A0  (sub_0x920AB7A0)
+      0x920A8F10 -> 0x92165C28  (sub_0x92165C28)
+      0x920A8F18 -> 0x920A9688  (sub_0x920A9688)
+
+sub_0x920A8EE0  [bfs_reachable]  va=0x920A8EE0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A9290)
+    disassembled 23 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A9290
+    internal_callees:
+      0x920A8EF0 -> 0x920A8C08  (sub_0x920A8C08)
+      0x920A8EF8 -> 0x920AF4A0  (sub_0x920AF4A0)
+      0x920A8F00 -> 0x920AB7B0  (sub_0x920AB7B0)
+      0x920A8F08 -> 0x920AB7A0  (sub_0x920AB7A0)
+      0x920A8F10 -> 0x92165C28  (sub_0x92165C28)
+      0x920A8F18 -> 0x920A9688  (sub_0x920A9688)
+
+sub_0x920A8FA0  [bfs_reachable]  va=0x920A8FA0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A9290)
+    disassembled 30 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A9290
+    internal_callees:
+      0x920A8FFC -> 0x920AF270  (sub_0x920AF270)
+    imported_callees:
+      0x920A8FF0 -> xboxkrnl.exe!KeTlsFree
+
+sub_0x920A9018  [bfs_reachable]  va=0x920A9018
+    discovery: bfs (reached from 0x920A05B8 via 0x920A94F0)
+    disassembled 59 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A94F0
+    internal_callees:
+      0x920A901C -> 0x920A5B68  (sub_0x920A5B68)
+      0x920A9024 -> 0x9209F3D0  (sub_0x9209F3D0)
+      0x920A9034 -> 0x920A8F48
+      0x920A9078 -> 0x920ABB78  (sub_0x920ABB78)
+      0x920A90B4 -> 0x92176EF0  (sub_0x92176EF0)
+      0x920A90C4 -> 0x920A90F0
+      0x920A90CC -> 0x920A5AC0  (sub_0x920A5AC0)
+      0x920A90D0 -> 0x920A90EC
+      0x920A90E0 -> 0x920A90F0
+      0x920A90F4 -> 0x920A09E8  (sub_0x920A09E8)
+    tail_calls:
+      0x920A9100 -> 0x920A5BB8
+
+sub_0x920A9290  [bfs_reachable]  va=0x920A9290
+    discovery: bfs (reached from 0x920A05B8 via 0x920A05B8)
+    disassembled 111 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A05B8
+    internal_callees:
+      0x920A9294 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x920A9300 -> 0x920A8EE0  (sub_0x920A8EE0)
+      0x920A9304 -> 0x920AF1F0  (sub_0x920AF1F0)
+      0x920A933C -> 0x920ABB78  (sub_0x920ABB78)
+      0x920A9378 -> 0x92176EF0  (sub_0x92176EF0)
+      0x920A93A4 -> 0x920A1F00  (sub_0x920A1F00)
+      0x920A93AC -> 0x920A93B8
+      0x920A93B0 -> 0x920A8FA0  (sub_0x920A8FA0)
+      0x920A93BC -> 0x920A5BBC
+      0x920A93CC -> 0x920A62F0  (sub_0x920A62F0)
+      0x920A93E0 -> 0x920A93F8
+    imported_callees:
+      0x920A92DC -> xboxkrnl.exe!KeTlsAlloc
+      0x920A92F4 -> xboxkrnl.exe!KeTlsSetValue
+
+sub_0x920A93C0  [bfs_reachable]  va=0x920A93C0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A3888)
+    disassembled 35 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A3888, 0x9210B2F8
+    internal_callees:
+      0x920A93CC -> 0x920A62F0  (sub_0x920A62F0)
+      0x920A93E0 -> 0x920A93F8
+
+sub_0x920A9480  [bfs_reachable]  va=0x920A9480
+    discovery: bfs (reached from 0x920A05B8 via 0x920A5AC0)
+    disassembled 17 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A5AC0
+
+sub_0x920A94F0  [bfs_reachable]  va=0x920A94F0
+    discovery: bfs (reached from 0x920A05B8 via 0x920ABB78)
+    disassembled 14 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A5AC0, 0x920A75D0, 0x920A7988, 0x920ABAA0, 0x920ABB78, 0x92178BE8
+    internal_callees:
+      0x920A94FC -> 0x920A9018  (sub_0x920A9018)
+      0x920A9510 -> 0x920A9518
+
+sub_0x920A9688  [bfs_reachable]  va=0x920A9688
+    discovery: bfs (reached from 0x920A05B8 via 0x920A8ED0)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A8ED0, 0x920A8EE0
+
+sub_0x920AB728  [bfs_reachable]  va=0x920AB728
+    discovery: bfs (reached from 0x920A05B8 via 0x920AB770)
+    disassembled 18 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A7988, 0x920AB770
+    internal_callees:
+      0x920AB768 -> 0x92176F00
+
+sub_0x920AB770  [bfs_reachable]  va=0x920AB770
+    discovery: bfs (reached from 0x920A05B8 via 0x920A7988)
+    disassembled 11 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A7988
+    internal_callees:
+      0x920AB780 -> 0x920AB728  (sub_0x920AB728)
+      0x920AB788 -> 0x920AB728  (sub_0x920AB728)
+
+sub_0x920AB7A0  [bfs_reachable]  va=0x920AB7A0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A8ED0)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A8ED0, 0x920A8EE0
+
+sub_0x920AB7B0  [bfs_reachable]  va=0x920AB7B0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A8ED0)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A8ED0, 0x920A8EE0
+
+sub_0x920AB7C0  [bfs_reachable]  va=0x920AB7C0
+    discovery: bfs (reached from 0x920A05B8 via 0x920ABAA0)
+    disassembled 17 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A75D0, 0x920ABAA0, 0x92178BE8
+    internal_callees:
+      0x920AB7E4 -> 0x920AB7F4
+      0x920AB7EC -> 0x920B0070  (sub_0x920B0070)
+
+sub_0x920ABAA0  [bfs_reachable]  va=0x920ABAA0
+    discovery: bfs (reached from 0x920A05B8 via 0x920ABB78)
+    disassembled 53 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920ABB78
+    internal_callees:
+      0x920ABAA4 -> 0x920A5B68  (sub_0x920A5B68)
+      0x920ABACC -> 0x920A94F0  (sub_0x920A94F0)
+      0x920ABAEC -> 0x920AB7C0  (sub_0x920AB7C0)
+      0x920ABAF4 -> 0x920ABB6C
+      0x920ABB14 -> 0x920A52D0  (sub_0x920A52D0)
+      0x920ABB20 -> 0x920A3E30  (sub_0x920A3E30)
+      0x920ABB3C -> 0x920A8C18  (sub_0x920A8C18)
+      0x920ABB58 -> 0x920ABAF0
+    tail_calls:
+      0x920ABB70 -> 0x920A5BB8
+
+sub_0x920ABB78  [bfs_reachable]  va=0x920ABB78
+    discovery: bfs (reached from 0x920A05B8 via 0x920A9290)
+    disassembled 26 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A9018, 0x920A9290
+    internal_callees:
+      0x920ABB98 -> 0x920ABAA0  (sub_0x920ABAA0)
+      0x920ABBB0 -> 0x920A94F0  (sub_0x920A94F0)
+      0x920ABBBC -> 0x920A94F0  (sub_0x920A94F0)
+
+sub_0x920AF1F0  [bfs_reachable]  va=0x920AF1F0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A9290)
+    disassembled 59 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A9290
+    internal_callees:
+      0x920AF1F4 -> 0x920A5B68  (sub_0x920A5B68)
+      0x920AF230 -> 0x920AF4E0  (sub_0x920AF4E0)
+      0x920AF258 -> 0x920A5BB8
+      0x920AF26C -> 0x920AF254
+      0x920AF2A8 -> 0x920A5AC0  (sub_0x920A5AC0)
+
+sub_0x920AF270  [bfs_reachable]  va=0x920AF270
+    discovery: bfs (reached from 0x920A05B8 via 0x920A8FA0)
+    disassembled 27 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A8FA0
+    internal_callees:
+      0x920AF2A8 -> 0x920A5AC0  (sub_0x920A5AC0)
+
+sub_0x920AF4A0  [bfs_reachable]  va=0x920AF4A0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A8ED0)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A8ED0, 0x920A8EE0
+
+sub_0x920AF4E0  [bfs_reachable]  va=0x920AF4E0
+    discovery: bfs (reached from 0x920A05B8 via 0x920AF1F0)
+    disassembled 35 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920AF1F0
+    internal_callees:
+      0x920AF534 -> 0x920AF558
+      0x920AF54C -> 0x920A09E8  (sub_0x920A09E8)
+
+sub_0x920B0070  [bfs_reachable]  va=0x920B0070
+    discovery: bfs (reached from 0x920A05B8 via 0x920AB7C0)
+    disassembled 4 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920AB7C0
+
+sub_0x920B4F78  [bfs_reachable]  va=0x920B4F78
+    discovery: bfs (reached from 0x920A05B8 via 0x920617D0)
+    disassembled 21 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061080, 0x920617D0
+    internal_callees:
+      0x920B4F98 -> 0x920C5E10
+      0x920B4FA4 -> 0x9209F0A0  (sub_0x9209F0A0)
+      0x920B4FAC -> 0x920B4FB8
+
+sub_0x920B8A90  [bfs_reachable]  va=0x920B8A90
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 14 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+
+sub_0x920B8AD0  [bfs_reachable]  va=0x920B8AD0
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 7 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+
+sub_0x920BA9B8  [bfs_reachable]  va=0x920BA9B8
+    discovery: bfs (reached from 0x920A05B8 via 0x92060F08)
+    disassembled 17 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060F08
+    internal_callees:
+      0x920BA9E0 -> 0x920BC9C8  (sub_0x920BC9C8)
+
+sub_0x920BB460  [bfs_reachable]  va=0x920BB460
+    discovery: bfs (reached from 0x920A05B8 via 0x920617D0)
+    disassembled 182 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060F08, 0x92061080, 0x920617D0
+    internal_callees:
+      0x920BB494 -> 0x920BB088
+      0x920BB4D4 -> 0x920BB568
+      0x920BB55C -> 0x920BB564
+      0x920BB5A0 -> 0x920BB5C4
+      0x920BB600 -> 0x920BB694
+      0x920BB688 -> 0x920BB690
+
+sub_0x920BB738  [bfs_reachable]  va=0x920BB738
+    discovery: bfs (reached from 0x920A05B8 via 0x920617D0)
+    disassembled 1 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060F08, 0x92061080, 0x920617D0
+    tail_calls:
+      0x920BB738 -> 0x920BB118
+
+sub_0x920BC9C8  [bfs_reachable]  va=0x920BC9C8
+    discovery: bfs (reached from 0x920A05B8 via 0x920BA9B8)
+    disassembled 29 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920BA9B8, 0x920BC9C8
+    internal_callees:
+      0x920BCA20 -> 0x920BC9C8  (sub_0x920BC9C8)
+
+sub_0x920D70E0  [bfs_reachable]  va=0x920D70E0
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 2 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+
+sub_0x920D7378  [bfs_reachable]  va=0x920D7378
+    discovery: bfs (reached from 0x920A05B8 via 0x920D73D8)
+    disassembled 24 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920D73D8
+
+sub_0x920D73D8  [bfs_reachable]  va=0x920D73D8
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 131 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+    internal_callees:
+      0x920D73DC -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x920D73F0 -> 0x920D7378  (sub_0x920D7378)
+      0x920D7450 -> 0x920A5BBC
+      0x920D74A8 -> 0x920D75C8
+      0x920D74E0 -> 0x920D7444
+      0x920D7538 -> 0x920D75C8
+      0x920D7570 -> 0x920D7444
+      0x920D75CC -> 0x920D744C
+
+sub_0x920F0498  [bfs_reachable]  va=0x920F0498
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DD18)
+    disassembled 22 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DD18, 0x9210DDA8
+    internal_callees:
+      0x920F04C0 -> 0x9210DD00  (sub_0x9210DD00)
+
+sub_0x920F0FF0  [bfs_reachable]  va=0x920F0FF0
+    discovery: bfs (reached from 0x920A05B8 via 0x920F15A8)
+    disassembled 24 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F13E0, 0x920F1460, 0x920F15A8, 0x920F1900, 0x920F1950, 0x920F19D8, 0x920F44E0, 0x920F4AE8, 0x920F7E80, 0x920F8098, 0x920FC798, 0x920FCFB8
+
+sub_0x920F1050  [bfs_reachable]  va=0x920F1050
+    discovery: bfs (reached from 0x920A05B8 via 0x92100BC8)
+    disassembled 19 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92100BC8
+    internal_callees:
+      0x920F1068 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x920F1080 -> 0x920F1088
+
+sub_0x920F13E0  [bfs_reachable]  va=0x920F13E0
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 31 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510, 0x92102030, 0x92121398
+    internal_callees:
+      0x920F1404 -> 0x920F1448
+      0x920F141C -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920F1430 -> 0x920F1448
+
+sub_0x920F1460  [bfs_reachable]  va=0x920F1460
+    discovery: bfs (reached from 0x920A05B8 via 0x920F44E0)
+    disassembled 32 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F44E0
+    internal_callees:
+      0x920F1484 -> 0x920F14CC
+      0x920F149C -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920F14B0 -> 0x920F14CC
+
+sub_0x920F15A8  [bfs_reachable]  va=0x920F15A8
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 53 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+    internal_callees:
+      0x920F15AC -> 0x920A5B5C  (sub_0x920A5B5C)
+      0x920F15D8 -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920F15EC -> 0x920F1674
+      0x920F15F4 -> 0x920F1640
+      0x920F1620 -> 0x920A6F78  (sub_0x920A6F78)
+      0x920F1650 -> 0x920F1674
+      0x920F1668 -> 0x920F1674
+    tail_calls:
+      0x920F1678 -> 0x920A5BAC
+
+sub_0x920F1900  [bfs_reachable]  va=0x920F1900
+    discovery: bfs (reached from 0x920A05B8 via 0x920FC798)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920FC798
+    internal_callees:
+      0x920F1920 -> 0x920F0FF0  (sub_0x920F0FF0)
+
+sub_0x920F1950  [bfs_reachable]  va=0x920F1950
+    discovery: bfs (reached from 0x920A05B8 via 0x92102030)
+    disassembled 28 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92102030, 0x921050E0, 0x92121398
+    internal_callees:
+      0x920F1970 -> 0x920F19AC
+      0x920F1980 -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920F19A4 -> 0x920F196C
+
+sub_0x920F19C0  [bfs_reachable]  va=0x920F19C0
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+
+sub_0x920F19D8  [bfs_reachable]  va=0x920F19D8
+    discovery: bfs (reached from 0x920A05B8 via 0x921080E8)
+    disassembled 15 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92102E70, 0x92102F60, 0x921043D0, 0x92107818, 0x921080E8, 0x92121398, 0x921703F8
+    internal_callees:
+      0x920F19F0 -> 0x920F0FF0  (sub_0x920F0FF0)
+
+sub_0x920F1A18  [bfs_reachable]  va=0x920F1A18
+    discovery: bfs (reached from 0x920A05B8 via 0x9210C910)
+    disassembled 45 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210B600, 0x9210C910
+    internal_callees:
+      0x920F1A1C -> 0x920A5B68  (sub_0x920A5B68)
+      0x920F1A3C -> 0x9210DCE0
+      0x920F1A50 -> 0x920A7D88  (sub_0x920A7D88)
+      0x920F1A70 -> 0x9210DD00  (sub_0x9210DD00)
+      0x920F1A7C -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x920F1A94 -> 0x920F1AC4
+      0x920F1AA4 -> 0x920A75D0  (sub_0x920A75D0)
+      0x920F1AA8 -> 0x920F1AC0
+    tail_calls:
+      0x920F1AC8 -> 0x920A5BB8
+
+sub_0x920F1B28  [bfs_reachable]  va=0x920F1B28
+    discovery: bfs (reached from 0x920A05B8 via 0x920618E0)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920618E0
+    internal_callees:
+      0x920F1B2C -> 0x920F1AD0
+
+sub_0x920F1B30  [bfs_reachable]  va=0x920F1B30
+    discovery: bfs (reached from 0x920A05B8 via 0x9210D5D0)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x921057E0, 0x92105AF8, 0x9210D248, 0x9210D5D0
+
+sub_0x920F1B50  [bfs_reachable]  va=0x920F1B50
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+
+sub_0x920F2040  [bfs_reachable]  va=0x920F2040
+    discovery: bfs (reached from 0x920A05B8 via 0x920FCFB8)
+    disassembled 10 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9205E5E0, 0x920FCFB8, 0x92101148, 0x92104218, 0x921080E8, 0x9210FB18
+
+sub_0x920F2198  [bfs_reachable]  va=0x920F2198
+    discovery: bfs (reached from 0x920A05B8 via 0x92100BC8)
+    disassembled 45 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92100BC8
+    internal_callees:
+      0x920F219C -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x920F21DC -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x920F2238 -> 0x920F2244
+    tail_calls:
+      0x920F2248 -> 0x920A5BBC
+
+sub_0x920F44E0  [bfs_reachable]  va=0x920F44E0
+    discovery: bfs (reached from 0x920A05B8 via 0x920FCFB8)
+    disassembled 113 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F44E0, 0x920F7E80, 0x920FC798, 0x920FCFB8
+    internal_callees:
+      0x920F44E4 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x920F4500 -> 0x920F45C8
+      0x920F4508 -> 0x92100F78  (sub_0x92100F78)
+      0x920F4518 -> 0x9212D428  (sub_0x9212D428)
+      0x920F4540 -> 0x920F44E0  (sub_0x920F44E0)
+      0x920F45B0 -> 0x920F45BC
+      0x920F45B8 -> 0x9210DD00  (sub_0x9210DD00)
+      0x920F45CC -> 0x920A5BBC
+      0x920F45D4 -> 0x920A5B64  (sub_0x920A5B64)
+      0x920F4608 -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920F461C -> 0x920F4634
+      0x920F4638 -> 0x920A5BB4
+      0x920F4668 -> 0x920F1460  (sub_0x920F1460)
+      0x920F467C -> 0x920F462C
+    imported_callees:
+      0x920F4574 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x920F45C0 -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x920F46A0 -> 0x920F4634
+
+sub_0x920F4810  [bfs_reachable]  va=0x920F4810
+    discovery: bfs (reached from 0x920A05B8 via 0x920F4AE8)
+    disassembled 17 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F4AE8
+
+sub_0x920F4AE8  [bfs_reachable]  va=0x920F4AE8
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 45 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+    internal_callees:
+      0x920F4AEC -> 0x920A5B68  (sub_0x920A5B68)
+      0x920F4B10 -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920F4B24 -> 0x920F4B94
+      0x920F4B60 -> 0x920F4B2C
+      0x920F4B84 -> 0x920F4810  (sub_0x920F4810)
+      0x920F4B88 -> 0x920F4B94
+    tail_calls:
+      0x920F4B98 -> 0x920A5BB8
+
+sub_0x920F7E80  [bfs_reachable]  va=0x920F7E80
+    discovery: bfs (reached from 0x920A05B8 via 0x920F8098)
+    disassembled 36 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F8098
+    internal_callees:
+      0x920F7EA0 -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920F7EB0 -> 0x920F7EBC
+      0x920F7EC0 -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920F7ED4 -> 0x920F7EFC
+      0x920F7EF0 -> 0x920F44E0  (sub_0x920F44E0)
+      0x920F7EF4 -> 0x920F7EFC
+
+sub_0x920F7F10  [bfs_reachable]  va=0x920F7F10
+    discovery: bfs (reached from 0x920A05B8 via 0x920FC798)
+    disassembled 27 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920FC798
+    internal_callees:
+      0x920F7F44 -> 0x920F1DB8
+    imported_callees:
+      0x920F7F34 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x920F7F5C -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x920F8098  [bfs_reachable]  va=0x920F8098
+    discovery: bfs (reached from 0x920A05B8 via 0x920FCFB8)
+    disassembled 81 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920FCFB8, 0x92101148, 0x92101188, 0x921043D0, 0x92107818, 0x92110868, 0x92121398, 0x921703F8
+    internal_callees:
+      0x920F809C -> 0x920A5B60  (sub_0x920A5B60)
+      0x920F80B8 -> 0x920F81D4
+      0x920F80D0 -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920F80E4 -> 0x920F81D4
+      0x920F81CC -> 0x920F7E80  (sub_0x920F7E80)
+    tail_calls:
+      0x920F81D8 -> 0x920A5BB0
+
+sub_0x920F8DA0  [bfs_reachable]  va=0x920F8DA0
+    discovery: bfs (reached from 0x920A05B8 via 0x9210B2F8)
+    disassembled 24 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210B2F8, 0x9210B400
+    internal_callees:
+      0x920F8DC0 -> 0x9210DD00  (sub_0x9210DD00)
+      0x920F8DE0 -> 0x9210DD00  (sub_0x9210DD00)
+
+sub_0x920FC798  [bfs_reachable]  va=0x920FC798
+    discovery: bfs (reached from 0x920A05B8 via 0x920FCF48)
+    disassembled 219 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920FC798, 0x920FCF48
+    internal_callees:
+      0x920FC79C -> 0x920A5B4C  (sub_0x920A5B4C)
+      0x920FC7C8 -> 0x920FCA78
+      0x920FC7E0 -> 0x920FC7F0
+      0x920FC7E8 -> 0x920F7F10  (sub_0x920F7F10)
+      0x920FC840 -> 0x920FCA78
+      0x920FC854 -> 0x920F1900  (sub_0x920F1900)
+      0x920FC86C -> 0x920FC878
+      0x920FC888 -> 0x920FCA78
+      0x920FC8B8 -> 0x920FC8C8
+      0x920FC8C0 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x920FC8E0 -> 0x920FCA78
+      0x920FC8F0 -> 0x920A6D50  (sub_0x920A6D50)
+      0x920FC904 -> 0x9212D2D0  (sub_0x9212D2D0)
+      0x920FC948 -> 0x920FC954
+      0x920FC950 -> 0x9210DD00  (sub_0x9210DD00)
+      0x920FC968 -> 0x920FCA78
+      0x920FC9B0 -> 0x920FC798  (sub_0x920FC798)
+      0x920FC9C4 -> 0x9212D428  (sub_0x9212D428)
+      0x920FCA00 -> 0x920FCA0C
+      0x920FCA08 -> 0x9210DD00  (sub_0x9210DD00)
+      0x920FCA10 -> 0x920FC95C
+      0x920FCA40 -> 0x920F44E0  (sub_0x920F44E0)
+      0x920FCA44 -> 0x920FC9BC
+      0x920FCA7C -> 0x920A5B9C
+      0x920FCAAC -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920FCAC0 -> 0x920FCAEC
+      0x920FCAD4 -> 0x920FC798  (sub_0x920FC798)
+    imported_callees:
+      0x920FC898 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x920FC8CC -> xboxkrnl.exe!RtlLeaveCriticalSection
+      0x920FC914 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x920FC960 -> xboxkrnl.exe!RtlLeaveCriticalSection
+      0x920FC9CC -> xboxkrnl.exe!RtlEnterCriticalSection
+
+sub_0x920FCF48  [bfs_reachable]  va=0x920FCF48
+    discovery: bfs (reached from 0x920A05B8 via 0x92060D20)
+    disassembled 27 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060D20
+    internal_callees:
+      0x920FCF6C -> 0x920FCFA0
+      0x920FCF80 -> 0x920FC798  (sub_0x920FC798)
+      0x920FCF94 -> 0x920FCF9C
+
+sub_0x920FCFB8  [bfs_reachable]  va=0x920FCFB8
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 51 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060AD0, 0x92060D20, 0x920628F0, 0x9206DF70, 0x92107818, 0x9212D188
+    internal_callees:
+      0x920FCFDC -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920FCFEC -> 0x920FCFF8
+      0x920FD000 -> 0x920F0FF0  (sub_0x920F0FF0)
+      0x920FD014 -> 0x920FD06C
+      0x920FD02C -> 0x920F2040  (sub_0x920F2040)
+      0x920FD038 -> 0x920F8098  (sub_0x920F8098)
+      0x920FD060 -> 0x920F44E0  (sub_0x920F44E0)
+      0x920FD064 -> 0x920FD06C
+
+sub_0x920FFB28  [bfs_reachable]  va=0x920FFB28
+    discovery: bfs (reached from 0x920A05B8 via 0x92100BC8)
+    disassembled 241 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060AD0, 0x92100BC8
+    internal_callees:
+      0x920FFB2C -> 0x920A5B34
+      0x920FFB48 -> 0x920FFEE4
+      0x920FFB54 -> 0x9210DD00  (sub_0x9210DD00)
+      0x920FFB88 -> 0x9212D1D0
+      0x920FFB90 -> 0x9212D188  (sub_0x9212D188)
+      0x920FFDFC -> 0x920FFE40
+      0x920FFE08 -> 0x920FFDF8
+      0x920FFE14 -> 0x9210DD00  (sub_0x9210DD00)
+      0x920FFE1C -> 0x9210DD00  (sub_0x9210DD00)
+      0x920FFE24 -> 0x9210DD00  (sub_0x9210DD00)
+      0x920FFE2C -> 0x9210DD00  (sub_0x9210DD00)
+      0x920FFE38 -> 0x920F1B68
+      0x920FFE4C -> 0x920F8430
+      0x920FFE54 -> 0x92108A80
+      0x920FFE60 -> 0x921087F0  (sub_0x921087F0)
+      0x920FFE64 -> 0x92108068
+      0x920FFE68 -> 0x92100F20
+      0x920FFE6C -> 0x92109A60
+      0x920FFE70 -> 0x9210D920
+      0x920FFE74 -> 0x92102088
+      0x920FFE84 -> 0x9210DD00  (sub_0x9210DD00)
+      0x920FFEAC -> 0x9210DD00  (sub_0x9210DD00)
+    imported_callees:
+      0x920FFB70 -> xboxkrnl.exe!KeTlsFree
+    tail_calls:
+      0x920FFEE8 -> 0x920A5B84
+
+sub_0x92100BC8  [bfs_reachable]  va=0x92100BC8
+    discovery: bfs (reached from 0x920A05B8 via 0x920609D8)
+    disassembled 209 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920609D8
+    internal_callees:
+      0x92100BCC -> 0x920A5B3C  (sub_0x920A5B3C)
+      0x92100BF4 -> 0x92100F04
+      0x92100C0C -> 0x92100F04
+      0x92100C2C -> 0x92100F04
+      0x92100C4C -> 0x92100C54
+      0x92100C74 -> 0x9212D4C8  (sub_0x9212D4C8)
+      0x92100C88 -> 0x920F1050  (sub_0x920F1050)
+      0x92100CA4 -> 0x920F2198  (sub_0x920F2198)
+      0x92100EEC -> 0x92100F10  (sub_0x92100F10)
+      0x92100EF0 -> 0x9210DB88  (sub_0x9210DB88)
+      0x92100EFC -> 0x920FFB28  (sub_0x920FFB28)
+    imported_callees:
+      0x92100C10 -> xboxkrnl.exe!KeTlsAlloc
+    tail_calls:
+      0x92100F08 -> 0x920A5B8C
+
+sub_0x92100F10  [bfs_reachable]  va=0x92100F10
+    discovery: bfs (reached from 0x920A05B8 via 0x92100BC8)
+    disassembled 4 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92100BC8
+
+sub_0x92100F78  [bfs_reachable]  va=0x92100F78
+    discovery: bfs (reached from 0x920A05B8 via 0x920F44E0)
+    disassembled 31 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F44E0
+    imported_callees:
+      0x92100F9C -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92100FD8 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x92101148  [bfs_reachable]  va=0x92101148
+    discovery: bfs (reached from 0x920A05B8 via 0x92101188)
+    disassembled 89 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92101148, 0x92101188
+    internal_callees:
+      0x9210114C -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x92101168 -> 0x920F2040  (sub_0x920F2040)
+      0x92101174 -> 0x9210FAC8  (sub_0x9210FAC8)
+      0x92101184 -> 0x920A5BBC
+      0x9210118C -> 0x920A5B68  (sub_0x920A5B68)
+      0x921011D4 -> 0x9210DD00  (sub_0x9210DD00)
+      0x921011D8 -> 0x92101218
+      0x921011E0 -> 0x9209EDD8  (sub_0x9209EDD8)
+      0x92101208 -> 0x92101148  (sub_0x92101148)
+      0x92101214 -> 0x920F8098  (sub_0x920F8098)
+      0x9210122C -> 0x9210C718  (sub_0x9210C718)
+      0x92101230 -> 0x921012B0  (sub_0x921012B0)
+      0x9210123C -> 0x920A5BB8
+      0x92101280 -> 0x9209F0A0  (sub_0x9209F0A0)
+      0x9210128C -> 0x9210DD00  (sub_0x9210DD00)
+    imported_callees:
+      0x921011A0 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92101228 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x92101188  [bfs_reachable]  va=0x92101188
+    discovery: bfs (reached from 0x920A05B8 via 0x92060B68)
+    disassembled 73 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060B68
+    internal_callees:
+      0x9210118C -> 0x920A5B68  (sub_0x920A5B68)
+      0x921011D4 -> 0x9210DD00  (sub_0x9210DD00)
+      0x921011D8 -> 0x92101218
+      0x921011E0 -> 0x9209EDD8  (sub_0x9209EDD8)
+      0x92101208 -> 0x92101148  (sub_0x92101148)
+      0x92101214 -> 0x920F8098  (sub_0x920F8098)
+      0x9210122C -> 0x9210C718  (sub_0x9210C718)
+      0x92101230 -> 0x921012B0  (sub_0x921012B0)
+      0x9210123C -> 0x920A5BB8
+      0x92101280 -> 0x9209F0A0  (sub_0x9209F0A0)
+      0x9210128C -> 0x9210DD00  (sub_0x9210DD00)
+    imported_callees:
+      0x921011A0 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92101228 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x921012B0  [bfs_reachable]  va=0x921012B0
+    discovery: bfs (reached from 0x920A05B8 via 0x92101148)
+    disassembled 7 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92101148, 0x92101188
+
+sub_0x92101328  [bfs_reachable]  va=0x92101328
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+
+sub_0x92102030  [bfs_reachable]  va=0x92102030
+    discovery: bfs (reached from 0x920A05B8 via 0x92102D60)
+    disassembled 22 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92102D60, 0x92102E70, 0x92102F60, 0x921033C0, 0x92105590, 0x92107818
+    internal_callees:
+      0x9210204C -> 0x920F1950  (sub_0x920F1950)
+      0x92102064 -> 0x920F13E0  (sub_0x920F13E0)
+
+sub_0x92102AF0  [bfs_reachable]  va=0x92102AF0
+    discovery: bfs (reached from 0x920A05B8 via 0x920623C8)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920623C8
+
+sub_0x92102D60  [bfs_reachable]  va=0x92102D60
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0, 0x921080E8
+    internal_callees:
+      0x92102D7C -> 0x92102030  (sub_0x92102030)
+      0x92102D90 -> 0x92102D9C
+      0x92102D98 -> 0x92121398  (sub_0x92121398)
+
+sub_0x92102E70  [bfs_reachable]  va=0x92102E70
+    discovery: bfs (reached from 0x920A05B8 via 0x9216D7B0)
+    disassembled 29 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x921050E0, 0x92107818, 0x9216D7B0
+    internal_callees:
+      0x92102E94 -> 0x92102030  (sub_0x92102030)
+      0x92102EA8 -> 0x92102ED0
+      0x92102EBC -> 0x920F19D8  (sub_0x920F19D8)
+      0x92102EC0 -> 0x92102EC8
+
+sub_0x92102F60  [bfs_reachable]  va=0x92102F60
+    discovery: bfs (reached from 0x920A05B8 via 0x9216D7B0)
+    disassembled 29 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92107818, 0x9216D7B0
+    internal_callees:
+      0x92102F84 -> 0x92102030  (sub_0x92102030)
+      0x92102F98 -> 0x92102FC0
+      0x92102FAC -> 0x920F19D8  (sub_0x920F19D8)
+      0x92102FB0 -> 0x92102FB8
+
+sub_0x921033C0  [bfs_reachable]  va=0x921033C0
+    discovery: bfs (reached from 0x920A05B8 via 0x9216D7B0)
+    disassembled 23 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9216D7B0
+    internal_callees:
+      0x921033E4 -> 0x92102030  (sub_0x92102030)
+      0x921033F8 -> 0x92103408
+
+sub_0x92103CC8  [bfs_reachable]  va=0x92103CC8
+    discovery: bfs (reached from 0x920A05B8 via 0x92062120)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060910, 0x92062120, 0x921057E0
+    internal_callees:
+      0x92103CD8 -> 0x92165C28  (sub_0x92165C28)
+      0x92103CEC -> 0x92103D04
+      0x92103CF4 -> 0x9212DC88
+      0x92103CFC -> 0x9210DD00  (sub_0x9210DD00)
+
+sub_0x92104218  [bfs_reachable]  va=0x92104218
+    discovery: bfs (reached from 0x920A05B8 via 0x921043D0)
+    disassembled 18 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x921043D0
+    internal_callees:
+      0x92104234 -> 0x920F2040  (sub_0x920F2040)
+      0x92104240 -> 0x9210FAC8  (sub_0x9210FAC8)
+
+sub_0x921043D0  [bfs_reachable]  va=0x921043D0
+    discovery: bfs (reached from 0x920A05B8 via 0x92107CE8)
+    disassembled 22 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92107CE8
+    internal_callees:
+      0x921043F4 -> 0x92104218  (sub_0x92104218)
+      0x92104404 -> 0x920F19D8  (sub_0x920F19D8)
+      0x9210440C -> 0x920F8098  (sub_0x920F8098)
+
+sub_0x921050E0  [bfs_reachable]  va=0x921050E0
+    discovery: bfs (reached from 0x920A05B8 via 0x9216D7B0)
+    disassembled 44 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9216D7B0
+    internal_callees:
+      0x92105108 -> 0x92105178
+      0x9210511C -> 0x920F1950  (sub_0x920F1950)
+      0x92105130 -> 0x92105178
+      0x9210513C -> 0x92102E70  (sub_0x92102E70)
+      0x92105154 -> 0x92105178
+      0x92105164 -> 0x920F1950  (sub_0x920F1950)
+
+sub_0x92105590  [bfs_reachable]  va=0x92105590
+    discovery: bfs (reached from 0x920A05B8 via 0x92060D20)
+    disassembled 26 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060D20
+    internal_callees:
+      0x921055B4 -> 0x92102030  (sub_0x92102030)
+      0x921055C8 -> 0x921055E0
+      0x921055D8 -> 0x920F8E00
+
+sub_0x921057E0  [bfs_reachable]  va=0x921057E0
+    discovery: bfs (reached from 0x920A05B8 via 0x92060910)
+    disassembled 141 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060910, 0x92105AF8
+    internal_callees:
+      0x921057E4 -> 0x920A5B64  (sub_0x920A5B64)
+      0x92105808 -> 0x9210D5D0  (sub_0x9210D5D0)
+      0x92105824 -> 0x9210CAE0  (sub_0x9210CAE0)
+      0x92105834 -> 0x9210CA10
+      0x92105848 -> 0x92103C28
+      0x92105864 -> 0x9210CA40
+      0x92105868 -> 0x9210588C
+      0x92105874 -> 0x9210CB90
+      0x92105878 -> 0x92105838
+      0x92105888 -> 0x9210DD00  (sub_0x9210DD00)
+      0x92105894 -> 0x9210CB28
+      0x921058A4 -> 0x920F1B30  (sub_0x920F1B30)
+      0x921058B4 -> 0x92165C28  (sub_0x92165C28)
+      0x921058D8 -> 0x9210D768
+      0x921058F4 -> 0x9210CAE0  (sub_0x9210CAE0)
+      0x92105904 -> 0x9210CA10
+      0x92105908 -> 0x92105918
+      0x92105914 -> 0x9210CB90
+      0x92105924 -> 0x9210CB28
+      0x92105928 -> 0x921059B4
+      0x92105934 -> 0x92103C28
+      0x92105950 -> 0x9210CA40
+      0x92105954 -> 0x92105968
+      0x92105964 -> 0x9210DD00  (sub_0x9210DD00)
+      0x92105970 -> 0x9210CB28
+      0x92105988 -> 0x92165C28  (sub_0x92165C28)
+      0x92105994 -> 0x9212D820
+      0x921059A0 -> 0x92103CC8  (sub_0x92103CC8)
+      0x921059B0 -> 0x92103CC8  (sub_0x92103CC8)
+      0x921059BC -> 0x920A5BB4
+      0x921059E8 -> 0x92102DF8
+      0x921059F8 -> 0x921049C8
+
+sub_0x92105AF8  [bfs_reachable]  va=0x92105AF8
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 66 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92108BD0
+    internal_callees:
+      0x92105AFC -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x92105B2C -> 0x92105B60
+      0x92105B40 -> 0x9210CF48  (sub_0x9210CF48)
+      0x92105B74 -> 0x920A5BBC
+      0x92105B9C -> 0x920F1B30  (sub_0x920F1B30)
+      0x92105BB8 -> 0x920F4960
+      0x92105BCC -> 0x921057E0  (sub_0x921057E0)
+      0x92105BD4 -> 0x92165C28  (sub_0x92165C28)
+      0x92105BE0 -> 0x9210DD00  (sub_0x9210DD00)
+    imported_callees:
+      0x92105B18 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92105B68 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x92105C00  [bfs_reachable]  va=0x92105C00
+    discovery: bfs (reached from 0x920A05B8 via 0x92107CE8)
+    disassembled 97 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92107CE8
+    internal_callees:
+      0x92105C04 -> 0x920A5B54  (sub_0x920A5B54)
+      0x92105C54 -> 0x92105CC8
+      0x92105C5C -> 0x920A7D88  (sub_0x920A7D88)
+      0x92105C68 -> 0x920A7D88  (sub_0x920A7D88)
+      0x92105C98 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x92105CB0 -> 0x920A75D0  (sub_0x920A75D0)
+      0x92105CC4 -> 0x920A75D0  (sub_0x920A75D0)
+      0x92105CE8 -> 0x9210CF48  (sub_0x9210CF48)
+      0x92105CFC -> 0x9210DD00  (sub_0x9210DD00)
+      0x92105D0C -> 0x92105D1C
+      0x92105D3C -> 0x92105D7C
+      0x92105D64 -> 0x92105D7C
+      0x92105D70 -> 0x92105D7C
+    imported_callees:
+      0x92105CD4 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92105D30 -> xboxkrnl.exe!RtlLeaveCriticalSection
+      0x92105D5C -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x92105D80 -> 0x920A5BA4
+
+sub_0x92107818  [bfs_reachable]  va=0x92107818
+    discovery: bfs (reached from 0x920A05B8 via 0x92107CE8)
+    disassembled 133 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92107CE8
+    internal_callees:
+      0x9210781C -> 0x920A5B58  (sub_0x920A5B58)
+      0x9210784C -> 0x92107928
+      0x9210789C -> 0x92107080
+      0x921078CC -> 0x92107928
+      0x921078E4 -> 0x921059C0
+      0x921078F4 -> 0x920FCFB8  (sub_0x920FCFB8)
+      0x921078FC -> 0x92107928
+      0x9210790C -> 0x92102030  (sub_0x92102030)
+      0x9210792C -> 0x920A5BA8
+      0x92107934 -> 0x920A5B64  (sub_0x920A5B64)
+      0x9210795C -> 0x920F19D8  (sub_0x920F19D8)
+      0x9210796C -> 0x92103F38
+      0x92107978 -> 0x920F8098  (sub_0x920F8098)
+      0x92107998 -> 0x92106238
+      0x921079A0 -> 0x92107A0C
+      0x921079BC -> 0x92102E70  (sub_0x92102E70)
+      0x921079D8 -> 0x92107930
+      0x921079EC -> 0x92102F60  (sub_0x92102F60)
+    imported_callees:
+      0x92107860 -> xboxkrnl.exe!KeTlsGetValue
+      0x92107870 -> xboxkrnl.exe!KeTlsSetValue
+      0x921078AC -> xboxkrnl.exe!KeTlsGetValue
+      0x921078BC -> xboxkrnl.exe!KeTlsSetValue
+    tail_calls:
+      0x92107A28 -> 0x920A5BB4
+
+sub_0x92107CE8  [bfs_reachable]  va=0x92107CE8
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 61 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060D20, 0x920628F0
+    internal_callees:
+      0x92107CEC -> 0x92107A30
+      0x92107CF4 -> 0x92107818  (sub_0x92107818)
+      0x92107CFC -> 0x920A5B64  (sub_0x920A5B64)
+      0x92107D28 -> 0x92105C00  (sub_0x92105C00)
+      0x92107D4C -> 0x92107DD4
+      0x92107D94 -> 0x92107818  (sub_0x92107818)
+      0x92107DCC -> 0x921043D0  (sub_0x921043D0)
+    imported_callees:
+      0x92107D5C -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92107DAC -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x92107DD8 -> 0x920A5BB4
+
+sub_0x921080E8  [bfs_reachable]  va=0x921080E8
+    discovery: bfs (reached from 0x920A05B8 via 0x92060D20)
+    disassembled 79 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060D20
+    internal_callees:
+      0x921080EC -> 0x920A5B68  (sub_0x920A5B68)
+      0x92108128 -> 0x9210821C
+      0x92108138 -> 0x920F19D8  (sub_0x920F19D8)
+      0x92108150 -> 0x92104F18
+      0x9210815C -> 0x92102450
+      0x92108170 -> 0x921045A0
+      0x92108184 -> 0x9210821C
+      0x92108198 -> 0x92102DF8
+      0x921081B8 -> 0x9210821C
+      0x921081C4 -> 0x92102D60  (sub_0x92102D60)
+      0x921081D8 -> 0x920F2040  (sub_0x920F2040)
+      0x921081E4 -> 0x920FD088
+      0x92108200 -> 0x92107930
+      0x9210820C -> 0x92102CC0
+      0x92108214 -> 0x92107E90
+    tail_calls:
+      0x92108220 -> 0x920A5BB8
+
+sub_0x921087F0  [bfs_reachable]  va=0x921087F0
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 113 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920FFB28, 0x92108BD0
+    internal_callees:
+      0x921087F4 -> 0x920A5B5C  (sub_0x920A5B5C)
+      0x92108808 -> 0x92105B78
+      0x92108838 -> 0x92101818
+      0x92108854 -> 0x9212DC88
+      0x9210885C -> 0x9210DD00  (sub_0x9210DD00)
+      0x92108864 -> 0x921089A0
+      0x92108878 -> 0x9210CF48  (sub_0x9210CF48)
+      0x92108890 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x921088B0 -> 0x921088B8
+      0x921088CC -> 0x92101818
+      0x921088E8 -> 0x9210D820
+      0x92108900 -> 0x92107018
+      0x92108908 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210890C -> 0x921089A0
+      0x92108930 -> 0x92107018
+      0x92108938 -> 0x9210DD00  (sub_0x9210DD00)
+      0x92108944 -> 0x9210CF48  (sub_0x9210CF48)
+      0x92108958 -> 0x9210B2F8  (sub_0x9210B2F8)
+      0x9210895C -> 0x921089A0
+      0x92108968 -> 0x92101818
+      0x92108984 -> 0x9212DC88
+      0x9210898C -> 0x9210DD00  (sub_0x9210DD00)
+      0x92108994 -> 0x921089A0
+    imported_callees:
+      0x9210881C -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x921089A4 -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x921089B0 -> 0x920A5BAC
+
+sub_0x921089B8  [bfs_reachable]  va=0x921089B8
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 49 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92108BD0
+    internal_callees:
+      0x921089BC -> 0x920A5B64  (sub_0x920A5B64)
+      0x921089F0 -> 0x9210CF48  (sub_0x9210CF48)
+      0x92108A14 -> 0x920A5BB4
+      0x92108A20 -> 0x9212CC40  (sub_0x9212CC40)
+      0x92108A34 -> 0x9212CC40  (sub_0x9212CC40)
+      0x92108A44 -> 0x921086E8
+      0x92108A54 -> 0x9212CD78  (sub_0x9212CD78)
+      0x92108A64 -> 0x9212CD78  (sub_0x9212CD78)
+      0x92108A70 -> 0x92108A04
+    imported_callees:
+      0x921089DC -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92108A08 -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x92108A78 -> 0x92108A04
+
+sub_0x92108BD0  [bfs_reachable]  va=0x92108BD0
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 147 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+    internal_callees:
+      0x92108BD4 -> 0x920A5B5C  (sub_0x920A5B5C)
+      0x92108BE8 -> 0x9212C790  (sub_0x9212C790)
+      0x92108BF8 -> 0x9212CC40  (sub_0x9212CC40)
+      0x92108C04 -> 0x921087F0  (sub_0x921087F0)
+      0x92108C18 -> 0x9212CD78  (sub_0x9212CD78)
+      0x92108C24 -> 0x920A5BAC
+      0x92108C60 -> 0x9212CC40  (sub_0x9212CC40)
+      0x92108C68 -> 0x92108C2C
+      0x92108CFC -> 0x920A6F78  (sub_0x920A6F78)
+      0x92108D1C -> 0x92108CC4
+      0x92108D28 -> 0x9212E5D0  (sub_0x9212E5D0)
+      0x92108D44 -> 0x920A7D88  (sub_0x920A7D88)
+      0x92108D50 -> 0x920A7D88  (sub_0x920A7D88)
+      0x92108D84 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x92108D9C -> 0x920A75D0  (sub_0x920A75D0)
+      0x92108DB0 -> 0x920A75D0  (sub_0x920A75D0)
+      0x92108DC0 -> 0x921089B8  (sub_0x921089B8)
+      0x92108DCC -> 0x92105AF8  (sub_0x92105AF8)
+      0x92108DE0 -> 0x9212E518  (sub_0x9212E518)
+      0x92108DF4 -> 0x9210DD00  (sub_0x9210DD00)
+      0x92108E04 -> 0x92108C84
+      0x92108E10 -> 0x92108C14
+    tail_calls:
+      0x92108E18 -> 0x92108C14
+
+sub_0x92108F40  [bfs_reachable]  va=0x92108F40
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 4 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+
+sub_0x92108FA8  [bfs_reachable]  va=0x92108FA8
+    discovery: bfs (reached from 0x920A05B8 via 0x92109160)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92109160, 0x92109510
+    internal_callees:
+      0x92108FD4 -> 0x9210DD00  (sub_0x9210DD00)
+
+sub_0x92109160  [bfs_reachable]  va=0x92109160
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 35 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+    internal_callees:
+      0x92109164 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x92109174 -> 0x92108FA8  (sub_0x92108FA8)
+      0x92109190 -> 0x920A7D88  (sub_0x920A7D88)
+      0x9210919C -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x921091B4 -> 0x921091E4
+      0x921091C8 -> 0x920A75D0  (sub_0x920A75D0)
+      0x921091CC -> 0x921091E0
+    tail_calls:
+      0x921091E8 -> 0x920A5BBC
+
+sub_0x92109510  [bfs_reachable]  va=0x92109510
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 1 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+    tail_calls:
+      0x92109510 -> 0x92108FA8  (sub_0x92108FA8)
+
+sub_0x9210B2F8  [bfs_reachable]  va=0x9210B2F8
+    discovery: bfs (reached from 0x920A05B8 via 0x9210D998)
+    disassembled 108 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x921087F0, 0x9210D998
+    internal_callees:
+      0x9210B2FC -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9210B330 -> 0x920F8DA0  (sub_0x920F8DA0)
+      0x9210B35C -> 0x920A93C0  (sub_0x920A93C0)
+      0x9210B380 -> 0x920A93C0  (sub_0x920A93C0)
+      0x9210B394 -> 0x9210DD18  (sub_0x9210DD18)
+      0x9210B3C0 -> 0x9210DD18  (sub_0x9210DD18)
+      0x9210B3F0 -> 0x9210B3F8
+      0x9210B3FC -> 0x920A5BBC
+      0x9210B404 -> 0x920A5B68  (sub_0x920A5B68)
+      0x9210B440 -> 0x920F8DA0  (sub_0x920F8DA0)
+      0x9210B45C -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210B470 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210B484 -> 0x920A5BB8
+      0x9210B4A0 -> 0x9210B278
+
+sub_0x9210B400  [bfs_reachable]  va=0x9210B400
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DB88)
+    disassembled 42 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210D1C8, 0x9210DB88
+    internal_callees:
+      0x9210B404 -> 0x920A5B68  (sub_0x920A5B68)
+      0x9210B440 -> 0x920F8DA0  (sub_0x920F8DA0)
+      0x9210B45C -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210B470 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210B484 -> 0x920A5BB8
+      0x9210B4A0 -> 0x9210B278
+
+sub_0x9210B600  [bfs_reachable]  va=0x9210B600
+    discovery: bfs (reached from 0x920A05B8 via 0x920618E0)
+    disassembled 122 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920618E0
+    internal_callees:
+      0x9210B604 -> 0x920A5B68  (sub_0x920A5B68)
+      0x9210B628 -> 0x920A5BB8
+      0x9210B63C -> 0x92178F60  (sub_0x92178F60)
+      0x9210B658 -> 0x92178F60  (sub_0x92178F60)
+      0x9210B674 -> 0x92178F60  (sub_0x92178F60)
+      0x9210B684 -> 0x9210CC58  (sub_0x9210CC58)
+      0x9210B698 -> 0x9210B624
+      0x9210B6B4 -> 0x9210CC58  (sub_0x9210CC58)
+      0x9210B6E0 -> 0x9210CF48  (sub_0x9210CF48)
+      0x9210B704 -> 0x9210B538
+      0x9210B718 -> 0x9210B1B0
+      0x9210B734 -> 0x9210B624
+      0x9210B744 -> 0x9210D820
+      0x9210B754 -> 0x9210AF78
+      0x9210B760 -> 0x9210B728
+      0x9210B778 -> 0x920F1A18  (sub_0x920F1A18)
+      0x9210B788 -> 0x9210B538
+      0x9210B78C -> 0x9210B758
+      0x9210B794 -> 0x9210B728
+    imported_callees:
+      0x9210B6CC -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x9210B72C -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x9210C718  [bfs_reachable]  va=0x9210C718
+    discovery: bfs (reached from 0x920A05B8 via 0x92101188)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92101148, 0x92101188
+    internal_callees:
+      0x9210C748 -> 0x92130410  (sub_0x92130410)
+    imported_callees:
+      0x9210C744 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x9210C750 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x9210C768  [bfs_reachable]  va=0x9210C768
+    discovery: bfs (reached from 0x920A05B8 via 0x9210D5D0)
+    disassembled 105 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210D248, 0x9210D5D0
+    internal_callees:
+      0x9210C76C -> 0x920A5B5C  (sub_0x920A5B5C)
+      0x9210C794 -> 0x9210C808
+      0x9210C7A8 -> 0x920A7098  (sub_0x920A7098)
+      0x9210C7C4 -> 0x920A7D88  (sub_0x920A7D88)
+      0x9210C7D8 -> 0x92178F60  (sub_0x92178F60)
+      0x9210C7FC -> 0x9210C804
+      0x9210C80C -> 0x920A5BAC
+      0x9210C814 -> 0x920A5B60  (sub_0x920A5B60)
+      0x9210C830 -> 0x920A7D88  (sub_0x920A7D88)
+      0x9210C83C -> 0x920A7D88  (sub_0x920A7D88)
+      0x9210C850 -> 0x920A7D88  (sub_0x920A7D88)
+      0x9210C864 -> 0x920A7D88  (sub_0x920A7D88)
+      0x9210C878 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9210C890 -> 0x9210C904
+      0x9210C89C -> 0x920A75D0  (sub_0x920A75D0)
+      0x9210C8AC -> 0x920A74C0
+      0x9210C8BC -> 0x920A74C0
+      0x9210C8D0 -> 0x92178F60  (sub_0x92178F60)
+      0x9210C8EC -> 0x920A74C0
+      0x9210C8FC -> 0x920A74C0
+    tail_calls:
+      0x9210C908 -> 0x920A5BB0
+
+sub_0x9210C910  [bfs_reachable]  va=0x9210C910
+    discovery: bfs (reached from 0x920A05B8 via 0x9210D5D0)
+    disassembled 39 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210D248, 0x9210D5D0
+    internal_callees:
+      0x9210C914 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9210C994 -> 0x920F1A18  (sub_0x920F1A18)
+      0x9210C998 -> 0x9210C9A4
+    tail_calls:
+      0x9210C9A8 -> 0x920A5BBC
+
+sub_0x9210CAE0  [bfs_reachable]  va=0x9210CAE0
+    discovery: bfs (reached from 0x920A05B8 via 0x921057E0)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x921057E0, 0x9212C790
+
+sub_0x9210CC58  [bfs_reachable]  va=0x9210CC58
+    discovery: bfs (reached from 0x920A05B8 via 0x9210B600)
+    disassembled 15 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210B600
+    internal_callees:
+      0x9210CC74 -> 0x920A7098  (sub_0x920A7098)
+
+sub_0x9210CF48  [bfs_reachable]  va=0x9210CF48
+    discovery: bfs (reached from 0x920A05B8 via 0x921089B8)
+    disassembled 63 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92105AF8, 0x92105C00, 0x921087F0, 0x921089B8, 0x9210B600, 0x9210D998
+    internal_callees:
+      0x9210CF4C -> 0x920A5B68  (sub_0x920A5B68)
+      0x9210CF7C -> 0x920A6F78  (sub_0x920A6F78)
+      0x9210CFA4 -> 0x920A5BB8
+      0x9210CFAC -> 0x9210CFA0
+      0x9210CFF0 -> 0x9210DD18  (sub_0x9210DD18)
+      0x9210D000 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D01C -> 0x9210D02C
+
+sub_0x9210D1C8  [bfs_reachable]  va=0x9210D1C8
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DB88)
+    disassembled 31 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DB88
+    internal_callees:
+      0x9210D1CC -> 0x920A5B68  (sub_0x920A5B68)
+      0x9210D230 -> 0x9210B400  (sub_0x9210B400)
+    imported_callees:
+      0x9210D1E0 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x9210D238 -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x9210D240 -> 0x920A5BB8
+
+sub_0x9210D248  [bfs_reachable]  va=0x9210D248
+    discovery: bfs (reached from 0x920A05B8 via 0x9210D5D0)
+    disassembled 373 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210D248, 0x9210D5D0
+    internal_callees:
+      0x9210D24C -> 0x920A5B4C  (sub_0x920A5B4C)
+      0x9210D29C -> 0x9210C9B0
+      0x9210D2EC -> 0x9210D0E8
+      0x9210D32C -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9210D364 -> 0x9210D36C
+      0x9210D37C -> 0x9210D4F0
+      0x9210D3D4 -> 0x9210D494
+      0x9210D3FC -> 0x9210D3C8
+      0x9210D414 -> 0x9210C810
+      0x9210D42C -> 0x9212F178
+      0x9210D440 -> 0x921306C0
+      0x9210D448 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D460 -> 0x9210D488
+      0x9210D4E8 -> 0x9210D598
+      0x9210D53C -> 0x9210D180
+      0x9210D558 -> 0x9210D180
+      0x9210D580 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D5CC -> 0x920A5B9C
+      0x9210D5D4 -> 0x920A5B58  (sub_0x920A5B58)
+      0x9210D5FC -> 0x9210D760
+      0x9210D620 -> 0x9210C910  (sub_0x9210C910)
+      0x9210D640 -> 0x9210C768  (sub_0x9210C768)
+      0x9210D64C -> 0x920F1B30  (sub_0x920F1B30)
+      0x9210D678 -> 0x92130E98  (sub_0x92130E98)
+      0x9210D698 -> 0x9210D248  (sub_0x9210D248)
+      0x9210D6A8 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D6BC -> 0x920A6F78  (sub_0x920A6F78)
+      0x9210D6D4 -> 0x920A6F78  (sub_0x920A6F78)
+      0x9210D6EC -> 0x92130E98  (sub_0x92130E98)
+      0x9210D70C -> 0x9210D248  (sub_0x9210D248)
+      0x9210D71C -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D738 -> 0x9210D248  (sub_0x9210D248)
+      0x9210D744 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D74C -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D754 -> 0x9210D760
+      0x9210D764 -> 0x920A5BA8
+      0x9210D76C -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9210D794 -> 0x9210D814
+      0x9210D7B8 -> 0x9210C910  (sub_0x9210C910)
+      0x9210D7D4 -> 0x9210C768  (sub_0x9210C768)
+      0x9210D7F4 -> 0x9210D248  (sub_0x9210D248)
+      0x9210D800 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D808 -> 0x9210D814
+    imported_callees:
+      0x9210D274 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x9210D5C0 -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x9210D818 -> 0x920A5BBC
+
+sub_0x9210D5D0  [bfs_reachable]  va=0x9210D5D0
+    discovery: bfs (reached from 0x920A05B8 via 0x921057E0)
+    disassembled 147 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x921057E0
+    internal_callees:
+      0x9210D5D4 -> 0x920A5B58  (sub_0x920A5B58)
+      0x9210D5FC -> 0x9210D760
+      0x9210D620 -> 0x9210C910  (sub_0x9210C910)
+      0x9210D640 -> 0x9210C768  (sub_0x9210C768)
+      0x9210D64C -> 0x920F1B30  (sub_0x920F1B30)
+      0x9210D678 -> 0x92130E98  (sub_0x92130E98)
+      0x9210D698 -> 0x9210D248  (sub_0x9210D248)
+      0x9210D6A8 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D6BC -> 0x920A6F78  (sub_0x920A6F78)
+      0x9210D6D4 -> 0x920A6F78  (sub_0x920A6F78)
+      0x9210D6EC -> 0x92130E98  (sub_0x92130E98)
+      0x9210D70C -> 0x9210D248  (sub_0x9210D248)
+      0x9210D71C -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D738 -> 0x9210D248  (sub_0x9210D248)
+      0x9210D744 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D74C -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D754 -> 0x9210D760
+      0x9210D764 -> 0x920A5BA8
+      0x9210D76C -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9210D794 -> 0x9210D814
+      0x9210D7B8 -> 0x9210C910  (sub_0x9210C910)
+      0x9210D7D4 -> 0x9210C768  (sub_0x9210C768)
+      0x9210D7F4 -> 0x9210D248  (sub_0x9210D248)
+      0x9210D800 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210D808 -> 0x9210D814
+    tail_calls:
+      0x9210D818 -> 0x920A5BBC
+
+sub_0x9210D998  [bfs_reachable]  va=0x9210D998
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DB88)
+    disassembled 123 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DB88, 0x92131208, 0x921317D8
+    internal_callees:
+      0x9210D99C -> 0x920A5B5C  (sub_0x920A5B5C)
+      0x9210D9C0 -> 0x9210DB7C
+      0x9210DA48 -> 0x9210CF48  (sub_0x9210CF48)
+      0x9210DA58 -> 0x9210DA68
+      0x9210DA94 -> 0x9210CF48  (sub_0x9210CF48)
+      0x9210DAA8 -> 0x9210B2F8  (sub_0x9210B2F8)
+      0x9210DAC8 -> 0x9210DB7C
+      0x9210DAD8 -> 0x9210D820
+      0x9210DB14 -> 0x9210D820
+      0x9210DB20 -> 0x9210DABC
+      0x9210DB4C -> 0x9210DB6C
+      0x9210DB70 -> 0x9210DB7C
+    imported_callees:
+      0x9210DA34 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x9210DAC0 -> xboxkrnl.exe!RtlLeaveCriticalSection
+      0x9210DB3C -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x9210DB80 -> 0x920A5BAC
+
+sub_0x9210DB88  [bfs_reachable]  va=0x9210DB88
+    discovery: bfs (reached from 0x920A05B8 via 0x92100BC8)
+    disassembled 94 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92100BC8
+    internal_callees:
+      0x9210DB8C -> 0x920A5B68  (sub_0x920A5B68)
+      0x9210DB94 -> 0x921300B0  (sub_0x921300B0)
+      0x9210DBA4 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9210DBD0 -> 0x9210DBE0
+      0x9210DBF4 -> 0x9210DCB4
+      0x9210DBFC -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9210DC20 -> 0x9210DC28
+      0x9210DC38 -> 0x9210DC80
+      0x9210DC44 -> 0x9210D998  (sub_0x9210D998)
+      0x9210DC68 -> 0x92131208  (sub_0x92131208)
+      0x9210DC74 -> 0x921317D8  (sub_0x921317D8)
+      0x9210DC8C -> 0x9210D1C8  (sub_0x9210D1C8)
+      0x9210DCA0 -> 0x9210B400  (sub_0x9210B400)
+      0x9210DCA8 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9210DCB4 -> 0x9210B4A8
+      0x9210DCB8 -> 0x92130348
+      0x9210DCC0 -> 0x9210DCD0
+      0x9210DCD4 -> 0x920A5BB8
+      0x9210DCDC -> 0x9209F008  (sub_0x9209F008)
+      0x9210DCF8 -> 0x9209F0C0  (sub_0x9209F0C0)
+
+sub_0x9210DCD8  [bfs_reachable]  va=0x9210DCD8
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 10 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F1050, 0x920F1A18, 0x920F2198, 0x920FC798, 0x92105C00, 0x921087F0, 0x92108BD0, 0x92109160, 0x9210C768, 0x9210D248, 0x9210DB88, 0x9210DD18, 0x9210DDA8, 0x9212C790, 0x9212D2D0, 0x9212D4C8, 0x921300B0, 0x92130E98, 0x92131208, 0x921317D8, 0x921376B0
+    internal_callees:
+      0x9210DCDC -> 0x9209F008  (sub_0x9209F008)
+      0x9210DCF8 -> 0x9209F0C0  (sub_0x9209F0C0)
+
+sub_0x9210DD00  [bfs_reachable]  va=0x9210DD00
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F0498, 0x920F1A18, 0x920F44E0, 0x920F8DA0, 0x920FC798, 0x920FFB28, 0x92101148, 0x92101188, 0x92103CC8, 0x921057E0, 0x92105AF8, 0x92105C00, 0x921087F0, 0x92108BD0, 0x92108FA8, 0x9210B2F8, 0x9210B400, 0x9210CF48, 0x9210D248, 0x9210D5D0, 0x9210DB88, 0x9212C790, 0x9212CD78, 0x9212D188, 0x9212E518, 0x9212FFC8, 0x92130200
+    internal_callees:
+      0x9210DD0C -> 0x9209F0A0  (sub_0x9209F0A0)
+
+sub_0x9210DD18  [bfs_reachable]  va=0x9210DD18
+    discovery: bfs (reached from 0x920A05B8 via 0x9210CF48)
+    disassembled 145 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210B2F8, 0x9210CF48
+    internal_callees:
+      0x9210DD1C -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9210DD40 -> 0x9209F0A0  (sub_0x9209F0A0)
+      0x9210DD48 -> 0x9210DDA0
+      0x9210DD54 -> 0x9209F008  (sub_0x9209F008)
+      0x9210DD70 -> 0x9209F0C0  (sub_0x9209F0C0)
+      0x9210DD8C -> 0x920A62F0  (sub_0x920A62F0)
+      0x9210DD98 -> 0x9209F0A0  (sub_0x9209F0A0)
+      0x9210DDA4 -> 0x920A5BBC
+      0x9210DDAC -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9210DDC4 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9210DDD4 -> 0x920F0498  (sub_0x920F0498)
+      0x9210DDDC -> 0x9210DDF8
+      0x9210DDFC -> 0x920A5BBC
+      0x9210DE04 -> 0x920A5B64  (sub_0x920A5B64)
+      0x9210DE14 -> 0x920F0498  (sub_0x920F0498)
+      0x9210DE1C -> 0x920A7D88  (sub_0x920A7D88)
+      0x9210DE64 -> 0x9210DEB8
+      0x9210DE80 -> 0x9210DDA8  (sub_0x9210DDA8)
+      0x9210DE94 -> 0x9210DEB8
+      0x9210DEA8 -> 0x9210DDA8  (sub_0x9210DDA8)
+      0x9210DED8 -> 0x9210DDA8  (sub_0x9210DDA8)
+      0x9210DEEC -> 0x920A5BB4
+      0x9210DEF8 -> 0x9210DEE8
+      0x9210DF00 -> 0x920F0498  (sub_0x920F0498)
+      0x9210DF0C -> 0x9210DEE8
+      0x9210DF30 -> 0x92136468  (sub_0x92136468)
+
+sub_0x9210DDA8  [bfs_reachable]  va=0x9210DDA8
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DD18)
+    disassembled 109 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DD18, 0x9210DDA8
+    internal_callees:
+      0x9210DDAC -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9210DDC4 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9210DDD4 -> 0x920F0498  (sub_0x920F0498)
+      0x9210DDDC -> 0x9210DDF8
+      0x9210DDFC -> 0x920A5BBC
+      0x9210DE04 -> 0x920A5B64  (sub_0x920A5B64)
+      0x9210DE14 -> 0x920F0498  (sub_0x920F0498)
+      0x9210DE1C -> 0x920A7D88  (sub_0x920A7D88)
+      0x9210DE64 -> 0x9210DEB8
+      0x9210DE80 -> 0x9210DDA8  (sub_0x9210DDA8)
+      0x9210DE94 -> 0x9210DEB8
+      0x9210DEA8 -> 0x9210DDA8  (sub_0x9210DDA8)
+      0x9210DED8 -> 0x9210DDA8  (sub_0x9210DDA8)
+      0x9210DEEC -> 0x920A5BB4
+      0x9210DEF8 -> 0x9210DEE8
+      0x9210DF00 -> 0x920F0498  (sub_0x920F0498)
+      0x9210DF0C -> 0x9210DEE8
+      0x9210DF30 -> 0x92136468  (sub_0x92136468)
+
+sub_0x9210FAC8  [bfs_reachable]  va=0x9210FAC8
+    discovery: bfs (reached from 0x920A05B8 via 0x92101148)
+    disassembled 19 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9205E5E0, 0x92101148, 0x92104218, 0x9210FB18
+    internal_callees:
+      0x9210FAF4 -> 0x920A6D50  (sub_0x920A6D50)
+
+sub_0x9210FB18  [bfs_reachable]  va=0x9210FB18
+    discovery: bfs (reached from 0x920A05B8 via 0x92121398)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92121398
+    internal_callees:
+      0x9210FB3C -> 0x920F2040  (sub_0x920F2040)
+      0x9210FB48 -> 0x9210FAC8  (sub_0x9210FAC8)
+
+sub_0x92110868  [bfs_reachable]  va=0x92110868
+    discovery: bfs (reached from 0x920A05B8 via 0x92112BB0)
+    disassembled 27 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92112BB0
+    internal_callees:
+      0x9211086C -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x92110888 -> 0x9205E5E0  (sub_0x9205E5E0)
+      0x92110894 -> 0x920F8098  (sub_0x920F8098)
+      0x921108B4 -> 0x921108CC
+    tail_calls:
+      0x921108D0 -> 0x920A5BBC
+
+sub_0x92112BB0  [bfs_reachable]  va=0x92112BB0
+    discovery: bfs (reached from 0x920A05B8 via 0x92121398)
+    disassembled 35 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92121398
+    internal_callees:
+      0x92112BFC -> 0x92110868  (sub_0x92110868)
+
+sub_0x92121398  [bfs_reachable]  va=0x92121398
+    discovery: bfs (reached from 0x920A05B8 via 0x92102D60)
+    disassembled 432 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92102D60
+    internal_callees:
+      0x9212139C -> 0x920A5B68  (sub_0x920A5B68)
+      0x921213B8 -> 0x920F1950  (sub_0x920F1950)
+      0x921213CC -> 0x921214E8
+      0x921213D8 -> 0x920F13E0  (sub_0x920F13E0)
+      0x921213F8 -> 0x9212140C
+      0x9212141C -> 0x921214E8
+      0x92121440 -> 0x92121450
+      0x9212146C -> 0x92112BB0  (sub_0x92112BB0)
+      0x9212147C -> 0x9210FB18  (sub_0x9210FB18)
+      0x92121488 -> 0x920F19D8  (sub_0x920F19D8)
+      0x92121490 -> 0x920F8098  (sub_0x920F8098)
+      0x9212149C -> 0x92102C88
+      0x921214AC -> 0x920F19D8  (sub_0x920F19D8)
+      0x921214B8 -> 0x920F19D8  (sub_0x920F19D8)
+      0x921214C8 -> 0x92112060
+      0x921214E0 -> 0x92112120
+      0x921214EC -> 0x920A5BB8
+      0x921214F4 -> 0x920A5B50  (sub_0x920A5B50)
+      0x92121518 -> 0x920F1950  (sub_0x920F1950)
+      0x9212152C -> 0x920F13E0  (sub_0x920F13E0)
+      0x9212154C -> 0x92121560
+      0x92121570 -> 0x92121738
+      0x921215A0 -> 0x920F1950  (sub_0x920F1950)
+      0x921215B0 -> 0x920F13E0  (sub_0x920F13E0)
+      0x921215DC -> 0x920F1950  (sub_0x920F1950)
+      0x921215EC -> 0x920F13E0  (sub_0x920F13E0)
+      0x92121630 -> 0x92121644
+      0x92121648 -> 0x92121694
+      0x92121670 -> 0x92121694
+      0x921216B0 -> 0x92112BB0  (sub_0x92112BB0)
+      0x921216C0 -> 0x9210FB18  (sub_0x9210FB18)
+      0x921216CC -> 0x920F19D8  (sub_0x920F19D8)
+      0x921216D4 -> 0x920F8098  (sub_0x920F8098)
+      0x921216E0 -> 0x92102C88
+      0x921216F0 -> 0x920F19D8  (sub_0x920F19D8)
+      0x921216FC -> 0x920F19D8  (sub_0x920F19D8)
+      0x9212170C -> 0x92112060
+      0x92121724 -> 0x92112120
+      0x9212172C -> 0x92121738
+      0x9212173C -> 0x920A5BA0
+      0x92121744 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x921217E0 -> 0x921369B8
+      0x921217EC -> 0x92135E80
+      0x921217F8 -> 0x92136278
+      0x92121824 -> 0x92120710
+      0x9212182C -> 0x920A5BBC
+      0x92121850 -> 0x921369B8
+      0x9212185C -> 0x92135E80
+      0x92121868 -> 0x92136278
+      0x9212188C -> 0x92121828
+      0x92121898 -> 0x9210F9C0
+      0x9212189C -> 0x92121828
+      0x921218C4 -> 0x920A89C8
+      0x921218F8 -> 0x92179118
+      0x92121920 -> 0x92179118
+      0x92121948 -> 0x92179118
+      0x92121970 -> 0x92179118
+      0x92121998 -> 0x92179118
+      0x921219C0 -> 0x92179118
+      0x921219EC -> 0x920A89C8
+      0x92121A14 -> 0x92120560
+      0x92121A38 -> 0x92121A40
+
+sub_0x9212C790  [bfs_reachable]  va=0x9212C790
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 285 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92108BD0
+    internal_callees:
+      0x9212C794 -> 0x920A5B54  (sub_0x920A5B54)
+      0x9212C7D4 -> 0x9210D768
+      0x9212C7F0 -> 0x9210CAE0  (sub_0x9210CAE0)
+      0x9212C800 -> 0x9210CA10
+      0x9212C80C -> 0x9212C830
+      0x9212C818 -> 0x9210CB90
+      0x9212C828 -> 0x9210CB28
+      0x9212C860 -> 0x9212CB78
+      0x9212C8F8 -> 0x9212C900
+      0x9212C904 -> 0x9212B0E8
+      0x9212C9A0 -> 0x9212C9C0
+      0x9212C9A8 -> 0x9212C9C0
+      0x9212C9B0 -> 0x9212C9C0
+      0x9212C9B8 -> 0x9212C9C0
+      0x9212C9E0 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9212CA28 -> 0x9212CA30
+      0x9212CA40 -> 0x9212CB74
+      0x9212CA58 -> 0x9212ACB8
+      0x9212CA80 -> 0x9212AE10
+      0x9212CAA8 -> 0x9212AE10
+      0x9212CAD0 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9212CAE8 -> 0x920A62F0  (sub_0x920A62F0)
+      0x9212CB0C -> 0x9212B148
+      0x9212CB3C -> 0x9212C500
+      0x9212CB54 -> 0x9212CE00
+      0x9212CB5C -> 0x9210DD00  (sub_0x9210DD00)
+      0x9212CB68 -> 0x9212CB74
+      0x9212CB98 -> 0x9210CA40
+      0x9212CB9C -> 0x9212CBB0
+      0x9212CBAC -> 0x9210DD00  (sub_0x9210DD00)
+      0x9212CBC0 -> 0x9210CB28
+      0x9212CBE4 -> 0x9212AF08
+      0x9212CBEC -> 0x9210DD00  (sub_0x9210DD00)
+      0x9212CBF4 -> 0x9210DD00  (sub_0x9210DD00)
+    tail_calls:
+      0x9212CC00 -> 0x920A5BA4
+
+sub_0x9212CC40  [bfs_reachable]  va=0x9212CC40
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 10 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x921089B8, 0x92108BD0
+
+sub_0x9212CD78  [bfs_reachable]  va=0x9212CD78
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 33 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x921089B8, 0x92108BD0
+    internal_callees:
+      0x9212CDCC -> 0x9212CE00
+      0x9212CDD4 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9212CDD8 -> 0x9212CDE0
+      0x9212CDDC -> 0x9212CE00
+
+sub_0x9212D188  [bfs_reachable]  va=0x9212D188
+    discovery: bfs (reached from 0x920A05B8 via 0x9212D4C8)
+    disassembled 50 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920FFB28, 0x9212D4C8
+    internal_callees:
+      0x9212D18C -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9212D1B0 -> 0x9210DD00  (sub_0x9210DD00)
+      0x9212D1CC -> 0x920A5BBC
+      0x9212D224 -> 0x920FCFB8  (sub_0x920FCFB8)
+
+sub_0x9212D250  [bfs_reachable]  va=0x9212D250
+    discovery: bfs (reached from 0x920A05B8 via 0x9212D4C8)
+    disassembled 32 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9212D2D0, 0x9212D4C8
+    internal_callees:
+      0x9212D260 -> 0x9212D2A0
+
+sub_0x9212D2D0  [bfs_reachable]  va=0x9212D2D0
+    discovery: bfs (reached from 0x920A05B8 via 0x920FC798)
+    disassembled 85 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920FC798
+    internal_callees:
+      0x9212D2D4 -> 0x920A5B68  (sub_0x920A5B68)
+      0x9212D328 -> 0x920A5BB8
+      0x9212D330 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9212D34C -> 0x9212D324
+      0x9212D36C -> 0x9212D250  (sub_0x9212D250)
+    imported_callees:
+      0x9212D2EC -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x9212D31C -> xboxkrnl.exe!RtlLeaveCriticalSection
+      0x9212D344 -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x9212D420 -> 0x9212D340
+
+sub_0x9212D428  [bfs_reachable]  va=0x9212D428
+    discovery: bfs (reached from 0x920A05B8 via 0x920F44E0)
+    disassembled 39 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920F44E0, 0x920FC798
+    internal_callees:
+      0x9212D42C -> 0x920A5B6C  (sub_0x920A5B6C)
+    imported_callees:
+      0x9212D444 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x9212D4B8 -> xboxkrnl.exe!RtlLeaveCriticalSection
+    tail_calls:
+      0x9212D4C0 -> 0x920A5BBC
+
+sub_0x9212D4C8  [bfs_reachable]  va=0x9212D4C8
+    discovery: bfs (reached from 0x920A05B8 via 0x92100BC8)
+    disassembled 31 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92100BC8
+    internal_callees:
+      0x9212D4CC -> 0x920A5B68  (sub_0x920A5B68)
+      0x9212D4E8 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x9212D520 -> 0x9212D250  (sub_0x9212D250)
+      0x9212D52C -> 0x920A5BB8
+      0x9212D534 -> 0x9212D188  (sub_0x9212D188)
+    tail_calls:
+      0x9212D540 -> 0x9212D528
+
+sub_0x9212E518  [bfs_reachable]  va=0x9212E518
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 28 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92108BD0
+    internal_callees:
+      0x9212E54C -> 0x92101818
+      0x9212E564 -> 0x9212E3E8
+      0x9212E56C -> 0x9210DD00  (sub_0x9210DD00)
+
+sub_0x9212E5D0  [bfs_reachable]  va=0x9212E5D0
+    discovery: bfs (reached from 0x920A05B8 via 0x92108BD0)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92108BD0
+    internal_callees:
+      0x9212E5E4 -> 0x9212E618
+      0x9212E5F8 -> 0x9212E618
+
+sub_0x9212FFC8  [bfs_reachable]  va=0x9212FFC8
+    discovery: bfs (reached from 0x920A05B8 via 0x92130200)
+    disassembled 22 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92130200
+    internal_callees:
+      0x92130008 -> 0x9210DD00  (sub_0x9210DD00)
+
+sub_0x921300B0  [bfs_reachable]  va=0x921300B0
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DB88)
+    disassembled 36 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DB88
+    internal_callees:
+      0x921300D8 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x921300F0 -> 0x920A6D50  (sub_0x920A6D50)
+      0x921300F8 -> 0x92130100
+    imported_callees:
+      0x921300D0 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92130120 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x92130200  [bfs_reachable]  va=0x92130200
+    discovery: bfs (reached from 0x920A05B8 via 0x92130410)
+    disassembled 108 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92130410
+    internal_callees:
+      0x92130204 -> 0x920A5B60  (sub_0x920A5B60)
+      0x92130210 -> 0x9209EDD8  (sub_0x9209EDD8)
+      0x92130258 -> 0x92130260
+      0x92130264 -> 0x9212FFC8  (sub_0x9212FFC8)
+      0x9213026C -> 0x9210DD00  (sub_0x9210DD00)
+      0x92130270 -> 0x92130288
+      0x921302A4 -> 0x920A5BB0
+      0x921302AC -> 0x920A5B64  (sub_0x920A5B64)
+      0x921302C8 -> 0x921302D8
+      0x921302EC -> 0x9213030C
+      0x921302F8 -> 0x920A6F78  (sub_0x920A6F78)
+      0x92130314 -> 0x92130340
+      0x92130328 -> 0x92130330
+      0x92130334 -> 0x9212FFC8  (sub_0x9212FFC8)
+      0x9213033C -> 0x9210DD00  (sub_0x9210DD00)
+      0x92130344 -> 0x920A5BB4
+      0x92130374 -> 0x921301A0
+      0x92130384 -> 0x9210DD00  (sub_0x9210DD00)
+    imported_callees:
+      0x92130368 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92130394 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x92130410  [bfs_reachable]  va=0x92130410
+    discovery: bfs (reached from 0x920A05B8 via 0x9210C718)
+    disassembled 24 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210C718
+    internal_callees:
+      0x9213044C -> 0x92130200  (sub_0x92130200)
+    imported_callees:
+      0x92130444 -> xboxkrnl.exe!RtlEnterCriticalSection
+      0x92130454 -> xboxkrnl.exe!RtlLeaveCriticalSection
+
+sub_0x92130E98  [bfs_reachable]  va=0x92130E98
+    discovery: bfs (reached from 0x920A05B8 via 0x9210D5D0)
+    disassembled 69 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210D248, 0x9210D5D0
+    internal_callees:
+      0x92130E9C -> 0x920A5B64  (sub_0x920A5B64)
+      0x92130EBC -> 0x920A7D88  (sub_0x920A7D88)
+      0x92130EC8 -> 0x920A7D88  (sub_0x920A7D88)
+      0x92130ED8 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x92130EEC -> 0x92130FA4
+      0x92130EF4 -> 0x920A7D88  (sub_0x920A7D88)
+      0x92130F00 -> 0x92130F1C
+      0x92130F24 -> 0x92130F2C
+      0x92130F5C -> 0x92130F70
+      0x92130F7C -> 0x92130F84
+    tail_calls:
+      0x92130FA8 -> 0x920A5BB4
+
+sub_0x92131208  [bfs_reachable]  va=0x92131208
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DB88)
+    disassembled 41 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DB88
+    internal_callees:
+      0x92131220 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x92131244 -> 0x9213124C
+      0x9213125C -> 0x92131294
+      0x92131268 -> 0x9210D998  (sub_0x9210D998)
+
+sub_0x921317D8  [bfs_reachable]  va=0x921317D8
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DB88)
+    disassembled 41 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DB88
+    internal_callees:
+      0x921317F0 -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x92131814 -> 0x9213181C
+      0x9213182C -> 0x92131864
+      0x92131838 -> 0x9210D998  (sub_0x9210D998)
+
+sub_0x92135ED0  [bfs_reachable]  va=0x92135ED0
+    discovery: bfs (reached from 0x920A05B8 via 0x92062078)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060AD0, 0x92062078
+
+sub_0x92135FB8  [bfs_reachable]  va=0x92135FB8
+    discovery: bfs (reached from 0x920A05B8 via 0x92060D20)
+    disassembled 13 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92060D20
+
+sub_0x92136020  [bfs_reachable]  va=0x92136020
+    discovery: bfs (reached from 0x920A05B8 via 0x920609D8)
+    disassembled 44 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920609D8
+    internal_callees:
+      0x9213604C -> 0x921360BC
+      0x9213606C -> 0x921360BC
+
+sub_0x921360D0  [bfs_reachable]  va=0x921360D0
+    discovery: bfs (reached from 0x920A05B8 via 0x920609D8)
+    disassembled 35 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920609D8, 0x92060AD0
+    internal_callees:
+      0x921360F8 -> 0x92136144
+
+sub_0x92136250  [bfs_reachable]  va=0x92136250
+    discovery: bfs (reached from 0x920A05B8 via 0x92061A48)
+    disassembled 5 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061A48
+
+sub_0x92136468  [bfs_reachable]  va=0x92136468
+    discovery: bfs (reached from 0x920A05B8 via 0x9210DDA8)
+    disassembled 18 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210DD18, 0x9210DDA8
+    internal_callees:
+      0x92136484 -> 0x921364A0
+
+sub_0x921376B0  [bfs_reachable]  va=0x921376B0
+    discovery: bfs (reached from 0x920A05B8 via 0x92138080)
+    disassembled 55 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92138080
+    internal_callees:
+      0x921376B4 -> 0x920A5B60  (sub_0x920A5B60)
+      0x921376CC -> 0x9210DCD8  (sub_0x9210DCD8)
+      0x92137710 -> 0x92137718
+      0x92137728 -> 0x92137780
+    tail_calls:
+      0x92137788 -> 0x920A5BB0
+
+sub_0x92138080  [bfs_reachable]  va=0x92138080
+    discovery: bfs (reached from 0x920A05B8 via 0x92062078)
+    disassembled 59 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062078
+    internal_callees:
+      0x92138084 -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x921380C8 -> 0x9213814C
+      0x921380F4 -> 0x921376B0  (sub_0x921376B0)
+      0x9213812C -> 0x92138134
+      0x92138154 -> 0x920A5BBC
+
+sub_0x9213B3C0  [bfs_reachable]  va=0x9213B3C0
+    discovery: bfs (reached from 0x920A05B8 via 0x920618E0)
+    disassembled 65 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920618E0
+    internal_callees:
+      0x9213B3D4 -> 0x92149860
+      0x9213B3DC -> 0x920A5B6C  (sub_0x920A5B6C)
+      0x9213B3FC -> 0x9213B420
+      0x9213B410 -> 0x9213A8E8
+      0x9213B434 -> 0x920A5BBC
+      0x9213B45C -> 0x9213B42C
+      0x9213B4A8 -> 0x9213B4B8
+
+sub_0x9213F2E0  [bfs_reachable]  va=0x9213F2E0
+    discovery: bfs (reached from 0x920A05B8 via 0x92061A48)
+    disassembled 4 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92061A48
+
+sub_0x92165C28  [bfs_reachable]  va=0x92165C28
+    discovery: bfs (reached from 0x920A05B8 via 0x920A8ED0)
+    disassembled 1 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A8ED0, 0x920A8EE0, 0x92103CC8, 0x921057E0, 0x92105AF8
+
+sub_0x9216C450  [bfs_reachable]  va=0x9216C450
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 2 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+
+sub_0x9216D7B0  [bfs_reachable]  va=0x9216D7B0
+    discovery: bfs (reached from 0x920A05B8 via 0x920628F0)
+    disassembled 44 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920628F0
+    internal_callees:
+      0x9216D7E4 -> 0x92102E70  (sub_0x92102E70)
+      0x9216D7E8 -> 0x9216D830
+      0x9216D7F0 -> 0x921050E0  (sub_0x921050E0)
+      0x9216D804 -> 0x921033C0  (sub_0x921033C0)
+      0x9216D818 -> 0x92178BE8  (sub_0x92178BE8)
+      0x9216D82C -> 0x92102F60  (sub_0x92102F60)
+      0x9216D83C -> 0x9216D848
+
+sub_0x921703F8  [bfs_reachable]  va=0x921703F8
+    discovery: bfs (reached from 0x920A05B8 via 0x92062510)
+    disassembled 22 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x92062510
+    internal_callees:
+      0x92170424 -> 0x921103E8
+      0x92170430 -> 0x920F19D8  (sub_0x920F19D8)
+      0x92170438 -> 0x920F8098  (sub_0x920F8098)
+
+sub_0x92176EF0  [bfs_reachable]  va=0x92176EF0
+    discovery: bfs (reached from 0x920A05B8 via 0x920A9290)
+    disassembled 3 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x920A9018, 0x920A9290
+
+sub_0x92178BE8  [bfs_reachable]  va=0x92178BE8
+    discovery: bfs (reached from 0x920A05B8 via 0x9216D7B0)
+    disassembled 49 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9216D7B0
+    internal_callees:
+      0x92178BFC -> 0x920A94F0  (sub_0x920A94F0)
+      0x92178C1C -> 0x920AB7C0  (sub_0x920AB7C0)
+      0x92178C28 -> 0x92178C9C
+
+sub_0x92178F60  [bfs_reachable]  va=0x92178F60
+    discovery: bfs (reached from 0x920A05B8 via 0x9210B600)
+    disassembled 16 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x9210B600, 0x9210C768
+

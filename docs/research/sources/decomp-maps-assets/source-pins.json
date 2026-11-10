@@ -1,0 +1,1022 @@
+{
+  "schema": 1,
+  "source_root": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets",
+  "metadata": {
+    "decoded_metro": [
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/README.md",
+        "bytes": 2990,
+        "sha256": "f87c41f40081f23cecb0734ce1e9f218a128862f4c58e351f18f5dc277d2c1d8"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/VALIDATION_REPORT.txt",
+        "bytes": 5350,
+        "sha256": "78cbb8ec4d4e1a668e0bdcc3895a0eaf6f67450099b8cc47c772f1cd91d18d5c"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/XNA_HANDOFF.txt",
+        "bytes": 1025,
+        "sha256": "17985e15f86636c17416ddf63048186f40cc4ecebd69bc199f629358a62d84e6"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/module_metadata.json",
+        "bytes": 61062,
+        "sha256": "d9a33940b2d3ed07f60db1db7389a2c0011a741be33ae0540c47bfddc77747b1"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/ghidra_manifest.json",
+        "bytes": 20983,
+        "sha256": "d7de1c302a74dc794d2b75cfe4972a5698efd97fcf47f9739d9aa5344fc8773e"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/validation.json",
+        "bytes": 5656,
+        "sha256": "19a856a4712799ec5dc94fe7bfa7619dfdd8104260c6786cfd46fa44aba66fb9"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/ghidra/project_audit.json",
+        "bytes": 14190,
+        "sha256": "20a5a1fcdce97aebef392ced1709fa6a0587cb5799c4eee7766b460d698e0cd9"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/00_INDEX.txt",
+        "bytes": 32072,
+        "sha256": "2ebe151c4ed4e9c7b2c3e2fd4574520468255d5273293f1ea9d7bc6a2124a471"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/01_EXPORT_TABLES_INDEX.txt",
+        "bytes": 2226,
+        "sha256": "06e54a18bee415f7610dc7afd1288f273b951c761dbd8030fb48ffd42e88d0a6"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/02_AVATAR_COMMAND_TABLE.txt",
+        "bytes": 17410,
+        "sha256": "b14c37e96ab5ba95da730fc36c213f2df0420ddbc97d8617b39cfbc5c9316354"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/03_IMPORT_TABLES_INDEX.txt",
+        "bytes": 4216,
+        "sha256": "b684969d677805cad86e6dc1d0009347814166db73c482f3931edd129b1a4ed6"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/04_CALL_GRAPH_INDEX.txt",
+        "bytes": 4563,
+        "sha256": "cfc7d9777323d0d7707bc5e0a0e061099571d6dcc3c0222bf00fc3b323ed2679"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/05_STRINGS_INDEX.txt",
+        "bytes": 232,
+        "sha256": "fe7c81950c2a65be2d69ed3baedc17e6b35e3fa67dd1433468c6768af8bae2f6"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/07_TITLE_IDS.txt",
+        "bytes": 6242,
+        "sha256": "b21b2489704b3ff2704484ec3a510900832cde8210aabe137e8e2bf9df64818a"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/08_STRUCTURES.txt",
+        "bytes": 1040,
+        "sha256": "ce6260e66a4382f04ab7d4a6f4d17f60bf856d74a93e54c0f6e990322915f995"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/09_RELATIONSHIPS.txt",
+        "bytes": 18250,
+        "sha256": "4a3e4254a0daa09e03aeb001e01a6143c20a7e7759ebe6eaf27b82a72bc0cce4"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/10_UNRESOLVED.txt",
+        "bytes": 3860,
+        "sha256": "81443819630757ea6427adf16d2d496b7a928131f86e6ab27a96913672d1c036"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/modules.tsv",
+        "bytes": 17788,
+        "sha256": "a0dd838d4493dcd6a8a6d955abc65e15630e6476638f836686b7386ba7458833"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/ghidra_programs.tsv",
+        "bytes": 10038,
+        "sha256": "e7a6b0b65c72bbba8a80637198692dcf62a84247b5d2242c6478a1e3baad25c6"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/identical_images.tsv",
+        "bytes": 241,
+        "sha256": "cd88192b914213d716626ff9dc83488274ee1dcc0f1c1305614202509ec5cf06"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/reference/ipc_coverage.tsv",
+        "bytes": 3013,
+        "sha256": "3436419edaed826b24f1f8c66d67b4a0e1d16d1ec23f9812bdf4704af2a65bfe"
+      }
+    ],
+    "decoded_nxe_kinect": [
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/README.md",
+        "bytes": 3011,
+        "sha256": "2f64d8da8cf1129713d546251595c27388313d376f1e6d54a7cd7666c7b8e05b"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/VALIDATION_REPORT.txt",
+        "bytes": 10190,
+        "sha256": "9bddc39209831c5061f8b4da9a7be69d41977f65055cbc08d299ae1146c67250"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/XNA_HANDOFF.txt",
+        "bytes": 2178,
+        "sha256": "a6950323b5790f30a1c7accb6da36e656d6aecd428a9ce9f9fc0c68f12e7eb2a"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/module_metadata.json",
+        "bytes": 112703,
+        "sha256": "291df9a0f2b55f3c13a2f7b1a0ca52f41990c592199b3ab3d6871ee3b998ba29"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/ghidra_manifest.json",
+        "bytes": 37301,
+        "sha256": "33464597aadd924ce9b089cbfc006fa28ee845c3f95cac406cd6cad9ba642a71"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/validation.json",
+        "bytes": 10846,
+        "sha256": "ead1cdb41f421f0cdb8aa83c60781f2954f37c1f39bfc016a181a8ab1c234d90"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/ghidra/project_audit.json",
+        "bytes": 19316,
+        "sha256": "ec42656c069e625e09ab05604815ed4ffc4857ca53caff83b85fb1baf7730243"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/00_INDEX.txt",
+        "bytes": 58717,
+        "sha256": "ceaaad86c0e307529caae0a4aa58439ba255ee019bca929c20e69b3d6791bcf3"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/01_EXPORT_TABLES_INDEX.txt",
+        "bytes": 3265,
+        "sha256": "609e19cc206e012faebd176245db6ff3c8df99de3d8cda59ef05ffcd3e250ece"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/02_AVATAR_COMMAND_TABLE.txt",
+        "bytes": 15008,
+        "sha256": "83365c3db6857324b4fc098fd5e6947370000d285058c29d50002a25fc941b8a"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/03_IMPORT_TABLES_INDEX.txt",
+        "bytes": 6673,
+        "sha256": "e45748ef83fac220a88b9d1c856a980fbfa6941ec5e0f5679210d6604ef947e5"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/04_CALL_GRAPH_INDEX.txt",
+        "bytes": 7433,
+        "sha256": "227d398d2d0ec5e6f41e6152aa130c2df44b73c034411e70e35a44720cf59bcd"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/05_STRINGS_INDEX.txt",
+        "bytes": 232,
+        "sha256": "0f3bec07e50a30dbb30074a96bda10d33aec5648826604b59d66d72611b2eb6b"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/07_TITLE_IDS.txt",
+        "bytes": 9784,
+        "sha256": "63f7bb1da144645ce0e0236c60a0a36d6b59ecfd41ffaa005eb6d3cb13652695"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/08_STRUCTURES.txt",
+        "bytes": 1040,
+        "sha256": "ce6260e66a4382f04ab7d4a6f4d17f60bf856d74a93e54c0f6e990322915f995"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/09_RELATIONSHIPS.txt",
+        "bytes": 29937,
+        "sha256": "0044461965d3c851289f73dcb70c231fd16574357f35f75f28f16d9d97c872bd"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/10_UNRESOLVED.txt",
+        "bytes": 8686,
+        "sha256": "d41611c3b20a804ca04f033020d3907b06775f37ace6cf6a668ee9eea9a3e229"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/modules.tsv",
+        "bytes": 32147,
+        "sha256": "b38175961f8667efcabebbed102773a3e4e60cfd83ab9bd55f0d99c44d2b790f"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/ghidra_programs.tsv",
+        "bytes": 16796,
+        "sha256": "d1a6a279bd2a39d8c2c3910fc3ebb2fbb2061cc7ae628e9d33057f6aff9bfad4"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/identical_images.tsv",
+        "bytes": 3203,
+        "sha256": "4ebeb57a14a53fbcb325f07f9a097c126033c19c955c521b80a58c6aa39b2ab2"
+      },
+      {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/reference/ipc_coverage.tsv",
+        "bytes": 3294,
+        "sha256": "9ffd0ffa78a329e342096cf37ce9e0c3148a0165b7f8997ee2d066dc0edf62bd"
+      }
+    ]
+  },
+  "selected_modules": {
+    "decoded_metro": [
+      {
+        "module": "AvatarEditor.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x92000000",
+        "pe_base": "0x92000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/AvatarEditor.xex",
+          "bytes": 54738944,
+          "sha256": "82c18ac5e1ab14ede4a44e67836564cfc6c2ca8380dde8deaad4744b390c0417"
+        },
+        "source_sha256": "4f322fe7b9956cf1faa74345b0c723b0ec92541d7b83655a3c823a3bdf4e2598",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 16135,
+          "canonical_module": "AvatarEditor.xex",
+          "decoded_sha256": "82c18ac5e1ab14ede4a44e67836564cfc6c2ca8380dde8deaad4744b390c0417",
+          "functions": 7785,
+          "independent_decode_error": "",
+          "independent_decode_matches": true,
+          "module": "AvatarEditor.xex",
+          "program": "b0c342082476_AvatarEditor.xex",
+          "project_path": "/pending/b0c342082476_AvatarEditor.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "Guide.AvatarMiniCreator.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/Guide.AvatarMiniCreator.xex",
+          "bytes": 475136,
+          "sha256": "047c9e9c2ec552b8f787e452a328d9b693e4bc8a3656e3afcdc726ae7d09c856"
+        },
+        "source_sha256": "1b93032f2cec407d75e6718204624675ef4886bac576a87c60b1f0dcfb81960d",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 483,
+          "canonical_module": "Guide.AvatarMiniCreator.xex",
+          "decoded_sha256": "047c9e9c2ec552b8f787e452a328d9b693e4bc8a3656e3afcdc726ae7d09c856",
+          "functions": 270,
+          "independent_decode_error": "",
+          "independent_decode_matches": true,
+          "module": "Guide.AvatarMiniCreator.xex",
+          "program": "3baf79127906_Guide.AvatarMiniCreator.xex",
+          "project_path": "/pending/3baf79127906_Guide.AvatarMiniCreator.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "Xam.Community.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x91240000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/Xam.Community.xex",
+          "bytes": 323584,
+          "sha256": "cc71d326bbadfe767a11ff615adbbdc2ef107bd6afea656cb417a3f2899da6e4"
+        },
+        "source_sha256": "a5228c5628dc4eb86b02c16865abe1206ab8e4d596d6279402a8186f9ebe28ef",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 3990,
+          "canonical_module": "Xam.Community.xex",
+          "decoded_sha256": "cc71d326bbadfe767a11ff615adbbdc2ef107bd6afea656cb417a3f2899da6e4",
+          "functions": 1215,
+          "independent_decode_error": "",
+          "independent_decode_matches": true,
+          "module": "Xam.Community.xex",
+          "program": "3221d9b0eb11_Xam.Community.xex",
+          "project_path": "/pending/3221d9b0eb11_Xam.Community.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "Xna_TitleLauncher.xex",
+        "version": "3.2.1.0",
+        "runtime_base": "0x92000000",
+        "pe_base": "0x92000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/Xna_TitleLauncher.xex",
+          "bytes": 1232896,
+          "sha256": "07bfae53a28179f7d65c30a4cfd598949a53ac819be33f30069ad5cabcaaf378"
+        },
+        "source_sha256": "5da55eaa1c9512094cc48711d14796fe2d258e0e5cf7b7a423c02e3c6de38ceb",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 10457,
+          "canonical_module": "Xna_TitleLauncher.xex",
+          "decoded_sha256": "07bfae53a28179f7d65c30a4cfd598949a53ac819be33f30069ad5cabcaaf378",
+          "functions": 3060,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "Xna_TitleLauncher.xex",
+          "program": "4f30fcbba42d_Xna_TitleLauncher.xex",
+          "project_path": "/pending/4f30fcbba42d_Xna_TitleLauncher.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "dash.ExtraAVCodecs.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x9F7E0000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/dash.ExtraAVCodecs.xex",
+          "bytes": 3497984,
+          "sha256": "49bc7f375dfaeb1bcb5e6b7c93f7275bf513d7eed9446ef78d5106af74ac3645"
+        },
+        "source_sha256": "0b14919ab753784f95658b7bee388a1c75fc5d1d430f18090246bdb514acdec1",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 7935,
+          "canonical_module": "dash.ExtraAVCodecs.xex",
+          "decoded_sha256": "49bc7f375dfaeb1bcb5e6b7c93f7275bf513d7eed9446ef78d5106af74ac3645",
+          "functions": 2854,
+          "independent_decode_error": "",
+          "independent_decode_matches": true,
+          "module": "dash.ExtraAVCodecs.xex",
+          "program": "d6e852332fbd_dash.ExtraAVCodecs.xex",
+          "project_path": "/pending/d6e852332fbd_dash.ExtraAVCodecs.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "dash.ExtraAVCodecs2.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x9C500000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/dash.ExtraAVCodecs2.xex",
+          "bytes": 487424,
+          "sha256": "a7f6e5246f5f3791fa33190873f1a1bf31427d1fc7d6fc6ab10fca052f4ab67c"
+        },
+        "source_sha256": "cd39ead58a5fe9943b2d0d73d06996cd258cf31a205cf3fa906e5e712a95ec05",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 4143,
+          "canonical_module": "dash.ExtraAVCodecs2.xex",
+          "decoded_sha256": "a7f6e5246f5f3791fa33190873f1a1bf31427d1fc7d6fc6ab10fca052f4ab67c",
+          "functions": 1339,
+          "independent_decode_error": "",
+          "independent_decode_matches": true,
+          "module": "dash.ExtraAVCodecs2.xex",
+          "program": "8f0c732a648c_dash.ExtraAVCodecs2.xex",
+          "project_path": "/pending/8f0c732a648c_dash.ExtraAVCodecs2.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_createprofile.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_createprofile.xex",
+          "bytes": 114688,
+          "sha256": "caafb8f9056fa2b16ba5711325b975da06f5965ec2105c3a5f8202e67f59b9d3"
+        },
+        "source_sha256": "c5dae66e2e7b408ef6d84d659a2232ad89f01d78fa38c365d8732f2e0a221bbd",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 813,
+          "canonical_module": "packages/su20076000_00000000/$flash_createprofile.xex",
+          "decoded_sha256": "caafb8f9056fa2b16ba5711325b975da06f5965ec2105c3a5f8202e67f59b9d3",
+          "functions": 379,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_createprofile.xex",
+          "program": "5a0e4fa7a221__flash_createprofile.xex",
+          "project_path": "/pending/5a0e4fa7a221__flash_createprofile.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_dash.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x92000000",
+        "pe_base": "0x92000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_dash.xex",
+          "bytes": 16941056,
+          "sha256": "06a8446849184331dc1b513a894c08ad3f160dcec8473f70cdcae9f54b7c86f9"
+        },
+        "source_sha256": "3ad8f38d070eaf63cadac0697e3e8802c565cbfd0825a485347c5d718014f927",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 54182,
+          "canonical_module": "packages/su20076000_00000000/$flash_dash.xex",
+          "decoded_sha256": "06a8446849184331dc1b513a894c08ad3f160dcec8473f70cdcae9f54b7c86f9",
+          "functions": 31056,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_dash.xex",
+          "program": "e7f6fdec2c4b__flash_dash.xex",
+          "project_path": "/e7f6fdec2c4b__flash_dash.xex",
+          "status": "analyzed"
+        },
+        "source": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/_sources/packages/su20076000_00000000/$flash_dash.xex",
+          "bytes": 5971968,
+          "sha256": "3ad8f38d070eaf63cadac0697e3e8802c565cbfd0825a485347c5d718014f927"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_deviceselector.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x916D0000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_deviceselector.xex",
+          "bytes": 94208,
+          "sha256": "1e30e6eee8b5e2c0414faafa128f55ef24c961ede4d947d4815acbde2c83e63c"
+        },
+        "source_sha256": "2334c6772fd54201e60792c70a54e4714aaf74d45f657013ebe5da3737e06c0c",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 481,
+          "canonical_module": "packages/su20076000_00000000/$flash_deviceselector.xex",
+          "decoded_sha256": "1e30e6eee8b5e2c0414faafa128f55ef24c961ede4d947d4815acbde2c83e63c",
+          "functions": 248,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_deviceselector.xex",
+          "program": "c9065b410eab__flash_deviceselector.xex",
+          "project_path": "/pending/c9065b410eab__flash_deviceselector.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_gamerprofile.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_gamerprofile.xex",
+          "bytes": 319488,
+          "sha256": "25975c0c2fad9bb3ee66ca89f0a7bd5ab64b32b3051ccce1fa0a762ec697c3b7"
+        },
+        "source_sha256": "a99fb2ae20c4b3ffab9fa5f6a73e5766b49fbed5716e8b4d3752d1b97b83aad4",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 2742,
+          "canonical_module": "packages/su20076000_00000000/$flash_gamerprofile.xex",
+          "decoded_sha256": "25975c0c2fad9bb3ee66ca89f0a7bd5ab64b32b3051ccce1fa0a762ec697c3b7",
+          "functions": 1029,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_gamerprofile.xex",
+          "program": "236435bedc3f__flash_gamerprofile.xex",
+          "project_path": "/pending/236435bedc3f__flash_gamerprofile.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_hud.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x913E0000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_hud.xex",
+          "bytes": 299008,
+          "sha256": "a5b5e2fd260ce79600872979f019e9479f713be45aa54f90d5105fd6d73d2e61"
+        },
+        "source_sha256": "37e10612afde211e1d349838704f7cc2648ad5a4d1f8ca459f18ecd2c1f31ac7",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 2075,
+          "canonical_module": "packages/su20076000_00000000/$flash_hud.xex",
+          "decoded_sha256": "a5b5e2fd260ce79600872979f019e9479f713be45aa54f90d5105fd6d73d2e61",
+          "functions": 930,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_hud.xex",
+          "program": "5b103626df33__flash_hud.xex",
+          "project_path": "/pending/5b103626df33__flash_hud.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_minimediaplayer.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_minimediaplayer.xex",
+          "bytes": 126976,
+          "sha256": "ac151e16592d142d797ec973f03f44dc6dfaa297f0ef4f956b53fd65f83f1d55"
+        },
+        "source_sha256": "98e3937157e58e880e87ae65aee5fa761a366f5429befde421a7ccd530fb805d",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 973,
+          "canonical_module": "packages/su20076000_00000000/$flash_minimediaplayer.xex",
+          "decoded_sha256": "ac151e16592d142d797ec973f03f44dc6dfaa297f0ef4f956b53fd65f83f1d55",
+          "functions": 469,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_minimediaplayer.xex",
+          "program": "e2998e3a4868__flash_minimediaplayer.xex",
+          "project_path": "/pending/e2998e3a4868__flash_minimediaplayer.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_signin.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_signin.xex",
+          "bytes": 274432,
+          "sha256": "9aa0bead2c38f0d3882b352d0ead30df39707875549c659a33d757519e929689"
+        },
+        "source_sha256": "86695c6c36250cc4b4addb7ccc07d15d54492b352c979cf5c0934804109a6130",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 1560,
+          "canonical_module": "packages/su20076000_00000000/$flash_signin.xex",
+          "decoded_sha256": "9aa0bead2c38f0d3882b352d0ead30df39707875549c659a33d757519e929689",
+          "functions": 638,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_signin.xex",
+          "program": "ea0058886c9f__flash_signin.xex",
+          "project_path": "/pending/ea0058886c9f__flash_signin.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_xam.xex",
+        "version": "2.0.17559.0",
+        "runtime_base": "0x815F0000",
+        "pe_base": "0x815F0000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_xam.xex",
+          "bytes": 6356992,
+          "sha256": "f9e44cd6f4b04875ddc5a3b8fd519785ba2b0488b1c4622f818b740ba4064313"
+        },
+        "source_sha256": "78b3dbd8ae866f4258f5444205486ea9f8451afaa30f469c875dcf345f828467",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 34316,
+          "canonical_module": "packages/su20076000_00000000/$flash_xam.xex",
+          "decoded_sha256": "f9e44cd6f4b04875ddc5a3b8fd519785ba2b0488b1c4622f818b740ba4064313",
+          "functions": 13941,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_xam.xex",
+          "program": "342c8fdca6d4__flash_xam.xex",
+          "project_path": "/pending/342c8fdca6d4__flash_xam.xex",
+          "status": "analyzed"
+        },
+        "source": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/_sources/packages/su20076000_00000000/$flash_xam.xex",
+          "bytes": 2424832,
+          "sha256": "78b3dbd8ae866f4258f5444205486ea9f8451afaa30f469c875dcf345f828467"
+        }
+      }
+    ],
+    "decoded_nxe_kinect": [
+      {
+        "module": "$flash_dash.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x92000000",
+        "pe_base": "0x92000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/$flash_dash.xex",
+          "bytes": 15216640,
+          "sha256": "898d94035af8f01e770b16a82d8087e9cbc995b53edaf2285546e1509eef4e6a"
+        },
+        "source_sha256": "c2a8a0aa3c42f2f054bbd503b66f2bc9e3b5486f9323c44e1695e5e063bffb85",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 48117,
+          "canonical_module": "$flash_dash.xex",
+          "decoded_sha256": "898d94035af8f01e770b16a82d8087e9cbc995b53edaf2285546e1509eef4e6a",
+          "functions": 26932,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "$flash_dash.xex",
+          "program": "c62144f12a27__flash_dash.xex",
+          "project_path": "/c62144f12a27__flash_dash.xex",
+          "status": "analyzed"
+        },
+        "source": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/_sources/$flash_dash.xex",
+          "bytes": 6172672,
+          "sha256": "c2a8a0aa3c42f2f054bbd503b66f2bc9e3b5486f9323c44e1695e5e063bffb85"
+        }
+      },
+      {
+        "module": "$flash_xam.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x817E0000",
+        "pe_base": "0x817E0000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/$flash_xam.xex",
+          "bytes": 5570560,
+          "sha256": "77c69971a934f28ac7fcebcf73514203f40b9ba22017ca01083036b4702c948f"
+        },
+        "source_sha256": "99c857e2f93fc0c23172eda3d9e1ac92c59381ddd294cd1f80dd944ab804e643",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 29277,
+          "canonical_module": "$flash_xam.xex",
+          "decoded_sha256": "77c69971a934f28ac7fcebcf73514203f40b9ba22017ca01083036b4702c948f",
+          "functions": 11851,
+          "independent_decode_error": "java.lang.ArrayIndexOutOfBoundsException",
+          "independent_decode_matches": null,
+          "module": "$flash_xam.xex",
+          "program": "54bd17895905__flash_xam.xex",
+          "project_path": "/pending/54bd17895905__flash_xam.xex",
+          "status": "analyzed"
+        },
+        "source": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/_sources/$flash_xam.xex",
+          "bytes": 2170880,
+          "sha256": "99c857e2f93fc0c23172eda3d9e1ac92c59381ddd294cd1f80dd944ab804e643"
+        }
+      },
+      {
+        "module": "AvatarEditor.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x92000000",
+        "pe_base": "0x92000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/AvatarEditor.xex",
+          "bytes": 54505472,
+          "sha256": "7fd71785ad87390d0cdd0a6fb038b8915be58b6c8d0673c0f90754eecb0165cf"
+        },
+        "source_sha256": "5593985c1e9b980ea3587a838583571d3acc2d7cd1f808ec22c856f9760337cb",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 14467,
+          "canonical_module": "AvatarEditor.xex",
+          "decoded_sha256": "7fd71785ad87390d0cdd0a6fb038b8915be58b6c8d0673c0f90754eecb0165cf",
+          "functions": 7532,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "AvatarEditor.xex",
+          "program": "f335e4f4548c_AvatarEditor.xex",
+          "project_path": "/pending/f335e4f4548c_AvatarEditor.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "Guide.AvatarMiniCreator.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x10000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/Guide.AvatarMiniCreator.xex",
+          "bytes": 471040,
+          "sha256": "c8e943e2f663b1d92e20e88e1cc192de26a53acccc82d0c7c2ad04daf9373d74"
+        },
+        "source_sha256": "b7aca8125772aca1e84043bf56e691e02fedee17f2075e5a5f6c55fefe53beeb",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 480,
+          "canonical_module": "Guide.AvatarMiniCreator.xex",
+          "decoded_sha256": "c8e943e2f663b1d92e20e88e1cc192de26a53acccc82d0c7c2ad04daf9373d74",
+          "functions": 265,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "Guide.AvatarMiniCreator.xex",
+          "program": "63ea145e704e_Guide.AvatarMiniCreator.xex",
+          "project_path": "/pending/63ea145e704e_Guide.AvatarMiniCreator.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "Xam.Community.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x91240000",
+        "pe_base": "0x10000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/Xam.Community.xex",
+          "bytes": 282624,
+          "sha256": "4145b298919bb9f58d2460212db39620684543d9dd1ac5500300232c5c4585cc"
+        },
+        "source_sha256": "b16d61f06e80653d8efd211c97ed0f6fc330a8bfcd1886842bc860c2539cd855",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 3634,
+          "canonical_module": "Xam.Community.xex",
+          "decoded_sha256": "4145b298919bb9f58d2460212db39620684543d9dd1ac5500300232c5c4585cc",
+          "functions": 1106,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "Xam.Community.xex",
+          "program": "cf6f0be17cfa_Xam.Community.xex",
+          "project_path": "/pending/cf6f0be17cfa_Xam.Community.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "Xna_TitleLauncher.xex",
+        "version": "3.2.1.0",
+        "runtime_base": "0x92000000",
+        "pe_base": "0x92000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/Xna_TitleLauncher.xex",
+          "bytes": 1232896,
+          "sha256": "07bfae53a28179f7d65c30a4cfd598949a53ac819be33f30069ad5cabcaaf378"
+        },
+        "source_sha256": "5da55eaa1c9512094cc48711d14796fe2d258e0e5cf7b7a423c02e3c6de38ceb",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 10457,
+          "canonical_module": "Xna_TitleLauncher.xex",
+          "decoded_sha256": "07bfae53a28179f7d65c30a4cfd598949a53ac819be33f30069ad5cabcaaf378",
+          "functions": 3060,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "Xna_TitleLauncher.xex",
+          "program": "4f30fcbba42d_Xna_TitleLauncher.xex",
+          "project_path": "/pending/4f30fcbba42d_Xna_TitleLauncher.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "dash.ExtraAVCodecs.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x9C060000",
+        "pe_base": "0x98000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/dash.ExtraAVCodecs.xex",
+          "bytes": 2015232,
+          "sha256": "47822fa4e708553c34ef0fe298e00b8fe0d1d5e3dc3da23ebc7dd037a65fb4f2"
+        },
+        "source_sha256": "d28de4db27cedf450fb78c32e97fc935f9b862d632135b7994d3af866f343973",
+        "ghidra": {
+          "analysis_timed_out": false,
+          "calls": 5786,
+          "canonical_module": "dash.ExtraAVCodecs.xex",
+          "decoded_sha256": "47822fa4e708553c34ef0fe298e00b8fe0d1d5e3dc3da23ebc7dd037a65fb4f2",
+          "functions": 2181,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "dash.ExtraAVCodecs.xex",
+          "program": "eca91f842037_dash.ExtraAVCodecs.xex",
+          "project_path": "/pending/eca91f842037_dash.ExtraAVCodecs.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_createprofile.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x10000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/packages/su20076000_00000000/$flash_createprofile.xex",
+          "bytes": 122880,
+          "sha256": "edb5c882f43ca9411cc76151766666bfe68077d7913bfb63b5dc2c7276cf44e8"
+        },
+        "source_sha256": "171f23e7bed80e417f39670844642baf37fb96ba06ffc751aff57442f71272fe",
+        "ghidra": {
+          "alias": true,
+          "analysis_timed_out": false,
+          "calls": 771,
+          "canonical_module": "$flash_createprofile.xex",
+          "decoded_sha256": "edb5c882f43ca9411cc76151766666bfe68077d7913bfb63b5dc2c7276cf44e8",
+          "functions": 367,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_createprofile.xex",
+          "program": "606759f54f86__flash_createprofile.xex",
+          "project_path": "/pending/606759f54f86__flash_createprofile.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_dash.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x92000000",
+        "pe_base": "0x92000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/packages/su20076000_00000000/$flash_dash.xex",
+          "bytes": 15216640,
+          "sha256": "898d94035af8f01e770b16a82d8087e9cbc995b53edaf2285546e1509eef4e6a"
+        },
+        "source_sha256": "c2a8a0aa3c42f2f054bbd503b66f2bc9e3b5486f9323c44e1695e5e063bffb85",
+        "ghidra": {
+          "alias": true,
+          "analysis_timed_out": false,
+          "calls": 48117,
+          "canonical_module": "$flash_dash.xex",
+          "decoded_sha256": "898d94035af8f01e770b16a82d8087e9cbc995b53edaf2285546e1509eef4e6a",
+          "functions": 26932,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_dash.xex",
+          "program": "c62144f12a27__flash_dash.xex",
+          "project_path": "/c62144f12a27__flash_dash.xex",
+          "status": "analyzed"
+        },
+        "source": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/_sources/packages/su20076000_00000000/$flash_dash.xex",
+          "bytes": 6172672,
+          "sha256": "c2a8a0aa3c42f2f054bbd503b66f2bc9e3b5486f9323c44e1695e5e063bffb85"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_deviceselector.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x916D0000",
+        "pe_base": "0x10000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/packages/su20076000_00000000/$flash_deviceselector.xex",
+          "bytes": 81920,
+          "sha256": "2c330b30f1249538a323c0dfe9ccafd71867ef1bbb28a9bd72f60e5631d2dd39"
+        },
+        "source_sha256": "170ca3b65e1a66bc33398ae7f1c3000b65236c36cf4221c489aca969b2b6a25a",
+        "ghidra": {
+          "alias": true,
+          "analysis_timed_out": false,
+          "calls": 445,
+          "canonical_module": "$flash_deviceselector.xex",
+          "decoded_sha256": "2c330b30f1249538a323c0dfe9ccafd71867ef1bbb28a9bd72f60e5631d2dd39",
+          "functions": 229,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_deviceselector.xex",
+          "program": "2e8c3745a996__flash_deviceselector.xex",
+          "project_path": "/pending/2e8c3745a996__flash_deviceselector.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_gamerprofile.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x10000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/packages/su20076000_00000000/$flash_gamerprofile.xex",
+          "bytes": 323584,
+          "sha256": "ed08e358850f4eb36a63e512c644103c337a41672ba5f1ac1e68e67891623fdb"
+        },
+        "source_sha256": "a4784b27c9efe76f813d9ae1ebf267d24eb86a984b0791247e102c274b5d92bd",
+        "ghidra": {
+          "alias": true,
+          "analysis_timed_out": false,
+          "calls": 2556,
+          "canonical_module": "$flash_gamerprofile.xex",
+          "decoded_sha256": "ed08e358850f4eb36a63e512c644103c337a41672ba5f1ac1e68e67891623fdb",
+          "functions": 974,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_gamerprofile.xex",
+          "program": "3d18f82536bf__flash_gamerprofile.xex",
+          "project_path": "/pending/3d18f82536bf__flash_gamerprofile.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_hud.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x913E0000",
+        "pe_base": "0x10000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/packages/su20076000_00000000/$flash_hud.xex",
+          "bytes": 311296,
+          "sha256": "8b487a72307539ffda6daf249999ac8eea1e34974df2ea699ef0cf0c345b8f36"
+        },
+        "source_sha256": "45f272f1d98a3fdd25ef5ab752b1b8205e037a218b6b087b978e7150995b01d0",
+        "ghidra": {
+          "alias": true,
+          "analysis_timed_out": false,
+          "calls": 2314,
+          "canonical_module": "$flash_hud.xex",
+          "decoded_sha256": "8b487a72307539ffda6daf249999ac8eea1e34974df2ea699ef0cf0c345b8f36",
+          "functions": 985,
+          "independent_decode_error": "",
+          "independent_decode_matches": false,
+          "module": "packages/su20076000_00000000/$flash_hud.xex",
+          "program": "baa1200ad159__flash_hud.xex",
+          "project_path": "/pending/baa1200ad159__flash_hud.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_minimediaplayer.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x10000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/packages/su20076000_00000000/$flash_minimediaplayer.xex",
+          "bytes": 131072,
+          "sha256": "1e116c8f2e0772779898d341df00cad9e6f145f449d5f533287683a912796e80"
+        },
+        "source_sha256": "26a102d8ab66865e3576bbb2ae784b03119354b51fa52ecb1f09458cb513faa7",
+        "ghidra": {
+          "alias": true,
+          "analysis_timed_out": false,
+          "calls": 954,
+          "canonical_module": "$flash_minimediaplayer.xex",
+          "decoded_sha256": "1e116c8f2e0772779898d341df00cad9e6f145f449d5f533287683a912796e80",
+          "functions": 462,
+          "independent_decode_error": "",
+          "independent_decode_matches": true,
+          "module": "packages/su20076000_00000000/$flash_minimediaplayer.xex",
+          "program": "c4809e1cc1e4__flash_minimediaplayer.xex",
+          "project_path": "/pending/c4809e1cc1e4__flash_minimediaplayer.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_signin.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x90100000",
+        "pe_base": "0x10000000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/packages/su20076000_00000000/$flash_signin.xex",
+          "bytes": 196608,
+          "sha256": "1dae0e0c27be325ddb87a51c361ad4b9a069d3ce38a6d9023dcc0e0919bd0c4a"
+        },
+        "source_sha256": "fba9eb8e5d0d7c379e2d65f4b8fd8e51a585174ee3bd02b44b683104f9fc2151",
+        "ghidra": {
+          "alias": true,
+          "analysis_timed_out": false,
+          "calls": 1385,
+          "canonical_module": "$flash_signin.xex",
+          "decoded_sha256": "1dae0e0c27be325ddb87a51c361ad4b9a069d3ce38a6d9023dcc0e0919bd0c4a",
+          "functions": 506,
+          "independent_decode_error": "",
+          "independent_decode_matches": true,
+          "module": "packages/su20076000_00000000/$flash_signin.xex",
+          "program": "48a0859f31d8__flash_signin.xex",
+          "project_path": "/pending/48a0859f31d8__flash_signin.xex",
+          "status": "analyzed"
+        }
+      },
+      {
+        "module": "packages/su20076000_00000000/$flash_xam.xex",
+        "version": "2.0.12581.0",
+        "runtime_base": "0x817E0000",
+        "pe_base": "0x817E0000",
+        "decoded": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/packages/su20076000_00000000/$flash_xam.xex",
+          "bytes": 5570560,
+          "sha256": "77c69971a934f28ac7fcebcf73514203f40b9ba22017ca01083036b4702c948f"
+        },
+        "source_sha256": "99c857e2f93fc0c23172eda3d9e1ac92c59381ddd294cd1f80dd944ab804e643",
+        "ghidra": {
+          "alias": true,
+          "analysis_timed_out": false,
+          "calls": 29277,
+          "canonical_module": "$flash_xam.xex",
+          "decoded_sha256": "77c69971a934f28ac7fcebcf73514203f40b9ba22017ca01083036b4702c948f",
+          "functions": 11851,
+          "independent_decode_error": "java.lang.ArrayIndexOutOfBoundsException",
+          "independent_decode_matches": null,
+          "module": "packages/su20076000_00000000/$flash_xam.xex",
+          "program": "54bd17895905__flash_xam.xex",
+          "project_path": "/pending/54bd17895905__flash_xam.xex",
+          "status": "analyzed"
+        },
+        "source": {
+          "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_nxe_kinect/_sources/packages/su20076000_00000000/$flash_xam.xex",
+          "bytes": 2170880,
+          "sha256": "99c857e2f93fc0c23172eda3d9e1ac92c59381ddd294cd1f80dd944ab804e643"
+        }
+      }
+    ]
+  },
+  "frozen_17559_comparisons": [
+    {
+      "module": "$flash_xam.xex",
+      "matches": true,
+      "previous_frozen": {
+        "path": "/home/kyoki/.local/state/xenia-edge-research/evidence/native-guide/sysapp-abi/xam.image",
+        "bytes": 6356992,
+        "sha256": "f9e44cd6f4b04875ddc5a3b8fd519785ba2b0488b1c4622f818b740ba4064313"
+      },
+      "new_decoded": {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_xam.xex",
+        "bytes": 6356992,
+        "sha256": "f9e44cd6f4b04875ddc5a3b8fd519785ba2b0488b1c4622f818b740ba4064313"
+      }
+    },
+    {
+      "module": "$flash_dash.xex",
+      "matches": true,
+      "previous_frozen": {
+        "path": "/home/kyoki/.local/state/xenia-edge-research/evidence/hdd-gate/native-storage-format-dash-decode-private-v1/operation/dash.image",
+        "bytes": 16941056,
+        "sha256": "06a8446849184331dc1b513a894c08ad3f160dcec8473f70cdcae9f54b7c86f9"
+      },
+      "new_decoded": {
+        "path": "/home/kyoki/Documents/xbox dash/Decomp+maps+assets/decoded_metro/packages/su20076000_00000000/$flash_dash.xex",
+        "bytes": 16941056,
+        "sha256": "06a8446849184331dc1b513a894c08ad3f160dcec8473f70cdcae9f54b7c86f9"
+      }
+    }
+  ],
+  "read_in_place": true,
+  "raw_binary_or_asset_copies": false,
+  "full_corpus_revalidated": false
+}

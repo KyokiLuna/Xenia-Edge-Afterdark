@@ -1,0 +1,15 @@
+{
+  "module": "$flash_xam.xex",
+  "program": "54bd17895905__flash_xam.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "77c69971a934f28ac7fcebcf73514203f40b9ba22017ca01083036b4702c948f",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x817e0400",
+  "functions": 11851,
+  "calls": 29277,
+  "strings": 2731,
+  "string_xrefs": 1906,
+  "independent_decode_error": "java.lang.ArrayIndexOutOfBoundsException"
+}

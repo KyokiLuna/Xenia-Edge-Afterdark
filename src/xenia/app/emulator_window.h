@@ -13,10 +13,14 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include "xenia/app/game_library.h"
+#include "xenia/app/title_metadata_cache.h"
+#include "xenia/base/native_ui_backend_route.h"
 #include "xenia/emulator.h"
 #include "xenia/gpu/command_processor.h"
 #include "xenia/ui/imgui_audio_dialog.h"
@@ -96,9 +100,13 @@ class EmulatorWindow {
                             const std::string& target);
   // With |boot_animation| the boot animation plays before the title starts.
   void LaunchTitleInNewProcess(const std::filesystem::path& path_to_file,
-                               bool boot_animation = false);
+                               bool boot_animation = false,
+                               uint32_t launch_flags = 0,
+                               std::vector<uint8_t> launch_data = {});
   xe::X_STATUS RunTitle(const std::filesystem::path& path_to_file,
-                        bool boot_animation = false);
+                        bool boot_animation = false,
+                        uint32_t launch_flags = 0,
+                        std::vector<uint8_t> launch_data = {});
   void UpdateTitle();
 
   void SetFullscreen(bool fullscreen);
@@ -186,7 +194,8 @@ class EmulatorWindow {
   // needed.
   void InitializeGameLibrary();
   // Gives the core the library releases the dashboard lists as its games.
-  void PublishLibraryTitles();
+  void PublishLibraryTitles(bool schedule_scan = true);
+  void ScheduleLibraryMetadataScan();
 
   // Registers a just-launched title in the library so games opened outside the
   // import flow still appear in the list.
@@ -218,7 +227,9 @@ class EmulatorWindow {
   void ToggleDisplayConfigDialog();
   void TogglePerformanceTuningDialog();
   void ToggleDebugSettingsDialog();
-  void ToggleContextMenu(bool use_cursor_position = true);
+  void ToggleContextMenu(
+      bool use_cursor_position = true,
+      std::shared_ptr<NativeUiBackendRoute::HostLease> host_route = {});
   void ShowCompatibility();
   void ShowFAQ();
   void ShowBuildCommit();
@@ -257,12 +268,20 @@ class EmulatorWindow {
   ProfileConfigDialog* profile_dialog_ = nullptr;
   ui::ImGuiAudioDialog* audio_dialog_ = nullptr;
   ui::ImGuiContextMenu* context_menu_ = nullptr;
+  // Sampled by the input thread; menu pointers remain UI-thread-only.
+  std::atomic<uint64_t> context_menu_generation_{0};
   std::unordered_set<ui::VirtualKey> hotkeys_down_;
 
   GameListPanel* game_list_panel_ = nullptr;
   std::unique_ptr<GameLibrary> game_library_;
   // Cleared when this window goes, which drops what the library fill thread
   // still has queued for it.
+  // UI-owned metadata records. The worker never reads GameLibrary or cvars.
+  std::unordered_map<std::string, PhysicalTitleMetadata> physical_metadata_;
+  uint64_t library_metadata_generation_ = 0;
+  bool library_metadata_running_ = false;
+  bool library_metadata_publishing_ = false;
+  std::thread library_metadata_thread_;
   std::shared_ptr<std::atomic<bool>> library_fill_alive_ =
       std::make_shared<std::atomic<bool>>(true);
   std::unique_ptr<WxToolbarState> wx_toolbar_state_;
@@ -319,9 +338,10 @@ class EmulatorWindow {
   // confirmation. Returns true if the title is being reset in-process, false
   // if a process swap was scheduled (or no title is open).
   bool StopTitleAndReturnToList();
-  // StopTitleAndReturnToList, or with DashboardIsHome, starts the dashboard in
-  // place of the title. Returns true when the dashboard is on its way.
-  bool StopTitleAndReturnHome();
+  // An explicit guest request names the installed dashboard independently of
+  // the startup-home preference. Copy launch data before deferring teardown.
+  // Without that request, preserve the host menu's home preference.
+  bool StopTitleAndReturnHome(bool explicit_dashboard = false);
 };
 
 }  // namespace app

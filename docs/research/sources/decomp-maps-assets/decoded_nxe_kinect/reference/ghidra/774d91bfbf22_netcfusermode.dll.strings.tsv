@@ -1,0 +1,795 @@
+va	data_type	text
+0x8850004d	string	!This program cannot be run in DOS mode.\r\r\n$
+0x885001c8	string	.rdata
+0x88500217	string	@.xedata
+0x885002b8	string	.edata
+0x885002df	string	@.reloc
+0x8850043c	unicode	Quantum
+0x8850044c	unicode	StressMode
+0x88500490	string	t %x %s\r\n
+0x8850049c	string	unknown
+0x885004ac	string	o %x %x %x
+0x885004b8	string	r %x %x %x %x\r\n
+0x885004c8	string	r %x %x %x\r\n
+0x885004d8	string	c %S %x\r\n
+0x885004e4	string	a 2 %S %x\r\n
+0x88500510	string	Finalize
+0x88500adc	string	RuntimePropertyInfo
+0x88500af0	string	ParameterInfo
+0x88500b00	string	RuntimeConstructorInfo
+0x88500b18	string	RuntimeMethodInfo
+0x88500b2c	string	RuntimeFieldInfo
+0x88500b40	string	RuntimeEventInfo
+0x88500b54	string	CustomAttribute
+0x88500b64	string	Module
+0x88500b6c	string	AssemblyName
+0x88500b7c	string	Assembly
+0x88500b88	string	Thread
+0x88500b90	string	UnhandledExceptionEventArgs
+0x88500bac	string	MemberAccessException
+0x88500bc4	string	Version
+0x88500c04	string	System.Reflection
+0x88500c18	string	System.Threading
+0x88500c2c	string	System
+0x88500c34	unicode	x-unicode-2-0-utf-8
+0x88500c5c	unicode	x-unicode-2-0-utf-7
+0x88500c84	unicode	x-unicode-1-1-utf-8
+0x88500cac	unicode	x-unicode-1-1-utf-7
+0x88500d0c	unicode	UTF-16LE
+0x88500d30	unicode	us-ascii
+0x88500d4c	unicode	UTF-16BE
+0x88500d60	unicode	unicodeFFFE
+0x88500d78	unicode	unicode-2-0-utf-8
+0x88500d9c	unicode	unicode-2-0-utf-7
+0x88500dc0	unicode	unicode-1-1-utf-8
+0x88500de4	unicode	unicode-1-1-utf-7
+0x88500e08	unicode	unicode
+0x88500e24	unicode	csUnicode11UTF7
+0x88500efc	unicode	ascii
+0x8850102c	string	bad allocation
+0x885012c8	unicode	(null)
+0x885012d9	string	null)
+0x88501620	string	GetType
+0x8850165c	unicode	%s.%s
+0x88501680	unicode	%s %s
+0x88501694	unicode	, %s %s
+0x885016a4	unicode	, %s 
+0x885016b0	unicode	...\r\n
+0x885016c4	unicode	%s\r\n
+0x8850170f	string	FIEnumerable`1
+0x88501720	string	ICollection`1
+0x88501731	string	List`1
+0x88501738	unicode	DefaultDomain
+0x88501764	string	MethodAccessException
+0x8850177c	string	.System.Threading.ThreadTerminateException
+0x885017a8	string	.System.Threading.ThreadAbortException
+0x885017d0	string	InvalidOperationException
+0x885017ec	string	StackOverflowException
+0x88501804	string	.System.Security.SecurityException
+0x88501828	string	NotSupportedException
+0x88501840	string	RankException
+0x88501850	string	ArgumentException
+0x88501864	string	.System.Security.VerificationException
+0x8850188c	string	FormatException
+0x8850189c	string	MissingMethodException
+0x885018b4	string	TypeLoadException
+0x885018c8	string	ArgumentOutOfRangeException
+0x885018e4	string	ArgumentNullException
+0x885018fc	string	InvalidProgramException
+0x88501914	string	ArrayTypeMismatchException
+0x88501930	string	ArithmeticException
+0x88501944	string	DivideByZeroException
+0x8850195c	string	OverflowException
+0x88501970	string	IndexOutOfRangeException
+0x8850198c	string	InvalidCastException
+0x885019a4	string	OutOfMemoryException
+0x885019bc	string	NullReferenceException
+0x885019d8	string	System
+0x885019e8	string	ValueType
+0x885019f4	string	.ctor
+0x88501af0	unicode	.exe
+0x88501afc	unicode	.dll
+0x88501b08	unicode	neutral
+0x88501b18	string	neutral
+0x88501b20	string	0123456789ABCDEF
+0x88501b34	string	neutral
+0x88501b44	unicode	Version
+0x88501b54	unicode	PublicKey
+0x88501b68	unicode	PublicKeyToken
+0x88501b88	unicode	Culture
+0x88501b98	unicode	Module
+0x88501e9c	unicode	 tej wersji zestawu %1.
+0x88501fe2	unicode	w delegowanych.
+0x88502004	unicode	w %1.%2(%3)\n
+0x885021dc	unicode	cia '%2' do biblioteki DLL PInvoke '%1'.
+0x88502254	unicode	 biblioteki DLL PInvoke '%1'.
+0x8850234c	unicode	 metody: %2 %1.
+0x88502396	unicode	 typu '%1' z zestawu '%2'.
+0x885025cc	unicode	Anuluj
+0x885026b6	unicode	ledzenie aplikacji
+0x8850270a	unicode	d aplikacji lub obiektu
+0x88502764	unicode	 zasobu {0} w {1}
+0x88502a66	unicode	d komunikacji
+0x88502a90	unicode	\n%1, wiersz %2!d!\n
+0x88502abe	unicode	d potwierdzenia\n
+0x88502afe	unicode	d potwierdzenia macierzystego\n
+0x88502bac	unicode	Kontynuuj
+0x88502bc0	unicode	Debuguj
+0x88502be0	unicode	w %1.%2()\n
+0x88502d16	unicode	cej informacji.\n\n
+0x88502e68	unicode	cej informacji.\n\n
+0x88502f22	unicode	ytkownika w %1.\n\n
+0x88502f48	unicode	Zapisywanie:  0x%1!08x!\n
+0x88502f7c	unicode	Czytanie: 0x%1!08x!\n
+0x88503130	unicode	cej informacji.\n\n
+0x88503282	unicode	cej informacji.\n\n
+0x885035c6	unicode	 PInvoke DLL "%1".
+0x88503610	unicode	 PInvoke DLL "%1".
+0x88503812	unicode	 .NET Compact Framework.\n\n
+0x88503908	unicode	 .NET Compact Framework.\n\n
+0x88504682	unicode	o da assemblagem %1.
+0x885046b4	unicode	dulo em falha: %1\n\rDesvio: 0x%2!08x!\r\n
+0x88504772	unicode	ncrona de delegados.
+0x885047b6	unicode	vel criar a interface COM com o IID '%1' devido ao erro que se segue: %2.
+0x88504866	unicode	vel criar o objecto COM com o CLSID '%1' devido ao erro que se segue: %2.
+0x88504916	unicode	vel localizar um Ponto de Entrada '%2' numa DLL PInvoke '%1'.
+0x885049ae	unicode	vel localizar a DLL PInvoke '%1'.
+0x88504ac2	unicode	o encontrado: %2 %1.
+0x88504b0a	unicode	vel carregar o tipo '%1' da assemblagem '%2'.
+0x88504c2a	unicode	o instalada neste dispositivo.\n\n
+0x88504d3c	unicode	o instalada neste dispositivo.\n\n
+0x88504db2	unicode	o com o rastreio activado. Pretende continuar  com o rastreio activado?
+0x88504eac	unicode	o ou definido por objecto
+0x8850517a	unicode	o para ver a mensagem.
+0x885051f8	unicode	o nativa\n
+0x88505210	unicode	(Ligar a "%1" Porta %2!d! para depurar)\n
+0x885054c4	unicode	o de utilizador.\n\n
+0x8850551c	unicode	o de utilizador em %1.\n\n
+0x88505550	unicode	A escrever: 0x%1!08x!\n
+0x88505580	unicode	A ler: 0x%1!08x!\n
+0x88506160	unicode	o do Microsoft .NET Compact Framework.
+0x885061b4	unicode	dulo com defeito: %1\n\rDeslocamento: 0x%2!08x!\r\n
+0x88506290	unicode	ncrona de representantes.
+0x885062c4	unicode	em %1.%2(%3)\n
+0x8850631a	unicode	o pode ser criada devido ao seguinte erro: %2.
+0x885063b0	unicode	o pode ser criado devido ao seguinte erro: %2.
+0x88506426	unicode	vel localizar um Ponto de Entrada '%2' em uma DLL Pinvoke '%1'.
+0x885064be	unicode	vel localizar PInvoke DLL '%1'.
+0x885065b0	unicode	o foi localizado.
+0x885065e6	unicode	o localizado: %2 %1.
+0x8850667e	unicode	dulos (assembly) '%2'.
+0x88506708	unicode	 .NET Compact Framework mais nova do que aquela instalada neste dispositivo.\n\n
+0x8850680a	unicode	 .NET Compact Framework mais nova do que aquela instalada neste dispositivo.\n\n
+0x885068a8	unicode	Aplicativo iniciado com rastreamento habilitado. Deseja continuar com ele habilitado?
+0x88506954	unicode	Rastreamento de aplicativo
+0x8850698c	unicode	Aviso
+0x885069a8	unicode	Erro definido por aplicativo ou por objeto
+0x88506a20	unicode	o foi encontrado em {1}
+0x88506c5e	unicode	 para outras plataformas. Reinicie o aplicativo para ver a mensagem.
+0x88506d14	unicode	Erro
+0x88506d20	unicode	\n%1, Linha %2!d!\n
+0x88506d70	unicode	Declarar
+0x88506da8	unicode	o nativa\n
+0x88506dc0	unicode	(Conectar-se a "%1" Porta %2!d! para depurar)\n
+0x88506e20	unicode	Detalhes
+0x88506e34	unicode	Sair
+0x88506e40	unicode	em %1.%2()\n
+0x885070de	unicode	rio em %1.\n\n
+0x885070f8	unicode	Gravando:  0x%1!08x!\n
+0x88507124	unicode	Lendo: 0x%1!08x!\n
+0x88507568	string	b~N\rR0
+0x885075ac	string	b~N\rR0
+0x8850895c	unicode	: %1\n\rOffset: 0x%2!08x!\r\n
+0x88508e94	string	0D0D0H
+0x885095d0	unicode	 essere caricata da questa versione di Microsoft .NET Compact Framework.
+0x88509668	unicode	Modulo che ha provocato l'errore: %1\n\rOffset: 0x%2!08x!\r\n
+0x8850971e	unicode	 supportato il richiamo asincrono di delegati.
+0x8850977c	unicode	in %1.%2(%3)\n
+0x88509798	unicode	Impossibile creare l'interfaccia COM con IID '%1' a causa del seguente errore: %2.
+0x88509840	unicode	Impossibile creare l'oggetto COM con CLSID '%1' a causa del seguente errore: %2.
+0x885098e8	unicode	Impossibile trovare un punto di ingresso '%2' in una DLL PInvoke '%1'.
+0x88509978	unicode	Impossibile trovare la DLL PInvoke '%1'.
+0x885099d0	unicode	Impossibile trovare il file o l'assembly '%1' oppure una delle sue dipendenze.
+0x88509a70	unicode	Metodo non trovato: %2 %1.
+0x88509aa8	unicode	Impossibile caricare il tipo '%1' dall'assembly '%2'.
+0x88509bbc	unicode	 recente di quella installata in questo dispositivo.\n\n
+0x88509cde	unicode	 recente di quella installata in questo dispositivo.\n\n
+0x88509d4c	unicode	Annulla
+0x88509d62	unicode	 stata avviata un'applicazione con l'analisi attivata. Continuare con l'analisi attivata?
+0x88509e18	unicode	Analisi applicazione
+0x88509e44	unicode	Avviso
+0x88509e60	unicode	Errore definito dall'applicazione o dall'oggetto
+0x88509ec8	unicode	Impossibile trovare la risorsa {0} in {1}
+0x8850a178	unicode	 per altre piattaforme. Per visualizzare il messaggio, riavviare l'applicazione.
+0x8850a21c	unicode	Errore di comunicazione
+0x8850a24c	unicode	Errore
+0x8850a25c	unicode	\n%1, riga %2!d!\n
+0x8850a280	unicode	Asserzione non riuscita\n
+0x8850a2b4	unicode	Asserz.
+0x8850a2c4	unicode	Errore di asserzione nativa\n
+0x8850a300	unicode	(Eseguire la connessione a "%1" porta %2!d! per il debug)\n
+0x8850a378	unicode	Dettagli
+0x8850a38c	unicode	Continua
+0x8850a3a0	unicode	Esci
+0x8850a3b0	unicode	Errore imprevisto.\nScegliere Esci e riavviare il programma oppure scegliere Dettagli per ulteriori informazioni.\n\n
+0x8850a498	unicode	Errore imprevisto in %1.\nScegliere Esci e riavviare il programma oppure scegliere Dettagli per ulteriori informazioni.\n\n
+0x8850a598	unicode	 verificata un'interruzione utente.\n\n
+0x8850a5f0	unicode	 verificata un'interruzione utente in %1.\n\n
+0x8850a648	unicode	Scrittura: 0x%1!08x!\n
+0x8850a674	unicode	Lettura: 0x%1!08x!\n
+0x8850a6a0	unicode	\nIndirizzo eccezione: 0x%1!08x!\n
+0x8850a6e4	unicode	Codice eccezione: 0x%1!08x!
+0x8850a728	unicode	 verificata un'eccezione nativa.\nScegliere Esci e riavviare il programma oppure scegliere Dettagli per ulteriori informazioni.\n\n
+0x8850a838	unicode	 verificata un'eccezione nativa in %1.\nScegliere Esci e riavviare il programma oppure scegliere Dettagli per ulteriori informazioni.\n\n
+0x8850a9dc	unicode	n del ensamblado %1.
+0x8850aa0c	unicode	dulo con errores: %1\n\rDesplazamiento: 0x%2!08x!\r\n
+0x8850ab04	unicode	en %1.%2(%3)\n
+0x8850ab20	unicode	La interfaz COM con IID '%1' no se puede crear debido al error %2.
+0x8850aba8	unicode	El objeto COM con CLSID '%1' no se puede crear debido al error %2.
+0x8850ac30	unicode	No se puede encontrar un punto de entrada '%2' en un archivo DLL PInvoke '%1'.
+0x8850acd0	unicode	No se puede encontrar el archivo DLL PInvoke '%1'.
+0x8850ad54	unicode	 el nombre de archivo o de ensamblado '%1', o una de sus dependencias.
+0x8850ade8	unicode	todo no encontrado: %2 %1.
+0x8850ae20	unicode	No se pudo cargar el tipo '%1' desde el ensamblado '%2'.
+0x8850af64	unicode	 instalada en este dispositivo.\n\n
+0x8850b07e	unicode	 instalada en este dispositivo.\n\n
+0x8850b0c4	unicode	Cancelar
+0x8850b14a	unicode	Desea que el seguimiento siga habilitado?
+0x8850b1dc	unicode	Advertencia
+0x8850b238	unicode	n o definido por objeto
+0x8850b526	unicode	n para ver el mensaje.
+0x8850b58c	unicode	Aceptar
+0x8850b61c	unicode	n nativa\n
+0x8850b630	unicode	(Conectar con "%1", puerto %2!d!, para depurar)\n
+0x8850b694	unicode	Detalles
+0x8850b6a8	unicode	Continuar
+0x8850b6bc	unicode	Depurar
+0x8850b6cc	unicode	Salir
+0x8850b6d8	unicode	en %1.%2()\n
+0x8850b8d2	unicode	n del usuario.\n\n
+0x8850b90e	unicode	n del usuario en %1.\n\n
+0x8850b93c	unicode	Escribiendo: 0x%1!08x!\n
+0x8850b96c	unicode	Leyendo: 0x%1!08x!\n
+0x8850bc56	unicode	e par cette version du Microsoft .NET Compact Framework.
+0x8850bdbc	unicode	re asynchrone.
+0x8850bf7a	unicode	e '%2' introuvable dans la DLL PInvoke '%1'.
+0x8850bfd4	unicode	DLL PInvoke '%1' introuvable.
+0x8850c07e	unicode	pendances, est introuvable.
+0x8850c0bc	unicode	thode introuvable : %2 %1.
+0x8850c140	unicode	 partir de l'assembly '%2'.
+0x8850c274	unicode	rique.\n\n
+0x8850c38e	unicode	rique.\n\n
+0x8850c3a0	unicode	Annuler
+0x8850c48c	unicode	age d'application
+0x8850c4b0	unicode	Avertissement
+0x8850c4f2	unicode	finie par l'application ou par l'objet
+0x8850c586	unicode	e dans {1}
+0x8850c83e	unicode	marrez l'application pour voir le message.
+0x8850c896	unicode	chec de la communication
+0x8850c8c8	unicode	Erreur
+0x8850c8d8	unicode	\n%1, ligne %2!d!\n
+0x8850c8fe	unicode	chec d'assertion\n
+0x8850c924	unicode	Assertion
+0x8850c93a	unicode	chec d'assertion native\n
+0x8850c9b8	unicode	bogage)\n
+0x8850c9d0	unicode	tails
+0x8850c9dc	unicode	Continuer
+0x8850c9f4	unicode	boguer
+0x8850ca04	unicode	Quitter
+0x8850cb08	unicode	tails pour plus d'informations.\n\n
+0x8850cc38	unicode	tails pour plus d'informations.\n\n
+0x8850cc80	unicode	Une interruption utilisateur s'est produite.\n\n
+0x8850cce0	unicode	Une interruption utilisateur s'est produite dans %1.\n\n
+0x8850cefe	unicode	tails pour plus d'informations.\n\n
+0x8850d02e	unicode	tails pour plus d'informations.\n\n
+0x8850d078	unicode	Die Version der Assembly "%1" kann von dieser Microsoft .NET Compact Framework-Version nicht geladen werden.
+0x8850d158	unicode	Fehlerhaftes Modul: %1\n\rOffset: 0x%2!08x!\r\n
+0x8850d1ee	unicode	tzt das asynchrone Aufrufen von Delegaten nicht.
+0x8850d250	unicode	bei %1.%2(%3)\n
+0x8850d270	unicode	Die COM-Schnittstelle mit der IID '%1' kann aufgrund des folgenden Fehlers nicht erstellt werden: %2.
+0x8850d340	unicode	Das COM-Objekt mit der CLSID '%1' kann aufgrund des folgenden Fehlers nicht erstellt werden: %2.
+0x8850d408	unicode	Der Einstiegspunkt '%2' in der PInvoke-DLL '%1' wurde nicht gefunden.
+0x8850d498	unicode	PInvoke-DLL '%1' wurde nicht gefunden.
+0x8850d540	unicode	ngigkeit davon wurde nicht gefunden.
+0x8850d590	unicode	Die Methode konnte nicht gefunden werden: %2 %1.
+0x8850d5f8	unicode	Der Typ '%1' konnte nicht aus der Assembly '%2' geladen werden.
+0x8850d74a	unicode	t installierte erforderlich.\n\n
+0x8850d864	unicode	t installierte erforderlich.\n\n
+0x8850d8a4	unicode	Abbrechen
+0x8850d944	unicode	chten Sie die Ablaufverfolgung beibehalten?
+0x8850d99c	unicode	Ablaufverfolgung der Anwendung
+0x8850d9dc	unicode	Warnung
+0x8850d9ec	unicode	Nein
+0x8850da00	unicode	Anwendungs- oder objektbedingter Fehler
+0x8850da50	unicode	Die Ressource '{0}' wurde in der Datei '{1}' nicht gefunden.
+0x8850dcfe	unicode	r andere Plattformen. Starten Sie die Anwendung neu, um die Meldung anzuzeigen.
+0x8850dda0	unicode	Kommunikationsfehler
+0x8850dde0	unicode	Fehler
+0x8850ddf0	unicode	\n%1, Zeile %2!d!\n
+0x8850de14	unicode	Assertionsfehler\n
+0x8850de38	unicode	Fehler bei systemeigenem Assert\n
+0x8850de80	unicode	(Zum Debuggen mit "%1", Anschluss %2!d! verbinden)\n
+0x8850dee8	unicode	Weiter
+0x8850def8	unicode	Debuggen
+0x8850df0c	unicode	Beenden
+0x8850df1c	unicode	bei %1.%2()\n
+0x8850df38	unicode	Unerwarteter Fehler.\nKlicken Sie auf "Beenden", und starten Sie das Programm neu. Weitere Informationen zu diesem Fehler erhalten Sie, indem Sie auf "Details" klicken.\n\n
+0x8850e090	unicode	Unerwarteter Fehler in %1.\nKlicken Sie auf "Beenden", und starten Sie das Programm neu. Weitere Informationen zu diesem Fehler erhalten Sie, indem Sie auf "Details" klicken.\n\n
+0x8850e1f0	unicode	Unterbrechung durch Benutzer.\n\n
+0x8850e230	unicode	Unterbrechung durch Benutzer in %1.\n\n
+0x8850e27c	unicode	Schreiben: 0x%1!08x!\n
+0x8850e2a8	unicode	Lesen: 0x%1!08x!\n
+0x8850e2cc	unicode	\nAusnahmeadresse: 0x%1!08x!\n
+0x8850e308	unicode	Ausnahmecode: 0x%1!08x!
+0x8850e338	unicode	Systemeigene Ausnahme.\nKlicken Sie auf "Beenden", und starten Sie das Programm neu. Weitere Informationen zu diesem Fehler erhalten Sie, indem Sie auf "Details" klicken.\n\n
+0x8850e490	unicode	Systemeigene Ausnahme in %1.\nKlicken Sie auf "Beenden", und starten Sie das Programm neu. Weitere Informationen zu diesem Fehler erhalten Sie, indem Sie auf "Details" klicken.\n\n
+0x8850e5f8	unicode	The version of the assembly %1 cannot be loaded by this version of the Microsoft .NET Compact Framework.
+0x8850e6d0	unicode	Faulting module: %1\n\rOffset: 0x%2!08x!\r\n
+0x8850e728	unicode	.NET Compact Framework does not support invoking delegates asynchronously.
+0x8850e7c0	unicode	   at %1.%2(%3)\n
+0x8850e7e8	unicode	COM interface with IID '%1' cannot be created due to the following error: %2.
+0x8850e888	unicode	COM object with CLSID '%1' cannot be created due to the following error: %2.
+0x8850e928	unicode	Can't find an Entry Point '%2' in a PInvoke DLL '%1'.
+0x8850e994	unicode	Can't find PInvoke DLL '%1'.
+0x8850e9d0	unicode	File or assembly name '%1', or one of its dependencies, was not found.
+0x8850ea60	unicode	Method not found: %2 %1.
+0x8850ea98	unicode	Could not load type '%1' from assembly '%2'.
+0x8850eb6e	unicode	 .NET Compact Framework than the version installed on this device.\n\n
+0x8850ec78	unicode	 .NET Compact Framework than the version installed on this device.\n\n
+0x8850ed04	unicode	Cancel
+0x8850ed18	unicode	An application was started with tracing enabled.  Do you wish to continue with tracing enabled?
+0x8850edd8	unicode	Application tracing
+0x8850ee00	unicode	Warning
+0x8850ee20	unicode	Application-defined or object-defined error
+0x8850ee78	unicode	The resource {0} was not found in {1}
+0x8850f0da	unicode	 for other platforms. Restart the application to see the message.
+0x8850f160	unicode	Communication failure
+0x8850f18c	unicode	Menu
+0x8850f1a0	unicode	Error
+0x8850f1ac	unicode	\n%1, Line %2!d!\n
+0x8850f1d0	unicode	Assertion Failed\n
+0x8850f1f4	unicode	Assert
+0x8850f204	unicode	Native Assert Failure\n
+0x8850f238	unicode	(Connect to "%1" Port %2!d! to debug)\n
+0x8850f288	unicode	Details
+0x8850f298	unicode	Continue
+0x8850f2ac	unicode	Debug
+0x8850f2b8	unicode	Quit
+0x8850f2c4	unicode	at %1.%2()\n
+0x8850f2e0	unicode	An unexpected error has occurred.\nSelect Quit and then restart this program, or select Details for more information.\n\n
+0x8850f3d0	unicode	An unexpected error has occurred in %1.\nSelect Quit and then restart this program, or select Details for more information.\n\n
+0x8850f4cc	unicode	A user break has occured.\n\n
+0x8850f508	unicode	A user break has occured in %1.\n\n
+0x8850f54c	unicode	Writing:  0x%1!08x!\n
+0x8850f578	unicode	Reading: 0x%1!08x!\n
+0x8850f5a0	unicode	\nExceptionAddress: 0x%1!08x!\n
+0x8850f5dc	unicode	ExceptionCode: 0x%1!08x!
+0x8850f610	unicode	A native exception has occurred.\nSelect Quit and then restart this program, or select Details for more information.\n\n
+0x8850f700	unicode	A native exception has occurred in %1.\nSelect Quit and then restart this program, or select Details for more information.\n\n
+0x8850f7f8	unicode	Accept
+0x8850f808	unicode	Shutdown
+0x8850f81c	unicode	Transport
+0x8850f830	unicode	Host
+0x88510240	string	Invoke
+0x88510268	unicode	Invalid Argument
+0x885102d0	string	(# $)
+0x885102d8	string	($ #)
+0x8851045c	string	System.Reflection.TargetInvocationException
+0x88510840	unicode	1#QNAN
+0x88510850	unicode	1#INF
+0x8851085c	unicode	1#IND
+0x88510868	unicode	1#SNAN
+0x88510c20	string	M:\XNA\V2\RTM\8220\XBox360\bin\release\NetCFUserMode.pdb
+0x8858070b	string	Partida de Jugador
+0x88580724	string	$Enables you to play Community Games.
+0x8858074d	string	Microsoft Corporation
+0x88580766	string	Microsoft Corporation
+0x8858077f	string	Otros
+0x885807a3	string	Configurar los ajustes
+0x885807bd	string	Iniciar el juego
+0x885807d1	string	Pausa
+0x885807d9	string	\rFin del juego
+0x885807ed	string	nico jugador
+0x885807fd	string	Multijugador
+0x8858080d	string	Cooperativo local
+0x88580822	string	Local versus
+0x88580831	string	\rOnline Versus
+0x88580843	string	Cooperativo online
+0x88580859	string	Versus Ordenador
+0x8858086d	string	Buscando juegos
+0x88580880	string	Esperando a jugadores
+0x88580899	string	Esperando sala princ.
+0x885808b2	string	Configu. partida
+0x885808c6	string	Jugando con amigos
+0x885808dc	string	Modo puzzle
+0x885808ea	string	\rModo historia
+0x88580906	string	deo modo hist
+0x88580922	string	ditos
+0x88580941	string	Dificultad: media
+0x8858096e	string	Dificultad: extrema
+0x88580985	string	Personalizando jugador
+0x8858099f	string	Editando nivel
+0x885809b1	string	En la tienda de juegos
+0x885809cb	string	Modo arcade
+0x885809ea	string	\tModo reto
+0x88580a16	string	ctica
+0x88580a1f	string	Modo escenario
+0x88580a31	string	Modo supervivencia
+0x88580a46	string	\rModo tutorial
+0x88580a58	string	Juego gratuito
+0x88580a6a	string	Tiempo restante
+0x88580a7d	string	Luchando
+0x88580a89	string	Jugando un minijuego
+0x88580aa1	string	Contrarreloj
+0x88580aca	string	Ganando
+0x88580ad4	string	\tPerdiendo
+0x88580ae2	string	Empatando en puntua.
+0x88580b11	string	Con buena racha
+0x88580b3c	string	\rCasi acabando
+0x88580b4e	string	Cornflower Blue
+0x88580b69	string	Nivel
+0x88580b81	string	Cooperat.: fase
+0x88580b94	string	Cooperat.: nivel
+0x88580ba8	string	Contra: puntua.
+0x88580bbb	string	Luchando contra jefe
+0x88580bd3	string	Juego ganado
+0x88580be3	string	Secreto encontrado
+0x88580c0f	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x88580d8e	string	$Enables you to play Community Games.
+0x88580db7	string	Microsoft Corporation
+0x88580dd0	string	Microsoft Corporation
+0x8858134b	string	Cornflower Blue
+0x8858144f	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x885815aa	string	Partita del Giocatore
+0x885815c6	string	$Enables you to play Community Games.
+0x885815ef	string	Microsoft Corporation
+0x88581608	string	Microsoft Corporation
+0x88581621	string	Altro
+0x88581636	string	Dal menu
+0x88581642	string	Config. delle impost.
+0x8858165b	string	Avvio del gioco
+0x8858166e	string	Sospeso
+0x88581679	string	Fine del gioco
+0x8858168b	string	Giocatore singolo
+0x885816a0	string	Multiplayer
+0x885816af	string	Co-op locale
+0x885816bf	string	Confronto locale
+0x885816d3	string	Confronto online
+0x885816e7	string	Co-op online
+0x885816f7	string	Confronto computer
+0x8858170d	string	Ricerca di giochi
+0x88581722	string	Attesa dei giocatori
+0x8858173a	string	In attesa nella sala
+0x88581752	string	Impostazione gara
+0x88581767	string	Gioco con amici
+0x88581797	string	 storia
+0x885817a2	string	Visualizz. filmato
+0x885817b8	string	Visualizz. crediti
+0x885817d9	string	: facile
+0x885817f0	string	: media
+0x88581806	string	: difficile
+0x88581820	string	: estrema
+0x8858182d	string	Personaliz. giocatore
+0x88581846	string	Modifica livello
+0x8858185a	string	Nel Marketplace giochi
+0x8858187d	string	 Arcade
+0x88581891	string	 campagna
+0x885818ba	string	 esplorazione
+0x885818d4	string	 pratica
+0x885818e9	string	 scenario
+0x885818ff	string	 sopravvivenza
+0x88581911	string	Mod. esercit. pratica
+0x8858192a	string	Gioco libero
+0x8858193a	string	Per passare il tempo
+0x88581952	string	In combattimento
+0x88581966	string	Riproduzione minigioco
+0x88581980	string	Attacco a tempo
+0x88581993	string	Tentat. battere record
+0x885819ad	string	Vittoria
+0x885819b8	string	\tSconfitta
+0x885819d1	string	Superato
+0x885819dc	string	\tOn A Roll
+0x885819ea	string	Bloc. su punto diff.
+0x88581a02	string	Quasi finito
+0x88581a12	string	Cornflower Blue
+0x88581a2d	string	Livello
+0x88581a37	string	\tPunteggio
+0x88581a45	string	Co-op: fase
+0x88581a54	string	Co-op: livello
+0x88581a66	string	Confr: punteggio
+0x88581a7a	string	Capo del combattimento
+0x88581a94	string	Vincitore del gioco
+0x88581aab	string	Segreto trovato
+0x88581ad4	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x88581c21	string	Mise en Relation
+0x88581c38	string	$Enables you to play Community Games.
+0x88581c61	string	Microsoft Corporation
+0x88581c7a	string	Microsoft Corporation
+0x88581c93	string	Autre
+0x88581ca8	string	Dans les menus
+0x88581cd5	string	Lance le jeu
+0x88581ce5	string	En pause
+0x88581cf0	string	\tGame Over
+0x88581cfe	string	Mode un joueur
+0x88581d10	string	Multijoueur
+0x88581d1e	string	\nCoop local
+0x88581d2d	string	Versus local
+0x88581d3d	string	Versus en ligne
+0x88581d4f	string	\rCoop en ligne
+0x88581d61	string	Contre l'ordinateur
+0x88581d78	string	Recherche des jeux
+0x88581d8e	string	En attente de joueurs
+0x88581da7	string	En attente dans Lobby
+0x88581dc0	string	Configure le match
+0x88581dd6	string	Joue entre amis
+0x88581de9	string	Mode Puzzle
+0x88581df7	string	\rMode histoire
+0x88581e19	string	matique
+0x88581e35	string	rique
+0x88581e4b	string	: Facile
+0x88581e7c	string	: Difficile
+0x88581ea6	string	Personna. personnage
+0x88581ebe	string	Modifie un niveau
+0x88581ed3	string	Dans boutique de jeux
+0x88581eec	string	Mode Arcade
+0x88581efa	string	\rMode Campagne
+0x88581f0c	string	Mode Challenge
+0x88581f1e	string	Mode Exploration
+0x88581f3e	string	nement
+0x88581f51	string	nario
+0x88581f5a	string	Mode Survie
+0x88581f69	string	Mode Didacticiel
+0x88581f7c	string	\tJeu libre
+0x88581f89	string	\rPerd du temps
+0x88581f9a	string	\tEn combat
+0x88581faf	string	 un mini-jeu
+0x88581fbf	string	Mode contre la montre
+0x88581fd8	string	Tente nouveau record
+0x88581ff0	string	Gagne
+0x88582015	string	En plus grand nombre
+0x8858205f	string	Cornflower Blue
+0x88582072	string	Stage
+0x88582085	string	Score
+0x8858208e	string	Coop : Stage
+0x8858209d	string	\rCoop : Niveau
+0x885820af	string	Versus : Score
+0x885820c1	string	Combat un boss
+0x885820e4	string	couvert un secret
+0x8858210f	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x885822a2	string	$Enables you to play Community Games.
+0x885822cb	string	Microsoft Corporation
+0x885822e4	string	Microsoft Corporation
+0x885829c8	string	Cornflower Blue
+0x88582af1	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x88582c56	string	Partida por Jogador
+0x88582c70	string	$Enables you to play Community Games.
+0x88582c99	string	Microsoft Corporation
+0x88582cb2	string	Microsoft Corporation
+0x88582ce0	string	No Menu
+0x88582ceb	string	Definindo Config.
+0x88582d00	string	Iniciando Jogo
+0x88582d12	string	Pausado
+0x88582d1d	string	Fim de Jogo
+0x88582d2b	string	\nUm Jogador
+0x88582d3a	string	Multijogador
+0x88582d4a	string	Cooperativo Local
+0x88582d5f	string	Local Versus
+0x88582d6e	string	\rOnline Versus
+0x88582d80	string	Cooperativo Online
+0x88582d96	string	Versus Computador
+0x88582dab	string	Procurando Jogos
+0x88582dbf	string	Aguardando Jogadores
+0x88582dd7	string	Aguardando No Lobby
+0x88582dee	string	Organizando Partida
+0x88582e05	string	Jogando Com Amigos
+0x88582e1b	string	Modo Enigma
+0x88582e60	string	ditos
+0x88582eb0	string	Dificuldade: Extrema
+0x88582ec8	string	Personalizando Jogador
+0x88582ef5	string	Loja no Jogo
+0x88582f05	string	Modo Arcade
+0x88582f13	string	\rModo Campanha
+0x88582f25	string	Modo Desafio
+0x88582f4a	string	Modo Treino
+0x88582f80	string	\rModo Tutorial
+0x88582f91	string	\nJogo Livre
+0x88582f9f	string	\rMatando Tempo
+0x88582fb0	string	\nEm Combate
+0x88582fbf	string	Jogando Minijogo
+0x88582fd3	string	Time Attack
+0x88582fe2	string	Tentando Bater Recorde
+0x88582ffc	string	Ganhando
+0x88583008	string	Perdendo
+0x88583014	string	Placar Empatado
+0x8858303e	string	\tEmpolgado
+0x8858304c	string	Encarando Osso Duro
+0x88583063	string	Quase Acabando
+0x88583075	string	Cornflower Blue
+0x8858309e	string	Placar
+0x885830d1	string	Versus: Placar
+0x885830e2	string	\rBatalha Final
+0x885830f3	string	\rGanhou o Jogo
+0x88583105	string	Descobriu Segredo
+0x88583130	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x8858327c	string	Mitspieler-Suche
+0x88583293	string	$Enables you to play Community Games.
+0x885832bc	string	Microsoft Corporation
+0x885832d5	string	Microsoft Corporation
+0x885832ee	string	Andere
+0x88583310	string	Einst. werden konfig.
+0x88583329	string	Spiel wird gestartet
+0x88583340	string	\nAngehalten
+0x8858334f	string	Spiel vorbei
+0x8858335e	string	\rEinzelspieler
+0x88583370	string	Multiplayer
+0x8858337e	string	\rLokales Co-Op
+0x88583390	string	Lokales Versus
+0x885833a1	string	\rOnline Versus
+0x885833b3	string	Online Co-Op
+0x885833c3	string	Versus Computer
+0x885833d6	string	Sucht nach Spielen
+0x885833ec	string	Wartet auf Spieler
+0x88583402	string	Wartet in der Lobby
+0x88583419	string	Richt. Spiel ein
+0x8858342d	string	Spielt mit Freunden
+0x88583444	string	Puzzle-Modus
+0x88583454	string	Geschichten-Modus
+0x88583469	string	Sieht Filmseq.
+0x8858347b	string	Sieht Mitwirkende
+0x88583490	string	Schwierigkeit: Einfach
+0x885834aa	string	Schwierigkeit: Mittel
+0x885834c3	string	Schwierigkeit: Schwer
+0x885834dc	string	Schwierigkeit: Extrem
+0x885834f5	string	Passt Spieler an
+0x88583509	string	Bearbeitet Level
+0x8858351d	string	Im Spielemarkt
+0x8858352f	string	Arcade-Modus
+0x8858353f	string	Kampagnen-Modus
+0x88583552	string	Herausforderungs-Modus
+0x8858356c	string	Erkundungs-Modus
+0x88583582	string	bungs-Modus
+0x88583591	string	Szenario-Modus
+0x885835a5	string	berlebens-Modus
+0x885835b8	string	Tutorial-Modus
+0x885835ca	string	Kostenloses Spiel
+0x885835df	string	Verschwendet Zeit
+0x885835f4	string	Im Kampf
+0x88583600	string	Spielt Minigame
+0x88583613	string	Zeitangriff
+0x88583621	string	\rRekordversuch
+0x88583633	string	Gewinnt
+0x8858363e	string	Verliert
+0x8858364a	string	Punktegleichstand
+0x8858365e	string	\nUnterlegen
+0x88583688	string	In schwierigem Teil
+0x8858369f	string	Fast fertig
+0x885836ae	string	Cornflower Blue
+0x885836c1	string	Phase
+0x885836ca	string	Level
+0x885836dd	string	Co-Op: Phase
+0x885836ed	string	Co-Op: Level
+0x885836fd	string	Versus: Punkte
+0x88583714	string	mpft Endgegner
+0x88583726	string	Hat Spiel gewonnen
+0x8858373c	string	Hat Geheimnis gefunden
+0x8858376c	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x885838d6	string	$Enables you to play Community Games.
+0x885838ff	string	Microsoft Corporation
+0x88583918	string	Microsoft Corporation
+0x88583d85	string	Cornflower Blue
+0x88583e5d	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x88583f98	string	Player Match
+0x88583fab	string	$Enables you to play Community Games.
+0x88583fd4	string	Microsoft Corporation
+0x88583fed	string	Microsoft Corporation
+0x88584006	string	Other
+0x8858401b	string	At Menu
+0x88584026	string	Configuring Settings
+0x8858403d	string	\rStarting Game
+0x8858404f	string	Paused
+0x88584058	string	\tGame Over
+0x88584065	string	\rSingle Player
+0x88584077	string	Multiplayer
+0x88584086	string	Local Co-Op
+0x88584095	string	Local Versus
+0x885840a4	string	\rOnline Versus
+0x885840b6	string	Online Co-Op
+0x885840c6	string	Versus Computer
+0x885840d9	string	Looking For Games
+0x885840ee	string	Waiting For Players
+0x88584105	string	Waiting In Lobby
+0x88584119	string	Setting Up Match
+0x8858412d	string	Playing With Friends
+0x88584145	string	Puzzle Mode
+0x88584153	string	\nStory Mode
+0x88584162	string	Watching Cutscene
+0x88584177	string	Watching Credits
+0x8858418b	string	Difficulty: Easy
+0x8858419f	string	Difficulty: Medium
+0x885841b5	string	Difficulty: Hard
+0x885841c9	string	Difficulty: Extreme
+0x885841e0	string	Customizing Player
+0x885841f5	string	\rEditing Level
+0x88584206	string	\rIn Game Store
+0x88584218	string	Arcade Mode
+0x88584226	string	\rCampaign Mode
+0x88584238	string	Challenge Mode
+0x8858424a	string	Exploration Mode
+0x8858425d	string	\rPractice Mode
+0x8858426e	string	\rScenario Mode
+0x8858427f	string	\rSurvival Mode
+0x88584290	string	\rTutorial Mode
+0x885842a1	string	\tFree Play
+0x885842af	string	Wasting Time
+0x885842be	string	\tIn Combat
+0x885842cc	string	Playing Minigame
+0x885842e0	string	Time Attack
+0x885842ef	string	Trying For Record
+0x88584304	string	Winning
+0x8858430f	string	Losing
+0x88584318	string	\rScore Is Tied
+0x8858432a	string	Outnumbered
+0x88584338	string	\tOn A Roll
+0x88584346	string	Stuck On A Hard Bit
+0x8858435d	string	Nearly Finished
+0x88584370	string	Cornflower Blue
+0x88584383	string	Stage
+0x8858438c	string	Level
+0x88584395	string	Score
+0x8858439e	string	Co-Op: Stage
+0x885843ae	string	Co-Op: Level
+0x885843bd	string	\rVersus: Score
+0x885843ce	string	\rBattling Boss
+0x885843e0	string	Won The Game
+0x885843f0	string	Found Secret
+0x88584416	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x8858456f	string	$Enables you to play Community Games.
+0x88584598	string	Microsoft Corporation
+0x885845b1	string	Microsoft Corporation
+0x88584981	string	Cornflower Blue
+0x88584a4c	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x88584b97	string	Pojedynek graczy
+0x88584bae	string	$Enables you to play Community Games.
+0x88584bd7	string	Microsoft Corporation
+0x88584bf0	string	Microsoft Corporation
+0x88584c41	string	Uruchamianie gry
+0x88584c54	string	\nWstrzymana
+0x88584c62	string	\nKoniec gry
+0x88584c71	string	Jeden gracz
+0x88584c80	string	Wielu graczy
+0x88584ca1	string	praca
+0x88584caa	string	Lokalnie, przeciwko
+0x88584cc1	string	Online, przeciwko
+0x88584ce5	string	praca
+0x88584cee	string	Przeciwko komputerowi
+0x88584d07	string	Wyszukiwanie gier
+0x88584d1c	string	Oczekiwanie na graczy
+0x88584d35	string	W poczekalni
+0x88584d45	string	Przygotowywanie gry
+0x88584d75	string	Tryb zagadek
+0x88584d9d	string	dam przer. filmowy
+0x88584db8	string	dam inf o autorach
+0x88584df3	string	Poziom: Trudny
+0x88584e05	string	Poziom: Ekstremalny
+0x88584e46	string	Sklep w grze
+0x88584e6d	string	\rTryb kampanii
+0x88584e8f	string	Tryb odkrywania
+0x88584ea9	string	wiczenia
+0x88584eb5	string	Tryb scenariuszy
+0x88584edc	string	Tryb samouczka
+0x88584eee	string	Swobodna gra
+0x88584f0f	string	W trakcje walki
+0x88584f35	string	Gra na czas
+0x88584f52	string	 rekord
+0x88584f68	string	\nPrzegrywam
+0x88584f76	string	\nJest remis
+0x88584f99	string	Dobra passa
+0x88584fb5	string	\rPrawie koniec
+0x88584fc7	string	Cornflower Blue
+0x88584ffc	string	praca: etap
+0x88585012	string	praca: poz.
+0x88585021	string	Przeciwko: wynik
+0x8858503c	string	 z bossem
+0x88585058	string	Odkryta tajemnica
+0x885872ba	string	XnaIcon.PNGXSRC
+0x885872d5	string	584E07D2.original.xlast

@@ -20,7 +20,7 @@ namespace xe {
 namespace vfs {
 
 std::optional<XexMetadata> ExtractZarMetadata(
-    const std::filesystem::path& path);
+    const std::filesystem::path& path, bool read_title_resources = false);
 
 }  // namespace vfs
 }  // namespace xe

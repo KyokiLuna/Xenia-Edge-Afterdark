@@ -17,17 +17,20 @@
 #include "xenia/base/cvar.h"
 #include "xenia/base/filesystem.h"
 #include "xenia/base/logging.h"
+#include "xenia/base/mutex.h"
 #include "xenia/base/string_util.h"
 #include "xenia/base/threading.h"
 #include "xenia/base/utf8.h"
 #include "xenia/cpu/processor.h"
 #include "xenia/emulator.h"
+#include "xenia/hid/input_system.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/title_id_utils.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/xam.h"
 #include "xenia/kernel/xam/xam_content_device.h"
+#include "xenia/kernel/xam/xam_launch_contract.h"
 #include "xenia/kernel/xam/xam_module.h"
 #include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xam/xam_state.h"
@@ -39,6 +42,7 @@
 #include "xenia/kernel/xconfig.h"
 #include "xenia/kernel/xenumerator.h"
 #include "xenia/kernel/xthread.h"
+#include "xenia/memory.h"
 #include "xenia/ui/windowed_app_context.h"
 #include "xenia/vfs/devices/host_path_entry.h"
 #include "xenia/vfs/devices/xcontent_container_device.h"
@@ -68,9 +72,21 @@ DEFINE_bool(in_process_title_relaunch, true,
             "Shutdown/Setup cycle instead of spawning a new emulator process.",
             "Kernel");
 
+DEFINE_bool(data_center_mode, false,
+            "Emulated machine data-center boot-mode bit queried by XAM. "
+            "Normal console mode is false.",
+            "Kernel.Machine");
+
 namespace xe {
 namespace kernel {
 namespace xam {
+
+dword_result_t XamIsDataCenterMode_entry() {
+  // This is an emulated machine boot-mode property. Native XAM obtains the
+  // same bit from bootloader data, which an HLE boot does not map as RAM.
+  return cvars::data_center_mode ? 1 : 0;
+}
+DECLARE_XAM_EXPORT1(XamIsDataCenterMode, kMisc, kImplemented);
 
 // https://github.com/tpn/winsdk-10/blob/master/Include/10.0.14393.0/km/wdm.h#L15539
 typedef enum _MODE { KernelMode, UserMode, MaximumMode } MODE;
@@ -418,6 +434,67 @@ dword_result_t XamGetDashContext_entry(const ppc_context_t& ctx) {
   return ctx->kernel_state->dash_context_;
 }
 DECLARE_XAM_EXPORT1(XamGetDashContext, kNone, kImplemented);
+
+dword_result_t XamLoaderShouldConfirmReboot_entry(const ppc_context_t& ctx) {
+  auto* state = ctx->kernel_state;
+  uint32_t system_flags = 0;
+  if (const auto module = state->GetExecutableModule()) {
+    module->GetOptHeader<uint32_t>(XEX_HEADER_SYSTEM_FLAGS, &system_flags);
+  }
+  return ShouldConfirmDashboardReboot(state->title_id() == kDashboardID,
+                                     system_flags, state->dash_context_);
+}
+DECLARE_XAM_EXPORT1(XamLoaderShouldConfirmReboot, kNone, kImplemented);
+
+void XamLoaderRebootToDash_entry(lpvoid_t launch_data_ptr) {
+  if (!launch_data_ptr) {
+    XELOGW("XamLoaderRebootToDash: no launch record");
+    return;
+  }
+  const auto request = DashboardRebootRequest::Copy(
+      {launch_data_ptr.as<const uint8_t*>(), DashboardRebootRequest::kBytes});
+  auto* state = kernel_state();
+  auto* emulator = state->emulator();
+  auto xam = state->GetKernelModule<XamModule>("xam.xex");
+  auto& loader_data = xam->loader_data();
+  loader_data.launch_data.assign(request->bytes().begin(),
+                                  request->bytes().end());
+  loader_data.launch_data_present = true;
+
+  // Native 17559 samples the initiating user's right trigger to select its
+  // alternate restart mode. This system operation must not read title-filtered
+  // input, nor substitute the host's last-used slot for the record's user.
+  uint8_t right_trigger = 0;
+  if (auto* input = emulator->input_system()) {
+    auto lock = input->lock();
+    hid::X_INPUT_STATE input_state{};
+    if (input->GetStateForUI(request->user_index(), hid::InputType::Controller,
+                             &input_state) == X_ERROR_SUCCESS) {
+      right_trigger = input_state.gamepad.right_trigger;
+    }
+  }
+  loader_data.launch_flags = request->launch_flags(right_trigger);
+  XELOGI("XamLoaderRebootToDash: user={} reason={:X} flags={:X}",
+         request->user_index(), request->reason(), loader_data.launch_flags);
+  if (request->notify_running_dashboard(state->title_id() == kDashboardID,
+                                        state->dash_context_, right_trigger)) {
+    // Native 17559 uses this event for its reboot/navigation record, distinct
+    // from the URI navigation event 0x80040021.
+    state->BroadcastNotification(static_cast<XNotificationID>(0x80040016),
+                                  request->notification_value());
+    return;
+  }
+
+  // The HUD callback resumes after this call to dismiss its native scene.
+  // Queue the existing UI-owned transition and return: ExitToDashboard parks
+  // the current thread, which would strand a native callback in its own drain.
+  if (const auto navigate = emulator->on_exit_to_dashboard()) {
+    navigate();
+  } else {
+    XELOGW("XamLoaderRebootToDash: no dashboard navigation handler");
+  }
+}
+DECLARE_XAM_EXPORT1(XamLoaderRebootToDash, kNone, kImplemented);
 
 dword_result_t XamGetExecutionId_entry(lpdword_t info_ptr) {
   auto module = kernel_state()->GetExecutableModule();
@@ -1184,22 +1261,84 @@ DECLARE_XAM_EXPORT1(Sleep, kNone, kImplemented);
 dword_result_t GetTickCount_entry() { return Clock::QueryGuestUptimeMillis(); }
 DECLARE_XAM_EXPORT1(GetTickCount, kNone, kImplemented);
 
-dword_result_t RtlSetLastNTError_entry(dword_t error_code) {
+namespace {
+// Caller holds the recursive global region through the exact word access. The
+// native17559 exports use the passed PCR, not host thread-local XThread state:
+// PCR+150 inhibits access; otherwise PCR+100 names KTHREAD, whose+160 is error.
+// Actual XThread PCR/KTHREAD allocations are ordinary virtual RAM. Reject an
+// invalid/foreign context or malformed/nonvirtual chain without touching bytes;
+// this is HLE bounds handling, not a claim of retail fault behavior.
+xe::be<uint32_t>* CheckedLastErrorSlot(const ppc_context_t& context,
+                                     bool writable) {
+  if (!context.value() || !context->kernel_state ||
+      context->kernel_state != kernel_state()) {
+    return nullptr;
+  }
+  auto& memory = *context->kernel_state->memory();
+  if (context->virtual_membase != memory.virtual_membase() ||
+      context->r[13] > UINT32_MAX) {
+    return nullptr;
+  }
+  const auto word = [&](uint32_t base, uint32_t offset, bool write) {
+    if (!base || (base & 3) || uint64_t(base) + offset + 4 > 0x100000000ull) {
+      return static_cast<xe::be<uint32_t>*>(nullptr);
+    }
+    const uint32_t address = base + offset;
+    const auto* heap = memory.LookupHeap(address);
+    if (!heap || heap->heap_type() != HeapType::kGuestVirtual) {
+      return static_cast<xe::be<uint32_t>*>(nullptr);
+    }
+    const auto access = memory.QueryRangeAccess(address, 4);
+    if (write ? access != memory::PageAccess::kReadWrite
+              : access == memory::PageAccess::kNoAccess) {
+      return static_cast<xe::be<uint32_t>*>(nullptr);
+    }
+    return memory.TranslateVirtual<xe::be<uint32_t>*>(address);
+  };
+  const uint32_t pcr = uint32_t(context->r[13]);
+  const auto* inhibit = word(pcr, 0x150, false);
+  if (!inhibit || uint32_t(*inhibit) != 0) {
+    return nullptr;
+  }
+  const auto* current_thread = word(pcr, 0x100, false);
+  return current_thread ? word(*current_thread, 0x160, writable) : nullptr;
+}
+}  // namespace
+
+void RtlSetLastError_entry(dword_t error_code, const ppc_context_t& context) {
+  auto lock = global_critical_region::AcquireDirect();
+  if (auto* error = CheckedLastErrorSlot(context, true)) {
+    *error = uint32_t(error_code);
+  }
+  // Native stores the DWORD but leaves the complete caller r3 unchanged.
+}
+DECLARE_XAM_EXPORT1(RtlSetLastError, kNone, kImplemented);
+
+dword_result_t RtlSetLastNTError_entry(dword_t error_code,
+                                      const ppc_context_t& context) {
   const uint32_t result =
       xe::kernel::xboxkrnl::xeRtlNtStatusToDosError(error_code);
-  XThread::SetLastError(result);
-
+  auto lock = global_critical_region::AcquireDirect();
+  if (auto* error = CheckedLastErrorSlot(context, true)) {
+    *error = result;
+  }
+  // Mapping and return still occur when PCR access is inhibited.
   return result;
 }
 DECLARE_XAM_EXPORT1(RtlSetLastNTError, kNone, kImplemented);
 
-dword_result_t RtlGetLastError_entry() { return XThread::GetLastError(); }
+qword_result_t RtlGetLastError_entry(const ppc_context_t& context) {
+  auto lock = global_critical_region::AcquireDirect();
+  const auto* error = CheckedLastErrorSlot(context, false);
+  // Native lwz zero-extends even a stored DWORD with its high bit set.
+  return error ? uint64_t(uint32_t(*error)) : 0;
+}
 DECLARE_XAM_EXPORT1(RtlGetLastError, kNone, kImplemented);
 
 dword_result_t XGetOverlappedExtendedError_entry(
-    pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+    pointer_t<XAM_OVERLAPPED> overlapped_ptr, const ppc_context_t& context) {
   if (!overlapped_ptr) {
-    return XThread::GetLastError();
+    return uint32_t(RtlGetLastError_entry(context));
   }
   if (overlapped_ptr->result == X_ERROR_IO_PENDING) {
     return X_ERROR_IO_INCOMPLETE;
@@ -1208,16 +1347,19 @@ dword_result_t XGetOverlappedExtendedError_entry(
 }
 DECLARE_XAM_EXPORT1(XGetOverlappedExtendedError, kNone, kImplemented);
 
-dword_result_t GetLastError_entry() { return RtlGetLastError_entry(); }
+qword_result_t GetLastError_entry(const ppc_context_t& context) {
+  return RtlGetLastError_entry(context);
+}
 DECLARE_XAM_EXPORT1(GetLastError, kNone, kImplemented);
 
-dword_result_t GetModuleHandleA_entry(lpstring_t module_name) {
+dword_result_t GetModuleHandleA_entry(lpstring_t module_name,
+                                     const ppc_context_t& context) {
   xe::be<uint32_t> module_ptr = 0;
   const X_STATUS error_code = xe::kernel::xboxkrnl::XexGetModuleHandle(
       module_name.value(), &module_ptr);
 
   if (XFAILED(error_code)) {
-    RtlSetLastNTError_entry(error_code);
+    RtlSetLastNTError_entry(error_code, context);
 
     return NULL;
   }
@@ -1229,7 +1371,7 @@ DECLARE_XAM_EXPORT1(GetModuleHandleA, kNone, kImplemented);
 dword_result_t XapipCreateThread_entry(
     lpdword_t thread_attributes, dword_t stack_size, lpvoid_t start_address,
     lpvoid_t parameter, dword_t creation_flags, dword_t thread_processor,
-    lpdword_t thread_id) {
+    lpdword_t thread_id, const ppc_context_t& context) {
   uint32_t flags = (creation_flags >> 2) & 1;
 
   if (thread_processor != -1) {
@@ -1242,7 +1384,7 @@ dword_result_t XapipCreateThread_entry(
       &result, stack_size, thread_id, start_address, parameter, 0, flags);
 
   if (XFAILED(error_code)) {
-    RtlSetLastNTError_entry(error_code);
+    RtlSetLastNTError_entry(error_code, context);
 
     return NULL;
   }
@@ -1254,18 +1396,20 @@ DECLARE_XAM_EXPORT1(XapipCreateThread, kNone, kImplemented);
 dword_result_t CreateThread_entry(lpdword_t lpThreadAttributes,
                                   dword_t dwStackSize, lpvoid_t lpStartAddress,
                                   lpvoid_t lpParameter, dword_t dwCreationFlags,
-                                  lpdword_t lpThreadId) {
+                                  lpdword_t lpThreadId,
+                                  const ppc_context_t& context) {
   return XapipCreateThread_entry(lpThreadAttributes, dwStackSize,
                                  lpStartAddress, lpParameter, dwCreationFlags,
-                                 -1, lpThreadId);
+                                 -1, lpThreadId, context);
 }
 DECLARE_XAM_EXPORT1(CreateThread, kNone, kImplemented);
 
-dword_result_t CloseHandle_entry(dword_t hObject) {
+dword_result_t CloseHandle_entry(dword_t hObject,
+                                const ppc_context_t& context) {
   const X_STATUS error_code = xe::kernel::xboxkrnl::NtClose(hObject);
 
   if (XFAILED(error_code)) {
-    RtlSetLastNTError_entry(error_code);
+    RtlSetLastNTError_entry(error_code, context);
 
     return false;
   }
@@ -1274,13 +1418,14 @@ dword_result_t CloseHandle_entry(dword_t hObject) {
 }
 DECLARE_XAM_EXPORT1(CloseHandle, kNone, kImplemented);
 
-dword_result_t ResumeThread_entry(dword_t hThread) {
+dword_result_t ResumeThread_entry(dword_t hThread,
+                                 const ppc_context_t& context) {
   uint32_t suspend_count;
   const X_STATUS error_code =
       xe::kernel::xboxkrnl::NtResumeThread(hThread, &suspend_count);
 
   if (XFAILED(error_code)) {
-    RtlSetLastNTError_entry(error_code);
+    RtlSetLastNTError_entry(error_code, context);
 
     return -1;
   }
@@ -1299,43 +1444,56 @@ dword_result_t GetCurrentThreadId_entry() {
 }
 DECLARE_XAM_EXPORT1(GetCurrentThreadId, kNone, kImplemented);
 
-qword_result_t XapiFormatTimeOut_entry(lpqword_t result,
-                                       dword_t dwMilliseconds) {
-  if (dwMilliseconds == -1) {
+// Returns timeout, or null for INFINITE.
+static uint64_t* XapiFormatTimeOut(uint64_t* timeout, uint32_t milliseconds) {
+  if (milliseconds == UINT32_MAX) {
+    return nullptr;
+  }
+  *timeout = static_cast<int64_t>(-10000) * milliseconds;
+  return timeout;
+}
+
+// Returns r3 as the caller passed it, upper half included.
+qword_result_t XapiFormatTimeOut_entry(lpqword_t result, dword_t dwMilliseconds,
+                                       const ppc_context_t& ctx) {
+  uint64_t timeout;
+  if (!XapiFormatTimeOut(&timeout, dwMilliseconds)) {
     return 0;
   }
-
-  *result = static_cast<int64_t>(-10000) * dwMilliseconds;
-  return result.host_address();
+  *result = timeout;
+  return ctx->r[3];
 }
 DECLARE_XAM_EXPORT1(XapiFormatTimeOut, kNone, kImplemented);
 
 dword_result_t WaitForSingleObjectEx_entry(dword_t hHandle,
                                            dword_t dwMilliseconds,
-                                           dword_t bAlertable) {
-  // TODO(Gliniak): Figure it out to be less janky.
+                                           dword_t bAlertable,
+                                           const ppc_context_t& context) {
   uint64_t timeout;
-  uint64_t* timeout_ptr = reinterpret_cast<uint64_t*>(
-      static_cast<uint64_t>(XapiFormatTimeOut_entry(&timeout, dwMilliseconds)));
+  uint64_t* timeout_ptr = XapiFormatTimeOut(&timeout, dwMilliseconds);
+  // The kernel takes alertable as a BOOLEAN.
+  const uint8_t alertable = uint8_t(bAlertable);
 
   X_STATUS result =
-      xboxkrnl::NtWaitForSingleObjectEx(hHandle, 1, bAlertable, timeout_ptr);
+      xboxkrnl::NtWaitForSingleObjectEx(hHandle, 1, alertable, timeout_ptr);
 
   while (bAlertable && result == X_STATUS_ALERTED) {
     result =
-        xboxkrnl::NtWaitForSingleObjectEx(hHandle, 1, bAlertable, timeout_ptr);
+        xboxkrnl::NtWaitForSingleObjectEx(hHandle, 1, alertable, timeout_ptr);
   }
 
-  RtlSetLastNTError_entry(result);
-  result = -1;
-
+  if (int32_t(result) < 0) {
+    RtlSetLastNTError_entry(result, context);
+    return -1;
+  }
   return result;
 }
 DECLARE_XAM_EXPORT1(WaitForSingleObjectEx, kNone, kImplemented);
 
 dword_result_t WaitForSingleObject_entry(dword_t hHandle,
-                                         dword_t dwMilliseconds) {
-  return WaitForSingleObjectEx_entry(hHandle, dwMilliseconds, 0);
+                                         dword_t dwMilliseconds,
+                                         const ppc_context_t& context) {
+  return WaitForSingleObjectEx_entry(hHandle, dwMilliseconds, 0, context);
 }
 DECLARE_XAM_EXPORT1(WaitForSingleObject, kNone, kImplemented);
 

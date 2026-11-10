@@ -1,0 +1,18 @@
+{
+  "module": "Dash.MP.Offline.lex",
+  "program": "0f3888fd29de_Dash.MP.Offline.lex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "4332af94a51f3279cef8a9bbb651e59f69f1f5bbd7c9c2a16a96f3de740d51ed",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9c660400",
+  "functions": 463,
+  "calls": 1187,
+  "strings": 262,
+  "string_xrefs": 269,
+  "independent_sha256": "7bc55aeb6fd646706a28a159965809a42188e4bf0215b746fb3bb67c783113c0",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

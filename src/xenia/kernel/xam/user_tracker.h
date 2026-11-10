@@ -13,11 +13,12 @@
 #include <chrono>
 #include <set>
 #include <span>
-
 #include "xenia/xbox.h"
-
 #include "xenia/kernel/xam/user_profile.h"
 #include "xenia/kernel/xam/user_settings.h"
+#include <atomic>
+#include <mutex>
+#include "xenia/kernel/xam/profile_gpd_transaction.h"
 
 namespace xe {
 namespace kernel {
@@ -37,7 +38,7 @@ struct TitleInfo {
   X_XDBF_AVATARAWARDS_COUNTER female_avatar_awards;
   std::chrono::sys_time<std::chrono::system_clock::duration> last_played;
 
-  std::span<const uint8_t> icon;
+  std::vector<uint8_t> icon;
 
   bool WasTitlePlayed() const {
     return last_played.time_since_epoch().count() != 0;
@@ -54,10 +55,18 @@ class UserTracker {
   bool RemoveUser(uint64_t xuid);
 
   // SPA related methods
-  void UpdateSpaInfo(SpaInfo* spa_info);
+  void UpdateSpaInfo(std::shared_ptr<const SpaInfo> spa_info);
 
   // User related methods
   bool UnlockAchievement(uint64_t xuid, uint32_t achievement_id);
+  std::optional<CapturedAchievementAward> CaptureAward(uint64_t xuid,
+                                                       uint32_t title_id,
+                                                       uint32_t achievement_id,
+                                                       std::error_code&) const;
+  std::optional<CapturedAchievementAward> CaptureAward(uint8_t slot,
+                                                       uint32_t title_id,
+                                                       uint32_t achievement_id,
+                                                       std::error_code&) const;
   void RefreshTitleSummary(uint64_t xuid, uint32_t title_id);
 
   // Context
@@ -73,7 +82,7 @@ class UserTracker {
   std::vector<AttributeKey> GetUserPropertyIds(uint64_t xuid) const;
 
   // Settings
-  void UpsertSetting(uint64_t xuid, uint32_t title_id,
+  bool UpsertSetting(uint64_t xuid, uint32_t title_id,
                      const UserSetting* setting);
 
   std::optional<UserSetting> GetSetting(UserProfile* user, uint32_t title_id,
@@ -96,13 +105,13 @@ class UserTracker {
   // Achievements
   std::vector<Achievement> GetUserTitleAchievements(uint64_t xuid,
                                                     uint32_t title_id) const;
-  std::span<const uint8_t> GetAchievementIcon(uint64_t xuid, uint32_t title_id,
+  std::vector<uint8_t> GetAchievementIcon(uint64_t xuid, uint32_t title_id,
                                               uint32_t achievement_id) const;
 
   // Images
   bool UpdateUserIcon(uint64_t xuid, std::span<const uint8_t> icon_data);
 
-  std::span<const uint8_t> GetIcon(uint64_t xuid, uint32_t title_id,
+  std::vector<uint8_t> GetIcon(uint64_t xuid, uint32_t title_id,
                                    XTileType tile_type, uint64_t tile_id) const;
 
  private:
@@ -119,7 +128,12 @@ class UserTracker {
 
   void FlushUserData(const uint64_t xuid);
 
-  SpaInfo* spa_data_ = nullptr;
+  ProfileGpdTransactionAttempt Mutate(uint64_t, ProfileGpdMutation) const;
+  std::shared_ptr<const SpaInfo> Spa() const;
+  std::vector<uint64_t> Tracked() const;
+  mutable std::mutex metadata_mutex_;
+  std::shared_ptr<const SpaInfo> spa_data_;
+  mutable std::atomic<uint64_t> next_request_{1};
 
   std::set<uint64_t> tracked_xuids_;
 };

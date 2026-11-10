@@ -12,6 +12,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string_view>
 #include "third_party/tomlplusplus/toml.hpp"
 
@@ -27,6 +28,11 @@ extern std::string game_config_suffix;
 
 void SetupConfig(const std::filesystem::path& config_folder);
 toml::table LoadGameConfig(uint32_t title_id);
+// Read an arbitrary title's integer config with runtime precedence, leaving all
+// active cvars and pending type-warning state untouched. Nullopt means unknown
+// cvar or a non-int32 cvar, rather than a synthetic default.
+std::optional<int32_t> ResolveInt32GameConfig(uint32_t title_id,
+                                           std::string_view cvar_name);
 std::filesystem::path GetBundledDataPath(const std::string& subdirectory);
 
 // Extract title_id from a game file and load its config overrides.

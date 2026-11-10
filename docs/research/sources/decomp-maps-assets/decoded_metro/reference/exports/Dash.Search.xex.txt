@@ -1,0 +1,4 @@
+Dash.Search.xex exports
+=======================
+
+{"confidence": "CONFIRMED", "function_va": "0x9AD12000", "module": "Dash.Search.xex", "ordinal": "0x00000001", "resolved_name": ""}

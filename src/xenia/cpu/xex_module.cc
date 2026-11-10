@@ -12,7 +12,9 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstring>
+#include <optional>
 #include <unordered_set>
 
 #include "third_party/fmt/include/fmt/format.h"
@@ -23,6 +25,7 @@
 #include "xenia/base/math.h"
 #include "xenia/base/memory.h"
 #include "xenia/base/pe_image.h"
+#include "xenia/base/xex_image.h"
 
 #include "xenia/cpu/cpu_flags.h"
 #include "xenia/cpu/export_resolver.h"
@@ -36,6 +39,7 @@
 
 #include "third_party/mbedtls/include/mbedtls/aes.h"
 #include "third_party/mbedtls/include/mbedtls/sha1.h"
+#include "third_party/mbedtls/include/mbedtls/sha256.h"
 #include "xenia/cpu/ppc/ppc_decode_data.h"
 #include "xenia/cpu/ppc/ppc_instr.h"
 DEFINE_bool(disable_instruction_infocache, false,
@@ -57,18 +61,10 @@ DECLARE_bool(allow_plugins);
 
 DECLARE_bool(disable_context_promotion);
 
-static constexpr uint8_t xe_xex1_retail_key[16] = {
-    0xA2, 0x6C, 0x10, 0xF7, 0x1F, 0xD9, 0x35, 0xE9,
-    0x8B, 0x99, 0x92, 0x2C, 0xE9, 0x32, 0x15, 0x72};
-static constexpr uint8_t xe_xex1_devkit_key[16] = {
-    0xA8, 0xB0, 0x05, 0x12, 0xED, 0xE3, 0x63, 0x8D,
-    0xC6, 0x58, 0xB3, 0x10, 0x1F, 0x9F, 0x50, 0xD1};
-static constexpr uint8_t xe_xex2_retail_key[16] = {
-    0x20, 0xB1, 0x85, 0xA5, 0x9D, 0x28, 0xFD, 0xC3,
-    0x40, 0x58, 0x3F, 0xBB, 0x08, 0x96, 0xBF, 0x91};
-static constexpr uint8_t xe_xex2_devkit_key[16] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+static const uint8_t* xe_xex1_retail_key = xe::XexImageMasterKey(true, false);
+static const uint8_t* xe_xex1_devkit_key = xe::XexImageMasterKey(true, true);
+static const uint8_t* xe_xex2_retail_key = xe::XexImageMasterKey(false, false);
+static const uint8_t* xe_xex2_devkit_key = xe::XexImageMasterKey(false, true);
 
 void aes_decrypt_buffer(const uint8_t* session_key, const uint8_t* input_buffer,
                         const size_t input_size, uint8_t* output_buffer,
@@ -603,234 +599,125 @@ void XexModule::ReleaseImage() {
   }
 }
 
-int XexModule::ReadImageUncompressed(const void* xex_addr, size_t xex_length) {
-  // Allocate in-place the XEX memory.
-  const uint32_t exe_length =
-      static_cast<uint32_t>(xex_length - xex_header()->header_size);
+// Convert the already decoded loader headers to the shared bounded codec.
+// The caller owns both block storage and image allocation.
+static std::optional<XexImageOptions> ImageOptions(
+    const xex2_opt_file_format_info* info, const uint8_t* session_key,
+    std::vector<XexImageBasicBlock>& blocks, const xex2_header* header,
+    size_t header_size) {
+  const uintptr_t offset = uintptr_t(info) - uintptr_t(header);
+  if (!info || uintptr_t(info) < uintptr_t(header) || offset > header_size ||
+      header_size - offset < 8 || info->info_size < 8 ||
+      info->info_size > header_size - offset) {
+    return std::nullopt;
+  }
+  XexImageOptions options;
+  options.compression = static_cast<XexImageCompression>(
+      static_cast<uint16_t>(info->compression_type));
+  options.encryption = static_cast<XexImageEncryption>(
+      static_cast<uint16_t>(info->encryption_type));
+  std::copy_n(session_key, 16, options.session_key.begin());
+  if (options.compression == XexImageCompression::kBasic) {
+    if ((info->info_size - 8) % 8) {
+      return std::nullopt;
+    }
+    for (uint32_t i = 0; i < (info->info_size - 8) / 8; ++i) {
+      const auto& block = info->compression_info.basic.blocks[i];
+      blocks.push_back({block.data_size, block.zero_size});
+    }
+    options.basic_blocks = blocks;
+  } else if (options.compression == XexImageCompression::kNormal) {
+    if (info->info_size < 36) {
+      return std::nullopt;
+    }
+    options.normal_window_size = info->compression_info.normal.window_size;
+    const auto& first = info->compression_info.normal.first_block;
+    options.normal_first_block_size = first.block_size;
+    std::copy_n(first.block_hash, 20, options.normal_first_block_hash.begin());
+  }
+  return options;
+}
 
-  uint32_t uncompressed_size = exe_length;
-  if (!AllocImage(uncompressed_size)) {
+int XexModule::ReadImageUncompressed(const void* xex_addr, size_t xex_length) {
+  if (xex_header()->header_size > xex_length) {
+    return 1;
+  }
+  const uint32_t size = uint32_t(xex_length - xex_header()->header_size);
+  if (!AllocImage(size)) {
     XELOGE("Unable to allocate XEX memory at {:08X}-{:08X}.", base_address_,
-           uncompressed_size);
+           size);
     return 2;
   }
-  uint8_t* buffer = memory()->TranslateVirtual(base_address_);
-  std::memset(buffer, 0, uncompressed_size);
-
-  const uint8_t* p = (const uint8_t*)xex_addr + xex_header()->header_size;
-
-  switch (opt_file_format_info()->encryption_type) {
-    case XEX_ENCRYPTION_NONE:
-      if (exe_length > uncompressed_size) {
-        return 1;
-      }
-      memcpy(buffer, p, exe_length);
-      return 0;
-    case XEX_ENCRYPTION_NORMAL:
-      aes_decrypt_buffer(session_key_, p, exe_length, buffer,
-                         uncompressed_size);
-      return 0;
-    default:
-      assert_always();
-      return 1;
+  std::vector<XexImageBasicBlock> blocks;
+  const auto options =
+      ImageOptions(opt_file_format_info(), session_key_, blocks, xex_header(),
+                   xex_header_mem_.size());
+  if (!options) {
+    return 1;
   }
-
-  return 0;
+  return DecodeXexImage(
+             {static_cast<const uint8_t*>(xex_addr) + xex_header()->header_size,
+              size},
+             {memory()->TranslateVirtual(base_address_), size},
+             *options) == XexImageResult::kSuccess
+             ? 0
+             : 1;
 }
 
 int XexModule::ReadImageBasicCompressed(const void* xex_addr,
                                         size_t xex_length) {
-  const uint32_t exe_length =
-      static_cast<uint32_t>(xex_length - xex_header()->header_size);
-  const uint8_t* source_buffer =
-      (const uint8_t*)xex_addr + xex_header()->header_size;
-  const uint8_t* p = source_buffer;
-
-  auto heap = memory()->LookupHeap(base_address_);
-
-  // Calculate uncompressed length.
-  uint32_t uncompressed_size = 0;
-
-  auto* file_info = opt_file_format_info();
-  auto& comp_info = file_info->compression_info.basic;
-
-  uint32_t block_count = (file_info->info_size - 8) / 8;
-  for (uint32_t n = 0; n < block_count; n++) {
-    const uint32_t data_size = comp_info.blocks[n].data_size;
-    const uint32_t zero_size = comp_info.blocks[n].zero_size;
-    uncompressed_size += data_size + zero_size;
-  }
-
-  // Calculate the total size of the XEX image from its headers.
-  uint32_t total_size = 0;
-  for (uint32_t i = 0; i < xex_security_info()->page_descriptor_count; i++) {
-    // Byteswap the bitfield manually.
-    xex2_page_descriptor desc;
-    desc.value = xe::byte_swap(xex_security_info()->page_descriptors[i].value);
-
-    total_size += desc.page_count * heap->page_size();
-  }
-
-  // Allocate in-place the XEX memory.
-  if (!AllocImage(total_size)) {
-    XELOGE("Unable to allocate XEX memory at {:08X}-{:08X}.", base_address_,
-           uncompressed_size);
+  if (xex_header()->header_size > xex_length) {
     return 1;
   }
-
-  uint8_t* buffer = memory()->TranslateVirtual(base_address_);
-  std::memset(buffer, 0, total_size);  // Quickly zero the contents.
-  uint8_t* d = buffer;
-
-  mbedtls_aes_context context;
-  mbedtls_aes_init(&context);
-  mbedtls_aes_setkey_dec(&context, session_key_, 128);
-  uint8_t ivec[16] = {0};
-
-  for (size_t n = 0; n < block_count; n++) {
-    const uint32_t data_size = comp_info.blocks[n].data_size;
-    const uint32_t zero_size = comp_info.blocks[n].zero_size;
-
-    // Block sizes come from the file. Decryption only covers whole 16-byte
-    // blocks within data_size.
-    const size_t source_offset = size_t(p - source_buffer);
-    const size_t dest_offset = size_t(d - buffer);
-    if (data_size > exe_length - source_offset || dest_offset > total_size ||
-        data_size > total_size - dest_offset) {
-      XELOGE("XEX basic compression block {} is out of bounds", n);
-      return 1;
-    }
-
-    switch (opt_file_format_info()->encryption_type) {
-      case XEX_ENCRYPTION_NONE:
-        memcpy(d, p, data_size);
-        break;
-      case XEX_ENCRYPTION_NORMAL:
-        mbedtls_aes_crypt_cbc(&context, MBEDTLS_AES_DECRYPT, data_size & ~15u,
-                              ivec, p, d);
-        break;
-      default:
-        assert_always();
-        return 1;
-    }
-
-    p += data_size;
-    d += data_size + zero_size;
+  std::vector<XexImageBasicBlock> blocks;
+  const auto options =
+      ImageOptions(opt_file_format_info(), session_key_, blocks, xex_header(),
+                   xex_header_mem_.size());
+  if (!options) {
+    return 1;
   }
-
-  mbedtls_aes_free(&context);
-  return 0;
+  auto heap = memory()->LookupHeap(base_address_);
+  uint64_t total_size = 0;
+  for (uint32_t i = 0; i < xex_security_info()->page_descriptor_count; ++i) {
+    xex2_page_descriptor desc;
+    desc.value = xe::byte_swap(xex_security_info()->page_descriptors[i].value);
+    total_size += uint64_t(desc.page_count) * heap->page_size();
+  }
+  if (total_size > UINT32_MAX || !AllocImage(uint32_t(total_size))) {
+    return 1;
+  }
+  return DecodeXexImage(
+             {static_cast<const uint8_t*>(xex_addr) + xex_header()->header_size,
+              xex_length - xex_header()->header_size},
+             {memory()->TranslateVirtual(base_address_), size_t(total_size)},
+             *options) == XexImageResult::kSuccess
+             ? 0
+             : 1;
 }
 
 int XexModule::ReadImageCompressed(const void* xex_addr, size_t xex_length) {
-  const uint32_t exe_length =
-      static_cast<uint32_t>(xex_length - xex_header()->header_size);
-  const uint8_t* exe_buffer =
-      (const uint8_t*)xex_addr + xex_header()->header_size;
-
-  // src -> dest:
-  // - decrypt (if encrypted)
-  // - de-block:
-  //    4b total size of next block in uint8_ts
-  //   20b hash of entire next block (including size/hash)
-  //    Nb block uint8_ts
-  // - decompress block contents
-
-  uint8_t* compress_buffer = NULL;
-  const uint8_t* p = NULL;
-  uint8_t* d = NULL;
-
-  // Decrypt (if needed).
-  bool free_input = false;
-  const uint8_t* input_buffer = exe_buffer;
-  size_t input_size = exe_length;
-
-  switch (opt_file_format_info()->encryption_type) {
-    case XEX_ENCRYPTION_NONE:
-      // No-op.
-      break;
-    case XEX_ENCRYPTION_NORMAL:
-      // TODO: a way to do without a copy/alloc?
-      free_input = true;
-      input_buffer = (const uint8_t*)calloc(1, exe_length);
-      aes_decrypt_buffer(session_key_, exe_buffer, exe_length,
-                         (uint8_t*)input_buffer, exe_length);
-      break;
-    default:
-      assert_always();
-      return 1;
+  if (xex_header()->header_size > xex_length) {
+    return 1;
   }
-
-  const auto* compression_info = &opt_file_format_info()->compression_info;
-  const xex2_compressed_block_info* cur_block =
-      &compression_info->normal.first_block;
-
-  compress_buffer = (uint8_t*)calloc(1, exe_length);
-
-  p = input_buffer;
-  d = compress_buffer;
-
-  // De-block.
-  int result_code = 0;
-
-  uint8_t block_calced_digest[0x14];
-  while (cur_block->block_size) {
-    const uint8_t* pnext = p + cur_block->block_size;
-    const auto* next_block = (const xex2_compressed_block_info*)p;
-
-    // Compare block hash, if no match we probably used wrong decrypt key
-    mbedtls_sha1(p, cur_block->block_size, block_calced_digest);
-    if (memcmp(block_calced_digest, cur_block->block_hash, 0x14) != 0) {
-      result_code = 2;
-      break;
-    }
-
-    // skip block info
-    p += 4;
-    p += 20;
-
-    while (true) {
-      const size_t chunk_size = (p[0] << 8) | p[1];
-      p += 2;
-      if (!chunk_size) {
-        break;
-      }
-
-      memcpy(d, p, chunk_size);
-      p += chunk_size;
-      d += chunk_size;
-    }
-
-    p = pnext;
-    cur_block = next_block;
+  std::vector<XexImageBasicBlock> blocks;
+  const auto options =
+      ImageOptions(opt_file_format_info(), session_key_, blocks, xex_header(),
+                   xex_header_mem_.size());
+  if (!options) {
+    return 1;
   }
-
-  if (!result_code) {
-    uint32_t uncompressed_size = image_size();
-
-    // Allocate in-place the XEX memory.
-    if (AllocImage(uncompressed_size)) {
-      uint8_t* buffer = memory()->TranslateVirtual(base_address_);
-      std::memset(buffer, 0, uncompressed_size);
-
-      // Decompress into XEX base
-      result_code = lzx_decompress(
-          compress_buffer, d - compress_buffer, buffer, uncompressed_size,
-          compression_info->normal.window_size, nullptr, 0);
-    } else {
-      XELOGE("Unable to allocate XEX memory at {:08X}-{:08X}.", base_address_,
-             uncompressed_size);
-      result_code = 3;
-    }
+  const uint32_t size = image_size();
+  if (!AllocImage(size)) {
+    return 3;
   }
-
-  if (compress_buffer) {
-    free((void*)compress_buffer);
+  const auto result = DecodeXexImage(
+      {static_cast<const uint8_t*>(xex_addr) + xex_header()->header_size,
+       xex_length - xex_header()->header_size},
+      {memory()->TranslateVirtual(base_address_), size}, *options);
+  if (result == XexImageResult::kBlockHashMismatch) {
+    return 2;
   }
-  if (free_input) {
-    free((void*)input_buffer);
-  }
-  return result_code;
+  return result == XexImageResult::kSuccess ? 0 : 1;
 }
 
 int XexModule::ReadPEHeaders() {
@@ -1160,6 +1047,72 @@ bool XexModule::LoadContinue() {
 
     auto library_data = reinterpret_cast<uint8_t*>(opt_import_libraries);
     uint32_t library_offset = opt_import_libraries->string_table.size + 12;
+    if (guest_import_provider_) {
+      // Validate the entire consumer family before any slot/thunk changes.
+      // Once a native object family is selected, a late missing export cannot
+      // leave the first half native and the second half HLE.
+      std::vector<GuestImportProvider::Request> requests;
+      for (uint32_t offset = library_offset;
+           offset < opt_import_libraries->size;) {
+        if (uint64_t(offset) + offsetof(xex2_import_library, import_table) >
+            opt_import_libraries->size) {
+          return false;
+        }
+        const auto* library =
+            reinterpret_cast<const xex2_import_library*>(library_data + offset);
+        const size_t name_index = library->name_index & 0xFF;
+        if (library->size < offsetof(xex2_import_library, import_table) ||
+            uint64_t(offset) + library->size > opt_import_libraries->size ||
+            uint64_t(offsetof(xex2_import_library, import_table)) +
+                    uint64_t(library->count) * 4 >
+                library->size ||
+            name_index >= xe::countof(string_table) ||
+            name_index >= opt_import_libraries->string_table.count ||
+            !string_table[name_index]) {
+          return false;
+        }
+        const std::string library_name(string_table[name_index]);
+        std::vector<uint32_t> records;
+        std::unordered_set<uint16_t> function_ordinals;
+        for (uint32_t i = 0; i < library->count; ++i) {
+          const uint32_t address = library->import_table[i];
+          if (address < base_address_ ||
+              uint64_t(address) + 4 > uint64_t(base_address_) + image_size() ||
+              memory()->QueryRangeAccess(address, 4) ==
+                  xe::memory::PageAccess::kNoAccess) {
+            return false;
+          }
+          const uint32_t value =
+              xe::load_and_swap<uint32_t>(memory()->TranslateVirtual(address));
+          if ((value >> 24) > 1) {
+            return false;
+          }
+          records.push_back(value);
+          if ((value >> 24) == 1) {
+            function_ordinals.insert(uint16_t(value));
+          }
+        }
+        for (const uint32_t value : records) {
+          const uint16_t ordinal = uint16_t(value);
+          const auto* known = processor_->export_resolver()->GetExportByOrdinal(
+              library_name, ordinal);
+          const auto kind = known
+                                ? (known->get_type() == Export::Type::kFunction
+                                       ? GuestImportProvider::Kind::kFunction
+                                       : GuestImportProvider::Kind::kData)
+                                : (function_ordinals.contains(ordinal)
+                                       ? GuestImportProvider::Kind::kFunction
+                                       : GuestImportProvider::Kind::kData);
+          requests.push_back({library_name, ordinal, kind});
+        }
+        offset += library->size;
+      }
+      std::string error;
+      if (!guest_import_provider_->Preflight(requests, &error)) {
+        XELOGE("Native guest import preflight failed for {}: {}", name_, error);
+        return false;
+      }
+    }
     while (library_offset < opt_import_libraries->size) {
       auto library =
           reinterpret_cast<xex2_import_library*>(library_data + library_offset);
@@ -1200,7 +1153,9 @@ bool XexModule::LoadContinue() {
         }
       }
 
-      SetupLibraryImports(library_name, library);
+      if (!SetupLibraryImports(library_name, library)) {
+        return false;
+      }
       library_offset += library->size;
     }
   }
@@ -1243,7 +1198,9 @@ bool XexModule::LoadContinue() {
   return true;
 }
 
-void XexModule::Precompile() {
+void XexModule::Precompile() { Precompile(true); }
+
+void XexModule::Precompile(bool compile_discovered) {
   if (!has_code()) {
     return;
   }
@@ -1269,7 +1226,7 @@ void XexModule::Precompile() {
 
   info_cache_.Init(this);
   // Emulator::CompleteLaunch compiles the executable after plugins patch it.
-  if (!is_executable()) {
+  if (compile_discovered && !is_executable()) {
     PrecompileDiscoveredFunctions();
   }
 }
@@ -1278,6 +1235,7 @@ bool XexModule::Unload() {
     return true;
   }
   loaded_ = false;
+  guest_host_bridges_.clear();
 
   // If this isn't a patch, just deallocate the memory occupied by the exe
   if (!is_patch()) {
@@ -1288,6 +1246,491 @@ bool XexModule::Unload() {
 
   xex_header_mem_.resize(0);
 
+  return true;
+}
+
+bool XexModule::BindGuestExportToHost(uint16_t ordinal,
+                                      std::string_view host_library,
+                                      uint16_t host_ordinal) {
+  if (!loaded_) {
+    return false;
+  }
+  const uint32_t address = GetProcAddress(ordinal);
+  auto* resolver = processor_->export_resolver();
+  auto* target = resolver
+                     ? resolver->GetExportByOrdinal(host_library, host_ordinal)
+                     : nullptr;
+  if (!target || target->get_type() != Export::Type::kFunction ||
+      !target->is_implemented() || !target->function_data.trampoline) {
+    return false;
+  }
+  // The export table supplies the entry identity. Legacy callers don't supply
+  // a full original extent/hash; reserve only the two-instruction overlay.
+  return InstallGuestFunctionBridge(
+      address, 8, {},
+      reinterpret_cast<GuestFunction::ExternHandler>(
+          target->function_data.trampoline),
+      target, target->name, EntryWitness::kExport);
+}
+
+bool XexModule::BindGuestExportToHost(uint16_t ordinal,
+                                      std::string_view host_library,
+                                      uint16_t host_ordinal, uint32_t full_size,
+                                      std::string_view full_sha256) {
+  if (!loaded_ || full_sha256.size() != 64) {
+    return false;
+  }
+  const uint32_t address = GetProcAddress(ordinal);
+  auto* resolver = processor_->export_resolver();
+  auto* target = resolver
+                     ? resolver->GetExportByOrdinal(host_library, host_ordinal)
+                     : nullptr;
+  if (!target || target->get_type() != Export::Type::kFunction ||
+      !target->is_implemented() || !target->function_data.trampoline) {
+    return false;
+  }
+  return InstallGuestFunctionBridge(
+      address, full_size, full_sha256,
+      reinterpret_cast<GuestFunction::ExternHandler>(
+          target->function_data.trampoline),
+      target, target->name, EntryWitness::kExportFullExtent);
+}
+
+bool XexModule::BindGuestFunctionToHost(uint32_t address, uint32_t size,
+                                        std::string_view expected_sha256,
+                                        std::string_view host_library,
+                                        uint16_t host_ordinal) {
+  auto* resolver = processor_->export_resolver();
+  auto* target = resolver
+                     ? resolver->GetExportByOrdinal(host_library, host_ordinal)
+                     : nullptr;
+  if (!target || target->get_type() != Export::Type::kFunction ||
+      !target->is_implemented() || !target->function_data.trampoline) {
+    return false;
+  }
+  return InstallGuestFunctionBridge(
+      address, size, expected_sha256,
+      reinterpret_cast<GuestFunction::ExternHandler>(
+          target->function_data.trampoline),
+      target, target->name, EntryWitness::kDirectCall);
+}
+
+bool XexModule::BindGuestFunctionToHost(
+    uint32_t address, uint32_t size, std::string_view expected_sha256,
+    GuestFunction::ExternHandler host_handler, std::string_view host_name) {
+  return InstallGuestFunctionBridge(address, size, expected_sha256,
+                                    host_handler, nullptr, host_name,
+                                    EntryWitness::kDirectCall);
+}
+
+bool XexModule::BindGuestTaskCallbackToHost(
+    uint32_t address, uint32_t size, std::string_view expected_sha256,
+    const GuestTaskCallbackRegistration& registration,
+    GuestFunction::ExternHandler host_handler, std::string_view host_name) {
+  return InstallGuestFunctionBridge(
+      address, size, expected_sha256, host_handler, nullptr, host_name,
+      EntryWitness::kNativeTaskRegistration, &registration);
+}
+
+const uint8_t* XexModule::TranslateCode(uint32_t address) const {
+  auto it = guest_host_bridges_.upper_bound(address);
+  if (it != guest_host_bridges_.begin()) {
+    --it;
+    const uint32_t offset = address - it->first;
+    if (offset < it->second.translation.size()) {
+      return it->second.translation.data() + offset;
+    }
+  }
+  return Module::TranslateCode(address);
+}
+
+Symbol::Status XexModule::DeclareFunction(uint32_t address,
+                                          Function** out_function) {
+  auto it = guest_host_bridges_.upper_bound(address);
+  if (it != guest_host_bridges_.begin()) {
+    --it;
+    if (address != it->first &&
+        uint64_t(address) < uint64_t(it->first) + it->second.original_size) {
+      *out_function = nullptr;
+      return Symbol::Status::kFailed;
+    }
+  }
+  return Module::DeclareFunction(address, out_function);
+}
+
+bool XexModule::InstallGuestFunctionBridge(
+    uint32_t address, uint32_t size, std::string_view expected_sha256,
+    GuestFunction::ExternHandler handler, Export* export_data,
+    std::string_view host_name, EntryWitness entry_witness,
+    const GuestTaskCallbackRegistration* task_registration) {
+  // No lock can undo a literal machine-code target embedded in a caller.
+  // The caller must keep this module quiescent from load until installation.
+  auto lock = xe::global_critical_region::AcquireDirect();
+  const bool require_full_extent = entry_witness != EntryWitness::kExport;
+  const bool require_task_registration =
+      entry_witness == EntryWitness::kNativeTaskRegistration;
+  if (require_task_registration != (task_registration != nullptr)) {
+    return false;
+  }
+  const uint64_t end = uint64_t(address) + size;
+  const uint64_t image_end =
+      uint64_t(base_address_) + security_info_.image_size;
+  if (!loaded_ || !base_address_ || !handler || host_name.empty() ||
+      (address & 3) || (size & 3) || size < 8 || size > 1024 * 1024 ||
+      address < base_address_ || end > image_end || end > 0x100000000ull ||
+      image_end > 0x100000000ull ||
+      (require_full_extent && expected_sha256.size() != 64)) {
+    return false;
+  }
+  const auto readable_image = [&](uint32_t start, uint64_t length) {
+    return length && length <= UINT32_MAX && start >= base_address_ &&
+           uint64_t(start) + length <= image_end &&
+           memory()->QueryRangeAccess(start, uint32_t(length)) !=
+               xe::memory::PageAccess::kNoAccess;
+  };
+  const auto code_owned = [&](uint32_t start, uint32_t length) {
+    if (!readable_image(start, length)) {
+      return false;
+    }
+    for (uint64_t current = start; current < uint64_t(start) + length;
+         current = (current & ~uint64_t(0xFFF)) + 0x1000) {
+      xex2_section_type section;
+      if (!GetPageSectionType(uint32_t(current), &section) ||
+          section != XEX_SECTION_CODE) {
+        return false;
+      }
+    }
+    // CPU modules may claim narrower ranges than XEX allocation pages.
+    for (uint64_t current = start; current < uint64_t(start) + length;
+         current += 4) {
+      if (processor_->LookupModule(uint32_t(current)) != this) {
+        return false;
+      }
+    }
+    return processor_->LookupModule(start + length - 1) == this;
+  };
+  if (!code_owned(address, size)) {
+    return false;
+  }
+  const auto hash_matches = [&](uint32_t start, uint32_t length,
+                                std::string_view expected) {
+    if (expected.size() != 64 || !code_owned(start, length)) {
+      return false;
+    }
+    const auto hex = [](char c) -> int {
+      if (c >= '0' && c <= '9') {
+        return c - '0';
+      }
+      if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+      }
+      if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+      }
+      return -1;
+    };
+    std::array<uint8_t, 32> digest;
+    mbedtls_sha256(memory()->TranslateVirtual<const uint8_t*>(start), length,
+                   digest.data(), 0);
+    for (size_t i = 0; i < digest.size(); ++i) {
+      const int high = hex(expected[i * 2]);
+      const int low = hex(expected[i * 2 + 1]);
+      if (high < 0 || low < 0 || digest[i] != ((high << 4) | low)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  if (!expected_sha256.empty() &&
+      !hash_matches(address, size, expected_sha256)) {
+    return false;
+  }
+  if (require_task_registration) {
+    const auto& witness = *task_registration;
+    const uint64_t schedule_end =
+        uint64_t(witness.schedule_address) + witness.schedule_size;
+    const uint64_t registration_end =
+        uint64_t(witness.registration_address) + witness.registration_size;
+    if (witness.registration_size != 9 * 4 ||
+        (witness.registration_address & 3) || (witness.schedule_address & 3) ||
+        (witness.schedule_size & 3) || witness.schedule_size < 8 ||
+        witness.schedule_size > 1024 * 1024 || schedule_end > image_end ||
+        registration_end > image_end ||
+        (witness.schedule_address < end && address < schedule_end) ||
+        (witness.registration_address < end && address < registration_end) ||
+        (witness.registration_address < schedule_end &&
+         witness.schedule_address < registration_end) ||
+        !hash_matches(witness.registration_address, witness.registration_size,
+                      witness.registration_sha256) ||
+        !hash_matches(witness.schedule_address, witness.schedule_size,
+                      witness.schedule_sha256)) {
+      return false;
+    }
+    // Version-verified native registration template. The unrelated stores and
+    // argument preparation cannot clobber r10 between lis and addi r3. There
+    // is no branch before the direct BL and no address from guest host data.
+    std::array<uint32_t, 9> words;
+    for (size_t i = 0; i < words.size(); ++i) {
+      words[i] = xe::load_and_swap<uint32_t>(memory()->TranslateVirtual(
+          witness.registration_address + uint32_t(i) * 4));
+    }
+    if ((words[0] & 0xFFFF0000) != 0x39610000 ||  // addi r11,r1,args
+        (words[1] & 0xFFFF0000) != 0x3D400000 ||  // lis r10,callback@ha
+        (words[2] & 0xFFFF0000) != 0x38C10000 ||  // addi r6,r1,out
+        (words[3] & 0xFFFF0000) != 0x38A10000 ||  // addi r5,r1,args
+        words[4] != 0x38800000 ||                 // li r4,0
+        words[5] != 0xFBEB0000 ||                 // std r31,0(r11)
+        (words[6] & 0xFFFF0000) != 0x93C10000 ||  // stw r30,args(r1)
+        (words[7] & 0xFFFF0000) != 0x386A0000 ||  // addi r3,r10,callback@l
+        (words[8] & 0xFC000003) != 0x48000001 ||  // relative BL
+        uint16_t(words[0]) != uint16_t(words[3]) ||
+        uint16_t(words[0]) != uint16_t(words[6])) {
+      return false;
+    }
+    const uint32_t callback = (uint32_t(uint16_t(words[1])) << 16) +
+                              uint32_t(int32_t(int16_t(words[7])));
+    int64_t displacement = words[8] & 0x03FFFFFC;
+    if (displacement & 0x02000000) {
+      displacement -= 0x04000000;
+    }
+    const uint32_t schedule =
+        uint32_t(int64_t(witness.registration_address) + 8 * 4 + displacement);
+    if (callback != address || schedule != witness.schedule_address) {
+      return false;
+    }
+  }
+  for (const auto& [start, bridge] : guest_host_bridges_) {
+    for (const auto& dependency : bridge.dependencies) {
+      if (dependency.size && uint64_t(dependency.address) < end &&
+          address < uint64_t(dependency.address) + dependency.size) {
+        return false;
+      }
+    }
+    const uint64_t bridge_end = uint64_t(start) + bridge.original_size;
+    if ((uint64_t(start) < end && address < bridge_end) ||
+        (require_task_registration &&
+         ((uint64_t(start) < uint64_t(task_registration->schedule_address) +
+                                 task_registration->schedule_size &&
+           task_registration->schedule_address < bridge_end) ||
+          (uint64_t(start) < uint64_t(task_registration->registration_address) +
+                                 task_registration->registration_size &&
+           task_registration->registration_address < bridge_end)))) {
+      return false;
+    }
+  }
+  bool conflict = false;
+  ForEachFunction([&](Function* function) {
+    const uint32_t start = function->address();
+    const uint64_t function_end = function->has_end_address()
+                                      ? uint64_t(function->end_address()) + 4
+                                      : uint64_t(start) + 4;
+    if (uint64_t(start) >= end || function_end <= address) {
+      return;
+    }
+    if (start != address || !function->is_guest() || function->IsSaverest() ||
+        function->behavior() != Function::Behavior::kDefault ||
+        function->status() != Symbol::Status::kDeclared ||
+        static_cast<GuestFunction*>(function)->machine_code() ||
+        (require_full_extent && function->has_end_address() &&
+         function_end != end)) {
+      conflict = true;
+    }
+  });
+  for (uint32_t entry : GetAddressedFunctions()) {
+    if (entry >= address && uint64_t(entry) < end) {
+      auto* symbol = LookupSymbol(entry, false);
+      if (entry != address || !symbol ||
+          symbol->type() != Symbol::Type::kFunction) {
+        conflict = true;
+      }
+    }
+  }
+  if (conflict || processor_->QueryFunction(address)) {
+    return false;
+  }
+  // PE runtime entries and real exports must not hide an interior alias.
+  bool exact_task_entry = false;
+  bool exact_schedule_entry = false;
+  if (const auto* pdata = GetPESection(".pdata"); pdata && pdata->raw_size) {
+    if ((pdata->raw_size & 7) ||
+        !readable_image(pdata->address, pdata->raw_size)) {
+      return false;
+    }
+    for (uint32_t offset = 0; offset < pdata->raw_size; offset += 8) {
+      const uint32_t entry = xe::load_and_swap<uint32_t>(
+          memory()->TranslateVirtual(pdata->address + offset));
+      if (entry > address && uint64_t(entry) < end) {
+        return false;
+      }
+      if (require_task_registration) {
+        const auto& witness = *task_registration;
+        const uint32_t packed = xe::load_and_swap<uint32_t>(
+            memory()->TranslateVirtual(pdata->address + offset + 4));
+        const uint32_t length = ((packed >> 8) & 0x3FFFFF) * 4;
+        const uint64_t runtime_end = uint64_t(entry) + length;
+        if ((entry != address && entry < end && runtime_end > address) ||
+            (entry != witness.schedule_address &&
+             uint64_t(entry) <
+                 uint64_t(witness.schedule_address) + witness.schedule_size &&
+             runtime_end > witness.schedule_address)) {
+          return false;
+        }
+        if (entry == address) {
+          if (exact_task_entry || length != size) {
+            return false;
+          }
+          exact_task_entry = true;
+        }
+        if (entry == witness.schedule_address) {
+          if (exact_schedule_entry || length != witness.schedule_size) {
+            return false;
+          }
+          exact_schedule_entry = true;
+        }
+        if (entry > witness.schedule_address &&
+            uint64_t(entry) <
+                uint64_t(witness.schedule_address) + witness.schedule_size) {
+          return false;
+        }
+      }
+    }
+  }
+  if (require_task_registration &&
+      (!exact_task_entry || !exact_schedule_entry)) {
+    return false;
+  }
+  if (security_info_.export_table) {
+    const uint32_t table_address = security_info_.export_table;
+    constexpr uint32_t kHeader = offsetof(xex2_export_table, ordOffset);
+    if (!readable_image(table_address, kHeader)) {
+      return false;
+    }
+    const auto* table =
+        memory()->TranslateVirtual<const xex2_export_table*>(table_address);
+    const uint32_t count = table->count;
+    if (count > 0x10000 ||
+        !readable_image(table_address, kHeader + uint64_t(count) * 4)) {
+      return false;
+    }
+    for (uint32_t i = 0; i < count; ++i) {
+      const uint64_t entry = (uint64_t(table->imagebaseaddr) << 16) +
+                             uint32_t(table->ordOffset[i]);
+      if (entry > address && entry < end) {
+        return false;
+      }
+    }
+  } else {
+    xex2_opt_data_directory* directory_info = nullptr;
+    if (GetOptHeader(XEX_HEADER_EXPORTS_BY_NAME, &directory_info)) {
+      const uint64_t directory_address =
+          uint64_t(base_address_) + directory_info->offset;
+      if (directory_address > UINT32_MAX ||
+          !readable_image(uint32_t(directory_address),
+                          sizeof(X_IMAGE_EXPORT_DIRECTORY))) {
+        return false;
+      }
+      const auto* directory =
+          memory()->TranslateVirtual<const X_IMAGE_EXPORT_DIRECTORY*>(
+              uint32_t(directory_address));
+      const uint32_t count = directory->NumberOfFunctions;
+      const uint64_t table = directory_address + directory->AddressOfFunctions;
+      if (count > 0x10000 || table > UINT32_MAX ||
+          (count && !readable_image(uint32_t(table), uint64_t(count) * 4))) {
+        return false;
+      }
+      const auto* entries =
+          memory()->TranslateVirtual<const uint32_t*>(uint32_t(table));
+      for (uint32_t i = 0; i < count; ++i) {
+        const uint64_t entry = uint64_t(base_address_) + entries[i];
+        if (entry > address && entry < end) {
+          return false;
+        }
+      }
+    }
+  }
+  if (require_full_extent) {
+    const auto branch_target = [](uint32_t pc, uint32_t word) {
+      const bool conditional = (word >> 26) == 16;
+      int64_t displacement = word & (conditional ? 0xFFFC : 0x03FFFFFC);
+      if (displacement & (conditional ? 0x8000 : 0x02000000)) {
+        displacement -= conditional ? 0x10000 : 0x04000000;
+      }
+      return uint32_t((word & 2) ? displacement : int64_t(pc) + displacement);
+    };
+    const uint32_t terminal = xe::load_and_swap<uint32_t>(
+        memory()->TranslateVirtual(uint32_t(end - 4)));
+    const uint32_t terminal_target = branch_target(uint32_t(end - 4), terminal);
+    if (terminal != 0x4E800020 && terminal != 0x4E800420 &&
+        !((terminal >> 26) == 18 && !(terminal & 1) &&
+          (terminal_target < address || uint64_t(terminal_target) >= end))) {
+      return false;
+    }
+    bool called_entry = false;
+    for (uint64_t page = base_address_; page < image_end;
+         page = (page & ~uint64_t(0xFFF)) + 0x1000) {
+      xex2_section_type section;
+      if (!GetPageSectionType(uint32_t(page), &section)) {
+        return false;
+      }
+      if (section != XEX_SECTION_CODE) {
+        continue;
+      }
+      const uint32_t page_size = uint32_t(
+          std::min<uint64_t>(0x1000 - (page & 0xFFF), image_end - page));
+      if (!code_owned(uint32_t(page), page_size)) {
+        return false;
+      }
+      for (uint32_t offset = 0; offset < page_size; offset += 4) {
+        const uint32_t pc = uint32_t(page) + offset;
+        const uint32_t word =
+            xe::load_and_swap<uint32_t>(memory()->TranslateVirtual(pc));
+        const uint32_t opcode = word >> 26;
+        if (opcode != 18 && opcode != 16) {
+          continue;
+        }
+        const uint32_t target = branch_target(pc, word);
+        called_entry |= opcode == 18 && (word & 1) && target == address;
+        if (target > address && uint64_t(target) < end &&
+            ((word & 1) || pc < address || uint64_t(pc) >= end)) {
+          return false;
+        }
+      }
+    }
+    if (entry_witness == EntryWitness::kDirectCall && !called_entry) {
+      return false;
+    }
+  }
+  // All validation precedes symbol/cache mutation. No compiled version was
+  // accepted, so existing callers can only use a resolvable indirection slot.
+  processor_->InvalidateCodeRange(address, size);
+  Function* function = nullptr;
+  const auto status = DeclareFunction(address, &function);
+  if (status != Symbol::Status::kNew && status != Symbol::Status::kDeclared) {
+    return false;
+  }
+  auto* guest = static_cast<GuestFunction*>(function);
+  try {
+    guest->set_name(host_name);
+    GuestHostBridge bridge{size, {}};
+    if (require_task_registration) {
+      bridge.dependencies[0] = {task_registration->registration_address,
+                                task_registration->registration_size};
+      bridge.dependencies[1] = {task_registration->schedule_address,
+                                task_registration->schedule_size};
+    }
+    xe::store_and_swap<uint32_t>(bridge.translation.data(), 0x44000042);
+    xe::store_and_swap<uint32_t>(bridge.translation.data() + 4, 0x4E800020);
+    guest_host_bridges_.emplace(address, std::move(bridge));
+  } catch (...) {
+    guest->set_status(Symbol::Status::kFailed);
+    throw;
+  }
+  // The function end is the inclusive final synthetic instruction.
+  guest->set_end_address(address + 4);
+  guest->SetupExtern(handler, export_data);
+  guest->set_status(Symbol::Status::kDeclared);
+  XELOGI("Guest function bridge: {} address={:08X} original_size={} -> {}",
+         name_, address, size, host_name);
   return true;
 }
 
@@ -1307,6 +1750,16 @@ bool XexModule::SetupLibraryImports(const std::string_view name,
   library_info.id = library->id;
   library_info.version.value = library->version().value;
   library_info.min_version.value = library->version_min().value;
+  std::unordered_set<uint16_t> function_ordinals;
+  if (guest_import_provider_) {
+    for (uint32_t i = 0; i < library->count; ++i) {
+      const uint32_t value = xe::load_and_swap<uint32_t>(
+          memory()->TranslateVirtual(uint32_t(library->import_table[i])));
+      if ((value >> 24) == 1) {
+        function_ordinals.insert(uint16_t(value));
+      }
+    }
+  }
 
   // Imports are stored as {import descriptor, thunk addr, import desc, ...}
   // Even thunks have an import descriptor (albeit unused/useless)
@@ -1335,6 +1788,30 @@ bool XexModule::SetupLibraryImports(const std::string_view name,
     } else if (user_module) {
       user_export_addr = user_module->GetProcAddressByOrdinal(ordinal);
     }
+    if (guest_import_provider_) {
+      const auto kind =
+          kernel_export
+              ? (kernel_export->get_type() == Export::Type::kFunction
+                     ? GuestImportProvider::Kind::kFunction
+                     : GuestImportProvider::Kind::kData)
+              : (record_type == 1 || function_ordinals.contains(ordinal)
+                     ? GuestImportProvider::Kind::kFunction
+                     : GuestImportProvider::Kind::kData);
+      const auto resolution =
+          guest_import_provider_->Resolve(name, ordinal, kind);
+      if (resolution.disposition ==
+          GuestImportProvider::Disposition::kRejected) {
+        XELOGE("Native guest import rejected for {}: {}:{:03X}", name_, name,
+               ordinal);
+        return false;
+      }
+      if (resolution.disposition == GuestImportProvider::Disposition::kBound) {
+        kernel_export = nullptr;
+        user_export_addr = resolution.address;
+        XELOGI("Native guest import: {} {}:{:03X} -> {:08X}", name_, name,
+               ordinal, user_export_addr);
+      }
+    }
 
     // Import not resolved?
     if (!kernel_export && !user_export_addr) {
@@ -1348,7 +1825,7 @@ bool XexModule::SetupLibraryImports(const std::string_view name,
     if (record_type == 0) {
       // Variable.
 
-      ImportLibraryFn import_info;
+      ImportLibraryFn import_info{};
       import_info.ordinal = ordinal;
       import_info.value_address = record_addr;
       library_info.imports.push_back(import_info);
@@ -1567,6 +2044,17 @@ void XexInfoCache::Init(XexModule* xexmod) {
   }
 }
 InfoCacheFlags* XexModule::GetInstructionAddressFlags(uint32_t guest_addr) {
+  auto bridge = guest_host_bridges_.upper_bound(guest_addr);
+  if (bridge != guest_host_bridges_.begin()) {
+    --bridge;
+    if (uint64_t(guest_addr) <
+        uint64_t(bridge->first) + bridge->second.original_size) {
+      // The persistent cache is keyed by original guest code, not this
+      // module's explicit host-binding policy. Neither consume old native
+      // instruction facts nor persist synthetic syscall facts under that hash.
+      return nullptr;
+    }
+  }
   if (guest_addr < low_address_ || guest_addr > high_address_) {
     return nullptr;
   }

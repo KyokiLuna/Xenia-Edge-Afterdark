@@ -7,6 +7,7 @@
  ******************************************************************************
  */
 
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
@@ -14,7 +15,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-
 #include "xenia/base/logging.h"
 #include "xenia/emulator.h"
 #include "xenia/kernel/kernel_state.h"
@@ -26,10 +26,14 @@
 #include "xenia/kernel/xenumerator.h"
 #include "xenia/kernel/xsession.h"
 #include "xenia/xbox.h"
-
 #include "third_party/stb/stb_image.h"
-
+#include "third_party/mbedtls/include/mbedtls/sha256.h"
 #include "xenia/kernel/xconfig.h"
+#include "xenia/base/memory.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
+#include "xenia/kernel/xam/profile_gpd_transaction.h"
+#include "xenia/kernel/xam/tile_service.h"
+#include "xenia/kernel/xam/tile_request.h"
 
 enum X_USER_AGE_GROUP : uint32_t { CHILD, TEEN, ADULT };
 
@@ -215,220 +219,375 @@ DECLARE_XAM_EXPORT1(XamUserGetGamerTag, kUserProfiles, kImplemented);
 
 // https://github.com/oukiar/freestyledash/blob/master/Freestyle/Tools/Generic/xboxtools.cpp
 uint32_t XamUserReadProfileSettingsEx(
-    uint32_t title_id, uint32_t user_index, uint32_t xuid_count,
-    be<uint64_t>* xuids, uint32_t setting_count, be<uint32_t>* setting_ids,
-    uint32_t unused, be<uint32_t>* buffer_size_ptr, uint8_t* buffer,
+    uint32_t title_id, uint32_t user_index, uint32_t xuid_count, uint32_t xuids, uint32_t setting_count,
+                                      uint32_t setting_ids,
+    uint32_t unused,
+                                      uint32_t buffer_size_address,
+                                      uint32_t buffer_address,
     lpvoid_t overlapped_ptr) {
-  // must have at least 1 to 32 settings
-  if (setting_count < 1 || setting_count > 32) {
-    return X_ERROR_INVALID_PARAMETER;
-  }
-
-  // buffer size pointer must be valid
-  if (!buffer_size_ptr) {
-    return X_ERROR_INVALID_PARAMETER;
-  }
-
-  // if buffer size is non-zero, buffer pointer must be valid
-  auto buffer_size = static_cast<uint32_t>(*buffer_size_ptr);
-  if (buffer_size && !buffer) {
-    return X_ERROR_INVALID_PARAMETER;
-  }
-
-  uint32_t needed_header_size = 0;
-  uint32_t needed_data_size = 0;
-  for (uint32_t i = 0; i < setting_count; ++i) {
-    needed_header_size += sizeof(X_USER_PROFILE_SETTING);
-    const AttributeKey setting_key =
-        UserData::get_attribute_key(static_cast<uint32_t>(setting_ids[i]));
-    switch (static_cast<X_USER_DATA_TYPE>(setting_key.type)) {
-      case X_USER_DATA_TYPE::WSTRING:
-      case X_USER_DATA_TYPE::BINARY:
-        needed_data_size += setting_key.size;
+  auto* kernel = kernel_state();
+  auto& memory = *kernel->memory();
+  // Bounded observation of owned read preparation/publication only. Existing
+  // Kernel Debug logging must be enabled; no payload bytes or account identity
+  // are logged. Each process admits at most32 local-user requests, including
+  // size queries. No retry, guest read or public behavior is added.
+  static std::atomic<uint32_t> diagnostic_requests{0};
+  uint32_t diagnostic_id = 0;
+  if (user_index < XUserMaxUserCount && !xuids &&
+      logging::ShouldLog(LogLevel::Debug, LogSrc::Kernel)) {
+    auto next = diagnostic_requests.load(std::memory_order_relaxed);
+    while (next < 32) {
+      if (diagnostic_requests.compare_exchange_strong(
+              next, next + 1, std::memory_order_relaxed)) {
+        diagnostic_id = next + 1;
         break;
-      default:
-        break;
+      }
+    }
+  }
+  const auto diagnostic =
+      [diagnostic_id, title_id, user_index, setting_count, buffer_address,
+       async = bool(overlapped_ptr)](
+          const char* stage, uint32_t result,
+          const std::error_code& host_error = {}, uint32_t setting_id = 0,
+          uint32_t rows = 0) -> uint32_t {
+    if (diagnostic_id) {
+      logging::AppendLogLineFormat(
+          LogSrc::Kernel, LogLevel::Debug, logging::kPrefixCharDebug,
+          "Profile settings read diagnostic {}: stage={} title={:08X} "
+          "user={} requested={} output={:08X} async={} result={:08X} "
+          "host_error={} category={} setting={:08X} rows={}",
+          diagnostic_id, stage, title_id, user_index, setting_count,
+          buffer_address, async, result, host_error.value(),
+          host_error.category().name(), setting_id, rows);
+    }
+    return result;
+  };
+  if (setting_count < 1 || setting_count > 32 || !buffer_size_address ||
+      !setting_ids ||
+      !util::GuestIoRangeValid(memory, buffer_size_address, 4, true)) {
+    return diagnostic("input_range", X_ERROR_INVALID_PARAMETER);
+  }
+  std::array<uint8_t, 4> size_bytes{};
+  if (XFAILED(
+          util::ReadGuestIoBuffer(memory, buffer_size_address, size_bytes))) {
+    return diagnostic("size_read", X_ERROR_INVALID_PARAMETER);
+  }
+  const auto capacity = xe::load_and_swap<uint32_t>(size_bytes.data());
+  if (capacity && !buffer_address) {
+    return diagnostic("output_absent", X_ERROR_INVALID_PARAMETER);
+  }
+  std::vector<uint8_t> id_bytes(size_t(setting_count) * 4);
+  if (XFAILED(util::ReadGuestIoBuffer(memory, setting_ids, id_bytes))) {
+    return diagnostic("ids_read", X_ERROR_INVALID_PARAMETER);
+  }
+  std::vector<uint32_t> ids;
+  ids.reserve(setting_count);
+  uint64_t header_bytes =
+               uint64_t(setting_count) * sizeof(X_USER_PROFILE_SETTING),
+           data_bytes = 0;
+  for (uint32_t i = 0; i != setting_count; ++i) {
+    const uint32_t id = xe::load_and_swap<uint32_t>(id_bytes.data() + i * 4);
+    ids.push_back(id);
+    if (diagnostic_id) {
+      logging::AppendLogLineFormat(
+          LogSrc::Kernel, LogLevel::Debug, logging::kPrefixCharDebug,
+          "Profile settings read diagnostic {}: requested_id={:08X}",
+          diagnostic_id, id);
+    }
+    const auto key =
+        UserData::get_attribute_key(id);
+    if (key.type == uint32_t(X_USER_DATA_TYPE::BINARY) ||
+        key.type == uint32_t(X_USER_DATA_TYPE::WSTRING)) {
+      data_bytes += key.size;
     }
   }
   if (xuids) {
-    needed_header_size *= xuid_count;
-    needed_data_size *= xuid_count;
+    header_bytes *= xuid_count;
+    data_bytes *= xuid_count;
   }
-  needed_header_size += sizeof(X_USER_READ_PROFILE_SETTINGS);
-
-  uint32_t needed_size = needed_header_size + needed_data_size;
-  if (!buffer || buffer_size < needed_size) {
-    if (!buffer_size) {
-      *buffer_size_ptr = needed_size;
-    }
-    return X_ERROR_INSUFFICIENT_BUFFER;
+  const uint64_t required = 8 + header_bytes + data_bytes;
+  if (diagnostic_id) {
+    logging::AppendLogLineFormat(
+        LogSrc::Kernel, LogLevel::Debug, logging::kPrefixCharDebug,
+        "Profile settings read diagnostic {}: capacity={} required={} "
+        "effective_title={:08X} limit=32",
+        diagnostic_id, capacity, required,
+        title_id ? title_id : kernel->title_id());
   }
-
-  auto run = [=](uint32_t& extended_error, uint32_t& length) {
-    extended_error = 0;
-    length = 0;
-
-    // An XUID array with no XUIDs or more than 16 fails after the buffer size
-    // check.
-    if (xuids && (!xuid_count || xuid_count > 16)) {
-      extended_error = X_E_INVALIDARG;
-      return X_ERROR_FUNCTION_FAILED;
+  if (required > UINT32_MAX) {
+    return diagnostic("required_overflow", X_ERROR_INVALID_PARAMETER);
+  }
+  if (!buffer_address || capacity < required) {
+    if (!capacity) {
+      xe::store_and_swap<uint32_t>(size_bytes.data(), uint32_t(required));
+      if (XFAILED(util::WriteGuestIoBuffer(memory, buffer_size_address,
+                                           size_bytes))) {
+        return diagnostic("size_publish", X_ERROR_FUNCTION_FAILED);
+      }
     }
-
-    auto user_profile = kernel_state()->xam_state()->GetUserProfile(user_index);
-
-    if (!user_profile && !xuids) {
-      extended_error = X_E_NO_SUCH_USER;
-      return X_ERROR_FUNCTION_FAILED;
+    return diagnostic("size_query", X_ERROR_INSUFFICIENT_BUFFER);
+  }
+  if (xuids && (!xuid_count || xuid_count > 16)) {
+    return diagnostic("xuid_count", X_ERROR_FUNCTION_FAILED);
+  }
+  // The legacy implementation only consumed the first XUID despite claiming
+  // all rows. Do not fabricate the still-unqualified remote/multi-XUID result.
+  if (xuids && xuid_count != 1) {
+    return diagnostic("xuid_batch_unsupported", X_ERROR_FUNCTION_FAILED);
+  }
+  if (!util::GuestIoRangeValid(memory, buffer_address, capacity, true) ||
+      util::GuestIoRangesOverlap(memory, buffer_address, capacity,
+                                 buffer_size_address, 4)) {
+    return diagnostic("output_range_or_alias", X_ERROR_INVALID_PARAMETER);
+  }
+  std::error_code error;
+  ProfileGpdWriter writer;
+  if (xuids) {
+    std::array<uint8_t, 8> xuid{};
+    if (XFAILED(util::ReadGuestIoBuffer(memory, xuids, xuid))) {
+      return diagnostic("xuid_read", X_ERROR_INVALID_PARAMETER);
     }
-
+    writer = kernel->xam_state()->profile_manager()->CaptureGpdWriter(
+        xe::load_and_swap<uint64_t>(xuid.data()), error);
+  } else if (user_index < XUserMaxUserCount) {
+    writer = kernel->xam_state()->profile_manager()->CaptureGpdWriter(
+        uint8_t(user_index), error);
+  }
+  if (!writer.model) {
+    return diagnostic("writer_capture", X_ERROR_FUNCTION_FAILED, error);
+  }
+  const auto models = kernel->xam_state()->profile_manager()->CaptureGpdRead(
+      writer.model->xuid(), error);
+  if (!models) {
+    return diagnostic("models_capture", X_ERROR_FUNCTION_FAILED, error);
+  }
+  const auto captured = writer.model->CaptureRead(error);
+  if (!captured || captured->models != models) {
+    return diagnostic(captured ? "models_changed" : "origin_capture",
+                      X_ERROR_FUNCTION_FAILED, error);
+  }
+  std::vector<uint8_t> output(size_t(required), 0);
+  size_t record_at = 8, data_at = 8 + size_t(header_bytes);
+  uint32_t valid = 0;
+  for (auto id : ids) {
+    if (!UserSetting::is_setting_valid(id)) {
+      diagnostic("setting_skipped", X_ERROR_SUCCESS, {}, id);
+      continue;
+    }
+    const auto value =
+        models->Setting(title_id ? title_id : kernel->title_id(), id, error);
+    if (error || !value) {
+      return diagnostic("setting_lookup", X_ERROR_FUNCTION_FAILED, error, id);
+    }
+    X_USER_PROFILE_SETTING row{};
+    row.setting_id = id;
+    row.source = value->get_setting_source();
+    row.data = *value->get_data();
     if (xuids) {
-      uint64_t user_xuid = static_cast<uint64_t>(xuids[0]);
-      if (!kernel_state()->xam_state()->IsUserSignedIn(user_xuid)) {
-        extended_error = X_E_NO_SUCH_USER;
-        return X_ERROR_FUNCTION_FAILED;
-      }
-      user_profile = kernel_state()->xam_state()->GetUserProfile(user_xuid);
+      row.xuid = writer.model->xuid();
+    } else {
+      row.xuid = UINT64_MAX;
+      row.user_index = user_index;
     }
-
-    if (!user_profile) {
-      extended_error = X_E_NO_SUCH_USER;
-      return X_ERROR_FUNCTION_FAILED;
-    }
-
-    auto out_header = reinterpret_cast<X_USER_READ_PROFILE_SETTINGS*>(buffer);
-    auto out_setting =
-        reinterpret_cast<X_USER_PROFILE_SETTING*>(&out_header[1]);
-    out_header->setting_count = static_cast<uint32_t>(setting_count);
-    out_header->settings_ptr =
-        kernel_state()->memory()->HostToGuestVirtual(out_setting);
-
-    uint32_t additional_data_buffer_ptr =
-        out_header->settings_ptr +
-        (setting_count * sizeof(X_USER_PROFILE_SETTING));
-
-    std::fill_n(out_setting, setting_count, X_USER_PROFILE_SETTING{});
-
-    for (uint32_t n = 0; n < setting_count; ++n) {
-      const uint32_t setting_id = setting_ids[n];
-      if (!UserSetting::is_setting_valid(setting_id)) {
-        if (setting_id != 0) {
-          XELOGE(
-              "xeXamUserReadProfileSettingsEx requested unimplemented setting "
-              "{:08X}",
-              setting_id);
-        }
-        --out_header->setting_count;
-        continue;
+    if (UserSetting::requires_additional_data(id)) {
+      const auto owned = value->get_extended_data();
+      const uint32_t count = std::min<uint32_t>(uint32_t(owned.size()),
+                                                UserSetting::get_max_size(id));
+      if (data_at > output.size() || count > output.size() - data_at) {
+        return diagnostic("payload_bound", X_ERROR_FUNCTION_FAILED, {}, id);
       }
-
-      const bool is_valid =
-          kernel_state()->xam_state()->user_tracker()->GetUserSetting(
-              user_profile->xuid(),
-              title_id ? title_id : kernel_state()->title_id(), setting_id,
-              out_setting, additional_data_buffer_ptr);
-
-      if (is_valid) {
-        if (xuids) {
-          out_setting->xuid = user_profile->xuid();
-        } else {
-          out_setting->xuid = -1;
-          out_setting->user_index = user_index;
+      row.data.data.binary.size = count;
+      row.data.data.binary.ptr = count ? buffer_address + uint32_t(data_at) : 0;
+      if (count) {
+        std::memcpy(output.data() + data_at, owned.data(), count);
+      }
+      data_at += UserSetting::get_max_size(id);
+    }
+    if (diagnostic_id) {
+      // Hash only the same already-owned bytes selected for the prepared row.
+      // "prepared" is not delivery; only the later published result witnesses
+      // successful publication of this unchanged owned output vector.
+      const auto payload = value->get_extended_data();
+      const uint32_t payload_size = UserSetting::requires_additional_data(id)
+                                        ? uint32_t(row.data.data.binary.size)
+                                        : 0;
+      std::array<char, 65> digest_text{};
+      const char* hash = "not-binary";
+      if (value->get_type() == X_USER_DATA_TYPE::BINARY) {
+        std::array<uint8_t, 32> digest{};
+        constexpr uint8_t empty = 0;
+        hash = "unavailable";
+        if (!mbedtls_sha256(payload_size ? payload.data() : &empty,
+                            payload_size, digest.data(), 0)) {
+          constexpr char hex[] = "0123456789abcdef";
+          for (size_t n = 0; n != digest.size(); ++n) {
+            digest_text[n * 2] = hex[digest[n] >> 4];
+            digest_text[n * 2 + 1] = hex[digest[n] & 15];
+          }
+          hash = digest_text.data();
         }
       }
-      ++out_setting;
+      logging::AppendLogLineFormat(
+          LogSrc::Kernel, LogLevel::Debug, logging::kPrefixCharDebug,
+          "Profile settings read diagnostic {}: stage=prepared_row "
+          "setting={:08X} source={} type={} binary_or_string_bytes={} "
+          "sha256={}",
+          diagnostic_id, id, uint32_t(value->get_setting_source()),
+          uint32_t(value->get_type()), payload_size, hash);
     }
-
-    extended_error = X_HRESULT_FROM_WIN32(X_STATUS_SUCCESS);
+    std::memcpy(output.data() + record_at, &row, sizeof(row));
+    record_at += sizeof(row);
+    ++valid;
+  }
+  xe::store_and_swap<uint32_t>(output.data(), valid);
+  xe::store_and_swap<uint32_t>(output.data() + 4, buffer_address + 8);
+  auto run = [kernel, model = writer.model, origin = captured->origin,
+              buffer_address, output = std::move(output), diagnostic, valid](
+                 uint32_t& extended_error, uint32_t& length) {
+    extended_error = X_E_FAIL;
     length = 0;
-    return X_STATUS_SUCCESS;
+    if (!model->IsCurrent(origin)) {
+      return diagnostic("publish_origin_changed", X_ERROR_FUNCTION_FAILED,
+                        {}, 0, valid);
+    }
+    if (XFAILED(util::WriteGuestIoBuffer(*kernel->memory(), buffer_address,
+                                         output))) {
+      extended_error = X_E_INVALIDARG;
+      return diagnostic("publish_guest_write", X_ERROR_FUNCTION_FAILED,
+                        {}, 0, valid);
+    }
+    extended_error = X_E_SUCCESS;
+      return diagnostic("published", X_ERROR_SUCCESS, {}, 0, valid);
   };
 
   if (!overlapped_ptr) {
-    uint32_t extended_error, length;
+    uint32_t extended_error = 0, length = 0;
     return run(extended_error, length);
   }
-
-  kernel_state()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
-  return X_ERROR_IO_PENDING;
+  kernel->CompleteOverlappedDeferredEx(run, overlapped_ptr);
+  return diagnostic("queued", X_ERROR_IO_PENDING);
 }
 
 dword_result_t XamUserReadProfileSettings_entry(
     dword_t title_id, dword_t user_index, dword_t xuid_count, lpqword_t xuids,
     dword_t setting_count, lpdword_t setting_ids, lpdword_t buffer_size_ptr,
     lpvoid_t buffer_ptr, lpvoid_t overlapped) {
-  return XamUserReadProfileSettingsEx(title_id, user_index, xuid_count, xuids,
-                                      setting_count, setting_ids, 0,
-                                      buffer_size_ptr, buffer_ptr, overlapped);
+  return XamUserReadProfileSettingsEx(title_id, user_index, xuid_count, xuids.guest_address(),
+                                      setting_count, setting_ids.guest_address(), 0,
+                                      buffer_size_ptr.guest_address(), buffer_ptr.guest_address(), overlapped);
 }
 DECLARE_XAM_EXPORT1(XamUserReadProfileSettings, kUserProfiles, kImplemented);
 
 dword_result_t XamUserReadProfileSettingsEx_entry(
     dword_t title_id, dword_t user_index, dword_t xuid_count, lpqword_t xuids,
-    dword_t setting_count, lpdword_t setting_ids, lpdword_t buffer_size_ptr,
-    lpdword_t unkn_buffer_size_ptr, lpvoid_t buffer_ptr, lpvoid_t overlapped) {
+    dword_t setting_count, lpdword_t setting_ids, dword_t options,
+    lpdword_t buffer_size_ptr, lpvoid_t buffer_ptr, lpvoid_t overlapped) {
+  // Retail17559 passes an opaque DWORD in r9 and the size pointer in r10.
+  // Native avatar/profile consumers also place output/overlap in the two
+  // following stack homes. Options must never be interpreted as an address.
   return XamUserReadProfileSettingsEx(
-      title_id, user_index, xuid_count, xuids, setting_count, setting_ids, 0,
-      buffer_size_ptr ? buffer_size_ptr : unkn_buffer_size_ptr, buffer_ptr,
-      overlapped);
+      title_id, user_index, xuid_count, xuids.guest_address(), setting_count, setting_ids.guest_address(),
+      options, buffer_size_ptr.guest_address(), buffer_ptr.guest_address(), overlapped);
 }
 DECLARE_XAM_EXPORT1(XamUserReadProfileSettingsEx, kUserProfiles, kImplemented);
 
 dword_result_t XamUserWriteProfileSettings_entry(
     dword_t title_id, dword_t user_index, dword_t setting_count,
     pointer_t<X_USER_PROFILE_SETTING> settings, lpvoid_t overlapped) {
-  if (!setting_count || !settings) {
+  if (!setting_count || setting_count > 64 || !settings ||
+      user_index >= XUserMaxUserCount) {
     return X_ERROR_INVALID_PARAMETER;
   }
 
-  auto run = [=](uint32_t& extended_error, uint32_t& length) {
-    bool was_avatar_setting_changed = false;
-    const uint8_t user_index_bit = (1 << user_index) & 0xF;
-    // Update and save settings.
-    const auto& user_profile =
-        kernel_state()->xam_state()->GetUserProfile(user_index);
-
-    // Skip writing data about users with id != 0 they're not supported
-    if (!user_profile) {
-      extended_error = X_HRESULT_FROM_WIN32(X_ERROR_NO_SUCH_USER);
+  auto* kernel = kernel_state();
+  auto& memory = *kernel->memory();
+  std::error_code capture_error;
+  auto writer = kernel->xam_state()->profile_manager()->CaptureGpdWriter(
+      uint8_t(user_index), capture_error);
+  if (!writer.model) {
+    return X_ERROR_NO_SUCH_USER;
+  }
+  std::vector<uint8_t> bytes(size_t(setting_count) *
+                             sizeof(X_USER_PROFILE_SETTING));
+  if (XFAILED(
+          util::ReadGuestIoBuffer(memory, settings.guest_address(), bytes))) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+  ProfileGpdMutation command;
+  command.kind = ProfileGpdMutationKind::kSetSettings;
+  command.title_id = title_id ? title_id.value() : kernel->title_id();
+  command.request_id = writer.model->AllocateRequestId(capture_error);
+  if (capture_error || !command.title_id) {
+    return X_ERROR_FUNCTION_FAILED;
+  }
+  bool avatar_changed = false;
+  for (uint32_t n = 0; n != setting_count; ++n) {
+    X_USER_PROFILE_SETTING input{};
+    std::memcpy(&input, bytes.data() + n * sizeof(input), sizeof(input));
+    const uint32_t id = input.setting_id;
+    const auto type = UserSetting::get_type(id);
+    if (type > X_USER_DATA_TYPE::DATETIME) {
+      return X_ERROR_INVALID_PARAMETER;
+    }
+    std::vector<uint8_t> extended;
+    if (type == X_USER_DATA_TYPE::BINARY || type == X_USER_DATA_TYPE::WSTRING) {
+      const uint32_t count = input.data.data.binary.size;
+      if (count > UserSetting::get_max_size(id) || count > kMaxUserDataSize ||
+          (type == X_USER_DATA_TYPE::WSTRING && (count & 1))) {
+        return X_ERROR_INVALID_PARAMETER;
+      }
+      extended.resize(count);
+      if (count && XFAILED(util::ReadGuestIoBuffer(
+                       memory, input.data.data.binary.ptr, extended))) {
+        return X_ERROR_INVALID_PARAMETER;
+      }
+    }
+    X_XDBF_GPD_SETTING_HEADER header{};
+    header.setting_id = id;
+    header.setting_type = type;
+    std::memcpy(&header.base_data, &input.data.data, sizeof(header.base_data));
+    command.settings.emplace_back(&header, extended);
+    avatar_changed |=
+        id == uint32_t(UserSettingId::XPROFILE_GAMERCARD_AVATAR_INFO_1);
+  }
+  auto origin = writer.CaptureCurrentOrigin(command, capture_error);
+  if (!origin) {
+    return X_ERROR_FUNCTION_FAILED;
+  }
+  auto run = [kernel, writer = std::move(writer), origin = std::move(*origin),
+              command = std::move(command),
+              avatar_changed](uint32_t& extended_error, uint32_t& length) {
+    const auto result = writer.Submit(command, origin.stamp);
+    using S = ProfileGpdTransactionAttempt::State;
+    const bool committed =
+        !result.error &&
+        (result.state == S::kCommitted || result.state == S::kAlreadyCommitted);
+    const auto status = committed ? X_ERROR_SUCCESS : X_ERROR_FUNCTION_FAILED;
+    extended_error = committed ? X_E_SUCCESS : X_E_FAIL;
       length = 0;
-      return X_ERROR_NO_SUCH_USER;
+    if (committed && result.state == S::kCommitted) {
+      // Recheck the original owner after IO. Never notify a replacement slot.
+      std::error_code current_error;
+      auto current = writer.model->CaptureOrigin(current_error);
+      if (current && current->stamp.sign_in_generation ==
+                         origin.stamp.sign_in_generation) {
+        const uint32_t bit = 1u << origin.user_slot;
+        kernel->BroadcastNotification(
+        kXNotificationSystemProfileSettingChanged,
+                                      bit);
+    if (avatar_changed) {
+          kernel->BroadcastNotification(kXNotificationSystemAvatarChanged, bit);
     }
-
-    for (uint32_t n = 0; n < setting_count; ++n) {
-      const UserSetting setting = UserSetting(&settings[n]);
-      if (setting.get_setting_id() ==
-          static_cast<uint32_t>(
-              UserSettingId::XPROFILE_GAMERCARD_AVATAR_INFO_1)) {
-        was_avatar_setting_changed = true;
       }
-
-      if (!setting.is_valid_type()) {
-        continue;
-      }
-
-      kernel_state()->xam_state()->user_tracker()->UpsertSetting(
-          user_profile->xuid(), title_id, &setting);
     }
-
-    kernel_state()->BroadcastNotification(
-        kXNotificationSystemProfileSettingChanged, user_index_bit);
-    if (was_avatar_setting_changed) {
-      kernel_state()->BroadcastNotification(kXNotificationSystemAvatarChanged,
-                                            user_index_bit);
-    }
-
-    extended_error = X_HRESULT_FROM_WIN32(X_STATUS_SUCCESS);
-    length = 0;
-    return X_STATUS_SUCCESS;
+    return status;
   };
 
   if (!overlapped) {
-    uint32_t extended_error, length;
-    return run(extended_error, length);
+    uint32_t error = 0, length = 0;
+    return run(error, length);
   }
-
-  kernel_state()->CompleteOverlappedDeferredEx(run, overlapped);
+  kernel->CompleteOverlappedDeferredEx(run, overlapped);
   return X_ERROR_IO_PENDING;
 }
 DECLARE_XAM_EXPORT1(XamUserWriteProfileSettings, kUserProfiles, kImplemented);
@@ -900,52 +1059,21 @@ DECLARE_XAM_EXPORT1(XamUserCreateTitlesPlayedEnumerator, kUserProfiles, kStub);
 
 dword_result_t XamReadTile_entry(dword_t tile_type, dword_t title_id,
                                  qword_t item_id, dword_t user_index,
-                                 lpdword_t output_ptr,
-                                 lpdword_t buffer_size_ptr,
+                                 lpdword_t output_ptr, lpdword_t buffer_size_ptr,
                                  pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
-  auto user = kernel_state()->xam_state()->GetUserProfile(user_index);
-  if (!user) {
-    user = kernel_state()->xam_state()->GetUserProfile(item_id);
-    if (!user) {
-      return X_ERROR_INVALID_PARAMETER;
-    }
-  }
-
-  if (!buffer_size_ptr) {
-    return X_ERROR_INVALID_PARAMETER;
-  }
-
-  auto run = [=](uint32_t& extended_error, uint32_t& length) {
-    std::span<const uint8_t> tile =
-        kernel_state()->xam_state()->user_tracker()->GetIcon(
-            user->xuid(), title_id, static_cast<XTileType>(tile_type.value()),
-            item_id);
-
-    auto result = X_ERROR_SUCCESS;
-
-    if (tile.empty()) {
-      result = X_ERROR_FILE_NOT_FOUND;
-    }
-
-    *buffer_size_ptr = static_cast<uint32_t>(tile.size());
-
-    if (output_ptr) {
-      memcpy(output_ptr, tile.data(), tile.size());
-    } else {
-      result = X_ERROR_INSUFFICIENT_BUFFER;
-    }
-
-    extended_error = X_HRESULT_FROM_WIN32(result);
-    length = 0;
-    return result;
+  auto* kernel = kernel_state();
+  TileRequestArguments args;
+  args.type = tile_type; args.title = title_id; args.item = item_id; args.user = user_index;
+  args.destination = output_ptr.guest_address(); args.size_address = buffer_size_ptr.guest_address();
+  args.overlapped = overlapped_ptr.guest_address();
+  X_HRESULT status;
+  auto request = CaptureTileRequest(*kernel, args, status);
+  if (!request) { return X_ERROR_FUNCTION_FAILED; }
+  auto run = [kernel, request](uint32_t& error, uint32_t& length) {
+    return CompleteTileRequest(*kernel, *request, error, length);
   };
-
-  if (!overlapped_ptr) {
-    uint32_t extended_error, length;
-    return run(extended_error, length);
-  }
-
-  kernel_state()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
+  if (!overlapped_ptr) { uint32_t error = 0, length = 0; return run(error, length); }
+  kernel->CompleteOverlappedDeferredEx(std::move(run), overlapped_ptr);
   return X_ERROR_IO_PENDING;
 }
 DECLARE_XAM_EXPORT1(XamReadTile, kUserProfiles, kSketchy);
@@ -956,6 +1084,9 @@ dword_result_t XamReadTileEx_entry(dword_t tile_type, dword_t game_id,
                                    lpdword_t output_ptr,
                                    lpdword_t buffer_size_ptr,
                                    pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  if (tile_type == 12 || unk1 || unk2) {
+    return X_ERROR_FUNCTION_FAILED;
+  }
   return XamReadTile_entry(tile_type, game_id, item_id, offset, output_ptr,
                            buffer_size_ptr, overlapped_ptr);
 }
@@ -1018,75 +1149,37 @@ DECLARE_XAM_EXPORT1(XamParseGamerTileKey, kUserProfiles, kImplemented);
 dword_result_t XamReadTileToTexture_entry(dword_t tile_type, dword_t title_id,
                                           qword_t tile_id, dword_t user_index,
                                           lpvoid_t buffer_ptr, dword_t stride,
-                                          dword_t tile_height,
-                                          dword_t overlapped_ptr) {
-  // Every failure is ERROR_FUNCTION_FAILED and leaves the texture untouched.
-  // The extended error says where the read stopped. Tiles read by key pass
-  // XUSER_INDEX_NONE, which isn't looked up here.
-  X_HRESULT extended_error = X_E_SUCCESS;
-  std::span<const uint8_t> tile;
-  auto user = kernel_state()->xam_state()->GetUserProfile(user_index);
-  if (!user) {
-    extended_error = user_index < XUserMaxUserCount
-                         ? X_E_NO_SUCH_USER
-                         : X_HRESULT_FROM_WIN32(X_ERROR_FILE_NOT_FOUND);
-  } else {
-    tile = kernel_state()->xam_state()->user_tracker()->GetIcon(
-        user->xuid(), title_id, static_cast<XTileType>(tile_type.value()),
-        tile_id);
-    if (tile.empty()) {
-      extended_error = X_HRESULT_FROM_WIN32(X_ERROR_FILE_NOT_FOUND);
-    } else if (!buffer_ptr) {
-      extended_error = X_E_INVALIDARG;
-    }
-  }
-
-  int width = 0, height = 0, channels = 0;
-  unsigned char* imageData =
-      extended_error
-          ? nullptr
-          : stbi_load_from_memory(tile.data(), static_cast<int>(tile.size()),
-                                  &width, &height, &channels, STBI_rgb_alpha);
-  if (!extended_error && !imageData) {
-    extended_error = X_E_FAIL;
-  }
-
-  if (imageData) {
-    const size_t icon_dimmension_size = size_t(width) * size_t(height);
-    for (size_t i = 0; i < icon_dimmension_size; i++) {
-      unsigned char* pixel = &imageData[i * sizeof(uint32_t)];
-
-      // RGBA to ARGB. TODO: Find faster method!
-      // RGBA->AGBR
-      std::swap(pixel[0], pixel[3]);
-      // AGBR->ARBG
-      std::swap(pixel[1], pixel[3]);
-      // ARBG->ARGB
-      std::swap(pixel[2], pixel[3]);
-    }
-
-    const uint32_t row_size = std::min<uint32_t>(
-        stride, uint32_t(width) * uint32_t(sizeof(uint32_t)));
-    const uint32_t rows = std::min<uint32_t>(tile_height, uint32_t(height));
-    auto dest = reinterpret_cast<uint8_t*>(buffer_ptr.host_address());
-    for (uint32_t y = 0; y < rows; y++) {
-      std::memcpy(dest + size_t(y) * stride,
-                  imageData + size_t(y) * width * sizeof(uint32_t), row_size);
-    }
-
-    stbi_image_free(imageData);
-  }
-
-  const X_RESULT result =
-      extended_error ? X_ERROR_FUNCTION_FAILED : X_ERROR_SUCCESS;
-  if (overlapped_ptr) {
-    kernel_state()->CompleteOverlappedImmediateEx(overlapped_ptr, result,
-                                                  extended_error, 0);
-    return X_ERROR_IO_PENDING;
-  }
-  return result;
+                                          dword_t tile_height, dword_t overlapped_ptr) {
+  auto* kernel = kernel_state();
+  TileRequestArguments args;
+  args.texture = true; args.type = tile_type; args.title = title_id; args.item = tile_id;
+  args.user = user_index; args.destination = buffer_ptr.guest_address(); args.stride = stride;
+  args.height = tile_height; args.overlapped = overlapped_ptr;
+  X_HRESULT status;
+  auto request = CaptureTileRequest(*kernel, args, status);
+  if (!request) { return X_ERROR_FUNCTION_FAILED; }
+  auto run = [kernel, request](uint32_t& error, uint32_t& length) {
+    return CompleteTileRequest(*kernel, *request, error, length);
+  };
+  if (!overlapped_ptr) { uint32_t error = 0, length = 0; return run(error, length); }
+  kernel->CompleteOverlappedDeferredEx(std::move(run), overlapped_ptr);
+  return X_ERROR_IO_PENDING;
 }
-DECLARE_XAM_EXPORT1(XamReadTileToTexture, kUserProfiles, kStub);
+DECLARE_XAM_EXPORT1(XamReadTileToTexture, kUserProfiles, kSketchy);
+
+dword_result_t XamReadTileToTextureEx_entry(dword_t type, dword_t title,
+                                            qword_t item, dword_t user,
+                                            dword_t extra28, dword_t extra2c,
+                                            lpvoid_t destination,
+                                            dword_t stride, dword_t height,
+                                            dword_t overlapped) {
+  if (type == 12 || extra28 || extra2c) {
+    return X_ERROR_FUNCTION_FAILED;
+  }
+  return XamReadTileToTexture_entry(type, title, item, user, destination,
+                                    stride, height, overlapped);
+}
+DECLARE_XAM_EXPORT1(XamReadTileToTextureEx, kUserProfiles, kSketchy);
 
 // Alias XUserAwardGamerPicture
 dword_result_t XamWriteGamerTile_entry(
@@ -1415,6 +1508,11 @@ static X_RESULT UserLogon(const std::vector<uint64_t>& xuids, uint32_t flags,
                           uint32_t overlapped_ptr) {
   auto run = [xuids, flags](uint32_t& extended_error,
                             uint32_t& length) -> X_RESULT {
+    if (xe::global_critical_region::is_held_by_current_thread()) {
+      extended_error = X_E_NOT_IMPLEMENTED;
+      length = 0;
+      return X_ERROR_FUNCTION_FAILED;
+    }
     auto const profile_manager = kernel_state()->xam_state()->profile_manager();
 
     X_STATUS result = X_ERROR_SUCCESS;
@@ -1425,6 +1523,10 @@ static X_RESULT UserLogon(const std::vector<uint64_t>& xuids, uint32_t flags,
            user_index++) {
         if (xuids[user_index]) {
           profile_manager->Login(xuids[user_index], user_index, true);
+          const auto actual = profile_manager->CaptureProfile(user_index);
+          if (!actual || actual->xuid() != xuids[user_index]) {
+            result = X_ERROR_FUNCTION_FAILED;
+          }
         }
       }
     }
@@ -1460,6 +1562,10 @@ static X_RESULT UserLogon(const std::vector<uint64_t>& xuids, uint32_t flags,
            user_index++) {
         if (xuids[user_index]) {
           profile_manager->Login(xuids[user_index], user_index, true);
+          const auto actual = profile_manager->CaptureProfile(user_index);
+          if (!actual || actual->xuid() != xuids[user_index]) {
+            result = X_ERROR_FUNCTION_FAILED;
+          }
         }
       }
     }
@@ -1485,10 +1591,17 @@ dword_result_t XamUserLogon_entry(lpqword_t xuids_ptr, dword_t flags,
   if (!xuids_ptr) {
     return X_ERROR_INVALID_PARAMETER;
   }
-  const auto host_xuids_ptr =
-      kernel_memory()->TranslateVirtual<xe::be<uint64_t>*>(xuids_ptr);
-  return UserLogon(
-      std::vector<uint64_t>(host_xuids_ptr, host_xuids_ptr + XUserMaxUserCount),
+  std::array<uint8_t, XUserMaxUserCount * 8> bytes{};
+  if (XFAILED(util::ReadGuestIoBuffer(*kernel_memory(),
+                                      xuids_ptr.guest_address(), bytes))) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+  std::vector<uint64_t> xuids;
+  xuids.reserve(XUserMaxUserCount);
+  for (uint32_t i = 0; i != XUserMaxUserCount; ++i) {
+    xuids.push_back(xe::load_and_swap<uint64_t>(bytes.data() + i * 8));
+  }
+  return UserLogon(xuids,
       flags, overlapped_ptr.guest_address());
 }
 DECLARE_XAM_EXPORT1(XamUserLogon, kUserProfiles, kImplemented);
@@ -1503,9 +1616,17 @@ dword_result_t XamUserLogonEx_entry(pointer_t<X_PROFILEENUMRESULT> profiles_ptr,
   if (!profiles_ptr) {
     return X_ERROR_INVALID_PARAMETER;
   }
+  std::array<uint8_t, sizeof(X_PROFILEENUMRESULT) * XUserMaxUserCount> bytes{};
+  if (XFAILED(util::ReadGuestIoBuffer(*kernel_memory(),
+                                      profiles_ptr.guest_address(), bytes))) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
   std::vector<uint64_t> xuids;
-  for (uint32_t i = 0; i < XUserMaxUserCount; i++) {
-    xuids.push_back(profiles_ptr[i].xuid_offline);
+  xuids.reserve(XUserMaxUserCount);
+  for (uint32_t i = 0; i != XUserMaxUserCount; ++i) {
+    X_PROFILEENUMRESULT profile{};
+    std::memcpy(&profile, bytes.data() + i * sizeof(profile), sizeof(profile));
+    xuids.push_back(profile.xuid_offline);
   }
   return UserLogon(xuids, flags, overlapped_ptr.guest_address());
 }

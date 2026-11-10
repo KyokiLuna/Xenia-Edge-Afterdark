@@ -1,0 +1,93 @@
+va	data_type	text
+0x9010052c	string	CSV_USERABANDN
+0x9010053c	string	CSV_TRANSFAIL
+0x90100580	unicode	xuiIntroScene
+0x9010059c	unicode	xuiMoreInfoScene
+0x901005c0	unicode	xuiTransitioningScene
+0x901005ec	unicode	xuiTransitionCompleteScene
+0x90100644	unicode	HUDScene
+0x90100658	unicode	nuiIntroScene.xur
+0x9010067c	unicode	cntrlIntroScene.xur
+0x901006a4	unicode	nuiTransitioningScene.xur
+0x901006d8	unicode	cntrlTransitioningScene.xur
+0x90100710	unicode	nuiTransitionCompleteScene.xur
+0x90100750	unicode	cntrlTransitionCompleteScene.xur
+0x901007c8	unicode	XuiCanvas
+0x90100874	unicode	CSVTrans
+0x90100964	unicode	CSVTrans_Custom.xus
+0x9010098c	unicode	nuiMoreInfoScene.xur
+0x901009b8	unicode	cntrlMoreInfoScene.xur
+0x901009e8	unicode	Title
+0x901009f4	unicode	Spinner
+0x90100a04	unicode	Description
+0x90100a1c	unicode	ButtonMoreInfo
+0x90100a3c	unicode	ButtonContinue
+0x90100ab4	unicode	sharedres://LiveProfile.xus
+0x90100aec	unicode	sharedres://LiveAll.xus
+0x90100b20	unicode	sharedres://ico_32x_ConsoleTypeWinPC.png
+0x90100b78	unicode	sharedres://ico_32x_ConsoleTypeXenon.png
+0x90100bd0	unicode	sharedres://ico_32x_ConsoleTypeXbox.png
+0x90100c20	unicode	sharedres://secretAchievement.png
+0x90100c68	unicode	sharedres://unearnedAchievement.png
+0x90100cb0	unicode	sharedres://ico_32x_Zone_Underground.png
+0x90100d08	unicode	sharedres://ico_32x_Zone_Family.png
+0x90100d50	unicode	sharedres://ico_32x_Zone_Pro.png
+0x90100d98	unicode	sharedres://ico_32x_Zone_RR.png
+0x90100e50	string	deviceselector.xex
+0x90100e6c	unicode	TV-MA
+0x90100e78	unicode	TV-14
+0x90100e84	unicode	TV-PG
+0x90100e90	unicode	TV-G
+0x90100e9c	unicode	TV-Y7-FV
+0x90100eb0	unicode	TV-Y7
+0x90100ebc	unicode	TV-Y
+0x90100ed4	unicode	NC-17
+0x90100ee4	unicode	PG-13
+0x90100f04	unicode	EXPLICIT
+0x90100f18	unicode	USTV
+0x90100f24	unicode	MPAA
+0x90101a40	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\csvtrans\src\obj\xbox\Guide.CSVTrans.pdb
+0x90108491	string	abcdefghijklmnopqrstuvwxyz
+0x901084b1	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9010901f	string	CSVTrans_Custom.xus
+0x9010903b	string	cntrlIntroScene.xur
+0x90109057	string	cntrlMoreInfoScene.xur
+0x9010a000	string	 currency within about 12 hours.\r\n\r\nFor more info, go to www.xbox.com/pointsfaq.
+0x9010a051	string	Continue
+0x9010a05a	string	There's a problem contacting Xbox Live. Please try again later.\r\n\r\nStatus code: %08X
+0x9010a0af	string	Return to What I Was Doing
+0x9010a0ca	string	Sorry, there's a problem on our side. Please try again.\r\n\r\nStatus code: %08X
+0x9010b000	string	anvas
+0x9010b200	string	xtSubTitle
+0x9010b20b	string	XuiText
+0x9010b213	string	Title
+0x9010b219	string	Spinner
+0x9010b221	string	Loading_Small
+0x9010b22f	string	HUDScene
+0x9010b238	string	XuiCanvas
+0x9010b383	string	xuiTransitionCompleteSceneId
+0x9010b3a0	string	xuiTransitionCompleteScene
+0x9010b3bb	string	ButtonContinue
+0x9010b3ca	string	TransFrom
+0x9010b3d4	string	TransTo
+0x9010b3dc	string	TransBackFrom
+0x9010b3ea	string	TransBackTo
+0x9010b3f6	string	Select
+0x9010b3fd	string	NuiHudStandardButton
+0x9010b412	string	XuiButton
+0x9010b41c	string	Description
+0x9010b428	string	Label_BodyWhite11pt
+0x9010b43c	string	XuiLabel
+0x9010b445	string	txtSubTitle
+0x9010b451	string	XuiText
+0x9010b459	string	Title
+0x9010b45f	string	HUDScene
+0x9010b468	string	XuiCanvas
+0x9010b611	string	fen Sie Ihr Konto online unter http://account.live.com.
+0x9010b6af	string	fen Sie Ihr Konto online unter http://account.live.com.
+0x9010b744	string	hrung umgestellt.\r\n\r\nWeitere Informationen finden Sie unter www.xbox.com/pointsfaq
+0x9010b797	string	Weiter
+0x9010b7f0	string	ter noch einmal.\r\n\r\nStatuscode: %08X
+0x9010b837	string	Ein internes Problem ist aufgetreten. Versuchen Sie es noch einmal.\r\n\r\nStatuscode: %08X
+0x9010b93a	string	hrung verwendet. %s\r\n\r\nWeitere Informationen finden Sie unter www.xbox.com/pointsfaq.
+0x9010b990	string	Wir zahlen %s in Ihr Microsoft-Konto ein.

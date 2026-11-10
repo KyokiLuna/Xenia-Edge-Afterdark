@@ -1,0 +1,18 @@
+{
+  "module": "hud.xex",
+  "program": "d280ec7cc7c7_hud.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "e2977ea9f78d769b931ac63e8625cd218cc9637b2a8f0240822317ee8fa55a13",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x913e0400",
+  "functions": 523,
+  "calls": 1362,
+  "strings": 260,
+  "string_xrefs": 294,
+  "independent_sha256": "e2977ea9f78d769b931ac63e8625cd218cc9637b2a8f0240822317ee8fa55a13",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

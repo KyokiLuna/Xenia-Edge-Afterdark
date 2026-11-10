@@ -130,9 +130,9 @@ elseif(APPLE)
   # JIT entitlements so the binary can map writable+executable pages.
   #
   # iconutil only accepts a strictly-named .iconset directory, so stage one
-  # in the build tree by copying assets/icon/<size>.png to the canonical
+  # in the build tree by copying the Afterdark generated PNGs to the canonical
   # icon_<size>x<size>[@2x].png names.
-  set(_xe_app_icon_src "${PROJECT_SOURCE_DIR}/assets/icon")
+  set(_xe_app_icon_src "${PROJECT_SOURCE_DIR}/assets/icon/afterdark/generated")
   set(_xe_app_iconset_dir "${CMAKE_CURRENT_BINARY_DIR}/AppIcon.iconset")
   set(_xe_app_icns "${CMAKE_CURRENT_BINARY_DIR}/AppIcon.icns")
   set(_xe_app_iconset_pairs
@@ -172,7 +172,7 @@ elseif(APPLE)
 
   set_target_properties(xenia-app PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist"
-    MACOSX_BUNDLE_BUNDLE_NAME "Xenia-edge"
+    MACOSX_BUNDLE_BUNDLE_NAME "Xenia Edge Afterdark"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.xenia.edge"
     MACOSX_BUNDLE_BUNDLE_VERSION "1"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"

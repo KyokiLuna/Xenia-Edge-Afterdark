@@ -8,8 +8,11 @@
  */
 
 #include "xenia/kernel/xam/xam_ui.h"
+#include "xenia/base/xui_resource.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <charconv>
 #include <mutex>
 #include <optional>
@@ -19,6 +22,7 @@
 
 #include "third_party/utfcpp/source/utf8.h"
 #include "xenia/app/emulator_window.h"
+#include "xenia/base/mutex.h"
 #include "xenia/base/png_utils.h"
 #include "xenia/base/string.h"
 #include "xenia/base/system.h"
@@ -26,10 +30,14 @@
 #include "xenia/hid/input_system.h"
 #include "xenia/kernel/guest_scheduler.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_system_ui_service.h"
 #include "xenia/kernel/title_id_utils.h"
+#include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/content_manager.h"
+#include "xenia/kernel/xam/host_ui_fallback.h"
 #include "xenia/kernel/xam/xam_content_device.h"
+#include "xenia/kernel/xam/xam_keyboard.h"
 #include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xam/xam_state.h"
 #include "xenia/kernel/xmodule.h"
@@ -47,9 +55,10 @@
 #include "xenia/kernel/xam/ui/signin_ui.h"
 #include "xenia/kernel/xam/ui/title_info_ui.h"
 
-DEFINE_bool(storage_selection_dialog, false,
-            "Show storage device selection dialog when the game requests it.",
-            "UI");
+DEFINE_transient_bool(storage_selection_dialog, false,
+                      "Deprecated compatibility option; storage selection is "
+                      "automatic unless the request requires UI.",
+                      "UI");
 
 DECLARE_int32(license_mask);
 
@@ -258,111 +267,12 @@ void MessageBoxDialog::OnDraw(ImGuiIO& io) {
   }
 }
 
-void KeyboardInputDialog::OnDraw(ImGuiIO& io) {
-  if (!has_opened_) {
-    ImGui::OpenPopup(title_.c_str());
-    has_opened_ = true;
-  }
-
-  // Center the window on screen
-  ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
-  ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-  // Size constraints leave an auto-resize popup a pixel short of its contents
-  ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 30.0f, 0.0f),
-                           ImGuiCond_Always);
-
-  // Style like Xbox - white background, black text, Xbox green highlights
-  const ImVec4 xbox_green(0.063f, 0.486f, 0.063f, 1.0f);
-  ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_TitleBg, xbox_green);
-  ImGui::PushStyleColor(ImGuiCol_TitleBgActive, xbox_green);
-  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, xbox_green);
-  ImGui::PushStyleColor(ImGuiCol_ButtonActive, xbox_green);
-  ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.95f, 0.95f, 0.95f, 1.0f));
-  ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,
-                        ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 16));
-
-  if (ImGui::BeginPopupModal(title_.c_str(), nullptr,
-                             ImGuiWindowFlags_AlwaysAutoResize)) {
-    // Handle keyboard escape or gamepad B/Back to cancel
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ShouldCloseFromGamepad()) {
-      text_ = "";
-      cancelled_ = true;
-      ImGui::CloseCurrentPopup();
-      Close();
-    }
-
-    if (description_.size()) {
-      ImGui::TextWrapped("%s", description_.c_str());
-    }
-
-    ImGui::PushID("input_text");
-    // Set focus to InputText on first frame
-    if (!focus_set_) {
-      ImGui::SetKeyboardFocusHere();
-      focus_set_ = true;
-    }
-    bool input_submitted =
-        ImGui::InputText("##body", text_buffer_.data(), text_buffer_.size(),
-                         ImGuiInputTextFlags_EnterReturnsTrue);
-    // Context menu for paste functionality
-    if (ImGui::BeginPopupContextItem("input_context_menu")) {
-      if (ImGui::MenuItem("Paste")) {
-        if (ImGui::GetClipboardText() != nullptr) {
-          std::string clipboard_text = ImGui::GetClipboardText();
-          xe::string_util::copy_truncating(text_buffer_.data(), clipboard_text,
-                                           text_buffer_.size());
-        }
-      }
-      ImGui::EndPopup();
-    }
-    ImGui::PopID();
-
-    if (input_submitted) {
-      text_ = std::string(text_buffer_.data(), text_buffer_.size());
-      cancelled_ = false;
-      ImGui::CloseCurrentPopup();
-      Close();
-    }
-
-    // OK button
-    if (ImGui::Button("OK")) {
-      text_ = std::string(text_buffer_.data(), text_buffer_.size());
-      cancelled_ = false;
-      ImGui::CloseCurrentPopup();
-      Close();
-    }
-    ImGui::SetItemDefaultFocus();
-
-    ImGui::SameLine();
-
-    // Cancel button
-    if (ImGui::Button("Cancel")) {
-      text_ = "";
-      cancelled_ = true;
-      ImGui::CloseCurrentPopup();
-      Close();
-    }
-    ImGui::Spacing();
-    ImGui::EndPopup();
-  } else {
-    Close();
-  }
-
-  ImGui::PopStyleVar(2);
-  ImGui::PopStyleColor(10);
-}
-
 static dword_result_t XamShowMessageBoxUi(
     dword_t user_index, lpu16string_t title_ptr, lpu16string_t text_ptr,
     dword_t button_count, lpdword_t button_ptrs, dword_t active_button,
     dword_t flags, pointer_t<MESSAGEBOX_RESULT> result_ptr,
-    pointer_t<XAM_OVERLAPPED> overlapped) {
+    pointer_t<XAM_OVERLAPPED> overlapped,
+    std::shared_ptr<NativeUiBackendRoute::HostLease> host_route = {}) {
   std::string title = title_ptr ? xe::to_utf8(title_ptr.value()) : "";
   std::string text = text_ptr ? xe::to_utf8(text_ptr.value()) : "";
 
@@ -395,6 +305,106 @@ static dword_result_t XamShowMessageBoxUi(
 
   if (kernel_state()->xam_state()->IsUIActive()) {
     return X_ERROR_ACCESS_DENIED;
+  }
+
+  if (host_route) {
+    // The selected host cut is the existing ordinary message-box behavior.
+    // Profile/passcode scenes require separate native/profile contracts.
+    if (flags & (XMBox_PASSCODEMODE | XMBox_VERIFYPASSCODEMODE)) {
+      return X_ERROR_NOT_SUPPORTED;
+    }
+    auto* state = kernel_state();
+    if (!result_ptr ||
+        state->memory()->QueryRangeAccess(result_ptr.guest_address(),
+                                          sizeof(MESSAGEBOX_RESULT)) !=
+            memory::PageAccess::kReadWrite ||
+        (overlapped &&
+         state->memory()->QueryRangeAccess(overlapped.guest_address(),
+                                           sizeof(XAM_OVERLAPPED)) !=
+             memory::PageAccess::kReadWrite)) {
+      return X_ERROR_INVALID_PARAMETER;
+    }
+    auto* window = state->emulator()->display_window();
+    auto* drawer = state->emulator()->imgui_drawer();
+    auto* input = state->emulator()->input_system();
+    if (!window || !drawer || !input) {
+      return X_ERROR_FUNCTION_FAILED;
+    }
+    bool expected = false;
+    auto* xam = state->xam_state();
+    if (!xam->is_xam_dialog_present_.compare_exchange_strong(expected, true)) {
+      return X_ERROR_ACCESS_DENIED;
+    }
+    auto reservation = std::make_shared<HostUiFallbackReservation>(xam, input);
+    if (!reservation->input_gap()) {
+      return X_ERROR_NOT_READY;
+    }
+    auto completion = std::make_shared<HostUiFallbackCompletion>();
+    const uint32_t result_address = result_ptr.guest_address();
+    auto pre = [state, host_route] {
+      if (!host_route->cancelled()) {
+        state->BroadcastNotification(kXNotificationSystemUI, true);
+      }
+    };
+    auto run = [state, reservation, host_route, completion, window, drawer,
+                input, title, text, buttons, active = uint32_t(active_button),
+                result_address](uint32_t& extended,
+                                uint32_t& length) -> X_RESULT {
+      const auto gap = reservation->input_gap();
+      QueueHostUiFallback(
+          window->app_context(), host_route, completion,
+          [host_route, gap, drawer, input, title, text, buttons,
+           active](const auto& completed) {
+            auto dialog = std::make_unique<MessageBoxDialog>(
+                drawer, input, title, text, buttons, active);
+            dialog->set_close_callback(
+                [raw = dialog.get(), completed, host_route] {
+                  completed->Finish({xe::ui::TextEntryResult::kAccepted,
+                                     {},
+                                     raw->chosen_button()});
+                });
+            completed->admitted.store(true);
+            if (gap) {
+              gap->Release();
+            }
+            dialog.release();
+          });
+      GuestScheduler::WaitOnFence(completion->closed);
+      const auto value = completion->result();
+      reservation->Release();
+      extended = X_ERROR_CANCELLED;
+      length = 0;
+      if (value.result != xe::ui::TextEntryResult::kAccepted) {
+        return X_ERROR_CANCELLED;
+      }
+      auto memory_lock = global_critical_region::AcquireDirect();
+      if (state->memory()->QueryRangeAccess(result_address,
+                                            sizeof(MESSAGEBOX_RESULT)) !=
+          memory::PageAccess::kReadWrite) {
+        extended = X_ERROR_INVALID_PARAMETER;
+        return X_ERROR_INVALID_PARAMETER;
+      }
+      state->memory()
+          ->TranslateVirtual<MESSAGEBOX_RESULT*>(result_address)
+          ->ButtonPressed = value.button;
+      extended = X_ERROR_SUCCESS;
+      return X_ERROR_SUCCESS;
+    };
+    auto post = [state, host_route] {
+      xe::threading::Sleep(kUIDelayMillis);
+      state->BroadcastNotification(kXNotificationSystemUI, false);
+    };
+    if (overlapped) {
+      state->CompleteOverlappedDeferredEx(std::move(run),
+                                          overlapped.guest_address(),
+                                          std::move(pre), std::move(post));
+      return X_ERROR_IO_PENDING;
+    }
+    pre();
+    uint32_t extended = X_ERROR_CANCELLED, length = 0;
+    const auto result = run(extended, length);
+    post();
+    return result;
   }
 
   kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
@@ -434,7 +444,23 @@ static dword_result_t XamShowMessageBoxUi(
 }
 
 dword_result_t XamIsUIActive_entry() {
-  return kernel_state()->xam_state()->IsUIActive();
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kIsUiActive, {});
+  const bool host_dialog = kernel_state()->xam_state()->IsUIActive();
+  if (!native.handled()) {
+    return host_dialog;
+  }
+  const auto* input = kernel_state()->emulator()->input_system();
+  if (host_dialog || (input && input->IsUIInputBlocked())) {
+    return 1;
+  }
+  if (native.disposition !=
+      NativeSystemUiPublicCallResult::Disposition::kReturned) {
+    // BOOL has no error channel. An admitted native service with unknown UI
+    // state must not let the title treat an active UI as closed.
+    return 1;
+  }
+  return native.value;
 }
 DECLARE_XAM_EXPORT2(XamIsUIActive, kUI, kImplemented, kHighFrequency);
 
@@ -444,9 +470,18 @@ dword_result_t XamShowMessageBoxUI_entry(
     dword_t button_count, lpdword_t button_ptrs, dword_t active_button,
     dword_t flags, pointer_t<MESSAGEBOX_RESULT> result_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped) {
+  const std::array<uint32_t, 9> arguments{
+      user_index,   title_ptr.guest_address(),   text_ptr.guest_address(),
+      button_count, button_ptrs.guest_address(), active_button,
+      flags,        result_ptr.guest_address(),  overlapped.guest_address()};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kShowMessageBox, arguments);
+  if (native.handled()) {
+    return native.value;
+  }
   return XamShowMessageBoxUi(user_index, title_ptr, text_ptr, button_count,
                              button_ptrs, active_button, flags, result_ptr,
-                             overlapped);
+                             overlapped, native.host_fallback);
 }
 DECLARE_XAM_EXPORT1(XamShowMessageBoxUI, kUI, kImplemented);
 
@@ -506,133 +541,284 @@ dword_result_t XNotifyQueueUI_entry(dword_t exnq, dword_t dwUserIndex,
 DECLARE_XAM_EXPORT1(XNotifyQueueUI, kUI, kSketchy);
 
 // https://www.se7ensins.com/forums/threads/release-how-to-use-xshowkeyboardui-release.906568/
-dword_result_t XamShowKeyboardUI_entry(
-    dword_t user_index, dword_t flags, lpu16string_t default_text,
-    lpu16string_t title, lpu16string_t description, lpu16string_t buffer,
-    dword_t buffer_length, pointer_t<XAM_OVERLAPPED> overlapped) {
-  if (!buffer) {
-    return X_ERROR_INVALID_PARAMETER;
+dword_result_t XamShowKeyboardUI_entry(dword_t user_index, dword_t flags,
+                                       lpu16string_t default_text,
+                                       lpu16string_t title,
+                                       lpu16string_t description,
+                                       lpvoid_t buffer, dword_t buffer_length,
+                                       pointer_t<XAM_OVERLAPPED> overlapped) {
+  const std::array<uint32_t, 8> arguments{user_index,
+                                          flags,
+                                          default_text.guest_address(),
+                                          title.guest_address(),
+                                          description.guest_address(),
+                                          buffer.guest_address(),
+                                          buffer_length,
+                                          overlapped.guest_address()};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kShowKeyboard, arguments);
+  if (native.handled()) {
+    return native.value;
   }
-
-  assert_not_null(overlapped);
-
-  auto close = [buffer, buffer_length](KeyboardInputDialog* dialog,
-                                       uint32_t& extended_error,
-                                       uint32_t& length) -> X_RESULT {
-    if (dialog->cancelled()) {
-      extended_error = X_ERROR_CANCELLED;
-      length = 0;
-      return X_ERROR_SUCCESS;
-    } else {
-      // Zero the output buffer.
-      auto text = xe::to_utf16(dialog->text());
-      string_util::copy_and_swap_truncating(buffer, text, buffer_length);
-      extended_error = X_ERROR_SUCCESS;
-      length = 0;
-      return X_ERROR_SUCCESS;
-    }
-  };
-
-  if (kernel_state()->xam_state()->IsUIActive()) {
-    return X_ERROR_ACCESS_DENIED;
-  }
-
-  kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
-
-  const Emulator* emulator = kernel_state()->emulator();
-  xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
-  xe::hid::InputSystem* input_system = emulator->input_system();
-
-  std::string title_str = title ? xe::to_utf8(title.value()) : "";
-  std::string desc_str = description ? xe::to_utf8(description.value()) : "";
-  std::string def_text_str =
-      default_text ? xe::to_utf8(default_text.value()) : "";
-
-  // If no default text provided, use the user's gamertag
-  if (def_text_str.empty()) {
-    auto profile_manager = kernel_state()->xam_state()->profile_manager();
-    if (profile_manager) {
-      // Try the specified user_index first, fall back to slot 0
-      auto profile =
-          profile_manager->GetProfile(static_cast<uint8_t>(user_index));
-      if (!profile) {
-        profile = profile_manager->GetProfile(static_cast<uint8_t>(0));
-      }
-      if (profile) {
-        def_text_str = profile->name();
-      }
-    }
-  }
-
-  return xeXamDispatchDialogEx<KeyboardInputDialog>(
-      new KeyboardInputDialog(imgui_drawer, input_system, title_str, desc_str,
-                              def_text_str, buffer_length),
-      close, overlapped);
+  return ShowKeyboardUI(
+      user_index, flags, default_text ? default_text.value() : u"",
+      title ? title.value() : u"", description ? description.value() : u"",
+      buffer.guest_address(), buffer_length, overlapped.guest_address(),
+      native.host_fallback);
 }
 DECLARE_XAM_EXPORT1(XamShowKeyboardUI, kUI, kImplemented);
+
+// Public304 keeps its actual caller/user. Native FE owns the request, focus,
+// current-app and results; no host modal or FF-switch policy is created here.
+dword_result_t XamShowGuideUI_entry(dword_t user_index) {
+  const std::array<uint32_t, 1> arguments{user_index};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kShowGuide, arguments);
+  return native.handled() ? native.value : X_ERROR_NOT_SUPPORTED;
+}
+DECLARE_XAM_EXPORT1(XamShowGuideUI, kUI, kImplemented);
 
 dword_result_t XamShowDeviceSelectorUI_entry(
     dword_t user_index, dword_t content_type, dword_t content_flags,
     qword_t total_requested, lpdword_t device_id_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped) {
+  auto* state = kernel_state();
   if (!overlapped) {
     return X_ERROR_INVALID_PARAMETER;
   }
-
+  if (state->memory()->QueryRangeAccess(overlapped.guest_address(),
+                                        sizeof(XAM_OVERLAPPED)) !=
+      memory::PageAccess::kReadWrite) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
   if ((user_index >= XUserMaxUserCount && user_index != XUserIndexAny) ||
-      (content_flags & 0x83F00008) != 0 || !device_id_ptr) {
+      (content_flags & 0x83F00008) != 0 || !device_id_ptr ||
+      state->memory()->QueryRangeAccess(device_id_ptr.guest_address(), 4) !=
+          memory::PageAccess::kReadWrite) {
     XOverlappedSetExtendedError(overlapped, X_ERROR_INVALID_PARAMETER);
     return X_ERROR_INVALID_PARAMETER;
   }
 
-  std::vector<const DummyDeviceInfo*> devices = ListStorageDevices();
-
-  if (!cvars::storage_selection_dialog) {
-    // Default to the first storage device (HDD).
-    return xeXamDispatchWithoutDialog(
-        [device_id_ptr, devices]() -> X_RESULT {
-          if (devices.empty()) {
-            return X_ERROR_CANCELLED;
-          }
-
-          const DummyDeviceInfo* device_info = devices.front();
-          *device_id_ptr = static_cast<uint32_t>(device_info->device_id);
-          return X_ERROR_SUCCESS;
-        },
-        overlapped);
+  const auto devices = ListStorageDevices(state);
+  const uint64_t required = total_requested;
+  // Automatic storage admission is not a native-UI operation. In particular,
+  // a healthy HDD does not depend on the Guide's profile/provider readiness.
+  // The output is never read as a preference: it may be uninitialized storage.
+  const auto choice = SelectStorageDevice(devices, content_flags, required, 1);
+  static std::atomic<uint64_t> selector_trace_count{0};
+  const uint64_t trace_id = selector_trace_count.fetch_add(1);
+  auto trace = [trace_id, user = uint32_t(user_index),
+                type = uint32_t(content_type), flags = uint32_t(content_flags),
+                required, kind = choice.kind](const char* path,
+                                             uint32_t selected, X_RESULT result) {
+    if (trace_id < 128) {
+      XELOGI("Device selector {}: user={} type={} flags={:08X} required={:016X} "
+             "path={} choice={} device={} result={:08X}",
+             trace_id, user, type, flags, required, path, uint32_t(kind),
+             selected, result);
+    }
+  };
+  trace("admit", choice.device_id, X_ERROR_IO_PENDING);
+  std::shared_ptr<NativeUiBackendRoute::HostLease> host_route;
+  if (choice.kind == StorageSelectionKind::kPrompt) {
+    // Native2CB forwards the full uint64 r6 unchanged. A dword pair would
+    // move the output arguments to the wrong registers. Only a genuine prompt
+    // enters native UI; an entered native request is never replayed on the host.
+    const std::array<uint64_t, 6> arguments{
+        user_index, content_type, content_flags, total_requested,
+        device_id_ptr.guest_address(), overlapped.guest_address()};
+    const auto native =
+        NativeSystemUiService::TryInvokePublicRegistersOnOriginalCaller(
+            state, NativeSystemUiPublicCall::kShowDeviceSelector, arguments);
+    if (native.handled()) {
+      trace("native_prompt", choice.device_id, native.value);
+      return native.value;
+    }
+    host_route = native.host_fallback;
   }
-
-  auto close = [device_id_ptr, devices](MessageBoxDialog* dialog) -> X_RESULT {
-    uint32_t button = dialog->chosen_button();
-    if (button >= devices.size()) {
+  const uint32_t output = device_id_ptr.guest_address();
+  auto publish = [state, output, required,
+                  host_route](uint32_t device_id) -> X_RESULT {
+    // Drain must observe publication as one operation of the selected UI
+    // cohort, rather than racing a cancelled() snapshot and guest output.
+    auto entered = host_route ? host_route->TryEnter() : nullptr;
+    if (host_route && !entered) {
       return X_ERROR_CANCELLED;
     }
-
-    const DummyDeviceInfo* device_info = devices.at(button);
-    *device_id_ptr = static_cast<uint32_t>(device_info->device_id);
+    const auto current = GetStorageDeviceInfo(state, device_id);
+    if (!current || !current->available) {
+      return X_ERROR_DEVICE_NOT_CONNECTED;
+    }
+    if (current->read_only) {
+      return X_ERROR_ACCESS_DENIED;
+    }
+    if (!CanStoreOnDevice(*current, required)) {
+      return X_RESULT_FROM_WIN32(0x70);  // ERROR_DISK_FULL.
+    }
+    auto memory_lock = global_critical_region::AcquireDirect();
+    if (state->memory()->QueryRangeAccess(output, 4) !=
+        memory::PageAccess::kReadWrite) {
+      return X_ERROR_INVALID_PARAMETER;
+    }
+    *state->memory()->TranslateVirtual<xe::be<uint32_t>*>(output) = device_id;
     return X_ERROR_SUCCESS;
   };
-
-  if (kernel_state()->xam_state()->IsUIActive()) {
+  if (choice.kind != StorageSelectionKind::kPrompt) {
+    // The actual Kernel owns and joins this worker before ContentManager and
+    // Memory are destroyed. Retain the actual module (not a reusable guest
+    // hmodule address), and reject a superseded/stopping foreground execution.
+    // This acquires neither a modal input lease nor native UI prerequisites.
+    auto title = state->GetExecutableModule();
+    const auto execution = state->emulator()->title_execution_state().snapshot();
+    auto current = [state, title, execution] {
+      if (state->GetExecutableModule().get() != title.get()) {
+        return false;
+      }
+      const auto now = state->emulator()->title_execution_state().snapshot();
+      if (now.generation != execution.generation) {
+        return false;
+      }
+      if (execution.generation) {
+        return execution.phase == TitleExecutionState::Phase::kRunning &&
+               now.phase == TitleExecutionState::Phase::kRunning &&
+               now.hmodule == execution.hmodule &&
+               state->emulator()->OwnsTitleExecution(state);
+      }
+      // Kernel-only fixtures / pre-foreground compatibility retain their
+      // exact generation-zero module and state; this is no Running proof.
+      return now == execution &&
+             now.phase != TitleExecutionState::Phase::kStopping;
+    };
+    const uint32_t overlap_address = overlapped.guest_address();
+    state->CompleteOverlappedDeferredEx(
+        [state, choice, current, publish, trace, overlap_address](
+            uint32_t& extended, uint32_t& length) -> X_RESULT {
+          X_RESULT result = X_ERROR_CANCELLED;
+          if (current()) {
+            if (state->memory()->QueryRangeAccess(overlap_address,
+                                                  sizeof(XAM_OVERLAPPED)) !=
+                memory::PageAccess::kReadWrite) {
+              result = X_ERROR_INVALID_PARAMETER;
+            } else {
+              switch (choice.kind) {
+                case StorageSelectionKind::kAutomatic:
+                  result = publish(choice.device_id);
+                  break;
+                case StorageSelectionKind::kDiskFull:
+                  result = X_RESULT_FROM_WIN32(0x70);
+                  break;
+                case StorageSelectionKind::kNoDevice:
+                  result = X_ERROR_DEVICE_NOT_CONNECTED;
+                  break;
+                default:
+                  break;
+              }
+            }
+          }
+          trace("complete_without_ui", choice.device_id, result);
+          extended = X_HRESULT_FROM_WIN32(result);
+          length = 0;
+          return result;
+        },
+        overlap_address);
+    return X_ERROR_IO_PENDING;
+  }
+  if (state->xam_state()->IsUIActive()) {
+    trace("host_prompt_busy", choice.device_id, X_ERROR_ACCESS_DENIED);
     return X_ERROR_ACCESS_DENIED;
   }
 
-  kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
-
-  std::string title = "Select storage device";
-  std::string desc = "";
-
   cxxopts::OptionNames buttons;
-  for (auto& device_info : devices) {
-    buttons.push_back(to_utf8(device_info->name));
+  for (const auto& device : devices) {
+    buttons.push_back(fmt::format("{} ({} MB free)", to_utf8(device.name),
+                                  device.free_bytes / (1024 * 1024)));
   }
   buttons.push_back("Cancel");
+  const std::string description =
+      devices.empty()
+          ? "No writable storage device is connected."
+          : "Select a device with enough free space. Free up space in the "
+            "dashboard's storage settings if needed.";
+  auto* window = state->emulator()->display_window();
+  auto* drawer = state->emulator()->imgui_drawer();
+  auto* input = state->emulator()->input_system();
+  if (!window || !drawer || !input) {
+    trace("host_prompt_unavailable", choice.device_id, X_ERROR_FUNCTION_FAILED);
+    return X_ERROR_FUNCTION_FAILED;
+  }
+  if (host_route) {
+    auto* xam = state->xam_state();
+    bool expected = false;
+    if (!xam->is_xam_dialog_present_.compare_exchange_strong(expected, true)) {
+      return X_ERROR_ACCESS_DENIED;
+    }
+    auto reservation = std::make_shared<HostUiFallbackReservation>(xam, input);
+    if (!reservation->input_gap()) {
+      return X_ERROR_NOT_READY;
+    }
+    auto completion = std::make_shared<HostUiFallbackCompletion>();
+    auto pre = [state, host_route] {
+      if (!host_route->cancelled()) {
+        state->BroadcastNotification(kXNotificationSystemUI, true);
+      }
+    };
+    auto run = [reservation, host_route, completion, window, drawer, input,
+                devices, buttons, description,
+                publish](uint32_t& extended, uint32_t& length) {
+      const auto gap = reservation->input_gap();
+      QueueHostUiFallback(
+          window->app_context(), host_route, completion,
+          [host_route, gap, drawer, input, buttons,
+           description](const auto& completed) {
+            auto dialog = std::make_unique<MessageBoxDialog>(
+                drawer, input, "Select storage device", description, buttons,
+                0);
+            dialog->set_close_callback(
+                [raw = dialog.get(), completed, host_route] {
+                  completed->Finish({xe::ui::TextEntryResult::kAccepted,
+                                     {},
+                                     raw->chosen_button()});
+                });
+            completed->admitted.store(true);
+            if (gap) {
+              gap->Release();
+            }
+            dialog.release();
+          });
+      GuestScheduler::WaitOnFence(completion->closed);
+      const auto value = completion->result();
+      reservation->Release();
+      X_RESULT result = X_ERROR_CANCELLED;
+      if (!host_route->cancelled() &&
+          value.result == xe::ui::TextEntryResult::kAccepted &&
+          value.button < devices.size()) {
+        result = publish(devices[value.button].device_id);
+      }
+      extended = X_HRESULT_FROM_WIN32(result);
+      length = 0;
+      return result;
+    };
+    auto post = [state, host_route] {
+      xe::threading::Sleep(kUIDelayMillis);
+      state->BroadcastNotification(kXNotificationSystemUI, false);
+    };
+    state->CompleteOverlappedDeferredEx(std::move(run),
+                                        overlapped.guest_address(),
+                                        std::move(pre), std::move(post));
+    return X_ERROR_IO_PENDING;
+  }
 
-  const Emulator* emulator = kernel_state()->emulator();
-  xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
-  xe::hid::InputSystem* input_system = emulator->input_system();
+  // Native-disabled compatibility path retains the existing host dialog. Its
+  // selected device is an owned value and is re-observed before output writes.
+  state->xam_state()->is_xam_dialog_present_.store(true);
+  auto close = [devices, publish](MessageBoxDialog* dialog) -> X_RESULT {
+    const uint32_t button = dialog->chosen_button();
+    return button < devices.size() ? publish(devices[button].device_id)
+                                   : X_ERROR_CANCELLED;
+  };
   return xeXamDispatchDialog<MessageBoxDialog>(
-      new MessageBoxDialog(imgui_drawer, input_system, title, desc, buttons, 0),
+      new MessageBoxDialog(drawer, input, "Select storage device", description,
+                           buttons, 0),
       close, overlapped);
 }
 DECLARE_XAM_EXPORT1(XamShowDeviceSelectorUI, kUI, kImplemented);
@@ -1413,139 +1599,8 @@ dword_result_t XuiUninit_entry() {
 }
 DECLARE_XAM_EXPORT1(XuiUninit, kUI, kSketchy);
 
-static std::optional<std::u16string> ReadXuiString(
-    std::span<const uint8_t> data, size_t* offset, size_t length) {
-  if (*offset + length * 2 > data.size()) {
-    return std::nullopt;
-  }
-  std::u16string string(length, u'\0');
-  for (size_t i = 0; i < length; ++i) {
-    string[i] =
-        char16_t(xe::load_and_swap<uint16_t>(data.data() + *offset + i * 2));
-  }
-  *offset += length * 2;
-  return string;
-}
-
-// A file in an XUIZ package, the archive XUI resources keep their files in.
-// Version 1 names the files in UTF-16 and version 3 in UTF-8, with the same
-// entries otherwise.
-static std::optional<std::span<const uint8_t>> FindXuiPackageFile(
-    std::span<const uint8_t> package, const std::string_view name) {
-  constexpr uint32_t kXuiPackageMagic = 0x5855495A;  // XUIZ
-  if (package.size() < 0x16 ||
-      xe::load_and_swap<uint32_t>(package.data()) != kXuiPackageMagic) {
-    return std::nullopt;
-  }
-  const uint32_t version = xe::load_and_swap<uint32_t>(package.data() + 4);
-  if (version != 1 && version != 3) {
-    return std::nullopt;
-  }
-  const size_t data_start =
-      0x16 + size_t(xe::load_and_swap<uint32_t>(package.data() + 0x10));
-  const uint16_t file_count =
-      xe::load_and_swap<uint16_t>(package.data() + 0x14);
-  size_t offset = 0x16;
-  for (uint16_t i = 0; i < file_count; ++i) {
-    if (offset + 9 > package.size()) {
-      return std::nullopt;
-    }
-    const uint32_t size = xe::load_and_swap<uint32_t>(package.data() + offset);
-    const uint32_t file_offset =
-        xe::load_and_swap<uint32_t>(package.data() + offset + 4);
-    const size_t name_length = package[offset + 8];
-    offset += 9;
-    std::string file_name;
-    if (version == 3) {
-      if (offset + name_length > package.size()) {
-        return std::nullopt;
-      }
-      file_name.assign(reinterpret_cast<const char*>(package.data() + offset),
-                       name_length);
-      if (!::utf8::is_valid(file_name)) {
-        return std::nullopt;
-      }
-      offset += name_length;
-    } else {
-      auto wide_name = ReadXuiString(package, &offset, name_length);
-      if (!wide_name) {
-        return std::nullopt;
-      }
-      file_name = xe::to_utf8(*wide_name);
-    }
-    if (xe::utf8::equal_case(file_name, name)) {
-      if (data_start + file_offset + size > package.size()) {
-        return std::nullopt;
-      }
-      return package.subspan(data_start + file_offset, size);
-    }
-  }
-  return std::nullopt;
-}
-
-// An XUIS string table, empty strings stand for missing ones. Version 1 has
-// UTF-16 strings after their length and version 2 NUL-terminated UTF-8 ones.
-static std::optional<std::vector<std::u16string>> ParseXuiStringTable(
-    std::span<const uint8_t> data, uint8_t* out_flags) {
-  constexpr uint32_t kXuiStringTableMagic = 0x58554953;  // XUIS
-  if (data.size() < 0xC ||
-      xe::load_and_swap<uint32_t>(data.data()) != kXuiStringTableMagic ||
-      (data[4] != 1 && data[4] != 2)) {
-    return std::nullopt;
-  }
-  const uint8_t version = data[4];
-  const uint8_t flags = data[5];
-  std::vector<std::u16string> strings(
-      xe::load_and_swap<uint16_t>(data.data() + 0xA));
-  size_t offset = 0xC;
-  auto read_string = [&]() -> std::optional<std::u16string> {
-    if (version == 2) {
-      if (offset >= data.size()) {
-        return std::nullopt;
-      }
-      const auto start = data.begin() + offset;
-      const auto end = std::find(start, data.end(), uint8_t(0));
-      if (end == data.end()) {
-        return std::nullopt;
-      }
-      const size_t length = size_t(end - start);
-      const std::string_view text(
-          reinterpret_cast<const char*>(data.data() + offset), length);
-      if (!::utf8::is_valid(text)) {
-        return std::nullopt;
-      }
-      offset += length + 1;
-      return xe::to_utf16(text);
-    }
-    if (offset + 2 > data.size()) {
-      return std::nullopt;
-    }
-    const uint16_t length = xe::load_and_swap<uint16_t>(data.data() + offset);
-    offset += 2;
-    return ReadXuiString(data, &offset, length);
-  };
-  for (auto& string : strings) {
-    auto value = read_string();
-    if (!value) {
-      return std::nullopt;
-    }
-    string = std::move(*value);
-    // Indexed tables have nothing after the string, the others an id or a key.
-    if (flags & 2) {
-      continue;
-    }
-    if (flags & 1) {
-      offset += 4;
-    } else if (!read_string()) {
-      return std::nullopt;
-    }
-  }
-  if (offset > data.size()) {
-    return std::nullopt;
-  }
-  *out_flags = flags;
-  return strings;
-}
+using xe::resource::FindXuiPackageFile;
+using xe::resource::ParseXuiStringTable;
 
 X_HRESULT LoadXuiStringTable(XModule& module, std::string_view section,
                              std::string_view file_name, uint32_t* table_ptr) {

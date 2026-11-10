@@ -1,0 +1,6 @@
+deviceselector.xex exports
+==========================
+
+{"confidence": "CONFIRMED", "function_va": "0x916D38E0", "module": "deviceselector.xex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x916D3878", "module": "deviceselector.xex", "ordinal": "0x00000002", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x916D37B8", "module": "deviceselector.xex", "ordinal": "0x00000003", "resolved_name": ""}

@@ -10,15 +10,19 @@
 #include "xenia/base/logging.h"
 
 #include <algorithm>
+#include <condition_variable>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/hid/input_system.h"
 
 #include "xenia/base/cvar.h"
 #include "xenia/base/profiling.h"
 #include "xenia/hid/input_driver.h"
 #include "xenia/kernel/util/shim_utils.h"
+#include "xenia/ui/virtual_key.h"
 
 #ifdef XE_PLATFORM_WIN32
 #include "xenia/hid/portal/hardware_portal.h"
@@ -48,7 +52,97 @@ InputSystem::InputSystem(xe::ui::Window* window) : window_(window) {
 #endif  // XE_PLATFORM_WIN32
 }
 
-InputSystem::~InputSystem() = default;
+namespace {
+// Same physical button/VK family used by SDL's keystroke generator. Triggers
+// and stick directions are not bits in X_INPUT_GAMEPAD::buttons.
+uint16_t KeystrokeButtonMask(uint16_t virtual_key) {
+  using Key = ui::VirtualKey;
+  switch (static_cast<Key>(virtual_key)) {
+    case Key::kXInputPadDpadUp:
+      return X_INPUT_GAMEPAD_DPAD_UP;
+    case Key::kXInputPadDpadDown:
+      return X_INPUT_GAMEPAD_DPAD_DOWN;
+    case Key::kXInputPadDpadLeft:
+      return X_INPUT_GAMEPAD_DPAD_LEFT;
+    case Key::kXInputPadDpadRight:
+      return X_INPUT_GAMEPAD_DPAD_RIGHT;
+    case Key::kXInputPadStart:
+      return X_INPUT_GAMEPAD_START;
+    case Key::kXInputPadBack:
+      return X_INPUT_GAMEPAD_BACK;
+    case Key::kXInputPadLThumbPress:
+      return X_INPUT_GAMEPAD_LEFT_THUMB;
+    case Key::kXInputPadRThumbPress:
+      return X_INPUT_GAMEPAD_RIGHT_THUMB;
+    case Key::kXInputPadLShoulder:
+      return X_INPUT_GAMEPAD_LEFT_SHOULDER;
+    case Key::kXInputPadRShoulder:
+      return X_INPUT_GAMEPAD_RIGHT_SHOULDER;
+    case Key::kXInputPadGuide:
+      return X_INPUT_GAMEPAD_GUIDE;
+    case Key::kXInputPadA:
+      return X_INPUT_GAMEPAD_A;
+    case Key::kXInputPadB:
+      return X_INPUT_GAMEPAD_B;
+    case Key::kXInputPadX:
+      return X_INPUT_GAMEPAD_X;
+    case Key::kXInputPadY:
+      return X_INPUT_GAMEPAD_Y;
+    default:
+      return 0;
+  }
+}
+struct NativeDeviceNotificationInvocation {
+  const void* state;
+  const NativeDeviceNotificationInvocation* previous;
+};
+thread_local const NativeDeviceNotificationInvocation*
+    native_device_invocation = nullptr;
+}  // namespace
+
+struct NativeDeviceNotificationRundown::State {
+  State(uint64_t owner_generation,
+        InputSystem::NativeDevicesChangedCallback owner_callback)
+      : generation(owner_generation), callback(std::move(owner_callback)) {}
+  const uint64_t generation;
+  const InputSystem::NativeDevicesChangedCallback callback;
+  std::mutex mutex;
+  std::condition_variable drained;
+  bool stopped = false;
+  bool queued = false;
+  size_t active = 0;
+};
+
+NativeDeviceNotificationRundown::NativeDeviceNotificationRundown(
+    std::shared_ptr<State> state)
+    : state_(std::move(state)) {}
+
+bool NativeDeviceNotificationRundown::Drain() noexcept {
+  // UI callbacks may pump the queue recursively. An ancestor's reservation is
+  // still active while a nested callback runs, so searching only the topmost
+  // invocation would deadlock when that nested callback drains the ancestor.
+  for (auto* active = native_device_invocation; active;
+       active = active->previous) {
+    if (active->state == state_.get()) {
+      return false;
+    }
+  }
+  try {
+    std::unique_lock lock(state_->mutex);
+    if (!state_->stopped) {
+      return false;
+    }
+    state_->drained.wait(lock, [&] { return !state_->active; });
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+InputSystem::~InputSystem() {
+  auto guard = lock();
+  StopNativeDeviceNotifications(native_input_generation_.load());
+}
 
 X_STATUS InputSystem::Setup() {
   LoadSlotBindingsFromPassthrough();
@@ -61,6 +155,11 @@ X_STATUS InputSystem::Setup() {
 
 void InputSystem::AddDriver(std::unique_ptr<InputDriver> driver) {
   driver->set_devices_changed_callback([this]() { NotifyDevicesChanged(); });
+  driver->SetNativeTextGeneration(native_input_generation_.load());
+  driver->SetNativeTextHostModal(native_input_generation_.load(),
+                                 IsUIInputBlocked());
+  driver->SetNativeControllerKeystrokeGeneration(
+      native_guide_generation_.load());
   drivers_.push_back(std::move(driver));
 }
 
@@ -81,6 +180,7 @@ void InputSystem::NotifyDevicesChanged() {
     // The device list has changed; menu/toolbar must refresh even if
     // ReconcileBindings didn't alter any bindings (e.g. a dismissed device
     // replugged is visible again but stays unbound).
+    QueueNativeDeviceNotification();
     if (bindings_changed_cb_) {
       bindings_changed_cb_();
     }
@@ -186,13 +286,12 @@ X_RESULT InputSystem::GetState(uint32_t user_index, uint32_t flags,
   if (result != X_ERROR_SUCCESS) {
     return result;
   }
-  out_state->packet_number =
-      out_state->packet_number + ui_input_blocking_edges_.load();
+  out_state->packet_number = out_state->packet_number + UiInputBlockingEdges();
 
   // While UI holds the input, connected controllers read as at rest and empty
   // slots stay empty, as xam reports them. The packet number stays live here
   // since xam freezes it only for its own UI.
-  if (ui_active || IsUIInputBlocked()) {
+  if (ui_active || IsUIInputBlocked() || native_input_owner_) {
     uint32_t packet_number = out_state->packet_number;
     std::memset(out_state, 0, sizeof(X_INPUT_STATE));
     out_state->packet_number = packet_number;
@@ -202,8 +301,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, uint32_t flags,
   // Mask buttons that were held when a UI dialog closed until they're
   // released, so the close-press doesn't carry through into the game.
   if (consumed_buttons_[user_index] != 0) {
-    uint16_t buttons = out_state->gamepad.buttons;
-    consumed_buttons_[user_index] &= buttons;
+    const uint16_t buttons = out_state->gamepad.buttons;
     out_state->gamepad.buttons = buttons & ~consumed_buttons_[user_index];
   }
 
@@ -219,12 +317,15 @@ X_RESULT InputSystem::GetStateForUI(uint32_t user_index, uint32_t flags,
   }
   // The devices in the slot act as one controller.
   InputDriver* connected_driver = nullptr;
-  bool other_type = false;
+  bool other_type = false, controller_sampled = false,
+       controller_unknown = false;
+  uint16_t controller_buttons = 0;
   for (const auto& binding : slot_bindings_[user_index]) {
     if (!binding.driver) {
       continue;
     }
-    if ((flags & binding.driver->GetInputType()) == 0) {
+    const auto input_type = binding.driver->GetInputType();
+    if ((flags & input_type) == 0) {
       other_type = true;
       continue;
     }
@@ -232,7 +333,12 @@ X_RESULT InputSystem::GetStateForUI(uint32_t user_index, uint32_t flags,
     X_INPUT_STATE* target = connected_driver ? &state : out_state;
     if (binding.driver->GetState(binding.driver_slot, target) !=
         X_ERROR_SUCCESS) {
+      controller_unknown |= input_type == InputType::Controller;
       continue;
+    }
+    if (input_type == InputType::Controller) {
+      controller_sampled = true;
+      controller_buttons |= uint16_t(target->gamepad.buttons);
     }
     if (connected_driver) {
       MergeState(out_state, state);
@@ -245,6 +351,13 @@ X_RESULT InputSystem::GetStateForUI(uint32_t user_index, uint32_t flags,
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
   if (connected_driver) {
+    if (controller_sampled && !controller_unknown) {
+      // Only known controller samples observe releases: a keyboard or another
+      // neutral controller cannot stand in for a failed bound provider. Raw UI
+      // buttons stay unchanged so B can close native UI. The host poll observes
+      // real Up without TITLE or an audience-specific filtered read.
+      consumed_buttons_[user_index] &= controller_buttons;
+    }
     UpdateUsedSlot(connected_driver, user_index, true);
     AdjustDeadzoneLevels(user_index, &out_state->gamepad);
     if (out_state->gamepad.buttons != 0) {
@@ -280,6 +393,10 @@ void InputSystem::MergeState(X_INPUT_STATE* state, const X_INPUT_STATE& other) {
 void InputSystem::AddUIInputBlocker() {
   if (ui_input_blockers_.fetch_add(1) == 0) {
     ui_input_blocking_edges_.fetch_add(1);
+    for (auto& driver : drivers_) {
+      driver->SetNativeTextHostModal(native_input_generation_.load(), true);
+      driver->ResetNativeText(native_input_generation_.load());
+    }
   }
 }
 
@@ -300,7 +417,424 @@ void InputSystem::RemoveUIInputBlocker() {
   }
   if (ui_input_blockers_.fetch_sub(1) == 1) {
     ui_input_blocking_edges_.fetch_add(1);
+    for (auto& driver : drivers_) {
+      driver->SetNativeTextHostModal(native_input_generation_.load(), false);
+      driver->ResetNativeText(native_input_generation_.load());
+    }
   }
+}
+
+UiInputReservation::UiInputReservation(std::shared_ptr<State> state)
+    : state_(std::move(state)) {
+  if (state_->count.fetch_add(1) == 0) {
+    state_->edges.fetch_add(1);
+  }
+}
+UiInputReservation::~UiInputReservation() { Release(); }
+void UiInputReservation::Release() noexcept {
+  if (!released_.exchange(true) && state_->count.fetch_sub(1) == 1) {
+    state_->edges.fetch_add(1);
+  }
+}
+std::shared_ptr<UiInputReservation> InputSystem::ReserveHostUiInput(
+    uint64_t generation) {
+  const auto state = host_ui_input_reservations_.load();
+  if (!generation || generation != native_input_generation_.load() || !state ||
+      state->generation != generation || state->count.load() == UINT32_MAX) {
+    return {};
+  }
+  return std::shared_ptr<UiInputReservation>(new UiInputReservation(state));
+}
+
+bool InputSystem::BeginNativeInputTransport(
+    uint64_t generation, NativeGuideCapture guide_capture,
+    NativeDevicesChangedCallback devices_changed) {
+  if (!generation ||
+      (native_input_generation_ && native_input_generation_ != generation)) {
+    return false;
+  }
+  auto previous = native_device_notifications_.load(std::memory_order_acquire);
+  std::shared_ptr<NativeDeviceNotificationRundown> notification;
+  if (devices_changed) {
+    // Never replace a live subscriber or revive a retired generation. Prepare
+    // the token before changing transport state so allocation failure is inert.
+    if (!window_ || generation <= native_device_notifications_closed_through_) {
+      return false;
+    }
+    if (previous) {
+      std::lock_guard guard(previous->state_->mutex);
+      if (!previous->state_->stopped) {
+        return false;
+      }
+    }
+    try {
+      auto state = std::make_shared<NativeDeviceNotificationRundown::State>(
+          generation, std::move(devices_changed));
+      notification = std::shared_ptr<NativeDeviceNotificationRundown>(
+          new NativeDeviceNotificationRundown(std::move(state)));
+    } catch (...) {
+      return false;
+    }
+  }
+  auto host_input = host_ui_input_reservations_.load();
+  if (!host_input || host_input->generation != generation) {
+    try {
+      host_input = std::make_shared<UiInputReservation::State>(generation);
+    } catch (...) {
+      return false;
+    }
+  }
+  host_ui_input_reservations_.store(std::move(host_input));
+  native_input_generation_ = generation;
+  native_guide_capture_ = std::move(guide_capture);
+  native_guide_generation_ = 0;
+  if (notification ||
+      (previous && previous->state_->generation != generation)) {
+    native_device_notifications_.store(std::move(notification),
+                                       std::memory_order_release);
+  }
+  for (auto& driver : drivers_) {
+    driver->SetNativeTextGeneration(generation);
+  }
+  return true;
+}
+
+std::shared_ptr<NativeDeviceNotificationRundown>
+InputSystem::StopNativeDeviceNotifications(uint64_t generation) {
+  if (!generation) {
+    return {};
+  }
+  auto token = native_device_notifications_.load(std::memory_order_acquire);
+  const bool matching_token = token && token->state_->generation == generation;
+  if (!matching_token && generation != native_input_generation_) {
+    return {};
+  }
+  native_device_notifications_closed_through_ =
+      std::max(native_device_notifications_closed_through_, generation);
+  if (!matching_token) {
+    return {};
+  }
+  {
+    std::lock_guard guard(token->state_->mutex);
+    token->state_->stopped = true;
+    token->state_->queued = false;
+  }
+  // Keep the sealed token discoverable through repeated close/End calls.
+  // A later generation may replace it, while its owner retains it for Drain.
+  return token;
+}
+
+void InputSystem::QueueNativeDeviceNotification() {
+  auto token = native_device_notifications_.load(std::memory_order_acquire);
+  if (!token || !window_) {
+    return;
+  }
+  const auto state = token->state_;
+  {
+    std::lock_guard guard(state->mutex);
+    if (state->stopped || state->queued) {
+      return;
+    }
+    state->queued = true;
+  }
+  const std::weak_ptr<NativeDeviceNotificationRundown> weak = token;
+  bool queued = false;
+  try {
+    queued = window_->app_context().CallInUIThreadDeferred([weak] {
+      auto entered = weak.lock();
+      if (!entered) {
+        return;
+      }
+      const auto state = entered->state_;
+      {
+        std::lock_guard guard(state->mutex);
+        if (state->stopped || !state->queued) {
+          return;
+        }
+        state->queued = false;
+        ++state->active;
+      }
+      // Reserve before invoking the callback, including the gap before its
+      // weak Driver lock/AcquirePoll. Scope exit runs after all callback-local
+      // owners have been destroyed, on normal return or exception unwind.
+      struct Invocation {
+        explicit Invocation(
+            std::shared_ptr<NativeDeviceNotificationRundown::State>
+                owner) noexcept
+            : state(std::move(owner)),
+              chain{state.get(), native_device_invocation} {
+          native_device_invocation = &chain;
+        }
+        ~Invocation() {
+          native_device_invocation = chain.previous;
+          std::lock_guard guard(state->mutex);
+          --state->active;
+          state->drained.notify_all();
+        }
+        std::shared_ptr<NativeDeviceNotificationRundown::State> state;
+        NativeDeviceNotificationInvocation chain;
+      } invocation(state);
+      state->callback();
+    });
+  } catch (...) {
+    std::lock_guard guard(state->mutex);
+    state->queued = false;
+    throw;
+  }
+  if (!queued) {
+    std::lock_guard guard(state->mutex);
+    state->queued = false;
+  }
+}
+
+void InputSystem::EndNativeInputTransport(uint64_t generation) {
+  if (!generation || generation != native_input_generation_) {
+    return;
+  }
+  StopNativeDeviceNotifications(generation);
+  SetNativeInputOwner(generation, false);
+  host_ui_input_reservations_.store({});
+  native_input_generation_ = 0;
+  native_guide_capture_ = {};
+  native_guide_generation_ = 0;
+  for (auto& driver : drivers_) {
+    driver->SetNativeTextGeneration(0);
+    driver->SetNativeControllerKeystrokeGeneration(0);
+  }
+}
+
+bool InputSystem::EnableNativeGuideTransport(uint64_t generation) {
+  if (!generation || native_input_generation_ != generation ||
+      !native_guide_capture_) {
+    return false;
+  }
+  if (native_guide_generation_ != generation) {
+    for (auto& driver : drivers_) {
+      driver->SetNativeControllerKeystrokeGeneration(generation);
+    }
+    native_guide_generation_ = generation;
+  }
+  return true;
+}
+std::shared_ptr<const NativeGuideButtonEdge>
+InputSystem::CaptureNativeGuideButtonEdge(uint32_t slot,
+                                          uint64_t expected_generation) try {
+  NativeGuideCapture capture;
+  {
+    auto guard = lock();
+    if (!expected_generation ||
+        native_input_generation_ != expected_generation ||
+        native_guide_generation_ != expected_generation ||
+        slot >= XUserMaxUserCount || IsUIInputBlocked()) {
+      static xe::NativeSystemUiTraceLimiter trace;
+      trace.Emit("input", "input_capture_rejected",
+                 {{"slot", slot},
+                  {"expected_generation", expected_generation},
+                  {"input_generation", native_input_generation_.load()},
+                  {"guide_generation", native_guide_generation_.load()},
+                  {"host_modal", IsUIInputBlocked()}});
+      return {};
+    }
+    capture = native_guide_capture_;
+  }
+  auto edge = capture ? capture(slot) : nullptr;
+  static xe::NativeSystemUiTraceLimiter trace;
+  trace.Emit(
+      "input", "input_capture_result",
+      {{"slot", slot},
+       {"expected_generation", expected_generation},
+       {"captured", bool(edge)}},
+      edge && edge->trace_id()
+          ? std::initializer_list<
+                xe::NativeSystemUiTraceLimiter::Field>{{"input_trace_id",
+                                                        edge->trace_id()}}
+          : std::initializer_list<xe::NativeSystemUiTraceLimiter::Field>{});
+  return edge;
+} catch (...) {
+  return {};
+}
+NativeGuideDispatch InputSystem::DispatchNativeGuideButtonEdge(
+    const std::shared_ptr<const NativeGuideButtonEdge>& edge,
+    uint64_t expected_generation) try {
+  uint32_t reason = 0;
+  {
+    auto guard = lock();
+    if (!expected_generation) {
+      return {NativeGuideDisposition::kInactive, {}};
+    }
+    if (!edge) {
+      reason = 1;
+    } else if (edge->consumed_.exchange(true)) {
+      reason = 2;
+    } else if (native_input_generation_ != expected_generation) {
+      reason = 3;
+    } else if (native_guide_generation_ != expected_generation) {
+      reason = 4;
+    } else if (IsUIInputBlocked()) {
+      reason = 5;
+    } else if (edge->generation_ != expected_generation) {
+      reason = 6;
+    } else if (!edge->dispatch_) {
+      reason = 7;
+    }
+  }
+  if (reason) {
+    static xe::NativeSystemUiTraceLimiter trace;
+    trace.Emit(
+        "input", "input_dispatch_rejected",
+        {{"expected_generation", expected_generation}, {"reason", reason}},
+        edge && edge->trace_id()
+            ? std::initializer_list<
+                  xe::NativeSystemUiTraceLimiter::Field>{{"input_trace_id",
+                                                          edge->trace_id()}}
+            : std::initializer_list<xe::NativeSystemUiTraceLimiter::Field>{});
+    return {NativeGuideDisposition::kDenied, {}};
+  }
+  const auto result = edge->dispatch_();
+  static xe::NativeSystemUiTraceLimiter trace;
+  trace.Emit(
+      "input", "input_dispatch_result",
+      {{"input_generation", expected_generation},
+       {"slot", edge->source_slot()},
+       {"queue_accepted",
+        result.disposition == NativeGuideDisposition::kAccepted}},
+      edge->trace_id()
+          ? std::initializer_list<
+                xe::NativeSystemUiTraceLimiter::Field>{{"input_trace_id",
+                                                        edge->trace_id()}}
+          : std::initializer_list<xe::NativeSystemUiTraceLimiter::Field>{});
+  return result;
+} catch (...) {
+  return {NativeGuideDisposition::kDenied, {}};
+}
+
+X_RESULT InputSystem::GetStateForNativeDriver(uint32_t slot, uint32_t flags,
+                                              X_INPUT_STATE* state) {
+  const auto result = GetStateForUI(slot, flags, state);
+  if (result != X_ERROR_SUCCESS) {
+    return result;
+  }
+  ApplyNativeHostModalSuppression(slot, state);
+  return result;
+}
+
+void InputSystem::ApplyNativeHostModalSuppression(uint32_t slot,
+                                                  X_INPUT_STATE* state) {
+  if (!state || slot >= XUserMaxUserCount) {
+    return;
+  }
+  state->packet_number = state->packet_number + UiInputBlockingEdges();
+  if (IsUIInputBlocked()) {
+    const uint32_t packet = state->packet_number;
+    *state = {};
+    state->packet_number = packet;
+  } else {
+    const uint16_t buttons = state->gamepad.buttons;
+    state->gamepad.buttons = buttons & ~consumed_buttons_[slot];
+  }
+}
+
+bool InputSystem::SetNativeInputOwner(uint64_t generation, bool owns_input) {
+  if (!generation || generation != native_input_generation_) {
+    return false;
+  }
+  if (native_input_owner_ == owns_input) {
+    return true;
+  }
+  native_input_owner_ = owns_input;
+  ui_input_blocking_edges_.fetch_add(1);
+  for (auto& driver : drivers_) {
+    // This is the HLE title queue only; it never touches native text edges.
+    driver->DiscardKeystrokes();
+  }
+  ResetNativeText(generation);
+  if (!owns_input) {
+    X_INPUT_STATE state{};
+    for (uint32_t user = 0; user < XUserMaxUserCount; ++user) {
+      if (GetStateForUI(user, InputType::Controller, &state) ==
+          X_ERROR_SUCCESS) {
+        consumed_buttons_[user] |= state.gamepad.buttons;
+      }
+    }
+  }
+  return true;
+}
+
+bool InputSystem::HasNativeTextInput(uint64_t generation) const {
+  return generation && generation == native_input_generation_ &&
+         std::any_of(drivers_.begin(), drivers_.end(), [](const auto& driver) {
+           return driver->HasNativeTextInput();
+         });
+}
+
+bool InputSystem::SetNativeTextOwner(uint64_t generation, uint64_t revision,
+                                     uint32_t user, bool enabled) {
+  if (!generation || generation != native_input_generation_ ||
+      (revision ? user >= XUserMaxUserCount
+                : (user != UINT32_MAX || enabled))) {
+    return false;
+  }
+  bool accepted = false;
+  for (auto& driver : drivers_) {
+    if (!driver->HasNativeTextInput()) {
+      continue;
+    }
+    driver->SetNativeTextHostModal(generation, IsUIInputBlocked());
+    accepted |= driver->SetNativeTextOwner(generation, revision, user, enabled);
+  }
+  return accepted;
+}
+
+NativeTextState InputSystem::GetNativeTextState(uint64_t generation) const {
+  if (!generation || generation != native_input_generation_) {
+    return {};
+  }
+  for (const auto& driver : drivers_) {
+    if (!driver->HasNativeTextInput()) {
+      continue;
+    }
+    const auto state = driver->GetNativeTextState(generation);
+    if (state.available) {
+      return state;
+    }
+  }
+  return {};
+}
+
+void InputSystem::ResetNativeText(uint64_t generation) {
+  if (generation && generation == native_input_generation_) {
+    for (auto& driver : drivers_) {
+      driver->ResetNativeText(generation);
+    }
+  }
+}
+
+X_RESULT InputSystem::GetNativeTextKeystroke(uint64_t generation,
+                                             uint32_t user_index,
+                                             X_INPUT_KEYSTROKE* output) {
+  if (!output || user_index >= XUserMaxUserCount) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+  if (!HasNativeTextInput(generation)) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+  if (IsUIInputBlocked()) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+  bool invalidated = false;
+  for (auto& driver : drivers_) {
+    if (!driver->HasNativeTextInput()) {
+      continue;
+    }
+    const X_RESULT result =
+        driver->GetNativeTextKeystroke(generation, user_index, output);
+    if (result == X_ERROR_DEVICE_NOT_CONNECTED) {
+      invalidated = true;
+    } else if (result != X_ERROR_EMPTY) {
+      return result;
+    }
+  }
+  return invalidated ? X_ERROR_DEVICE_NOT_CONNECTED : X_ERROR_EMPTY;
 }
 
 X_RESULT InputSystem::SetState(uint32_t user_index,
@@ -329,9 +863,11 @@ X_RESULT InputSystem::GetKeystroke(uint32_t user_index, uint32_t flags,
   // While UI holds the input, connected slots have no keystrokes and empty ones
   // stay empty, as xam reports them. Never success, since a title draining
   // keystrokes until EMPTY would spin forever.
-  if (ui_active || IsUIInputBlocked()) {
-    for (auto& driver : drivers_) {
-      driver->DiscardKeystrokes();
+  if (ui_active || IsUIInputBlocked() || native_input_owner_) {
+    if (!native_input_owner_) {
+      for (auto& driver : drivers_) {
+        driver->DiscardKeystrokes();
+      }
     }
     std::memset(out_keystroke, 0, sizeof(X_INPUT_KEYSTROKE));
     X_INPUT_STATE state;
@@ -354,6 +890,15 @@ X_RESULT InputSystem::GetKeystroke(uint32_t user_index, uint32_t flags,
     }
     any_connected = true;
     if (r == X_ERROR_SUCCESS) {
+      // Legacy providers may synthesize a held-button DOWN/REPEAT from their
+      // own state. Consume that provider result, but expose no stroke until a
+      // real raw controller poll has observed release for this logical slot.
+      if (user_index < XUserMaxUserCount &&
+          (consumed_buttons_[user_index] &
+           KeystrokeButtonMask(uint16_t(out_keystroke->virtual_key)))) {
+        *out_keystroke = {};
+        return X_ERROR_EMPTY;
+      }
       last_used_slot = user_index;
       // Drivers stamp their own slot. The title expects the user it asked for.
       out_keystroke->user_index = static_cast<uint8_t>(user_index);
@@ -481,6 +1026,7 @@ std::unique_lock<xe_unlikely_mutex> InputSystem::lock() {
 }
 
 void InputSystem::ReconcileBindings() {
+  bool native_bindings_changed = false;
   struct LiveDevice {
     InputDriver* driver;
     InputDeviceInfo info;
@@ -506,6 +1052,7 @@ void InputSystem::ReconcileBindings() {
         }
       }
       if (!found) {
+        native_bindings_changed = true;
         b.driver = nullptr;
         b.driver_slot = 0;
       }
@@ -536,6 +1083,7 @@ void InputSystem::ReconcileBindings() {
       unbound.push_back(&l);
       continue;
     }
+    native_bindings_changed = true;
     detached->driver = l.driver;
     detached->driver_slot = l.info.driver_slot;
     detached->display_name = l.info.display_name;
@@ -587,6 +1135,7 @@ void InputSystem::ReconcileBindings() {
     binding.stable_id = l->info.stable_id;
     binding.display_name = l->info.display_name;
     bindings.push_back(std::move(binding));
+    native_bindings_changed = true;
   }
 
   // Pass 4: a device with a native mode uses it unless its type is overridden.
@@ -596,6 +1145,9 @@ void InputSystem::ReconcileBindings() {
         b.driver->SetNativeMode(b.driver_slot, !b.subtype_override);
       }
     }
+  }
+  if (native_bindings_changed) {
+    QueueNativeDeviceNotification();
   }
 }
 
@@ -696,6 +1248,7 @@ void InputSystem::UnbindDevice(InputDriver* driver, uint8_t driver_slot) {
 }
 
 void InputSystem::NotifyBindingsChanged() {
+  QueueNativeDeviceNotification();
   if (kernel::kernel_state()) {
     kernel::kernel_state()->BroadcastNotification(
         kXNotificationSystemInputDevicesChanged, 0);

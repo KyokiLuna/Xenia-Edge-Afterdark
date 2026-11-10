@@ -1,0 +1,18 @@
+{
+  "module": "Guide.AvatarMiniCreator.xex",
+  "program": "3baf79127906_Guide.AvatarMiniCreator.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "047c9e9c2ec552b8f787e452a328d9b693e4bc8a3656e3afcdc726ae7d09c856",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 270,
+  "calls": 483,
+  "strings": 243,
+  "string_xrefs": 104,
+  "independent_sha256": "047c9e9c2ec552b8f787e452a328d9b693e4bc8a3656e3afcdc726ae7d09c856",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

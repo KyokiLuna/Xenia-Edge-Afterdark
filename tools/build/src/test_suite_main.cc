@@ -16,6 +16,7 @@
 
 #include "xenia/base/console_app_main.h"
 #include "xenia/base/platform.h"
+#include "xenia/base/host_storage.h"
 
 #define CATCH_CONFIG_RUNNER
 #include "third_party/catch/single_include/catch2/catch.hpp"
@@ -24,6 +25,24 @@ namespace xe {
 namespace test_suite {
 
 int test_suite_main(const std::vector<std::string>& args) {
+  // Research/build qualification explicitly binds its protected project FS.
+  // Absence preserves general-use defaults; never infer storage_root/CWD.
+  std::shared_ptr<filesystem::HostStorageRoot> protected_filesystem;
+  if (const auto requested = std::getenv("XENIA_HOST_STORAGE_PROTECTED_ROOT")) {
+    if (!*requested) { std::cerr << "Empty protected filesystem root\n"; return 2; }
+    std::error_code error;
+    protected_filesystem = filesystem::HostStorageRoot::Open(
+        xe::to_path(requested), true, error, filesystem::kHostStorageReserve);
+    if (!protected_filesystem || error) {
+      std::cerr << "Protected filesystem unavailable: " << error.message() << '\n';
+      return 2;
+    }
+    const auto space = protected_filesystem->Observe();
+    if (!space.available || space.available_bytes < space.reserve_bytes) {
+      std::cerr << "Protected filesystem reserve unavailable\n"; return 2;
+    }
+  }
+
   // Catch doesn't expose a way to pass a vector of strings, despite building a
   // vector internally.
   int argc = 0;

@@ -1,0 +1,178 @@
+va	data_type	text
+0x9fea08f0	string	[MfgBootLauncher] DoLoadConnectx error ntstatus = %x\r\n
+0x9fea0928	string	connectx.xex
+0x9fea0938	string	[MfgBootLauncher] DoLoadConnectx - calling XexLoadImageFromMemory(baseAddr = %p, imageSize = 0x%x, "connectx.xex",...)\r\n
+0x9fea09b8	string	%02X-%02X-%02X-%02X-%02X-%02X
+0x9fea09d8	string	GET /Bootrequest/dutbooturlrequest.aspx?mac=
+0x9fea0a08	string	\connectx.xex
+0x9fea0a18	string	&file=
+0x9fea0a20	string	[MfgBootLauncher] DetermineAction: result = %d(%x), HRESULT = %x\r\n
+0x9fea0a68	string	[MfgBootLauncher] DetermineAction: result = 200, returning BL_OTHER_ERROR\r\n
+0x9fea0ab4	string	[MfgBootLauncher] terminating with error.\r\n
+0x9fea0ae0	string	[MfgBootLauncher] Phy Phail\n
+0x9fea0b00	string	[MfgBootLauncher] XLaunchNewImageEx returned.  Exitting.\r\n
+0x9fea0b3c	string	[MfgBootLauncher] pathbuffer:\r\n
+0x9fea0b5c	string	[MfgBootLauncher] exebuffer:\r\n
+0x9fea0b80	string	[MfgBootLauncher] About to exit boot launcher and XLaunchNewImageEx \r\n
+0x9fea0bc8	string	\network\smb
+0x9fea0c30	string	[MfgBootLauncher] Successfully initialized connection \r\n
+0x9fea0c70	string	[MfgBootLauncher] Unable to connect socket on port %d using GateWay IP: %d.%d.%d.%d \r\n
+0x9fea0cc8	string	[MfgBootLauncher] Error couldn't find Gateway address \r\n
+0x9fea0d04	string	[MfgBootLauncher] Ethernet link disconnected\r\n
+0x9fea0d34	string	[MfgBootLauncher] Found GateWayIP: %d.%d.%d.%d \r\n
+0x9fea0d68	string	[MfgBootLauncher] Invalid gateway, retrying... \r\n
+0x9fea0da0	string	[MfgBootLauncher] Send GET Command Error.  MfgRawTransfer returned %d(%x)\r\n
+0x9fea0dec	string	[MfgBootLauncher] Re-initializing socket connection\r\n
+0x9fea0e28	string	[MfgBootLauncher] Send GET (file) Command Error.  RawTransferWithStream returned %d(%x)\r\n
+0x9fea0e84	string	Failed to write vault/n
+0x9fea0e9c	string	\Device\Flash
+0x9fea0eac	string	Failed to save vault/n
+0x9fea0ec4	string	Failed allocate vault memory/n
+0x9fea0ee4	string	Response Refused \n
+0x9fea0ef8	string	Bad Base64 decode \n
+0x9fea0f0c	string	Unable to parse response\n
+0x9fea0f28	string	GET /Bootrequest/dutbooturlrequest.aspx?challenge=
+0x9fea0f60	string	[MfgBootLauncher] connectx lib did not load \r\n
+0x9fea0f90	string	[MfgBootLauncher] Starting loader \r\n
+0x9fea0ff8	string	HTTP/
+0x9fea1008	string	Content-Length:
+0x9fea1018	string	[MfgBootLauncher] recv err\r\n
+0x9fea1038	string	[MfgBootLauncher] RawTransferWithStream - SOCKET_ERROR\r\n
+0x9fea1074	string	[MfgBootLauncher] RawTransferWithStream - buffer = %s\r\n
+0x9fea10b8	string	[MfgBootLauncher] MfgRawTransfer - (body) BuildResponse returned HRESULT %d(%x)\r\n
+0x9fea1110	string	[MfgBootLauncher] MfgRawTransfer - (body) dwErr == SOCKET_ERROR  recv() returned error code %d(%x)\r\n
+0x9fea1178	string	[MfgBootLauncher] MfgRawTransfer - (body) dwErr == 0  recv() returned error code %d(%x)\r\n
+0x9fea11d4	string	[MfgBootLauncher] MfgRawTransfer - HTTPContentLength is 0.\r\n
+0x9fea1218	string	[MfgBootLauncher] MfgRawTransfer - (header) dwErr == SOCKET_ERROR  recv() returned error code %d(%x)\r\n
+0x9fea1280	string	[MfgBootLauncher] MfgRawTransfer - (header) dwErr == 0  recv() returned error code %d(%x)\r\n
+0x9fea12e0	string	[MfgBootLauncher] MfgRawTransfer - received header larger than 1k\r\n
+0x9fea1328	string	[MfgBootLauncher] MfgRawTransfer - (body in header) BuildResponse returned HRESULT %d(%x)\r\n
+0x9fea1388	string	[MfgBootLauncher] MfgRawTransfer - send() returned error code %d(%x)\r\n
+0x9fea13d0	string	[MfgBootLauncher] MfgRawTransfer - request == NULL\r\n
+0x9fea1408	string	[MfgBootLauncher] MfgRawTransfer - sock == INVALID_SOCKET\r\n
+0x9fea1448	string	ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/Base64: Invalid input\n
+0x9fea1f10	string	[XAPI RETURN VALUE] %d\n
+0x9fea1fbc	unicode	runtime error 
+0x9fea1fe0	unicode	TLOSS error\n
+0x9fea1ffc	unicode	SING error\n
+0x9fea2014	unicode	DOMAIN error\n
+0x9fea2030	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9fea2220	unicode	R6032\n- not enough space for locale information\n
+0x9fea2288	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9fea234c	unicode	R6030\n- CRT not initialized\n
+0x9fea2388	unicode	R6028\n- unable to initialize heap\n
+0x9fea23d0	unicode	R6027\n- not enough space for lowio initialization\n
+0x9fea2438	unicode	R6026\n- not enough space for stdio initialization\n
+0x9fea24a0	unicode	R6025\n- pure virtual function call\n
+0x9fea24e8	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9fea2550	unicode	R6019\n- unable to open console device\n
+0x9fea25a0	unicode	R6018\n- unexpected heap error\n
+0x9fea25e0	unicode	R6017\n- unexpected multithread lock error\n
+0x9fea2638	unicode	R6016\n- not enough space for thread data\n
+0x9fea2690	unicode	R6010\n- abort() has been called\n
+0x9fea26d8	unicode	R6009\n- not enough space for environment\n
+0x9fea2730	unicode	R6008\n- not enough space for arguments\n
+0x9fea2780	unicode	R6002\n- floating point support not loaded\n
+0x9fea2890	string	Unknown exception
+0x9fea28ac	string	bad allocation
+0x9fea2960	unicode	HH:mm:ss
+0x9fea2974	unicode	dddd, MMMM dd, yyyy
+0x9fea299c	unicode	MM/dd/yy
+0x9fea29c0	unicode	December
+0x9fea29d4	unicode	November
+0x9fea29e8	unicode	October
+0x9fea29f8	unicode	September
+0x9fea2a0c	unicode	August
+0x9fea2a1c	unicode	July
+0x9fea2a28	unicode	June
+0x9fea2a34	unicode	April
+0x9fea2a40	unicode	March
+0x9fea2a4c	unicode	February
+0x9fea2a60	unicode	January
+0x9fea2ad0	unicode	Saturday
+0x9fea2ae4	unicode	Friday
+0x9fea2af4	unicode	Thursday
+0x9fea2b08	unicode	Wednesday
+0x9fea2b1c	unicode	Tuesday
+0x9fea2b2c	unicode	Monday
+0x9fea2b3c	unicode	Sunday
+0x9fea2b84	string	HH:mm:ss
+0x9fea2b90	string	dddd, MMMM dd, yyyy
+0x9fea2ba4	string	MM/dd/yy
+0x9fea2bb8	string	December
+0x9fea2bc4	string	November
+0x9fea2bd0	string	October
+0x9fea2bd8	string	September
+0x9fea2be4	string	August
+0x9fea2bfc	string	April
+0x9fea2c04	string	March
+0x9fea2c0c	string	February
+0x9fea2c18	string	January
+0x9fea2c50	string	Saturday
+0x9fea2c5c	string	Friday
+0x9fea2c64	string	Thursday
+0x9fea2c70	string	Wednesday
+0x9fea2c7c	string	Tuesday
+0x9fea2c84	string	Monday
+0x9fea2c8c	string	Sunday
+0x9fea34e0	string	 Complete Object Locator'
+0x9fea34fc	string	 Class Hierarchy Descriptor'
+0x9fea351c	string	 Base Class Array'
+0x9fea3530	string	 Base Class Descriptor at (
+0x9fea354c	string	 Type Descriptor'
+0x9fea3560	string	`local static thread guard'
+0x9fea357c	string	`managed vector copy constructor iterator'
+0x9fea35a8	string	`vector vbase copy constructor iterator'
+0x9fea35d4	string	`vector copy constructor iterator'
+0x9fea35f8	string	`dynamic atexit destructor for '
+0x9fea361c	string	`dynamic initializer for '
+0x9fea3638	string	`eh vector vbase copy constructor iterator'
+0x9fea3664	string	`eh vector copy constructor iterator'
+0x9fea368c	string	`managed vector destructor iterator'
+0x9fea36b4	string	`managed vector constructor iterator'
+0x9fea36dc	string	`placement delete[] closure'
+0x9fea36fc	string	`placement delete closure'
+0x9fea3718	string	`omni callsig'
+0x9fea3728	string	 delete[]
+0x9fea3734	string	 new[]
+0x9fea373c	string	`local vftable constructor closure'
+0x9fea3760	string	`local vftable'
+0x9fea3770	string	`RTTI
+0x9fea377c	string	`udt returning'
+0x9fea378c	string	`copy constructor closure'
+0x9fea37a8	string	`eh vector vbase constructor iterator'
+0x9fea37d0	string	`eh vector destructor iterator'
+0x9fea37f0	string	`eh vector constructor iterator'
+0x9fea3814	string	`virtual displacement map'
+0x9fea3830	string	`vector vbase constructor iterator'
+0x9fea3854	string	`vector destructor iterator'
+0x9fea3874	string	`vector constructor iterator'
+0x9fea3894	string	`scalar deleting destructor'
+0x9fea38b4	string	`default constructor closure'
+0x9fea38d4	string	`vector deleting destructor'
+0x9fea38f4	string	`vbase destructor'
+0x9fea3908	string	`string'
+0x9fea3914	string	`local static guard'
+0x9fea392c	string	`typeof'
+0x9fea3938	string	`vcall'
+0x9fea3940	string	`vbtable'
+0x9fea394c	string	`vftable'
+0x9fea39d4	string	operator
+0x9fea39fc	string	 delete
+0x9fea3a0c	string	__unaligned
+0x9fea3a18	string	__restrict
+0x9fea3a24	string	__ptr64
+0x9fea3a2c	string	__eabi
+0x9fea3a34	string	__clrcall
+0x9fea3a40	string	__fastcall
+0x9fea3a4c	string	__thiscall
+0x9fea3a58	string	__stdcall
+0x9fea3a64	string	__pascal
+0x9fea3a70	string	__cdecl
+0x9fea3a78	string	__based(
+0x9fea3c50	string	xam.xex
+0x9fea3ca0	string	e:\bt\248805\core\private\tools\mfgbootlauncher\obj\xbox\MfgBootLauncher.pdb
+0x9feb1ad8	string	.?AVbad_alloc@std@@
+0x9feb1af4	string	.?AVexception@std@@
+0x9feb1fd9	string	abcdefghijklmnopqrstuvwxyz
+0x9feb1ff9	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ

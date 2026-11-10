@@ -413,6 +413,74 @@ TEST_CASE("Reset Event", "[event]") {
   REQUIRE(result == WaitResult::kSuccess);
 }
 
+TEST_CASE("Query manual event preserves signal state", "[event][event_query]") {
+  for (bool initial : {false, true}) {
+    CAPTURE(initial);
+    auto event = Event::CreateManualResetEvent(initial);
+    REQUIRE(event);
+    const auto check_query = [&](bool signaled) {
+      for (int repeat = 0; repeat < 4; ++repeat) {
+        CAPTURE(repeat);
+        const auto info = event->Query();
+        CHECK(info.type == 0);
+        CHECK(info.state == (signaled ? 1u : 0u));
+      }
+    };
+    check_query(initial);
+    CHECK(Wait(event.get(), false, 0ms) ==
+          (initial ? WaitResult::kSuccess : WaitResult::kTimeout));
+    check_query(initial);
+
+    event->Set();
+    check_query(true);
+    CHECK(Wait(event.get(), false, 0ms) == WaitResult::kSuccess);
+    check_query(true);
+    CHECK(Wait(event.get(), false, 0ms) == WaitResult::kSuccess);
+    check_query(true);
+
+    event->Reset();
+    check_query(false);
+    CHECK(Wait(event.get(), false, 0ms) == WaitResult::kTimeout);
+    event->Reset();
+    check_query(false);
+  }
+}
+
+TEST_CASE("Query auto event does not consume or create a signal",
+          "[event][event_query]") {
+  for (bool initial : {false, true}) {
+    CAPTURE(initial);
+    auto event = Event::CreateAutoResetEvent(initial);
+    REQUIRE(event);
+    const auto check_query = [&](bool signaled) {
+      for (int repeat = 0; repeat < 4; ++repeat) {
+        CAPTURE(repeat);
+        const auto info = event->Query();
+        CHECK(info.type == 1);
+        CHECK(info.state == (signaled ? 1u : 0u));
+      }
+    };
+    check_query(initial);
+    CHECK(Wait(event.get(), false, 0ms) ==
+          (initial ? WaitResult::kSuccess : WaitResult::kTimeout));
+    check_query(false);
+    CHECK(Wait(event.get(), false, 0ms) == WaitResult::kTimeout);
+
+    event->Set();
+    check_query(true);
+    CHECK(Wait(event.get(), false, 0ms) == WaitResult::kSuccess);
+    check_query(false);
+    CHECK(Wait(event.get(), false, 0ms) == WaitResult::kTimeout);
+
+    event->Set();
+    event->Reset();
+    check_query(false);
+    CHECK(Wait(event.get(), false, 0ms) == WaitResult::kTimeout);
+    event->Reset();
+    check_query(false);
+  }
+}
+
 TEST_CASE("Wait on Multiple Events", "[event]") {
   auto events = std::array<std::unique_ptr<Event>, 4>{
       Event::CreateAutoResetEvent(false),

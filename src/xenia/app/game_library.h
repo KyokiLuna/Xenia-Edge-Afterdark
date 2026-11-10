@@ -19,10 +19,13 @@
 #include <string>
 #include <vector>
 
+#include "xenia/vfs/title_metadata.h"
 #include "xenia/xbox.h"
 
 namespace xe {
 namespace app {
+
+constexpr uint32_t kLibraryMetadataRevision = 1;
 
 // What a game file says about itself. Empty when the file can't be read at
 // all, which is different from a game that genuinely has no media id:
@@ -34,8 +37,7 @@ struct GameFileInfo {
   uint32_t version = 0;
   uint8_t disc_number = 0;
   uint8_t disc_count = 0;
-  // Title art the file carries. Only STFS containers embed one, so this is
-  // empty for ISO, XEX and ZAR, which is also why the names below are.
+  // Encoded title art from the package header or executable SPA resource.
   std::vector<uint8_t> icon;
   // What the package calls itself. `title_name` is the game it belongs to,
   // which an expansion shares with its base game. `display_name` is the
@@ -44,8 +46,15 @@ struct GameFileInfo {
   std::string display_name;
   // A disc image or bare XEX has no type of its own, so it counts as a title.
   XContentType content_type = XContentType::kXbox360Title;
+  uint32_t title_id = 0;
+  uint32_t package_license_mask = 0;
+  vfs::TitleResourcesStatus title_resources_status =
+      vfs::TitleResourcesStatus::kNotRequested;
+  std::optional<vfs::TitleResourceMetadata> title_resources;
+  std::optional<uint32_t> native_category;
 };
-std::optional<GameFileInfo> ReadGameFileInfo(const std::filesystem::path& path);
+std::optional<GameFileInfo> ReadGameFileInfo(const std::filesystem::path &path,
+                                             bool read_title_resources = true);
 
 // "major.minor.build.qfe", the form used for release folder names and for
 // showing a version to the user.
@@ -99,6 +108,12 @@ struct LibraryEntry {
   time_t last_played = 0;
   // Invalid until one of its files has been read.
   XContentType content_type = XContentType::kInvalid;
+  uint32_t metadata_revision = 0;
+  uint32_t package_license_mask = 0;
+  vfs::TitleResourcesStatus title_resources_status =
+      vfs::TitleResourcesStatus::kNotRequested;
+  // Encoded art is persisted through IconPath, rather than duplicated in TOML.
+  std::optional<vfs::TitleResourceMetadata> title_resources;
 
   LibraryKey key() const { return {title_id, version}; }
 
@@ -231,7 +246,7 @@ class GameLibrary {
   std::vector<Release> SplitIntoReleases(const LibraryEntry& entry,
                                          bool& identified) const;
   // Writes `icon` into `dir`, or copies the art already at `fallback_dir`
-  // when the files carry none, which is the case for ISO, XEX and ZAR.
+  // when the file has no readable embedded title art.
   void PlaceIcon(const std::filesystem::path& dir,
                  const std::vector<uint8_t>& icon,
                  const std::filesystem::path& fallback_dir) const;

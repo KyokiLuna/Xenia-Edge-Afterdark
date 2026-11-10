@@ -1,0 +1,2148 @@
+decoded_nxe_kinect module index
+===============================
+
+All addresses use XEX runtime VAs. PE ImageBase and sizes remain separate.
+Origin and package-member paths distinguish identically named versions.
+
+path: $flash_aac.xexp
+origin: $flash_aac.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x91380000
+xex_entry_va: 
+xex_security_image_size: 0x00048000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 18432
+module_version: None
+title_id: 
+base_module: 
+target_version: 2.0.12581.0
+sha256: 5d7e4279036c969ae598d6ec3ac67c8f4d7ff96912a4f1fe145c94b9212a1271
+decoded_sha256: 5d7e4279036c969ae598d6ec3ac67c8f4d7ff96912a4f1fe145c94b9212a1271
+confidence: UNRESOLVED
+note: No same-dashboard base matching filename, source version and load address
+
+path: $flash_bootanim.xex
+origin: $flash_bootanim.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x98000000
+xex_entry_va: 
+xex_security_image_size: 0x00082000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00000000
+pe_size_of_image: 0x0006BE00
+decoded_size: 532480
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 309c590c7ca9019787479d4565ca09f3599bd20b7f425ecd3fcb1d12298765b6
+decoded_sha256: b268bc1f3104d3e9df03888f8bbdd6023974928fbf75d91730aef57cf66db182
+confidence: CONFIRMED
+note: 
+
+path: $flash_bootanim.xexp
+origin: $flash_bootanim.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x98000000
+xex_entry_va: 
+xex_security_image_size: 0x0008F000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 28672
+module_version: None
+title_id: 
+base_module: bootanim.xex
+target_version: 2.0.7371.0
+sha256: f31733f0793a610b4b756380791fc7a1c8c4bc06f2b373501d97dbac6eae4139
+decoded_sha256: f31733f0793a610b4b756380791fc7a1c8c4bc06f2b373501d97dbac6eae4139
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Invalid reconstructed format header
+
+path: $flash_createprofile.xex
+origin: $flash_createprofile.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90108F48
+xex_security_image_size: 0x0001E000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00008F48
+pe_size_of_image: 0x0001A600
+decoded_size: 122880
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 171f23e7bed80e417f39670844642baf37fb96ba06ffc751aff57442f71272fe
+decoded_sha256: edb5c882f43ca9411cc76151766666bfe68077d7913bfb63b5dc2c7276cf44e8
+confidence: CONFIRMED
+note: 
+
+path: $flash_createprofile.xexp
+origin: $flash_createprofile.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x90100000
+xex_entry_va: 
+xex_security_image_size: 0x00027000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 53248
+module_version: None
+title_id: 
+base_module: createprofile.xex
+target_version: 2.0.7371.0
+sha256: 7c48c5bebb6a8d7e05b8d1a9c17600d87a3ca2ad5f75a601c23dc1492644b717
+decoded_sha256: 7c48c5bebb6a8d7e05b8d1a9c17600d87a3ca2ad5f75a601c23dc1492644b717
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Invalid reconstructed format header
+
+path: $flash_dash.xex
+origin: $flash_dash.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x92000000
+xex_entry_va: 0x9217BE30
+xex_security_image_size: 0x00E83000
+pe_image_base: 0x92000000
+pe_entry_rva: 0x0017BE30
+pe_size_of_image: 0x00B05800
+decoded_size: 15216640
+module_version: 2.0.12581.0
+title_id: 0xFFFE07D1
+base_module: 
+target_version: 
+sha256: c2a8a0aa3c42f2f054bbd503b66f2bc9e3b5486f9323c44e1695e5e063bffb85
+decoded_sha256: 898d94035af8f01e770b16a82d8087e9cbc995b53edaf2285546e1509eef4e6a
+confidence: CONFIRMED
+note: 
+
+path: $flash_deviceselector.xex
+origin: $flash_deviceselector.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x916D0000
+xex_entry_va: 0x916D64F8
+xex_security_image_size: 0x00014000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000064F8
+pe_size_of_image: 0x0000DA00
+decoded_size: 81920
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 170ca3b65e1a66bc33398ae7f1c3000b65236c36cf4221c489aca969b2b6a25a
+decoded_sha256: 2c330b30f1249538a323c0dfe9ccafd71867ef1bbb28a9bd72f60e5631d2dd39
+confidence: CONFIRMED
+note: 
+
+path: $flash_deviceselector.xexp
+origin: $flash_deviceselector.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x916D0000
+xex_entry_va: 
+xex_security_image_size: 0x0000C000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 10240
+module_version: None
+title_id: 
+base_module: deviceselector.xex
+target_version: 2.0.7371.0
+sha256: 80c0cbd70b648d3ae5b5ce2647c2e93ce42b2d4a5b8fb53cb8b31852dd869f6d
+decoded_sha256: 80c0cbd70b648d3ae5b5ce2647c2e93ce42b2d4a5b8fb53cb8b31852dd869f6d
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Invalid reconstructed format header
+
+path: $flash_gamerprofile.xex
+origin: $flash_gamerprofile.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90119248
+xex_security_image_size: 0x0004F000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00019248
+pe_size_of_image: 0x00038E00
+decoded_size: 323584
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: a4784b27c9efe76f813d9ae1ebf267d24eb86a984b0791247e102c274b5d92bd
+decoded_sha256: ed08e358850f4eb36a63e512c644103c337a41672ba5f1ac1e68e67891623fdb
+confidence: CONFIRMED
+note: 
+
+path: $flash_gamerprofile.xexp
+origin: $flash_gamerprofile.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x90100000
+xex_entry_va: 
+xex_security_image_size: 0x00056000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 63488
+module_version: None
+title_id: 
+base_module: gamerprofile.xex
+target_version: 2.0.7371.0
+sha256: 64284dbb096df58bc36365fb0c9c7fcb8d21839b88cb59f95c259f07ed566e65
+decoded_sha256: 64284dbb096df58bc36365fb0c9c7fcb8d21839b88cb59f95c259f07ed566e65
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Invalid reconstructed format header
+
+path: $flash_hud.xex
+origin: $flash_hud.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x913E0000
+xex_entry_va: 0x913FBA50
+xex_security_image_size: 0x0004C000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x0001BA50
+pe_size_of_image: 0x00033600
+decoded_size: 311296
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 45f272f1d98a3fdd25ef5ab752b1b8205e037a218b6b087b978e7150995b01d0
+decoded_sha256: 8b487a72307539ffda6daf249999ac8eea1e34974df2ea699ef0cf0c345b8f36
+confidence: CONFIRMED
+note: 
+
+path: $flash_hud.xexp
+origin: $flash_hud.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x913E0000
+xex_entry_va: 
+xex_security_image_size: 0x0006B000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 153600
+module_version: None
+title_id: 
+base_module: hud.xex
+target_version: 2.0.7371.0
+sha256: 615ddfa56475e785ceb84933b096273a6ac7b1e68d849cab04e3c84c6ce9ae0c
+decoded_sha256: 615ddfa56475e785ceb84933b096273a6ac7b1e68d849cab04e3c84c6ce9ae0c
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Invalid reconstructed format header
+
+path: $flash_huduiskin.xex
+origin: $flash_huduiskin.xex
+member: 
+status: decoded
+content_kind: xui_archive
+xex_load_address: 0x90F90000
+xex_entry_va: 
+xex_security_image_size: 0x00032000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 204800
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: a408ad5e83551fbe3469083bdbd95eedbb7fa4dd055f61b8891d8c35b937883f
+decoded_sha256: 75d6c35604a84512ae98fc818401483165618527e3e6e7c86116b3b389669e92
+confidence: CONFIRMED
+note: 
+
+path: $flash_mfgbootlauncher.xex
+origin: $flash_mfgbootlauncher.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9FEA0000
+xex_entry_va: 0x9FEA75E8
+xex_security_image_size: 0x00013000
+pe_image_base: 0x92000000
+pe_entry_rva: 0x000075E8
+pe_size_of_image: 0x00018000
+decoded_size: 77824
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: f4c373712dd9840a507b91cbfcc0a1790905b8296151e4047d9f302efeff7ac6
+decoded_sha256: dc5f8cdebf516bfdc5a58268568f5723418ba5bbf275b30ec3ed3bda5f8bf9ec
+confidence: CONFIRMED
+note: 
+
+path: $flash_mfgbootlauncher.xexp
+origin: $flash_mfgbootlauncher.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x9FEA0000
+xex_entry_va: 
+xex_security_image_size: 0x00016000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 18432
+module_version: None
+title_id: 
+base_module: mfgbootlauncher.xex
+target_version: 2.0.7371.0
+sha256: f52140da172436c0fec1687c2a11a5ad149d8f128cc98aa5dc530e418bfc780e
+decoded_sha256: f52140da172436c0fec1687c2a11a5ad149d8f128cc98aa5dc530e418bfc780e
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Invalid reconstructed format header
+
+path: $flash_minimediaplayer.xex
+origin: $flash_minimediaplayer.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x9010C3C8
+xex_security_image_size: 0x00020000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x0000C3C8
+pe_size_of_image: 0x00019400
+decoded_size: 131072
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 26a102d8ab66865e3576bbb2ae784b03119354b51fa52ecb1f09458cb513faa7
+decoded_sha256: 1e116c8f2e0772779898d341df00cad9e6f145f449d5f533287683a912796e80
+confidence: CONFIRMED
+note: 
+
+path: $flash_minimediaplayer.xexp
+origin: $flash_minimediaplayer.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x90100000
+xex_entry_va: 
+xex_security_image_size: 0x00026000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 30720
+module_version: None
+title_id: 
+base_module: minimediaplayer.xex
+target_version: 2.0.7371.0
+sha256: df8d295a4c2b22ab752351f1af22aa23787a4432ca158e9cb02b3fe1d0472c5c
+decoded_sha256: df8d295a4c2b22ab752351f1af22aa23787a4432ca158e9cb02b3fe1d0472c5c
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Invalid reconstructed format header
+
+path: $flash_nomni.xexp
+origin: $flash_nomni.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x91090000
+xex_entry_va: 
+xex_security_image_size: 0x0004E000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 45056
+module_version: None
+title_id: 
+base_module: 
+target_version: 2.0.12581.0
+sha256: fec5edfec54a5c315f48b44d3aedbbb4626bdfc3cc4cf22a4454c212349d05d4
+decoded_sha256: fec5edfec54a5c315f48b44d3aedbbb4626bdfc3cc4cf22a4454c212349d05d4
+confidence: UNRESOLVED
+note: No same-dashboard base matching filename, source version and load address
+
+path: $flash_nomnifwm.xexp
+origin: $flash_nomnifwm.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x91070000
+xex_entry_va: 
+xex_security_image_size: 0x00017000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 20480
+module_version: None
+title_id: 
+base_module: 
+target_version: 2.0.12581.0
+sha256: 79600eabf9d8f9b9c23f760a72bd46474c1f97a25efc913b7378352628085212
+decoded_sha256: 79600eabf9d8f9b9c23f760a72bd46474c1f97a25efc913b7378352628085212
+confidence: UNRESOLVED
+note: No same-dashboard base matching filename, source version and load address
+
+path: $flash_signin.xex
+origin: $flash_signin.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x901034E0
+xex_security_image_size: 0x00030000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000034E0
+pe_size_of_image: 0x0001E600
+decoded_size: 196608
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: fba9eb8e5d0d7c379e2d65f4b8fd8e51a585174ee3bd02b44b683104f9fc2151
+decoded_sha256: 1dae0e0c27be325ddb87a51c361ad4b9a069d3ce38a6d9023dcc0e0919bd0c4a
+confidence: CONFIRMED
+note: 
+
+path: $flash_signin.xexp
+origin: $flash_signin.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x90100000
+xex_entry_va: 
+xex_security_image_size: 0x00029000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 30720
+module_version: None
+title_id: 
+base_module: signin.xex
+target_version: 2.0.7371.0
+sha256: c0987a239abd371bfa7d0b402ab530da9fb4198b7a21db5c83b46f1506343c54
+decoded_sha256: c0987a239abd371bfa7d0b402ab530da9fb4198b7a21db5c83b46f1506343c54
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Reconstructed load-address fields disagree
+
+path: $flash_systemupdate.xex
+origin: $flash_systemupdate.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x92000000
+xex_entry_va: 0x92019058
+xex_security_image_size: 0x000B4000
+pe_image_base: 0x00400000
+pe_entry_rva: 0x00019058
+pe_size_of_image: 0x000B8200
+decoded_size: 737280
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 9aa91d4ef3f5c97885ddc0922b33d0165878c28c9ddc09665013cff2437f91ae
+decoded_sha256: ccf8cd542eb1c2950792a93d4c4f5d0392c57b6ffa907414fb72af8cef370097
+confidence: CONFIRMED
+note: 
+
+path: $flash_systemupdate2pre.xex
+origin: $flash_systemupdate2pre.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x98200000
+xex_entry_va: 
+xex_security_image_size: 0x000AC000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00000000
+pe_size_of_image: 0x000C4400
+decoded_size: 704512
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: cdaef107c38b5bcb9c01bbbe59229a81ee4a97de175b858956defe3b43b8e8c0
+decoded_sha256: 320352108fc9e30e2b0f36d7df4a2cbd415e1172bd9db605544b1a1bf8804cd4
+confidence: CONFIRMED
+note: 
+
+path: $flash_updater.xex
+origin: $flash_updater.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x901049B0
+xex_security_image_size: 0x00012000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000049B0
+pe_size_of_image: 0x0000D200
+decoded_size: 73728
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 86404b2fe75ce090711a190964ebf8c4bd917b6a582f713439d2aa9db8e7e357
+decoded_sha256: d265e4d54ca4773bd44d7b1cce78f0727e2ac93df33b3e2669caa493a4d3f72c
+confidence: CONFIRMED
+note: 
+
+path: $flash_updater.xexp
+origin: $flash_updater.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x90100000
+xex_entry_va: 
+xex_security_image_size: 0x0000D000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 12288
+module_version: None
+title_id: 
+base_module: updater.xex
+target_version: 2.0.7371.0
+sha256: eb33f0f187a16d0f499c3d93064165a240005d3ca23f4205d7ce23698de58632
+decoded_sha256: eb33f0f187a16d0f499c3d93064165a240005d3ca23f4205d7ce23698de58632
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Reconstructed load-address fields disagree
+
+path: $flash_vk.xex
+origin: $flash_vk.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x917D0000
+xex_entry_va: 0x917DB3E0
+xex_security_image_size: 0x00017000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x0000B3E0
+pe_size_of_image: 0x00011200
+decoded_size: 94208
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 1096713a421157c740498f021283ac6d8701a45a85f6599f1d4e7e302b2f5948
+decoded_sha256: 716462a63d34e55c3896583bc967448d2e3a9b5a0a8eda96e073f4fc16bcb178
+confidence: CONFIRMED
+note: 
+
+path: $flash_vk.xexp
+origin: $flash_vk.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x917D0000
+xex_entry_va: 
+xex_security_image_size: 0x0002C000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 45056
+module_version: None
+title_id: 
+base_module: vk.xex
+target_version: 2.0.7371.0
+sha256: c2cc42e89b0344f101ca134d4f5fd83ba231431db86fb4feccd07fe92e3bed1f
+decoded_sha256: c2cc42e89b0344f101ca134d4f5fd83ba231431db86fb4feccd07fe92e3bed1f
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Invalid reconstructed format header
+
+path: $flash_xam.xex
+origin: $flash_xam.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x817E0000
+xex_entry_va: 0x81871FA0
+xex_security_image_size: 0x00550000
+pe_image_base: 0x817E0000
+pe_entry_rva: 0x00091FA0
+pe_size_of_image: 0x004E0200
+decoded_size: 5570560
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 99c857e2f93fc0c23172eda3d9e1ac92c59381ddd294cd1f80dd944ab804e643
+decoded_sha256: 77c69971a934f28ac7fcebcf73514203f40b9ba22017ca01083036b4702c948f
+confidence: CONFIRMED
+note: 
+
+path: $flash_xam.xexp
+origin: $flash_xam.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x81870000
+xex_entry_va: 
+xex_security_image_size: 0x00440000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 1163264
+module_version: None
+title_id: 
+base_module: xam.xex
+target_version: 2.0.7371.0
+sha256: c7f5052ab1b2a2e8ad334596582cc8fa70e600047f828a47fb12645ae63878eb
+decoded_sha256: c7f5052ab1b2a2e8ad334596582cc8fa70e600047f828a47fb12645ae63878eb
+confidence: UNRESOLVED
+note: Delta reconstruction rejected: Invalid reconstructed format header
+
+path: $flash_ximecore.xex
+origin: $flash_ximecore.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x91680000
+xex_entry_va: 0x91689CC0
+xex_security_image_size: 0x00027000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00009CC0
+pe_size_of_image: 0x0002CC00
+decoded_size: 159744
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 64353acc32e0af46dba2317bb415a517b80e6b0f2c517cef927fddddf77e4235
+decoded_sha256: cfaf7f983d81d33ed650b477e106d1c9b86d23942caef5369000fdb4d5036591
+confidence: CONFIRMED
+note: 
+
+path: $flash_ximedic.xexp
+origin: $flash_ximedic.xexp
+member: 
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x81720000
+xex_entry_va: 
+xex_security_image_size: 0x000B0000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 10240
+module_version: None
+title_id: 
+base_module: 
+target_version: 2.0.12581.0
+sha256: 20fe84744a202d7bab6714ed92f330dbe9e415a9799047408fd209c6b210a965
+decoded_sha256: 20fe84744a202d7bab6714ed92f330dbe9e415a9799047408fd209c6b210a965
+confidence: UNRESOLVED
+note: No same-dashboard base matching filename, source version and load address
+
+path: $install_extender.xex
+origin: $install_extender.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9F100000
+xex_entry_va: 0x9F106750
+xex_security_image_size: 0x0001D000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00006750
+pe_size_of_image: 0x00010200
+decoded_size: 118784
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 405f28696aa2ae36d6039ed690ed8253d95fec202952008bc5b78ba14d7437f3
+decoded_sha256: 2bf6801a3042ea9ce3dd6994735c404b150263125c0855fca97fb63fc76a3142
+confidence: CONFIRMED
+note: 
+
+path: AvatarEditor.xex
+origin: AvatarEditor.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x92000000
+xex_entry_va: 0x92100198
+xex_security_image_size: 0x033FB000
+pe_image_base: 0x92000000
+pe_entry_rva: 0x00100198
+pe_size_of_image: 0x0261BE00
+decoded_size: 54505472
+module_version: 2.0.12581.0
+title_id: 0x584D07D1
+base_module: 
+target_version: 
+sha256: 5593985c1e9b980ea3587a838583571d3acc2d7cd1f808ec22c856f9760337cb
+decoded_sha256: 7fd71785ad87390d0cdd0a6fb038b8915be58b6c8d0673c0f90754eecb0165cf
+confidence: CONFIRMED
+note: 
+
+path: AvatarMiniCreator.xex
+origin: AvatarMiniCreator.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90104868
+xex_security_image_size: 0x00087000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00004868
+pe_size_of_image: 0x00019000
+decoded_size: 552960
+module_version: 2.0.7357.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 6eed22e53e6bc97d7a1c82c007f21371e585d8addb6b8f3687a82978505da8fb
+decoded_sha256: 1196a28758caf8cff0b574fc71ada59edcf8be7df1c8429c2f0c10c8d6b14b52
+confidence: CONFIRMED
+note: 
+
+path: BiometricSetup.xex
+origin: BiometricSetup.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x92000000
+xex_entry_va: 0x920DC088
+xex_security_image_size: 0x0060C000
+pe_image_base: 0x92000000
+pe_entry_rva: 0x000DC088
+pe_size_of_image: 0x00316200
+decoded_size: 6340608
+module_version: 2.0.12581.0
+title_id: 0x584D07D7
+base_module: 
+target_version: 
+sha256: e6cfe73f01e4d6f4eb50e6578e9f8ce615fbac18b2633ba427ec4ddb84213c41
+decoded_sha256: 77b2d0665040362692648125487ee1364d67f20e6d8cd4e8a4de718ac13243dd
+confidence: CONFIRMED
+note: 
+
+path: Dash.AttractionScreen.xex
+origin: Dash.AttractionScreen.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9BF60000
+xex_entry_va: 0x9BF663B8
+xex_security_image_size: 0x0002B000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x000063B8
+pe_size_of_image: 0x00020200
+decoded_size: 176128
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 32fff463c0a5624b6fc3212d1657910ae12f5bac1e082c2e0dd2240bc37b0ba0
+decoded_sha256: 291f55940115c6cd13c7f5b62704c52a3dc05f655e8f9878f9476456fd8ce3ff
+confidence: CONFIRMED
+note: 
+
+path: Dash.FieldCalibration.lex
+origin: Dash.FieldCalibration.lex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9BD60000
+xex_entry_va: 0x9BD66000
+xex_security_image_size: 0x00091000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x00006000
+pe_size_of_image: 0x00040400
+decoded_size: 593920
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 9a77a06ad3bb7f17b5354f6dead3c22ed7ea4f1fde5ed104bb9c203a80d43527
+decoded_sha256: 2e93e2fa332d4c3f151ea0ec27b79063a70dc91382c76d1ac06c58b4484b3de5
+confidence: CONFIRMED
+note: 
+
+path: Dash.MP.Offline.lex
+origin: Dash.MP.Offline.lex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9C660000
+xex_entry_va: 0x9C664000
+xex_security_image_size: 0x000CF000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x00004000
+pe_size_of_image: 0x00022000
+decoded_size: 847872
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: c0351c868ca553ecadc27238dc0b8798f498fc903f08b6db580f6ab92e9eb0b9
+decoded_sha256: 4332af94a51f3279cef8a9bbb651e59f69f1f5bbd7c9c2a16a96f3de740d51ed
+confidence: CONFIRMED
+note: 
+
+path: Dash.NuiTroubleshooter.lex
+origin: Dash.NuiTroubleshooter.lex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9CB50000
+xex_entry_va: 0x9CBB0C68
+xex_security_image_size: 0x00295000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x00060C68
+pe_size_of_image: 0x00186600
+decoded_size: 2707456
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: ae9d61e766922e612f4e9434a30413029c31297dbf71adc003ed69ccff771c5c
+decoded_sha256: 715eb378be6f469929c38628d5b8a612519588de4f392c6693b89d5093b653f3
+confidence: CONFIRMED
+note: 
+
+path: Guide.AvatarMiniCreator.xex
+origin: Guide.AvatarMiniCreator.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90104938
+xex_security_image_size: 0x00073000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00004938
+pe_size_of_image: 0x0001AE00
+decoded_size: 471040
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: b7aca8125772aca1e84043bf56e691e02fedee17f2075e5a5f6c55fefe53beeb
+decoded_sha256: c8e943e2f663b1d92e20e88e1cc192de26a53acccc82d0c7c2ad04daf9373d74
+confidence: CONFIRMED
+note: 
+
+path: Guide.NuiTroubleshooter.xex
+origin: Guide.NuiTroubleshooter.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90111A78
+xex_security_image_size: 0x000A2000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00011A78
+pe_size_of_image: 0x00069E00
+decoded_size: 663552
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 49362bfe08670fe354de9ea4cc7a3918aa3e3b3d877d1949e13904fcdc225586
+decoded_sha256: d8b9589b87cf99faf0beb2c4e80f9d297fd73e048f8de02aa0dc052b368dbfa7
+confidence: CONFIRMED
+note: 
+
+path: LivePack.xex
+origin: LivePack.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9F610000
+xex_entry_va: 0x9F66D018
+xex_security_image_size: 0x004ED000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x0005D018
+pe_size_of_image: 0x00382C00
+decoded_size: 5165056
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: b76b3d2ed143a12e68e9bee4ae04431e767b78a5b1d7fec1492950930d0cd84c
+decoded_sha256: c78927a519659200288e48e660cc7eb46699e32f3175a27e150ebb14841f3fbd
+confidence: CONFIRMED
+note: 
+
+path: Party.xex
+origin: Party.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x91260000
+xex_entry_va: 0x91263958
+xex_security_image_size: 0x0003B000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x00003958
+pe_size_of_image: 0x00048A00
+decoded_size: 241664
+module_version: 2.0.7357.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 1240961f7cfb3892a008f2b643b481c09895f6a349ff0c8a88ea12938c8eab5a
+decoded_sha256: 551d2d7723f5d3d647889929533c2aa30aa1cff2b1ab029d977b93addc436584
+confidence: CONFIRMED
+note: 
+
+path: XIMEDICEX.XEX
+origin: XIMEDICEX.XEX
+member: 
+status: decoded
+content_kind: ime_dictionary
+xex_load_address: 0x816A0000
+xex_entry_va: 
+xex_security_image_size: 0x00070000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 458752
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 6034ef76d90a583b3e72551f738a0386a99b20fb106ff7958029344644cc3623
+decoded_sha256: 43c324ed8d6b05531f63c6e97aabfa0eb6289df69f5dbf2779034566c4de2bd6
+confidence: CONFIRMED
+note: 
+
+path: XMsgr.xex
+origin: XMsgr.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x91720000
+xex_entry_va: 0x917294F0
+xex_security_image_size: 0x00042000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000094F0
+pe_size_of_image: 0x0004DE00
+decoded_size: 270336
+module_version: 2.0.7357.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: fdcbe86084dd083fbc8c37c7fe0ed45f6189d39cbaeefe96cfdc8540f8de6429
+decoded_sha256: 90d1f2319d8c513e4754914e2f95c50855c0e7ace0530cfb7e152b70aa28a4db
+confidence: CONFIRMED
+note: 
+
+path: Xam.Community.xex
+origin: Xam.Community.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x91240000
+xex_entry_va: 0x91243D48
+xex_security_image_size: 0x00045000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00003D48
+pe_size_of_image: 0x00049200
+decoded_size: 282624
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: b16d61f06e80653d8efd211c97ed0f6fc330a8bfcd1886842bc860c2539cd855
+decoded_sha256: 4145b298919bb9f58d2460212db39620684543d9dd1ac5500300232c5c4585cc
+confidence: CONFIRMED
+note: 
+
+path: Xam.LiveMessenger.xex
+origin: Xam.LiveMessenger.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x91720000
+xex_entry_va: 0x91729E08
+xex_security_image_size: 0x0002D000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00009E08
+pe_size_of_image: 0x00039C00
+decoded_size: 184320
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: ceada3848bf0a85988214d0750749a586155cce81258595c67c3fdd87fc2a920
+decoded_sha256: 2d0cc5733c333d1d8d0977399b57ccf74428739857bed4f23bd18154af7196a5
+confidence: CONFIRMED
+note: 
+
+path: Xam.WordRegister.xex
+origin: Xam.WordRegister.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90105978
+xex_security_image_size: 0x0000B000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00005978
+pe_size_of_image: 0x0000BE00
+decoded_size: 45056
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 8a83e4ae129be4c1f21f6b93b2a34033ce01311cce96d1491b291895e1faa660
+decoded_sha256: 32c785a386eeb1354cd6608c1331d76e3d7fe3012f37897b1ccec96dae1ce075
+confidence: CONFIRMED
+note: 
+
+path: XimeDicCh.xex
+origin: XimeDicCh.xex
+member: 
+status: decoded
+content_kind: opaque_data
+xex_load_address: 0x81670000
+xex_entry_va: 
+xex_security_image_size: 0x00030000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 196608
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 3775a3bc3f44786f161e24e8430086fcae3737e4c9537cc664ea05b60654ca36
+decoded_sha256: 96593abf568ebe41d3ef98c3cd89ad775aa274a8e53b6b431d5f11d0fbebaf78
+confidence: CONFIRMED
+note: 
+
+path: Xna_TitleLauncher.xex
+origin: Xna_TitleLauncher.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x92000000
+xex_entry_va: 0x9203C020
+xex_security_image_size: 0x0012D000
+pe_image_base: 0x92000000
+pe_entry_rva: 0x0003C020
+pe_size_of_image: 0x00148C00
+decoded_size: 1232896
+module_version: 3.2.1.0
+title_id: 0x584E07D2
+base_module: 
+target_version: 
+sha256: 5da55eaa1c9512094cc48711d14796fe2d258e0e5cf7b7a423c02e3c6de38ceb
+decoded_sha256: 07bfae53a28179f7d65c30a4cfd598949a53ac819be33f30069ad5cabcaaf378
+confidence: CONFIRMED
+note: 
+
+path: bootanim.xex
+origin: bootanim.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x98000000
+xex_entry_va: 
+xex_security_image_size: 0x0008E000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00000000
+pe_size_of_image: 0x00074400
+decoded_size: 581632
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 352764f79181c628a1cfe88037da0e812654dfeb5eb037b41f1617eafa9fab5f
+decoded_sha256: 1699406fe0791960eb9d3346c463a172a88c1423197216865c9f6aa861002244
+confidence: CONFIRMED
+note: 
+
+path: createprofile.xex
+origin: createprofile.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x901069D0
+xex_security_image_size: 0x0001B000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000069D0
+pe_size_of_image: 0x00017E00
+decoded_size: 110592
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 890f10a3754a4119d135fa6c9a99e4a0eed067bacf556f7ff51cf797baef0497
+decoded_sha256: 3cfbcb0191047296666ffd2f78bcfa97945c4dcddc37d82c32904c4d05847e31
+confidence: CONFIRMED
+note: 
+
+path: dash.ExtraAVCodecs.xex
+origin: dash.ExtraAVCodecs.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9C060000
+xex_entry_va: 0x9C0E0078
+xex_security_image_size: 0x001EC000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x00080078
+pe_size_of_image: 0x00207E00
+decoded_size: 2015232
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: d28de4db27cedf450fb78c32e97fc935f9b862d632135b7994d3af866f343973
+decoded_sha256: 47822fa4e708553c34ef0fe298e00b8fe0d1d5e3dc3da23ebc7dd037a65fb4f2
+confidence: CONFIRMED
+note: 
+
+path: dash.NuiFirstUse.xex
+origin: dash.NuiFirstUse.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9D950000
+xex_entry_va: 0x9D95E310
+xex_security_image_size: 0x001A6000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x0000E310
+pe_size_of_image: 0x00034400
+decoded_size: 1728512
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: e2ef4fc6935755a821aed6d86f8a7036245b4c4a576db6378bde7636761b14bb
+decoded_sha256: 50bd7f4ebb7611d1f7bb41b8c9ae86d7a674ddda4c04c305c81884a6764984b2
+confidence: CONFIRMED
+note: 
+
+path: dash.firstuse.xex
+origin: dash.firstuse.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9B760000
+xex_entry_va: 0x9B7643A0
+xex_security_image_size: 0x0026A000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x000043A0
+pe_size_of_image: 0x0001B200
+decoded_size: 2531328
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 63985639f1cee7968bceb7a4f7212266b775116815cfdf4cea2986162458fb84
+decoded_sha256: d05a60c7c6fab71248150cece32849ec3204016382206662e5facc3c915c63b9
+confidence: CONFIRMED
+note: 
+
+path: dash.natalpregame.xex
+origin: dash.natalpregame.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9C7D0000
+xex_entry_va: 0x9C7D33A0
+xex_security_image_size: 0x00089000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x000033A0
+pe_size_of_image: 0x00012600
+decoded_size: 561152
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 27c0f9ec8c157416f69cc6dcf9594d463ebd5f177569bc66b575c0fe7cbbae02
+decoded_sha256: 0badbdfec066bdc3217de9894f8dba184b4910a5d6d92dfcb6583c0c1484ebc5
+confidence: CONFIRMED
+note: 
+
+path: dash.nuihub.xex
+origin: dash.nuihub.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9CE80000
+xex_entry_va: 0x9CE8BDC8
+xex_security_image_size: 0x00061000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x0000BDC8
+pe_size_of_image: 0x00029E00
+decoded_size: 397312
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: f4e36b216fbc66b182b136a0c8bae54d7c55f1ee6bee7cc7f440b8c18694bcc6
+decoded_sha256: ddd3dbafe9125a307b952ae6909022774a5885ec30d839798f7bc386eb30b202
+confidence: CONFIRMED
+note: 
+
+path: dash.xex
+origin: dash.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x92000000
+xex_entry_va: 0x920A8848
+xex_security_image_size: 0x007F5000
+pe_image_base: 0x00400000
+pe_entry_rva: 0x000A8848
+pe_size_of_image: 0x00529000
+decoded_size: 8343552
+module_version: 2.0.1888.0
+title_id: 0xFFFE07D1
+base_module: 
+target_version: 
+sha256: 38f9d594b923d2aaee0a0b79cc2a511172c6b8ed48d6ad4f243d8d05033f3ad1
+decoded_sha256: 3d3bf5c1a3c27e91d6cbdeaa8c22ecee836a12d872ed0a34c60454698bdfc4f1
+confidence: CONFIRMED
+note: 
+
+path: dashnui.xex
+origin: dashnui.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9E490000
+xex_entry_va: 0x9E6EB178
+xex_security_image_size: 0x0039B000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x0025B178
+pe_size_of_image: 0x003B9600
+decoded_size: 3780608
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 75aa4a59d6182a47fe5f60f721bef6dec1e94764ba9923c656b99001b2ed8af1
+decoded_sha256: 76b5d14e85414f650d872107e18d6526949cc0e9ff6850fa7dac28cf0fad41a5
+confidence: CONFIRMED
+note: 
+
+path: deviceselector.xex
+origin: deviceselector.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x916D0000
+xex_entry_va: 0x916D3CD8
+xex_security_image_size: 0x0000A000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00003CD8
+pe_size_of_image: 0x00009200
+decoded_size: 40960
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 4b4af73507d788cc715cbfacc1b129151cb1487d6ee2e1c1217534ba880329ed
+decoded_sha256: f62f06b36907a0957a006e8557d2231acd9bd667e8ecdd7652afcd8b864843c7
+confidence: CONFIRMED
+note: 
+
+path: feedback.xex
+origin: feedback.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x901086F8
+xex_security_image_size: 0x00045000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000086F8
+pe_size_of_image: 0x0001A000
+decoded_size: 282624
+module_version: 2.0.7357.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: e073419c2a52e6a8709d7649da088fef9b081ddf8fbf451222d17407b171664a
+decoded_sha256: d70b13396e3fad20a02562ca6981c82fcbd3911aab65189bebecf1779eb5e634
+confidence: CONFIRMED
+note: 
+
+path: friends.xex
+origin: friends.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x9012E138
+xex_security_image_size: 0x000B4000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x0002E138
+pe_size_of_image: 0x00045200
+decoded_size: 737280
+module_version: 2.0.7357.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 1275e71e4af521807b9a2ccdce977e1af48b8d175abd40255f3ca7cadeea4e51
+decoded_sha256: fc609a7a107b4930bd0e4732df0660b64254eb2fc43d2ebb3f011616ea8b207a
+confidence: CONFIRMED
+note: 
+
+path: gamerprofile.xex
+origin: gamerprofile.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x901109A0
+xex_security_image_size: 0x00040000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000109A0
+pe_size_of_image: 0x00029800
+decoded_size: 262144
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 9609cf72233d97df98da06a2c346d522bfa7de5a5e9c567e4512d427c5ac629f
+decoded_sha256: 24c1d30ab3945f20aa0d13bd017eb606d2b310bb0b2e248be5f63ec2863cf13d
+confidence: CONFIRMED
+note: 
+
+path: hostloader.dll
+origin: hostloader.dll
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x8A000000
+xex_entry_va: 0x8A03C0B0
+xex_security_image_size: 0x001E0000
+pe_image_base: 0x88000000
+pe_entry_rva: 0x0003C0B0
+pe_size_of_image: 0x0019EC00
+decoded_size: 1966080
+module_version: 2.0.7357.0
+title_id: 0x584E07D2
+base_module: 
+target_version: 
+sha256: 85d913134ba51cf93fa1a0fd2e3fc7446d55bc1fb9e5827ec6e24bb499cfdbe8
+decoded_sha256: 266d1a7f599584f7e5e3a97b48faba25ee2872240028a0ec0aef7e2a19a36e8d
+confidence: CONFIRMED
+note: 
+
+path: hud.xex
+origin: hud.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x913E0000
+xex_entry_va: 0x913EE8C0
+xex_security_image_size: 0x00040000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x0000E8C0
+pe_size_of_image: 0x00020600
+decoded_size: 262144
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 7fd4e1445da417d6e328cd532e1cc50054be9ae8316f194a4e1deae52baed071
+decoded_sha256: e2977ea9f78d769b931ac63e8625cd218cc9637b2a8f0240822317ee8fa55a13
+confidence: CONFIRMED
+note: 
+
+path: huduiskin.xex
+origin: huduiskin.xex
+member: 
+status: decoded
+content_kind: xui_archive
+xex_load_address: 0x91440000
+xex_entry_va: 
+xex_security_image_size: 0x00034000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 212992
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: e74b6d03595a2fb51b24016628a2006879c86ac7606454c223bbe5b6c88579bf
+decoded_sha256: 5aa543c0369a4cedef9592483b83824ff1f2e5143c718b9691063f24f0fdc451
+confidence: CONFIRMED
+note: 
+
+path: marketplace.xex
+origin: marketplace.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x9013C9C8
+xex_security_image_size: 0x00104000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x0003C9C8
+pe_size_of_image: 0x00070800
+decoded_size: 1064960
+module_version: 2.0.7357.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 90004e09f535496acb51743e848e06a443d98021daf9c589acfaa8bb408b380f
+decoded_sha256: 9c7f368dbcb02b1c5ed6618de089ce8da73240670b38688e48dd9b53e76f37ce
+confidence: CONFIRMED
+note: 
+
+path: mfgbootlauncher.xex
+origin: mfgbootlauncher.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9FEA0000
+xex_entry_va: 0x9FEA7108
+xex_security_image_size: 0x00015000
+pe_image_base: 0x00400000
+pe_entry_rva: 0x00007108
+pe_size_of_image: 0x00018200
+decoded_size: 86016
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: c83392de6e79e841aacb0775c5122e6ae076c0607a953bd555762c152b657786
+decoded_sha256: 8711d797ea09e29d4aba4223b5d960eb75afd1c34fa30efd76a326ea636abca4
+confidence: CONFIRMED
+note: 
+
+path: minimediaplayer.xex
+origin: minimediaplayer.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x901088A8
+xex_security_image_size: 0x0001C000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000088A8
+pe_size_of_image: 0x00012C00
+decoded_size: 114688
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 45a573ca96f7d78493f81a9b2dd865ba4dab0fcf1058d361075c22f9fa217eff
+decoded_sha256: 2dff081e5cad5d2c034af4915133cc2ebfe331a73f4e429c566f018564c69aa9
+confidence: CONFIRMED
+note: 
+
+path: natalsu.xex
+origin: natalsu.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x98000000
+xex_entry_va: 0x980016A8
+xex_security_image_size: 0x00007000
+pe_image_base: 0x98000000
+pe_entry_rva: 0x000016A8
+pe_size_of_image: 0x00008E00
+decoded_size: 28672
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: c16b9c4b3807160761b32f877ece1d80fbc2ede27d101ab5690a4ae523e9f81a
+decoded_sha256: eceb1236e1306f5bede2f4a16469bc4cda26138a5735bcbf7a7ac025654f3b99
+confidence: CONFIRMED
+note: 
+
+path: nuihud.xex
+origin: nuihud.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x901051B0
+xex_security_image_size: 0x0000C000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000051B0
+pe_size_of_image: 0x0000C200
+decoded_size: 49152
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 377162db8a3b9e2da5520a6e26e170c7c3c0c0b8236a89b420c8a1620915fab4
+decoded_sha256: eb586c2172f8139de6238be29dbbbec598e6cb6b88939b27578c81b26992b93c
+confidence: CONFIRMED
+note: 
+
+path: quickchat.xex
+origin: quickchat.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90110368
+xex_security_image_size: 0x00057000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00010368
+pe_size_of_image: 0x0002C600
+decoded_size: 356352
+module_version: 2.0.7357.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 67d3d3c90c0cde110e3bd0c006f683d96d7873b8c9ca7f473832eb63c610953e
+decoded_sha256: b913f838276efa04f115bdbc3ca3c0eab1762c030d205375d59bf46abc633272
+confidence: CONFIRMED
+note: 
+
+path: runtime/v3.0/netcfusermode.dll
+origin: runtime/v3.0/netcfusermode.dll
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x88500000
+xex_entry_va: 0x88521A10
+xex_security_image_size: 0x00090000
+pe_image_base: 0x88500000
+pe_entry_rva: 0x00021A10
+pe_size_of_image: 0x00099000
+decoded_size: 589824
+module_version: 2.0.7357.0
+title_id: 0x584E07D2
+base_module: 
+target_version: 
+sha256: 2f3488b74093d7ef0e9db5e54145c0b447c90418989c163529d9c9736e355801
+decoded_sha256: 2b5ee33640aac709832f95a6f9135e02b38a3f0dcdc7ead632646bf3dbea68e8
+confidence: CONFIRMED
+note: 
+
+path: runtime/v3.0/runtimehost.xex
+origin: runtime/v3.0/runtimehost.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x8B000000
+xex_entry_va: 0x8B166B20
+xex_security_image_size: 0x006E0000
+pe_image_base: 0x88000000
+pe_entry_rva: 0x00166B20
+pe_size_of_image: 0x00789400
+decoded_size: 7208960
+module_version: 2.0.7357.0
+title_id: 0x584E07D2
+base_module: 
+target_version: 
+sha256: a1ff87d50ad175ab7c44c56d98d3797015114ac4f9f30271fb7ab23ef9ca9ce3
+decoded_sha256: 6036becd4d4eb4b19161dfdf6a43846d7511c046cf2149c17b017eec7b794fe6
+confidence: CONFIRMED
+note: 
+
+path: signin.xex
+origin: signin.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90108800
+xex_security_image_size: 0x00023000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00008800
+pe_size_of_image: 0x00019600
+decoded_size: 143360
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: e87cd23f7dea25ae0c1d9af60cd79f462575939d3737ce9d89aa83151a629a01
+decoded_sha256: 56f95330636c1ce38ec1999a0bbe2a240aba20d1ee741010ab0703cfb74a7291
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_aac.xexp
+origin: su20076000_00000000
+member: $flash_aac.xexp
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x91380000
+xex_entry_va: 
+xex_security_image_size: 0x00048000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 18432
+module_version: None
+title_id: 
+base_module: 
+target_version: 2.0.12581.0
+sha256: 5d7e4279036c969ae598d6ec3ac67c8f4d7ff96912a4f1fe145c94b9212a1271
+decoded_sha256: 5d7e4279036c969ae598d6ec3ac67c8f4d7ff96912a4f1fe145c94b9212a1271
+confidence: UNRESOLVED
+note: No same-dashboard base matching filename, source version and load address
+
+path: packages/su20076000_00000000/$flash_bootanim.xex
+origin: su20076000_00000000
+member: $flash_bootanim.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x98000000
+xex_entry_va: 
+xex_security_image_size: 0x00082000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00000000
+pe_size_of_image: 0x0006BE00
+decoded_size: 532480
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 309c590c7ca9019787479d4565ca09f3599bd20b7f425ecd3fcb1d12298765b6
+decoded_sha256: b268bc1f3104d3e9df03888f8bbdd6023974928fbf75d91730aef57cf66db182
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_createprofile.xex
+origin: su20076000_00000000
+member: $flash_createprofile.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90108F48
+xex_security_image_size: 0x0001E000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00008F48
+pe_size_of_image: 0x0001A600
+decoded_size: 122880
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 171f23e7bed80e417f39670844642baf37fb96ba06ffc751aff57442f71272fe
+decoded_sha256: edb5c882f43ca9411cc76151766666bfe68077d7913bfb63b5dc2c7276cf44e8
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_dash.xex
+origin: su20076000_00000000
+member: $flash_dash.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x92000000
+xex_entry_va: 0x9217BE30
+xex_security_image_size: 0x00E83000
+pe_image_base: 0x92000000
+pe_entry_rva: 0x0017BE30
+pe_size_of_image: 0x00B05800
+decoded_size: 15216640
+module_version: 2.0.12581.0
+title_id: 0xFFFE07D1
+base_module: 
+target_version: 
+sha256: c2a8a0aa3c42f2f054bbd503b66f2bc9e3b5486f9323c44e1695e5e063bffb85
+decoded_sha256: 898d94035af8f01e770b16a82d8087e9cbc995b53edaf2285546e1509eef4e6a
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_deviceselector.xex
+origin: su20076000_00000000
+member: $flash_deviceselector.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x916D0000
+xex_entry_va: 0x916D64F8
+xex_security_image_size: 0x00014000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000064F8
+pe_size_of_image: 0x0000DA00
+decoded_size: 81920
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 170ca3b65e1a66bc33398ae7f1c3000b65236c36cf4221c489aca969b2b6a25a
+decoded_sha256: 2c330b30f1249538a323c0dfe9ccafd71867ef1bbb28a9bd72f60e5631d2dd39
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_gamerprofile.xex
+origin: su20076000_00000000
+member: $flash_gamerprofile.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90119248
+xex_security_image_size: 0x0004F000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00019248
+pe_size_of_image: 0x00038E00
+decoded_size: 323584
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: a4784b27c9efe76f813d9ae1ebf267d24eb86a984b0791247e102c274b5d92bd
+decoded_sha256: ed08e358850f4eb36a63e512c644103c337a41672ba5f1ac1e68e67891623fdb
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_hud.xex
+origin: su20076000_00000000
+member: $flash_hud.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x913E0000
+xex_entry_va: 0x913FBA50
+xex_security_image_size: 0x0004C000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x0001BA50
+pe_size_of_image: 0x00033600
+decoded_size: 311296
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 45f272f1d98a3fdd25ef5ab752b1b8205e037a218b6b087b978e7150995b01d0
+decoded_sha256: 8b487a72307539ffda6daf249999ac8eea1e34974df2ea699ef0cf0c345b8f36
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_huduiskin.xex
+origin: su20076000_00000000
+member: $flash_huduiskin.xex
+status: decoded
+content_kind: xui_archive
+xex_load_address: 0x90F90000
+xex_entry_va: 
+xex_security_image_size: 0x00032000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 204800
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: a408ad5e83551fbe3469083bdbd95eedbb7fa4dd055f61b8891d8c35b937883f
+decoded_sha256: 75d6c35604a84512ae98fc818401483165618527e3e6e7c86116b3b389669e92
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_mfgbootlauncher.xex
+origin: su20076000_00000000
+member: $flash_mfgbootlauncher.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9FEA0000
+xex_entry_va: 0x9FEA75E8
+xex_security_image_size: 0x00013000
+pe_image_base: 0x92000000
+pe_entry_rva: 0x000075E8
+pe_size_of_image: 0x00018000
+decoded_size: 77824
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: f4c373712dd9840a507b91cbfcc0a1790905b8296151e4047d9f302efeff7ac6
+decoded_sha256: dc5f8cdebf516bfdc5a58268568f5723418ba5bbf275b30ec3ed3bda5f8bf9ec
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_minimediaplayer.xex
+origin: su20076000_00000000
+member: $flash_minimediaplayer.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x9010C3C8
+xex_security_image_size: 0x00020000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x0000C3C8
+pe_size_of_image: 0x00019400
+decoded_size: 131072
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 26a102d8ab66865e3576bbb2ae784b03119354b51fa52ecb1f09458cb513faa7
+decoded_sha256: 1e116c8f2e0772779898d341df00cad9e6f145f449d5f533287683a912796e80
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_nomni.xexp
+origin: su20076000_00000000
+member: $flash_nomni.xexp
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x91090000
+xex_entry_va: 
+xex_security_image_size: 0x0004E000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 45056
+module_version: None
+title_id: 
+base_module: 
+target_version: 2.0.12581.0
+sha256: fec5edfec54a5c315f48b44d3aedbbb4626bdfc3cc4cf22a4454c212349d05d4
+decoded_sha256: fec5edfec54a5c315f48b44d3aedbbb4626bdfc3cc4cf22a4454c212349d05d4
+confidence: UNRESOLVED
+note: No same-dashboard base matching filename, source version and load address
+
+path: packages/su20076000_00000000/$flash_nomnifwm.xexp
+origin: su20076000_00000000
+member: $flash_nomnifwm.xexp
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x91070000
+xex_entry_va: 
+xex_security_image_size: 0x00017000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 20480
+module_version: None
+title_id: 
+base_module: 
+target_version: 2.0.12581.0
+sha256: 79600eabf9d8f9b9c23f760a72bd46474c1f97a25efc913b7378352628085212
+decoded_sha256: 79600eabf9d8f9b9c23f760a72bd46474c1f97a25efc913b7378352628085212
+confidence: UNRESOLVED
+note: No same-dashboard base matching filename, source version and load address
+
+path: packages/su20076000_00000000/$flash_signin.xex
+origin: su20076000_00000000
+member: $flash_signin.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x901034E0
+xex_security_image_size: 0x00030000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000034E0
+pe_size_of_image: 0x0001E600
+decoded_size: 196608
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: fba9eb8e5d0d7c379e2d65f4b8fd8e51a585174ee3bd02b44b683104f9fc2151
+decoded_sha256: 1dae0e0c27be325ddb87a51c361ad4b9a069d3ce38a6d9023dcc0e0919bd0c4a
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_systemupdate.xex
+origin: su20076000_00000000
+member: $flash_systemupdate.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x92000000
+xex_entry_va: 0x92019058
+xex_security_image_size: 0x000B4000
+pe_image_base: 0x00400000
+pe_entry_rva: 0x00019058
+pe_size_of_image: 0x000B8200
+decoded_size: 737280
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 9aa91d4ef3f5c97885ddc0922b33d0165878c28c9ddc09665013cff2437f91ae
+decoded_sha256: ccf8cd542eb1c2950792a93d4c4f5d0392c57b6ffa907414fb72af8cef370097
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_systemupdate2pre.xex
+origin: su20076000_00000000
+member: $flash_systemupdate2pre.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x98200000
+xex_entry_va: 
+xex_security_image_size: 0x000AC000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00000000
+pe_size_of_image: 0x000C4400
+decoded_size: 704512
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: cdaef107c38b5bcb9c01bbbe59229a81ee4a97de175b858956defe3b43b8e8c0
+decoded_sha256: 320352108fc9e30e2b0f36d7df4a2cbd415e1172bd9db605544b1a1bf8804cd4
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_updater.xex
+origin: su20076000_00000000
+member: $flash_updater.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x901049B0
+xex_security_image_size: 0x00012000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x000049B0
+pe_size_of_image: 0x0000D200
+decoded_size: 73728
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 86404b2fe75ce090711a190964ebf8c4bd917b6a582f713439d2aa9db8e7e357
+decoded_sha256: d265e4d54ca4773bd44d7b1cce78f0727e2ac93df33b3e2669caa493a4d3f72c
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_vk.xex
+origin: su20076000_00000000
+member: $flash_vk.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x917D0000
+xex_entry_va: 0x917DB3E0
+xex_security_image_size: 0x00017000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x0000B3E0
+pe_size_of_image: 0x00011200
+decoded_size: 94208
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 1096713a421157c740498f021283ac6d8701a45a85f6599f1d4e7e302b2f5948
+decoded_sha256: 716462a63d34e55c3896583bc967448d2e3a9b5a0a8eda96e073f4fc16bcb178
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_xam.xex
+origin: su20076000_00000000
+member: $flash_xam.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x817E0000
+xex_entry_va: 0x81871FA0
+xex_security_image_size: 0x00550000
+pe_image_base: 0x817E0000
+pe_entry_rva: 0x00091FA0
+pe_size_of_image: 0x004E0200
+decoded_size: 5570560
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 99c857e2f93fc0c23172eda3d9e1ac92c59381ddd294cd1f80dd944ab804e643
+decoded_sha256: 77c69971a934f28ac7fcebcf73514203f40b9ba22017ca01083036b4702c948f
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_ximecore.xex
+origin: su20076000_00000000
+member: $flash_ximecore.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x91680000
+xex_entry_va: 0x91689CC0
+xex_security_image_size: 0x00027000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00009CC0
+pe_size_of_image: 0x0002CC00
+decoded_size: 159744
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 64353acc32e0af46dba2317bb415a517b80e6b0f2c517cef927fddddf77e4235
+decoded_sha256: cfaf7f983d81d33ed650b477e106d1c9b86d23942caef5369000fdb4d5036591
+confidence: CONFIRMED
+note: 
+
+path: packages/su20076000_00000000/$flash_ximedic.xexp
+origin: su20076000_00000000
+member: $flash_ximedic.xexp
+status: unresolved
+content_kind: unresolved_xex
+xex_load_address: 0x81720000
+xex_entry_va: 
+xex_security_image_size: 0x000B0000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 10240
+module_version: None
+title_id: 
+base_module: 
+target_version: 2.0.12581.0
+sha256: 20fe84744a202d7bab6714ed92f330dbe9e415a9799047408fd209c6b210a965
+decoded_sha256: 20fe84744a202d7bab6714ed92f330dbe9e415a9799047408fd209c6b210a965
+confidence: UNRESOLVED
+note: No same-dashboard base matching filename, source version and load address
+
+path: packages/su20076000_00000000/$install_extender.xex
+origin: su20076000_00000000
+member: $install_extender.xex
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x9F100000
+xex_entry_va: 0x9F106750
+xex_security_image_size: 0x0001D000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00006750
+pe_size_of_image: 0x00010200
+decoded_size: 118784
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 405f28696aa2ae36d6039ed690ed8253d95fec202952008bc5b78ba14d7437f3
+decoded_sha256: 2bf6801a3042ea9ce3dd6994735c404b150263125c0855fca97fb63fc76a3142
+confidence: CONFIRMED
+note: 
+
+path: titlelauncher.xex
+origin: titlelauncher.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x82000000
+xex_entry_va: 0x8202BDA0
+xex_security_image_size: 0x000F0000
+pe_image_base: 0x82000000
+pe_entry_rva: 0x0002BDA0
+pe_size_of_image: 0x0010E400
+decoded_size: 983040
+module_version: 2.0.7357.0
+title_id: 0x584E07D2
+base_module: 
+target_version: 
+sha256: b1b5c32b83037f1f8e57a69bce8fd22e61a6d0c8bef2081b1ebeaf0c90fc797a
+decoded_sha256: f3b81f99e068272495f475c1f09984b5eca101644a5daa3bf85e895beaf7838e
+confidence: CONFIRMED
+note: 
+
+path: updater.xex
+origin: updater.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90102550
+xex_security_image_size: 0x0000B000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00002550
+pe_size_of_image: 0x0000C200
+decoded_size: 45056
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: f8ab1be60ab8698157907368a42de5a48445997431db793c30c81e734202790b
+decoded_sha256: 32e672c81c1d8a5b9f100730e37e2881720a2e7ffc1848c10f35ecf7178a1682
+confidence: CONFIRMED
+note: 
+
+path: vk.xex
+origin: vk.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x917D0000
+xex_entry_va: 0x917E6048
+xex_security_image_size: 0x0003B000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00016048
+pe_size_of_image: 0x00030400
+decoded_size: 241664
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 50c42afd760b59d9a8f47c7f318411cf8c7c161e6c65fc0e5a9d86f4d334f38a
+decoded_sha256: 18758100d0dea26ea4e38c31dc8211f94b43c216c188950452dff554c730ea99
+confidence: CONFIRMED
+note: 
+
+path: voicemail.xex
+origin: voicemail.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x90100000
+xex_entry_va: 0x90116678
+xex_security_image_size: 0x00038000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00016678
+pe_size_of_image: 0x00030200
+decoded_size: 229376
+module_version: 2.0.7357.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 2b5fa944e2379e02e23dc7bc868380df62d848dcffe621cd6d6dc9b644ac772e
+decoded_sha256: cf41b022443d4776144903aa200ce6145109d418dfb8b8245717df8e8c391abb
+confidence: CONFIRMED
+note: 
+
+path: xam.xex
+origin: xam.xex
+member: 
+status: decoded
+content_kind: pe_executable
+xex_load_address: 0x81870000
+xex_entry_va: 0x818E7EA0
+xex_security_image_size: 0x00310000
+pe_image_base: 0x10000000
+pe_entry_rva: 0x00077EA0
+pe_size_of_image: 0x00319000
+decoded_size: 3211264
+module_version: 2.0.1888.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: 4a32c297179112c411abf8ae9f7ca40c776375b0443b4ecb79cd8952042ccbcf
+decoded_sha256: 1733db65e4609b9567ddfc461933e957baac52a4783c0615133db31ab13407fd
+confidence: CONFIRMED
+note: 
+
+path: ximedic.xex
+origin: ximedic.xex
+member: 
+status: decoded
+content_kind: ime_dictionary
+xex_load_address: 0x81720000
+xex_entry_va: 
+xex_security_image_size: 0x000A0000
+pe_image_base: 
+pe_entry_rva: 
+pe_size_of_image: 
+decoded_size: 655360
+module_version: 2.0.12581.0
+title_id: 0x00000000
+base_module: 
+target_version: 
+sha256: b7f71a9bf166c0775f614f97d7edf4e0b937f87935b89ffee47144442c0551f8
+decoded_sha256: 7144f8f309c80c2ee94c827a90fbae66cc085cee39f6dd049f5dc2be1570d003
+confidence: CONFIRMED
+note: 
+

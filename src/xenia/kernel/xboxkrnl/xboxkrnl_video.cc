@@ -10,12 +10,19 @@
 #include "xenia/kernel/xboxkrnl/xboxkrnl_video.h"
 
 #include "xenia/base/logging.h"
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/emulator.h"
+#include "xenia/gpu/command_processor.h"
 #include "xenia/gpu/graphics_system.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_notification_presentation.h"
+#include "xenia/kernel/native_system_graphics_notifications.h"
+#include "xenia/kernel/native_system_graphics_transport.h"
+#include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_rtl.h"
+#include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
 #include "xenia/xbox.h"
 
 DEFINE_int32(
@@ -174,7 +181,11 @@ struct X_DISPLAY_INFO {
 static_assert_size(X_DISPLAY_INFO, 0x58);
 
 void VdGetCurrentDisplayInformation_entry(
-    pointer_t<X_DISPLAY_INFO> display_info) {
+    pointer_t<X_DISPLAY_INFO> display_info, const ppc_context_t& context) {
+  auto observation =
+      NativeNotificationPresentationObserver::BeforeNativeDisplayInformation(
+          context.value() ? context->kernel_state : nullptr, context.value(),
+          display_info.guest_address());
   X_VIDEO_MODE mode;
   VdQueryVideoMode(&mode, false);
 
@@ -198,6 +209,7 @@ void VdGetCurrentDisplayInformation_entry(
   display_info->display_refresh_rate = mode.refresh_rate;
   display_info->display_interlaced = mode.is_interlaced;
   display_info->actual_display_width = (uint16_t)mode.display_width;
+  observation.Complete();
 }
 DECLARE_XBOXKRNL_EXPORT1(VdGetCurrentDisplayInformation, kVideo, kStub);
 
@@ -302,12 +314,13 @@ dword_result_t VdEnableDisableClockGating_entry(dword_t enabled) {
 DECLARE_XBOXKRNL_EXPORT1(VdEnableDisableClockGating, kVideo, kStub);
 
 void VdSetGraphicsInterruptCallback_entry(function_t callback,
-                                          lpvoid_t user_data) {
+                                          lpvoid_t user_data,
+                                          const ppc_context_t& context) {
   // callback takes 2 params
   // r3 = bool 0/1 - 0 is normal interrupt, 1 is some acquire/lock mumble
   // r4 = user_data (r4 of VdSetGraphicsInterruptCallback)
-  auto graphics_system = kernel_state()->emulator()->graphics_system();
-  graphics_system->SetInterruptCallback(callback, user_data);
+  kernel_state()->RegisterGraphicsInterruptCallback(
+      callback, user_data, xeKeGetCurrentProcessType(context));
 }
 DECLARE_XBOXKRNL_EXPORT1(VdSetGraphicsInterruptCallback, kVideo, kImplemented);
 
@@ -328,18 +341,99 @@ void VdEnableRingBufferRPtrWriteBack_entry(lpvoid_t ptr,
 }
 DECLARE_XBOXKRNL_EXPORT1(VdEnableRingBufferRPtrWriteBack, kVideo, kImplemented);
 
-void VdGetSystemCommandBuffer_entry(lpunknown_t p0_ptr, lpunknown_t p1_ptr) {
+void VdGetSystemCommandBuffer_entry(lpunknown_t p0_ptr, lpunknown_t p1_ptr,
+                                    const ppc_context_t& context) {
+  if (const auto native =
+          NativeSystemGraphicsTransport::Lookup(kernel_state())) {
+    const auto result = native->Get(
+        p0_ptr.guest_address(), p1_ptr.guest_address(), uint32_t(context->lr));
+    if (result == NativeSystemGraphicsTransport::HookResult::kHandled) {
+      return;
+    }
+    if (result == NativeSystemGraphicsTransport::HookResult::kRejected) {
+      XELOGE("Native VdGetSystemCommandBuffer rejected caller={:08X}",
+             uint32_t(context->lr));
+      return;
+    }
+  }
   p0_ptr.Zero(0x94);
   xe::store_and_swap<uint32_t>(p0_ptr, 0xBEEF0000);
   xe::store_and_swap<uint32_t>(p1_ptr, 0xBEEF0001);
 }
 DECLARE_XBOXKRNL_EXPORT1(VdGetSystemCommandBuffer, kVideo, kStub);
 
-void VdSetSystemCommandBufferGpuIdentifierAddress_entry(lpunknown_t unk) {
+void VdSetSystemCommandBufferGpuIdentifierAddress_entry(
+    lpunknown_t unk, const ppc_context_t& context) {
+  if (const auto native =
+          NativeSystemGraphicsTransport::Lookup(kernel_state())) {
+    const auto result = native->SetIdentifierAddress(unk.guest_address(),
+                                                     uint32_t(context->lr));
+    if (result == NativeSystemGraphicsTransport::HookResult::kHandled) {
+      return;
+    }
+    if (result == NativeSystemGraphicsTransport::HookResult::kRejected) {
+      XELOGE("Native system identifier registration rejected caller={:08X}",
+             uint32_t(context->lr));
+      return;
+    }
+  }
   // r3 = 0x2B10(d3d?) + 8
 }
 DECLARE_XBOXKRNL_EXPORT1(VdSetSystemCommandBufferGpuIdentifierAddress, kVideo,
                          kStub);
+
+dword_result_t VdQuerySystemCommandBuffer_entry(dword_t mode,
+                                                const ppc_context_t& context) {
+  using Counter = NativeSystemGraphicsTransport::DiagnosticCounter;
+  NativeSystemGraphicsTransport::RecordDiagnosticCounter(Counter::kQueryExport);
+  const auto native = NativeSystemGraphicsTransport::Lookup(kernel_state());
+  static xe::NativeSystemUiTraceLimiter query_trace;
+  query_trace.EmitTransition(uint64_t(bool(native)), "transport",
+                             "query_export",
+                             {{"thread_id", context->thread_id},
+                              {"return_address", uint32_t(context->lr)},
+                              {"mode", uint32_t(mode)},
+                              {"transport_found", bool(native)}});
+  if (native) {
+    const auto result = native->Query(mode, uint32_t(context->lr));
+    return result.disposition ==
+                   NativeSystemGraphicsTransport::HookResult::kHandled
+               ? result.available
+               : 0;
+  }
+  NativeSystemGraphicsTransport::RecordDiagnosticCounter(
+      Counter::kQueryNoTransport);
+  return 0;  // No installed system-record transport can accept a record.
+}
+DECLARE_XBOXKRNL_EXPORT2(VdQuerySystemCommandBuffer, kVideo, kImplemented,
+                         kSketchy);
+
+void VdSetSystemCommandBuffer_entry(lpunknown_t descriptor,
+                                    const ppc_context_t& context) {
+  using Counter = NativeSystemGraphicsTransport::DiagnosticCounter;
+  NativeSystemGraphicsTransport::RecordDiagnosticCounter(Counter::kSetExport);
+  const auto native = NativeSystemGraphicsTransport::Lookup(kernel_state());
+  static xe::NativeSystemUiTraceLimiter set_trace;
+  set_trace.Emit("transport", "set_export",
+                 {{"thread_id", context->thread_id},
+                  {"return_address", uint32_t(context->lr)},
+                  {"descriptor_address", descriptor.guest_address()},
+                  {"transport_found", bool(native)}});
+  if (native) {
+    if (native->Set(descriptor.guest_address(), uint32_t(context->lr)) !=
+        NativeSystemGraphicsTransport::HookResult::kHandled) {
+      XELOGE(
+          "Native VdSetSystemCommandBuffer rejected caller={:08X} "
+          "descriptor={:08X}",
+          uint32_t(context->lr), descriptor.guest_address());
+    }
+  } else {
+    NativeSystemGraphicsTransport::RecordDiagnosticCounter(
+        Counter::kSetNoTransport);
+  }
+}
+DECLARE_XBOXKRNL_EXPORT2(VdSetSystemCommandBuffer, kVideo, kImplemented,
+                         kSketchy);
 
 // VdVerifyMEInitCommand
 // r3
@@ -395,7 +489,14 @@ void AppendParam(StringBuffer* string_buffer, pointer_t<BufferScaling> param) {
 }
 
 dword_result_t VdCallGraphicsNotificationRoutines_entry(
-    unknown_t unk0, pointer_t<BufferScaling> args_ptr) {
+    unknown_t unk0, pointer_t<BufferScaling> args_ptr,
+    const ppc_context_t& context) {
+  if (const auto native =
+          NativeSystemGraphicsNotifications::Lookup(kernel_state())) {
+    return native->Call(unk0, args_ptr.guest_address(), uint32_t(context->lr))
+               ? X_STATUS_SUCCESS
+               : X_STATUS_UNSUCCESSFUL;
+  }
   assert_true(unk0 == 1);
 
   // TODO(benvanik): what does this mean, I forget:
@@ -403,6 +504,19 @@ dword_result_t VdCallGraphicsNotificationRoutines_entry(
   return 0;
 }
 DECLARE_XBOXKRNL_EXPORT2(VdCallGraphicsNotificationRoutines, kVideo,
+                         kImplemented, kSketchy);
+
+void VdRegisterXamGraphicsNotification_entry(function_t callback,
+                                             const ppc_context_t& context) {
+  if (const auto native =
+          NativeSystemGraphicsNotifications::Lookup(kernel_state())) {
+    if (!native->Register(callback, uint32_t(context->lr))) {
+      XELOGE("Native XAM graphics notification registration rejected: {:08X}",
+             uint32_t(callback));
+    }
+  }
+}
+DECLARE_XBOXKRNL_EXPORT2(VdRegisterXamGraphicsNotification, kVideo,
                          kImplemented, kSketchy);
 
 dword_result_t VdIsHSIOTrainingSucceeded_entry() {
@@ -495,6 +609,32 @@ void VdSwap_entry(
   // use this method.
   buffer_ptr.Zero(64 * 4);
 
+  uint64_t native_title_ticket = 0;
+  auto* native_graphics = kernel_state()->emulator()->graphics_system();
+  auto* native_cp =
+      native_graphics ? native_graphics->command_processor() : nullptr;
+  // Inactive is the original four-word XE_SWAP path: no new module, process,
+  // foreground or provider work is done without explicit service activation.
+  if (native_cp && native_cp->NativeSystemTitleInputEnabled() &&
+      xeKeGetCurrentProcessType(
+          XThread::GetCurrentThread()->thread_state()->context()) ==
+          X_PROCTYPE_TITLE) {
+    auto* emulator = kernel_state()->emulator();
+    const auto foreground = emulator->title_execution_state().snapshot();
+    const auto title = kernel_state()->GetExecutableModule();
+    if (title && emulator->OwnsTitleExecution(kernel_state()) &&
+        foreground.phase == TitleExecutionState::Phase::kRunning) {
+      gpu::NativeSystemTitleInput::Swap swap;
+      swap.foreground_generation = foreground.generation;
+      swap.title_hmodule = title->hmodule_ptr();
+      swap.title_load_generation = title->load_generation();
+      std::memcpy(swap.fetch.data(), &gpu_fetch, sizeof(gpu_fetch));
+      swap.width = uint32_t(gpu_fetch.size_2d.width) + 1;
+      swap.height = uint32_t(gpu_fetch.size_2d.height) + 1;
+      native_title_ticket = native_cp->StageNativeSystemTitleSwap(swap);
+    }
+  }
+
   uint32_t offset = 0;
   auto dwords = buffer_ptr.as_array<uint32_t>();
 
@@ -508,12 +648,17 @@ void VdSwap_entry(
   dwords[offset++] = gpu_fetch.dword_4;
   dwords[offset++] = gpu_fetch.dword_5;
 
-  dwords[offset++] = xenos::MakePacketType3(xenos::PM4_XE_SWAP, 4);
+  dwords[offset++] =
+      xenos::MakePacketType3(xenos::PM4_XE_SWAP, native_title_ticket ? 6 : 4);
   dwords[offset++] = xe::gpu::xenos::kSwapSignature;
   dwords[offset++] = frontbuffer_physical_address;
 
   dwords[offset++] = *width;
   dwords[offset++] = *height;
+  if (native_title_ticket) {
+    dwords[offset++] = uint32_t(native_title_ticket >> 32);
+    dwords[offset++] = uint32_t(native_title_ticket);
+  }
 
   // Fill the rest of the buffer with NOP packets.
   for (uint32_t i = offset; i < 64; i++) {

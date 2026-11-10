@@ -19,6 +19,7 @@
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/kernel/xfile.h"
 #include "xenia/vfs/device.h"
+#include "xenia/vfs/host_storage_errors.h"
 #include "xenia/xbox.h"
 
 namespace xe {
@@ -253,6 +254,9 @@ dword_result_t NtSetInformationFile_entry(
     case XFileDispositionInformation: {
       auto info = info_ptr.as<X_FILE_DISPOSITION_INFORMATION*>();
       bool delete_on_close = info->delete_file ? true : false;
+      if (delete_on_close && !file->entry()->allows_namespace_mutation()) {
+        return X_STATUS_ACCESS_DENIED;
+      }
       file->entry()->SetForDeletion(static_cast<bool>(info->delete_file));
       XELOGW("NtSetInformationFile set deleting flag for {} on close to: {}",
              file->name(), delete_on_close);
@@ -322,8 +326,8 @@ dword_result_t NtSetInformationFile_entry(
       break;
     }
     default:
-      // Unsupported, for now.
-      assert_always();
+      // A recognized packet shape does not implement the requested operation.
+      result = X_STATUS_NOT_SUPPORTED;
       break;
   }
 
@@ -390,8 +394,24 @@ dword_result_t NtQueryVolumeInformationFile_entry(
     case XFileFsSizeInformation: {
       auto device = file->device();
       auto info = info_ptr.as<X_FILE_FS_SIZE_INFORMATION*>();
-      info->total_allocation_units = device->total_allocation_units();
-      info->available_allocation_units = device->available_allocation_units();
+      const auto space = device->storage_space();
+      if (!space.available) {
+        status = vfs::HostStorageError(
+            space.error ? space.error
+                        : std::make_error_code(std::errc::no_such_device));
+        out_length = 0;
+        break;
+      }
+      const uint64_t unit =
+          uint64_t(file->entry()->sectors_per_allocation_unit()) *
+          device->bytes_per_sector();
+      if (!unit) {
+        status = X_STATUS_INVALID_PARAMETER;
+        out_length = 0;
+        break;
+      }
+      info->total_allocation_units = space.capacity_bytes / unit;
+      info->available_allocation_units = space.usable_bytes / unit;
       info->sectors_per_allocation_unit =
           file->entry()->sectors_per_allocation_unit();
       info->bytes_per_sector = device->bytes_per_sector();

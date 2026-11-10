@@ -44,6 +44,7 @@ class WindowInputListener {
   virtual void OnKeyDown(KeyEvent& e) {}
   virtual void OnKeyUp(KeyEvent& e) {}
   virtual void OnKeyChar(KeyEvent& e) {}
+  virtual void OnTextInput(TextInputEvent& e) {}
 
   virtual void OnMouseDown(MouseEvent& e) {}
   virtual void OnMouseMove(MouseEvent& e) {}

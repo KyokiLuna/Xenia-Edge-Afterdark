@@ -1,0 +1,27 @@
+title_id	source	module_or_name	va	confidence
+0x584D07D1	module_identity	AvatarEditor.xex		CONFIRMED
+0x584E07D2	module_identity	hostloader.dll		CONFIRMED
+0x584E07D2	module_identity	titlelauncher.xex		CONFIRMED
+0x584E07D2	module_identity	runtime/v3.0/BackCompatShim.xex		CONFIRMED
+0x584E07D2	module_identity	runtime/v3.0/netcfusermode.dll		CONFIRMED
+0x584E07D2	module_identity	runtime/v3.0/runtimehost.xex		CONFIRMED
+0x584E07D2	module_identity	runtime/v3.1/BackCompatShim.xex		CONFIRMED
+0x584E07D2	module_identity	runtime/v3.1/netcfusermode.dll		CONFIRMED
+0x584E07D2	module_identity	runtime/v3.1/runtimehost.xex		CONFIRMED
+0xFFFE07D1	module_identity	$flash_dash.xex		CONFIRMED
+0xFFFE07D1	module_identity	dash.xex		CONFIRMED
+0x20000	module_identity	$flash_createprofile.xexp		SUSPECT_METADATA
+0x20000	module_identity	$flash_hud.xexp		SUSPECT_METADATA
+0x7600000	module_identity	$flash_signin.xexp		SUSPECT_METADATA
+0x7600000	module_identity	$flash_updater.xexp		SUSPECT_METADATA
+0x2DB6D43C	module_identity	$flash_xam.xexp		SUSPECT_METADATA
+0x58424F58	module_identity	$flash_gamerprofile.xexp		SUSPECT_METADATA
+0x584D07D1	xenia_source_constant	kAvatarEditorID		CONFIRMED
+0x584E07D1	xenia_source_constant	kXN_2001		CONFIRMED
+0x584E07D2	xenia_source_constant	kXN_2002		CONFIRMED
+0xFFFE07D1	xenia_source_constant	kDashboardID		CONFIRMED
+0x584D07D1	code_reference	$flash_xam.xexp	0x818D2904	INFERRED
+0x584E07D2	code_reference	$flash_xam.xexp	0x818E6784	INFERRED
+0x584E07D2	code_reference	$flash_xam.xexp	0x8192FE7C	INFERRED
+0x584E07D1	code_reference	$flash_xam.xexp	0x8192FE8C	INFERRED
+0x584E07D2	code_reference	$flash_dash.xex	0x922A38A8	INFERRED

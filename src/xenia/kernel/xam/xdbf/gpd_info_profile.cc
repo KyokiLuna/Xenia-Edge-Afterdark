@@ -8,12 +8,10 @@
  */
 
 #include "xenia/kernel/xam/xdbf/gpd_info_profile.h"
-
 #include "third_party/fmt/include/fmt/format.h"
 #include "xenia/base/filesystem.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/string_util.h"
-
 #include <ranges>
 
 namespace xe {
@@ -37,6 +35,19 @@ GpdInfoProfile::GetTitlesInfo() const {
   }
   return entries;
 };
+
+const X_XDBF_GPD_TITLE_PLAYED* GpdInfoProfile::GetTitleInfo(
+    uint32_t title_id) const {
+  for (const auto& entry : entries_) {
+    if (!IsSyncEntry(&entry) && IsEntryOfSection(&entry, GpdSection::kTitle) &&
+        uint32_t(entry.info.id) == title_id &&
+        entry.data.size() >= sizeof(X_XDBF_GPD_TITLE_PLAYED)) {
+      return reinterpret_cast<const X_XDBF_GPD_TITLE_PLAYED*>(
+          entry.data.data());
+    }
+  }
+  return nullptr;
+}
 
 X_XDBF_GPD_TITLE_PLAYED* GpdInfoProfile::GetTitleInfo(const uint32_t title_id) {
   auto title = entries_ | std::views::filter([](const auto& entry) {

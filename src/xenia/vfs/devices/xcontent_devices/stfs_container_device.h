@@ -10,6 +10,7 @@
 #ifndef XENIA_VFS_DEVICES_XCONTENT_DEVICES_STFS_CONTAINER_DEVICE_H_
 #define XENIA_VFS_DEVICES_XCONTENT_DEVICES_STFS_CONTAINER_DEVICE_H_
 
+#include <atomic>
 #include <span>
 #include <unordered_map>
 
@@ -27,17 +28,29 @@ class StfsContainerDevice : public XContentContainerDevice {
  public:
   StfsContainerDevice(const std::string_view mount_path,
                       const std::filesystem::path& host_path);
-  StfsContainerDevice(const std::string_view mount_path, File* package_file);
+  // Failure leaves package_file owned by the caller; success nulls it.
+  StfsContainerDevice(const std::string_view mount_path, File*& package_file);
+  StfsContainerDevice(const std::string_view mount_path,
+                      std::unique_ptr<XContentReadBacking> backing,
+                      const std::filesystem::path& host_path = {});
   ~StfsContainerDevice() override;
 
+  void Retire() override {
+    auto lock = global_critical_region::AcquireDirect();
+    retired_ = true;
+  }
+  bool retired() const { return retired_.load(); }
+
+  // Capability restriction for an immutable native view, independent of the
+  // descriptor's single/paired-hash layout flag.
+  void SetReadOnlyView() { read_only_view_ = true; }
   bool is_read_only() const override {
-    return GetContainerHeader()
+    return read_only_view_ || GetContainerHeader()
         ->content_metadata.volume_descriptor.stfs.flags.bits.read_only_format;
   }
 
   bool supports_concurrent_io() const override {
-    return !package_file_ ||
-           package_file_->entry()->device()->supports_concurrent_io();
+    return backing_ && backing_->supports_concurrent_io();
   }
 
   bool queues_all_requests() const override { return true; }
@@ -60,8 +73,12 @@ class StfsContainerDevice : public XContentContainerDevice {
 
   // False unless all of |buffer| was read.
   bool ReadData(size_t offset, std::span<uint8_t> buffer) const;
+  X_STATUS ReadDataWithStatus(size_t offset, std::span<uint8_t> buffer,
+                              size_t* transferred) const;
 
  private:
+  std::atomic<bool> retired_{false};
+  bool read_only_view_ = false;
   static const uint8_t kBlocksHashLevelAmount = 3;
   const uint32_t kBlocksPerHashLevel[kBlocksHashLevelAmount] = {170, 28900,
                                                                 4913000};
@@ -95,7 +112,6 @@ class StfsContainerDevice : public XContentContainerDevice {
   uint32_t block_step_[2];
 
   std::unordered_map<size_t, StfsHashTable> cached_hash_tables_;
-  std::unique_ptr<MappedMemory> data_;
 };
 
 }  // namespace vfs

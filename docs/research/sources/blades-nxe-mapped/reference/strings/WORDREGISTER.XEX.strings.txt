@@ -1,0 +1,16 @@
+Keyword-filtered strings for WORDREGISTER.XEX
+xex_load_address=0x90100000
+(10 matches; full unfiltered dump not kept - re-run strings(1) on the decoded file directly if you need everything)
+xrefs NOT computed (not a priority module) - address/offset only.
+------------------------------------------------------------
+
+[0x901000E8] file_off=0xE8 (ascii): 'Rich\\'
+[0x90100AB0] file_off=0xAB0 (ascii): 'xam.xex'
+[0x90100AD0] file_off=0xAD0 (ascii): 'e:\\xenon\\flash-spring10\\core\\private\\xam\\apps\\wordregister\\src\\obj\\xbox\\WordRegister.pdb'
+[0x9010867B] file_off=0x867B (ascii): '"\\qu0'
+[0x901086DB] file_off=0x86DB (ascii): '"\\qu0'
+[0x90108804] file_off=0x8804 (utf16be): '"Xbox 360", "'
+[0x90108868] file_off=0x8868 (utf16be): ': "Xbox 360"4'
+[0x90109E8A] file_off=0x9E8A (utf16be): 'ico_DeviceIcon'
+[0x9010A344] file_off=0xA344 (utf16be): 'ico_DeviceIcon'
+[0x9010A9B2] file_off=0xA9B2 (utf16be): 'ico_DeviceIcon'

@@ -1,0 +1,18 @@
+{
+  "module": "$flash_updater.xex",
+  "program": "54443f41f7d8__flash_updater.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "d265e4d54ca4773bd44d7b1cce78f0727e2ac93df33b3e2669caa493a4d3f72c",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 259,
+  "calls": 458,
+  "strings": 33,
+  "string_xrefs": 45,
+  "independent_sha256": "01197a4ec90e9ddbf6d95d4ab047f4a0c59e61363813e71eb1a93249ff474866",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

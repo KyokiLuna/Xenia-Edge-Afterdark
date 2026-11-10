@@ -1,0 +1,7 @@
+Dash.NuiTroubleshooter.lex exports
+==================================
+
+{"confidence": "CONFIRMED", "function_va": "0x9CBDC820", "module": "Dash.NuiTroubleshooter.lex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9CBAD108", "module": "Dash.NuiTroubleshooter.lex", "ordinal": "0x00000002", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9CBCB448", "module": "Dash.NuiTroubleshooter.lex", "ordinal": "0x00000003", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9CBCB448", "module": "Dash.NuiTroubleshooter.lex", "ordinal": "0x00000004", "resolved_name": ""}

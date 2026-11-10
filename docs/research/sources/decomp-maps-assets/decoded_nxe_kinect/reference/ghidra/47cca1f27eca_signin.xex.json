@@ -1,0 +1,18 @@
+{
+  "module": "signin.xex",
+  "program": "47cca1f27eca_signin.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "56f95330636c1ce38ec1999a0bbe2a240aba20d1ee741010ab0703cfb74a7291",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 334,
+  "calls": 798,
+  "strings": 165,
+  "string_xrefs": 118,
+  "independent_sha256": "56f95330636c1ce38ec1999a0bbe2a240aba20d1ee741010ab0703cfb74a7291",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

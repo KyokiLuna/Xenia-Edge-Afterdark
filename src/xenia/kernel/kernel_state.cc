@@ -9,19 +9,30 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <ranges>
 
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_system_ui_notifications.h"
+
+#include <cstdlib>
 
 #include "xenia/base/byte_stream.h"
 #include "xenia/base/logging.h"
+#include "xenia/base/snapshot_publisher.h"
 #include "xenia/emulator.h"
+#include "xenia/gpu/graphics_system.h"
 #include "xenia/hid/input_system.h"
 #include "xenia/kernel/guest_scheduler.h"
+#include "xenia/kernel/native_import_domain.h"
+#include "xenia/kernel/native_notification_preference_coordinator.h"
+#include "xenia/kernel/native_system_allocation_authority.h"
+#include "xenia/kernel/native_xui_probe.h"
 #include "xenia/kernel/smc.h"
 #include "xenia/kernel/title_id_utils.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
+#include "xenia/kernel/xam/app_manager.h"
 #include "xenia/kernel/xam/xam_state.h"
 #include "xenia/kernel/xam/xam_system_link.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_memory.h"
@@ -32,6 +43,7 @@
 #include "xenia/kernel/xmodule.h"
 #include "xenia/kernel/xnotifylistener.h"
 #include "xenia/kernel/xobject.h"
+#include "xenia/kernel/xstfs_device.h"
 #include "xenia/kernel/xsocket.h"
 #include "xenia/kernel/xthread.h"
 #include "xenia/kernel/xtimer.h"
@@ -49,6 +61,19 @@ DEFINE_uint32(kernel_build_version, 17559, "Define current kernel version",
 UPDATE_from_uint32(kernel_build_version, 2026, 10, 15, 4, 1888);
 
 DECLARE_string(cl);
+DECLARE_bool(native_guide_bootstrap_probe);
+DECLARE_bool(native_xui_probe);
+DECLARE_bool(native_xui_render_probe);
+DECLARE_bool(native_guide_scene_probe);
+DECLARE_bool(native_hud_controller_probe);
+DECLARE_bool(native_xui_target_probe);
+DECLARE_bool(native_system_device_binding_probe);
+DECLARE_bool(native_gpu_context_probe);
+DECLARE_bool(native_guide_host_probe);
+DECLARE_bool(native_guide_real_time_probe);
+DECLARE_bool(native_frame_lease_probe);
+DECLARE_bool(native_frame_execute_probe);
+DECLARE_bool(native_frame_composite_probe);
 
 namespace xe {
 namespace kernel {
@@ -62,7 +87,10 @@ KernelState* shared_kernel_state_ = nullptr;
 
 KernelState* kernel_state() { return shared_kernel_state_; }
 
-KernelState::KernelState(Emulator* emulator)
+KernelState::KernelState(
+    Emulator* emulator, std::shared_ptr<ConsoleSettingsStore> console_settings,
+    std::error_code console_settings_error,
+    std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery_owner)
     : emulator_(emulator),
       memory_(emulator->memory()),
       dispatch_thread_running_(false),
@@ -72,9 +100,16 @@ KernelState::KernelState(Emulator* emulator)
   shared_kernel_state_ = this;
   processor_ = emulator->processor();
   file_system_ = emulator->file_system();
+  // Explicit authority already protected by Emulator before VFS construction.
+  // Keep it independent of XConfig and alive before XamState/profile discovery.
+  snapshot_recovery_owner_ = std::move(recovery_owner);
   // Signing in a Live-enabled profile on boot reads the console's country and
   // language.
-  xconfig_ = std::make_unique<XConfig>();
+  notification_preferences_ =
+      std::make_shared<NativeNotificationPreferenceCoordinator>(
+          console_settings);
+  xconfig_ = std::make_unique<XConfig>(std::move(console_settings),
+                                       console_settings_error);
   xam_state_ = std::make_unique<xam::XamState>(emulator, this);
   guest_scheduler_ = std::make_unique<GuestScheduler>(this);
   smc_ = std::make_unique<SystemManagementController>();
@@ -96,9 +131,22 @@ KernelState::~KernelState() {
   // Before anything a timer callback touches goes away.
   XTimer::CancelAll();
 
+  ShutdownNativeGuideBootstrapProbe();
+
   SetExecutableModule(nullptr);
 
   ShutdownDispatchThread();
+  if (xam_state_) {
+    app_manager()->ClearGuestApps();
+  }
+  // Destroy canceled work while module pins, memory and the object table are
+  // still valid. No request can be added after the dispatch worker stops.
+  decltype(dispatch_queue_) canceled_dispatch;
+  {
+    std::lock_guard lock(dispatch_mutex_);
+    canceled_dispatch.swap(dispatch_queue_);
+  }
+  canceled_dispatch.clear();
 
   // Reclaiming leftover fibers releases handles, so run this while the object
   // table is still alive.
@@ -111,6 +159,53 @@ KernelState::~KernelState() {
   }
 
   executable_module_.reset();
+  native_system_app_leases_.clear();
+  // NativeSystemUiService must have closed ingress and supplied actual CPU /
+  // graph-specific GPU stop proof before this boundary. No PPC destructor.
+  for (const auto& authority : native_system_allocation_authorities_) {
+    authority->CloseAdmission();
+  }
+  // Registered delegations are retained by these resident holders. Keep them
+  // discoverable until every Session, including an early Revoke/Freeze failure
+  // before production provenance is installed, has actually retired below.
+  if (!native_system_allocation_authorities_.empty()) {
+    bool cpu_stopped = !XThread::IsInThread();
+    for (const auto& thread :
+         object_table_.GetObjectsByType<XThread>(XObject::Type::Thread)) {
+      cpu_stopped = cpu_stopped && !thread->is_running();
+    }
+    // Scheduler join above plus the early service / callback host-thread joins
+    // must precede dropping cohort lifetime. Graph retirement separately
+    // checks the actual same-backend GPU stop token; no destructor-time PPC.
+    const bool retired =
+        cpu_stopped && RetireNativeSystemAllocationsAfterKernelStop(
+                           [&](const memory::PhysicalAllocationOwner& owner) {
+                             return cpu_stopped && owner.valid();
+                           });
+    if (!retired) {
+      try {
+        XELOGE(
+            "Native allocation cohort: stop retirement unproven; retaining "
+            "process");
+        xe::FlushLog();
+      } catch (...) {
+      }
+      std::quick_exit(EXIT_FAILURE);
+    }
+  }
+  resident_native_resources_.clear();
+  native_system_allocation_authorities_.clear();
+  for (const auto& [id, domain] : native_import_domains_) {
+    domain->Retire();
+  }
+  native_import_domains_.clear();
+  // All runtime consumers and the diagnostic thread have stopped. Release
+  // generation pins before the module list and guest memory disappear.
+  auto retired_runtimes = std::move(guest_runtimes_);
+  for (auto& [hmodule, runtime] : retired_runtimes) {
+    runtime->RetireAndDrain();
+  }
+  retired_runtimes.clear();
   user_modules_.clear();
   kernel_modules_.clear();
 
@@ -128,10 +223,30 @@ KernelState::~KernelState() {
     socket->Abandon();
   }
 
+  // All CPU consumers stopped above. Dismount drops active backing ownership,
+  // then the object table drains native member XFiles and their backing aliases.
+  for (const auto& device : native_stfs_devices_) { device->Dismount(); }
+
   // Delete all objects.
   object_table_.Reset();
 
   xam_state_.reset();
+  if (!native_stfs_devices_.empty()) {
+    // A normally registered nested container can retain a native parent File.
+    // Emulator would clear this VFS immediately after Kernel destruction;
+    // drain it here, after modules/XFiles/XamState, while Kernel still exists.
+    file_system_->Clear();
+  }
+  for (const auto& device : native_stfs_devices_) {
+    if (!device->backing_drained()) {
+      // A host File escaped native rundown. Its alias still retains an XFile
+      // requiring this Kernel. Do not free Kernel/Memory underneath that owner.
+      XELOGE("Native STFS backing escaped Kernel rundown; retaining process");
+      xe::FlushLog();
+      std::quick_exit(EXIT_FAILURE);
+    }
+  }
+  native_stfs_devices_.clear();
 
   assert_true(shared_kernel_state_ == this);
   shared_kernel_state_ = nullptr;
@@ -544,6 +659,76 @@ object_ref<UserModule> KernelState::GetUserModuleForAddress(uint32_t address) {
   return nullptr;
 }
 
+bool KernelState::RegisterGraphicsInterruptCallback(uint32_t callback,
+                                                    uint32_t user_data,
+                                                    uint32_t process_type) {
+  auto global_lock = global_critical_region_.Acquire();
+  auto* graphics = emulator_->graphics_system();
+  if (!graphics) {
+    return false;
+  }
+  auto module = callback ? GetUserModuleForAddress(callback) : nullptr;
+  if (module && module->unloading_) {
+    return false;
+  }
+  graphics->SetInterruptCallbackForProcess(
+      callback, user_data, process_type, module ? module->hmodule_ptr() : 0,
+      module ? std::make_shared<object_ref<UserModule>>(module) : nullptr);
+  return true;
+}
+
+std::shared_ptr<GuestRuntime> KernelState::GetGuestRuntime(uint32_t hmodule) {
+  auto lock = global_critical_region_.Acquire();
+  const auto found = guest_runtimes_.find(hmodule);
+  return found == guest_runtimes_.end() ? nullptr : found->second;
+}
+
+std::shared_ptr<GuestRuntime> KernelState::CreateGuestRuntime(
+    const object_ref<UserModule>& module) {
+  auto lock = global_critical_region_.Acquire();
+  if (!module || module->unloading_ || !module->is_system_app_module() ||
+      std::ranges::find_if(user_modules_, [&module](const auto& loaded) {
+        return loaded.get() == module.get();
+      }) == user_modules_.end()) {
+    return {};
+  }
+  auto& runtime = guest_runtimes_[module->hmodule_ptr()];
+  if (!runtime) {
+    runtime = std::make_shared<GuestRuntime>(
+        GuestRuntime::Identity{module->hmodule_ptr(),
+                               next_guest_runtime_generation_++},
+        std::make_shared<object_ref<UserModule>>(module));
+  }
+  return runtime;
+}
+
+std::shared_ptr<KernelState::UserModuleExecutionLease>
+KernelState::AcquireUserModuleExecutionLease(
+    const object_ref<UserModule>& module) {
+  auto lock = global_critical_region_.Acquire();
+  if (!module || module->unloading_ || module->native_teardown_claimed_ ||
+      module->execution_leases_.load(std::memory_order_relaxed) == UINT32_MAX ||
+      std::ranges::find_if(user_modules_, [&module](const auto& loaded) {
+        return loaded.get() == module.get();
+      }) == user_modules_.end()) {
+    return {};
+  }
+  auto* lease =
+      new UserModuleExecutionLease(this, module.get(), module->hmodule_ptr());
+  module->execution_leases_.fetch_add(1, std::memory_order_relaxed);
+  return std::shared_ptr<UserModuleExecutionLease>(
+      lease, [module](auto* value) {
+        module->execution_leases_.fetch_sub(1, std::memory_order_release);
+        delete value;
+      });
+}
+
+void KernelState::RetainNativeResourceUntilTeardown(
+    std::shared_ptr<void> resource) {
+  auto lock = global_critical_region_.Acquire();
+  resident_native_resources_.push_back(std::move(resource));
+}
+
 object_ref<XThread> KernelState::LaunchModule(object_ref<UserModule> module) {
   if (!module->is_executable()) {
     return nullptr;
@@ -710,12 +895,53 @@ void KernelState::LoadKernelModule(object_ref<KernelModule> kernel_module) {
 }
 
 object_ref<UserModule> KernelState::LoadUserModule(
-    const std::string_view raw_name, bool call_entry) {
+    const std::string_view raw_name, bool call_entry, bool system_app_module,
+    std::shared_ptr<const cpu::GuestImportProvider> import_provider,
+    std::shared_ptr<NativeImportDomain> import_domain) {
+  auto domain_operation = import_domain ? import_domain->Acquire()
+                                        : NativeImportDomain::Operation{};
+  if (import_domain && !domain_operation) {
+    return nullptr;
+  }
+  if (import_domain) {
+    auto lock = global_critical_region_.Acquire();
+    const auto found = native_import_domains_.find(import_domain->id());
+    if (found == native_import_domains_.end() ||
+        found->second != import_domain ||
+        (import_provider && import_provider != import_domain->profile())) {
+      return nullptr;
+    }
+    import_provider = import_domain->profile();
+    system_app_module = true;
+  }
+  if (import_provider &&
+      (!system_app_module || !XThread::IsInThread() ||
+       (!import_domain &&
+        XThread::GetCurrentThread()->guest_object<X_KTHREAD>()->process_type !=
+            X_PROCTYPE_SYSTEM))) {
+    XELOGE("Native guest import provider requires an explicit system module");
+    return nullptr;
+  }
   // Some games try to load relative to launch module, others specify full path.
   auto name = xe::utf8::find_name_from_guest_path(raw_name);
   std::string path(raw_name);
   if (name == raw_name) {
-    if (!executable_module_) {
+    if (import_domain) {
+      // A native system child belongs to its root's loader namespace, even
+      // when the request arrived on a TITLE-process caller thread.
+      auto lock = global_critical_region_.Acquire();
+      const auto root =
+          std::ranges::find_if(user_modules_, [&](const auto& value) {
+            return NativeImportDomain::Member{value->hmodule_ptr(),
+                                              value->load_generation()} ==
+                   import_domain->root();
+          });
+      if (root == user_modules_.end() || (*root)->path().empty()) {
+        return nullptr;
+      }
+      path = xe::utf8::join_guest_paths(
+          xe::utf8::find_base_guest_path((*root)->path()), name);
+    } else if (!executable_module_) {
       path = xe::utf8::join_guest_paths(
           xe::utf8::find_base_guest_path((*user_modules_.cbegin())->path()),
           name);
@@ -731,7 +957,24 @@ object_ref<UserModule> KernelState::LoadUserModule(
 
     // See if we've already loaded it
     for (auto& existing_module : user_modules_) {
-      if (existing_module->Matches(path)) {
+      if (existing_module->Matches(path) ||
+          (import_domain && existing_module->Matches(name))) {
+        if (existing_module->unloading_ ||
+            (import_domain &&
+             (existing_module->import_domain_id_ != import_domain->id() ||
+              existing_module->import_domain_.lock() != import_domain ||
+              !import_domain->Contains(
+                  {existing_module->hmodule_ptr(),
+                   existing_module->load_generation()}))) ||
+            (!import_domain && existing_module->import_domain_id_)) {
+          return nullptr;
+        }
+        if (import_provider &&
+            existing_module->import_provider_ != import_provider) {
+          XELOGE("Refusing to replace imports of already loaded module {}",
+                 path);
+          return nullptr;
+        }
         return existing_module;
       }
     }
@@ -742,14 +985,37 @@ object_ref<UserModule> KernelState::LoadUserModule(
     // TODO: this read, decrypt and decompress stalls the calling fiber's
     // dispatch thread. Offloading it needs care, it touches kernel state and
     // guest-thread identity.
-    module = object_ref<UserModule>(new UserModule(this));
+    module = object_ref<UserModule>(
+        new UserModule(this, system_app_module, std::move(import_provider)));
+    if (import_domain) {
+      if (!import_domain->Register(
+              {module->hmodule_ptr(), module->load_generation()})) {
+        object_table()->ReleaseHandle(module->handle());
+        return nullptr;
+      }
+      module->import_domain_ = import_domain;
+      module->import_domain_id_ = import_domain->id();
+    }
     X_STATUS status = module->LoadFromFile(path);
-    if (XFAILED(status)) {
+    if (XFAILED(status) ||
+        (import_domain &&
+         module->module_format() != UserModule::kModuleFormatXex)) {
+      if (import_domain) {
+        import_domain->Unregister(
+            {module->hmodule_ptr(), module->load_generation()});
+      }
       object_table()->ReleaseHandle(module->handle());
       return nullptr;
     }
 
     global_lock.lock();
+
+    if (import_domain && !import_domain->active()) {
+      import_domain->Unregister(
+          {module->hmodule_ptr(), module->load_generation()});
+      object_table()->ReleaseHandle(module->handle());
+      return nullptr;
+    }
 
     // Putting into the listing automatically retains.
     user_modules_.push_back(module);
@@ -758,7 +1024,21 @@ object_ref<UserModule> KernelState::LoadUserModule(
 }
 
 object_ref<UserModule> KernelState::LoadUserModuleFromMemory(
-    const std::string_view raw_name, const void* addr, const size_t length) {
+    const std::string_view raw_name, const void* addr, const size_t length,
+    std::shared_ptr<NativeImportDomain> import_domain) {
+  auto domain_operation = import_domain ? import_domain->Acquire()
+                                        : NativeImportDomain::Operation{};
+  if (import_domain && !domain_operation) {
+    return nullptr;
+  }
+  if (import_domain) {
+    auto lock = global_critical_region_.Acquire();
+    const auto found = native_import_domains_.find(import_domain->id());
+    if (found == native_import_domains_.end() ||
+        found->second != import_domain) {
+      return nullptr;
+    }
+  }
   auto name = xe::utf8::find_base_name_from_guest_path(raw_name);
 
   object_ref<UserModule> module;
@@ -768,6 +1048,21 @@ object_ref<UserModule> KernelState::LoadUserModuleFromMemory(
     // See if we've already loaded it
     for (auto& existing_module : user_modules_) {
       if (existing_module->Matches(name)) {
+        if (import_domain) {
+          // A memory-image request is a fresh identity, not permission to
+          // silently substitute an already loaded image with the same name.
+          return nullptr;
+        }
+        if (existing_module->unloading_ ||
+            (import_domain &&
+             (existing_module->import_domain_id_ != import_domain->id() ||
+              existing_module->import_domain_.lock() != import_domain ||
+              !import_domain->Contains(
+                  {existing_module->hmodule_ptr(),
+                   existing_module->load_generation()}))) ||
+            (!import_domain && existing_module->import_domain_id_)) {
+          return nullptr;
+        }
         return existing_module;
       }
     }
@@ -775,14 +1070,37 @@ object_ref<UserModule> KernelState::LoadUserModuleFromMemory(
     global_lock.unlock();
 
     // Module wasn't loaded, so load it.
-    module = object_ref<UserModule>(new UserModule(this));
+    module = object_ref<UserModule>(
+        new UserModule(this, bool(import_domain),
+                       import_domain ? import_domain->profile() : nullptr));
+    if (import_domain) {
+      if (!import_domain->Register(
+              {module->hmodule_ptr(), module->load_generation()})) {
+        object_table()->ReleaseHandle(module->handle());
+        return nullptr;
+      }
+      module->import_domain_ = import_domain;
+      module->import_domain_id_ = import_domain->id();
+    }
     X_STATUS status = module->LoadFromMemoryNamed(name, addr, length);
-    if (XFAILED(status)) {
+    if (XFAILED(status) ||
+        (import_domain &&
+         module->module_format() != UserModule::kModuleFormatXex)) {
+      if (import_domain) {
+        import_domain->Unregister(
+            {module->hmodule_ptr(), module->load_generation()});
+      }
       object_table()->ReleaseHandle(module->handle());
       return nullptr;
     }
 
     global_lock.lock();
+    if (import_domain && !import_domain->active()) {
+      import_domain->Unregister(
+          {module->hmodule_ptr(), module->load_generation()});
+      object_table()->ReleaseHandle(module->handle());
+      return nullptr;
+    }
 
     // Putting into the listing automatically retains.
     user_modules_.push_back(module);
@@ -790,8 +1108,36 @@ object_ref<UserModule> KernelState::LoadUserModuleFromMemory(
   return module;
 }
 
-X_RESULT KernelState::FinishLoadingUserModule(
-    const object_ref<UserModule> module, bool call_entry) {
+X_RESULT
+KernelState::FinishLoadingUserModule(const object_ref<UserModule> module,
+                                     bool call_entry, bool compile_discovered) {
+  auto domain = module->import_domain_.lock();
+  auto domain_operation =
+      domain ? domain->Acquire() : NativeImportDomain::Operation{};
+  if (module->import_domain_id_ &&
+      (!domain_operation ||
+       !domain->Contains({module->hmodule_ptr(), module->load_generation()}))) {
+    return X_STATUS_ACCESS_DENIED;
+  }
+  if (domain && module->native_import_ready()) {
+    return X_STATUS_SUCCESS;
+  }
+  if (domain && module->native_import_finishing_.exchange(true)) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
+  struct FinishImportClaim {
+    std::atomic<bool>* claim;
+    std::shared_ptr<NativeImportDomain> domain;
+    bool completed = false;
+    ~FinishImportClaim() {
+      if (domain && !completed) {
+        domain->Retire();
+      }
+      if (claim) {
+        claim->store(false, std::memory_order_release);
+      }
+    }
+  } finish_claim{domain ? &module->native_import_finishing_ : nullptr, domain};
   // TODO(Gliniak): Apply custom patches here
   X_RESULT result = module->LoadContinue();
   if (XFAILED(result)) {
@@ -802,10 +1148,13 @@ X_RESULT KernelState::FinishLoadingUserModule(
                                              module->hash());
   emulator_->on_patch_apply();
   if (module->xex_module()) {
-    module->xex_module()->Precompile();
+    module->xex_module()->Precompile(compile_discovered);
   }
 
   if (module->is_dll_module() && module->entry_point() && call_entry) {
+    if (domain && !domain->active()) {
+      return X_STATUS_ACCESS_DENIED;
+    }
     // Call DllMain(DLL_PROCESS_ATTACH):
     // https://msdn.microsoft.com/en-us/library/windows/desktop/ms682583%28v=vs.85%29.aspx
     uint64_t args[] = {
@@ -817,14 +1166,28 @@ X_RESULT KernelState::FinishLoadingUserModule(
     module->is_attached_ = true;
 
     auto thread_state = XThread::GetCurrentThread()->thread_state();
-    processor()->Execute(thread_state, module->entry_point(), args,
-                         xe::countof(args));
+    const bool executed = processor()->Execute(
+        thread_state, module->entry_point(), args, xe::countof(args));
+    if (domain && (!executed || !uint32_t(thread_state->context()->r[3]))) {
+      // An interrupted/failed native attach may already have published state.
+      // Keep its module loaded and close future domain admission, never retry
+      // attach or invent a safe detach boundary.
+      domain->Retire();
+      return X_STATUS_UNSUCCESSFUL;
+    }
   }
+  if (domain && !domain->active()) {
+    return X_STATUS_ACCESS_DENIED;
+  }
+  if (domain) {
+    module->native_import_ready_.store(true, std::memory_order_release);
+  }
+  finish_claim.completed = true;
   return result;
 }
 
-X_RESULT KernelState::ApplyTitleUpdate(
-    const object_ref<UserModule> title_module) {
+X_RESULT
+KernelState::ApplyTitleUpdate(const object_ref<UserModule> title_module) {
   const auto title_updates = FindTitleUpdate(title_module->title_id());
   if (title_updates.empty()) {
     return X_STATUS_SUCCESS;
@@ -972,9 +1335,9 @@ bool KernelState::IsPatchSignatureProper(
   return true;
 }
 
-X_RESULT KernelState::ApplyTitleUpdate(
-    const object_ref<UserModule> title_module,
-    const object_ref<UserModule> patch_module) {
+X_RESULT
+KernelState::ApplyTitleUpdate(const object_ref<UserModule> title_module,
+                              const object_ref<UserModule> patch_module) {
   if (!title_module) {
     XELOGE("{}: No title_module provided!", __FUNCTION__);
     return X_STATUS_UNSUCCESSFUL;
@@ -993,37 +1356,504 @@ X_RESULT KernelState::ApplyTitleUpdate(
   return result;
 }
 
-void KernelState::UnloadUserModule(const object_ref<UserModule>& module,
-                                   bool call_entry) {
-  auto global_lock = global_critical_region_.Acquire();
+X_STATUS KernelState::UnloadUserModule(const object_ref<UserModule>& module,
+                                       bool call_entry) {
+  if (!module) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  auto domain = module->import_domain_.lock();
+  auto domain_operation =
+      domain ? domain->Acquire() : NativeImportDomain::Operation{};
+  if (module->import_domain_id_ && !domain_operation) {
+    return X_STATUS_ACCESS_DENIED;
+  }
+  {
+    auto global_lock = global_critical_region_.Acquire();
+    const auto iter = std::ranges::find_if(
+        user_modules_,
+        [&module](const auto& e) { return e.get() == module.get(); });
+    if (iter == user_modules_.end() || module->unloading_) {
+      return X_STATUS_SUCCESS;
+    }
+    if (guest_runtimes_.contains(module->hmodule_ptr()) ||
+        module->has_execution_leases()) {
+      // A native system runtime has constructed process-lifetime heaps/static
+      // objects. No partial-DLL teardown protocol is implied by attachment.
+      XELOGW("Retaining {} while native runtime/execution ownership is active",
+             module->name());
+      return X_STATUS_ACCESS_DENIED;
+    }
+    // Claim exactly once before draining callbacks or running guest detach.
+    // Deferred self-unloads retain this claim and the module's lifetime pin.
+    module->unloading_ = true;
+  }
+  CompleteUserModuleUnload(module, call_entry);
+  return X_STATUS_SUCCESS;
+}
+
+void KernelState::CompleteUserModuleUnload(const object_ref<UserModule>& module,
+                                           bool call_entry) {
+  auto domain = module->import_domain_.lock();
+  auto domain_operation =
+      domain ? domain->Acquire() : NativeImportDomain::Operation{};
+  if (module->import_domain_id_ && !domain_operation) {
+    return;  // Closed domain retains the claimed module until Kernel stop.
+  }
+  // Retiring callbacks may drain in-flight guest calls. Do that before taking
+  // the kernel critical region, which those calls may themselves need.
+  auto* graphics = emulator_->graphics_system();
+  const bool graphics_can_wait =
+      !graphics ||
+      graphics->PrepareInterruptCallbackModuleShutdown(module->hmodule_ptr());
+  // A graphics self-unload must not first wait on a SysApp callback that may
+  // depend on this graphics invocation. Conversely, a SysApp self-unload must
+  // not wait on graphics after its own registry requested a deferred retry.
+  const bool apps_drained =
+      graphics_can_wait &&
+      app_manager()->BeginGuestAppModuleShutdown(module->hmodule_ptr());
+  const bool graphics_drained =
+      apps_drained &&
+      (!graphics ||
+       graphics->BeginInterruptCallbackModuleShutdown(module->hmodule_ptr()));
+  if (!apps_drained || !graphics_drained) {
+    // A callback cannot wait for itself. Keep the image alive and retry on the
+    // system dispatch worker after the current guest invocation has returned.
+    std::lock_guard lock(dispatch_mutex_);
+    if (dispatch_thread_running_) {
+      dispatch_queue_.push_back([this, module, call_entry]() {
+        CompleteUserModuleUnload(module, call_entry);
+      });
+      dispatch_cond_.notify_all();
+    } else {
+      XELOGW(
+          "Deferring module unload until teardown while a guest callback is "
+          "active");
+    }
+    return;
+  }
+  app_manager()->RetireGuestAppsForModule(module->hmodule_ptr());
+  if (graphics) {
+    graphics->RetireInterruptCallbacksForModule(module->hmodule_ptr());
+  }
 
   if (module->is_dll_module() && module->entry_point() && call_entry) {
     // Call DllMain(DLL_PROCESS_DETACH):
     // https://msdn.microsoft.com/en-us/library/windows/desktop/ms682583%28v=vs.85%29.aspx
-    uint64_t args[] = {
-        module->hmodule_ptr(),
-        0,  // DLL_PROCESS_DETACH
-        0,  // 0 for now, assume XexUnloadImage is like FreeLibrary
-    };
-    auto thread_state = XThread::GetCurrentThread()->thread_state();
-    processor()->Execute(thread_state, module->entry_point(), args,
-                         xe::countof(args));
+    auto* thread_state = XThread::GetCurrentThread()->thread_state();
+    thread_state->context()->r[3] = module->hmodule_ptr();
+    thread_state->context()->r[4] = 0;  // DLL_PROCESS_DETACH
+    thread_state->context()->r[5] = 0;
+    if (!processor()->Execute(thread_state, module->entry_point())) {
+      if (domain) {
+        domain->Retire();
+      }
+      XELOGE(
+          "Module detach execution incomplete for {}; retaining the "
+          "unloading generation until kernel teardown",
+          module->name());
+      RetainNativeResourceUntilTeardown(
+          std::make_shared<object_ref<UserModule>>(module));
+      return;
+    }
   }
 
+  // Do not hold the kernel critical region across guest detach. It can invoke
+  // callbacks that need the same region from another thread.
+  auto global_lock = global_critical_region_.Acquire();
+  if (domain && !domain->active()) {
+    return;
+  }
   auto iter = std::ranges::find_if(user_modules_, [&module](const auto& e) {
-    return e->path() == module->path();
+    return e.get() == module.get();
   });
-  assert_true(iter != user_modules_.end());  // Unloading an unregistered module
-                                             // is probably really bad
+  if (iter == user_modules_.end()) {
+    return;
+  }
   user_modules_.erase(iter);
 
-  // Ensure this module was not somehow registered twice
-  assert_true(std::find_if(user_modules_.begin(), user_modules_.end(),
-                           [&module](const auto& e) {
-                             return e->path() == module->path();
-                           }) == user_modules_.end());
+  if (auto domain = module->import_domain_.lock()) {
+    domain->Unregister({module->hmodule_ptr(), module->load_generation()});
+  }
 
   object_table()->ReleaseHandleInLock(module->handle());
+}
+
+namespace {
+// Loading/unloading runs guest code, so another operation must fail busy rather
+// than block a scheduler fiber on a mutex held by a guest callback.
+class SystemAppOperation {
+ public:
+  explicit SystemAppOperation(std::atomic_flag& active)
+      : active_(active),
+        acquired_(!active_.test_and_set(std::memory_order_acquire)) {}
+  ~SystemAppOperation() {
+    if (acquired_) {
+      active_.clear(std::memory_order_release);
+    }
+  }
+  bool acquired() const { return acquired_; }
+
+ private:
+  std::atomic_flag& active_;
+  bool acquired_;
+};
+}  // namespace
+
+X_HRESULT KernelState::LoadGuestSystemApp(
+    uint32_t app_id, std::string_view module_path, uint32_t user_index,
+    uint32_t options_ptr,
+    std::shared_ptr<const cpu::GuestImportProvider> import_provider) {
+  auto* thread = XThread::GetCurrentThread();
+  if (!thread ||
+      thread->guest_object<X_KTHREAD>()->process_type != X_PROCTYPE_SYSTEM ||
+      (user_index >= XUserMaxUserCount && user_index != XUserIndexNone)) {
+    return X_E_INVALIDARG;
+  }
+  SystemAppOperation operation(system_app_operation_active_);
+  if (!operation.acquired()) {
+    return X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+  }
+  auto* manager = app_manager();
+  if (const auto existing = manager->guest_apps().Lookup(app_id, true)) {
+    if (existing->execution_failed()) {
+      return X_E_FAIL;
+    }
+    return manager->guest_apps().Lookup(app_id)
+               ? X_E_SUCCESS
+               : X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+  }
+  // Do not reinitialize or steal an image already owned by another load path.
+  if (GetModule(module_path, true)) {
+    return X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+  }
+  const bool native_consumer = bool(import_provider);
+  auto module =
+      LoadUserModule(module_path, false, true, std::move(import_provider));
+  if (!module) {
+    return X_E_NOTFOUND;
+  }
+  if (!module->is_system_app_module()) {
+    // Another loader may have published it after the check above. Its owner
+    // controls initialization and teardown; do not attach or unload it here.
+    return X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+  }
+  if (native_consumer) {
+    auto lease = AcquireUserModuleExecutionLease(module);
+    if (!lease) {
+      return X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+    }
+    auto lock = global_critical_region_.Acquire();
+    native_system_app_leases_[module->hmodule_ptr()] = std::move(lease);
+  }
+  const auto load_result = FinishLoadingUserModule(module, false);
+  if (XFAILED(load_result) || !module->is_dll_module() ||
+      !module->entry_point() || !manager->PrepareGuestApp(app_id, module)) {
+    manager->RetireGuestAppsForModule(module->hmodule_ptr());
+    if (native_consumer) {
+      auto lock = global_critical_region_.Acquire();
+      native_system_app_leases_.erase(module->hmodule_ptr());
+    }
+    UnloadUserModule(module, false);
+    return X_E_FAIL;
+  }
+
+  // The descriptor must exist before DllMain calls XamRegisterSysApp. Use the
+  // system thread's own PCR/stack; never install this DLL as the title.
+  auto* state = thread->thread_state();
+  auto* context = state->context();
+  context->r[3] = module->hmodule_ptr();
+  context->r[4] = 1;  // DLL_PROCESS_ATTACH
+  context->r[5] = 0;
+  const bool executed = processor()->Execute(state, module->entry_point());
+  const bool attached = executed && static_cast<uint32_t>(context->r[3]) != 0;
+  module->is_attached_ = attached;
+  auto registration = manager->guest_apps().Lookup(app_id, true);
+  XELOGI("SysApp {:02X}: attach={} module={:08X} callback={:08X}", app_id,
+         attached, module->hmodule_ptr(),
+         registration ? registration->callback_address() : 0);
+  if (!attached || !registration) {
+    if (!native_consumer) {
+      UnloadUserModule(module, attached);
+    }
+    return X_E_FAIL;
+  }
+
+  // Verified 17559 initialization ABI: a 16-byte parameter block and a
+  // separate writable output word. HUD unconditionally dereferences arg1.
+  const uint32_t packet = memory_->SystemHeapAlloc(20);
+  if (!packet) {
+    if (!native_consumer) {
+      UnloadUserModule(module);
+    }
+    return X_HRESULT_FROM_WIN32(X_ERROR_NOT_ENOUGH_MEMORY);
+  }
+  auto* words = memory_->TranslateVirtual<xe::be<uint32_t>*>(packet);
+  words[0] = 1;  // Primary system app load.
+  words[1] = options_ptr;
+  words[2] = module->hmodule_ptr();
+  words[3] = user_index;
+  words[4] = 0;
+  const X_HRESULT result =
+      registration->DispatchLifecycle(0x80000004, packet, packet + 16);
+  const uint32_t output = words[4];
+  if (!registration->execution_failed()) {
+    memory_->SystemHeapFree(packet);
+  }
+  XELOGI("SysApp {:02X}: initialize={:08X} output={:08X}", app_id, result,
+         output);
+  // Native XUI consumers execute under their owning SYSTEM context. Keep
+  // normal XMsg admission closed from the start; activation before returning
+  // would expose an unguarded TITLE-thread entry during scene construction.
+  // Their explicit owner uses lifecycle dispatch until a SYSTEM dispatcher
+  // with matching context/lifetime admission is installed.
+  if (static_cast<int32_t>(result) < 0 || registration->execution_failed() ||
+      (!native_consumer && !manager->guest_apps().Activate(registration))) {
+    if (!native_consumer && !registration->execution_failed()) {
+      UnloadUserModule(module);
+    }
+    return static_cast<int32_t>(result) < 0 ? result : X_E_FAIL;
+  }
+  return result;
+}
+
+X_HRESULT KernelState::UnloadGuestSystemApp(uint32_t app_id) {
+  return UnloadGuestSystemApp(app_id, {});
+}
+
+X_HRESULT KernelState::UnloadGuestSystemApp(
+    uint32_t app_id,
+    std::shared_ptr<UserModuleExecutionLease> execution_lease) {
+  struct FailedLease {
+    KernelState* owner;
+    std::shared_ptr<UserModuleExecutionLease>& lease;
+    ~FailedLease() {
+      if (lease) {
+        owner->RetainNativeResourceUntilTeardown(std::move(lease));
+      }
+    }
+  } failed_lease{this, execution_lease};
+  if (!XThread::IsInThread()) {
+    return X_E_INVALIDARG;
+  }
+  auto* thread = XThread::GetCurrentThread();
+  if (!thread ||
+      thread->guest_object<X_KTHREAD>()->process_type != X_PROCTYPE_SYSTEM) {
+    return X_E_INVALIDARG;
+  }
+  SystemAppOperation operation(system_app_operation_active_);
+  if (!operation.acquired()) {
+    return X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+  }
+  auto* manager = app_manager();
+  auto registration = manager->guest_apps().Lookup(app_id, true);
+  if (!registration) {
+    return X_E_NOTFOUND;
+  }
+  auto module = GetUserModuleForAddress(registration->callback_address());
+  if (!module || module->hmodule_ptr() != registration->owner_hmodule()) {
+    return X_E_FAIL;
+  }
+  if (registration->execution_failed()) {
+    return X_E_FAIL;
+  }
+  {
+    auto lock = global_critical_region_.Acquire();
+    const uint32_t expected_leases =
+        uint32_t(native_system_app_leases_.contains(module->hmodule_ptr())) +
+        uint32_t(bool(execution_lease));
+    if (module->unloading_ || module->native_teardown_claimed_ ||
+        (execution_lease &&
+         (execution_lease.use_count() != 1 ||
+          execution_lease->kernel_ != this ||
+          execution_lease->owner_ != module.get() ||
+          execution_lease->hmodule() != module->hmodule_ptr())) ||
+        module->execution_leases_.load(std::memory_order_acquire) !=
+            expected_leases) {
+      return X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+    }
+    module->native_teardown_claimed_ = true;
+  }
+  // Stop admission without waiting: an older callback may need close03 to
+  // finish. Preserve the verified close -> drain -> destroy ordering.
+  if (!manager->guest_apps().StopNormalAdmission(registration)) {
+    return X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+  }
+  const auto close_result = registration->DispatchLifecycle(0x80000003, 0, 0);
+  if (registration->execution_failed()) {
+    return X_E_FAIL;
+  }
+  if (!manager->guest_apps().BeginShutdown(registration) &&
+      !manager->BeginGuestAppModuleShutdown(module->hmodule_ptr())) {
+    return X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+  }
+  // Close may unregister its own generation. A retired callback rejects the
+  // destructive call, but the pinned owner's module must still be unloaded.
+  const auto destroy_result = registration->DispatchLifecycle(0x80000005, 0, 0);
+  XELOGI("SysApp {:02X}: shutdown={:08X} destroy={:08X}", app_id, close_result,
+         destroy_result);
+  if (execution_lease && (XFAILED(close_result) || XFAILED(destroy_result))) {
+    RetainNativeResourceUntilTeardown(std::move(execution_lease));
+    return XFAILED(destroy_result) ? destroy_result : close_result;
+  }
+  if (registration->execution_failed()) {
+    return X_E_FAIL;
+  }
+  {
+    auto lock = global_critical_region_.Acquire();
+    if (native_system_app_leases_.contains(module->hmodule_ptr()) &&
+        (XFAILED(close_result) || XFAILED(destroy_result))) {
+      return XFAILED(destroy_result) ? destroy_result : close_result;
+    }
+    native_system_app_leases_.erase(module->hmodule_ptr());
+  }
+  execution_lease.reset();
+  const auto unload_result = UnloadUserModule(module);
+  if (XFAILED(unload_result)) {
+    return X_HRESULT_FROM_WIN32(X_ERROR_BUSY);
+  }
+  return static_cast<int32_t>(destroy_result) < 0 ? destroy_result
+                                                  : close_result;
+}
+
+void KernelState::StartNativeGuideBootstrapProbe(uint32_t user_index) {
+  if (native_guide_probe_thread_ || !GetExecutableModule()) {
+    return;
+  }
+  const bool probe_xui =
+      cvars::native_xui_probe || cvars::native_xui_render_probe ||
+      cvars::native_guide_scene_probe || cvars::native_hud_controller_probe ||
+      cvars::native_xui_target_probe ||
+      cvars::native_system_device_binding_probe ||
+      cvars::native_gpu_context_probe || cvars::native_guide_host_probe ||
+      cvars::native_guide_real_time_probe || cvars::native_frame_lease_probe ||
+      cvars::native_frame_execute_probe;
+  const bool probe_hud = cvars::native_guide_bootstrap_probe;
+  const uint64_t title_generation =
+      emulator_->title_execution_state().snapshot().generation;
+  native_guide_probe_stop_.store(false, std::memory_order_release);
+  native_guide_probe_thread_ = object_ref<XHostThread>(new XHostThread(
+      this, 1024 * 1024, X_CREATE_SUSPENDED,
+      [this, user_index, probe_xui, probe_hud, title_generation]() {
+        auto title = GetExecutableModule();
+        const auto title_is_running = [&] {
+          const auto snapshot = emulator_->title_execution_state().snapshot();
+          return snapshot.generation == title_generation &&
+                 snapshot.phase == TitleExecutionState::Phase::kRunning &&
+                 emulator_->OwnsTitleExecution(this);
+        };
+        const auto start_deadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(12);
+        while (!title_is_running() &&
+               !native_guide_probe_stop_.load(std::memory_order_acquire) &&
+               std::chrono::steady_clock::now() < start_deadline) {
+          XThread::GetCurrentThread()->Delay(0, 0, uint64_t(-100000ll));
+        }
+        if (!title_is_running() ||
+            native_guide_probe_stop_.load(std::memory_order_acquire)) {
+          XELOGE("Native system UI probe: foreground execution not admitted");
+          return 0;
+        }
+        if (probe_xui) {
+          // Cold-start allocation alone cannot demonstrate coexistence. Let the
+          // title submit frames before entering the native engine, and keep the
+          // wait bounded and cancellable during an in-process title reset.
+          const uint32_t first_frame = xe::logging::GetFrameNumber();
+          const auto deadline =
+              std::chrono::steady_clock::now() + std::chrono::seconds(12);
+          while ((!title_is_running() ||
+                  uint32_t(xe::logging::GetFrameNumber() - first_frame) < 5) &&
+                 !native_guide_probe_stop_.load(std::memory_order_acquire) &&
+                 std::chrono::steady_clock::now() < deadline) {
+            XThread::GetCurrentThread()->Delay(0, 0, uint64_t(-100000ll));
+          }
+          if (native_guide_probe_stop_.load(std::memory_order_acquire)) {
+            return 0;
+          }
+          auto* graphics = emulator_->graphics_system();
+          const uint32_t ready_frame = xe::logging::GetFrameNumber();
+          if (!graphics || !title_is_running() ||
+              uint32_t(ready_frame - first_frame) < 5 ||
+              !graphics->ring_initialization_generation()) {
+            XELOGE(
+                "Native system UI probe: title presentation prerequisite "
+                "not reached; XUI entry skipped");
+            return 0;
+          }
+          const auto ring_generation =
+              graphics->ring_initialization_generation();
+          const auto title_interrupt =
+              graphics->CaptureInterruptCallback(X_PROCTYPE_TITLE);
+          XELOGI(
+              "Native system UI probe: title ready frame={} ring={} "
+              "execution_generation={} callback_generation={}",
+              ready_frame, ring_generation, title_generation,
+              title_interrupt ? title_interrupt->generation() : 0);
+          const auto result = RunNativeXuiProbe(this);
+          const auto final_interrupt =
+              graphics->CaptureInterruptCallback(X_PROCTYPE_TITLE);
+          XELOGI(
+              "Native system UI probe: XUI result={:08X} title_preserved={} "
+              "ring_preserved={} title_callback_preserved={} frame={}",
+              result, GetExecutableModule().get() == title.get(),
+              ring_generation == graphics->ring_initialization_generation(),
+              title_interrupt == final_interrupt,
+              xe::logging::GetFrameNumber());
+          if (XSUCCEEDED(result) && cvars::native_frame_composite_probe) {
+            // The diagnostic's Session is owned by this actual SYSTEM thread.
+            // Keep that owner alive for presentation observation; thread exit
+            // revokes it. This is not a production native-manager update loop.
+            while (title_is_running() &&
+                   !native_guide_probe_stop_.load(std::memory_order_acquire)) {
+              XThread::GetCurrentThread()->Delay(0, 0, uint64_t(-160000ll));
+            }
+          }
+        }
+        if (!probe_hud) {
+          return 0;
+        }
+        // Reusing the image address and app ID exercises retirement rather
+        // than merely observing a first allocation's zero-filled memory.
+        for (uint32_t iteration = 1; iteration <= 2; ++iteration) {
+          const auto result =
+              LoadGuestSystemApp(0xFF, "\\SystemRoot\\hud.xex", user_index);
+          XELOGI("Native guide bootstrap {}: result={:08X} title_preserved={}",
+                 iteration, result, GetExecutableModule().get() == title.get());
+          if (app_manager()->guest_apps().Lookup(0xFF, true)) {
+            const auto unload_result = UnloadGuestSystemApp(0xFF);
+            XELOGI("Native guide bootstrap {}: unload={:08X}", iteration,
+                   unload_result);
+          }
+          const bool retired = !GetModule("\\SystemRoot\\hud.xex", true) &&
+                               !app_manager()->guest_apps().Lookup(0xFF, true);
+          XELOGI("Native guide bootstrap {}: retired={}", iteration, retired);
+          if (XFAILED(result) || !retired) {
+            break;
+          }
+        }
+        return 0;
+      },
+      GetSystemProcess()));
+  native_guide_probe_thread_->set_name("Native System UI Probe");
+  native_guide_probe_thread_->set_can_debugger_suspend(true);
+  if (XFAILED(native_guide_probe_thread_->Create())) {
+    native_guide_probe_thread_.reset();
+    return;
+  }
+  native_guide_probe_thread_->Resume();
+}
+
+void KernelState::ShutdownNativeGuideBootstrapProbe() {
+  native_guide_probe_stop_.store(true, std::memory_order_release);
+  if (!native_guide_probe_thread_) {
+    return;
+  }
+  // A guest request made by the probe itself must not join its own host thread.
+  // Its owner retains the reference and joins before subsystem teardown.
+  if (XThread::IsInThread(native_guide_probe_thread_.get())) {
+    return;
+  }
+  native_guide_probe_thread_->Wait(0, 0, false, nullptr);
+  native_guide_probe_thread_.reset();
 }
 
 void KernelState::InitXmpVolumePatch() {
@@ -1032,17 +1862,30 @@ void KernelState::InitXmpVolumePatch() {
 
 void KernelState::TerminateTitle() {
   XELOGI("KernelState::TerminateTitle");
+  emulator_->NotifyTitleExecutionStopped(0, this);
   xe::FlushLog();
   std::quick_exit(EXIT_SUCCESS);
 }
 
 // Doesn't return when the host UI's handler took the title down.
-static void HandOffToHostUI(const Emulator::ExitToDashboardCallback& handler) {
+static void HandOffToHostUI(Emulator* emulator,
+                            const Emulator::ExitToDashboardCallback& handler) {
+  // The asynchronous callback contract keeps the executing thread alive until
+  // it parks. Do not retain an owning reference on a fiber stack that teardown
+  // may discard without unwinding.
+  auto* current_thread = XThread::GetCurrentThread();
+  auto* owner = current_thread ? current_thread->kernel_state() : nullptr;
+  const auto generation =
+      emulator->title_execution_state().snapshot().generation;
   if (handler && handler()) {
+    if (generation) {
+      emulator->NotifyTitleExecutionStopped(generation, owner);
+    }
     // Park off guest code until the host's reset or exit ends us; Suspend can
     // return on POSIX, so loop rather than fall through to TerminateTitle.
-    auto* current_thread = XThread::GetCurrentThread();
-    current_thread->Suspend(nullptr);
+    if (current_thread) {
+      current_thread->Suspend(nullptr);
+    }
     while (true) {
       xe::threading::NanoSleep(int64_t(1'000'000'000));
     }
@@ -1051,13 +1894,13 @@ static void HandOffToHostUI(const Emulator::ExitToDashboardCallback& handler) {
 
 void KernelState::ExitToDashboard() {
   XELOGI("KernelState::ExitToDashboard");
-  HandOffToHostUI(emulator_->on_exit_to_dashboard());
+  HandOffToHostUI(emulator_, emulator_->on_exit_to_dashboard());
   TerminateTitle();
 }
 
 void KernelState::PowerOff() {
   XELOGI("KernelState::PowerOff");
-  HandOffToHostUI(emulator_->on_power_off());
+  HandOffToHostUI(emulator_, emulator_->on_power_off());
   TerminateTitle();
 }
 
@@ -1097,7 +1940,8 @@ void KernelState::OnThreadExecute(XThread* thread) {
   // https://msdn.microsoft.com/en-us/library/windows/desktop/ms682583%28v=vs.85%29.aspx
   auto thread_state = thread->thread_state();
   for (auto user_module : user_modules_) {
-    if (user_module->is_dll_module() && user_module->entry_point()) {
+    if (!user_module->is_system_app_module() && !user_module->unloading_ &&
+        user_module->is_dll_module() && user_module->entry_point()) {
       uint64_t args[] = {
           user_module->hmodule_ptr(),
           user_module->is_attached()
@@ -1127,7 +1971,8 @@ void KernelState::OnThreadExit(XThread* thread) {
   auto thread_state = thread->thread_state();
   const bool notifies_dlls = NotifiesDlls(thread);
   for (auto user_module : user_modules_) {
-    if (notifies_dlls && user_module->is_dll_module() &&
+    if (notifies_dlls && !user_module->is_system_app_module() &&
+        !user_module->unloading_ && user_module->is_dll_module() &&
         user_module->entry_point()) {
       uint64_t args[] = {
           user_module->hmodule_ptr(),
@@ -1174,8 +2019,11 @@ void KernelState::RegisterNotifyListener(XNotifyListener* listener) {
   // https://cs.rin.ru/forum/viewtopic.php?f=38&t=60668&hilit=resident+evil+5&start=375
   if (!has_notified_startup_ && listener->mask() & kXNotifySystem) {
     has_notified_startup_ = true;
+    const bool native_visible =
+        !listener->is_system() &&
+        NativeSystemUiNotifications::CurrentVisibility(this).value_or(false);
     listener->EnqueueNotification(kXNotificationSystemUI,
-                                  xam_state()->IsUIActive());
+                                  native_visible || xam_state()->IsUIActive());
     listener->EnqueueNotification(kXNotificationSystemSignInChanged, 1);
     // Sent when a storage device comes or goes. The dashboard rescans its
     // content on it. Content can change on the host between runs so the
@@ -1217,8 +2065,26 @@ void KernelState::UnregisterNotifyListener(XNotifyListener* listener) {
 
 void KernelState::BroadcastNotification(XNotificationID id, uint32_t data) {
   auto global_lock = global_critical_region_.Acquire();
+  const bool native_visible =
+      id == kXNotificationSystemUI &&
+      NativeSystemUiNotifications::CurrentVisibility(this).value_or(false);
   for (const auto& notify_listener : notify_listeners_) {
-    notify_listener->EnqueueNotification(id, data);
+    // Closing a host dialog while the native UI remains visible must not
+    // report an inactive system UI to TITLE HLE listeners. Native SYSTEM
+    // listeners remain in their separate native registry.
+    const uint32_t listener_data =
+        native_visible && !notify_listener->is_system() ? 1 : data;
+    notify_listener->EnqueueNotification(id, listener_data);
+  }
+}
+
+void KernelState::BroadcastNativeSystemUiNotification(bool visible) {
+  auto global_lock = global_critical_region_.Acquire();
+  const bool active = visible || xam_state()->IsUIActive();
+  for (const auto& listener : notify_listeners_) {
+    if (!listener->is_system()) {
+      listener->EnqueueNotification(kXNotificationSystemUI, active);
+    }
   }
 }
 
@@ -1346,7 +2212,30 @@ void KernelState::CompleteOverlappedDeferredEx(
   dispatch_cond_.notify_all();
 }
 
+bool KernelState::KeepNativeStfsDevice(
+    const object_ref<XStfsDevice>& device) {
+  if (!device) { return false; }
+  auto lock = global_critical_region_.Acquire();
+  constexpr size_t kMaximumBodies = 128;
+  constexpr uint64_t kMaximumContextBytes = 16 * 1024 * 1024;
+  uint64_t bytes = device->context_size();
+  for (const auto& old : native_stfs_devices_) { bytes += old->context_size(); }
+  if (native_stfs_devices_.size() >= kMaximumBodies ||
+      bytes > kMaximumContextBytes) {
+    return false;
+  }
+  native_stfs_devices_.push_back(device);
+  return true;
+}
+
 bool KernelState::Save(ByteStream* stream) {
+  {
+    auto lock = global_critical_region_.Acquire();
+    if (!guest_runtimes_.empty() || !native_stfs_devices_.empty()) {
+      XELOGE("Native runtime/device save/restore ownership is not implemented");
+      return false;
+    }
+  }
   XELOGD("Serializing the kernel...");
   stream->Write(kKernelSaveSignature);
 
@@ -1459,6 +2348,13 @@ uint32_t KernelState::CreateKeTimestampBundle() {
 }
 
 bool KernelState::Restore(ByteStream* stream) {
+  {
+    auto lock = global_critical_region_.Acquire();
+    if (!guest_runtimes_.empty() || !native_stfs_devices_.empty()) {
+      XELOGE("Cannot restore over a resident native runtime/device generation");
+      return false;
+    }
+  }
   // Check the magic value.
   if (stream->Read<uint32_t>() != kKernelSaveSignature) {
     return false;
@@ -1498,6 +2394,9 @@ bool KernelState::Restore(ByteStream* stream) {
     }
   }
 
+  if (auto* graphics = emulator_->graphics_system()) {
+    graphics->RebindRestoredInterruptCallbackModule();
+  }
   return true;
 }
 
@@ -1509,14 +2408,50 @@ std::bitset<4> KernelState::GetConnectedUsers() const {
   return input_sys->GetConnectedSlots();
 }
 // todo: definitely need to do more to pretend to be in a dpc
+void DPCImpersonationScope::Enter(X_KPCR& pcr, uint32_t process_type) {
+  xenia_assert(pcr.prcb_data.dpc_active == 0);
+  previous_irql_ = pcr.current_irql;
+  previous_process_type_ = pcr.processtype_value_in_dpc;
+  previous_cpu_ = pcr.prcb_data.current_cpu;
+  previous_dpc_active_ = pcr.prcb_data.dpc_active;
+  pcr.current_irql = 2;
+  pcr.prcb_data.dpc_active = 1;
+  if (process_type != UINT32_MAX) {
+    pcr.processtype_value_in_dpc = static_cast<uint8_t>(process_type);
+  }
+}
+
+void DPCImpersonationScope::Leave(X_KPCR& pcr) const {
+  pcr.current_irql = previous_irql_;
+  pcr.processtype_value_in_dpc = previous_process_type_;
+  pcr.prcb_data.current_cpu = previous_cpu_;
+  pcr.prcb_data.dpc_active = previous_dpc_active_;
+}
+
+void DPCImpersonationScope::Run(X_KPCR& pcr, uint32_t process_type, uint8_t cpu,
+                                const std::function<void(uint8_t)>& select_cpu,
+                                const std::function<void()>& callback,
+                                const std::function<void()>& deferred_dpcs) {
+  DPCImpersonationScope scope;
+  scope.Enter(pcr, process_type);
+  struct Restore {
+    X_KPCR& pcr;
+    const DPCImpersonationScope& scope;
+    const std::function<void(uint8_t)>& select_cpu;
+    ~Restore() {
+      select_cpu(scope.previous_cpu_);
+      scope.Leave(pcr);
+    }
+  } restore{pcr, scope, select_cpu};
+  select_cpu(cpu);
+  callback();
+  deferred_dpcs();
+}
+
 void KernelState::BeginDPCImpersonation(cpu::ppc::PPCContext* context,
                                         DPCImpersonationScope& scope) {
   auto kpcr = context->TranslateVirtualGPR<X_KPCR*>(context->r[13]);
-  xenia_assert(kpcr->prcb_data.dpc_active == 0);
-  scope.previous_irql_ = kpcr->current_irql;
-
-  kpcr->current_irql = 2;
-  kpcr->prcb_data.dpc_active = 1;
+  scope.Enter(*kpcr);
 }
 void KernelState::EndDPCImpersonation(cpu::ppc::PPCContext* context,
                                       DPCImpersonationScope& end_scope) {
@@ -1524,8 +2459,10 @@ void KernelState::EndDPCImpersonation(cpu::ppc::PPCContext* context,
   xboxkrnl::xeRunDeferredDpcs(context);
   auto kpcr = context->TranslateVirtualGPR<X_KPCR*>(context->r[13]);
   xenia_assert(kpcr->prcb_data.dpc_active == 1);
-  kpcr->current_irql = end_scope.previous_irql_;
-  kpcr->prcb_data.dpc_active = 0;
+  if (XThread::IsInThread()) {
+    XThread::GetCurrentThread()->SetActiveCpu(end_scope.previous_cpu_);
+  }
+  end_scope.Leave(*kpcr);
 }
 void KernelState::QueueDpc(uint32_t dpc_ptr, uint32_t arg1, uint32_t arg2) {
   auto target = memory()->TranslateVirtual<XDPC*>(dpc_ptr);
@@ -1675,7 +2612,8 @@ bool KernelState::RemoveDpc(uint32_t dpc_ptr) {
 
 void KernelState::EmulateCPInterruptDPC(uint32_t interrupt_callback,
                                         uint32_t interrupt_callback_data,
-                                        uint32_t source, uint32_t cpu) {
+                                        uint32_t source, uint32_t cpu,
+                                        uint32_t process_type) {
   // Source 0 is vblank, where the console's graphics DPC enters background
   // mode. Before the callback check, which the console also does without one.
   if (source == 0 && GuestScheduler::enabled()) {
@@ -1692,7 +2630,6 @@ void KernelState::EmulateCPInterruptDPC(uint32_t interrupt_callback,
   if (cpu == 0xFFFFFFFF) {
     cpu = 2;
   }
-  thread->SetActiveCpu(cpu);
 
   /*
     in reality, our interrupt is a callback that is called in a dpc which is
@@ -1701,23 +2638,16 @@ void KernelState::EmulateCPInterruptDPC(uint32_t interrupt_callback,
     we need to impersonate a dpc
   */
   auto current_context = thread->thread_state()->context();
-  auto kthread = memory()->TranslateVirtual<X_KTHREAD*>(thread->guest_object());
-
   auto pcr = memory()->TranslateVirtual<X_KPCR*>(thread->pcr_ptr());
-
-  DPCImpersonationScope dpc_scope{};
-  BeginDPCImpersonation(current_context, dpc_scope);
-
-  // todo: check VdGlobalXamDevice here. if VdGlobalXamDevice is nonzero, should
-  // set X_PROCTYPE_SYSTEM
-  xboxkrnl::xeKeSetCurrentProcessType(X_PROCTYPE_TITLE, current_context);
-
-  uint64_t args[] = {source, interrupt_callback_data};
-  processor_->Execute(thread->thread_state(), interrupt_callback, args,
-                      xe::countof(args));
-  xboxkrnl::xeKeSetCurrentProcessType(X_PROCTYPE_IDLE, current_context);
-
-  EndDPCImpersonation(current_context, dpc_scope);
+  DPCImpersonationScope::Run(
+      *pcr, process_type, static_cast<uint8_t>(cpu),
+      [thread](uint8_t selected_cpu) { thread->SetActiveCpu(selected_cpu); },
+      [&]() {
+        uint64_t args[] = {source, interrupt_callback_data};
+        processor_->Execute(thread->thread_state(), interrupt_callback, args,
+                            xe::countof(args));
+      },
+      [&]() { xboxkrnl::xeRunDeferredDpcs(current_context); });
 }
 
 uint32_t KernelState::GetBackgroundProcessors() {
@@ -1969,6 +2899,22 @@ void KernelState::InitializeKernelGuestGlobals() {
        kernel_guest_globals_ +
            offsetof32(KernelGuestGlobals, IoDeviceObjectType)}};
   xboxkrnl::xeKeSetEvent(&block->UsbdBootEnumerationDoneEvent, 1, 0);
+
+  // Explicit virtual-kernel compatibility policy: healthy STFS and no pending
+  // USB driver work start unsignaled. Use manual-reset notification events so
+  // work/error state is not implicitly consumed by a wait. Retail reset modes
+  // are not established; USB work production and STFS error query/clear remain
+  // unsupported. These must never alias the signaled boot-ready/default event.
+  for (auto* event :
+       {&block->UsbdDriverLoadRequiredEvent, &block->StfsDeviceErrorEvent}) {
+    event->header.type = EventNotificationObject;
+    event->header.signal_state = 0;
+    // Bind the ordinary host wrapper to this Kernel's borrowed global body.
+    // No current guest thread/TLS or process-global initializer is required.
+    auto object =
+        XObject::GetNativeObject<XEvent>(this, event, EventNotificationObject);
+    assert_not_null(object);
+  }
 
   // Matches the console's boot value: CPUs 2-5 take background-scheduling
   // windows, and a title can move that with KeSetBackgroundProcessors.

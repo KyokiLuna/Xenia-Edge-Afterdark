@@ -50,7 +50,7 @@ class GameAchievementsUI final : public XamGamepadDialog {
   uint64_t window_id_;
 
   const TitleInfo title_info_;
-  const UserProfile* profile_;
+  const uint64_t profile_xuid_;
 
   std::vector<Achievement> achievements_info_;
   std::map<uint32_t, std::unique_ptr<xe::ui::ImmediateTexture>>

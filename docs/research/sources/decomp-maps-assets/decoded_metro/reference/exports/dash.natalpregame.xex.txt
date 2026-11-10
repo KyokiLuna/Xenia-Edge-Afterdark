@@ -1,0 +1,4 @@
+dash.natalpregame.xex exports
+=============================
+
+{"confidence": "CONFIRMED", "function_va": "0x9C783000", "module": "dash.natalpregame.xex", "ordinal": "0x00000001", "resolved_name": ""}

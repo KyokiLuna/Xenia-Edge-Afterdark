@@ -1,0 +1,5 @@
+Guide.CSVTrans.xex exports
+==========================
+
+{"confidence": "CONFIRMED", "function_va": "0x901029C0", "module": "Guide.CSVTrans.xex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x90102000", "module": "Guide.CSVTrans.xex", "ordinal": "0x00000002", "resolved_name": ""}

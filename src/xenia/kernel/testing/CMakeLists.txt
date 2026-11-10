@@ -1,7 +1,7 @@
 xe_test_suite(xenia-kernel-tests ${CMAKE_CURRENT_SOURCE_DIR}
   LINKS
     capstone fmt imgui mbedtls
-    xenia-apu xenia-base xenia-core xenia-cpu xenia-gpu
+    xenia-apu xenia-apu-nop xenia-base xenia-core xenia-cpu xenia-gpu
     xenia-hid-portal xenia-kernel xenia-ui xenia-patcher
 )
 if(XE_TARGET_X86_64 AND TARGET xenia-kernel-tests)

@@ -1,0 +1,191 @@
+va	data_type	text
+0x9c500b98	string	Output.pcm
+0x9c500ba4	string	Input.ac3
+0x9c500d3c	string	MPEG2 Decoder Thread
+0x9c500d60	string	MPEG2 decoder driver thread
+0x9c500d7c	string	MPEG2 slicer thread
+0x9c500de8	string	PHSCOR table index out of range
+0x9c500e10	string	ac3_dec: muting
+0x9c500e20	string	ac3_dec: repeating previous block
+0x9c500e44	string	ac3_dec: block 0 & 1 exceed 5/8 of a frame
+0x9c500e70	string	ac3_dec: end of block 5 exceeds 3/8 of a frame
+0x9c500f38	string	D picture end_of_macroblock bit
+0x9c501844	string	SOFTWARE\Microsoft\MPEG2Demultiplexer\Transport
+0x9c501874	string	SOFTWARE\Microsoft\MPEG2Demultiplexer\Program
+0x9c5018c8	unicode	ATSC Audio (EAC3)
+0x9c5018ec	unicode	MPEG LOAS
+0x9c501900	unicode	ISDB SUPERIMPOSE
+0x9c501924	unicode	ISDB CAPTIONS
+0x9c501940	unicode	H264 Video
+0x9c501958	unicode	DVB SUBTITLES
+0x9c501974	unicode	Teletext
+0x9c501988	unicode	ADTS AAC Audio
+0x9c5019a8	unicode	MPEG2 Audio
+0x9c5019f8	unicode	Transport Stream
+0x9c501a1c	unicode	Transport Payload
+0x9c501a40	unicode	ATSC Audio (AC3)
+0x9c501a64	unicode	MPEG1 Audio
+0x9c501a7c	unicode	ATSC Video
+0x9c50b460	string	xdcall: trying to reuse cpl leak terms in block 0
+0x9c50b494	string	xdcall: trying to reuse SNR offsets in block 0
+0x9c50b4c4	string	xdcall: chbwcod too high
+0x9c50b4e0	string	xdcall: trying to reuse bit allocation info in block 0
+0x9c50b518	string	xdcall: trying to reuse exponent strategy in block 0
+0x9c50b550	string	xdcall: trying to reuse LFE exp strategy in block 0
+0x9c50b584	string	xdcall: trying to reuse CPL exp strategy in block 0
+0x9c50b5b8	string	xdcall: trying to reuse rematrix flags in block 0
+0x9c50b5ec	string	xdcall: can't couple in 1+1 dual mono mode
+0x9c50b618	string	xdcall: trying to reuse coupling strategy in block 0
+0x9c50b650	string	bsi_d: additional bsi being skipped
+0x9c50bf3f	string	{ClockSubordinateSettlingMillis
+0x9c50bf60	string	MinDownstreamBufferingMillis
+0x9c50bf80	string	OverPadMillis
+0x9c50c1ec	unicode	Video
+0x9c50c1f8	unicode	Mpeg-1
+0x9c50c208	unicode	AC-3
+0x9c50c214	unicode	LPCM
+0x9c50c220	unicode	ADTS
+0x9c50c2a0	string	SetSyncPoints
+0x9c50c2b0	string	ReportDiscontinuities
+0x9c50c424	string	TimeoutCheckThreshold
+0x9c50c57b	string	qDVD Internal List
+0x9c50c608	string	Sample Queue List
+0x9c50c6c8	unicode	A-%7d
+0x9c50c6e8	unicode	V-%7d
+0x9c50c708	unicode	D-%7d
+0x9c512238	string	expand_delta: delta bit alloc past end of array
+0x9c51279c	string	VideoPTSOffsetMs
+0x9c5127b0	string	AudioPTSOffsetMs
+0x9c512fa1	string	Vv@Unknown exception
+0x9c512fbd	string	Vv@bad allocation
+0x9c51320c	string	e+000
+0x9c513214	unicode	HH:mm:ss
+0x9c513228	unicode	dddd, MMMM dd, yyyy
+0x9c513250	unicode	MM/dd/yy
+0x9c513274	unicode	December
+0x9c513288	unicode	November
+0x9c51329c	unicode	October
+0x9c5132ac	unicode	September
+0x9c5132c0	unicode	August
+0x9c5132d0	unicode	July
+0x9c5132dc	unicode	June
+0x9c5132e8	unicode	April
+0x9c5132f4	unicode	March
+0x9c513300	unicode	February
+0x9c513314	unicode	January
+0x9c513384	unicode	Saturday
+0x9c513398	unicode	Friday
+0x9c5133a8	unicode	Thursday
+0x9c5133bc	unicode	Wednesday
+0x9c5133d0	unicode	Tuesday
+0x9c5133e0	unicode	Monday
+0x9c5133f0	unicode	Sunday
+0x9c513438	string	HH:mm:ss
+0x9c513444	string	dddd, MMMM dd, yyyy
+0x9c513458	string	MM/dd/yy
+0x9c51346c	string	December
+0x9c513478	string	November
+0x9c513484	string	October
+0x9c51348c	string	September
+0x9c513498	string	August
+0x9c5134b0	string	April
+0x9c5134b8	string	March
+0x9c5134c0	string	February
+0x9c5134cc	string	January
+0x9c513504	string	Saturday
+0x9c513510	string	Friday
+0x9c513518	string	Thursday
+0x9c513524	string	Wednesday
+0x9c513530	string	Tuesday
+0x9c513538	string	Monday
+0x9c513540	string	Sunday
+0x9c513578	unicode	ull)
+0x9c513668	unicode	runtime error 
+0x9c51368c	unicode	TLOSS error\n
+0x9c5136a8	unicode	SING error\n
+0x9c5136c0	unicode	DOMAIN error\n
+0x9c5136e0	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9c5138d0	unicode	R6032\n- not enough space for locale information\n
+0x9c513938	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9c5139fc	unicode	R6030\n- CRT not initialized\n
+0x9c513a38	unicode	R6028\n- unable to initialize heap\n
+0x9c513a80	unicode	R6027\n- not enough space for lowio initialization\n
+0x9c513ae8	unicode	R6026\n- not enough space for stdio initialization\n
+0x9c513b50	unicode	R6025\n- pure virtual function call\n
+0x9c513b98	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9c513c00	unicode	R6019\n- unable to open console device\n
+0x9c513c50	unicode	R6018\n- unexpected heap error\n
+0x9c513c90	unicode	R6017\n- unexpected multithread lock error\n
+0x9c513ce8	unicode	R6016\n- not enough space for thread data\n
+0x9c513d40	unicode	R6010\n- abort() has been called\n
+0x9c513d88	unicode	R6009\n- not enough space for environment\n
+0x9c513de0	unicode	R6008\n- not enough space for arguments\n
+0x9c513e30	unicode	R6002\n- floating point support not loaded\n
+0x9c514840	string	_nextafter
+0x9c514898	string	floor
+0x9c5149e8	string	 Complete Object Locator'
+0x9c514a04	string	 Class Hierarchy Descriptor'
+0x9c514a24	string	 Base Class Array'
+0x9c514a38	string	 Base Class Descriptor at (
+0x9c514a54	string	 Type Descriptor'
+0x9c514a68	string	`local static thread guard'
+0x9c514a84	string	`managed vector copy constructor iterator'
+0x9c514ab0	string	`vector vbase copy constructor iterator'
+0x9c514adc	string	`vector copy constructor iterator'
+0x9c514b00	string	`dynamic atexit destructor for '
+0x9c514b24	string	`dynamic initializer for '
+0x9c514b40	string	`eh vector vbase copy constructor iterator'
+0x9c514b6c	string	`eh vector copy constructor iterator'
+0x9c514b94	string	`managed vector destructor iterator'
+0x9c514bbc	string	`managed vector constructor iterator'
+0x9c514be4	string	`placement delete[] closure'
+0x9c514c04	string	`placement delete closure'
+0x9c514c20	string	`omni callsig'
+0x9c514c30	string	 delete[]
+0x9c514c3c	string	 new[]
+0x9c514c44	string	`local vftable constructor closure'
+0x9c514c68	string	`local vftable'
+0x9c514c78	string	`RTTI
+0x9c514c84	string	`udt returning'
+0x9c514c94	string	`copy constructor closure'
+0x9c514cb0	string	`eh vector vbase constructor iterator'
+0x9c514cd8	string	`eh vector destructor iterator'
+0x9c514cf8	string	`eh vector constructor iterator'
+0x9c514d1c	string	`virtual displacement map'
+0x9c514d38	string	`vector vbase constructor iterator'
+0x9c514d5c	string	`vector destructor iterator'
+0x9c514d7c	string	`vector constructor iterator'
+0x9c514d9c	string	`scalar deleting destructor'
+0x9c514dbc	string	`default constructor closure'
+0x9c514ddc	string	`vector deleting destructor'
+0x9c514dfc	string	`vbase destructor'
+0x9c514e10	string	`string'
+0x9c514e1c	string	`local static guard'
+0x9c514e34	string	`typeof'
+0x9c514e40	string	`vcall'
+0x9c514e48	string	`vbtable'
+0x9c514e54	string	`vftable'
+0x9c514edc	string	operator
+0x9c514f04	string	 delete
+0x9c514f14	string	__unaligned
+0x9c514f20	string	__restrict
+0x9c514f2c	string	__ptr64
+0x9c514f34	string	__eabi
+0x9c514f3c	string	__clrcall
+0x9c514f48	string	__fastcall
+0x9c514f54	string	__thiscall
+0x9c514f60	string	__stdcall
+0x9c514f6c	string	__pascal
+0x9c514f78	string	__cdecl
+0x9c514f80	string	__based(
+0x9c515158	string	1#QNAN
+0x9c515160	string	1#INF
+0x9c515168	string	1#IND
+0x9c515170	string	1#SNAN
+0x9c5152d0	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\dlls\extracodecs2\obj\xbox\dash.ExtraAVCodecs2.pdb
+0x9c574238	string	.?AVbad_alloc@std@@
+0x9c574254	string	.?AVexception@std@@
+0x9c574999	string	abcdefghijklmnopqrstuvwxyz
+0x9c5749b9	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9c576036	string	dash.ExtraAVCodecs2.xex
+0x9c57604e	string	ExtraAVCodecsInitialize

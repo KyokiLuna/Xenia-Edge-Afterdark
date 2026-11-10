@@ -22,10 +22,10 @@ StfsContainerFile::~StfsContainerFile() = default;
 
 void StfsContainerFile::Destroy() { delete this; }
 
-size_t StfsContainerFile::Read(std::span<uint8_t> buffer, size_t offset,
-                               size_t record_file) {
+X_STATUS StfsContainerFile::Read(std::span<uint8_t> buffer, size_t offset,
+                                 size_t record_file, size_t* transferred) {
   auto device = static_cast<const StfsContainerDevice*>(entry_->device());
-  return device->ReadData(offset, buffer) ? buffer.size() : 0;
+  return device->ReadDataWithStatus(offset, buffer, transferred);
 }
 
 }  // namespace vfs

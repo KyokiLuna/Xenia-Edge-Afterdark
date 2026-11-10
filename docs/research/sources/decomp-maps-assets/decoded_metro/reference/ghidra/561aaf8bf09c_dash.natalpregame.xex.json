@@ -1,0 +1,18 @@
+{
+  "module": "dash.natalpregame.xex",
+  "program": "561aaf8bf09c_dash.natalpregame.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "ec2995783999cb946e37bd7a0f8e7a415e22d92eca20ef8c8c7ab635c9eaeaff",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9c780400",
+  "functions": 283,
+  "calls": 510,
+  "strings": 117,
+  "string_xrefs": 102,
+  "independent_sha256": "ec2995783999cb946e37bd7a0f8e7a415e22d92eca20ef8c8c7ab635c9eaeaff",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

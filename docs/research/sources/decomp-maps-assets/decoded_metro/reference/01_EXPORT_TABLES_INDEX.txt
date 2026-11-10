@@ -1,0 +1,26 @@
+exports
+=======
+
+Dash.FieldCalibration.lex: 4 entries -> reference/exports/Dash.FieldCalibration.lex.txt
+Dash.Kiosk.lex: 3 entries -> reference/exports/Dash.Kiosk.lex.txt
+Dash.NetworkStorage.lex: 3 entries -> reference/exports/Dash.NetworkStorage.lex.txt
+Dash.NuiTroubleshooter.lex: 4 entries -> reference/exports/Dash.NuiTroubleshooter.lex.txt
+Dash.Search.xex: 1 entries -> reference/exports/Dash.Search.xex.txt
+Guide.CSVTrans.xex: 2 entries -> reference/exports/Guide.CSVTrans.xex.txt
+Guide.Fitness.xex: 2 entries -> reference/exports/Guide.Fitness.xex.txt
+PlayReady.xex: 36 entries -> reference/exports/PlayReady.xex.txt
+dash.ClosedCaptionDll.xex: 3 entries -> reference/exports/dash.ClosedCaptionDll.xex.txt
+dash.ExtraAVCodecs.xex: 1 entries -> reference/exports/dash.ExtraAVCodecs.xex.txt
+dash.ExtraAVCodecs2.xex: 1 entries -> reference/exports/dash.ExtraAVCodecs2.xex.txt
+dash.natalpregame.xex: 1 entries -> reference/exports/dash.natalpregame.xex.txt
+dash.xex: 1217 entries -> reference/exports/dash.xex.txt
+dashnui.xex: 76 entries -> reference/exports/dashnui.xex.txt
+natalsu.xex: 1 entries -> reference/exports/natalsu.xex.txt
+packages/su20076000_00000000/$flash_bootanim.xex: 3 entries -> reference/exports/packages/su20076000_00000000/$flash_bootanim.xex.txt
+packages/su20076000_00000000/$flash_createprofile.xex: 2 entries -> reference/exports/packages/su20076000_00000000/$flash_createprofile.xex.txt
+packages/su20076000_00000000/$flash_dash.xex: 1217 entries -> reference/exports/packages/su20076000_00000000/$flash_dash.xex.txt
+packages/su20076000_00000000/$flash_deviceselector.xex: 3 entries -> reference/exports/packages/su20076000_00000000/$flash_deviceselector.xex.txt
+packages/su20076000_00000000/$flash_systemupdate2pre.xex: 2 entries -> reference/exports/packages/su20076000_00000000/$flash_systemupdate2pre.xex.txt
+packages/su20076000_00000000/$flash_vk.xex: 4 entries -> reference/exports/packages/su20076000_00000000/$flash_vk.xex.txt
+packages/su20076000_00000000/$flash_xam.xex: 1606 entries -> reference/exports/packages/su20076000_00000000/$flash_xam.xex.txt
+packages/su20076000_00000000/$install_extender.xex: 1 entries -> reference/exports/packages/su20076000_00000000/$install_extender.xex.txt

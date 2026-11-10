@@ -13,6 +13,7 @@
 #include "xenia/base/cvar.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/platform.h"
+#include "xenia/ui/native_ui_plane_handoff.h"
 #include "xenia/ui/window.h"
 
 #if XE_PLATFORM_WIN32
@@ -587,6 +588,330 @@ bool Presenter::IsGuestOutputDrivingPaints() const {
           guest_output_last_refresh_ticks_.load(std::memory_order_relaxed)));
   return std::chrono::steady_clock::now() - last_refresh <
          std::chrono::milliseconds(kGuestOutputStallTimeoutMillis);
+}
+
+bool NativeUiPlaneImageReference::valid() const noexcept {
+  if (!publication || !authority || !image.valid()) {
+    return false;
+  }
+  const auto owner = authority->owner();
+  return owner.valid() && image.owner == owner.allocation_owner &&
+         backend_epoch == owner.backend_epoch;
+}
+std::optional<NativeUiPlanePaintProjection> ProjectNativeUiPlanePresentation(
+    const gpu::NativeOverlayPresentation& presentation, uint32_t target_width,
+    uint32_t target_height) noexcept {
+  if (!presentation.valid() || !target_width || !target_height ||
+      target_width > uint32_t(INT32_MAX) ||
+      target_height > uint32_t(INT32_MAX)) {
+    return {};
+  }
+  const double scale =
+      std::min(double(target_width) / presentation.canvas_width,
+               double(target_height) / presentation.canvas_height);
+  const double canvas_width = presentation.canvas_width * scale;
+  const double canvas_height = presentation.canvas_height * scale;
+  const double canvas_x = (double(target_width) - canvas_width) * 0.5;
+  const double canvas_y = (double(target_height) - canvas_height) * 0.5;
+  const double x = canvas_x +
+                   double(int64_t(presentation.x) - presentation.canvas_x) *
+                       scale;
+  const double y = canvas_y +
+                   double(int64_t(presentation.y) - presentation.canvas_y) *
+                       scale;
+  const double width = presentation.width * scale;
+  const double height = presentation.height * scale;
+  NativeUiPlanePaintProjection result;
+  result.x = float(x);
+  result.y = float(y);
+  result.width = float(width);
+  result.height = float(height);
+  result.opacity = float(presentation.opacity) / 255.0f;
+  const double left = std::max(x, canvas_x);
+  const double top = std::max(y, canvas_y);
+  const double right = std::min(x + width, canvas_x + canvas_width);
+  const double bottom = std::min(y + height, canvas_y + canvas_height);
+  if (left >= right || top >= bottom) {
+    return result;  // Valid fully clipped window; no paint or fence is claimed.
+  }
+  // The native canvas may begin between host pixels. Clip according to pixel
+  // centers, including the left/top boundary and excluding right/bottom. The
+  // unclipped quad is retained above, so clipping cannot stretch its UVs.
+  const auto edge = [](double value, uint32_t limit) {
+    return uint32_t(std::clamp(std::ceil(value - 0.5), 0.0, double(limit)));
+  };
+  result.scissor_x = edge(left, target_width);
+  result.scissor_y = edge(top, target_height);
+  result.scissor_width = edge(right, target_width) - result.scissor_x;
+  result.scissor_height = edge(bottom, target_height) - result.scissor_y;
+  return result;
+}
+
+void NativeUiPlaneImageSelection::Preflight::CheckLiveness() noexcept {
+  authority_live = visibility.authority && visibility.authority->IsLive();
+  desired_live =
+      visibility.image_permission && visibility.image_permission->IsLive();
+  previous_live = previous.permission && previous.permission->IsLive();
+}
+NativeUiPlaneImageSelection::Preflight NativeUiPlaneImageSelection::Prepare(
+    const NativeUiPlaneVisibility& visibility) const {
+  return {visibility, qualified_};
+}
+bool NativeUiPlaneImageSelection::Matches(
+    const Preflight& probe, const NativeUiPlaneVisibility& current) const {
+  return probe.visibility.authority == current.authority &&
+         probe.visibility.revision == current.revision &&
+         probe.visibility.visible == current.visible &&
+         probe.visibility.image_permission == current.image_permission &&
+         probe.previous.reference.publication ==
+             qualified_.reference.publication &&
+         probe.previous.permission == qualified_.permission;
+}
+namespace {
+bool CanReconcileNonmodalHandoff(
+    const NativeUiPlaneVisibility& before,
+    const NativeUiPlaneVisibility& current) noexcept {
+  const auto& checked = before.image_permission;
+  const auto& permission = current.image_permission;
+  return before.visible && current.visible && before.revision &&
+         current.revision >= before.revision && current.authority &&
+         current.authority == before.authority && checked && permission &&
+         (current.revision != before.revision || permission == checked) &&
+         checked->epoch() == permission->epoch() && !checked->IsRevoked() &&
+         !permission->IsRevoked() &&
+         checked->image().owner == permission->image().owner &&
+         permission->image().owner ==
+             current.authority->owner().allocation_owner;
+}
+}  // namespace
+
+bool NativeUiPlaneImageSelection::CanRecord(
+    const NativeUiPlaneVisibility& visibility,
+    const Selection& selection) noexcept {
+  const auto& image = selection.reference;
+  if (!visibility.visible || !visibility.revision ||
+      selection.visibility_revision != visibility.revision || !image.valid() ||
+      image.authority != visibility.authority) {
+    return false;
+  }
+  if (!visibility.image_permission) {
+    return !selection.permission;
+  }
+  const auto& presentation = visibility.image_permission->presentation();
+  if (presentation && !presentation->opacity) {
+    return false;  // Transparent advance must not fall back to older pixels.
+  }
+  return selection.permission &&
+         (!selection.permission->presentation() ||
+          selection.permission->presentation()->opacity) &&
+         !visibility.image_permission->IsRevoked() &&
+         !selection.permission->IsRevoked() &&
+         visibility.image_permission->epoch() ==
+             selection.permission->epoch() &&
+         selection.permission->image() == image.image;
+}
+bool CanRecordNativeUiPlaneAfterHandoff(
+    const NativeUiPlaneVisibility& admitted,
+    const NativeUiPlaneVisibility& current,
+    const NativeUiPlaneImageSelection::Selection& selection) noexcept {
+  // This validates only an already selected immutable pair. It does not grant
+  // authority, promote a pending image or repeat full liveness under a backend
+  // lock. Full liveness was checked before Select outside backend ownership.
+  if (!NativeUiPlaneImageSelection::CanRecord(admitted, selection)) {
+    return false;
+  }
+  if (admitted.authority == current.authority &&
+      admitted.revision == current.revision &&
+      admitted.visible == current.visible &&
+      admitted.image_permission == current.image_permission) {
+    return true;
+  }
+  // Swapchain acquisition and base-title drawing can span another normal
+  // Source completion after Select. Retain the admitted image and its own
+  // placement, but never cross a hide, modal transition or revoked/new epoch.
+  if (!CanReconcileNonmodalHandoff(admitted, current)) {
+    return false;
+  }
+  auto retained = selection;
+  retained.visibility_revision = current.revision;
+  return NativeUiPlaneImageSelection::CanRecord(current, retained);
+}
+NativeUiPlaneImageSelection::Selection NativeUiPlaneImageSelection::Current(
+    const Preflight& probe, const NativeUiPlaneVisibility& current,
+    const NativeUiPlaneImageReference& modal) const {
+  if (!Matches(probe, current) || !probe.authority_live || !current.visible) {
+    return {};
+  }
+  Selection result;
+  if (!current.image_permission) {
+    result = {modal, {}, current.revision};
+  } else if (probe.desired_live && probe.previous_live) {
+    result = qualified_;
+    result.visibility_revision = current.revision;
+  }
+  return CanRecord(current, result) ? result : Selection{};
+}
+NativeUiPlaneImageSelection::Selection NativeUiPlaneImageSelection::Select(
+    const Preflight& probe, const NativeUiPlaneVisibility& current,
+    const NativeUiPlaneImageReference& desired,
+    const NativeUiPlaneImageReference& modal) {
+  if (!Matches(probe, current)) {
+    // A normal completed Source (or another actual paint) may advance while
+    // full liveness is checked outside the backend lock or a sampling fence
+    // is awaited. That is not a native hide. Reconcile only the SAME live
+    // nonmodal authority/epoch already checked by this preflight, never a
+    // newly observed epoch or a modal/foreground/backend transition.
+    if (!probe.authority_live || !probe.desired_live ||
+        !CanReconcileNonmodalHandoff(probe.visibility, current)) {
+      Reset();
+      return {};
+    }
+    const auto& permission = current.image_permission;
+    if (desired.image == permission->image()) {
+      Selection ready{desired, permission, current.revision};
+      if (CanRecord(current, ready)) {
+        qualified_ = ready;
+        return ready;
+      }
+    }
+    // Use the CURRENT qualified pair, not the preflight's possibly released
+    // publication. It may have been advanced by another paint in the meantime.
+    // Its image and placement/opacity stay together until the exact new image
+    // is ready. CanRecord also makes a new transparent request a hard barrier.
+    Selection retained = qualified_;
+    retained.visibility_revision = current.revision;
+    if (retained.permission &&
+        retained.permission->epoch() == permission->epoch() &&
+        CanRecord(current, retained)) {
+      qualified_ = retained;
+      return retained;
+    }
+    Reset();
+    return {};
+  }
+  if (!probe.authority_live || !current.visible || !current.image_permission) {
+    Reset();
+    if (probe.authority_live && current.visible && !current.image_permission) {
+      Selection result{modal, {}, current.revision};
+      if (CanRecord(current, result)) {
+        return result;
+      }
+    }
+    return {};
+  }
+  if (probe.desired_live &&
+      desired.image == current.image_permission->image()) {
+    Selection result{desired, current.image_permission, current.revision};
+    if (CanRecord(current, result)) {
+      qualified_ = result;
+      return result;
+    }
+  }
+  auto previous = Current(probe, current, modal);
+  if (previous) {
+    qualified_ = previous;
+    return previous;
+  }
+  Reset();
+  return {};
+}
+
+bool Presenter::BindNativeUiPlaneAuthority(
+    std::shared_ptr<const NativeUiPlaneAuthority> authority) {
+  if (!authority || !authority->owner().valid() || !authority->IsLive()) {
+    return false;
+  }
+  std::lock_guard lock(native_ui_plane_mutex_);
+  if (native_ui_plane_sealed_ ||
+      (native_ui_plane_visibility_.authority &&
+       native_ui_plane_visibility_.authority != authority)) {
+    return false;
+  }
+  native_ui_plane_visibility_.authority = std::move(authority);
+  return true;
+}
+
+bool Presenter::SetNativeUiPlaneVisibility(
+    const std::shared_ptr<const NativeUiPlaneAuthority>& authority,
+    uint64_t revision, bool visible,
+    std::shared_ptr<const NativeUiPlaneImagePermission> image_permission) {
+  // Query resident permission without holding a backend or publication lock.
+  if (!authority || !revision || (visible && !authority->IsLive())) {
+    return false;
+  }
+  if (!visible) {
+    image_permission.reset();
+  }
+  if (image_permission &&
+      (image_permission->image().owner != authority->owner().allocation_owner ||
+       !image_permission->IsLive())) {
+    return false;
+  }
+  {
+    std::lock_guard lock(native_ui_plane_mutex_);
+    auto& current = native_ui_plane_visibility_;
+    if (native_ui_plane_sealed_ || current.authority != authority ||
+        revision < current.revision ||
+        (revision == current.revision &&
+         (visible != current.visible ||
+          image_permission != current.image_permission))) {
+      return false;
+    }
+    current.revision = revision;
+    current.visible = visible;
+    current.image_permission = std::move(image_permission);
+  }
+  RequestNativeUiPlaneRepaint();
+  return true;
+}
+
+bool Presenter::WithdrawNativeUiPlaneAuthority(
+    const std::shared_ptr<const NativeUiPlaneAuthority>& authority) {
+  {
+    std::lock_guard lock(native_ui_plane_mutex_);
+    if (!authority || (native_ui_plane_visibility_.authority &&
+                       native_ui_plane_visibility_.authority != authority)) {
+      return false;
+    }
+    native_ui_plane_visibility_ = {};
+  }
+  RequestNativeUiPlaneRepaint();
+  return true;
+}
+
+std::shared_ptr<const NativeUiPlaneAuthority>
+Presenter::GetNativeUiPlaneAuthority(
+    const memory::PhysicalAllocationOwner& owner,
+    uint64_t backend_epoch) const {
+  auto snapshot = SnapshotNativeUiPlaneVisibility();
+  auto authority = snapshot.authority;
+  if (!authority || authority->owner().allocation_owner != owner ||
+      authority->owner().backend_epoch != backend_epoch ||
+      !authority->IsLive()) {
+    return {};
+  }
+  return authority;
+}
+
+NativeUiPlaneVisibility Presenter::SnapshotNativeUiPlaneVisibility() const {
+  std::lock_guard lock(native_ui_plane_mutex_);
+  return native_ui_plane_sealed_ ? NativeUiPlaneVisibility{}
+                                 : native_ui_plane_visibility_;
+}
+
+void Presenter::SealNativeUiPlanePublication() {
+  std::lock_guard lock(native_ui_plane_mutex_);
+  native_ui_plane_sealed_ = true;
+  native_ui_plane_visibility_ = {};
+}
+
+void Presenter::RequestNativeUiPlaneRepaint() {
+  // This also paints a hidden plane away over a stalled title or blank base.
+  // Unlike RequestUIPaint, no host UIDrawer is required.
+  std::lock_guard lock(paint_mode_mutex_);
+  if (paint_mode_ != PaintMode::kNone) {
+    RequestPaintOrConnectionRecoveryViaWindow(true);
+  }
 }
 
 void Presenter::RequestUIPaintFromUIThread() {

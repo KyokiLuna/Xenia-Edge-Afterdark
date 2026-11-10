@@ -1,0 +1,18 @@
+{
+  "module": "$flash_minimediaplayer.xex",
+  "program": "c4809e1cc1e4__flash_minimediaplayer.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "1e116c8f2e0772779898d341df00cad9e6f145f449d5f533287683a912796e80",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 462,
+  "calls": 954,
+  "strings": 254,
+  "string_xrefs": 224,
+  "independent_sha256": "1e116c8f2e0772779898d341df00cad9e6f145f449d5f533287683a912796e80",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

@@ -1,0 +1,18 @@
+{
+  "module": "nuihud.xex",
+  "program": "e34bb6f36aed_nuihud.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "503503e1bc0c2cddea578d5cc6fb7f50bbddc21a5e1ef8e97ad89a4a35a1a7c2",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 270,
+  "calls": 442,
+  "strings": 127,
+  "string_xrefs": 154,
+  "independent_sha256": "503503e1bc0c2cddea578d5cc6fb7f50bbddc21a5e1ef8e97ad89a4a35a1a7c2",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

@@ -1,0 +1,558 @@
+va	data_type	text
+0x901008d0	unicode	sharedres://unearnedAchievement.png
+0x90100918	unicode	Xaudio_Sound01
+0x90100988	unicode	TransitionBackEnd
+0x901009ac	unicode	TransitionBack
+0x901009cc	unicode	TransitionOutLeftEnd
+0x901009f8	unicode	TransitionOutRightEnd
+0x90100a24	unicode	TransitionOutLeft
+0x90100a48	unicode	TransitionOutRight
+0x90100a70	unicode	LegendX
+0x90100a80	unicode	PageLeftGroup\ControlPackNuiSideLeft
+0x90100ad0	unicode	PageRightGroup\ControlPackNuiSideRight
+0x90100b20	unicode	HoverB
+0x90100b30	unicode	labPaging
+0x90100b44	unicode	HeaderShader
+0x90100b60	unicode	legend_X
+0x90100b74	unicode	AchievementList
+0x90100b94	unicode	labGameTitle
+0x90100bb0	unicode	labBackground
+0x90100bcc	unicode	labAchievementDescription
+0x90100c00	unicode	labAchievementName
+0x90100c28	unicode	labAcquiredDate
+0x90100c48	unicode	labPoints
+0x90100c5c	unicode	ctlLoading
+0x90100c74	unicode	labEmpty
+0x90100c88	unicode	labCountText
+0x90100ca8	unicode	TransitionInRightEnd
+0x90100cd4	unicode	TransitionInLeftEnd
+0x90100cfc	unicode	TransitionInRight
+0x90100d20	unicode	TransitionInLeft
+0x90100d48	unicode	%u %lc
+0x90100d58	unicode	NuiAchievementDetails.xur
+0x90100d8c	unicode	828_AchievDetails.xur
+0x90100dc8	unicode	LegendA
+0x90100dd8	unicode	shareButton
+0x90100df0	unicode	achievementDescriptionText
+0x90100e28	unicode	credText
+0x90100e3c	unicode	achievementTitleText
+0x90100e68	unicode	%s %lc
+0x90100e78	unicode	sharedres://unearnedAvatarAward.png
+0x90100ed0	unicode	AvatarAwardList
+0x90100ef0	unicode	labAvatarAwardDescription
+0x90100f24	unicode	labAvatarAwardName
+0x90100f4c	unicode	809_ChangeGamerTile.xur
+0x90100f90	unicode	backButton
+0x90100fbc	unicode	gamerTileList
+0x90100fd8	unicode	gamerCard
+0x90100fec	unicode	waitCursorControl
+0x90101010	unicode	ChangePersonalTile.xur
+0x90101040	string	custom_
+0x9010105c	string	customgamertiles:\%s
+0x90101074	string	customgamertiles
+0x90101088	unicode	EditGamerTileScene
+0x901010b0	unicode	807_EditGamerTile.xur
+0x901010dc	unicode	memory://%X,%X
+0x90101110	unicode	metaPanelScene
+0x90101130	unicode	capturePictureButton
+0x9010115c	unicode	downloadTilesButton
+0x90101184	unicode	changePersonalTileButton
+0x901011b8	unicode	changeGamerTileButton
+0x901011e4	unicode	808_EditProfile.xur
+0x9010125c	unicode	gamerTileButton
+0x9010127c	unicode	profileNameButton
+0x901012a0	unicode	scnBox_motto
+0x901012bc	unicode	labMotto
+0x901012d0	unicode	gamerBioButton
+0x901012f0	unicode	gamerLocationButton
+0x90101318	unicode	gamerNameButton
+0x90101338	unicode	gamerZoneButton
+0x90101358	unicode	gamerMottoButton
+0x9010137c	unicode	avatarEditorButton
+0x901013a4	unicode	gamerTagButton
+0x901013c4	unicode	onlinePersonalCardGroup
+0x901013f4	unicode	onlineDatacenterButtonGroup
+0x9010142c	unicode	onlineButtonGroup
+0x90101450	unicode	offlineButtonGroup
+0x90101478	string	Dash.LF.GamerTagChange.lex
+0x90101494	string	UseDashGamertagChangeApp
+0x901014b0	unicode	Event9
+0x901014c0	unicode	Avatar
+0x901014d0	unicode	Edit Profile
+0x901014ec	unicode	Guide
+0x901014f8	unicode	Guide/Edit Profile/Avatar
+0x9010152c	unicode	AvatarEditor
+0x90101548	unicode	labName
+0x90101558	unicode	labLocation
+0x90101570	unicode	labBio
+0x90101580	unicode	NuiGamesList.xur
+0x901015a4	unicode	NuiLoadAchievements.xur
+0x901015d4	unicode	837_LoadAvatarAwards.xur
+0x90101608	unicode	837_AvatarAwardGamesMe.xur
+0x90101640	unicode	826-7_GameAchievStatsYou.xur
+0x9010167c	unicode	804_LoadAchievements.xur
+0x901016b0	unicode	825_GameShowcaseCompare.xur
+0x901016e8	unicode	820_GameShowcaseMe.xur
+0x90101718	unicode	GamerCardScene.xur
+0x90101740	unicode	AchievementDetailsScene
+0x90101770	unicode	NuiAchievementDetailsScene
+0x901017b4	unicode	ChangeGamerTileScene
+0x901017e0	unicode	ChangePersonalTileScene
+0x90101810	unicode	EditProfileScene
+0x90101834	unicode	GameScene
+0x90101848	unicode	GameShowcaseMeScene
+0x90101870	unicode	MeGameList
+0x901018a4	unicode	GameShowcaseYouScene
+0x901018d0	unicode	YouGameList
+0x901018e8	unicode	GamerCardUIScene
+0x9010190c	unicode	GamerPreferencesScene
+0x90101938	unicode	GamerPreferencesList
+0x90101964	unicode	PreferenceCategoryScene
+0x90101994	unicode	PreferenceValueList
+0x901019bc	unicode	PreferenceSettingScene
+0x901019ec	unicode	YouAchievementsScene
+0x90101a18	unicode	YouAchievementsList
+0x90101a40	unicode	CSignInPreferencesScene
+0x90101a70	unicode	BrushImageControl
+0x90101a94	unicode	MetaPanelScene
+0x90101ab4	unicode	SelectGamerZoneScene
+0x90101ae0	unicode	CXuiEditAutoScroll
+0x90101b08	unicode	AvatarAwardGamesMeScene
+0x90101b38	unicode	AvatarAwardGameList
+0x90101b7c	unicode	CAvatarAwardsGridList
+0x90101ba8	unicode	CAvatarAwardsGridScene
+0x90101bd8	unicode	LoadAvatarAwardsScene
+0x90101c38	unicode	XuiCanvas
+0x90101cdc	unicode	GamerTileList
+0x90101d6c	unicode	YouAsyncWorker
+0x90101d8c	unicode	CAchievementsGridList
+0x90101db8	unicode	CAchievementsGridScene
+0x90101de8	unicode	NuiAchievementsGridScene
+0x90101e38	unicode	LoadAchievementsScene
+0x90101e64	unicode	LoadNuiAchievementsScene
+0x90101e98	unicode	AchievementsGameListScene
+0x90101fb4	unicode	HUDScene
+0x90101fc8	unicode	XuiList
+0x90102050	unicode	XuiScene
+0x90102114	unicode	XuiEdit
+0x90102124	unicode	GamerProfile_Custom.xus
+0x90102154	unicode	XuiControl
+0x9010216c	unicode	XuiButton
+0x90102180	unicode	fitnessButton
+0x9010219c	unicode	addLiveButton
+0x901021b8	unicode	accountSecurityButton
+0x901021e4	unicode	signInPreferencesButton
+0x90102214	unicode	gamerPreferencesButton
+0x90102244	unicode	viewReputationButton
+0x90102270	unicode	editProfileButton
+0x90102294	unicode	viewGamesButton
+0x901022b4	unicode	onlineTextGroup
+0x901022d4	unicode	meOnlineButtonGroup
+0x901022fc	unicode	meOfflineButtonGroup
+0x90102328	unicode	830_GamerPreferences.xur
+0x901024f8	unicode	preferenceList
+0x9010252c	unicode	headerText
+0x90102558	unicode	sharedres://DurangoGameTile.png
+0x90102598	unicode	LegendY
+0x901025bc	unicode	gameList
+0x901025d0	unicode	xButton
+0x901025e0	unicode	noGamesText
+0x90102614	unicode	meTileImage
+0x9010262c	unicode	youTileImage
+0x90102648	unicode	youGamertagText
+0x9010267c	unicode	meCredText
+0x90102694	unicode	youCredText
+0x901026ac	unicode	titleList
+0x901026c0	unicode	837_AvatarAwards.xur
+0x901026ec	unicode	802_Achievements.xur
+0x90102718	unicode	NuiAchievements.xur
+0x9010275c	unicode	setting%uLabel
+0x9010277c	unicode	setting%uValue
+0x901027cc	unicode	832_PreferenceCategory.xur
+0x90102848	unicode	valueList
+0x9010285c	unicode	831_PreferenceSetting.xur
+0x901028b8	unicode	achievementList
+0x901028d8	unicode	noAchievementsText
+0x90102900	unicode	803_SignInPreferences.xur
+0x90102934	unicode	radgrpAutoSignInLive
+0x90102974	unicode	PreChangeLeft
+0x90102990	unicode	EndPreChangeLeft
+0x901029b4	unicode	PreChangeRight
+0x901029d4	unicode	EndPreChangeRight
+0x901029f8	unicode	GridPanel/Panel%i
+0x90102a20	unicode	PageRightGroup/ControlPackNuiSideRight
+0x90102a70	unicode	PageLeftGroup/ControlPackNuiSideLeft
+0x90102abc	unicode	labCountPages
+0x90102ad8	unicode	GridPanel
+0x90102b00	unicode	PostChangeRight
+0x90102b20	unicode	EndPostChangeRight
+0x90102b48	unicode	PostChangeLeft
+0x90102b68	unicode	EndPostChangeLeft
+0x90102b8c	unicode	GameListButton
+0x90102bc0	unicode	SelectGamerzone.xur
+0x90102bf4	unicode	zoneList
+0x90102c5c	unicode	klcc
+0x90102c68	unicode	diners
+0x90102c80	unicode	discover
+0x90102c94	unicode	amex
+0x90102ca0	unicode	mastercard
+0x90102cb8	unicode	visa
+0x90102cc4	unicode	japanesekatakana
+0x90102ce8	unicode	japanesehiragana
+0x90102d0c	unicode	schfull
+0x90102d1c	unicode	latinextended
+0x90102d38	unicode	russionfull
+0x90102d50	unicode	tchfull
+0x90102d60	unicode	koreanfull
+0x90102d78	unicode	japanesefull
+0x90102d94	unicode	latinalphabet
+0x90102db0	unicode	latinnumeric
+0x90102dcc	unicode	latinipaddress
+0x90102dec	unicode	latinphone
+0x90102e04	unicode	latingamertag
+0x90102e20	unicode	latinemail
+0x90102e38	unicode	latinfull
+0x90102e4c	unicode	phone
+0x90102e58	unicode	contactemail
+0x90102e74	unicode	postalcode
+0x90102e8c	unicode	state
+0x90102e98	unicode	city
+0x90102ea4	unicode	district
+0x90102eb8	unicode	street2
+0x90102ec8	unicode	street1
+0x90102ed8	unicode	none
+0x90102eec	unicode	SocialPostAchievementImageUrl
+0x90102f28	unicode	SocialPostCompareAchievementUrl
+0x90102f68	unicode	sharedres://LiveProfile.xus
+0x90102fa0	unicode	sharedres://LiveAll.xus
+0x90102fd0	unicode	sharedres://ico_32x_ConsoleTypeWinPC.png
+0x90103028	unicode	sharedres://ico_32x_ConsoleTypeXenon.png
+0x90103080	unicode	sharedres://ico_32x_ConsoleTypeXbox.png
+0x901030d0	unicode	sharedres://secretAchievement.png
+0x90103118	unicode	sharedres://ico_32x_Zone_Underground.png
+0x90103170	unicode	sharedres://ico_32x_Zone_Family.png
+0x901031b8	unicode	sharedres://ico_32x_Zone_Pro.png
+0x90103200	unicode	sharedres://ico_32x_Zone_RR.png
+0x901032b8	unicode	64_%08x%08x%08x.png
+0x901032e4	string	custom_
+0x901032ec	string	gp%08x%08x%08x
+0x901032fc	string	file://%s:/%s
+0x9010330c	string	%s:\*.png
+0x90103330	unicode	1to2
+0x9010333c	unicode	Text2
+0x90103348	unicode	Text1
+0x90103354	string	vk.xex
+0x9010337c	unicode	XuiElement
+0x901033ac	unicode	FadeOut
+0x901033bc	unicode	FadeOutEnd
+0x901033d4	unicode	FadeIn
+0x901033e4	unicode	FadeInEnd
+0x901033f8	string	deviceselector.xex
+0x901034c4	string	http://
+0x901034cc	unicode	TV-MA
+0x901034d8	unicode	TV-14
+0x901034e4	unicode	TV-PG
+0x901034f0	unicode	TV-G
+0x901034fc	unicode	TV-Y7-FV
+0x90103510	unicode	TV-Y7
+0x9010351c	unicode	TV-Y
+0x90103534	unicode	NC-17
+0x90103544	unicode	PG-13
+0x90103564	unicode	EXPLICIT
+0x90103578	unicode	USTV
+0x90103584	unicode	MPAA
+0x90104088	string	xam.xex
+0x901040a8	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\gamerprofile\src\obj\xbox\GamerProfile.pdb
+0x901278a4	unicode	AsyncTaskManager0
+0x90128d49	string	abcdefghijklmnopqrstuvwxyz
+0x90128d69	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9012a01f	string	GamerProfile_Custom.xus
+0x9012b000	string	_ChangeGamerZone.xus
+0x9012b01d	string	it-it\820_GameShowcaseMe.xus
+0x9012b041	string	!it-it\825_GameShowcaseCompare.xus
+0x9012b06a	string	z"it-it\826-7_GameAchievStatsYou.xus
+0x9012b097	string	it-it\828_AchievDetails.xus
+0x9012b0bb	string	it-it\830_GamerPreferences.xus
+0x9012b0e2	string	it-it\831_PreferenceSetting.xus
+0x9012b108	string	\n it-it\832_PreferenceCategory.xus
+0x9012b132	string	 it-it\837_AvatarAwardGamesMe.xus
+0x9012b15c	string	it-it\837_AvatarAwards.xus
+0x9012b17f	string	it-it\837_LoadAvatarAwards.xus
+0x9012b1a6	string	it-it\ChangePersonalTile.xus
+0x9012b1cb	string	it-it\GamerCardScene.xus
+0x9012b1ec	string	it-it\GamerProfile_Custom.xus
+0x9012b212	string	it-it\GamerscoreMoreInfo.xus
+0x9012b237	string	it-it\GamerZoneInfo.xus
+0x9012b257	string	it-it\NuiAchievementDetails.xus
+0x9012b27f	string	it-it\NuiAchievements.xus
+0x9012b2a1	string	it-it\NuiGamesList.xus
+0x9012b2c0	string	it-it\NuiLoadAchievements.xus
+0x9012b2e6	string	it-it\SelectGamerzone.xus
+0x9012b308	string	ko-kr\802_Achievements.xus
+0x9012b32b	string	ko-kr\803_SignInPreferences.xus
+0x9012b353	string	ko-kr\804_LoadAchievements.xus
+0x9012b37a	string	ko-kr\807_EditGamerTile.xus
+0x9012b39e	string	ko-kr\808_editProfile.xus
+0x9012c000	string	-br\825_GameShowcaseCompare.xus
+0x9012c027	string	"pt-br\826-7_GameAchievStatsYou.xus
+0x9012c200	string	neInfo.xus
+0x9012c213	string	pt-br\NuiAchievementDetails.xus
+0x9012c23b	string	pt-br\NuiAchievements.xus
+0x9012c25d	string	pt-br\NuiGamesList.xus
+0x9012c27c	string	pt-br\NuiLoadAchievements.xus
+0x9012c2a2	string	pt-br\SelectGamerzone.xus
+0x9012c2c4	string	ru-ru\802_Achievements.xus
+0x9012c2e7	string	ru-ru\803_SignInPreferences.xus
+0x9012c30f	string	ru-ru\804_LoadAchievements.xus
+0x9012c336	string	ru-ru\807_EditGamerTile.xus
+0x9012c35a	string	ru-ru\808_editProfile.xus
+0x9012c37c	string	ru-ru\809_ChangeGamerTile.xus
+0x9012c3a2	string	ru-ru\812_ChangeGamerZone.xus
+0x9012c3c8	string	ru-ru\820_GameShowcaseMe.xus
+0x9012c3ec	string	!ru-ru\825_GameShowcaseCompare.xus
+0x9012c415	string	y"ru-ru\826-7_GameAchievStatsYou.xus
+0x9012c442	string	ru-ru\828_AchievDetails.xus
+0x9012c466	string	ru-ru\830_GamerPreferences.xus
+0x9012c48d	string	ru-ru\831_PreferenceSetting.xus
+0x9012c4b4	string	 ru-ru\832_PreferenceCategory.xus
+0x9012c4dd	string	 ru-ru\837_AvatarAwardGamesMe.xus
+0x9012c507	string	ru-ru\837_AvatarAwards.xus
+0x9012c52a	string	ru-ru\837_LoadAvatarAwards.xus
+0x9012c551	string	ru-ru\ChangePersonalTile.xus
+0x9012c576	string	ru-ru\GamerCardScene.xus
+0x9012c597	string	ru-ru\GamerProfile_Custom.xus
+0x9012c5bd	string	ru-ru\GamerscoreMoreInfo.xus
+0x9012c5e2	string	ru-ru\GamerZoneInfo.xus
+0x9012c602	string	ru-ru\NuiAchievementDetails.xus
+0x9012c62a	string	ru-ru\NuiAchievements.xus
+0x9012c64c	string	ru-ru\NuiGamesList.xus
+0x9012c66b	string	ru-ru\NuiLoadAchievements.xus
+0x9012c691	string	ru-ru\SelectGamerzone.xus
+0x9012c6b3	string	zh-tw\802_Achievements.xus
+0x9012c6d6	string	zh-tw\803_SignInPreferences.xus
+0x9012c6fe	string	zh-tw\804_LoadAchievements.xus
+0x9012c725	string	zh-tw\807_EditGamerTile.xus
+0x9012c749	string	zh-tw\808_editProfile.xus
+0x9012c76b	string	zh-tw\809_ChangeGamerTile.xus
+0x9012c791	string	zh-tw\812_ChangeGamerZone.xus
+0x9012c7b7	string	zh-tw\820_GameShowcaseMe.xus
+0x9012c7da	string	%!zh-tw\825_GameShowcaseCompare.xus
+0x9012c805	string	"zh-tw\826-7_GameAchievStatsYou.xus
+0x9012c831	string	zh-tw\828_AchievDetails.xus
+0x9012c855	string	zh-tw\830_GamerPreferences.xus
+0x9012c87c	string	zh-tw\831_PreferenceSetting.xus
+0x9012c8a3	string	 zh-tw\832_PreferenceCategory.xus
+0x9012c8cb	string	v zh-tw\837_AvatarAwardGamesMe.xus
+0x9012c8f6	string	zh-tw\837_AvatarAwards.xus
+0x9012c919	string	zh-tw\837_LoadAvatarAwards.xus
+0x9012c940	string	zh-tw\ChangePersonalTile.xus
+0x9012c965	string	zh-tw\GamerCardScene.xus
+0x9012c986	string	zh-tw\GamerProfile_Custom.xus
+0x9012c9ac	string	zh-tw\GamerscoreMoreInfo.xus
+0x9012c9d1	string	zh-tw\GamerZoneInfo.xus
+0x9012c9f1	string	zh-tw\NuiAchievementDetails.xus
+0x9012ca19	string	zh-tw\NuiAchievements.xus
+0x9012ca3b	string	zh-tw\NuiGamesList.xus
+0x9012ca5a	string	zh-tw\NuiLoadAchievements.xus
+0x9012caa4	string	sInverted
+0x9012caae	string	Normal
+0x9012cab5	string	About Gamerscore
+0x9012cac6	string	Can't change your bio. Please try again later.
+0x9012caf5	string	Your bio contains a word or phrase that isn't allowed. Please try again.
+0x9012cb3e	string	Snap a custom personal picture with your Xbox Live Vision camera.
+0x9012cb80	string	Your gamer picture is visible to anyone who views your profile.
+0x9012cbc0	string	Only your friends can see your personal picture.
+0x9012cbf1	string	Are you sure you want to remove this game from your history?
+0x9012cc2e	string	Can't save your personal picture. Please try again.
+0x9012cc62	string	Delete Game History
+0x9012cc76	string	Choose defaults for action and shooting games.\r\n\r\nGame defaults establish default settings for a game the first time you play it. For a game you're playing or have already played, change your settings in the game.
+0x9012cd4c	string	Choose defaults for all games.\r\n\r\nGame defaults establish default settings for a game the first time you play it. For a game you're playing or have already played, change your settings in the game.
+0x9012ce12	string	Choose defaults for racing games.\r\n\r\nGame defaults establish default settings for a game the first time you play it. For a game you're playing or have already played, change your settings in the game.
+0x9012cedb	string	Choose whether targets are automatically selected.
+0x9012cf0e	string	Choose whether your aim returns to the center of the screen.
+0x9012cf4b	string	Choose the stick you want to use for movement.
+0x9012cf7a	string	Choose your default controller sensitivity.
+0x9012cfa6	string	Choose your default game difficulty.
+0x9012cfcb	string	Choose your default primary color.
+0x9012cfee	string	Choose your default secondary color.
+0x9012d013	string	Choose whether buttons or triggers control the accelerator.
+0x9012d04f	string	Choose whether buttons or triggers apply the brakes.
+0x9012d084	string	Choose your default camera angle.
+0x9012d0a6	string	Choose your default transmission.
+0x9012d0c8	string	Choose how vertical look is controlled. With normal control, push the stick up to look up. With inverted control, push the stick down to look up.
+0x9012d15a	string	Download new gamer pictures at the Xbox Games Store.
+0x9012d18f	string	Enter some information about yourself. Your bio is visible to anyone viewing your profile.
+0x9012d1ee	string	Your location is visible to anyone who views your profile.
+0x9012d229	string	Location
+0x9012d232	string	Your motto can contain up to 21 characters.
+0x9012d25e	string	Motto
+0x9012d264	string	Your name is visible to anyone who views your profile.
+0x9012d2a0	string	Edit Profile Name
+0x9012d2b2	string	Can't save your personal picture. Please try again.
+0x9012d2ea	string	%1!u! of %2!u! Achievements
+0x9012d306	string	Page %i of %i
+0x9012d314	string	%1!u! of %2!u! Awards
+0x9012d32a	string	This action is not available to guests.
+0x9012d352	string	Guest
+0x9012d358	string	Can't change your location. Please try again later.
+0x9012d38c	string	Your location contains a word or phrase that isn't allowed. Please try again.
+0x9012d3fb	string	Can't change your motto. Please try again later.
+0x9012d42c	string	Your motto contains a word or phrase that isn't allowed. Please try again.
+0x9012d47a	string	Can't change your name. Please try again later.
+0x9012d4aa	string	Your name contains a word or phrase that isn't allowed. Please try again.
+0x9012d4f4	string	Action
+0x9012d4fb	string	General
+0x9012d503	string	Racing
+0x9012d50a	string	Auto-Aim
+0x9012d513	string	Auto-Center
+0x9012d51f	string	Movement
+0x9012d528	string	Controller Sensitivity
+0x9012d53f	string	Difficulty
+0x9012d54a	string	Primary Color
+0x9012d558	string	Secondary Color
+0x9012d568	string	Accelerator Control
+0x9012d57c	string	Brake Control
+0x9012d58a	string	Camera Angle
+0x9012d597	string	Transmission
+0x9012d5ba	string	%s Defaults
+0x9012d5c6	string	Your name, location, and bio are visible to anyone viewing your profile.\r\n\r\nTo change your privacy & online settings, go to Settings, Privacy.
+0x9012d655	string	Your name, location, and bio are visible to anyone viewing your profile.
+0x9012d69e	string	Personal Profile
+0x9012d6af	string	Sign in to Xbox Live to change your bio.
+0x9012d6d8	string	Sign in to Xbox Live to delete your game history.
+0x9012d70a	string	Sign in to Xbox Live to change your gamer zone.
+0x9012d73a	string	Sign in to Xbox Live to change your gamertag.
+0x9012d768	string	Sign in to Xbox Live to change your location.
+0x9012d796	string	Sign in to Xbox Live to change your motto.
+0x9012d7c1	string	Sign in to Xbox Live to change your name.
+0x9012d7eb	string	Sign in to Xbox Live to view your reputation.
+0x9012d819	string	Sign in to Xbox Live to download gamer pictures.
+0x9012d84d	string	(No bio)
+0x9012d856	string	(No location)
+0x9012d864	string	(No motto)
+0x9012d86f	string	(No name)
+0x9012d879	string	Can't save your personal picture. Please try again.
+0x9012d8ad	string	Left Stick
+0x9012d8b8	string	Right Stick
+0x9012d8cd	string	Medium
+0x9012d8de	string	Normal
+0x9012d8e5	string	Black
+0x9012d8f0	string	Brown
+0x9012d8f6	string	Green
+0x9012d901	string	Orange
+0x9012d90d	string	Purple
+0x9012d91d	string	White
+0x9012d923	string	Yellow
+0x9012d92a	string	Button
+0x9012d931	string	Button
+0x9012d93d	string	Inside
+0x9012d944	string	Front
+0x9012d94a	string	Trigger
+0x9012d952	string	Automatic
+0x9012d95c	string	Manual
+0x9012d9d0	string	9gamerCardScene
+0x9012d9e0	string	GamerCardUIScene
+0x9012d9f1	string	TransFrom
+0x9012d9fb	string	TransTo
+0x9012da03	string	TransBackFrom
+0x9012da11	string	TransBackTo
+0x9012da1d	string	Select
+0x9012da29	string	graphic_metapane
+0x9012da3a	string	RightPanelShader
+0x9012da4b	string	XuiLabel
+0x9012da54	string	GamerCardBackground
+0x9012da68	string	XuiFigure
+0x9012da72	string	backButton
+0x9012da7d	string	legend_B
+0x9012da86	string	XuiBackButton
+0x9012da94	string	gamerCard
+0x9012da9e	string	XuiGamerCard
+0x9012daab	string	meOfflineButtonGroup
+0x9012dac0	string	viewGamesButton
+0x9012dad0	string	btn_standard_list
+0x9012dae2	string	editProfileButton
+0x9012daf4	string	View Games
+0x9012daff	string	XuiButton
+0x9012db09	string	gamerPreferencesButton
+0x9012db20	string	Edit Profile
+0x9012db2d	string	signInPreferencesButton
+0x9012db45	string	Game Defaults
+0x9012db53	string	addLiveButton
+0x9012db61	string	Sign-in Preferences
+0x9012db75	string	fitnessButton
+0x9012db83	string	Join Xbox Live
+0x9012db92	string	viewFitnessButton
+0x9012dba4	string	Manage Exercise Info
+0x9012dbb9	string	XuiScene
+0x9012dbc2	string	meOnlineButtonGroup
+0x9012dbd6	string	viewReputationButton
+0x9012dbeb	string	View Rep
+0x9012dbf4	string	accountSecurityButton
+0x9012dc0a	string	Account Security
+0x9012dc1b	string	onlineTextGroup
+0x9012dc32	string	CXuiEditAutoScroll
+0x9012dc45	string	edit_AutoScroll_small_white
+0x9012dc61	string	XuiEdit
+0x9012dc70	string	edit_NoCaret_white
+0x9012dc83	string	labLocation
+0x9012dc8f	string	Label_Body_small_white1line
+0x9012dcab	string	labName
+0x9012dcb3	string	scnBox_motto
+0x9012dcc0	string	labMotto
+0x9012dcc9	string	headerText
+0x9012dcd4	string	Label_Head
+0x9012dcdf	string	Profile
+0x9012dce7	string	HUDScene
+0x9012dcf0	string	XuiCanvas
+0x9012e07e	string	scnAboutText
+0x9012e08b	string	CAboutTextScene
+0x9012e09b	string	FadeOut
+0x9012e0a3	string	FadeIn
+0x9012e0b4	string	legend_B
+0x9012e0bd	string	XuiBackButton
+0x9012e0cb	string	labSceneTitle
+0x9012e0d9	string	Label_Head
+0x9012e0e4	string	Gamerscore
+0x9012e0ef	string	XuiLabel
+0x9012e0f8	string	Content
+0x9012e100	string	edit_NoCaretSmall
+0x9012e112	string	Your gamerscore is the sum of your Xbox achievements in games on Xbox consoles, Windows, and Windows Phone. Every achievement in a game has a score. By unlocking achievements, you increase your gamerscore, which is displayed on your profile.
+0x9012e204	string	XuiEdit
+0x9012e20c	string	HUDScene
+0x9012e215	string	XuiCanvas
+0x9012e2e3	string	SVECT
+0x9012e31a	string	Scene_Main
+0x9012e325	string	FadeOut
+0x9012e32d	string	FadeIn
+0x9012e339	string	txt_Header
+0x9012e344	string	Label_Head
+0x9012e34f	string	Xbox Live Gamer Zone
+0x9012e364	string	XuiLabel
+0x9012e36d	string	txt_GamerZoneInfo
+0x9012e37f	string	edit_NoCaretSmall
+0x9012e391	string	Gamer zones are used for player matchmaking. Your choice of gamer zone determines which game sessions you are most likely to join. Player matchmaking helps you find sessions with other players from the same gamer zone.\r\n\r\nFor example, if you select the pro zone, you are most likely to play with other pro zone players. If there are no suitable sessions in your zone, you can still play with players from other zones.
+0x9012e533	string	XuiEdit
+0x9012e53b	string	backButton
+0x9012e546	string	XuiBackButton
+0x9012e554	string	HUDScene
+0x9012e55d	string	XuiCanvas
+0x9012e66a	string	(SceneMain
+0x9012e675	string	CAchievementsGridScene
+0x9012e68c	string	AchievementList
+0x9012e69c	string	TransFrom
+0x9012e6a6	string	TransTo
+0x9012e6ae	string	TransBackFrom
+0x9012e6bc	string	TransBackTo
+0x9012e6c8	string	Select
+0x9012e6d4	string	HeaderShader
+0x9012e6e1	string	XuiFigure
+0x9012e6eb	string	labBackground
+0x9012e6f9	string	XuiLabel
+0x9012e702	string	legend_B
+0x9012e70b	string	XuiBackButton
+0x9012e719	string	labAchievementName
+0x9012e72c	string	Label_Head
+0x9012e737	string	labAcquiredDate
+0x9012e747	string	Label_BodyRight_white
+0x9012e75d	string	labPoints
+0x9012e767	string	labAchievementDescription

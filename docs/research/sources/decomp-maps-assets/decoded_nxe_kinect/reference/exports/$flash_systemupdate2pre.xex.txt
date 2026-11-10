@@ -1,0 +1,5 @@
+$flash_systemupdate2pre.xex exports
+===================================
+
+{"confidence": "CONFIRMED", "function_va": "0x982140B8", "module": "$flash_systemupdate2pre.xex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x98214178", "module": "$flash_systemupdate2pre.xex", "ordinal": "0x00000002", "resolved_name": ""}

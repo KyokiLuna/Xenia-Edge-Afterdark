@@ -1,0 +1,20 @@
+{
+  "module": "runtime/v3.0/runtimehost.xex",
+  "program": "fa170df2b293_runtimehost.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "6036becd4d4eb4b19161dfdf6a43846d7511c046cf2149c17b017eec7b794fe6",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x8b000600",
+  "functions": 10009,
+  "calls": 24542,
+  "strings": 4850,
+  "string_xrefs": 3572,
+  "independent_sha256": "6036becd4d4eb4b19161dfdf6a43846d7511c046cf2149c17b017eec7b794fe6",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0,
+  "decompiled_functions": 9938,
+  "decompile_failures": 2
+}

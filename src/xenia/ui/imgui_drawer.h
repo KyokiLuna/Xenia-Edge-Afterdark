@@ -10,6 +10,7 @@
 #ifndef XENIA_UI_IMGUI_DRAWER_H_
 #define XENIA_UI_IMGUI_DRAWER_H_
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -33,6 +34,9 @@ enum ImGuiKey : int;
 namespace xe {
 namespace ui {
 
+namespace test {
+class ImGuiDrawerGamepadTestAccess;
+}
 class ImGuiDialog;
 class ImGuiNotification;
 class Window;
@@ -95,15 +99,28 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
   }
 
   bool HasOpenDialogs() const { return !dialogs_.empty(); }
+  bool IsOnlyDialog(const ImGuiDialog* dialog) const {
+    return dialogs_.size() == 1 && dialogs_.front() == dialog;
+  }
+  // Safe to sample off the UI thread. Queued input must still match this
+  // ownership generation when it reaches the UI thread.
+  uint64_t input_capture_generation() const {
+    return input_capture_generation_.load(std::memory_order_acquire);
+  }
+  // UI thread only. Draw calls this automatically; input handoff can also
+  // observe popup changes made between frames before checking its generation.
+  void RefreshInputCaptureState();
   void LoadInputSystem(hid::InputSystem* input_system);
 
-  // Post a callback to be executed after the current frame completes
-  void PostDeferredCallback(std::function<void()> callback);
+  // Post a callback to be executed after the current frame completes. False
+  // means the UI loop has already stopped accepting work.
+  bool PostDeferredCallback(std::function<void()> callback);
 
  protected:
   void OnKeyDown(KeyEvent& e) override;
   void OnKeyUp(KeyEvent& e) override;
   void OnKeyChar(KeyEvent& e) override;
+  void OnTextInput(TextInputEvent& e) override;
   void OnMouseDown(MouseEvent& e) override;
   void OnMouseMove(MouseEvent& e) override;
   void OnMouseUp(MouseEvent& e) override;
@@ -112,6 +129,7 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
   // For now, no need for OnDpiChanged because redrawing is done continuously.
 
  private:
+  friend class test::ImGuiDrawerGamepadTestAccess;
   void Initialize();
   void InitializeFonts(const float font_size);
   bool LoadCustomFont(ImGuiIO& io, ImFontConfig& font_config, float font_size);
@@ -143,6 +161,11 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
 
   // All currently-attached dialogs that get drawn.
   std::vector<ImGuiDialog*> dialogs_;
+  std::atomic<uint64_t> input_capture_generation_{0};
+  uint32_t input_capture_top_popup_id_ = 0;
+  // Add/remove already publishes the new owner. Its initial popup appearance
+  // must not invalidate input captured for that dialog before its first Draw.
+  bool input_capture_popup_rebase_pending_ = false;
 
   // All queued notifications. Notification at index 0 is currently presented
   // one.

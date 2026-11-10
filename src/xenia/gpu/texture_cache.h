@@ -95,6 +95,10 @@ class TextureCache {
   }
 
   virtual void ClearCache();
+  // New immutable byte view, including resident textures without installed
+  // watches. Invalidates data only, never destroys an in-flight GPU object.
+  // Rejects ordinary live/Title SharedMemory.
+  bool InvalidateAllDataFromExternalSource();
 
   virtual void CompletedSubmissionUpdated(uint64_t completed_submission_index);
   virtual void BeginSubmission(uint64_t new_submission_index);

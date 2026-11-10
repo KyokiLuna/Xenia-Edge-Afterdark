@@ -8,11 +8,11 @@
  */
 
 #include <ranges>
-
 #include "xenia/emulator.h"
-
 #include <algorithm>
+#include <array>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <utility>
 #include "config.h"
@@ -24,11 +24,14 @@
 #include "xenia/base/cvar.h"
 #include "xenia/base/debugging.h"
 #include "xenia/base/exception_handler.h"
+#include "xenia/base/filesystem.h"
+#include "xenia/base/host_storage.h"
 #include "xenia/base/literals.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/mapped_memory.h"
 #include "xenia/base/memory.h"
 #include "xenia/base/platform.h"
+#include "xenia/base/snapshot_publisher.h"
 #include "xenia/base/string.h"
 #include "xenia/base/system.h"
 #include "xenia/base/utf8.h"
@@ -40,8 +43,18 @@
 #include "xenia/gpu/graphics_system.h"
 #include "xenia/hid/input_driver.h"
 #include "xenia/hid/input_system.h"
+#include "xenia/kernel/console_data_owner.h"
 #include "xenia/kernel/guest_scheduler.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_file_io_contract_probe.h"
+#include "xenia/kernel/native_graphics_device_binding.h"
+#include "xenia/kernel/native_input_driver.h"
+#include "xenia/kernel/native_system_callback_dispatcher.h"
+#include "xenia/kernel/native_system_graphics_notifications.h"
+#include "xenia/kernel/native_system_graphics_transport.h"
+#include "xenia/kernel/native_system_ui_first_record_probe.h"
+#include "xenia/kernel/native_system_ui_notifications.h"
+#include "xenia/kernel/native_system_ui_service.h"
 #include "xenia/kernel/smc.h"
 #include "xenia/kernel/title_id_utils.h"
 #include "xenia/kernel/user_module.h"
@@ -56,6 +69,7 @@
 #include "xenia/kernel/xconfig.h"
 #include "xenia/kernel/xfile.h"
 #include "xenia/kernel/xthread.h"
+#include "xenia/kernel/xtimer.h"
 #include "xenia/memory.h"
 #include "xenia/ui/file_picker.h"
 #include "xenia/ui/imgui_dialog.h"
@@ -70,6 +84,7 @@
 #include "xenia/vfs/devices/xcontent_container_device.h"
 #include "xenia/vfs/entry.h"
 #include "xenia/vfs/file.h"
+#include "xenia/vfs/installed_system_source.h"
 #include "xenia/vfs/iso_metadata.h"
 #include "xenia/vfs/stfs_metadata.h"
 #include "xenia/vfs/virtual_file_system.h"
@@ -83,6 +98,20 @@
 #elif XE_ARCH_ARM64
 #include "xenia/cpu/backend/a64/a64_backend.h"
 #endif  // XE_ARCH
+
+// Process-only opt-in. Public defaults do not reserve 20GiB on every volume.
+// The research launcher names the actual protected project FS explicitly.
+DEFINE_transient_path(host_storage_protected_root, "",
+                      "Existing root whose actual filesystem retains a 20GiB reserve.",
+                      "Storage");
+DEFINE_transient_path(managed_device_state_root, "",
+                      "Explicit same-filesystem state parent for nondefault managed Content.",
+                      "Storage");
+
+DEFINE_string(system_readonly_source_root, "",
+              "Read-only installed-system source. Empty uses local system; "
+              "the installer destination stays local.",
+              "Storage");
 
 DEFINE_double(time_scalar, 1.0,
               "Scalar used to speed or slow time (1x, 2x, 1/2x, etc).",
@@ -164,6 +193,122 @@ UPDATE_from_bool(mount_cache, 2024, 8, 31, 20, false);
 DEFINE_bool(mount_memory_unit, false, "Enable memory unit (MU) mount",
             "Storage");
 
+DEFINE_bool(
+    native_guide_bootstrap_probe, false,
+    "Run an isolated native HUD SysApp lifecycle diagnostic after title "
+    "launch; this does not enable native guide rendering.",
+    "Kernel.Debug");
+
+DEFINE_bool(native_xui_probe, false,
+            "Development-only native XUI diagnostic requiring an isolated "
+            "process deadline: uninitialized native XAM can wait indefinitely. "
+            "Does not enable rendering.",
+            "Kernel.Debug");
+
+DEFINE_bool(native_system_ui, false,
+            "Opt in to the validated resident native system UI service. "
+            "Requires installed system files and a fresh verified startup "
+            "plan; mutually exclusive with native diagnostics.",
+            "Kernel");
+DEFINE_path(native_system_ui_startup_plan, "",
+            "Verified17559 native system startup plan including notification "
+            "initialization and original-caller input roles. Required only "
+            "for native_system_ui; never inferred from a diagnostic plan.",
+            "Kernel");
+
+DECLARE_path(native_notification_render_probe_report);
+DECLARE_path(native_notification_queue_probe_report);
+DECLARE_path(native_notification_preferences_probe_report);
+
+DEFINE_bool(native_system_first_record_probe, false,
+            "Observe actual native Task/FE/UI startup and one native manager "
+            "record before GPU execution. Requires a separate verified system "
+            "startup plan, new absolute report path and external deadline; "
+            "does not enable production Guide rendering.",
+            "Kernel.Debug");
+DEFINE_path(native_system_first_record_report, "",
+            "Exclusive new absolute JSONL report for the native first-record "
+            "diagnostic; its bounded PM4 observation uses a new .pm4 sibling.",
+            "Kernel.Debug");
+
+DEFINE_path(native_file_io_contract_report, "",
+            "Explicit opt-in separate exclusive JSONL report for actual-Kernel "
+            "file-I/O contract diagnostics. Requires native first-record probe "
+            "and disposable isolated storage; never enables production UI.",
+            "Kernel.Debug");
+
+DEFINE_path(native_xui_runtime_plan, "",
+            "Verified image-specific native runtime plan for isolated XUI "
+            "diagnostics. Empty refuses native initialization; no guessed "
+            "constructor execution or full XAM DLL entry is performed.",
+            "Kernel.Debug");
+
+DEFINE_bool(native_xui_render_probe, false,
+            "After the verified native XUI CPU gate, test an owned native "
+            "shared/light renderer and drawing context. Requires a verified "
+            "runtime plan and external process deadline; does not publish UI.",
+            "Kernel.Debug");
+
+DEFINE_bool(
+    native_guide_scene_probe, false,
+    "Within the isolated native recording diagnostic, load HUD with "
+    "one native XUI import family and exercise its real scene. Requires "
+    "verified resource/message helpers; does not publish UI.",
+    "Kernel.Debug");
+
+DEFINE_path(native_xui_record_capture, "",
+            "Optional new absolute private capture file for validated native "
+            "XUI PM4. Used only by the isolated recording diagnostic.",
+            "Kernel.Debug");
+
+DEFINE_bool(native_hud_controller_probe, false,
+            "Isolated native HUD background/controller diagnostic. Requires "
+            "verified owner helpers and retains the entire native UI graph "
+            "until kernel reset; no UI publication or input acceptance.",
+            "Kernel.Debug");
+
+DEFINE_bool(native_xui_target_probe, false,
+            "Record a native target, viewport, clear and resolve using the "
+            "verified deferred catalog. No GPU execution or presentation.",
+            "Kernel.Debug");
+DEFINE_bool(native_system_device_binding_probe, false,
+            "Use a checked, kernel-resident SYSTEM recording-device owner "
+            "for native HUD assets. Requires controller/scene diagnostics; "
+            "does not authorize native GPU submission.",
+            "Kernel.Debug");
+DEFINE_bool(native_gpu_context_probe, false,
+            "Allocate independent native rendering resources on the CP "
+            "thread after the native CPU render diagnostic. No activation, "
+            "native GPU execution or presentation.",
+            "Kernel.Debug");
+DEFINE_bool(native_guide_host_probe, false,
+            "Attach the native HUD to its real app host and record the "
+            "composite canvas. Requires retained controller, scene and SYSTEM "
+            "device diagnostics; no GPU execution or presentation.",
+            "Kernel.Debug");
+DEFINE_bool(native_guide_real_time_probe, false,
+            "Pace the native scene diagnostic with measured guest uptime "
+            "and real timer deadlines. No input pump or presentation.",
+            "Kernel.Debug");
+DEFINE_bool(native_frame_lease_probe, false,
+            "Track the native producer from runtime startup, freeze its "
+            "completed record and pin actual backing allocations. Requires "
+            "the retained guide/target diagnostics; does not submit GPU work.",
+            "Kernel.Debug");
+
+DEFINE_bool(native_frame_execute_probe, false,
+            "Execute one verified frozen native guide frame at a title swap "
+            "boundary and require its exact GPU fence before retirement. "
+            "Diagnostic only; composition requires the separate composite "
+            "probe. No input acceptance.",
+            "Kernel.Debug");
+
+DEFINE_bool(native_frame_composite_probe, false,
+            "GPU-copy the diagnostic native frame to an owned image and "
+            "compose it over the title. Requires native_frame_execute_probe; "
+            "does not enable normal guide input or keyboard admission.",
+            "Kernel.Debug");
+
 DEFINE_path(xefu_path, "",
             "Folder with XeFu, the Xbox 360's original Xbox emulator: xbox.xex "
             "and the xefu*.xex builds it picks from, as the console's system "
@@ -196,11 +341,13 @@ using namespace xe::literals;
 Emulator::Emulator(const std::filesystem::path& command_line,
                    const std::filesystem::path& storage_root,
                    const std::filesystem::path& content_root,
-                   const std::filesystem::path& cache_root)
+                   const std::filesystem::path& cache_root,
+                   SetupPurpose purpose)
     : on_launch(),
       on_terminate(),
       on_exit(),
       command_line_(command_line),
+      setup_purpose_(purpose),
       storage_root_(storage_root),
       content_root_(content_root),
       cache_root_(cache_root),
@@ -254,17 +401,156 @@ Emulator::Emulator(const std::filesystem::path& command_line,
 
 Emulator::~Emulator() { Shutdown(); }
 
+void Emulator::StopNativeSystemBeforeProviderShutdown() {
+  if (!kernel_state_) {
+    return;
+  }
+  // Seal creation and join the WHOLE actual SYSTEM bootstrap host frame,
+  // including failures before a domain/allocation authority was registered.
+  // Its admitted native frontend still needs every provider below to be live.
+  kernel::NativeSystemUiService::StopForKernelOrFailStop(kernel_state_.get());
+  const auto fail_stop = []() noexcept {
+    try {
+      XELOGE(
+          "Native SYSTEM teardown lacks a complete CPU/callback stop; "
+          "retaining providers until process exit");
+      xe::FlushLog();
+    } catch (...) {
+    }
+    // Do not unwind provider/module/memory owners underneath a running native
+    // callback. Relaunch/reset are marshalled to an external host thread.
+    std::quick_exit(EXIT_FAILURE);
+  };
+  try {
+    if (!kernel_state_->HasNativeImportDomains() &&
+        !kernel_state_->HasNativeSystemAllocationAuthorities()) {
+      return;
+    }
+    if (!kernel::GuestScheduler::enabled() ||
+        (kernel::XThread::IsInThread() &&
+         kernel::XThread::GetCurrentThread()->kernel_state() ==
+             kernel_state_.get())) {
+      fail_stop();
+    }
+    {
+      const auto threads =
+          kernel_state_->object_table()->GetObjectsByType<kernel::XThread>(
+              kernel::XObject::Type::Thread);
+      for (const auto& thread : threads) {
+        // A current scheduler CVar is not proof of how an older thread was
+        // created. OS-backed guest threads have no safe cohort join here.
+        if (!thread->is_host_thread() && thread->thread()) {
+          fail_stop();
+        }
+      }
+    }
+
+    // A heap/bootstrap failure can precede import-domain registration. Seal
+    // allocation/frame admission for that retained cohort as well.
+    kernel_state_->CloseNativeSystemAllocationAdmission();
+    kernel::NativeInputDriver::BeginStopForKernel(kernel_state_.get());
+    kernel::NativeSystemCallbackDispatcher::BeginStopForKernel(
+        kernel_state_.get());
+    // Discard queued callbacks and complete their registration reservations
+    // before waiting for the driver's outstanding-operation count to reach
+    // zero.
+    if (!kernel::NativeSystemCallbackDispatcher::DrainAndJoinForKernel(
+            kernel_state_.get()) ||
+        !kernel::NativeInputDriver::DrainForKernel(kernel_state_.get())) {
+      fail_stop();
+    }
+
+    if (graphics_system_) {
+      graphics_system_->StopFrameLimiter();
+      if (!graphics_system_->StopInterruptCallbacksAndWait()) {
+        fail_stop();
+      }
+    }
+    if (audio_system_) {
+      audio_system_->StopWorker();
+    }
+    kernel::XTimer::CancelAll();
+    kernel_state_->ShutdownDispatchThread();
+
+    // This joins all guest CPU/I/O workers, including processor-DPC fibers.
+    // Keep CP and its backend alive until no guest recorder can publish again.
+    kernel_state_->guest_scheduler()->Shutdown();
+    {
+      auto threads =
+          kernel_state_->object_table()->GetObjectsByType<kernel::XThread>(
+              kernel::XObject::Type::Thread);
+      for (const auto& thread : threads) {
+        // Recheck after joining: a producer may have created a thread while the
+        // earlier callback drains were in progress.
+        if (!thread->is_host_thread() && thread->thread()) {
+          fail_stop();
+        }
+      }
+      for (auto& thread : threads) {
+        if (!thread->is_host_thread()) {
+          thread->Terminate(0);
+        }
+      }
+    }
+    // A producer could have rearmed a timer before the CPU join completed.
+    kernel::XTimer::CancelAll();
+    if (!kernel::NativeInputDriver::
+            ReleaseInputTransportAfterProducersStoppedForKernel(
+                kernel_state_.get())) {
+      fail_stop();
+    }
+  } catch (...) {
+    fail_stop();
+  }
+}
+
+std::shared_ptr<const kernel::xam::ProfileGpdReadModels>
+Emulator::CaptureProfileGpds(uint8_t slot, std::error_code& error) {
+  error.clear();
+  std::unique_lock lock(launch_mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    error = std::make_error_code(std::errc::device_or_resource_busy);
+    return {};
+  }
+  if (!kernel_state_ || !kernel_state_->xam_state() ||
+      title_execution_state_.snapshot().phase ==
+          kernel::TitleExecutionState::Phase::kStopping) {
+    error = std::make_error_code(std::errc::operation_canceled);
+    return {};
+  }
+  return kernel_state_->xam_state()->profile_manager()->CaptureGpdRead(slot,
+                                                                       error);
+}
 void Emulator::Shutdown() {
+  std::lock_guard<std::recursive_mutex> profile_capture_boundary(launch_mutex_);
   XELOGI("Emulator::Shutdown: starting teardown");
+  const uint64_t closing_generation = title_execution_state_.BeginStopping();
+  title_execution_owner_.store(nullptr, std::memory_order_release);
+  kernel::NativeSystemUiService::SealHostUiFallbackForKernelOrFailStop(
+      kernel_state_.get());
+
+  if (kernel_state_) {
+    kernel_state_->ShutdownNativeGuideBootstrapProbe();
+  }
+  StopNativeSystemBeforeProviderShutdown();
 
   // During relaunch, notify listeners before teardown so they can disconnect
   // UI resources while subsystems are still alive. Skip during normal
   // destructor — the UI loop may not be running.
   if (relaunching_) {
+    // Normal relaunch/reset already stopped the CP. Repeat the idempotent
+    // boundary here so an error path cannot release UI uploads/drawers before
+    // native GPU retirement or the actual device-stop proof.
+    if (graphics_system_ && graphics_system_->command_processor()) {
+      graphics_system_->command_processor()->Shutdown();
+    }
     on_before_shutdown();
   }
 
   // Note that we delete things in the reverse order they were initialized.
+
+  // Dependents own independent backend drivers; stop before AudioSystem.
+  audio_media_player_.reset();
 
   // Give the systems time to shutdown before we delete them.
   if (graphics_system_) {
@@ -283,10 +569,10 @@ void Emulator::Shutdown() {
   }
   graphics_system_.reset();
   audio_system_.reset();
-  audio_media_player_.reset();
 
   kernel_state_.reset();
   file_system_.reset();
+  mounted_system_generation_ = 0;
   patcher_.reset();
   plugin_loader_.reset();
 
@@ -302,12 +588,24 @@ void Emulator::Shutdown() {
   game_info_database_.reset();
   paused_ = false;
   boot_animation_requested_ = false;
+  title_execution_state_.CompleteStop(closing_generation);
 
   XELOGI("Emulator::Shutdown: teardown complete");
 }
 
 uint32_t Emulator::main_thread_id() {
   return main_thread_ ? main_thread_->thread_id() : 0;
+}
+
+bool Emulator::BindProtectedStorageRoot(
+    std::shared_ptr<const filesystem::HostStorageRoot> root) {
+  if (kernel_state_ || protected_storage_root_ || !root ||
+      !root->native_filesystem_authority() ||
+      root->Observe().reserve_bytes < filesystem::kHostStorageReserve) {
+    return false;
+  }
+  protected_storage_root_ = std::move(root);
+  return true;
 }
 
 X_STATUS Emulator::Setup(
@@ -319,6 +617,29 @@ X_STATUS Emulator::Setup(
         graphics_system_factory,
     std::function<std::vector<std::unique_ptr<hid::InputDriver>>(ui::Window*)>
         input_driver_factory) {
+  if (setup_purpose_ == SetupPurpose::kGraphicsReplay &&
+      (require_cpu_backend || !storage_root_.empty() || !content_root_.empty() ||
+       !cache_root_.empty())) {
+    XELOGE("Graphics replay requires no guest execution or persistent roots");
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  if (!cvars::host_storage_protected_root.empty() && !protected_storage_root_) {
+    std::error_code policy_error;
+    auto owner = filesystem::HostStorageRoot::Open(
+        cvars::host_storage_protected_root, true, policy_error,
+        filesystem::kHostStorageReserve);
+    if (!owner || policy_error || !BindProtectedStorageRoot(std::move(owner))) {
+      XELOGE("Explicit protected filesystem authority unavailable: {}", policy_error.message());
+      return X_STATUS_UNSUCCESSFUL;
+    }
+  }
+  if (protected_storage_root_) {
+    const auto policy = protected_storage_root_->Observe();
+    if (!policy.available || policy.available_bytes < policy.reserve_bytes) {
+      XELOGE("Explicit protected filesystem reserve is unavailable");
+      return X_STATUS_DISK_FULL;
+    }
+  }
   // Store parameters for reuse across Shutdown/Setup cycles.
   // Only overwrite if non-null so re-calls after Shutdown keep prior values.
   if (display_window) {
@@ -419,6 +740,85 @@ X_STATUS Emulator::Setup(
     imgui_drawer_->LoadInputSystem(input_system_.get());
   }
 
+  // Establish the console owner before XAM construction or ANY guest host
+  // source/mount admission. The Emulator owns it across ordinary title resets.
+  if (setup_purpose_ == SetupPurpose::kGuestExecution &&
+      !console_data_owner_) {
+    std::error_code console_error;
+    auto parent = filesystem::HostStorageRoot::Open(storage_root_, false,
+                                                   console_error);
+    console_data_owner_ =
+        kernel::ConsoleDataOwner::Open(std::move(parent), console_error);
+  }
+  if (console_data_owner_ && console_data_owner_->error()) {
+    XELOGE("Console settings unavailable: {} ({}). Existing bytes preserved.",
+           console_data_owner_->error().message(),
+           console_data_owner_->error().value());
+#if XE_PLATFORM_LINUX
+    // A corrupt store with proven protection can report errors through XConfig.
+    // An unprotected or unknown directory is a prerequisite failure; never
+    // proceed into guest mounts that could expose the preserved console data.
+    if (!console_data_owner_->private_root()) {
+      return X_STATUS_UNSUCCESSFUL;
+    }
+#endif
+  }
+
+  // Recovery is a separate authority, never a console-settings payload or a
+  // profile alias. Establish its protection before ANY guest mount; an error
+  // after protection must retain that owner rather than expose its files.
+  if (setup_purpose_ == SetupPurpose::kGuestExecution &&
+      !snapshot_recovery_owner_) {
+    std::error_code recovery_parent_error;
+    auto parent = filesystem::HostStorageRoot::Open(storage_root_, false,
+                                                   recovery_parent_error);
+    if (!parent || recovery_parent_error) {
+      XELOGE("Snapshot recovery parent unavailable: {} ({}). Existing bytes "
+             "preserved.", recovery_parent_error.message(),
+             recovery_parent_error.value());
+      return X_STATUS_UNSUCCESSFUL;
+    }
+    snapshot_recovery_owner_ = filesystem::SnapshotRecoveryOwner::Open(
+        std::move(parent));
+  }
+  if (snapshot_recovery_owner_ && snapshot_recovery_owner_->error()) {
+    XELOGE("Snapshot recovery unavailable: {} ({}). Existing bytes preserved.",
+           snapshot_recovery_owner_->error().message(),
+           snapshot_recovery_owner_->error().value());
+#if XE_PLATFORM_LINUX
+    if (!snapshot_recovery_owner_->root()) {
+      return X_STATUS_UNSUCCESSFUL;
+    }
+#endif
+  }
+
+  // Resolve one owned read namespace after private storage protection and
+  // before XAM can enumerate installed content. Never create a missing image.
+  if (setup_purpose_ == SetupPurpose::kGuestExecution) {
+#if XE_PLATFORM_WIN32
+    // Preserve the legacy Windows local path. Owned Subroot is POSIX-only.
+    if (!cvars::system_readonly_source_root.empty()) {
+      return X_STATUS_NOT_SUPPORTED;
+    }
+#else
+    std::error_code source_error;
+    if (!installed_system_source_) {
+      installed_system_source_ = vfs::InstalledSystemSource::Create(
+          system_files_path(), xe::to_path(cvars::system_readonly_source_root),
+          source_error);
+    }
+    if (!installed_system_source_ ||
+        !installed_system_source_->MatchesSelection(
+            xe::to_path(cvars::system_readonly_source_root))) {
+      XELOGE("Installed-system read source unavailable: {}",
+             source_error.message());
+      return X_STATUS_INVALID_PARAMETER;
+    }
+#endif
+  } else if (!cvars::system_readonly_source_root.empty()) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+
   XELOGI("{}: Initializing VFS...", __func__);
   // Bring up the virtual filesystem used by the kernel.
   file_system_ = std::make_unique<xe::vfs::VirtualFileSystem>();
@@ -427,7 +827,33 @@ X_STATUS Emulator::Setup(
 
   XELOGI("{}: Initializing Kernel...", __func__);
   // Shared kernel state.
-  kernel_state_ = std::make_unique<xe::kernel::KernelState>(this);
+  kernel_state_ = std::make_unique<xe::kernel::KernelState>(
+      this, console_data_owner_ ? console_data_owner_->settings() : nullptr,
+      console_data_owner_
+          ? console_data_owner_->error()
+          : std::make_error_code(std::errc::operation_not_supported),
+      snapshot_recovery_owner_);
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  if (setup_purpose_ == SetupPurpose::kGuestExecution &&
+      !kernel_state_->content_manager()->managed_sources_ready()) {
+    // An unreadable/partial private binding may lack protection. Do not admit
+    // an ordinary title/filesystem fallback after required device bootstrap
+    // failed; retain the actual error owners until subsystem teardown.
+    XELOGE("Required managed storage authority unavailable before guest admission");
+    return X_STATUS_UNSUCCESSFUL;
+  }
+#endif
+  kernel_state_->xam_state()->profile_manager()->InitializeProfiles();
+  if (installed_system_source_) {
+    const auto image = installed_system_source_->snapshot();
+    const auto catalog =
+        kernel_state_->content_manager()->sources().Source("installed-system");
+    if (!image || !image->valid() || !catalog ||
+        catalog->generation != image->generation()) {
+      XELOGE("Installed-system catalog authority unavailable at kernel setup");
+      return X_STATUS_UNSUCCESSFUL;
+    }
+  }
 #define LOAD_KERNEL_MODULE(t) \
   static_cast<void>(kernel_state_->LoadKernelModule<kernel::t>())
   // HLE kernel modules.
@@ -544,9 +970,31 @@ const std::unique_ptr<vfs::Device> Emulator::CreateVfsDevice(
       // An unpacked package's executable says where it came from, wherever
       // the files now are.
       auto xex = vfs::ExtractXexMetadata(path);
+      std::shared_ptr<filesystem::HostStorageRoot> source_directory;
+      if (installed_system_source_) {
+        const auto source = installed_system_source_->snapshot();
+        if (source && source->Contains(path)) {
+          std::error_code source_error;
+          source_directory =
+              source->DirectoryRoot(path.parent_path(), source_error);
+          if (!source_directory || source_error) {
+            return nullptr;
+          }
+        }
+      }
+      if (!source_directory && kernel_state_) {
+        bool managed = false;
+        std::error_code source_error;
+        source_directory = kernel_state_->content_manager()->sources().CaptureManagedDirectory(
+            path.parent_path(), !cvars::allow_game_relative_writes, managed, source_error);
+        if (source_error || (managed && !source_directory)) { return nullptr; }
+      }
+      const bool read_only =
+          (source_directory && source_directory->read_only()) || !cvars::allow_game_relative_writes;
       device = std::make_unique<vfs::HostPathDevice>(
-          mount_path, path.parent_path(), !cvars::allow_game_relative_writes,
-          false, xex && xex->RunsFromPackageOnly() ? "STFS" : "GDFX");
+          mount_path, path.parent_path(), read_only, false,
+          xex && xex->RunsFromPackageOnly() ? "STFS" : "GDFX",
+          std::move(source_directory));
     } break;
     case FileSignatureType::LIVE:
     case FileSignatureType::CON:
@@ -743,8 +1191,20 @@ static bool IsXboxOriginalDisc(const std::filesystem::path& path) {
 
 X_STATUS Emulator::LaunchPath(const std::filesystem::path& path,
                               std::string_view package_path) {
+  if (setup_purpose_ != SetupPurpose::kGuestExecution) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
   // A relaunch must not tear down what this mounts into and loads from.
   std::lock_guard<std::recursive_mutex> launch_lock(launch_mutex_);
+  auto launch_reservation = system_operations_.TryLaunch();
+  if (!launch_reservation) {
+    XELOGW("Title launch refused during system installation");
+    return X_STATUS_UNSUCCESSFUL;
+  }
+  if (!RefreshInstalledSystemSource()) {
+    XELOGE("Installed-system source refresh refused before title mount");
+    return X_STATUS_UNSUCCESSFUL;
+  }
   // Remember for relaunch fallback
   if (!path.empty()) {
     last_launch_path_ = path;
@@ -831,6 +1291,9 @@ void Emulator::SetDeploymentType(XDeploymentType detected_type) {
 }
 
 X_STATUS Emulator::LaunchXexFile(const std::filesystem::path& path) {
+  if (setup_purpose_ != SetupPurpose::kGuestExecution) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
   // We create a virtual filesystem pointing to its directory and symlink
   // that to the game filesystem.
   // e.g., /my/files/foo.xex will get a local fs at:
@@ -843,10 +1306,12 @@ X_STATUS Emulator::LaunchXexFile(const std::filesystem::path& path) {
   // Launch the game.
   auto fs_path = fmt::format("{}\\", kDefaultGameSymbolicLink) +
                  xe::path_to_utf8(file_name);
-  // A folder holding its own xam is the title's flash even with system files
-  // installed.
+  // A title-local xam supplies fallback Flash outside either installed-native
+  // mode. Both owned native modes require the registered read-only Flash.
   std::string package_root;
-  if (file_system_->FindSymbolicLink(kDefaultGameSymbolicLink, package_root) &&
+  if (!cvars::native_system_ui &&
+      !cvars::native_system_first_record_probe &&
+      file_system_->FindSymbolicLink(kDefaultGameSymbolicLink, package_root) &&
       (file_system_->ResolvePath(
            fmt::format("{}\\xam.xex", kDefaultGameSymbolicLink)) ||
        file_system_->ResolvePath(
@@ -864,6 +1329,9 @@ X_STATUS Emulator::LaunchXexFile(const std::filesystem::path& path) {
 }
 
 X_STATUS Emulator::LaunchDiscImage(const std::filesystem::path& path) {
+  if (setup_purpose_ != SetupPurpose::kGuestExecution) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
   std::string module_path = FindLaunchModule();
   X_STATUS result = CompleteLaunch(path, module_path);
 
@@ -1046,6 +1514,9 @@ static bool IsXeFuDispatcher(const std::optional<vfs::XexMetadata>& xex) {
 
 X_STATUS Emulator::LaunchXboxOriginal(const std::filesystem::path& path,
                                       std::string_view xbe_name) {
+  if (setup_purpose_ != SetupPurpose::kGuestExecution) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
   // As on the console, xbox.xex picks the XeFu build for the game and launches
   // it with the game's path, unless a XeFu build is set to run every game.
   const std::filesystem::path launcher = xefu_path() / cvars::xefu_launcher;
@@ -1087,6 +1558,9 @@ X_STATUS Emulator::LaunchXboxOriginal(const std::filesystem::path& path,
 }
 
 X_STATUS Emulator::LaunchDiscArchive(const std::filesystem::path& path) {
+  if (setup_purpose_ != SetupPurpose::kGuestExecution) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
   std::string module_path = FindLaunchModule();
   XELOGI("LaunchDiscArchive: FindLaunchModule returned '{}'", module_path);
   X_STATUS result = CompleteLaunch(path, module_path);
@@ -1100,6 +1574,9 @@ X_STATUS Emulator::LaunchDiscArchive(const std::filesystem::path& path) {
 }
 
 X_STATUS Emulator::LaunchStfsContainer(const std::filesystem::path& path) {
+  if (setup_purpose_ != SetupPurpose::kGuestExecution) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
   std::string module_path = FindLaunchModule();
   X_STATUS result = CompleteLaunch(path, module_path);
 
@@ -1122,6 +1599,9 @@ X_STATUS Emulator::LaunchStfsContainer(const std::filesystem::path& path) {
 
 X_STATUS Emulator::LaunchDiscPackage(const std::filesystem::path& path,
                                      std::string_view package_path) {
+  if (setup_purpose_ != SetupPurpose::kGuestExecution) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
   constexpr std::string_view kDiscMountPath = "\\Device\\Cdrom0";
   if (const X_STATUS result = MountPath(path, kDiscMountPath);
       XFAILED(result)) {
@@ -1149,6 +1629,9 @@ X_STATUS Emulator::LaunchDiscPackage(const std::filesystem::path& path,
 }
 
 X_STATUS Emulator::LaunchDefaultModule(const std::filesystem::path& path) {
+  if (setup_purpose_ != SetupPurpose::kGuestExecution) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
   cvars::launch_module = "";
   std::string module_path = FindLaunchModule();
   X_STATUS result = CompleteLaunch(path, module_path);
@@ -1575,9 +2058,16 @@ void Emulator::Resume() {
 bool Emulator::SaveToFile(const std::filesystem::path& path) {
   Pause();
 
+  std::array<uint8_t, apu::AudioSystem::kMaxSaveBytes> audio_state;
+  ByteStream audio_stream(audio_state.data(), audio_state.size());
+  if (!audio_system_->Save(&audio_stream)) {
+    Resume();
+    return false;
+  }
   filesystem::CreateEmptyFile(path);
   auto map = MappedMemory::Open(path, MappedMemory::Mode::kReadWrite, 0, 2_GiB);
   if (!map) {
+    Resume();
     return false;
   }
 
@@ -1593,7 +2083,7 @@ bool Emulator::SaveToFile(const std::filesystem::path& path) {
   // forward (possibly through guarded regions) without worry!
   processor_->Save(&stream);
   graphics_system_->Save(&stream);
-  audio_system_->Save(&stream);
+  stream.Write(audio_state.data(), audio_stream.offset());
   kernel_state_->Save(&stream);
   memory_->Save(&stream);
   map->Close(stream.offset());
@@ -1696,8 +2186,15 @@ void Emulator::RelaunchTitle(const std::string& host_path,
       xe::strip_pii(host_path), launch_module, package_path);
 
   // Tell WaitUntilExit not to fire on_exit when main thread dies.
+  title_execution_state_.BeginStopping();
+  kernel::NativeSystemUiService::SealHostUiFallbackForKernelOrFailStop(
+      kernel_state_.get());
   relaunching_ = true;
   on_title_closing();
+
+  kernel_state_->ShutdownNativeGuideBootstrapProbe();
+
+  StopNativeSystemBeforeProviderShutdown();
 
   // Stop the dispatch thread gracefully before force-terminating threads,
   // otherwise TerminateThread corrupts the CV it's blocked on.
@@ -1800,8 +2297,15 @@ void Emulator::ResetTitle() {
   std::lock_guard<std::recursive_mutex> launch_lock(launch_mutex_);
   XELOGI("ResetTitle: stopping title and resetting kernel");
 
+  title_execution_state_.BeginStopping();
+  kernel::NativeSystemUiService::SealHostUiFallbackForKernelOrFailStop(
+      kernel_state_.get());
   relaunching_ = true;
   on_title_closing();
+
+  kernel_state_->ShutdownNativeGuideBootstrapProbe();
+
+  StopNativeSystemBeforeProviderShutdown();
 
   kernel_state_->ShutdownDispatchThread();
 
@@ -1848,8 +2352,189 @@ void Emulator::ResetTitle() {
   XELOGI("ResetTitle: complete");
 }
 
+std::filesystem::path Emulator::GetInstalledDashboardPath() const {
+#if XE_PLATFORM_WIN32
+  return system_files_path() / "flash" / "dash.xex";
+#else
+  if (!installed_system_source_) {
+    return {};
+  }
+  const auto image = installed_system_source_->snapshot();
+  std::error_code error;
+  const auto path = image ? image->DashboardPath(error) : std::nullopt;
+  return path.value_or(std::filesystem::path{});
+#endif
+}
+
+std::optional<vfs::InstalledSystemOperationGate::Reservation>
+Emulator::TryBeginSystemInstallation() {
+  // A pending/active host launch wins without blocking the UI. The token then
+  // excludes later launches even through reentrant modal callbacks.
+  std::unique_lock<std::recursive_mutex> lock(launch_mutex_, std::try_to_lock);
+  if (!lock.owns_lock() || !kernel_state_ || !file_system_ ||
+      title_execution_state_.snapshot().phase !=
+          kernel::TitleExecutionState::Phase::kUnloaded ||
+      kernel_state_->HasNativeImportDomains() ||
+      kernel_state_->HasNativeSystemAllocationAuthorities()) {
+    return {};
+  }
+  return system_operations_.TryInstall();
+}
+
+bool Emulator::RefreshInstalledSystemSource(bool installed) {
+#if XE_PLATFORM_WIN32
+  return cvars::system_readonly_source_root.empty();
+#else
+  std::lock_guard<std::recursive_mutex> launch_lock(launch_mutex_);
+  if (!installed_system_source_ || !kernel_state_ || !file_system_ ||
+      !installed_system_source_->MatchesSelection(
+          xe::to_path(cvars::system_readonly_source_root))) {
+    return false;
+  }
+  std::error_code error;
+  const auto next = installed_system_source_->PrepareRefresh(error, installed);
+  if (!next || error) {
+    return false;
+  }
+  if (next == installed_system_source_->snapshot() &&
+      mounted_system_generation_ == next->generation()) {
+    return true;
+  }
+  // No native/guest provider can acquire a new system file during this idle
+  // host transition. A busy existing view is refused before any mutation.
+  if (title_execution_state_.snapshot().phase !=
+          kernel::TitleExecutionState::Phase::kUnloaded ||
+      kernel_state_->HasNativeImportDomains() ||
+      kernel_state_->HasNativeSystemAllocationAuthorities()) {
+    return false;
+  }
+  constexpr const char* mounts[] = {"\\Device\\Flash",
+                                    "\\Device\\Harddisk0\\SystemExtPartition",
+                                    "\\Device\\Harddisk0\\SystemAuxPartition"};
+  for (const auto mount : mounts) {
+    const auto old = file_system_->GetDevice(mount);
+    if (old && (!old->is_read_only() || old->has_open_files())) {
+      return false;
+    }
+  }
+  std::vector<std::unique_ptr<vfs::Device>> staged;
+  for (size_t i = 0; i < std::size(mounts); ++i) {
+    auto root =
+        next->PartitionRoot(vfs::InstalledSystemSource::Partition(i), error);
+    if (!root && error == std::errc::no_such_file_or_directory) {
+      continue;
+    }
+    if (!root || error) {
+      return false;
+    }
+    const auto host_path = root->path();
+    auto device = std::make_unique<vfs::HostPathDevice>(
+        mounts[i], host_path, true, false, "FATX", std::move(root));
+    if (!device->Initialize() || !device->AdmitGuestStorage(error) || error) {
+      return false;
+    }
+    staged.push_back(std::move(device));
+  }
+  const auto refuse = [&] {
+    // A concurrent host namespace failure cannot leave an executable mixed
+    // image. Retain any busy old tree and mark its view retired truthfully.
+    for (const auto mount : mounts) {
+      if (file_system_->GetDevice(mount)) {
+        file_system_->RetireDevice(mount);
+        file_system_->UnregisterDevice(mount);
+      }
+    }
+    mounted_system_generation_ = 0;
+    return false;
+  };
+  for (const auto mount : mounts) {
+    if (file_system_->GetDevice(mount) &&
+        !file_system_->UnregisterDevice(mount)) {
+      return refuse();
+    }
+  }
+  for (auto& device : staged) {
+    if (!file_system_->RegisterDevice(std::move(device))) {
+      return refuse();
+    }
+  }
+  if (!installed_system_source_->Commit(next, error)) {
+    return refuse();
+  }
+  auto content = next->ContentRoot(error);
+  if (!content && error != std::errc::no_such_file_or_directory) {
+    return refuse();
+  }
+  if (!kernel_state_->content_manager()->sources().RegisterReadOnly(
+          {"installed-system", 1, kernel::xam::DeviceType::HDD,
+           kernel::xam::ContentSourceKind::kInstalledSystem,
+           next->path() / "sysext" / "Content",
+           "\\Device\\Harddisk0\\SystemExtPartition\\Content",
+           u"System Content", true, 0,
+           "\\Device\\Harddisk0\\SystemExtPartition"},
+          std::move(content), next->generation())) {
+    return refuse();
+  }
+  mounted_system_generation_ = next->generation();
+  XELOGI(
+      "Installed-system read source: generation={} shared={} available={} "
+      "root={}",
+      next->generation(), next->shared(), next->available(),
+      xe::strip_pii(xe::path_to_utf8(next->path())));
+  return true;
+#endif
+}
+
 void Emulator::MountStandardDrives() {
   auto fs = file_system_.get();
+
+  // Public volumes never expose host settings/system/recovery directories.
+  // Logical HDD geometry follows Content, even with a separate backing FS.
+  std::error_code content_ec;
+  const bool default_content_root =
+      content_root_.lexically_normal() ==
+      (storage_root_ / "content").lexically_normal();
+  auto owned_storage =
+      filesystem::HostStorageRoot::Open(storage_root_, false, content_ec);
+  const auto prepare_directory =
+      [&](const std::filesystem::path& relative) {
+        if (!owned_storage) {
+          return std::shared_ptr<filesystem::HostStorageRoot>{};
+        }
+        auto root = owned_storage->Subroot(relative, false, content_ec);
+        if (root || content_ec != std::errc::no_such_file_or_directory) {
+          return root;
+        }
+        const auto created = owned_storage->Create(relative, true);
+        if (created && created != std::errc::file_exists) {
+          content_ec = created;
+          return std::shared_ptr<filesystem::HostStorageRoot>{};
+        }
+        return owned_storage->Subroot(relative, false, content_ec);
+      };
+  auto hdd = kernel_state_->content_manager()->sources().Source("hdd");
+  if (owned_storage && default_content_root && (!hdd || !hdd->available)) {
+    content_ec = owned_storage->Create("content", true);
+    hdd = kernel_state_->content_manager()->sources().Source("hdd");
+  }
+  const auto hdd_volume = kernel_state_->content_manager()->Volume("hdd");
+  if (hdd && hdd->available && hdd->storage && hdd_volume &&
+      hdd_volume->profile_writable() && hdd_volume->public_root()) {
+    const auto& volume_storage = hdd_volume->public_root();
+    auto volume = std::make_unique<vfs::HostPathDevice>(
+        "\\Device\\Harddisk0\\Partition1", volume_storage->path(), false,
+        false, "FATX", volume_storage, hdd->storage,
+        vfs::HostPathDevice::ControlRole::kFolderVolume);
+    if (volume->Initialize()) { fs->RegisterDevice(std::move(volume)); }
+    auto content = std::make_unique<vfs::HostPathDevice>(
+        "\\Device\\Harddisk0\\Partition1\\Content", content_root_, false, true,
+        "FATX", hdd->storage, hdd->storage);
+    if (content->Initialize()) {
+      fs->RegisterDevice(std::move(content));
+    }
+  } else {
+    XELOGW("Managed HDD content is unavailable; no backing folder recreated");
+  }
 
   if (cvars::mount_scratch) {
     auto scratch_device = std::make_unique<xe::vfs::HostPathDevice>(
@@ -1866,54 +2551,54 @@ void Emulator::MountStandardDrives() {
   }
 
   if (cvars::mount_cache) {
-    auto cache0_device = std::make_unique<xe::vfs::HostPathDevice>(
-        "\\CACHE0", storage_root_ / "cache0", false);
-    if (!cache0_device->Initialize()) {
-      XELOGE("Unable to scan cache0 path");
-    } else {
-      if (!fs->RegisterDevice(std::move(cache0_device))) {
-        XELOGE("Unable to register cache0 path");
-      } else {
-        fs->RegisterSymbolicLink("cache0:", "\\CACHE0");
+    // Preserve the three existing named-cache directories. They use their own
+    // physical backing geometry, even when Content lives on another disk.
+    for (const auto& [mount, folder] :
+         {std::pair{"\\CACHE0", "cache0"}, std::pair{"\\CACHE1", "cache1"},
+          std::pair{"\\CACHE", "cache"}}) {
+      auto storage = prepare_directory(folder);
+      if (!storage) {
+        XELOGE("Unable to prepare managed {} path: {}", folder,
+               content_ec.message());
+        continue;
       }
-    }
-
-    auto cache1_device = std::make_unique<xe::vfs::HostPathDevice>(
-        "\\CACHE1", storage_root_ / "cache1", false);
-    if (!cache1_device->Initialize()) {
-      XELOGE("Unable to scan cache1 path");
-    } else {
-      if (!fs->RegisterDevice(std::move(cache1_device))) {
-        XELOGE("Unable to register cache1 path");
-      } else {
-        fs->RegisterSymbolicLink("cache1:", "\\CACHE1");
+      auto device = std::make_unique<vfs::HostPathDevice>(
+          mount, storage_root_ / folder, false, false, "FATX", storage, storage,
+          vfs::HostPathDevice::ControlRole::kFolderVolume);
+      if (!device->Initialize() || !fs->RegisterDevice(std::move(device))) {
+        XELOGE("Unable to register {} path", folder);
+        continue;
       }
-    }
-
-    // Some (older?) games try accessing cache:\ too
-    auto cache_device = std::make_unique<xe::vfs::HostPathDevice>(
-        "\\CACHE", storage_root_ / "cache", false);
-    if (!cache_device->Initialize()) {
-      XELOGE("Unable to scan cache path");
-    } else {
-      if (!fs->RegisterDevice(std::move(cache_device))) {
-        XELOGE("Unable to register cache path");
-      } else {
-        fs->RegisterSymbolicLink("cache:", "\\CACHE");
-      }
+      fs->RegisterSymbolicLink(std::string(folder) + ":", mount);
     }
   }
 
   if (cvars::mount_memory_unit) {
-    auto mu_device = std::make_unique<xe::vfs::HostPathDevice>(
-        "\\MU", storage_root_ / "mu", false);
-    if (!mu_device->Initialize()) {
-      XELOGE("Unable to scan MU path");
+    const auto mu =
+        kernel_state_->content_manager()->sources().Source("memory-unit");
+    // An existing empty parent is not an initialized Content device. Creation
+    // or formatting is an explicit managed-storage operation.
+    if (!mu || !mu->available || !mu->storage) {
+      XELOGW("Configured memory unit is unavailable or uninitialized");
     } else {
-      if (!fs->RegisterDevice(std::move(mu_device))) {
-        XELOGE("Unable to register MU path");
-      } else {
-        fs->RegisterSymbolicLink("MU:", "\\MU");
+      const auto owner = kernel_state_->content_manager()->Volume("memory-unit");
+      auto volume_storage = owner && owner->profile_writable()
+                                ? owner->public_root() : nullptr;
+      if (volume_storage) {
+        auto volume = std::make_unique<vfs::HostPathDevice>(
+            "\\Device\\Mass0", volume_storage->path(), false, false, "FATX",
+            std::move(volume_storage), mu->storage,
+          vfs::HostPathDevice::ControlRole::kFolderVolume);
+        if (volume->Initialize() && fs->RegisterDevice(std::move(volume))) {
+          fs->RegisterSymbolicLink("MU:", "\\Device\\Mass0");
+          fs->RegisterSymbolicLink("\\MU", "\\Device\\Mass0");
+        }
+      }
+      auto content = std::make_unique<vfs::HostPathDevice>(
+          "\\Device\\Mass0\\Content", mu->source.root, false, true, "FATX",
+          mu->storage, mu->storage);
+      if (content->Initialize()) {
+        fs->RegisterDevice(std::move(content));
       }
     }
   }
@@ -1932,6 +2617,9 @@ void Emulator::MountStandardDrives() {
 
     fs->RegisterSymbolicLink("DEVKIT:", "\\DEVKIT");
     fs->RegisterSymbolicLink("e:", "\\DEVKIT");
+  }
+  if (!RefreshInstalledSystemSource()) {
+    XELOGE("Installed-system source unavailable during standard mount setup");
   }
 }
 
@@ -2394,6 +3082,28 @@ static std::string format_version(xex2_version version) {
 
 X_STATUS Emulator::CompleteLaunch(const std::filesystem::path& path,
                                   const std::string_view module_path) {
+  if (setup_purpose_ != SetupPurpose::kGuestExecution) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  if (!ValidateNativeSystemUiLaunchSelection()) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  const uint64_t generation = title_execution_state_.BeginPreparing();
+  if (!generation) {
+    XELOGE("Foreground title: another execution generation is still owned");
+    return X_STATUS_UNSUCCESSFUL;
+  }
+  bool accepted = false;
+  struct FailedPreparation {
+    kernel::TitleExecutionState& state;
+    uint64_t generation;
+    bool& accepted;
+    ~FailedPreparation() {
+      if (!accepted) {
+        state.CancelPreparing(generation);
+      }
+    }
+  } failed_preparation{title_execution_state_, generation, accepted};
   const bool boot_animation = std::exchange(boot_animation_requested_, false);
   // The window icon and on_launch listeners need the UI thread.
   X_STATUS result = X_STATUS_UNSUCCESSFUL;
@@ -2412,20 +3122,78 @@ X_STATUS Emulator::CompleteLaunch(const std::filesystem::path& path,
     module->xex_module()->PrecompileStaticInitializers();
   }
 
+  if (!cvars::native_notification_render_probe_report.empty() &&
+      !ValidateNativeSystemUiLaunchSelection()) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
+
   // A dashboard asks for xam's resources as soon as it starts.
   if (kernel::IsSystemTitle(kernel_state_->title_id())) {
     PrepareSystemTitle();
   }
 
+  if (cvars::native_system_ui && !StartNativeSystemUiBeforeTitle()) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
+  if (cvars::native_system_first_record_probe &&
+      !StartNativeSystemFirstRecordProbeBeforeTitle()) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
+
   // Drops only the launch suspend, so a debugger break still holds.
   if (!boot_animation || !PlayBootAnimation()) {
-    main_thread_->Resume();
+    const auto resume_result = main_thread_->Resume();
+    if (XFAILED(resume_result)) {
+      return resume_result;
+    }
+  }
+  accepted = true;
+
+  if (cvars::native_guide_bootstrap_probe || cvars::native_xui_probe ||
+      cvars::native_xui_render_probe || cvars::native_guide_scene_probe ||
+      cvars::native_hud_controller_probe || cvars::native_xui_target_probe ||
+      cvars::native_system_device_binding_probe ||
+      cvars::native_gpu_context_probe || cvars::native_guide_host_probe ||
+      cvars::native_guide_real_time_probe || cvars::native_frame_lease_probe ||
+      cvars::native_frame_execute_probe) {
+    kernel_state_->StartNativeGuideBootstrapProbe(0);
   }
 
   return X_STATUS_SUCCESS;
 }
 
+void Emulator::NotifyTitleExecutionStarted(uint64_t generation,
+                                           uint32_t hmodule, uint32_t thread_id,
+                                           kernel::KernelState* owner) {
+  if (!OwnsTitleExecution(owner) || !generation) {
+    return;
+  }
+  if (title_execution_state_.MarkRunning(generation, hmodule, thread_id)) {
+    const auto snapshot = title_execution_state_.snapshot();
+    XELOGI(
+        "Foreground title: running generation={} title={:08X} "
+        "module={:08X} main_thread={}",
+        snapshot.generation, snapshot.title_id, snapshot.hmodule,
+        snapshot.main_thread_id);
+  }
+}
+
+void Emulator::NotifyTitleExecutionStopped(uint64_t generation,
+                                           kernel::KernelState* owner) {
+  if (!generation) {
+    generation = title_execution_state_.snapshot().generation;
+  }
+  if (generation && OwnsTitleExecution(owner)) {
+    title_execution_state_.BeginStopping(generation);
+  }
+}
+
 void Emulator::PrepareSystemTitle() {
+  // Both owned native modes establish installed Flash aliases and load their
+  // own fresh XAM root. Keep the resource-only fallback on its separate path.
+  if (cvars::native_system_ui || cvars::native_system_first_record_probe) {
+    return;
+  }
   // Without installed system files the title's folder stands in for the flash.
   std::string system_root;
   if (!file_system_->FindSymbolicLink("\\SystemRoot", system_root)) {
@@ -2437,18 +3205,366 @@ void Emulator::PrepareSystemTitle() {
   file_system_->RegisterSymbolicLink("media:", "\\SystemRoot");
 
   // Only its resources are used, through the resource locators.
-  auto module = kernel_state_->LoadUserModule("\\SystemRoot\\xam.xex");
+  auto module =
+      kernel_state_->LoadUserModule("\\SystemRoot\\xam.xex", false, true);
   if (!module) {
-    module = kernel_state_->LoadUserModule("\\SystemRoot\\$flash_xam.xex");
+    module = kernel_state_->LoadUserModule("\\SystemRoot\\$flash_xam.xex",
+                                           false, true);
   }
   // A failure here doesn't fail the title.
   if (module) {
-    const X_STATUS result =
-        kernel_state_->FinishLoadingUserModule(module, false);
+    // Bind before compilation: PPC callers may embed a target's host address.
+    // This still prepares full code identity and save/restore metadata.
+    const bool native_runtime_probe =
+        cvars::native_xui_probe || cvars::native_xui_render_probe ||
+        cvars::native_guide_scene_probe || cvars::native_hud_controller_probe ||
+        cvars::native_xui_target_probe ||
+        cvars::native_system_device_binding_probe ||
+        cvars::native_gpu_context_probe || cvars::native_guide_host_probe ||
+        cvars::native_guide_real_time_probe ||
+        cvars::native_frame_lease_probe || cvars::native_frame_execute_probe;
+    const X_STATUS result = kernel_state_->FinishLoadingUserModule(
+        module, false, !native_runtime_probe);
     if (XFAILED(result)) {
       XELOGE("Failed to load the system xam module: {:08X}", result);
     }
   }
+}
+
+bool Emulator::ValidateNativeSystemUiLaunchSelection() const {
+  const auto& render_report = cvars::native_notification_render_probe_report;
+  if (!render_report.empty() &&
+      (!cvars::native_system_ui || cvars::native_system_first_record_probe ||
+       !cvars::native_notification_queue_probe_report.empty() ||
+       !cvars::native_notification_preferences_probe_report.empty() ||
+       !cvars::native_file_io_contract_report.empty() ||
+       (!render_report.is_absolute() && render_report.has_parent_path()) ||
+       render_report.filename() != "native-notification-render.jsonl")) {
+    XELOGE("Production render probe requires its exclusive native mode/report");
+    return false;
+  }
+  if (!cvars::native_system_ui) {
+    return true;
+  }
+  if (cvars::native_system_first_record_probe ||
+      cvars::native_guide_bootstrap_probe || cvars::native_xui_probe ||
+      cvars::native_xui_render_probe || cvars::native_guide_scene_probe ||
+      cvars::native_hud_controller_probe || cvars::native_xui_target_probe ||
+      cvars::native_system_device_binding_probe ||
+      cvars::native_gpu_context_probe || cvars::native_guide_host_probe ||
+      cvars::native_guide_real_time_probe || cvars::native_frame_lease_probe ||
+      cvars::native_frame_execute_probe ||
+      cvars::native_frame_composite_probe) {
+    XELOGE(
+        "Native system UI production and diagnostic modes are mutually "
+        "exclusive");
+    return false;
+  }
+  if (cvars::native_system_ui_startup_plan.empty() ||
+      !cvars::native_system_ui_startup_plan.is_absolute()) {
+    XELOGE(
+        "Native system UI requires an explicit absolute verified startup plan");
+    return false;
+  }
+  return true;
+}
+
+// Both owned native modes require the installed read-only Flash and a fresh
+// native XAM root. Resource-only system-title fallback is not this admission.
+static std::optional<std::string> PrepareInstalledNativeSystemRoot(
+    vfs::VirtualFileSystem& file_system, kernel::KernelState& kernel_state) {
+  auto* flash = file_system.GetDevice("\\Device\\Flash");
+  auto* flash_root = file_system.ResolvePath("\\Device\\Flash");
+  if (!flash || !flash->is_read_only() || !flash_root ||
+      flash_root->device() != flash) {
+    XELOGE("Native system UI requires installed read-only Flash system files");
+    return std::nullopt;
+  }
+  std::string target;
+  if (!file_system.FindSymbolicLink("\\SystemRoot", target) &&
+      !file_system.RegisterSymbolicLink("\\SystemRoot", "\\Device\\Flash")) {
+    return std::nullopt;
+  }
+  if (file_system.ResolvePath("\\SystemRoot") != flash_root) {
+    XELOGE("Native system UI SystemRoot does not identify installed Flash");
+    return std::nullopt;
+  }
+  if (!file_system.FindSymbolicLink("media:", target) &&
+      !file_system.RegisterSymbolicLink("media:", "\\SystemRoot")) {
+    return std::nullopt;
+  }
+  if (file_system.ResolvePath("media:") != flash_root) {
+    XELOGE(
+        "Native system UI media alias conflicts with installed system "
+        "resources");
+    return std::nullopt;
+  }
+  std::string root_path = "\\SystemRoot\\xam.xex";
+  auto* image = file_system.ResolvePath(root_path);
+  if (!image) {
+    root_path = "\\SystemRoot\\$flash_xam.xex";
+    image = file_system.ResolvePath(root_path);
+  }
+  if (!image || image->device() != flash || !image->size()) {
+    XELOGE("Native system UI installed native XAM is missing");
+    return std::nullopt;
+  }
+  // Service also checks freshness atomically under the actual loader lock.
+  // Refuse resource/native aliases before it loads any separate root.
+  if (kernel_state.GetModule("\\SystemRoot\\xam.xex", true) ||
+      kernel_state.GetModule("\\SystemRoot\\$flash_xam.xex", true)) {
+    XELOGE("Native system UI requires a fresh native XAM root");
+    return std::nullopt;
+  }
+  return root_path;
+}
+
+bool Emulator::StartNativeSystemUiBeforeTitle() try {
+  // A production build cannot silently compile against the pre-Notify startup
+  // contract. BootAdmitted includes the actual native8 mask/count/vector proof.
+  static_assert(uint32_t(kernel::NativeSystemUiStartupPhase::kNotifications) ==
+                8);
+  if (!cvars::native_system_ui || !ValidateNativeSystemUiLaunchSelection() ||
+      !kernel_state_ || !file_system_ || !graphics_system_ ||
+      !graphics_system_->presenter() || !kernel::GuestScheduler::enabled() ||
+      !main_thread_) {
+    return false;
+  }
+#if !(XE_PLATFORM_LINUX && XE_ARCH_AMD64)
+  // This profile has only been exercised on the current Linux/AMD64 backend.
+  // The common service remains portable; other platform activation awaits its
+  // own native lifecycle/render acceptance rather than borrowing this result.
+  XELOGE("Native system UI activation profile currently requires Linux/AMD64");
+  return false;
+#endif
+  std::error_code file_error;
+  if (!std::filesystem::is_regular_file(cvars::native_system_ui_startup_plan,
+                                        file_error) ||
+      file_error) {
+    XELOGE("Native system UI startup plan is unavailable");
+    return false;
+  }
+  auto* cp = graphics_system_->command_processor();
+  const auto supported = [](const gpu::NativeSystemFrameCapacity& capacity) {
+    using S = gpu::NativeSystemFrameCapacity::State;
+    return capacity.supported && capacity.immutable_input_snapshot_supported &&
+           capacity.backend_epoch &&
+           capacity.backend_stop_proof.backend_epoch() ==
+               capacity.backend_epoch &&
+           !capacity.backend_stop_proof.stopped() &&
+           (capacity.state == S::kAccepting || capacity.state == S::kQueued ||
+            capacity.state == S::kExecuting ||
+            capacity.state == S::kBackpressured);
+  };
+  auto initial = cp ? cp->GetNativeSystemFrameCapacity()
+                    : gpu::NativeSystemFrameCapacity{};
+  if (!initial.backend_epoch ||
+      initial.backend_stop_proof.backend_epoch() != initial.backend_epoch ||
+      initial.backend_stop_proof.stopped()) {
+    XELOGE(
+        "Native system UI backend lifetime is unavailable or already stopped");
+    return false;
+  }
+  const auto expected_backend_epoch = initial.backend_epoch;
+  // Initialize starts the actual worker asynchronously. During SetupContext,
+  // capability is still Unsupported, or Stopping until worker ingress opens.
+  // Wait only on this same real live backend; metadata never grants support.
+  const auto prewarm_deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!supported(initial)) {
+    if (initial.backend_epoch != expected_backend_epoch ||
+        initial.backend_stop_proof.backend_epoch() != expected_backend_epoch ||
+        initial.backend_stop_proof.stopped() ||
+        initial.state == gpu::NativeSystemFrameCapacity::State::kFailed ||
+        (initial.supported && !initial.immutable_input_snapshot_supported) ||
+        std::chrono::steady_clock::now() >= prewarm_deadline) {
+      XELOGE(
+          "Native system UI backend did not establish the actual snapshot "
+          "profile before startup");
+      return false;
+    }
+    xe::threading::Sleep(std::chrono::milliseconds(5));
+    initial = cp->GetNativeSystemFrameCapacity();
+  }
+  if (initial.backend_epoch != expected_backend_epoch ||
+      initial.backend_stop_proof.backend_epoch() != expected_backend_epoch ||
+      initial.backend_stop_proof.stopped()) {
+    XELOGE("Native system UI backend lifetime changed during prewarm");
+    return false;
+  }
+  auto root_path =
+      PrepareInstalledNativeSystemRoot(*file_system_, *kernel_state_);
+  if (!root_path) {
+    return false;
+  }
+  const auto transport = kernel::NativeSystemGraphicsTransport::Create();
+  if (!transport) {
+    return false;
+  }
+  kernel::NativeSystemUiService::Config config;
+  config.kernel = kernel_state_.get();
+  const auto prepared = title_execution_state_.snapshot();
+  const auto prepared_module = kernel_state_->GetExecutableModule();
+  if (!OwnsTitleExecution(kernel_state_.get()) || !prepared_module ||
+      prepared.phase != kernel::TitleExecutionState::Phase::kPreparing ||
+      !main_thread_ || !main_thread_->suspend_count() ||
+      prepared.hmodule != prepared_module->hmodule_ptr() ||
+      prepared.main_thread_id != main_thread_->thread_id()) {
+    XELOGE("Native system UI requires its actual suspended prepared Title");
+    return false;
+  }
+  config.prepared_title = {prepared.generation, prepared.hmodule,
+                           prepared_module->load_generation(),
+                           prepared.main_thread_id};
+  config.native_root_guest_path = std::move(*root_path);
+  config.validated_plan_path = cvars::native_system_ui_startup_plan;
+  config.transport = transport;
+  const auto service = kernel::NativeSystemUiService::Create(std::move(config));
+  if (!service || !service->Start()) {
+    XELOGE("Native system UI service bootstrap refused");
+    if (service) {
+      service->BeginStop();
+    }
+    return false;
+  }
+  const auto fail = [&](const std::string& reason) {
+    XELOGE("Native system UI pre-title startup failed: {}", reason);
+    service->BeginStop();  // Whole actual bootstrap/provider stop stays at the
+                           // existing Kernel boundary.
+    return false;
+  };
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(12);
+  while (std::chrono::steady_clock::now() < deadline) {
+    const auto status = service->snapshot();
+    const auto graphics = transport->snapshot();
+    const auto capacity = cp->GetNativeSystemFrameCapacity();
+    if (!status.failure.empty() || status.stopping || graphics.stopping ||
+        graphics.retired || !supported(capacity) ||
+        capacity.backend_epoch != initial.backend_epoch) {
+      return fail(status.failure.empty()
+                      ? "transport/backend stopped or startup failed"
+                      : status.failure);
+    }
+    auto* native_kernel = kernel_state_.get();
+    const auto receiver =
+        kernel::NativeSystemGraphicsNotifications::Lookup(native_kernel);
+    const auto ui_notifications =
+        kernel::NativeSystemUiNotifications::Lookup(native_kernel);
+    const auto binding = service->graphics_binding();
+    if (status.boot_admitted && status.title_heap_ready &&
+        status.source_frame_ready && binding &&
+        binding->CheckCpuResourceContext() &&
+        graphics.mode ==
+            kernel::NativeSystemGraphicsTransport::Mode::kProduction &&
+        graphics.ready &&
+        graphics.blocker ==
+            kernel::NativeSystemGraphicsTransport::Blocker::kNone &&
+        graphics.backend_epoch == initial.backend_epoch && receiver &&
+        receiver->IsRegistered() && ui_notifications &&
+        ui_notifications->IsAccepting()) {
+      XELOGI(
+          "Native system UI startup prerequisites established before "
+          "foreground resume: backend_epoch={}",
+          initial.backend_epoch);
+      return true;
+    }
+    xe::threading::Sleep(std::chrono::milliseconds(5));
+  }
+  return fail("actual boot/shared binding/receiver prerequisites timed out");
+} catch (...) {
+  // Bootstrap creation may already be visible. Keep the Kernel service cohort
+  // poisoned/retained; existing shutdown joins it before providers or memory.
+  if (kernel_state_) {
+    kernel::NativeSystemUiService::StopForKernelOrFailStop(kernel_state_.get());
+  }
+  XELOGE("Native system UI pre-title coordinator threw");
+  return false;
+}
+
+bool Emulator::StartNativeSystemFirstRecordProbeBeforeTitle() {
+  if (!kernel_state_ || !file_system_ ||
+      cvars::native_xui_runtime_plan.empty() ||
+      cvars::native_system_first_record_report.empty() ||
+      cvars::native_guide_bootstrap_probe || cvars::native_xui_probe ||
+      cvars::native_xui_render_probe || cvars::native_guide_scene_probe ||
+      cvars::native_hud_controller_probe || cvars::native_xui_target_probe ||
+      cvars::native_system_device_binding_probe ||
+      cvars::native_gpu_context_probe || cvars::native_guide_host_probe ||
+      cvars::native_guide_real_time_probe || cvars::native_frame_lease_probe ||
+      cvars::native_frame_execute_probe) {
+    XELOGE(
+        "Native first-record diagnostic requires its own plan/report and "
+        "an installed native root without manual scene diagnostics");
+    return false;
+  }
+  auto root_path =
+      PrepareInstalledNativeSystemRoot(*file_system_, *kernel_state_);
+  if (!root_path) {
+    return false;
+  }
+  std::shared_ptr<kernel::NativeSystemUiDiagnosticObservation> diagnostic =
+      kernel::NativeSystemUiFirstRecordProbe::Create(
+      kernel_state_.get(), cvars::native_system_first_record_report);
+  if (!diagnostic) {
+    XELOGE("Native first-record diagnostic could not reserve backend/report");
+    return false;
+  }
+  if (!cvars::native_file_io_contract_report.empty()) {
+    diagnostic = kernel::WrapFileIoContractProbe(
+        kernel_state_.get(), std::move(diagnostic),
+        cvars::native_file_io_contract_report);
+    if (!diagnostic) {
+      XELOGE("Actual-Kernel file-I/O diagnostic report admission failed");
+      return false;
+    }
+  }
+  kernel::NativeSystemUiService::Config config;
+  config.kernel = kernel_state_.get();
+  const auto prepared = title_execution_state_.snapshot();
+  const auto prepared_module = kernel_state_->GetExecutableModule();
+  if (!OwnsTitleExecution(kernel_state_.get()) || !prepared_module ||
+      prepared.phase != kernel::TitleExecutionState::Phase::kPreparing ||
+      !main_thread_ || !main_thread_->suspend_count() ||
+      prepared.hmodule != prepared_module->hmodule_ptr() ||
+      prepared.main_thread_id != main_thread_->thread_id()) {
+    XELOGE("Native system UI requires its actual suspended prepared Title");
+    return false;
+  }
+  config.prepared_title = {prepared.generation, prepared.hmodule,
+                           prepared_module->load_generation(),
+                           prepared.main_thread_id};
+  config.native_root_guest_path = std::move(*root_path);
+  config.validated_plan_path = cvars::native_xui_runtime_plan;
+  config.diagnostic = std::move(diagnostic);
+  const auto service = kernel::NativeSystemUiService::Create(std::move(config));
+  if (!service || !service->Start()) {
+    XELOGE("Native first-record diagnostic service bootstrap refused");
+    return false;
+  }
+  // Native startup/notification registration precedes the title's D3D video
+  // notifications. The real bootstrap then waits for the original foreground
+  // to run before calling the public native Guide API in its SYSTEM context.
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(12);
+  while (std::chrono::steady_clock::now() < deadline) {
+    const auto status = service->snapshot();
+    if (!status.failure.empty() || status.stopping) {
+      XELOGE("Native first-record startup failed: {}", status.failure);
+      service->BeginStop();
+      return false;
+    }
+    const auto notifications =
+        kernel::NativeSystemGraphicsNotifications::Lookup(kernel_state_.get());
+    if (status.diagnostic_boot_observed && status.title_heap_ready &&
+        notifications && notifications->IsRegistered()) {
+      return true;
+    }
+    xe::threading::Sleep(std::chrono::milliseconds(5));
+  }
+  XELOGE("Native first-record startup/graphics registration timed out");
+  service->BeginStop();
+  return false;
 }
 
 bool Emulator::PlayBootAnimation() {
@@ -2545,24 +3661,34 @@ X_STATUS Emulator::PrepareLaunch(const std::filesystem::path& path,
     input_system_->ResetKeystrokes();
   }
 
-  // Expose the HDD content partition. Games that resolve saves/DLC to a raw
-  // \Device\Harddisk0\Partition1\Content path via XamContentResolve open it
-  // directly, not through the save:/dlc: symlinks. Without this the open lands
-  // on the NullDevice below and fails, so a title can never see its own
-  // existing content and keeps recreating it.
-  auto content_device = std::make_unique<vfs::HostPathDevice>(
-      "\\Device\\Harddisk0\\Partition1\\Content", content_root_, false, true);
-  if (content_device->Initialize()) {
-    file_system_->RegisterDevice(std::move(content_device));
+  // Refresh one idle view instead of appending duplicate mounts. Existing
+  // open files retain their device/tree; a busy view cannot be discarded.
+  constexpr std::string_view kContentMount =
+      "\\Device\\Harddisk0\\Partition1\\Content";
+  const auto source = kernel_state_->content_manager()->sources().Source("hdd");
+  if (source && source->available && source->storage) {
+    if (!file_system_->GetDevice(kContentMount) ||
+        file_system_->UnregisterDevice(kContentMount)) {
+      auto content = std::make_unique<vfs::HostPathDevice>(
+          kContentMount, content_root_, false, true, "FATX", source->storage,
+          source->storage);
+      if (content->Initialize()) {
+        file_system_->RegisterDevice(std::move(content));
+      }
+    }
+  } else {
+    file_system_->RetireDevice(kContentMount);
   }
 
+#if XE_PLATFORM_WIN32
   // The files of an installed system update.
   for (const auto& [mount_path, folder] :
        {std::pair{"\\Device\\Flash", "flash"},
         std::pair{"\\Device\\Harddisk0\\SystemExtPartition", "sysext"},
         std::pair{"\\Device\\Harddisk0\\SystemAuxPartition", "sysaux"}}) {
     const auto host_path = system_files_path() / folder;
-    if (!std::filesystem::is_directory(host_path)) {
+    if (file_system_->GetDevice(mount_path) ||
+        !std::filesystem::is_directory(host_path)) {
       continue;
     }
     auto device =
@@ -2571,6 +3697,14 @@ X_STATUS Emulator::PrepareLaunch(const std::filesystem::path& path,
       file_system_->RegisterDevice(std::move(device));
     }
   }
+#else
+  const auto image =
+      installed_system_source_ ? installed_system_source_->snapshot() : nullptr;
+  if (!image || !image->valid() ||
+      mounted_system_generation_ != image->generation()) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
+#endif
   // \SystemRoot is the flash, where titles find the system fonts.
   std::string system_root;
   if (file_system_->GetDevice("\\Device\\Flash") &&
@@ -2868,6 +4002,15 @@ X_STATUS Emulator::PrepareLaunch(const std::filesystem::path& path,
     return X_STATUS_UNSUCCESSFUL;
   }
   main_thread_ = main_thread;
+  const uint64_t generation = title_execution_state_.snapshot().generation;
+  if (!title_execution_state_.SetPreparedIdentity(generation, title_id_.value(),
+                                                  module->hmodule_ptr(),
+                                                  main_thread_->thread_id())) {
+    ResetTitleState();
+    return X_STATUS_UNSUCCESSFUL;
+  }
+  main_thread_->set_title_execution_identity(generation, module->hmodule_ptr());
+  title_execution_owner_.store(kernel_state_.get(), std::memory_order_release);
   on_launch(title_id_.value(), title_name_);
 
   // Plugins must be loaded after calling LaunchModule() and

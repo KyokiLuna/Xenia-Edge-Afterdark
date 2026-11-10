@@ -1,0 +1,14 @@
+module	assembly	name	version	public_key_or_token	resolution
+runtime/v3.0/Microsoft.Xna.Framework.Game.dlx	Microsoft.Xna.Framework.Game	mscorlib	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/Microsoft.Xna.Framework.Game.dlx	Microsoft.Xna.Framework.Game	Microsoft.Xna.Framework	3.0.0.0	51C3BFB2DB46012C	present_in_this_dashboard
+runtime/v3.0/Microsoft.Xna.Framework.Game.dlx	Microsoft.Xna.Framework.Game	System	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/Microsoft.Xna.Framework.dlx	Microsoft.Xna.Framework	mscorlib	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/Microsoft.Xna.Framework.dlx	Microsoft.Xna.Framework	System	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/system.core.dlx	System.Core	mscorlib	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/system.dlx	System	mscorlib	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/system.sr.dlx	System.SR	mscorlib	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/system.xml.dlx	System.Xml	mscorlib	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/system.xml.dlx	System.Xml	System	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/system.xml.linq.dlx	System.Xml.Linq	mscorlib	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/system.xml.linq.dlx	System.Xml.Linq	System.Xml	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard
+runtime/v3.0/system.xml.linq.dlx	System.Xml.Linq	System.Core	3.5.0.0	1C9E259686F921E0	present_in_this_dashboard

@@ -1,0 +1,4 @@
+dash.ExtraAVCodecs.xex exports
+==============================
+
+{"confidence": "CONFIRMED", "function_va": "0x9F897AB0", "module": "dash.ExtraAVCodecs.xex", "ordinal": "0x00000001", "resolved_name": ""}

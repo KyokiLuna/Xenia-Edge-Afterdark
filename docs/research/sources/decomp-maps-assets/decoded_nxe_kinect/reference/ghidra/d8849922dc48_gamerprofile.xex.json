@@ -1,0 +1,18 @@
+{
+  "module": "gamerprofile.xex",
+  "program": "d8849922dc48_gamerprofile.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "24c1d30ab3945f20aa0d13bd017eb606d2b310bb0b2e248be5f63ec2863cf13d",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 686,
+  "calls": 1633,
+  "strings": 265,
+  "string_xrefs": 268,
+  "independent_sha256": "24c1d30ab3945f20aa0d13bd017eb606d2b310bb0b2e248be5f63ec2863cf13d",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

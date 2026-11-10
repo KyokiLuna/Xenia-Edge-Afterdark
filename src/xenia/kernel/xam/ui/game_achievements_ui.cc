@@ -8,7 +8,6 @@
  */
 
 #include "xenia/kernel/xam/ui/game_achievements_ui.h"
-
 #include "xenia/hid/input.h"
 #include "xenia/hid/input_system.h"
 #include "xenia/kernel/xam/xam_state.h"
@@ -24,7 +23,7 @@ GameAchievementsUI::GameAchievementsUI(xe::ui::ImGuiDrawer* imgui_drawer,
                                        const UserProfile* profile)
     : XamGamepadDialog(imgui_drawer, input_system),
       title_info_(*title_info),
-      profile_(profile),
+      profile_xuid_(profile ? profile->xuid() : 0),
       window_id_(GetWindowId()) {
   LoadAchievementsData();
 }
@@ -36,26 +35,41 @@ GameAchievementsUI::~GameAchievementsUI() {
 }
 
 bool GameAchievementsUI::LoadAchievementsData() {
-  achievements_info_ =
-      kernel_state()->xam_state()->achievement_manager()->GetTitleAchievements(
-          profile_->xuid(), title_info_.id);
-
-  if (achievements_info_.empty()) {
+  std::error_code error;
+  const auto models =
+      kernel_state()->xam_state()->profile_manager()->CaptureGpdRead(
+          profile_xuid_, error);
+  if (!models) {
     return false;
   }
+  const auto game = models->titles.find(title_info_.id);
 
+  if (game == models->titles.end()) {
+    return false;
+  }
+  achievements_info_.clear();
   xe::ui::IconsData data;
 
-  for (const Achievement& entry : achievements_info_) {
-    const auto icon =
-        kernel_state()->xam_state()->achievement_manager()->GetAchievementIcon(
-            profile_->xuid(), title_info_.id, entry.achievement_id);
+  for (const auto id : game->second.GetAchievementsIds()) {
+    const auto* entry = game->second.GetAchievementEntry(id);
+    if (!entry) {
+      return false;
+    }
+    Achievement achievement(entry);
+    achievement.achievement_name = game->second.GetAchievementTitle(id);
+    achievement.unlocked_description =
+        game->second.GetAchievementDescription(id);
+    achievement.locked_description =
+        game->second.GetAchievementUnachievedDescription(id);
+    achievements_info_.push_back(std::move(achievement));
 
-    data.insert({entry.image_id, icon});
+    data.insert_or_assign(entry->image_id,
+                          game->second.GetImage(entry->image_id));
   }
-
+  // One genuine validated immutable projection owns every span through upload;
+  // don't reread all GPDs once per achievement icon.
   achievements_icons_ = imgui_drawer()->LoadIcons(data);
-  return true;
+  return !achievements_info_.empty();
 }
 
 std::string GameAchievementsUI::GetAchievementTitle(

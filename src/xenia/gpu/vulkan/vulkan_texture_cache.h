@@ -12,6 +12,7 @@
 
 #include <array>
 #include <memory>
+#include <span>
 #include <unordered_map>
 #include <utility>
 
@@ -23,6 +24,7 @@
 
 namespace xe {
 namespace gpu {
+struct NativeFrameOutputLayout;
 namespace vulkan {
 
 class VulkanCommandProcessor;
@@ -93,6 +95,13 @@ class VulkanTextureCache final : public TextureCache {
   // preceding host GPU work.
   void RequestTextures(uint32_t used_texture_mask) override;
 
+  // After RequestTextures, require the real resources/views needed by this
+  // exact translated shader layout. Never accepts a null-texture fallback or
+  // a texture whose guest data upload failed. This does not prove ownership
+  // or grant execution permission; callers must already hold a frozen lease.
+  bool AreNativeTextureBindingsReady(
+      std::span<const VulkanShader::TextureBinding> bindings) const;
+
   VkImageView GetActiveBindingOrNullImageView(uint32_t fetch_constant_index,
                                               xenos::FetchOpDimension dimension,
                                               bool is_signed);
@@ -142,6 +151,11 @@ class VulkanTextureCache final : public TextureCache {
   VkImageView RequestSwapTexture(uint32_t& width_scaled_out,
                                  uint32_t& height_scaled_out,
                                  xenos::TextureFormat& format_out);
+  // Frozen native output only, with canonical physical fetch metadata. Loads
+  // only already-resident GPU bytes; never reads RF slot 0 or uploads CPU data.
+  VkImageView RequestNativePresentationTexture(
+      const NativeFrameOutputLayout& layout, memory::PhysicalRange output,
+      memory::PhysicalRange written);
 
   // Scaled resolve buffer management (for use by VulkanRenderTargetCache)
   // Simple non-overlapping buffer (fallback when sparse binding unavailable)
@@ -281,6 +295,7 @@ class VulkanTextureCache final : public TextureCache {
       kTransferDestination,
       kGuestShaderSampled,
       kSwapSampled,
+      kNativePresentationSampled,
     };
 
     // Takes ownership of the image and its memory.

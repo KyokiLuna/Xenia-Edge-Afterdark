@@ -76,6 +76,11 @@ class XmaDecoder {
   Memory* memory_ = nullptr;
   cpu::Processor* processor_ = nullptr;
 
+  // Captured once by Setup; changing the CVar cannot change the producer
+  // of a live decoder's work or pause acknowledgement.
+  bool dedicated_thread_ = false;
+  std::mutex lifecycle_mutex_;
+  bool shutting_down_ = true;  // lifecycle_mutex_ protects control admission.
   std::atomic<bool> worker_running_ = {false};
   kernel::object_ref<kernel::XHostThread> worker_thread_;
   std::unique_ptr<xe::threading::Event> work_event_ = nullptr;

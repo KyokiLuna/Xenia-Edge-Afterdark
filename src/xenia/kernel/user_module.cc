@@ -9,6 +9,9 @@
 
 #include "xenia/kernel/user_module.h"
 
+#include <atomic>
+#include <memory>
+
 #include "xenia/base/byte_stream.h"
 #include "xenia/base/filesystem.h"
 #include "xenia/base/logging.h"
@@ -25,10 +28,28 @@ DEFINE_bool(dump_module_images, false,
 
 namespace xe {
 namespace kernel {
+namespace {
+uint64_t NextModuleGeneration() {
+  static std::atomic<uint64_t> next{1};
+  auto value = next.load(std::memory_order_relaxed);
+  while (value && value != UINT64_MAX) {
+    if (next.compare_exchange_weak(value, value + 1,
+                                   std::memory_order_relaxed)) {
+      return value;
+    }
+  }
+  return 0;
+}
+}  // namespace
 
 // Host object: the loader owns module handles, not the title's namespace.
-UserModule::UserModule(KernelState* kernel_state)
-    : XModule(kernel_state, ModuleType::kUserModule, true) {}
+UserModule::UserModule(
+    KernelState* kernel_state, bool system_app_module,
+    std::shared_ptr<const cpu::GuestImportProvider> import_provider)
+    : XModule(kernel_state, ModuleType::kUserModule, true),
+      system_app_module_(system_app_module),
+      import_provider_(std::move(import_provider)),
+      load_generation_(NextModuleGeneration()) {}
 
 UserModule::~UserModule() { Unload(); }
 
@@ -118,6 +139,11 @@ X_STATUS UserModule::LoadFromFile(const std::string_view path) {
       return result;
     }
 
+    // Retain cleanup on read/decode failure too. A leaked member File would
+    // keep its container/backing XFile alive beyond native Kernel rundown.
+    auto destroy = [](vfs::File* value) { value->Destroy(); };
+    std::unique_ptr<vfs::File, decltype(destroy)> owned_file(file, destroy);
+
     // Read entire file into memory.
     // Ugh.
     size_t bytes_read = 0;
@@ -130,8 +156,7 @@ X_STATUS UserModule::LoadFromFile(const std::string_view path) {
     // Load the module.
     result = LoadFromMemory(buffer.data(), bytes_read);
 
-    // Close the file.
-    file->Destroy();
+    // owned_file closes before leaving this scope on every result.
   }
   return result;
 }
@@ -169,6 +194,7 @@ X_STATUS UserModule::LoadFromMemory(const void* addr, const size_t length) {
     // Runtime takes ownership.
     auto xex_module =
         std::make_unique<cpu::XexModule>(processor, kernel_state());
+    xex_module->SetGuestImportProvider(import_provider_);
     if (cvars::dump_xex) {
       auto dump_name = name_ + ".xex";
       auto dump_file = xe::filesystem::OpenFile(dump_name, "wb");

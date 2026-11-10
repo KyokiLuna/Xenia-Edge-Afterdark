@@ -1,0 +1,18 @@
+{
+  "module": "BiometricSetup.xex",
+  "program": "28ed96cca55b_BiometricSetup.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "8cd2e7cce1affcb2616172ce9ec0f71ee72227d698fab056c4681926d3259654",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x92000400",
+  "functions": 6454,
+  "calls": 13623,
+  "strings": 3650,
+  "string_xrefs": 2239,
+  "independent_sha256": "8cd2e7cce1affcb2616172ce9ec0f71ee72227d698fab056c4681926d3259654",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

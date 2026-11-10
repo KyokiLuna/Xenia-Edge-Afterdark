@@ -1,0 +1,18 @@
+{
+  "module": "friends.xex",
+  "program": "dc128d6f060e_friends.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "fc609a7a107b4930bd0e4732df0660b64254eb2fc43d2ebb3f011616ea8b207a",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 1286,
+  "calls": 4717,
+  "strings": 506,
+  "string_xrefs": 797,
+  "independent_sha256": "d79babfa855f19c47b0a8727176f802df671503cd4f3f40b68c2e0c214075f65",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

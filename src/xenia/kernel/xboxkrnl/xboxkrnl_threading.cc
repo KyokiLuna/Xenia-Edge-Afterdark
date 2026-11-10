@@ -10,16 +10,23 @@
 #include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <utility>
 #include <vector>
 
 #include "xenia/base/atomic.h"
 #include "xenia/base/clock.h"
 #include "xenia/base/math.h"
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/base/platform.h"
 #include "xenia/base/profiling.h"
 #include "xenia/cpu/processor.h"
 #include "xenia/kernel/guest_scheduler.h"
+#include "xenia/kernel/native_import_domain.h"
+#include "xenia/kernel/native_system_ui_notifications.h"
+#include "xenia/kernel/user_module.h"
+#include "xenia/kernel/util/native_wait_snapshot.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/kernel/xsemaphore.h"
@@ -1061,6 +1068,130 @@ dword_result_t NtWaitForSingleObjectEx_entry(dword_t object_handle,
 DECLARE_XBOXKRNL_EXPORT3(NtWaitForSingleObjectEx, kThreading, kImplemented,
                          kBlocking, kHighFrequency);
 
+namespace {
+// One synchronous real failure, never a substitute object or a wait result.
+void ObserveInvalidNativeWait(KernelState& kernel, uint32_t count,
+                              uint32_t array, uint32_t index,
+                              uint32_t object) noexcept {
+  if (!cvars::native_system_ui_trace || !XThread::IsInThread()) {
+    return;
+  }
+  auto* thread = XThread::GetCurrentThread();
+  auto* context =
+      thread->thread_state() ? thread->thread_state()->context() : nullptr;
+  if (!context || thread->kernel_state() != &kernel ||
+      context->kernel_state != &kernel ||
+      context->thread_state != thread->thread_state()) {
+    return;
+  }
+  static std::atomic<bool> captured{false};
+  if (captured.exchange(true, std::memory_order_relaxed)) {
+    return;
+  }
+  static NativeSystemUiTraceLimiter basic, header_trace, array_trace,
+      native_trace;
+  // This record precedes ALL optional guest reads and caller/module work.
+  basic.Emit("wait_object", "invalid_multiple_entry",
+             {{"thread_id", thread->thread_id()},
+              {"lr", context->lr},
+              {"sp", context->r[1]},
+              {"pcr", context->r[13]},
+              {"count", count},
+              {"array", array},
+              {"index", index},
+              {"object", object}});
+  try {
+    auto& memory = *kernel.memory();
+    const auto be = [](const uint8_t* p) {
+      return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 |
+             p[3];
+    };
+    std::array<uint8_t, 16> header{};
+    const bool header_read =
+        xe::kernel::internal::ReadNativeWaitSnapshot(memory, object, header);
+    header_trace.Emit("wait_object", "invalid_multiple_header_backing",
+                      {{"read", header_read},
+                       {"object", object},
+                       {"backing_only", 1},
+                       {"header0", be(header.data())},
+                       {"header1", be(header.data() + 4)},
+                       {"header2", be(header.data() + 8)},
+                       {"header3", be(header.data() + 12)}});
+    std::array<uint8_t, 256> raw{};
+    const bool array_read =
+        count && count <= 64 && index < count &&
+        xe::kernel::internal::ReadNativeWaitSnapshot(
+            memory, array, std::span(raw).first(size_t(count) * 4));
+    for (uint32_t offset = 0; offset < (array_read ? count : 1); offset += 8) {
+      std::array<uint32_t, 8> words{};
+      const uint32_t available = array_read ? std::min(8u, count - offset) : 0;
+      for (uint32_t i = 0; i < available; ++i) {
+        words[i] = be(raw.data() + size_t(offset + i) * 4);
+      }
+      // At most8 chunks, all within this limiter's first8 observations.
+      array_trace.Emit("wait_object", "invalid_multiple_array_backing",
+                       {{"read", array_read},
+                        {"backing_only", 1},
+                        {"first_index", offset},
+                        {"entries", available},
+                        {"w0", words[0]},
+                        {"w1", words[1]},
+                        {"w2", words[2]},
+                        {"w3", words[3]},
+                        {"w4", words[4]},
+                        {"w5", words[5]},
+                        {"w6", words[6]},
+                        {"w7", words[7]}});
+    }
+    const uint32_t lr = uint32_t(context->lr);
+    const auto caller = kernel.ResolveNativeImportCaller(lr);
+    const bool domain =
+        caller.module && caller.domain && caller.scoped &&
+        caller.domain->active() &&
+        caller.domain->root() ==
+            NativeImportDomain::Member{caller.module->hmodule_ptr(),
+                                       caller.module->load_generation()};
+    std::array<uint8_t, 4> call{}, table_count{}, slot{};
+    constexpr uint32_t root = 0x81AA08A8;
+    const bool layout = domain && context->lr == 0x816B9578 &&
+                        array == root + 0x150 && count >= 2 && count <= 26 &&
+                        index >= 2 && index < count &&
+                        xe::kernel::internal::ReadNativeWaitSnapshot(
+                            memory, 0x816B9574, call) &&
+                        be(call.data()) == 0x483B97A1 &&
+                        xe::kernel::internal::ReadNativeWaitSnapshot(
+                            memory, root + 0x21C, table_count) &&
+                        be(table_count.data()) == count - 2 &&
+                        xe::kernel::internal::ReadNativeWaitSnapshot(
+                            memory, root + 0x1BC + (index - 2) * 4, slot);
+    const uint32_t task = layout ? be(slot.data()) : 0;
+    std::array<uint8_t, 16> task_bytes{};
+    const bool task_read =
+        layout && task &&
+        xe::kernel::internal::ReadNativeWaitSnapshot(memory, task, task_bytes);
+    native_trace.Emit(
+        "wait_object", "invalid_multiple_native_candidate",
+        {{"native_domain_current", domain},
+         {"native_layout_checked", layout},
+         {"module", caller.module ? caller.module->hmodule_ptr() : 0},
+         {"module_generation",
+          caller.module ? caller.module->load_generation() : 0},
+         {"domain", caller.domain ? caller.domain->id() : 0},
+         {"task_address_read", layout},
+         {"task_candidate", task},
+         {"task_bytes_read", task_read},
+         {"task_references", be(task_bytes.data() + 4)},
+         {"task_flags", be(task_bytes.data() + 8)},
+         {"task_data", be(task_bytes.data() + 12)},
+         {"task_authority", 0},
+         {"array_value_matches_failure",
+          array_read && be(raw.data() + size_t(index) * 4) == object}});
+  } catch (...) {
+    // The first basic record survives; diagnostics never change wait behavior.
+  }
+}
+}  // namespace
+
 dword_result_t KeWaitForMultipleObjects_entry(
     dword_t count, lpdword_t objects_ptr, dword_t wait_type,
     dword_t wait_reason, dword_t processor_mode, dword_t alertable,
@@ -1076,10 +1207,14 @@ dword_result_t KeWaitForMultipleObjects_entry(
   {
     auto crit = global_critical_region::AcquireDirect();
     for (uint32_t n = 0; n < count; n++) {
-      auto object_ptr = kernel_memory()->TranslateVirtual(objects_ptr[n]);
+      const uint32_t object_address = objects_ptr[n];
+      auto object_ptr = kernel_memory()->TranslateVirtual(object_address);
       auto object_ref = XObject::GetNativeObject<XObject>(
           kernel_state(), object_ptr, UndefinedObject, true);
       if (!object_ref) {
+        ObserveInvalidNativeWait(*kernel_state(), uint32_t(count),
+                                 objects_ptr.guest_address(), n,
+                                 object_address);
         return X_STATUS_INVALID_PARAMETER;
       }
 
@@ -1298,7 +1433,11 @@ void xeKeKfReleaseSpinLock(PPCContext* ctx, X_KSPINLOCK* lock,
 
 void KfReleaseSpinLock_entry(pointer_t<X_KSPINLOCK> lock_ptr, dword_t old_irql,
                              const ppc_context_t& ppc_ctx) {
+  auto native_notification =
+      NativeSystemUiNotifications::BeforeNativeListenerUnlock(kernel_state(),
+                                                              ppc_ctx);
   xeKeKfReleaseSpinLock(ppc_ctx, lock_ptr, old_irql, true);
+  native_notification.Complete();
 }
 
 DECLARE_XBOXKRNL_EXPORT2(KfReleaseSpinLock, kThreading, kImplemented,

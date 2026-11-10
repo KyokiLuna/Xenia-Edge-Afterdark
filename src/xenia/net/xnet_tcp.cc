@@ -206,6 +206,11 @@ void Connection::Input(const Segment& segment, uint64_t now) {
   if (state_ == State::Closed) {
     return;
   }
+  // A reset from the previous incarnation must not assassinate TIME_WAIT or
+  // discard bytes received before its FIN (RFC 1337, fix F1).
+  if (state_ == State::TimeWait && (segment.flags & kRst)) {
+    return;
+  }
   if (state_ == State::SynSent) {
     InputSynSent(segment, now);
     Output(now);

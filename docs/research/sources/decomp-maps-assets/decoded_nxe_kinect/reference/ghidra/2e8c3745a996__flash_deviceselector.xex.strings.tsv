@@ -1,0 +1,111 @@
+va	data_type	text
+0x916d053c	unicode	DeviceList
+0x916d0554	unicode	ico_64x_HD_black.png
+0x916d0580	unicode	MUA.xur
+0x916d0590	unicode	MUB.xur
+0x916d05a0	unicode	ico_64x_BuiltInMU.png
+0x916d05cc	unicode	ico_96x_USB.png
+0x916d05ec	unicode	ico_64x_TransferCable.png
+0x916d0658	unicode	ico_32x_controller_wA.png
+0x916d068c	unicode	media
+0x916d069c	unicode	XuiProgressBar1
+0x916d06c4	unicode	Memory Unit
+0x916d06dc	unicode	Transfer Cable
+0x916d06fc	unicode	Hard Drive
+0x916d0718	unicode	PageRightGroup\ControlPackNuiSideRight
+0x916d0768	unicode	PageLeftGroup\ControlPackNuiSideLeft
+0x916d07b4	unicode	txtNoDevices
+0x916d07d0	unicode	txt_NumberOf
+0x916d07ec	unicode	NuiDeviceNotReady.xur
+0x916d0818	unicode	DeviceNotReady
+0x916d0840	unicode	txt_Directions
+0x916d0860	unicode	txt_Header
+0x916d0878	unicode	btnBack
+0x916d0888	unicode	btnNo
+0x916d0894	unicode	btnYes
+0x916d08a4	unicode	strings.xus
+0x916d08c8	unicode	XuiCanvas
+0x916d0908	unicode	NuiControllerRequiredButton
+0x916d09c4	unicode	XuiList
+0x916d09d4	unicode	HUDScene
+0x916d09e8	unicode	XuiNavButton
+0x916d0a04	unicode	DeviceListId
+0x916d0a20	unicode	NuiDeviceSelector.xur
+0x916d0a4c	unicode	DeviceSelectorScene
+0x916d0a7c	unicode	NuiDeviceFull.xur
+0x916d0aa0	unicode	DeviceFull
+0x916d0ab8	unicode	sharedres://ico_32x_controller_wA.png
+0x916d0b0c	unicode	btn_SelectAnother
+0x916d0b30	unicode	btn_ManageFiles
+0x916d0b80	string	_nextafter
+0x916d0bd8	string	floor
+0x916d0c78	string	e:\bt\248805\core\private\xam\apps\deviceselector\src\obj\xbox\deviceselector.pdb
+0x916da01f	string	DeviceFull.xur
+0x916da036	string	DeviceSelector.xur
+0x916da051	string	DeviceNotReady.xur
+0x916db051	string	scnDeviceSelector
+0x916db063	string	DeviceSelectorScene
+0x916db077	string	DeviceListId
+0x916db084	string	trans_FadeOut
+0x916db092	string	trans_FadeIn
+0x916db09f	string	Select
+0x916db0ab	string	legend_a
+0x916db0b4	string	legend_A
+0x916db0bd	string	XuiNavButton
+0x916db0d2	string	legend_B
+0x916db0db	string	XuiBackButton
+0x916db0e9	string	XuiLabel1
+0x916db0f3	string	Label_Head
+0x916db0fe	string	Select a Device
+0x916db10e	string	XuiLabel
+0x916db117	string	txt_Directions
+0x916db126	string	Label_Body
+0x916db131	string	Select a device.
+0x916db142	string	txt_NumberOf
+0x916db14f	string	txtNoDevices
+0x916db15c	string	XuiLabelCenterJustify
+0x916dc002	string	trans_FadeOut
+0x916dc010	string	trans_FadeIn
+0x916dc025	string	legend_B
+0x916dc3e7	string	)scnDeviceSelector
+0x916dc3fa	string	DeviceSelectorScene
+0x916dc40e	string	FocusBeacon
+0x916dc41a	string	trans_FadeOut
+0x916dc428	string	trans_FadeIn
+0x916dc435	string	legend_a
+0x916dc43e	string	legend_A
+0x916dc447	string	Select
+0x916dc44e	string	XuiNavButton
+0x916dc463	string	legend_B
+0x916dc471	string	XuiBackButton
+0x916dc47f	string	txtNoDevices
+0x916dc48c	string	XuiLabelCenterJustify
+0x916dc4a2	string	No valid storage devices found.\r\n                \r\nMake sure an Xbox 360 storage device is inserted, and that it has enough space available.
+0x916dc52f	string	XuiLabel
+0x916dc538	string	HoverBack
+0x916dc542	string	NuiHudHoverBack
+0x916dc552	string	Hud.BackButton
+0x916dc561	string	ControlPackNuiHoverBack
+0x916dc579	string	txt_NumberOf
+0x916dc586	string	Label_Body_small_white
+0x916dc59d	string	XuiLabel1
+0x916dc5a7	string	Label_HeadRight
+0x916dc5b7	string	Select a Device
+0x916dc5c7	string	DeviceListId
+0x916dc5d4	string	DeviceList
+0x916dc5df	string	List_3Line_Icon_prgbr_Vert_Grid
+0x916dc5ff	string	XuiList
+0x916dc607	string	PageLeftGroup
+0x916dc615	string	ControlPackNuiSideLeft
+0x916dc62c	string	controlpack://../handles/SideHandleLeft.xur
+0x916dc658	string	ControlPackNuiSideNav
+0x916dc66e	string	XuiGroup
+0x916dc677	string	PageRightGroup
+0x916dc686	string	ControlPackNuiSideRight
+0x916dc69e	string	controlpack://../handles/SideHandleRight.xur
+0x916dc6cb	string	XuiButton
+0x916dc6d5	string	HUDScene
+0x916dc6de	string	XuiCanvas
+0x916dc8b9	string	This device isn't set up for Xbox 360 storage. Do you want to configure it?\r\n\r\nThe device will be tested for performance and available space, and 512 MB will be used for Xbox 360 system data.
+0x916dc979	string	Configure USB Device
+0x916dc98e	string	There is not enough space on the storage device: %s

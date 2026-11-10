@@ -1,0 +1,6 @@
+bootanim.xex exports
+====================
+
+{"confidence": "CONFIRMED", "function_va": "0x9801A010", "module": "bootanim.xex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9801A068", "module": "bootanim.xex", "ordinal": "0x00000002", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9801A088", "module": "bootanim.xex", "ordinal": "0x00000003", "resolved_name": ""}

@@ -1,0 +1,41 @@
+Corpus validation report
+===========================
+Regenerate with: python3 _tool/build_11_validate.py
+Read-only checks - anomalies are reported, never silently fixed.
+
+FAILURES: 0
+WARNINGS: 0
+
+### PASSED CHECKS ###
+  OK: all 55 XEX2 source files are represented in modules.tsv
+  OK: all 3807 export table rows have VAs inside their module's XEX range
+  OK: modules.tsv export_count matches exports.tsv row counts everywhere it's declared
+  OK: every header_sidecar path referenced in modules.tsv exists on disk
+  OK: every attachment referenced in 09_RELATIONSHIPS.txt exists on disk
+  OK: all 5780 import record addresses (thunk/variable slots) are inside their module's XEX range
+  OK: all 13878 call-graph edges have addresses inside their module's XEX range
+  OK: no duplicate module rows in modules.tsv
+  OK: no duplicate (module, ordinal) pairs in exports.tsv
+  OK: all address-typed TSV fields parse as clean 0x-hex
+  OK: xex_load_address and pe_image_base are independently tracked and differ for 41 modules (e.g. $flash_bootanim.xexp) - confirms no accidental aliasing
+  OK: decoded_file_size and pe_size_of_image are independently tracked and differ for 46 modules - confirms no accidental aliasing
+  OK: all 4 known-unresolved XEXP files are correctly flagged UNRESOLVED/RAW in modules.tsv
+  OK: title_ids.tsv module_identity rows agree with modules.tsv title_id column
+  OK: [SEMANTIC-A] all 23 CONFIRMED_AVATAR entries match ipc.tsv exactly (port+command), no unexpected CONFIRMED rows
+  OK: [SEMANTIC-B] all 279 ipc.tsv rows (CONFIRMED+DERIVED) carry a non-empty endpoint_va and evidence_chain
+  OK: [SEMANTIC-C] all 256 DERIVED rows resolve to an XMsg*-named endpoint (no known-non-XMsg contradiction)
+  OK: [SEMANTIC-D] no duplicate (module,caller_va,callsite_va,endpoint_va) rows in ipc.tsv (279 rows, 279 distinct keys)
+  OK: [SEMANTIC-E] 6 functions retain >1 distinct IPC callsite (multi-site recording confirmed working)
+  OK: [SEMANTIC-F] 06_IPC_SERVICE_MAP.txt's documented CONFIRMED count matches ipc.tsv
+  OK: [SEMANTIC-G] no fake '0x00000000'/unresolved-caller callback provenance strings found in calls/*.txt
+  OK: [SEMANTIC-I] all 25 DERIVED import_thunk endpoints have a matching thunk_va row in imports.tsv
+
+### Coverage summary ###
+  modules indexed: 55
+  export rows: 3807
+  import rows: 5780
+  call-graph edges: 13878
+  strings indexed: 43670
+  IPC entries: 279 (23 CONFIRMED, 256 DERIVED)
+  IPC candidates rejected (no endpoint proof): 91
+  title ID records: 26

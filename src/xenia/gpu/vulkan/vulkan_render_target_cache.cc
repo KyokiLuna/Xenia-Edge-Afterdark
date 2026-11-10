@@ -417,7 +417,7 @@ bool VulkanRenderTargetCache::Initialize(uint32_t shared_memory_binding_count) {
       descriptor_set_layout_storage_buffer_;
   resolve_copy_descriptor_set_layouts[kResolveCopyDescriptorSetDest] =
       command_processor_.GetSingleTransientDescriptorLayout(
-          VulkanCommandProcessor::SingleTransientDescriptorLayout ::
+          VulkanCommandProcessor::SingleTransientDescriptorLayout::
               kStorageBuffer);
   VkPushConstantRange resolve_copy_push_constant_range;
   resolve_copy_push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -1094,6 +1094,32 @@ bool VulkanRenderTargetCache::Resolve(
     VulkanTextureCache& texture_cache, uint32_t& written_address_out,
     uint32_t& written_length_out, reg::RB_COPY_DEST_INFO* copy_dest_info_out,
     bool* written_scaled_out) {
+  return ResolveInternal(memory, shared_memory, texture_cache,
+                         written_address_out, written_length_out,
+                         copy_dest_info_out, written_scaled_out, nullptr,
+                         nullptr);
+}
+
+VulkanRenderTargetCache::NativeResolveOutcome
+VulkanRenderTargetCache::ResolveNative(
+    const Memory& memory, VulkanSharedMemory& shared_memory,
+    VulkanTextureCache& texture_cache,
+    const NativeResolveExpectation& expectation) {
+  NativeResolveOutcome outcome;
+  uint32_t written_address = 0, written_length = 0;
+  ResolveInternal(memory, shared_memory, texture_cache, written_address,
+                  written_length, nullptr, nullptr, &expectation, &outcome);
+  outcome.written_address = written_address;
+  outcome.written_length = written_length;
+  return outcome;
+}
+
+bool VulkanRenderTargetCache::ResolveInternal(
+    const Memory& memory, VulkanSharedMemory& shared_memory,
+    VulkanTextureCache& texture_cache, uint32_t& written_address_out,
+    uint32_t& written_length_out, reg::RB_COPY_DEST_INFO* copy_dest_info_out,
+    bool* written_scaled_out, const NativeResolveExpectation* expectation,
+    NativeResolveOutcome* native_outcome) {
   SCOPE_profile_cpu_f("gpu");
   written_address_out = 0;
   written_length_out = 0;
@@ -1107,13 +1133,61 @@ bool VulkanRenderTargetCache::Resolve(
   if (!draw_util::GetResolveInfo(
           register_file(), memory, trace_writer_, draw_resolution_scale_x(),
           draw_resolution_scale_y(), IsFixedRG16TruncatedToMinus1To1(),
-          IsFixedRGBA16TruncatedToMinus1To1(), resolve_info)) {
+          IsFixedRGBA16TruncatedToMinus1To1(), resolve_info,
+          shared_memory.has_external_read_source() ? &shared_memory
+                                                   : nullptr)) {
     XELOGE("Resolve: GetResolveInfo failed");
     return false;
   }
 
-  // Nothing to copy/clear.
+  if (native_outcome) {
+    native_outcome->copy_requested = resolve_info.copy_dest_extent_length != 0;
+    native_outcome->depth_clear_requested = resolve_info.IsClearingDepth();
+    native_outcome->color_clear_requested = resolve_info.IsClearingColor();
+    // Check the complete physical footprint before any render-target transfer,
+    // dispatch, ownership update or shared-memory write is encoded.
+    if (!expectation || !expectation->length ||
+        expectation->physical_address >= 0x20000000 ||
+        uint64_t(expectation->physical_address) + expectation->length >
+            0x20000000ull ||
+        (resolve_info.copy_dest_extent_length &&
+         (resolve_info.copy_dest_extent_start < expectation->physical_address ||
+          uint64_t(resolve_info.copy_dest_extent_start) +
+                  resolve_info.copy_dest_extent_length >
+              uint64_t(expectation->physical_address) + expectation->length))) {
+      native_outcome->status = NativeResolveOutcome::Status::kInvalidOutput;
+      return false;
+    }
+    if (draw_resolution_scaled ||
+        (resolve_info.copy_dest_extent_length &&
+         (resolve_info.copy_dest_info.copy_dest_format != expectation->format ||
+          resolve_info.copy_dest_info.copy_dest_array ||
+          resolve_info.copy_dest_info.copy_dest_slice))) {
+      native_outcome->status = NativeResolveOutcome::Status::kUnsupported;
+      return false;
+    }
+    if (expectation->require_copy && !resolve_info.copy_dest_extent_length) {
+      native_outcome->status = NativeResolveOutcome::Status::kCopyNotRecorded;
+      return false;
+    }
+    if (resolve_info.copy_dest_extent_length) {
+      draw_util::ResolveCopyShaderConstants constants;
+      uint32_t groups_x = 0, groups_y = 0;
+      if (resolve_info.GetCopyShader(1, 1, constants, groups_x, groups_y) ==
+              draw_util::ResolveCopyShaderIndex::kUnknown ||
+          !groups_x || !groups_y) {
+        native_outcome->status = NativeResolveOutcome::Status::kUnsupported;
+        return false;
+      }
+    }
+  }
+
+  // Nothing to copy/clear. A legacy no-op is not a native recorded outcome.
   if (!resolve_info.coordinate_info.width_div_8 || !resolve_info.height_div_8) {
+    if (native_outcome) {
+      native_outcome->status = NativeResolveOutcome::Status::kEmpty;
+      return false;
+    }
     return true;
   }
 
@@ -1138,10 +1212,12 @@ bool VulkanRenderTargetCache::Resolve(
                                             dump_rows, dump_pitch);
     if (copy_native) {
       // Redo the resolve info at 1x1 for the unscaled copy shader.
-      if (!draw_util::GetResolveInfo(register_file(), memory, trace_writer_, 1,
-                                     1, IsFixedRG16TruncatedToMinus1To1(),
-                                     IsFixedRGBA16TruncatedToMinus1To1(),
-                                     resolve_info)) {
+      if (!draw_util::GetResolveInfo(
+              register_file(), memory, trace_writer_, 1, 1,
+              IsFixedRG16TruncatedToMinus1To1(),
+              IsFixedRGBA16TruncatedToMinus1To1(), resolve_info,
+              shared_memory.has_external_read_source() ? &shared_memory
+                                                       : nullptr)) {
         return false;
       }
     }
@@ -1186,11 +1262,17 @@ bool VulkanRenderTargetCache::Resolve(
         resolved_directly = DirectResolveRenderTargets(
             resolve_info, copy_shader_constants, dump_base,
             dump_row_length_used, dump_rows, dump_pitch, copy_dest_scaled,
-            shared_memory, texture_cache);
+            shared_memory, texture_cache,
+            native_outcome ? &native_outcome->copy_commands : nullptr);
       }
       if (!resolved_directly) {
-        DumpRenderTargets(dump_base, dump_row_length_used, dump_rows,
-                          dump_pitch, copy_native);
+        const bool dumped =
+            DumpRenderTargets(dump_base, dump_row_length_used, dump_rows,
+                              dump_pitch, copy_native);
+        if (native_outcome && !dumped) {
+          command_processor_.PopDebugMarker();
+          return false;
+        }
       }
     }
 
@@ -1214,9 +1296,9 @@ bool VulkanRenderTargetCache::Resolve(
       // Make sure there is memory to write to.
       bool copy_dest_committed;
       // TODO(Triang3l): Resolution-scaled buffer committing.
-      copy_dest_committed =
-          shared_memory.RequestRange(resolve_info.copy_dest_extent_start,
-                                     resolve_info.copy_dest_extent_length);
+      copy_dest_committed = shared_memory.RequestRangeForGpuWrite(
+          resolve_info.copy_dest_extent_start,
+          resolve_info.copy_dest_extent_length);
       if (!copy_dest_committed) {
         XELOGE(
             "VulkanRenderTargetCache: Failed to obtain the resolve destination "
@@ -1237,7 +1319,7 @@ bool VulkanRenderTargetCache::Resolve(
             use_persistent_dest
                 ? texture_cache.shared_memory_persistent_descriptor_set()
                 : command_processor_.AllocateSingleTransientDescriptor(
-                      VulkanCommandProcessor::SingleTransientDescriptorLayout ::
+                      VulkanCommandProcessor::SingleTransientDescriptorLayout::
                           kStorageBuffer);
         if (descriptor_set_dest != VK_NULL_HANDLE) {
           // Write the destination descriptor.
@@ -1368,9 +1450,14 @@ bool VulkanRenderTargetCache::Resolve(
           VkPipelineLayout copy_pipeline_layout =
               copy_native ? resolve_copy_native_pipeline_layout_
                           : resolve_copy_pipeline_layout_;
-          command_processor_.BindExternalComputePipeline(
+          const VkPipeline copy_pipeline =
               copy_native ? resolve_copy_native_pipelines_[size_t(copy_shader)]
-                          : resolve_copy_pipelines_[size_t(copy_shader)]);
+                          : resolve_copy_pipelines_[size_t(copy_shader)];
+          if (native_outcome && copy_pipeline == VK_NULL_HANDLE) {
+            command_processor_.PopDebugMarker();
+            return false;
+          }
+          command_processor_.BindExternalComputePipeline(copy_pipeline);
           VkDescriptorSet descriptor_sets[kResolveCopyDescriptorSetCount] = {};
           descriptor_sets[kResolveCopyDescriptorSetEdram] =
               edram_storage_buffer_descriptor_set_;
@@ -1401,6 +1488,9 @@ bool VulkanRenderTargetCache::Resolve(
           command_processor_.SubmitBarriers(true);
           command_buffer.CmdVkDispatch(copy_group_count_x, copy_group_count_y,
                                        1);
+          if (native_outcome) {
+            ++native_outcome->copy_commands;
+          }
 
           // Make the scaled resolve buffer write visible to later reads.
           if (scaled_buffer_ready) {
@@ -1470,13 +1560,31 @@ bool VulkanRenderTargetCache::Resolve(
                   ? resolve_info.rb_color_clear_lo |
                         (uint64_t(resolve_info.rb_color_clear) << 32)
                   : resolve_info.rb_color_clear;
-          PerformTransfersAndResolveClears(2, clear_render_targets,
-                                           clear_transfers_, clear_values,
-                                           &clear_rectangle);
+          uint32_t recorded_mask = 0;
+          PerformTransfersAndResolveClears(
+              2, clear_render_targets, clear_transfers_, clear_values,
+              &clear_rectangle, native_outcome ? &recorded_mask : nullptr,
+              native_outcome ? &native_outcome->transfers_complete : nullptr);
+          if (native_outcome) {
+            native_outcome->depth_clear_recorded = (recorded_mask & 1) != 0;
+            native_outcome->color_clear_recorded = (recorded_mask & 2) != 0;
+            native_outcome->clear_commands += xe::bit_count(recorded_mask);
+          }
         }
         cleared = true;
       } break;
       case Path::kPixelShaderInterlock: {
+        if (native_outcome &&
+            ((clear_depth &&
+              resolve_fsi_clear_32bpp_pipeline_ == VK_NULL_HANDLE) ||
+             (clear_color &&
+              (resolve_info.color_edram_info.format_is_64bpp
+                   ? resolve_fsi_clear_64bpp_pipeline_
+                   : resolve_fsi_clear_32bpp_pipeline_) == VK_NULL_HANDLE))) {
+          native_outcome->status = NativeResolveOutcome::Status::kUnsupported;
+          command_processor_.PopDebugMarker();
+          return false;
+        }
         UseEdramBuffer(EdramBufferUsage::kComputeWrite);
         // Should be safe to only commit once (if was accessed as unordered or
         // with fragment shader interlock previously - if there was nothing to
@@ -1490,6 +1598,13 @@ bool VulkanRenderTargetCache::Resolve(
             resolve_info.GetClearShaderGroupCount(draw_resolution_scale_x(),
                                                   draw_resolution_scale_y());
         assert_true(clear_group_count.first && clear_group_count.second);
+        if (native_outcome &&
+            (!clear_group_count.first || !clear_group_count.second)) {
+          native_outcome->status =
+              NativeResolveOutcome::Status::kClearNotRecorded;
+          command_processor_.PopDebugMarker();
+          return false;
+        }
         if (clear_depth) {
           command_processor_.BindExternalComputePipeline(
               resolve_fsi_clear_32bpp_pipeline_);
@@ -1501,6 +1616,10 @@ bool VulkanRenderTargetCache::Resolve(
           command_processor_.SubmitBarriers(true);
           command_buffer.CmdVkDispatch(clear_group_count.first,
                                        clear_group_count.second, 1);
+          if (native_outcome) {
+            native_outcome->depth_clear_recorded = true;
+            ++native_outcome->clear_commands;
+          }
         }
         if (clear_color) {
           command_processor_.BindExternalComputePipeline(
@@ -1525,6 +1644,10 @@ bool VulkanRenderTargetCache::Resolve(
           command_processor_.SubmitBarriers(true);
           command_buffer.CmdVkDispatch(clear_group_count.first,
                                        clear_group_count.second, 1);
+          if (native_outcome) {
+            native_outcome->color_clear_recorded = true;
+            ++native_outcome->clear_commands;
+          }
         }
         MarkEdramBufferModified();
         cleared = true;
@@ -1537,6 +1660,26 @@ bool VulkanRenderTargetCache::Resolve(
     cleared = true;
   }
 
+  if (native_outcome) {
+    if (!native_outcome->transfers_complete) {
+      native_outcome->status = NativeResolveOutcome::Status::kTransferFailed;
+    } else if ((native_outcome->copy_requested &&
+                (!native_outcome->copy_commands || !written_length_out)) ||
+               (expectation->require_copy && !native_outcome->copy_commands)) {
+      native_outcome->status = NativeResolveOutcome::Status::kCopyNotRecorded;
+    } else if ((native_outcome->depth_clear_requested &&
+                !native_outcome->depth_clear_recorded) ||
+               (native_outcome->color_clear_requested &&
+                !native_outcome->color_clear_recorded)) {
+      native_outcome->status = NativeResolveOutcome::Status::kClearNotRecorded;
+    } else if (!native_outcome->copy_commands &&
+               !native_outcome->clear_commands) {
+      native_outcome->status = NativeResolveOutcome::Status::kEmpty;
+    } else if (copied && cleared) {
+      native_outcome->status = NativeResolveOutcome::Status::kRecorded;
+    }
+    return native_outcome->recorded();
+  }
   return copied && cleared;
 }
 
@@ -1544,6 +1687,24 @@ bool VulkanRenderTargetCache::Update(
     bool is_rasterization_done, reg::RB_DEPTHCONTROL normalized_depth_control,
     uint32_t normalized_color_mask, const Shader& vertex_shader,
     int32_t window_offset_tiles) {
+  return UpdateInternal(is_rasterization_done, normalized_depth_control,
+                        normalized_color_mask, vertex_shader,
+                        window_offset_tiles, false);
+}
+
+bool VulkanRenderTargetCache::UpdateNative(
+    bool is_rasterization_done, reg::RB_DEPTHCONTROL normalized_depth_control,
+    uint32_t normalized_color_mask, const Shader& vertex_shader,
+    int32_t window_offset_tiles) {
+  return UpdateInternal(is_rasterization_done, normalized_depth_control,
+                        normalized_color_mask, vertex_shader,
+                        window_offset_tiles, true);
+}
+
+bool VulkanRenderTargetCache::UpdateInternal(
+    bool is_rasterization_done, reg::RB_DEPTHCONTROL normalized_depth_control,
+    uint32_t normalized_color_mask, const Shader& vertex_shader,
+    int32_t window_offset_tiles, bool strict_native) {
   SCOPE_profile_cpu_f("gpu");
   if (!RenderTargetCache::Update(
           is_rasterization_done, normalized_depth_control,
@@ -1563,9 +1724,14 @@ bool VulkanRenderTargetCache::Update(
       RenderTarget* const* depth_and_color_render_targets =
           last_update_accumulated_render_targets();
 
-      PerformTransfersAndResolveClears(1 + xenos::kMaxColorRenderTargets,
-                                       depth_and_color_render_targets,
-                                       last_update_transfers());
+      bool transfers_complete = true;
+      PerformTransfersAndResolveClears(
+          1 + xenos::kMaxColorRenderTargets, depth_and_color_render_targets,
+          last_update_transfers(), nullptr, nullptr, nullptr,
+          strict_native ? &transfers_complete : nullptr);
+      if (strict_native && !transfers_complete) {
+        return false;
+      }
 
       if (depth_and_color_render_targets[0]) {
         render_pass_key.depth_and_color_used |= 1 << 0;
@@ -2860,8 +3026,15 @@ void VulkanRenderTargetCache::PerformTransfersAndResolveClears(
     uint32_t render_target_count, RenderTarget* const* render_targets,
     const std::vector<Transfer>* render_target_transfers,
     const uint64_t* render_target_resolve_clear_values,
-    const Transfer::Rectangle* resolve_clear_rectangle) {
+    const Transfer::Rectangle* resolve_clear_rectangle,
+    uint32_t* resolve_clear_recorded_mask_out, bool* transfers_complete_out) {
   SCOPE_profile_cpu_f("gpu");
+  if (transfers_complete_out) {
+    *transfers_complete_out = true;
+  }
+  if (resolve_clear_recorded_mask_out) {
+    *resolve_clear_recorded_mask_out = 0;
+  }
   assert_true(GetPath() == Path::kHostRenderTargets);
 
   bool resolve_clear_needed =
@@ -3106,6 +3279,16 @@ void VulkanRenderTargetCache::PerformTransfersAndResolveClears(
 
     auto& dest_vulkan_rt = *static_cast<VulkanRenderTarget*>(dest_rt);
     RenderTargetKey dest_rt_key = dest_vulkan_rt.key();
+    if (transfers_complete_out && !resolve_clear_needed &&
+        std::none_of(current_transfers.begin(), current_transfers.end(),
+                     [&](const Transfer& transfer) {
+                       return transfer.GetRectangles(dest_rt_key, nullptr,
+                                                     resolve_clear_rectangle) !=
+                              0;
+                     })) {
+      // A fully cut-out transfer has no required work, not a failed upload.
+      continue;
+    }
 
     // Late barriers in case there was cross-copying that prevented merging of
     // barriers.
@@ -3142,6 +3325,9 @@ void VulkanRenderTargetCache::PerformTransfersAndResolveClears(
     VkRenderPass transfer_render_pass =
         GetHostRenderTargetsRenderPass(transfer_render_pass_key);
     if (transfer_render_pass == VK_NULL_HANDLE) {
+      if (transfers_complete_out) {
+        *transfers_complete_out = false;
+      }
       continue;
     }
     const RenderTarget*
@@ -3152,6 +3338,9 @@ void VulkanRenderTargetCache::PerformTransfersAndResolveClears(
         transfer_render_pass_key, dest_rt_key.pitch_tiles_at_32bpp,
         transfer_framebuffer_render_targets);
     if (!transfer_framebuffer) {
+      if (transfers_complete_out) {
+        *transfers_complete_out = false;
+      }
       continue;
     }
     // Don't enter the render pass immediately - may still insert source
@@ -3411,6 +3600,9 @@ void VulkanRenderTargetCache::PerformTransfersAndResolveClears(
             (transfer_pipeline_layout_info.used_push_constant_dwords &
              kEdramTransferUsedPushConstantDwordStencilMaskBit) != 0;
 
+        if (transfers_complete_out && !transfer_rectangle_count) {
+          continue;
+        }
         uint32_t transfer_vertex_count = 6 * transfer_rectangle_count;
         VkBuffer transfer_vertex_buffer;
         VkDeviceSize transfer_vertex_buffer_offset;
@@ -3420,6 +3612,9 @@ void VulkanRenderTargetCache::PerformTransfersAndResolveClears(
                 sizeof(float), transfer_vertex_buffer,
                 transfer_vertex_buffer_offset));
         if (!transfer_rectangle_write_ptr) {
+          if (transfers_complete_out) {
+            *transfers_complete_out = false;
+          }
           continue;
         }
         for (auto it_merged = it_merged_first; it_merged <= it_merged_last;
@@ -3482,6 +3677,9 @@ void VulkanRenderTargetCache::PerformTransfersAndResolveClears(
         const VkPipeline* transfer_pipelines = GetTransferPipelines(
             TransferPipelineKey(transfer_render_pass_key, transfer_shader_key));
         if (!transfer_pipelines) {
+          if (transfers_complete_out) {
+            *transfers_complete_out = false;
+          }
           continue;
         }
         command_processor_.BindExternalGraphicsPipeline(transfer_pipelines[0]);
@@ -3780,6 +3978,9 @@ void VulkanRenderTargetCache::PerformTransfersAndResolveClears(
       }
       command_buffer.CmdVkClearAttachments(1, &resolve_clear_attachment, 1,
                                            &resolve_clear_rect);
+      if (resolve_clear_recorded_mask_out) {
+        *resolve_clear_recorded_mask_out |= UINT32_C(1) << i;
+      }
     }
   }
 
@@ -3836,7 +4037,8 @@ bool VulkanRenderTargetCache::DirectResolveRenderTargets(
     const draw_util::ResolveCopyShaderConstants& copy_shader_constants,
     uint32_t dump_base, uint32_t dump_row_length_used, uint32_t dump_rows,
     uint32_t dump_pitch, bool copy_dest_scaled,
-    VulkanSharedMemory& shared_memory, VulkanTextureCache& texture_cache) {
+    VulkanSharedMemory& shared_memory, VulkanTextureCache& texture_cache,
+    uint32_t* recorded_copy_commands_out) {
   SCOPE_profile_cpu_f("gpu");
   assert_true(GetPath() == Path::kHostRenderTargets);
 
@@ -3937,7 +4139,7 @@ bool VulkanRenderTargetCache::DirectResolveRenderTargets(
         command_processor_.GetVulkanDevice();
     vulkan_device->functions().vkUpdateDescriptorSets(
         vulkan_device->device(), 1, &write_descriptor_set_dest, 0, nullptr);
-  } else if (!shared_memory.RequestRange(
+  } else if (!shared_memory.RequestRangeForGpuWrite(
                  resolve_info.copy_dest_extent_start,
                  resolve_info.copy_dest_extent_length)) {
     XELOGE(
@@ -4121,6 +4323,9 @@ bool VulkanRenderTargetCache::DirectResolveRenderTargets(
            (kEdramDumpShaderResolveThreadsPerGroupY - 1)) /
               kEdramDumpShaderResolveThreadsPerGroupY,
           1);
+      if (recorded_copy_commands_out) {
+        ++*recorded_copy_commands_out;
+      }
     }
   }
 
@@ -4328,7 +4533,7 @@ void VulkanRenderTargetCache::EndEdramSnapshotReadback() {
       dfn.vkFreeMemory, device, edram_snapshot_download_buffer_memory_);
 }
 
-void VulkanRenderTargetCache::DumpRenderTargets(uint32_t dump_base,
+bool VulkanRenderTargetCache::DumpRenderTargets(uint32_t dump_base,
                                                 uint32_t dump_row_length_used,
                                                 uint32_t dump_rows,
                                                 uint32_t dump_pitch,
@@ -4339,8 +4544,10 @@ void VulkanRenderTargetCache::DumpRenderTargets(uint32_t dump_base,
   GetResolveCopyRectanglesToDump(dump_base, dump_row_length_used, dump_rows,
                                  dump_pitch, dump_rectangles_);
   if (dump_rectangles_.empty()) {
-    return;
+    // Every source tile is already authoritative in EDRAM.
+    return true;
   }
+  bool complete = true;
 
   command_processor_.PushDebugMarker(
       "DumpRenderTargets (EDRAM Write): base tile %u", dump_base);
@@ -4401,6 +4608,7 @@ void VulkanRenderTargetCache::DumpRenderTargets(uint32_t dump_base,
     EdramDumpShaderKey pipeline_key = invocation.pipeline_key;
     VkPipeline pipeline = GetDumpPipeline(pipeline_key);
     if (!pipeline) {
+      complete = false;
       continue;
     }
     command_processor_.BindExternalComputePipeline(pipeline);
@@ -4482,6 +4690,7 @@ void VulkanRenderTargetCache::DumpRenderTargets(uint32_t dump_base,
   }
 
   command_processor_.PopDebugMarker();
+  return complete;
 }
 
 }  // namespace vulkan

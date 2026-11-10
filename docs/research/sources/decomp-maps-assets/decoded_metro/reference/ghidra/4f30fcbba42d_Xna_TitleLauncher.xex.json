@@ -1,0 +1,20 @@
+{
+  "module": "Xna_TitleLauncher.xex",
+  "program": "4f30fcbba42d_Xna_TitleLauncher.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "07bfae53a28179f7d65c30a4cfd598949a53ac819be33f30069ad5cabcaaf378",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x92000400",
+  "functions": 3060,
+  "calls": 10457,
+  "strings": 978,
+  "string_xrefs": 762,
+  "independent_sha256": "00f4546c396dfa73c8322b22a16f2ec1e340bd7cd04191ef863b3f97e0482e37",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0,
+  "decompiled_functions": 3042,
+  "decompile_failures": 0
+}

@@ -1,0 +1,18 @@
+{
+  "module": "natalsu.xex",
+  "program": "7bf4f5b3cad6_natalsu.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "eceb1236e1306f5bede2f4a16469bc4cda26138a5735bcbf7a7ac025654f3b99",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x98000400",
+  "functions": 102,
+  "calls": 175,
+  "strings": 64,
+  "string_xrefs": 46,
+  "independent_sha256": "18619b678a5c207a971a0aa931604f48162e307c57ecdec450d5f095fe9f32c7",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

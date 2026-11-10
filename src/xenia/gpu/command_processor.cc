@@ -24,6 +24,7 @@
 #include "xenia/config.h"
 #include "xenia/gpu/gpu_flags.h"
 #include "xenia/gpu/graphics_system.h"
+#include "xenia/gpu/native_frame_execution.h"
 #include "xenia/gpu/packet_disassembler.h"
 #include "xenia/gpu/sampler_info.h"
 #include "xenia/gpu/texture_info.h"
@@ -231,7 +232,10 @@ CommandProcessor::CommandProcessor(GraphicsSystem* graphics_system,
   cached_zpd_mode_ = ParseZPDMode();
 }
 
-CommandProcessor::~CommandProcessor() = default;
+CommandProcessor::~CommandProcessor() {
+  std::lock_guard lock(native_frame_admission_mutex_);
+  native_frame_admissions_open_.store(false, std::memory_order_release);
+}
 
 bool CommandProcessor::Initialize() {
   // Initialize the gamma ramps to their default (linear) values - taken from
@@ -269,18 +273,243 @@ bool CommandProcessor::Initialize() {
 }
 
 void CommandProcessor::Shutdown() {
+  {
+    std::lock_guard lock(native_frame_admission_mutex_);
+    native_frame_admissions_open_.store(false, std::memory_order_release);
+    worker_running_ = false;
+  }
   // Already stopped if drained early during relaunch (stopped again at
-  // teardown).
+  // teardown). Ingress is sealed even if initialization never made a worker.
   if (!worker_thread_) {
     return;
   }
-
   EndTracing();
-
-  worker_running_ = false;
   write_ptr_index_event_->Set();
   worker_thread_->Wait(0, 0, 0, nullptr);
   worker_thread_.reset();
+}
+
+GpuCompletion CommandProcessor::CaptureGpuCompletion(
+    GpuCompletionResources resources, GpuCompletion::Observer observer) {
+  return GpuCompletion::Unsupported(std::move(observer));
+}
+
+void CommandProcessor::CaptureGpuCompletionAsync(
+    GpuCompletionResources resources, GpuCompletion::Observer captured,
+    GpuCompletion::Observer completed) {
+  CallInThread([this, resources = std::move(resources),
+                captured = std::move(captured),
+                completed = std::move(completed)]() mutable {
+    const auto token =
+        CaptureGpuCompletion(std::move(resources), std::move(completed));
+    if (captured) {
+      captured(token);
+    }
+  });
+}
+
+void CommandProcessor::ExecuteNativeFrameAsync(
+    std::shared_ptr<const NativeFrameExecutionRequest> request,
+    std::function<void(NativeFrameExecutionResult)> completed) {
+  struct Admission {
+    std::shared_ptr<const NativeFrameExecutionRequest> request;
+    std::function<void(NativeFrameExecutionResult)> completed;
+  };
+  auto work = std::make_shared<Admission>(
+      Admission{std::move(request), std::move(completed)});
+  const auto reject = [work] {
+    NativeFrameExecutionResult result;
+    result.status = NativeFrameExecutionResult::Status::kRejected;
+    result.failing_stage = NativeFrameExecutionResult::Stage::kAdmission;
+    if (work->completed) {
+      try {
+        work->completed(std::move(result));
+      } catch (...) {
+      }
+    }
+  };
+  bool queued = false;
+  {
+    std::lock_guard lock(native_frame_admission_mutex_);
+    if (native_frame_admissions_open_.load(std::memory_order_acquire)) {
+      native_frame_admissions_.Submit(
+          [this, work, reject] {
+            auto* worker = worker_thread_.get();
+            bool admitted = false;
+            if (worker && kernel::XThread::IsInThread(worker) &&
+                worker_running_ &&
+                native_frame_admissions_open_.load(std::memory_order_acquire) &&
+                !IsGuestCommandProcessingHalted() && work->request) {
+              try {
+                admitted = work->request->IsAdmitted();
+              } catch (...) {
+              }
+            }
+            if (!admitted || !worker_running_ ||
+                IsGuestCommandProcessingHalted()) {
+              reject();
+            } else {
+              QueueNativeFrameAtSafeBoundary(std::move(work->request),
+                                             std::move(work->completed));
+            }
+          },
+          false);
+      queued = true;
+    }
+  }
+  // No callback/capture destruction under admission lock. Sealed callbacks
+  // are rejected on their caller; admitted callbacks run at a real CP point.
+  if (!queued) {
+    reject();
+  } else {
+    write_ptr_index_event_->Set();
+  }
+}
+
+void CommandProcessor::EnqueueNativeFrameControl(
+    std::function<void(bool)> control) {
+  // Shared capture remains alive outside admission/queue locks, including a
+  // failed enqueue; only these known typed frame operations use this seam.
+  auto work = std::make_shared<std::function<void(bool)>>(std::move(control));
+  bool queued = false;
+  {
+    std::lock_guard lock(native_frame_admission_mutex_);
+    if (native_frame_admissions_open_.load(std::memory_order_acquire)) {
+      native_frame_admissions_.Submit(
+          [this, work] {
+            auto* worker = worker_thread_.get();
+            const bool ready =
+                worker && kernel::XThread::IsInThread(worker) &&
+                worker_running_ &&
+                native_frame_admissions_open_.load(std::memory_order_acquire);
+            (*work)(ready);
+          },
+          false);
+      queued = true;
+    }
+  }
+  if (queued) {
+    write_ptr_index_event_->Set();
+  } else {
+    (*work)(false);
+  }
+}
+
+NativeSystemFrameCapacity CommandProcessor::GetNativeSystemFrameCapacity()
+    const noexcept {
+  NativeSystemFrameCapacity result;
+  if (!worker_running_.load(std::memory_order_acquire)) {
+    result.state = NativeSystemFrameCapacity::State::kStopping;
+  }
+  return result;
+}
+
+void CommandProcessor::PumpNativeFramesAtSafePoint() {
+  if (!worker_thread_ || !kernel::XThread::IsInThread(worker_thread_.get()) ||
+      native_frame_pump_active_ || !worker_running_ ||
+      IsGuestCommandProcessingHalted()) {
+    return;
+  }
+  struct Guard {
+    bool& active;
+    ~Guard() { active = false; }
+  } guard{native_frame_pump_active_};
+  native_frame_pump_active_ = true;
+  // Bounded work preserves ordinary ring/WAIT progress and prevents a callback
+  // enqueueing more work from recursively executing another native frame.
+  try {
+    native_frame_admissions_.RunOne();
+    if (!IsGuestCommandProcessingHalted() && worker_running_) {
+      PumpQueuedNativeFramesAtSafePoint();
+    }
+  } catch (...) {
+    // Never unwind a worker past its actual backend-stop shutdown. Accepted
+    // source backing remains independently retained by its owner/CP scope.
+    HaltGuestCommandProcessing();
+  }
+}
+
+NativeFrameExecutionResult CommandProcessor::ExecuteNativeFrame(
+    std::shared_ptr<const NativeFrameExecutionRequest>) {
+  return {};
+}
+
+void CommandProcessor::QueueNativeFrameAtSafeBoundary(
+    std::shared_ptr<const NativeFrameExecutionRequest> request,
+    std::function<void(NativeFrameExecutionResult)> completed) {
+  auto result = ExecuteNativeFrame(std::move(request));
+  if (completed) {
+    completed(std::move(result));
+  }
+}
+
+NativeFrameReadbackResult CommandProcessor::ReadCompletedNativeFrame(
+    std::shared_ptr<const NativeFrameExecutionRequest>) {
+  return {};
+}
+
+void CommandProcessor::ReadCompletedNativeFrameAsync(
+    std::shared_ptr<const NativeFrameExecutionRequest> request,
+    std::function<void(NativeFrameReadbackResult)> completed) {
+  EnqueueNativeFrameControl(
+      [this, request = std::move(request),
+       completed = std::move(completed)](bool ready) mutable {
+        NativeFrameReadbackResult result;
+        result.status = NativeFrameReadbackResult::Status::kRejected;
+        try {
+          if (ready && !IsGuestCommandProcessingHalted() && request) {
+            // Do not use IsAdmitted: its one-use submit preparation was
+            // consumed.
+            result = ReadCompletedNativeFrame(std::move(request));
+          }
+        } catch (...) {
+          // A backend must contain every exception after a possible GPU attempt
+          // and return Failed after Source quarantine + retention + Halt.
+          result.status = NativeFrameReadbackResult::Status::kFailed;
+          HaltGuestCommandProcessing();
+        }
+        if (completed) {
+          try {
+            completed(std::move(result));
+          } catch (...) {
+            // No exception may unwind a worker around native GPU-stop shutdown.
+          }
+        }
+      });
+}
+
+NativeFramePresentationStatus
+CommandProcessor::GetNativeFramePresentationStatus(
+    std::shared_ptr<const NativeFrameExecutionRequest>) {
+  return {};
+}
+
+void CommandProcessor::CaptureNativeFramePresentationAsync(
+    std::shared_ptr<const NativeFrameExecutionRequest> request,
+    std::function<void(NativeFramePresentationStatus)> completed) {
+  EnqueueNativeFrameControl(
+      [this, request = std::move(request),
+       completed = std::move(completed)](bool ready) mutable {
+        NativeFramePresentationStatus result;
+        try {
+          if (ready && request) {
+            // Metadata only; source preparation was consumed by the native
+            // submit. Shutdown rejects the observation without touching backend
+            // objects.
+            result = GetNativeFramePresentationStatus(std::move(request));
+          }
+        } catch (...) {
+          result.status = NativeFramePresentationStatus::Status::kFailed;
+        }
+        if (completed) {
+          try {
+            completed(std::move(result));
+          } catch (...) {
+            // An observation callback cannot unwind the command processor
+            // worker.
+          }
+        }
+      });
 }
 
 void CommandProcessor::InitializeShaderStorage(
@@ -377,12 +606,14 @@ void CommandProcessor::RestoreGammaRamp(
 }
 
 void CommandProcessor::CallInThread(std::function<void()> fn) {
-  if (pending_fns_.empty() &&
-      kernel::XThread::IsInThread(worker_thread_.get())) {
-    fn();
-  } else {
-    pending_fns_.push(std::move(fn));
-  }
+  auto* worker = worker_thread_.get();
+  pending_fns_.Submit(std::move(fn),
+                      worker && kernel::XThread::IsInThread(worker));
+}
+
+GuestRenderBankAllocationResult
+CommandProcessor::AllocateNativeGuestRenderBank() {
+  return {};
 }
 
 void CommandProcessor::ClearCaches() {}
@@ -515,14 +746,26 @@ void CommandProcessor::WorkerThreadMain() {
     return;
   }
   SetTitleStateSuffix(MakeTitleStateSuffix());
+  {
+    std::lock_guard lock(native_frame_admission_mutex_);
+    // Shutdown and this publication share the same gate. A successful setup
+    // finishing after Shutdown cannot reopen CPU ingress.
+    native_frame_admissions_open_.store(
+        worker_running_ && !IsGuestCommandProcessingHalted(),
+        std::memory_order_release);
+  }
 
   while (worker_running_) {
-    while (!pending_fns_.empty()) {
-      auto fn = std::move(pending_fns_.front());
-      pending_fns_.pop();
-      fn();
+    while (!IsGuestCommandProcessingHalted() && pending_fns_.RunOne()) {
+    }
+    if (IsGuestCommandProcessingHalted()) {
+      break;
     }
 
+    PumpNativeFramesAtSafePoint();
+    if (IsGuestCommandProcessingHalted()) {
+      break;
+    }
     uint32_t write_ptr_index = write_ptr_index_.load();
     if (write_ptr_index == 0xBAADF00D || read_ptr_index_ == write_ptr_index) {
       SCOPE_profile_cpu_i("gpu", "xe::gpu::CommandProcessor::Stall");
@@ -530,6 +773,9 @@ void CommandProcessor::WorkerThreadMain() {
       // We spin here waiting for new ones, as the overhead of waiting on our
       // event is too high.
       PrepareForWait();
+      if (IsGuestCommandProcessingHalted()) {
+        break;
+      }
       uint32_t loop_count = 0;
       do {
         // If we spin around too much, revert to a "low-power" state.
@@ -548,20 +794,46 @@ void CommandProcessor::WorkerThreadMain() {
         loop_count++;
         // The guest may be spinning on a held-back signal.
         SubmitHeldSignals();
+        if (IsGuestCommandProcessingHalted()) {
+          break;
+        }
+        PollGpuCompletions();
+        PumpNativeFramesAtSafePoint();
+        if (IsGuestCommandProcessingHalted()) {
+          break;
+        }
         write_ptr_index = write_ptr_index_.load();
-      } while (worker_running_ && pending_fns_.empty() &&
+      } while (worker_running_ && !pending_fns_.HasPending() &&
                (write_ptr_index == 0xBAADF00D ||
                 read_ptr_index_ == write_ptr_index));
+      if (IsGuestCommandProcessingHalted()) {
+        break;
+      }
       ReturnFromWait();
-      if (!worker_running_ || !pending_fns_.empty()) {
+      if (IsGuestCommandProcessingHalted()) {
+        break;
+      }
+      if (!worker_running_ || pending_fns_.HasPending()) {
         continue;
       }
     }
     assert_true(read_ptr_index_ != write_ptr_index);
 
     // Execute. Note that we handle wraparound transparently.
-    read_ptr_index_ = ExecutePrimaryBuffer(read_ptr_index_, write_ptr_index);
+    const uint32_t next_read_ptr_index =
+        ExecutePrimaryBuffer(read_ptr_index_, write_ptr_index);
+    if (IsGuestCommandProcessingHalted()) {
+      break;
+    }
+    read_ptr_index_ = next_read_ptr_index;
     PerformCompletedHeldSignals();
+    if (IsGuestCommandProcessingHalted()) {
+      break;
+    }
+    PollGpuCompletions();
+    if (IsGuestCommandProcessingHalted()) {
+      break;
+    }
 
     // ExecutePrimaryBuffer republishes this every read_ptr_update_freq_ dwords
     // as it drains, this is the final position for the burst.
@@ -572,10 +844,23 @@ void CommandProcessor::WorkerThreadMain() {
           memory_->TranslatePhysical(read_ptr_writeback_ptr_), read_ptr_index_);
     }
 
+    PumpNativeFramesAtSafePoint();
+    if (IsGuestCommandProcessingHalted()) {
+      break;
+    }
+
     // FIXME: We're supposed to process the WAIT_UNTIL register at this point,
     // but no games seem to actually use it.
   }
 
+  {
+    std::lock_guard lock(native_frame_admission_mutex_);
+    native_frame_admissions_open_.store(false, std::memory_order_release);
+  }
+  // Sealed admission callbacks reject without GPU work on the actual worker.
+  // Native producer ingress is already closed before CP users are joined.
+  while (native_frame_admissions_.RunOne()) {
+  }
   SetTitleStateSuffix({});
   // The guest they are for is going away.
   held_guest_signals_.clear();
@@ -776,8 +1061,14 @@ void CommandProcessor::DispatchGuestInterrupt(uint32_t cpu_mask) {
 }
 
 void CommandProcessor::HoldOrPerformGuestSignal(const HeldGuestSignal& signal) {
+  if (IsGuestCommandProcessingHalted()) {
+    return;
+  }
   uint64_t submission = TakeMemexportSignalSubmission();
   PerformCompletedHeldSignals();
+  if (IsGuestCommandProcessingHalted()) {
+    return;
+  }
   if (held_guest_signals_.empty() && submission <= GetCompletedSubmission()) {
     PerformGuestSignal(signal);
     return;
@@ -794,6 +1085,9 @@ void CommandProcessor::HoldOrPerformGuestSignal(const HeldGuestSignal& signal) {
 }
 
 void CommandProcessor::PerformGuestSignal(const HeldGuestSignal& signal) {
+  if (IsGuestCommandProcessingHalted()) {
+    return;
+  }
   if (signal.destination) {
     xe::store(signal.destination, signal.value);
     return;
@@ -812,6 +1106,9 @@ void CommandProcessor::PerformCompletedHeldSignals() {
 }
 
 void CommandProcessor::SubmitHeldSignals() {
+  if (IsGuestCommandProcessingHalted()) {
+    return;
+  }
   if (!held_guest_signals_.empty()) {
     EndSubmissionForHeldSignals(held_guest_signals_submission_);
     PerformHeldSignals(0);
@@ -819,6 +1116,9 @@ void CommandProcessor::SubmitHeldSignals() {
 }
 
 void CommandProcessor::AwaitHeldSignalsWriting(uint32_t physical_address) {
+  if (IsGuestCommandProcessingHalted()) {
+    return;
+  }
   size_t await_count = held_guest_signals_.size();
   for (; await_count; --await_count) {
     const HeldGuestSignal& signal = held_guest_signals_[await_count - 1];
@@ -832,6 +1132,9 @@ void CommandProcessor::AwaitHeldSignalsWriting(uint32_t physical_address) {
 }
 
 void CommandProcessor::AwaitHeldSignalsAndMemexport() {
+  if (IsGuestCommandProcessingHalted()) {
+    return;
+  }
   uint64_t submission = TakeMemexportSignalSubmission();
   if (submission) {
     AwaitSubmissionForHeldSignals(submission);
@@ -840,6 +1143,9 @@ void CommandProcessor::AwaitHeldSignalsAndMemexport() {
 }
 
 void CommandProcessor::PerformHeldSignals(size_t await_count) {
+  if (IsGuestCommandProcessingHalted()) {
+    return;
+  }
   // A held-back signal is awaited after this long so a lost device that stops
   // anything from completing doesn't leave the guest waiting for it forever.
   constexpr auto kMaxHold = std::chrono::seconds(1);
@@ -847,12 +1153,18 @@ void CommandProcessor::PerformHeldSignals(size_t await_count) {
     const HeldGuestSignal& signal = held_guest_signals_.front();
     if (signal.submission > GetCompletedSubmission()) {
       PollCompletedSubmission();
+      if (IsGuestCommandProcessingHalted()) {
+        return;
+      }
       if (signal.submission > GetCompletedSubmission()) {
         if (!await_count &&
             std::chrono::steady_clock::now() - signal.held_since < kMaxHold) {
           return;
         }
         AwaitSubmissionForHeldSignals(signal.submission);
+        if (IsGuestCommandProcessingHalted()) {
+          return;
+        }
         if (signal.submission > GetCompletedSubmission()) {
           XELOGE(
               "A guest signal was held back for submission {}, which didn't "
@@ -1433,7 +1745,8 @@ void CommandProcessor::QueueZPDReport(uint32_t report_address) {
 
 void CommandProcessor::OpenQuerySegment(bool can_close_submission) {
   ActiveQuerySegment& segment = active_segment_;
-  if (segment.segment_active || query_segment_opening_ || !CanOpenQuery()) {
+  if (QueryTransportSuspended() || segment.segment_active ||
+      query_segment_opening_ || !CanOpenQuery()) {
     return;
   }
   const bool report = zpd_current_report_.handle != kInvalidReportHandle &&
@@ -1508,10 +1821,13 @@ void CommandProcessor::OpenQuerySegment(bool can_close_submission) {
 // Closes the active host segment without ending the report.
 // BeginQuery/EndQuery can't cross D3D12 command list or Vulkan render pass
 // boundaries. The result accumulates across all pieces.
-void CommandProcessor::CloseQuerySegment() {
+void CommandProcessor::CloseQuerySegment() { (void)CloseQuerySegmentChecked(); }
+
+CommandProcessor::QuerySegmentCloseStatus
+CommandProcessor::CloseQuerySegmentChecked() {
   ActiveQuerySegment& segment = active_segment_;
   if (!segment.segment_active) {
-    return;
+    return QuerySegmentCloseStatus::kInactive;
   }
   uint64_t submission = 0;
   const bool closed = CloseQuery(
@@ -1542,10 +1858,41 @@ void CommandProcessor::CloseQuerySegment() {
   const bool pending_begin = segment.report || segment.segment_pending_begin;
   segment = {};
   segment.segment_pending_begin = pending_begin;
+  return closed ? QuerySegmentCloseStatus::kClosed
+                : QuerySegmentCloseStatus::kFailed;
+}
+
+void CommandProcessor::ExchangeTitleQueryLogicalState(
+    NativeTitleQueryLogicalState& other) noexcept {
+  using std::swap;
+  swap(zpd_mode_, other.mode);
+  swap(zpd_next_report_handle_, other.next_report);
+  swap(zpd_current_report_, other.current);
+  swap(active_segment_, other.segment);
+  swap(query_segment_opening_, other.opening);
+  swap(zpd_reports_, other.reports);
+  swap(zpd_awaited_report_count_, other.awaited);
+  swap(zpd_sample_counter_, other.samples);
+  swap(zpd_speculative_sample_counter_, other.speculative);
+  swap(fast_zpd_report_cached_deltas_, other.cached_deltas);
+  swap(zpd_force_fake_fallback_, other.force_fake);
+  swap(fake_zpd_sample_count_, other.fake_samples);
+  swap(zpd_pending_retire_start_ms_, other.retire_start);
+  swap(zpd_draw_resolution_scale_x_, other.scale_x);
+  swap(zpd_draw_resolution_scale_y_, other.scale_y);
+  swap(zpd_stats_, other.stats);
+  swap(viz_queries_, other.viz);
+  swap(viz_draw_predicate_, other.predicate);
+  swap(viz_pending_resolves_, other.viz_pending);
+  swap(viz_enabled_, other.viz_enabled);
+  swap(cached_zpd_mode_, other.cached_mode);
 }
 
 void CommandProcessor::UpdateQuerySegment(uint32_t scale_area, bool count_total,
                                           bool survey) {
+  if (QueryTransportSuspended()) {
+    return;
+  }
   ActiveQuerySegment& segment = active_segment_;
   const reg::PA_SC_VIZ_QUERY viz_query =
       register_file_->Get<reg::PA_SC_VIZ_QUERY>();
@@ -1619,6 +1966,9 @@ CommandProcessor::ZPDReport* CommandProcessor::FindZPDReport(
 }
 
 void CommandProcessor::PrepareZPDForWait() {
+  if (QueryTransportSuspended()) {
+    return;
+  }
   ReportHandle awaited_handle = kInvalidReportHandle;
   for (const ZPDReport& report : zpd_reports_) {
     if (report.awaited) {
@@ -1666,6 +2016,9 @@ void CommandProcessor::PrepareZPDForWait() {
 }
 
 void CommandProcessor::PumpPendingRetire() {
+  if (QueryTransportSuspended()) {
+    return;
+  }
   bool rebase_needed = false;
   while (!zpd_reports_.empty()) {
     ZPDReport& front = zpd_reports_.front();

@@ -1,0 +1,18 @@
+{
+  "module": "PlayReady.xex",
+  "program": "8484c2145581_PlayReady.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "30e59339ae2904bbde08ae371f69ab87ee0d9ff29cc8dfd602e6218cfbbe2e3d",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9b5f0400",
+  "functions": 1610,
+  "calls": 8872,
+  "strings": 120,
+  "string_xrefs": 93,
+  "independent_sha256": "30e59339ae2904bbde08ae371f69ab87ee0d9ff29cc8dfd602e6218cfbbe2e3d",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

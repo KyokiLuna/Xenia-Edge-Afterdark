@@ -1,0 +1,39 @@
+PlayReady.xex exports
+=====================
+
+{"confidence": "CONFIRMED", "function_va": "0x9B74ECE8", "module": "PlayReady.xex", "ordinal": "0x00000066", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B74EA38", "module": "PlayReady.xex", "ordinal": "0x00000067", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B7564C8", "module": "PlayReady.xex", "ordinal": "0x00000068", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B756AF0", "module": "PlayReady.xex", "ordinal": "0x00000069", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B756CE0", "module": "PlayReady.xex", "ordinal": "0x0000006A", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B757558", "module": "PlayReady.xex", "ordinal": "0x0000006B", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B74DC60", "module": "PlayReady.xex", "ordinal": "0x0000006C", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B74E068", "module": "PlayReady.xex", "ordinal": "0x0000006D", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B750D20", "module": "PlayReady.xex", "ordinal": "0x0000006E", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B74E1B0", "module": "PlayReady.xex", "ordinal": "0x0000006F", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B74E318", "module": "PlayReady.xex", "ordinal": "0x00000070", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B74E530", "module": "PlayReady.xex", "ordinal": "0x00000071", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B753B80", "module": "PlayReady.xex", "ordinal": "0x00000072", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B751500", "module": "PlayReady.xex", "ordinal": "0x00000073", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B74E7F8", "module": "PlayReady.xex", "ordinal": "0x00000074", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B757028", "module": "PlayReady.xex", "ordinal": "0x00000075", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B73CE98", "module": "PlayReady.xex", "ordinal": "0x00000076", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B74EEC0", "module": "PlayReady.xex", "ordinal": "0x00000077", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B7070E8", "module": "PlayReady.xex", "ordinal": "0x00000078", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B758C18", "module": "PlayReady.xex", "ordinal": "0x00000079", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B75B290", "module": "PlayReady.xex", "ordinal": "0x0000007A", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B758D40", "module": "PlayReady.xex", "ordinal": "0x0000007B", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B758FB8", "module": "PlayReady.xex", "ordinal": "0x0000007C", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B7593B0", "module": "PlayReady.xex", "ordinal": "0x0000007D", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B759520", "module": "PlayReady.xex", "ordinal": "0x0000007E", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B759710", "module": "PlayReady.xex", "ordinal": "0x0000007F", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B759950", "module": "PlayReady.xex", "ordinal": "0x00000080", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B759AC0", "module": "PlayReady.xex", "ordinal": "0x00000081", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B75AD40", "module": "PlayReady.xex", "ordinal": "0x00000082", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B75B120", "module": "PlayReady.xex", "ordinal": "0x00000083", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B758A80", "module": "PlayReady.xex", "ordinal": "0x00000084", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B758B08", "module": "PlayReady.xex", "ordinal": "0x00000085", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B7589B0", "module": "PlayReady.xex", "ordinal": "0x00000086", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B756450", "module": "PlayReady.xex", "ordinal": "0x00000087", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B74DC20", "module": "PlayReady.xex", "ordinal": "0x00000088", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B703000", "module": "PlayReady.xex", "ordinal": "0x00000089", "resolved_name": ""}

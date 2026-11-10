@@ -14,10 +14,12 @@
 #include "xenia/kernel/xam/xdbf/spa_info.h"
 #include "xenia/kernel/xconfig.h"
 #include "xenia/kernel/xsession.h"
-
 #include "xenia/base/logging.h"
 #include "xenia/base/string.h"
 #include "xenia/base/string_util.h"
+#include "xenia/base/memory.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
+#include "xenia/kernel/xam/tile_request.h"
 
 namespace xe {
 namespace kernel {
@@ -220,10 +222,72 @@ X_HRESULT XgiApp::WriteUserPreference(uint32_t user_index, uint32_t preference,
   const UserSetting setting(
       static_cast<UserSettingId>(kUserPreferencesSettingId),
       static_cast<int32_t>(bits));
-  kernel_state_->xam_state()->user_tracker()->UpsertSetting(
-      user->xuid(), kDashboardID, &setting);
+  if (!kernel_state_->xam_state()->user_tracker()->UpsertSetting(
+      user->xuid(), kDashboardID, &setting)) {
+    return X_E_FAIL;
+  }
   kernel_state_->BroadcastNotification(
       kXNotificationSystemProfileSettingChanged, 1u << user_index);
+  return X_E_SUCCESS;
+}
+
+std::shared_ptr<const XgiApp::AchievementBatch> XgiApp::CaptureAchievementBatch(
+    KernelState& kernel, uint32_t address, uint32_t length, X_HRESULT& status) {
+  status = X_E_INVALIDARG;
+  if (!address || (length && length != 8)) {
+    return {};
+  }
+  std::array<uint8_t, 8> header{};
+  if (XFAILED(util::ReadGuestIoBuffer(*kernel.memory(), address, header))) {
+    return {};
+  }
+  const auto count = xe::load_and_swap<uint32_t>(header.data());
+  const auto pointer = xe::load_and_swap<uint32_t>(header.data() + 4);
+  // Local bounded request policy. No truncated list or fabricated success.
+  if (!count || count > 64 || !pointer) {
+    return {};
+  }
+  std::vector<uint8_t> bytes(size_t(count) * 8);
+  if (XFAILED(util::ReadGuestIoBuffer(*kernel.memory(), pointer, bytes))) {
+    return {};
+  }
+  auto out = std::make_shared<AchievementBatch>();
+  out->reserve(count);
+  std::map<const ProfileGpdModelAuthority*, uint64_t> prior;
+  for (uint32_t i = 0; i != count; ++i) {
+    const auto slot = xe::load_and_swap<uint32_t>(bytes.data() + i * 8);
+    const auto id = xe::load_and_swap<uint32_t>(bytes.data() + i * 8 + 4);
+    if (slot >= XUserMaxUserCount) {
+      return {};
+    }
+    std::error_code error;
+    auto award = kernel.xam_state()->user_tracker()->CaptureAward(
+        uint8_t(slot), kernel.title_id(), id, error);
+    if (!award) {
+      status = X_E_FAIL;
+      return {};
+    }
+    const auto preceding = prior[award->writer.model.get()]++;
+    if (preceding > UINT64_MAX - award->origin.stamp.model_version) {
+      return {};
+    }
+    // Each successful member advances the shared model exactly once. An
+    // interleaved writer makes the next exact stamped Begin fail closed.
+    award->origin.stamp.model_version += preceding;
+    out->push_back(std::move(*award));
+  }
+  status = X_E_SUCCESS;
+  return out;
+}
+X_HRESULT XgiApp::ExecuteAchievementBatch(KernelState& kernel,
+                                          const AchievementBatch& batch) {
+  for (const auto& award : batch) {
+    const auto result =
+        kernel.achievement_manager()->CompleteCapturedAward(award);
+    if (XFAILED(result)) {
+      return result;
+    }
+  }
   return X_E_SUCCESS;
 }
 
@@ -233,6 +297,15 @@ XgiApp::XgiApp(KernelState* kernel_state) : App(kernel_state, 0xFB) {}
 
 X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
                                       uint32_t buffer_length) {
+  if (IsTileMessage(message)) {
+    X_HRESULT status;
+    const auto request = CaptureTileMessage(*kernel_state_, message, buffer_ptr,
+                                            buffer_length, 0, status);
+    if (!request) { return status; }
+    uint32_t error = X_E_FAIL, length = 0;
+    CompleteTileRequest(*kernel_state_, *request, error, length);
+    return error;
+  }
   // NOTE: buffer_length may be zero or valid.
   auto buffer = memory_->TranslateVirtual(buffer_ptr);
   switch (message) {
@@ -293,29 +366,10 @@ X_HRESULT XgiApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       return X_E_SUCCESS;
     }
     case 0x000B0008: {
-      assert_true(!buffer_length ||
-                  buffer_length == sizeof(X_USER_ACHIEVEMENT));
-
-      const XGI_WRITEACHIEVEMENT* write_achievements =
-          reinterpret_cast<const XGI_WRITEACHIEVEMENT*>(buffer);
-
-      const X_USER_ACHIEVEMENT* achievements =
-          memory_->TranslateVirtual<X_USER_ACHIEVEMENT*>(
-              write_achievements->achievements_ptr);
-
-      XELOGD("XGIUserWriteAchievements({:08X}, {:08X})",
-             write_achievements->num_achievements.get(),
-             write_achievements->achievements_ptr.get());
-
-      for (uint32_t i = 0; i < write_achievements->num_achievements; i++) {
-        const X_USER_ACHIEVEMENT& achievement = achievements[i];
-
-        kernel_state_->achievement_manager()->EarnAchievement(
-            achievement.user_index, kernel_state_->title_id(),
-            achievement.achievement_id);
-      }
-
-      return X_E_SUCCESS;
+      X_HRESULT status;
+      auto owned = CaptureAchievementBatch(*kernel_state_, buffer_ptr,
+                                           buffer_length, status);
+      return owned ? ExecuteAchievementBatch(*kernel_state_, *owned) : status;
     }
     case 0x000B0010: {
       XELOGD("XSessionCreate({:08X}, {:08X})", buffer_ptr, buffer_length);

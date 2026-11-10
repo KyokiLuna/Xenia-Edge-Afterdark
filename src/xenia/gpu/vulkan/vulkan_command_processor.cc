@@ -12,6 +12,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 
 #include "xenia/base/assert.h"
 #include "xenia/base/byte_order.h"
@@ -40,6 +41,7 @@ DECLARE_bool(clear_memory_page_state);
 DECLARE_bool(gpu_debug_markers);
 DECLARE_bool(memexport_enable);
 DECLARE_bool(submit_on_primary_buffer_end);
+DECLARE_bool(native_frame_composite_probe);
 
 DEFINE_bool(
     vulkan_dynamic_rendering, true,
@@ -74,7 +76,7 @@ namespace shaders {
 constexpr VkDescriptorPoolSize
     VulkanCommandProcessor::kDescriptorPoolSizeUniformBufferDynamic = {
         VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-        SpirvShaderTranslator::kConstantBufferCount*
+        SpirvShaderTranslator::kConstantBufferCount *
             kLinkedTypeDescriptorPoolSetCount};
 
 constexpr VkDescriptorPoolSize
@@ -215,6 +217,526 @@ void VulkanCommandProcessor::PollCompletedSubmission() {
   completion_timeline_.AwaitSubmissionAndUpdateCompleted(
       GetCompletedSubmission());
   PumpQueryResolves();
+}
+
+void VulkanCommandProcessor::PollGpuCompletions() {
+  if (!gpu_completions_.has_pending() && !native_resource_epoch_count_) {
+    PublishCompletedNativePresentationImages();
+    ReclaimNativePresentationImages();
+    return;
+  }
+  completion_timeline_.UpdateCompletedSubmission();
+  if (device_lost_ || GetVulkanDevice()->IsLost() ||
+      completion_timeline_.last_completion_error() != VK_SUCCESS) {
+    gpu_completions_.FailPending();
+    return;
+  }
+  gpu_completions_.CompleteThrough(GetCompletedSubmission());
+  ReclaimNativeResourceEpochs();
+  PublishCompletedNativePresentationImages();
+  ReclaimNativePresentationImages();
+}
+
+GpuCompletion VulkanCommandProcessor::CaptureGpuCompletion(
+    GpuCompletionResources resources, GpuCompletion::Observer observer) {
+  // Capture the actual all-command submission boundary. Memexport submission
+  // tracking omits ordinary raster/texture work and cannot serve this purpose.
+  uint64_t submission = GetCurrentSubmission() - 1;
+  if (device_lost_ || GetVulkanDevice()->IsLost() ||
+      completion_timeline_.last_completion_error() != VK_SUCCESS) {
+    gpu_completions_.FailPending();
+  } else if (submission_open_) {
+    submission = GetCurrentSubmission();
+    if (!EndSubmission(false) || GetCurrentSubmission() <= submission) {
+      gpu_completions_.FailPending();
+    }
+  }
+  // No new commands may mean a previous submission, not immediate success.
+  // Only a real fence observation can make that previous boundary Complete.
+  completion_timeline_.UpdateCompletedSubmission();
+  if (device_lost_ || GetVulkanDevice()->IsLost() ||
+      completion_timeline_.last_completion_error() != VK_SUCCESS) {
+    gpu_completions_.FailPending();
+  } else {
+    gpu_completions_.CompleteThrough(GetCompletedSubmission());
+  }
+  return gpu_completions_.TrackSubmitted(submission, std::move(resources),
+                                         std::move(observer));
+}
+
+VulkanCommandProcessor::GuestRenderBank::~GuestRenderBank() {
+  // No bank commands are admitted by this allocation-only gate. Future
+  // activation must add real submission retirement before this destruction.
+  // Pipeline workers and their RT references must end before the RT cache.
+  pipeline_cache.reset();
+  // These consumers also retain the private register file. The texture cache
+  // must unregister its scaled-resolve watch while shared memory is alive.
+  texture_cache.reset();
+  primitive_processor.reset();
+  const auto& dfn = device.functions();
+  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyDescriptorPool,
+                                         device.device(), descriptor_pool);
+  ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyBuffer, device.device(),
+                                         zpd_counter_sink_buffer);
+  ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device.device(),
+                                         zpd_counter_sink_memory);
+  render_target_cache.reset();
+  shared_memory.reset();
+  register_file.reset();
+}
+
+GuestRenderBankAllocationResult
+VulkanCommandProcessor::AllocateNativeGuestRenderBank() {
+  return AllocateNativeGuestRenderBankForInput(false);
+}
+GuestRenderBankAllocationResult
+VulkanCommandProcessor::AllocateNativeGuestRenderBankForInput(
+    bool immutable_snapshot) {
+  using Result = GuestRenderBankAllocationResult;
+  Result result;
+  result.stage = Result::Stage::kPrecondition;
+  if (!worker_thread_ || !kernel::XThread::IsInThread(worker_thread_.get())) {
+    result.status = Result::Status::kWrongThread;
+    return result;
+  }
+  if (!register_file_ || register_file_ != graphics_system_->register_file() ||
+      !primitive_processor_ || !render_target_cache_ || !pipeline_cache_ ||
+      !texture_cache_ || !shared_memory_ || device_lost_ ||
+      GetVulkanDevice()->IsLost() ||
+      render_target_cache_->edram_buffer() == VK_NULL_HANDLE ||
+      shared_memory_->buffer() == VK_NULL_HANDLE ||
+      descriptor_set_layout_shared_memory_and_edram_ == VK_NULL_HANDLE ||
+      shared_memory_and_edram_descriptor_pool_ == VK_NULL_HANDLE ||
+      shared_memory_and_edram_descriptor_set_ == VK_NULL_HANDLE ||
+      std::any_of(descriptor_set_layouts_single_transient_.begin(),
+                  descriptor_set_layouts_single_transient_.end(),
+                  [](VkDescriptorSetLayout layout) {
+                    return layout == VK_NULL_HANDLE;
+                  })) {
+    result.status = Result::Status::kNotReady;
+    return result;
+  }
+
+  if (native_guest_render_bank_selected_ ||
+      native_resource_epoch_active_.valid()) {
+    result.status = Result::Status::kNotReady;
+    return result;
+  }
+  if (native_guest_render_bank_ &&
+      native_guest_render_bank_->immutable_snapshot != immutable_snapshot) {
+    std::swap(native_guest_render_bank_, native_alternate_guest_render_bank_);
+  }
+  // Snapshot only identities and CP-owned state this method must never replace
+  // or advance. Never copy/checksum title register contents: guest MMIO may
+  // access those concurrently. Only the unpublished private RF is probed below.
+  auto* const title_register_file = register_file_;
+  auto* const title_mmio_register_file = graphics_system_->register_file();
+  auto* const title_primitive = primitive_processor_.get();
+  auto* const title_texture = texture_cache_.get();
+  auto* const title_shared_memory = shared_memory_.get();
+  auto* const title_rt = render_target_cache_.get();
+  auto* const title_pipeline = pipeline_cache_.get();
+  const VkBuffer title_edram = title_rt->edram_buffer();
+  const VkDescriptorPool title_pool = shared_memory_and_edram_descriptor_pool_;
+  const VkDescriptorSet title_set = shared_memory_and_edram_descriptor_set_;
+  const VkDescriptorSet title_host_set =
+      shared_memory_host_and_edram_descriptor_set_;
+  const uint64_t title_submission = GetCurrentSubmission();
+  const uint64_t title_frame = frame_current_;
+  const bool title_submission_open = submission_open_;
+  const bool title_frame_open = frame_open_;
+  const Shader* const title_vs = active_vertex_shader_;
+  const Shader* const title_ps = active_pixel_shader_;
+  const uint32_t title_vs_address = active_vertex_shader_ucode_address_;
+  const uint64_t title_bin_select = bin_select_;
+  const uint64_t title_bin_mask = bin_mask_;
+  const auto title_summary = submission_in_progress_;
+  // Bound-command state is initialized by BeginSubmission, not SetupContext.
+  // Do not inspect it when no submission is open (including before the first).
+  const auto title_render_pass =
+      title_submission_open ? current_render_pass_ : VK_NULL_HANDLE;
+  const auto title_framebuffer =
+      title_submission_open ? current_framebuffer_ : nullptr;
+  const bool title_in_render_pass = title_submission_open && in_render_pass_;
+  const auto title_guest_pipeline =
+      title_submission_open ? current_guest_graphics_pipeline_ : VK_NULL_HANDLE;
+  const auto title_external_graphics_pipeline =
+      title_submission_open ? current_external_graphics_pipeline_
+                            : VK_NULL_HANDLE;
+  const auto title_external_compute_pipeline =
+      title_submission_open ? current_external_compute_pipeline_
+                            : VK_NULL_HANDLE;
+  const auto title_pipeline_layout =
+      title_submission_open ? current_guest_graphics_pipeline_layout_ : nullptr;
+  const size_t title_barriers = pending_barriers_.size();
+  const size_t title_buffer_barriers =
+      pending_barriers_buffer_memory_barriers_.size();
+  const size_t title_image_barriers =
+      pending_barriers_image_memory_barriers_.size();
+  const auto title_pending_barrier = current_pending_barrier_;
+  const size_t title_sparse_binds = sparse_memory_binds_.size();
+  const size_t title_sparse_buffer_binds = sparse_buffer_binds_.size();
+  result.title_register_file_identity =
+      uint64_t(reinterpret_cast<uintptr_t>(title_register_file));
+  const auto command_state_unchanged = [&]() {
+    return submission_in_progress_.submission_index ==
+               title_summary.submission_index &&
+           submission_in_progress_.frame_index == title_summary.frame_index &&
+           submission_in_progress_.draw_count == title_summary.draw_count &&
+           submission_in_progress_.dispatch_count ==
+               title_summary.dispatch_count &&
+           submission_in_progress_.resolve_count ==
+               title_summary.resolve_count &&
+           (!title_submission_open ||
+            (current_render_pass_ == title_render_pass &&
+             current_framebuffer_ == title_framebuffer &&
+             in_render_pass_ == title_in_render_pass &&
+             current_guest_graphics_pipeline_ == title_guest_pipeline &&
+             current_external_graphics_pipeline_ ==
+                 title_external_graphics_pipeline &&
+             current_external_compute_pipeline_ ==
+                 title_external_compute_pipeline &&
+             current_guest_graphics_pipeline_layout_ ==
+                 title_pipeline_layout)) &&
+           pending_barriers_.size() == title_barriers &&
+           pending_barriers_buffer_memory_barriers_.size() ==
+               title_buffer_barriers &&
+           pending_barriers_image_memory_barriers_.size() ==
+               title_image_barriers &&
+           current_pending_barrier_.src_stage_mask ==
+               title_pending_barrier.src_stage_mask &&
+           current_pending_barrier_.dst_stage_mask ==
+               title_pending_barrier.dst_stage_mask &&
+           current_pending_barrier_.buffer_memory_barriers_offset ==
+               title_pending_barrier.buffer_memory_barriers_offset &&
+           current_pending_barrier_.image_memory_barriers_offset ==
+               title_pending_barrier.image_memory_barriers_offset &&
+           sparse_memory_binds_.size() == title_sparse_binds &&
+           sparse_buffer_binds_.size() == title_sparse_buffer_binds;
+  };
+  const auto title_unchanged = [&]() {
+    result.title_command_state_unchanged = command_state_unchanged();
+    return register_file_ == title_register_file &&
+           graphics_system_->register_file() == title_mmio_register_file &&
+           primitive_processor_.get() == title_primitive &&
+           texture_cache_.get() == title_texture &&
+           shared_memory_.get() == title_shared_memory &&
+           render_target_cache_.get() == title_rt &&
+           pipeline_cache_.get() == title_pipeline &&
+           title_rt->edram_buffer() == title_edram &&
+           shared_memory_and_edram_descriptor_pool_ == title_pool &&
+           shared_memory_and_edram_descriptor_set_ == title_set &&
+           shared_memory_host_and_edram_descriptor_set_ == title_host_set &&
+           GetCurrentSubmission() == title_submission &&
+           frame_current_ == title_frame &&
+           submission_open_ == title_submission_open &&
+           frame_open_ == title_frame_open &&
+           active_vertex_shader_ == title_vs &&
+           active_pixel_shader_ == title_ps &&
+           active_vertex_shader_ucode_address_ == title_vs_address &&
+           bin_select_ == title_bin_select && bin_mask_ == title_bin_mask &&
+           result.title_command_state_unchanged;
+  };
+  const auto compatible = [&](const VulkanRenderTargetCache& candidate) {
+    return candidate.GetPath() == title_rt->GetPath() &&
+           candidate.draw_resolution_scale_x() ==
+               title_rt->draw_resolution_scale_x() &&
+           candidate.draw_resolution_scale_y() ==
+               title_rt->draw_resolution_scale_y() &&
+           candidate.msaa_2x_attachments_supported() ==
+               title_rt->msaa_2x_attachments_supported() &&
+           candidate.msaa_2x_no_attachments_supported() ==
+               title_rt->msaa_2x_no_attachments_supported() &&
+           candidate.depth_unorm24_vulkan_format_supported() ==
+               title_rt->depth_unorm24_vulkan_format_supported() &&
+           candidate.depth_float24_round() == title_rt->depth_float24_round() &&
+           candidate.depth_float24_convert_in_pixel_shader() ==
+               title_rt->depth_float24_convert_in_pixel_shader() &&
+           candidate.gamma_render_target_as_unorm16() ==
+               title_rt->gamma_render_target_as_unorm16();
+  };
+  const bool fsi =
+      title_rt->GetPath() == RenderTargetCache::Path::kPixelShaderInterlock;
+  const bool counter_binding_used = fsi || zpd_hybrid_supported_;
+  const auto* const vulkan_device = GetVulkanDevice();
+  const auto& dfn = vulkan_device->functions();
+  const VkDevice device = vulkan_device->device();
+  const uint32_t binding_count_log2 =
+      SpirvShaderTranslator::GetSharedMemoryStorageBufferCountLog2(
+          vulkan_device->properties().maxStorageBufferRange);
+  const uint32_t binding_count = UINT32_C(1) << binding_count_log2;
+  if (binding_count > SharedMemory::kBufferSize / (128 << 20)) {
+    result.status = Result::Status::kIncompatible;
+    result.stage = Result::Stage::kCompatibility;
+    result.title_unchanged = title_unchanged();
+    return result;
+  }
+  const bool host_set_needed =
+      !immutable_snapshot && shared_memory_->host_buffer() != VK_NULL_HANDLE;
+  const uint32_t set_count = host_set_needed ? 2 : 1;
+  result.pixel_shader_interlock = fsi;
+  result.draw_scale_x = title_rt->draw_resolution_scale_x();
+  result.draw_scale_y = title_rt->draw_resolution_scale_y();
+  if (immutable_snapshot &&
+      (result.draw_scale_x != 1 || result.draw_scale_y != 1)) {
+    result.status = Result::Status::kIncompatible;
+    return result;
+  }
+
+  result.shared_memory_binding_count = binding_count;
+  result.descriptor_set_count = set_count;
+  result.edram_bytes = uint64_t(xenos::kEdramSizeBytes) * result.draw_scale_x *
+                       result.draw_scale_y;
+
+  const auto independent = [&](GuestRenderBank& bank,
+                               bool require_initial_register_state) {
+    result.native_bank_identity = uint64_t(reinterpret_cast<uintptr_t>(&bank));
+    result.native_register_file_identity =
+        uint64_t(reinterpret_cast<uintptr_t>(bank.register_file.get()));
+    result.native_primitive_processor_identity =
+        uint64_t(reinterpret_cast<uintptr_t>(bank.primitive_processor.get()));
+    result.native_texture_cache_identity =
+        uint64_t(reinterpret_cast<uintptr_t>(bank.texture_cache.get()));
+    result.independent_primitive_processor =
+        bank.primitive_processor &&
+        bank.primitive_processor.get() != title_primitive;
+    result.independent_texture_cache =
+        bank.texture_cache && bank.texture_cache.get() != title_texture;
+    if (!bank.register_file ||
+        bank.register_file.get() == title_register_file ||
+        bank.register_file.get() == title_mmio_register_file) {
+      return false;
+    }
+    auto& private_registers = *bank.register_file;
+    // A reused bank contains the explicitly written state from its last
+    // native frame. Preserve that state across this diagnostic; constructor
+    // reset values are only an invariant while validating a fresh bank.
+    const uint64_t register_hash_before_probe =
+        XXH3_64bits(private_registers.values, sizeof(private_registers.values));
+    result.private_registers_unchanged =
+        !require_initial_register_state ||
+        register_hash_before_probe == bank.initial_register_hash;
+    // Exercise the actual private storage/accessor, then restore its previous
+    // value. No title word is read, copied, written or used as a native
+    // default.
+    const uint32_t original =
+        private_registers.Get<reg::RB_SURFACE_INFO>().value;
+    const uint32_t sentinel = original ^ UINT32_C(0xA55A1234);
+    private_registers.values[XE_GPU_REG_RB_SURFACE_INFO] = sentinel;
+    result.private_register_readback =
+        private_registers.Get<reg::RB_SURFACE_INFO>().value == sentinel;
+    private_registers.values[XE_GPU_REG_RB_SURFACE_INFO] = original;
+    result.private_registers_unchanged &=
+        XXH3_64bits(private_registers.values,
+                    sizeof(private_registers.values)) ==
+        register_hash_before_probe;
+    return result.private_register_readback &&
+           result.private_registers_unchanged &&
+           result.independent_primitive_processor &&
+           result.independent_texture_cache &&
+           bank.immutable_snapshot == immutable_snapshot &&
+           (!immutable_snapshot ||
+            (bank.shared_memory &&
+             bank.shared_memory.get() != title_shared_memory &&
+             bank.shared_memory->buffer() != title_shared_memory->buffer() &&
+             bank.shared_memory->is_native_snapshot_backing() &&
+             !bank.shared_memory->is_zero_copy() &&
+             bank.shared_memory->host_buffer() == VK_NULL_HANDLE)) &&
+           bank.render_target_cache && bank.pipeline_cache &&
+           bank.render_target_cache.get() != title_rt &&
+           bank.pipeline_cache.get() != title_pipeline &&
+           bank.render_target_cache->edram_buffer() != VK_NULL_HANDLE &&
+           bank.render_target_cache->edram_buffer() != title_edram &&
+           bank.descriptor_pool != VK_NULL_HANDLE &&
+           bank.descriptor_pool != title_pool &&
+           bank.descriptor_set != VK_NULL_HANDLE &&
+           bank.descriptor_set != title_set &&
+           bank.descriptor_set != title_host_set &&
+           (!host_set_needed ||
+            (bank.host_descriptor_set != VK_NULL_HANDLE &&
+             bank.host_descriptor_set != bank.descriptor_set &&
+             bank.host_descriptor_set != title_set &&
+             bank.host_descriptor_set != title_host_set)) &&
+           (!counter_binding_used ||
+            (bank.zpd_counter_sink_buffer != VK_NULL_HANDLE &&
+             bank.zpd_counter_sink_buffer != zpd_counter_sink_buffer_));
+  };
+  const auto fail = [&](Result::Status status, Result::Stage stage) {
+    result.status = status;
+    result.stage = stage;
+    result.title_unchanged = title_unchanged();
+    return result;
+  };
+  if (native_guest_render_bank_) {
+    result.already_allocated = true;
+    result.independent_resources =
+        independent(*native_guest_render_bank_, false);
+    if (!compatible(*native_guest_render_bank_->render_target_cache)) {
+      return fail(Result::Status::kIncompatible, Result::Stage::kCompatibility);
+    }
+    result.title_unchanged = title_unchanged();
+    result.status = result.independent_resources && result.title_unchanged
+                        ? Result::Status::kReady
+                        : Result::Status::kInvariantViolation;
+    result.stage = Result::Stage::kValidation;
+    return result;
+  }
+
+  // The tentative bank owns every partial allocation. Its destruction touches
+  // no title cache or common layout. No persistent shader storage is opened:
+  // InitializeShaderStorage is deliberately never called for this bank.
+  Result::Stage stage = Result::Stage::kRegisterFile;
+  try {
+    auto bank = std::make_unique<GuestRenderBank>(*GetVulkanDevice());
+    bank->immutable_snapshot = immutable_snapshot;
+    if (immutable_snapshot) {
+      bank->shared_memory = std::make_unique<VulkanSharedMemory>(
+          *this, *memory_, trace_writer_, guest_shader_pipeline_stages_,
+          VulkanSharedMemory::Backing::kNativeSnapshot);
+      if (!bank->shared_memory->Initialize()) {
+        return fail(Result::Status::kAllocationFailed, stage);
+      }
+    }
+    VulkanSharedMemory& bank_memory =
+        immutable_snapshot ? *bank->shared_memory : *shared_memory_;
+
+    bank->register_file = std::make_unique<RegisterFile>();
+    bank->initial_register_hash = XXH3_64bits(
+        bank->register_file->values, sizeof(bank->register_file->values));
+    stage = Result::Stage::kRenderTargetCache;
+    bank->render_target_cache = std::make_unique<VulkanRenderTargetCache>(
+        *bank->register_file, *memory_, trace_writer_, result.draw_scale_x,
+        result.draw_scale_y, *this);
+    if (!bank->render_target_cache->Initialize(binding_count)) {
+      return fail(Result::Status::kAllocationFailed, stage);
+    }
+    stage = Result::Stage::kCompatibility;
+    if (!compatible(*bank->render_target_cache)) {
+      return fail(Result::Status::kIncompatible, stage);
+    }
+    stage = Result::Stage::kPipelineCache;
+    bank->pipeline_cache = std::make_unique<VulkanPipelineCache>(
+        *this, *bank->register_file, *bank->render_target_cache,
+        guest_shader_vertex_stages_, zpd_hybrid_supported_);
+    if (!bank->pipeline_cache->Initialize()) {
+      return fail(Result::Status::kAllocationFailed, stage);
+    }
+
+    stage = Result::Stage::kPrimitiveProcessor;
+    bank->primitive_processor = std::make_unique<VulkanPrimitiveProcessor>(
+        *bank->register_file, *memory_, trace_writer_, bank_memory, *this);
+    // Initialize allocates/fills the built-in upload buffer only. Its upload
+    // is deferred until BeginSubmission, which this gate never invokes.
+    if (!bank->primitive_processor->Initialize()) {
+      return fail(Result::Status::kAllocationFailed, stage);
+    }
+
+    stage = Result::Stage::kTextureCache;
+    // Create allocates cache-local Vulkan resources and, when scaled, a
+    // shared-memory invalidation watch. Null-image clears and texture uploads
+    // occur only in later submission/request hooks, never in this gate.
+    // Active coexistence still needs a device-wide sampler allocation budget:
+    // each cache's legacy sampler budget assumes it is the only active cache.
+    bank->texture_cache = VulkanTextureCache::Create(
+        *bank->register_file, bank_memory, result.draw_scale_x,
+        result.draw_scale_y, *this, guest_shader_pipeline_stages_);
+    if (!bank->texture_cache) {
+      return fail(Result::Status::kAllocationFailed, stage);
+    }
+
+    stage = Result::Stage::kDescriptors;
+    bank->transient_resources =
+        std::make_unique<NativeTransientResources>(*GetVulkanDevice());
+    const VkDeviceSize counter_range =
+        XenosZPDReport::kCounterSizeBytes * kQueryPoolCapacity;
+    if (counter_binding_used &&
+        !ui::vulkan::util::CreateDedicatedAllocationBuffer(
+            GetVulkanDevice(), counter_range,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            ui::vulkan::util::MemoryPurpose::kDeviceLocal,
+            bank->zpd_counter_sink_buffer, bank->zpd_counter_sink_memory)) {
+      return fail(Result::Status::kAllocationFailed, stage);
+    }
+    VkDescriptorPoolSize pool_size = {};
+    pool_size.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pool_size.descriptorCount = set_count * (binding_count + uint32_t(fsi) +
+                                             uint32_t(counter_binding_used));
+    VkDescriptorPoolCreateInfo pool_info = {};
+    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.maxSets = set_count;
+    pool_info.poolSizeCount = 1;
+    pool_info.pPoolSizes = &pool_size;
+    if (dfn.vkCreateDescriptorPool(device, &pool_info, nullptr,
+                                   &bank->descriptor_pool) != VK_SUCCESS) {
+      return fail(Result::Status::kAllocationFailed, stage);
+    }
+    const VkDescriptorSetLayout layouts[2] = {
+        descriptor_set_layout_shared_memory_and_edram_,
+        descriptor_set_layout_shared_memory_and_edram_};
+    VkDescriptorSetAllocateInfo allocation = {};
+    allocation.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocation.descriptorPool = bank->descriptor_pool;
+    allocation.descriptorSetCount = set_count;
+    allocation.pSetLayouts = layouts;
+    VkDescriptorSet sets[2] = {};
+    if (dfn.vkAllocateDescriptorSets(device, &allocation, sets) != VK_SUCCESS) {
+      return fail(Result::Status::kAllocationFailed, stage);
+    }
+    bank->descriptor_set = sets[0];
+    bank->host_descriptor_set = host_set_needed ? sets[1] : VK_NULL_HANDLE;
+    const auto write_set = [&](VkDescriptorSet set, VkBuffer shared_buffer) {
+      std::array<VkDescriptorBufferInfo,
+                 SharedMemory::kBufferSize / (128 << 20)>
+          shared_infos = {};
+      const uint32_t binding_range =
+          SharedMemory::kBufferSize >> binding_count_log2;
+      for (uint32_t i = 0; i < binding_count; ++i) {
+        shared_infos[i] = {shared_buffer, VkDeviceSize(binding_range) * i,
+                           binding_range};
+      }
+      VkDescriptorBufferInfo counter_info = {bank->zpd_counter_sink_buffer, 0,
+                                             counter_range};
+      VkDescriptorBufferInfo edram_info = {
+          bank->render_target_cache->edram_buffer(), 0, VK_WHOLE_SIZE};
+      VkWriteDescriptorSet writes[3] = {};
+      uint32_t write_count = 0;
+      const auto append = [&](uint32_t binding, uint32_t count,
+                              const VkDescriptorBufferInfo* infos) {
+        VkWriteDescriptorSet& write = writes[write_count++];
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = set;
+        write.dstBinding = binding;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        write.descriptorCount = count;
+        write.pBufferInfo = infos;
+      };
+      append(0, binding_count, shared_infos.data());
+      if (counter_binding_used) {
+        append(1, 1, &counter_info);
+      }
+      if (fsi) {
+        append(2, 1, &edram_info);
+      }
+      dfn.vkUpdateDescriptorSets(device, write_count, writes, 0, nullptr);
+    };
+    write_set(bank->descriptor_set, bank_memory.buffer());
+    if (host_set_needed) {
+      write_set(bank->host_descriptor_set, bank_memory.host_buffer());
+    }
+    stage = Result::Stage::kValidation;
+    result.independent_resources = independent(*bank, true);
+    result.title_unchanged = title_unchanged();
+    if (!result.independent_resources || !result.title_unchanged) {
+      return fail(Result::Status::kInvariantViolation, stage);
+    }
+    native_guest_render_bank_ = std::move(bank);
+    result.status = Result::Status::kReady;
+    result.stage = stage;
+    return result;
+  } catch (const std::exception& e) {
+    XELOGE("Native guest render bank allocation failed: {}", e.what());
+    return fail(Result::Status::kAllocationFailed, stage);
+  }
 }
 
 std::string VulkanCommandProcessor::MakeTitleStateSuffix() const {
@@ -412,6 +934,8 @@ bool VulkanCommandProcessor::SetupContext() {
     XELOGE("Failed to initialize shared memory");
     return false;
   }
+
+  title_shared_memory_ = shared_memory_.get();
 
   // Read-watch consumption tracking for resolves.
   InitResolveReadWatch();
@@ -1429,12 +1953,53 @@ bool VulkanCommandProcessor::SetupContext() {
   system_constants_.zpd_fsi_counter_index = UINT32_MAX;
   zpd_counter_index_force_update_ = true;
 
+  native_shutdown_retention_installed_ =
+      vulkan_device->device() != VK_NULL_HANDLE &&
+      dfn.vkDeviceWaitIdle != nullptr;
+  const bool native_supported =
+      native_shutdown_retention_installed_ &&
+      vulkan_device->properties().imageViewFormatSwizzle &&
+      graphics_system_->presenter() && EnsureNativePresentationPipelines();
+  native_frame_capacity_word_.store(
+      native_supported
+          ? kNativeFrameCapabilitySupported |
+                ((render_target_cache_->draw_resolution_scale_x() == 1 &&
+                  render_target_cache_->draw_resolution_scale_y() == 1)
+                     ? kNativeImmutableSnapshotSupported
+                     : 0) |
+                uint32_t(NativeSystemFrameCapacity::State::kAccepting)
+          : uint32_t(NativeSystemFrameCapacity::State::kUnsupported),
+      std::memory_order_release);
+
   return true;
 }
 
 void VulkanCommandProcessor::ShutdownContext() {
-  AwaitAllQueueOperationsCompletion();
+  // Withdraw CPU publication before any GPU stop proof. Already admitted
+  // Sources retain immutable CPU bytes, never this CP's staging resources.
+  native_title_input_.Close();
+  native_shutdown_in_progress_ = true;
+  SetNativeFrameCapacityState(NativeSystemFrameCapacity::State::kStopping);
+  CancelPendingNativeFrame();
+  if (native_gpu_work_ever_attempted_) {
+    // This seals future submits before obtaining a device-wide stop proof.
+    // Never run the legacy queue wait or allocate a failed-resource fallback
+    // after native commands have entered the backend.
+    StopNativeGpuBeforeDestruction();
+  } else {
+    const bool gpu_idle = AwaitAllQueueOperationsCompletion();
+    PollGpuCompletions();
+    if (gpu_idle && !device_lost_ && !GetVulkanDevice()->IsLost()) {
+      gpu_completions_.ReleaseAfterGpuStopped();
+    } else {
+      // Preserve the legacy title-only resource quarantine behavior.
+      GetVulkanDevice()->QuarantineGuestMemoryLeases(
+          gpu_completions_.TakeFailedResources(),
+          gpu_completions_.MakeAfterDeviceDestroyedCallback());
+    }
+  }
 
+  DestroyNativePresentationResources();
   ResetResolveReadWatch();
   DestroyResolveFaultCopy();
 
@@ -1546,6 +2111,18 @@ void VulkanCommandProcessor::ShutdownContext() {
   ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device,
                                          zpd_counter_sink_buffer_memory_);
 
+  // Native GPU uses have stopped before either bank is destroyed. Their
+  // pipelines/workers, descriptors and RT cache precede the common layouts.
+  native_guest_render_bank_.reset();
+  native_alternate_guest_render_bank_.reset();
+  native_resource_epochs_ = {};
+  native_resource_epoch_head_ = 0;
+  native_resource_epoch_count_ = 0;
+  native_resource_epoch_serial_ = 0;
+  native_resource_epoch_completed_ = 0;
+  native_resource_epoch_active_ = {};
+  native_resource_epochs_poisoned_ = false;
+
   texture_cache_.reset();
 
   pipeline_cache_.reset();
@@ -1653,7 +2230,10 @@ void VulkanCommandProcessor::WriteRegister(uint32_t index, uint32_t value) {
 
   if (index >= XE_GPU_REG_SHADER_CONSTANT_000_X &&
       index <= XE_GPU_REG_SHADER_CONSTANT_511_W) {
-    if (frame_open_) {
+    // A native bank owns independently retired uniform buffers even when no
+    // Title frame is open. Its per-draw writes must invalidate the same mapped
+    // VS/PS constants without opening or advancing the Title logical frame.
+    if (frame_open_ || native_guest_render_bank_selected_) {
       uint32_t float_constant_index =
           (index - XE_GPU_REG_SHADER_CONSTANT_000_X) >> 2;
       if (float_constant_index >= 256) {
@@ -1802,9 +2382,51 @@ void VulkanCommandProcessor::InvalidateReadbackStaging(
 }
 
 bool VulkanCommandProcessor::FaultCopyResolveToGuestRam(
-    const std::vector<std::pair<uint32_t, uint32_t>>& ranges) {
-  if (ranges.empty() || device_lost_) {
+    const std::vector<std::pair<uint32_t, uint32_t>>& ranges,
+    bool strict_visibility, VulkanSharedMemory* explicit_native_source) {
+  if (native_submissions_sealed_.load(std::memory_order_acquire) ||
+      resolve_fault_copy_failed_.load(std::memory_order_acquire) ||
+      ranges.empty() || device_lost_) {
     return false;
+  }
+  VulkanSharedMemory* const memory_source =
+      explicit_native_source ? explicit_native_source : title_shared_memory_;
+  if (!memory_source ||
+      (explicit_native_source &&
+       (!worker_thread_ || !kernel::XThread::IsInThread(worker_thread_.get()) ||
+        !native_guest_render_bank_selected_ ||
+        !memory_source->is_native_snapshot_backing() ||
+        memory_source != shared_memory_.get()))) {
+    return false;
+  }
+  return CopyResolveOutput(ranges, strict_visibility, *memory_source);
+}
+
+bool VulkanCommandProcessor::CopyResolveOutput(
+    const std::vector<std::pair<uint32_t, uint32_t>>& ranges,
+    bool strict_visibility, VulkanSharedMemory& source,
+    std::span<uint8_t> host_destination) {
+  if (native_submissions_sealed_.load(std::memory_order_acquire) ||
+      resolve_fault_copy_failed_.load(std::memory_order_acquire) ||
+      ranges.empty() || device_lost_) {
+    return false;
+  }
+  const bool host_copy = !host_destination.empty();
+  if (host_copy) {
+    uint64_t total = 0;
+    for (const auto& range : ranges) {
+      if (!range.second || (range.first & 3) || (range.second & 3) ||
+          uint64_t(range.first) + range.second > 0x20000000u) {
+        return false;
+      }
+      total += range.second;
+      if (total > UINT32_MAX) {
+        return false;
+      }
+    }
+    if (total != host_destination.size()) {
+      return false;
+    }
   }
   ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
@@ -1842,6 +2464,7 @@ bool VulkanCommandProcessor::FaultCopyResolveToGuestRam(
   }
   if (dfn.vkResetCommandPool(device, resolve_fault_command_pool_, 0) !=
       VK_SUCCESS) {
+    resolve_fault_copy_failed_.store(true, std::memory_order_release);
     return false;
   }
   VkCommandBufferBeginInfo begin_info = {
@@ -1853,7 +2476,7 @@ bool VulkanCommandProcessor::FaultCopyResolveToGuestRam(
   }
   VkMemoryBarrier memory_barrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
   bool staging = false;
-  if (shared_memory_->is_zero_copy()) {
+  if (source.is_zero_copy() && !host_copy) {
     // With zero-copy the resolve wrote guest RAM itself, so there is nothing
     // to copy, only its writes to make visible to the host.
     memory_barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
@@ -1876,7 +2499,7 @@ bool VulkanCommandProcessor::FaultCopyResolveToGuestRam(
                              &memory_barrier, 0, nullptr, 0, nullptr);
     // Without the host buffer, the ranges are packed into a readback buffer and
     // copied out to guest RAM here once the GPU is done.
-    VkBuffer dest = shared_memory_->host_buffer();
+    VkBuffer dest = host_copy ? VK_NULL_HANDLE : source.host_buffer();
     staging = dest == VK_NULL_HANDLE;
     resolve_fault_copy_regions_.clear();
     VkDeviceSize staging_offset = 0;
@@ -1894,7 +2517,7 @@ bool VulkanCommandProcessor::FaultCopyResolveToGuestRam(
       }
       dest = resolve_fault_readback_.buffer;
     }
-    dfn.vkCmdCopyBuffer(resolve_fault_command_buffer_, shared_memory_->buffer(),
+    dfn.vkCmdCopyBuffer(resolve_fault_command_buffer_, source.buffer(),
                         dest, uint32_t(resolve_fault_copy_regions_.size()),
                         resolve_fault_copy_regions_.data());
     memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -1917,21 +2540,64 @@ bool VulkanCommandProcessor::FaultCopyResolveToGuestRam(
     ui::vulkan::VulkanDevice::Queue::Acquisition queue_acquisition =
         vulkan_device->AcquireQueue(
             vulkan_device->queue_family_graphics_compute(), 0);
+    // The CP stop wait takes this same canonical queue lock. Recheck after
+    // acquisition so no delayed fault can submit after the permanent seal.
+    if (native_submissions_sealed_.load(std::memory_order_acquire) ||
+        resolve_fault_copy_failed_.load(std::memory_order_acquire)) {
+      return false;
+    }
     submit_result = dfn.vkQueueSubmit(queue_acquisition.queue(), 1,
                                       &submit_info, resolve_fault_fence_);
   }
   if (submit_result != VK_SUCCESS) {
+    resolve_fault_copy_failed_.store(true, std::memory_order_release);
     return false;
   }
   VkResult wait_result = dfn.vkWaitForFences(device, 1, &resolve_fault_fence_,
                                              VK_TRUE, UINT64_MAX);
-  dfn.vkResetFences(device, 1, &resolve_fault_fence_);
   if (wait_result != VK_SUCCESS) {
+    resolve_fault_copy_failed_.store(true, std::memory_order_release);
+    return false;
+  }
+  // An unknown wait result may leave this fence pending. Native readback
+  // quarantines and halts rather than resetting or reusing that uncertain work.
+  if (dfn.vkResetFences(device, 1, &resolve_fault_fence_) != VK_SUCCESS) {
+    resolve_fault_copy_failed_.store(true, std::memory_order_release);
     return false;
   }
   if (staging) {
-    InvalidateReadbackStaging(resolve_fault_readback_);
-    CopyPackedRangesToGuestRam(resolve_fault_readback_.mapped, ranges);
+    if (strict_visibility || host_copy) {
+      const auto& readback = resolve_fault_readback_;
+      if (readback.memory == VK_NULL_HANDLE || !readback.mapped ||
+          readback.memory_type >= 32) {
+        resolve_fault_copy_failed_.store(true, std::memory_order_release);
+        return false;
+      }
+      if (!(vulkan_device->memory_types().host_coherent &
+            (UINT32_C(1) << readback.memory_type))) {
+        // CreateReadbackStagingBuffer maps the complete allocation at offset
+        // zero. WHOLE_SIZE covers its tail without atom-alignment ambiguity.
+        VkMappedMemoryRange range = {VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+        range.memory = readback.memory;
+        range.offset = 0;
+        range.size = VK_WHOLE_SIZE;
+        if (dfn.vkInvalidateMappedMemoryRanges(device, 1, &range) !=
+            VK_SUCCESS) {
+          resolve_fault_copy_failed_.store(true, std::memory_order_release);
+          return false;
+        }
+      }
+    } else {
+      InvalidateReadbackStaging(resolve_fault_readback_);
+    }
+    if (host_copy) {
+      // The immutable Title input receives exactly the raw GPU storage bytes.
+      // Never mirror them to guest RAM or reread a mutable guest allocation.
+      std::memcpy(host_destination.data(), resolve_fault_readback_.mapped,
+                  host_destination.size());
+    } else {
+      CopyPackedRangesToGuestRam(resolve_fault_readback_.mapped, ranges);
+    }
   }
   return true;
 }
@@ -2009,8 +2675,11 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr,
     return;
   }
 
-  // In case the swap command is the only one in the frame.
-  if (!BeginSubmission(true)) {
+  // Native Sources progress at worker/WAIT safe points independently of Swap.
+  // This only opens the title frame if Swap is its first command; it is never
+  // a second native execution owner.
+  if (native_frame_fatal_ || IsGuestCommandProcessingHalted() ||
+      native_submissions_sealed_ || !BeginSubmission(true)) {
     return;
   }
 
@@ -2026,439 +2695,306 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr,
 
   auto aspect = graphics_system_->GetScaledAspectRatio();
 
-  presenter->RefreshGuestOutput(
-      frontbuffer_width_scaled, frontbuffer_height_scaled, aspect.first,
-      aspect.second,
-      [this, frontbuffer_width_scaled, frontbuffer_height_scaled,
-       frontbuffer_format, swap_texture_view](
-          ui::Presenter::GuestOutputRefreshContext& context) -> bool {
-        // In case the swap command is the only one in the frame.
-        if (!BeginSubmission(true)) {
-          return false;
-        }
-
-        auto& vulkan_context = static_cast<
-            ui::vulkan::VulkanPresenter::VulkanGuestOutputRefreshContext&>(
-            context);
-        uint64_t guest_output_image_version = vulkan_context.image_version();
-
-        const ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
-        const ui::vulkan::VulkanDevice::Functions& dfn =
-            vulkan_device->functions();
-        const VkDevice device = vulkan_device->device();
-
-        uint32_t swap_frame_index =
-            uint32_t(frame_current_ % kMaxFramesInFlight);
-
-        // This is according to D3D::InitializePresentationParameters from a
-        // game executable, which initializes the 256-entry table gamma ramp for
-        // 8_8_8_8 output and the PWL gamma ramp for 2_10_10_10.
-        // TODO(Triang3l): Choose between the table and PWL based on
-        // DC_LUTA_CONTROL, support both for all formats (and also different
-        // increments for PWL).
-        bool use_pwl_gamma_ramp =
-            frontbuffer_format == xenos::TextureFormat::k_2_10_10_10 ||
-            frontbuffer_format ==
-                xenos::TextureFormat::k_2_10_10_10_AS_16_16_16_16;
-
-        SwapPostEffect swap_post_effect = GetActualSwapPostEffect();
-        bool use_fxaa = swap_post_effect == SwapPostEffect::kFxaa ||
-                        swap_post_effect == SwapPostEffect::kFxaaExtreme;
-
-        if (use_fxaa) {
-          // Make sure the texture of the correct size is available for FXAA.
-          if (fxaa_source_image_ != VK_NULL_HANDLE &&
-              (fxaa_source_width_ != frontbuffer_width_scaled ||
-               fxaa_source_height_ != frontbuffer_height_scaled)) {
-            // Need to resize the FXAA source texture.
-            if (GetCompletedSubmission() < fxaa_source_last_submission_) {
-              // Still in use - defer destruction.
-              destroy_memory_.emplace_back(fxaa_source_last_submission_,
-                                           fxaa_source_memory_);
-              destroy_images_.emplace_back(fxaa_source_last_submission_,
-                                           fxaa_source_image_);
-              destroy_image_views_.emplace_back(fxaa_source_last_submission_,
-                                                fxaa_source_image_view_);
-            } else {
-              dfn.vkDestroyImageView(device, fxaa_source_image_view_, nullptr);
-              dfn.vkDestroyImage(device, fxaa_source_image_, nullptr);
-              dfn.vkFreeMemory(device, fxaa_source_memory_, nullptr);
-            }
-            fxaa_source_image_ = VK_NULL_HANDLE;
-            fxaa_source_image_view_ = VK_NULL_HANDLE;
-            fxaa_source_memory_ = VK_NULL_HANDLE;
-            fxaa_source_width_ = 0;
-            fxaa_source_height_ = 0;
-            fxaa_source_last_submission_ = 0;
+  const bool strict_native_presentation =
+      cvars::native_frame_composite_probe || native_gpu_work_ever_attempted_;
+  bool refreshed = false;
+  try {
+    refreshed = presenter->RefreshGuestOutput(
+        frontbuffer_width_scaled, frontbuffer_height_scaled, aspect.first,
+        aspect.second,
+        [this, frontbuffer_width_scaled, frontbuffer_height_scaled,
+         frontbuffer_format, swap_texture_view, strict_native_presentation](
+            ui::Presenter::GuestOutputRefreshContext& context) -> bool {
+          // In case the swap command is the only one in the frame.
+          if (!BeginSubmission(true)) {
+            return false;
           }
-          if (fxaa_source_image_ == VK_NULL_HANDLE) {
-            // Create the FXAA source texture.
-            VkImageCreateInfo fxaa_source_image_create_info;
-            fxaa_source_image_create_info.sType =
-                VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-            fxaa_source_image_create_info.pNext = nullptr;
-            fxaa_source_image_create_info.flags = 0;
-            fxaa_source_image_create_info.imageType = VK_IMAGE_TYPE_2D;
-            fxaa_source_image_create_info.format = kFxaaSourceFormat;
-            fxaa_source_image_create_info.extent.width =
-                frontbuffer_width_scaled;
-            fxaa_source_image_create_info.extent.height =
-                frontbuffer_height_scaled;
-            fxaa_source_image_create_info.extent.depth = 1;
-            fxaa_source_image_create_info.mipLevels = 1;
-            fxaa_source_image_create_info.arrayLayers = 1;
-            fxaa_source_image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-            fxaa_source_image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-            fxaa_source_image_create_info.usage =
-                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-            fxaa_source_image_create_info.sharingMode =
-                VK_SHARING_MODE_EXCLUSIVE;
-            fxaa_source_image_create_info.queueFamilyIndexCount = 0;
-            fxaa_source_image_create_info.pQueueFamilyIndices = nullptr;
-            fxaa_source_image_create_info.initialLayout =
-                VK_IMAGE_LAYOUT_UNDEFINED;
-            if (dfn.vkCreateImage(device, &fxaa_source_image_create_info,
-                                  nullptr, &fxaa_source_image_) != VK_SUCCESS) {
-              XELOGE("Failed to create the FXAA source image");
-              use_fxaa = false;
-            } else {
-              VkMemoryRequirements fxaa_source_memory_requirements;
-              dfn.vkGetImageMemoryRequirements(
-                  device, fxaa_source_image_, &fxaa_source_memory_requirements);
-              VkMemoryAllocateInfo fxaa_source_memory_allocate_info;
-              fxaa_source_memory_allocate_info.sType =
-                  VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-              fxaa_source_memory_allocate_info.pNext = nullptr;
-              fxaa_source_memory_allocate_info.allocationSize =
-                  fxaa_source_memory_requirements.size;
-              fxaa_source_memory_allocate_info.memoryTypeIndex =
-                  ui::vulkan::util::ChooseMemoryType(
-                      vulkan_device->memory_types(),
-                      fxaa_source_memory_requirements.memoryTypeBits,
-                      ui::vulkan::util::MemoryPurpose::kDeviceLocal);
-              if (fxaa_source_memory_allocate_info.memoryTypeIndex ==
-                      UINT32_MAX ||
-                  dfn.vkAllocateMemory(
-                      device, &fxaa_source_memory_allocate_info, nullptr,
-                      &fxaa_source_memory_) != VK_SUCCESS) {
-                XELOGE("Failed to allocate FXAA source image memory");
+
+          auto& vulkan_context = static_cast<
+              ui::vulkan::VulkanPresenter::VulkanGuestOutputRefreshContext&>(
+              context);
+          uint64_t guest_output_image_version = vulkan_context.image_version();
+
+          const ui::vulkan::VulkanDevice* const vulkan_device =
+              GetVulkanDevice();
+          const ui::vulkan::VulkanDevice::Functions& dfn =
+              vulkan_device->functions();
+          const VkDevice device = vulkan_device->device();
+
+          uint32_t swap_frame_index =
+              uint32_t(frame_current_ % kMaxFramesInFlight);
+
+          // This is according to D3D::InitializePresentationParameters from a
+          // game executable, which initializes the 256-entry table gamma ramp
+          // for 8_8_8_8 output and the PWL gamma ramp for 2_10_10_10.
+          // TODO(Triang3l): Choose between the table and PWL based on
+          // DC_LUTA_CONTROL, support both for all formats (and also different
+          // increments for PWL).
+          bool use_pwl_gamma_ramp =
+              frontbuffer_format == xenos::TextureFormat::k_2_10_10_10 ||
+              frontbuffer_format ==
+                  xenos::TextureFormat::k_2_10_10_10_AS_16_16_16_16;
+
+          SwapPostEffect swap_post_effect = GetActualSwapPostEffect();
+          bool use_fxaa = swap_post_effect == SwapPostEffect::kFxaa ||
+                          swap_post_effect == SwapPostEffect::kFxaaExtreme;
+
+          if (use_fxaa) {
+            // Make sure the texture of the correct size is available for FXAA.
+            if (fxaa_source_image_ != VK_NULL_HANDLE &&
+                (fxaa_source_width_ != frontbuffer_width_scaled ||
+                 fxaa_source_height_ != frontbuffer_height_scaled)) {
+              // Need to resize the FXAA source texture.
+              if (GetCompletedSubmission() < fxaa_source_last_submission_) {
+                // Still in use - defer destruction.
+                destroy_memory_.emplace_back(fxaa_source_last_submission_,
+                                             fxaa_source_memory_);
+                destroy_images_.emplace_back(fxaa_source_last_submission_,
+                                             fxaa_source_image_);
+                destroy_image_views_.emplace_back(fxaa_source_last_submission_,
+                                                  fxaa_source_image_view_);
+              } else {
+                dfn.vkDestroyImageView(device, fxaa_source_image_view_,
+                                       nullptr);
                 dfn.vkDestroyImage(device, fxaa_source_image_, nullptr);
-                fxaa_source_image_ = VK_NULL_HANDLE;
-                use_fxaa = false;
-              } else if (dfn.vkBindImageMemory(device, fxaa_source_image_,
-                                               fxaa_source_memory_,
-                                               0) != VK_SUCCESS) {
-                XELOGE("Failed to bind FXAA source image memory");
                 dfn.vkFreeMemory(device, fxaa_source_memory_, nullptr);
-                fxaa_source_memory_ = VK_NULL_HANDLE;
-                dfn.vkDestroyImage(device, fxaa_source_image_, nullptr);
-                fxaa_source_image_ = VK_NULL_HANDLE;
+              }
+              fxaa_source_image_ = VK_NULL_HANDLE;
+              fxaa_source_image_view_ = VK_NULL_HANDLE;
+              fxaa_source_memory_ = VK_NULL_HANDLE;
+              fxaa_source_width_ = 0;
+              fxaa_source_height_ = 0;
+              fxaa_source_last_submission_ = 0;
+            }
+            if (fxaa_source_image_ == VK_NULL_HANDLE) {
+              // Create the FXAA source texture.
+              VkImageCreateInfo fxaa_source_image_create_info;
+              fxaa_source_image_create_info.sType =
+                  VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+              fxaa_source_image_create_info.pNext = nullptr;
+              fxaa_source_image_create_info.flags = 0;
+              fxaa_source_image_create_info.imageType = VK_IMAGE_TYPE_2D;
+              fxaa_source_image_create_info.format = kFxaaSourceFormat;
+              fxaa_source_image_create_info.extent.width =
+                  frontbuffer_width_scaled;
+              fxaa_source_image_create_info.extent.height =
+                  frontbuffer_height_scaled;
+              fxaa_source_image_create_info.extent.depth = 1;
+              fxaa_source_image_create_info.mipLevels = 1;
+              fxaa_source_image_create_info.arrayLayers = 1;
+              fxaa_source_image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+              fxaa_source_image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+              fxaa_source_image_create_info.usage =
+                  VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+              fxaa_source_image_create_info.sharingMode =
+                  VK_SHARING_MODE_EXCLUSIVE;
+              fxaa_source_image_create_info.queueFamilyIndexCount = 0;
+              fxaa_source_image_create_info.pQueueFamilyIndices = nullptr;
+              fxaa_source_image_create_info.initialLayout =
+                  VK_IMAGE_LAYOUT_UNDEFINED;
+              if (dfn.vkCreateImage(device, &fxaa_source_image_create_info,
+                                    nullptr,
+                                    &fxaa_source_image_) != VK_SUCCESS) {
+                XELOGE("Failed to create the FXAA source image");
                 use_fxaa = false;
               } else {
-                VkImageViewCreateInfo fxaa_source_image_view_create_info;
-                fxaa_source_image_view_create_info.sType =
-                    VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-                fxaa_source_image_view_create_info.pNext = nullptr;
-                fxaa_source_image_view_create_info.flags = 0;
-                fxaa_source_image_view_create_info.image = fxaa_source_image_;
-                fxaa_source_image_view_create_info.viewType =
-                    VK_IMAGE_VIEW_TYPE_2D;
-                fxaa_source_image_view_create_info.format = kFxaaSourceFormat;
-                fxaa_source_image_view_create_info.components.r =
-                    VK_COMPONENT_SWIZZLE_IDENTITY;
-                fxaa_source_image_view_create_info.components.g =
-                    VK_COMPONENT_SWIZZLE_IDENTITY;
-                fxaa_source_image_view_create_info.components.b =
-                    VK_COMPONENT_SWIZZLE_IDENTITY;
-                fxaa_source_image_view_create_info.components.a =
-                    VK_COMPONENT_SWIZZLE_IDENTITY;
-                fxaa_source_image_view_create_info.subresourceRange.aspectMask =
-                    VK_IMAGE_ASPECT_COLOR_BIT;
-                fxaa_source_image_view_create_info.subresourceRange
-                    .baseMipLevel = 0;
-                fxaa_source_image_view_create_info.subresourceRange.levelCount =
-                    1;
-                fxaa_source_image_view_create_info.subresourceRange
-                    .baseArrayLayer = 0;
-                fxaa_source_image_view_create_info.subresourceRange.layerCount =
-                    1;
-                if (dfn.vkCreateImageView(
-                        device, &fxaa_source_image_view_create_info, nullptr,
-                        &fxaa_source_image_view_) != VK_SUCCESS) {
-                  XELOGE("Failed to create the FXAA source image view");
+                VkMemoryRequirements fxaa_source_memory_requirements;
+                dfn.vkGetImageMemoryRequirements(
+                    device, fxaa_source_image_,
+                    &fxaa_source_memory_requirements);
+                VkMemoryAllocateInfo fxaa_source_memory_allocate_info;
+                fxaa_source_memory_allocate_info.sType =
+                    VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                fxaa_source_memory_allocate_info.pNext = nullptr;
+                fxaa_source_memory_allocate_info.allocationSize =
+                    fxaa_source_memory_requirements.size;
+                fxaa_source_memory_allocate_info.memoryTypeIndex =
+                    ui::vulkan::util::ChooseMemoryType(
+                        vulkan_device->memory_types(),
+                        fxaa_source_memory_requirements.memoryTypeBits,
+                        ui::vulkan::util::MemoryPurpose::kDeviceLocal);
+                if (fxaa_source_memory_allocate_info.memoryTypeIndex ==
+                        UINT32_MAX ||
+                    dfn.vkAllocateMemory(
+                        device, &fxaa_source_memory_allocate_info, nullptr,
+                        &fxaa_source_memory_) != VK_SUCCESS) {
+                  XELOGE("Failed to allocate FXAA source image memory");
+                  dfn.vkDestroyImage(device, fxaa_source_image_, nullptr);
+                  fxaa_source_image_ = VK_NULL_HANDLE;
+                  use_fxaa = false;
+                } else if (dfn.vkBindImageMemory(device, fxaa_source_image_,
+                                                 fxaa_source_memory_,
+                                                 0) != VK_SUCCESS) {
+                  XELOGE("Failed to bind FXAA source image memory");
                   dfn.vkFreeMemory(device, fxaa_source_memory_, nullptr);
                   fxaa_source_memory_ = VK_NULL_HANDLE;
                   dfn.vkDestroyImage(device, fxaa_source_image_, nullptr);
                   fxaa_source_image_ = VK_NULL_HANDLE;
                   use_fxaa = false;
                 } else {
-                  fxaa_source_width_ = frontbuffer_width_scaled;
-                  fxaa_source_height_ = frontbuffer_height_scaled;
+                  VkImageViewCreateInfo fxaa_source_image_view_create_info;
+                  fxaa_source_image_view_create_info.sType =
+                      VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                  fxaa_source_image_view_create_info.pNext = nullptr;
+                  fxaa_source_image_view_create_info.flags = 0;
+                  fxaa_source_image_view_create_info.image = fxaa_source_image_;
+                  fxaa_source_image_view_create_info.viewType =
+                      VK_IMAGE_VIEW_TYPE_2D;
+                  fxaa_source_image_view_create_info.format = kFxaaSourceFormat;
+                  fxaa_source_image_view_create_info.components.r =
+                      VK_COMPONENT_SWIZZLE_IDENTITY;
+                  fxaa_source_image_view_create_info.components.g =
+                      VK_COMPONENT_SWIZZLE_IDENTITY;
+                  fxaa_source_image_view_create_info.components.b =
+                      VK_COMPONENT_SWIZZLE_IDENTITY;
+                  fxaa_source_image_view_create_info.components.a =
+                      VK_COMPONENT_SWIZZLE_IDENTITY;
+                  fxaa_source_image_view_create_info.subresourceRange
+                      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                  fxaa_source_image_view_create_info.subresourceRange
+                      .baseMipLevel = 0;
+                  fxaa_source_image_view_create_info.subresourceRange
+                      .levelCount = 1;
+                  fxaa_source_image_view_create_info.subresourceRange
+                      .baseArrayLayer = 0;
+                  fxaa_source_image_view_create_info.subresourceRange
+                      .layerCount = 1;
+                  if (dfn.vkCreateImageView(
+                          device, &fxaa_source_image_view_create_info, nullptr,
+                          &fxaa_source_image_view_) != VK_SUCCESS) {
+                    XELOGE("Failed to create the FXAA source image view");
+                    dfn.vkFreeMemory(device, fxaa_source_memory_, nullptr);
+                    fxaa_source_memory_ = VK_NULL_HANDLE;
+                    dfn.vkDestroyImage(device, fxaa_source_image_, nullptr);
+                    fxaa_source_image_ = VK_NULL_HANDLE;
+                    use_fxaa = false;
+                  } else {
+                    fxaa_source_width_ = frontbuffer_width_scaled;
+                    fxaa_source_height_ = frontbuffer_height_scaled;
+                  }
                 }
               }
             }
           }
-        }
 
-        // FXAA can result in more than 8 bits of precision.
-        context.SetIs8bpc(!use_pwl_gamma_ramp && !use_fxaa);
+          // FXAA can result in more than 8 bits of precision.
+          context.SetIs8bpc(!use_pwl_gamma_ramp && !use_fxaa);
 
-        // Update the gamma ramp if it's out of date.
-        uint32_t& gamma_ramp_frame_index_ref =
-            use_pwl_gamma_ramp ? gamma_ramp_pwl_current_frame_
-                               : gamma_ramp_256_entry_table_current_frame_;
-        if (gamma_ramp_frame_index_ref == UINT32_MAX) {
-          constexpr uint32_t kGammaRampSize256EntryTable =
-              sizeof(uint32_t) * 256;
-          constexpr uint32_t kGammaRampSizePWL = sizeof(uint16_t) * 2 * 3 * 128;
-          constexpr uint32_t kGammaRampSize =
-              kGammaRampSize256EntryTable + kGammaRampSizePWL;
-          uint32_t gamma_ramp_offset_in_frame =
-              use_pwl_gamma_ramp ? kGammaRampSize256EntryTable : 0;
-          uint32_t gamma_ramp_upload_offset =
-              kGammaRampSize * swap_frame_index + gamma_ramp_offset_in_frame;
-          uint32_t gamma_ramp_size = use_pwl_gamma_ramp
-                                         ? kGammaRampSizePWL
-                                         : kGammaRampSize256EntryTable;
-          void* gamma_ramp_frame_upload =
-              reinterpret_cast<uint8_t*>(gamma_ramp_upload_mapping_) +
-              gamma_ramp_upload_offset;
-          if (std::endian::native != std::endian::little &&
-              use_pwl_gamma_ramp) {
-            // R16G16 is first R16, where the shader expects the base, and
-            // second G16, where the delta should be, but gamma_ramp_pwl_rgb()
-            // is an array of 32-bit DC_LUT_PWL_DATA registers - swap 16 bits in
-            // each 32.
-            auto gamma_ramp_pwl_upload =
-                reinterpret_cast<reg::DC_LUT_PWL_DATA*>(
-                    gamma_ramp_frame_upload);
-            const reg::DC_LUT_PWL_DATA* gamma_ramp_pwl = gamma_ramp_pwl_rgb();
-            for (size_t i = 0; i < 128 * 3; ++i) {
-              reg::DC_LUT_PWL_DATA& gamma_ramp_pwl_upload_entry =
-                  gamma_ramp_pwl_upload[i];
-              reg::DC_LUT_PWL_DATA gamma_ramp_pwl_entry = gamma_ramp_pwl[i];
-              gamma_ramp_pwl_upload_entry.base = gamma_ramp_pwl_entry.delta;
-              gamma_ramp_pwl_upload_entry.delta = gamma_ramp_pwl_entry.base;
+          // Update the gamma ramp if it's out of date.
+          uint32_t& gamma_ramp_frame_index_ref =
+              use_pwl_gamma_ramp ? gamma_ramp_pwl_current_frame_
+                                 : gamma_ramp_256_entry_table_current_frame_;
+          if (gamma_ramp_frame_index_ref == UINT32_MAX) {
+            constexpr uint32_t kGammaRampSize256EntryTable =
+                sizeof(uint32_t) * 256;
+            constexpr uint32_t kGammaRampSizePWL =
+                sizeof(uint16_t) * 2 * 3 * 128;
+            constexpr uint32_t kGammaRampSize =
+                kGammaRampSize256EntryTable + kGammaRampSizePWL;
+            uint32_t gamma_ramp_offset_in_frame =
+                use_pwl_gamma_ramp ? kGammaRampSize256EntryTable : 0;
+            uint32_t gamma_ramp_upload_offset =
+                kGammaRampSize * swap_frame_index + gamma_ramp_offset_in_frame;
+            uint32_t gamma_ramp_size = use_pwl_gamma_ramp
+                                           ? kGammaRampSizePWL
+                                           : kGammaRampSize256EntryTable;
+            void* gamma_ramp_frame_upload =
+                reinterpret_cast<uint8_t*>(gamma_ramp_upload_mapping_) +
+                gamma_ramp_upload_offset;
+            if (std::endian::native != std::endian::little &&
+                use_pwl_gamma_ramp) {
+              // R16G16 is first R16, where the shader expects the base, and
+              // second G16, where the delta should be, but gamma_ramp_pwl_rgb()
+              // is an array of 32-bit DC_LUT_PWL_DATA registers - swap 16 bits
+              // in each 32.
+              auto gamma_ramp_pwl_upload =
+                  reinterpret_cast<reg::DC_LUT_PWL_DATA*>(
+                      gamma_ramp_frame_upload);
+              const reg::DC_LUT_PWL_DATA* gamma_ramp_pwl = gamma_ramp_pwl_rgb();
+              for (size_t i = 0; i < 128 * 3; ++i) {
+                reg::DC_LUT_PWL_DATA& gamma_ramp_pwl_upload_entry =
+                    gamma_ramp_pwl_upload[i];
+                reg::DC_LUT_PWL_DATA gamma_ramp_pwl_entry = gamma_ramp_pwl[i];
+                gamma_ramp_pwl_upload_entry.base = gamma_ramp_pwl_entry.delta;
+                gamma_ramp_pwl_upload_entry.delta = gamma_ramp_pwl_entry.base;
+              }
+            } else {
+              std::memcpy(
+                  gamma_ramp_frame_upload,
+                  use_pwl_gamma_ramp
+                      ? static_cast<const void*>(gamma_ramp_pwl_rgb())
+                      : static_cast<const void*>(gamma_ramp_256_entry_table()),
+                  gamma_ramp_size);
             }
-          } else {
-            std::memcpy(
-                gamma_ramp_frame_upload,
-                use_pwl_gamma_ramp
-                    ? static_cast<const void*>(gamma_ramp_pwl_rgb())
-                    : static_cast<const void*>(gamma_ramp_256_entry_table()),
-                gamma_ramp_size);
+            bool gamma_ramp_has_upload_buffer =
+                gamma_ramp_upload_buffer_memory_ != VK_NULL_HANDLE;
+            ui::vulkan::util::FlushMappedMemoryRange(
+                vulkan_device,
+                gamma_ramp_has_upload_buffer ? gamma_ramp_upload_buffer_memory_
+                                             : gamma_ramp_buffer_memory_,
+                gamma_ramp_upload_memory_type_, gamma_ramp_upload_offset,
+                gamma_ramp_upload_memory_size_, gamma_ramp_size);
+            if (gamma_ramp_has_upload_buffer) {
+              // Copy from the host-visible buffer to the device-local one.
+              PushBufferMemoryBarrier(
+                  gamma_ramp_buffer_, gamma_ramp_offset_in_frame,
+                  gamma_ramp_size, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                  VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_READ_BIT,
+                  VK_ACCESS_TRANSFER_WRITE_BIT, VK_QUEUE_FAMILY_IGNORED,
+                  VK_QUEUE_FAMILY_IGNORED, false);
+              SubmitBarriers(true);
+              InsertDebugMarker("Gamma Ramp Upload: %u bytes",
+                                static_cast<uint32_t>(gamma_ramp_size));
+              VkBufferCopy gamma_ramp_buffer_copy;
+              gamma_ramp_buffer_copy.srcOffset = gamma_ramp_upload_offset;
+              gamma_ramp_buffer_copy.dstOffset = gamma_ramp_offset_in_frame;
+              gamma_ramp_buffer_copy.size = gamma_ramp_size;
+              deferred_command_buffer_.CmdVkCopyBuffer(
+                  gamma_ramp_upload_buffer_, gamma_ramp_buffer_, 1,
+                  &gamma_ramp_buffer_copy);
+              PushBufferMemoryBarrier(
+                  gamma_ramp_buffer_, gamma_ramp_offset_in_frame,
+                  gamma_ramp_size, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                  VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                  VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                  VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, false);
+            }
+            // The device-local, but not host-visible, gamma ramp buffer doesn't
+            // have per-frame sets of gamma ramps.
+            gamma_ramp_frame_index_ref =
+                gamma_ramp_has_upload_buffer ? 0 : swap_frame_index;
           }
-          bool gamma_ramp_has_upload_buffer =
-              gamma_ramp_upload_buffer_memory_ != VK_NULL_HANDLE;
-          ui::vulkan::util::FlushMappedMemoryRange(
-              vulkan_device,
-              gamma_ramp_has_upload_buffer ? gamma_ramp_upload_buffer_memory_
-                                           : gamma_ramp_buffer_memory_,
-              gamma_ramp_upload_memory_type_, gamma_ramp_upload_offset,
-              gamma_ramp_upload_memory_size_, gamma_ramp_size);
-          if (gamma_ramp_has_upload_buffer) {
-            // Copy from the host-visible buffer to the device-local one.
-            PushBufferMemoryBarrier(
-                gamma_ramp_buffer_, gamma_ramp_offset_in_frame, gamma_ramp_size,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_READ_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT, VK_QUEUE_FAMILY_IGNORED,
-                VK_QUEUE_FAMILY_IGNORED, false);
-            SubmitBarriers(true);
-            InsertDebugMarker("Gamma Ramp Upload: %u bytes",
-                              static_cast<uint32_t>(gamma_ramp_size));
-            VkBufferCopy gamma_ramp_buffer_copy;
-            gamma_ramp_buffer_copy.srcOffset = gamma_ramp_upload_offset;
-            gamma_ramp_buffer_copy.dstOffset = gamma_ramp_offset_in_frame;
-            gamma_ramp_buffer_copy.size = gamma_ramp_size;
-            deferred_command_buffer_.CmdVkCopyBuffer(gamma_ramp_upload_buffer_,
-                                                     gamma_ramp_buffer_, 1,
-                                                     &gamma_ramp_buffer_copy);
-            PushBufferMemoryBarrier(
-                gamma_ramp_buffer_, gamma_ramp_offset_in_frame, gamma_ramp_size,
-                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, false);
+
+          // Track FXAA source texture submission.
+          if (use_fxaa) {
+            fxaa_source_last_submission_ = GetCurrentSubmission();
           }
-          // The device-local, but not host-visible, gamma ramp buffer doesn't
-          // have per-frame sets of gamma ramps.
-          gamma_ramp_frame_index_ref =
-              gamma_ramp_has_upload_buffer ? 0 : swap_frame_index;
-        }
 
-        // Track FXAA source texture submission.
-        if (use_fxaa) {
-          fxaa_source_last_submission_ = GetCurrentSubmission();
-        }
+          // Determine the destination image for gamma application.
+          // If FXAA is enabled, gamma writes to the FXAA source texture.
+          // Otherwise, it writes directly to the guest output.
+          VkImage apply_gamma_dest_image =
+              use_fxaa ? fxaa_source_image_ : vulkan_context.image();
+          VkImageView apply_gamma_dest_image_view =
+              use_fxaa ? fxaa_source_image_view_ : vulkan_context.image_view();
 
-        // Determine the destination image for gamma application.
-        // If FXAA is enabled, gamma writes to the FXAA source texture.
-        // Otherwise, it writes directly to the guest output.
-        VkImage apply_gamma_dest_image =
-            use_fxaa ? fxaa_source_image_ : vulkan_context.image();
-        VkImageView apply_gamma_dest_image_view =
-            use_fxaa ? fxaa_source_image_view_ : vulkan_context.image_view();
-
-        // Transition destination image for compute shader storage image write.
-        if (use_fxaa) {
-          // FXAA source - transition from undefined (we'll be overwriting).
-          PushImageMemoryBarrier(apply_gamma_dest_image,
-                                 ui::vulkan::util::InitializeSubresourceRange(),
-                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-                                 VK_ACCESS_SHADER_WRITE_BIT,
-                                 VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_GENERAL);
-        } else if (vulkan_context.image_ever_written_previously()) {
-          // Guest output - insert a barrier after the last presenter's usage.
-          // Will be overwriting all the contents, so oldLayout can be
-          // UNDEFINED.
-          PushImageMemoryBarrier(
-              apply_gamma_dest_image,
-              ui::vulkan::util::InitializeSubresourceRange(),
-              ui::vulkan::VulkanPresenter::kGuestOutputInternalStageMask,
-              VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-              ui::vulkan::VulkanPresenter::kGuestOutputInternalAccessMask,
-              VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-              VK_IMAGE_LAYOUT_GENERAL);
-        } else {
-          // Guest output - first write to the image, just transition.
-          PushImageMemoryBarrier(apply_gamma_dest_image,
-                                 ui::vulkan::util::InitializeSubresourceRange(),
-                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
-                                 VK_ACCESS_SHADER_WRITE_BIT,
-                                 VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_GENERAL);
-        }
-
-        // End the current render pass before inserting barriers.
-        SubmitBarriers(true);
-
-        PushDebugMarker("Apply Gamma Ramp: %s%s",
-                        use_pwl_gamma_ramp ? "PWL" : "256-entry table",
-                        use_fxaa ? " (with FXAA luma)" : "");
-
-        // Select the appropriate gamma pipeline.
-        VkPipeline gamma_pipeline;
-        if (use_pwl_gamma_ramp) {
-          gamma_pipeline = use_fxaa ? swap_apply_gamma_pwl_fxaa_luma_pipeline_
-                                    : swap_apply_gamma_pwl_pipeline_;
-        } else {
-          gamma_pipeline =
-              use_fxaa ? swap_apply_gamma_256_entry_table_fxaa_luma_pipeline_
-                       : swap_apply_gamma_256_entry_table_pipeline_;
-        }
-        deferred_command_buffer_.CmdVkBindPipeline(
-            VK_PIPELINE_BIND_POINT_COMPUTE, gamma_pipeline);
-
-        // Update the source descriptor set with the swap texture.
-        VkDescriptorSet swap_descriptor_source =
-            swap_descriptors_source_[swap_frame_index];
-        VkDescriptorImageInfo swap_descriptor_source_image_info;
-        swap_descriptor_source_image_info.sampler = VK_NULL_HANDLE;
-        swap_descriptor_source_image_info.imageView = swap_texture_view;
-        swap_descriptor_source_image_info.imageLayout =
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        VkWriteDescriptorSet swap_descriptor_source_write;
-        swap_descriptor_source_write.sType =
-            VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        swap_descriptor_source_write.pNext = nullptr;
-        swap_descriptor_source_write.dstSet = swap_descriptor_source;
-        swap_descriptor_source_write.dstBinding = 0;
-        swap_descriptor_source_write.dstArrayElement = 0;
-        swap_descriptor_source_write.descriptorCount = 1;
-        swap_descriptor_source_write.descriptorType =
-            VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        swap_descriptor_source_write.pImageInfo =
-            &swap_descriptor_source_image_info;
-        swap_descriptor_source_write.pBufferInfo = nullptr;
-        swap_descriptor_source_write.pTexelBufferView = nullptr;
-
-        // Update the destination descriptor set with the destination image.
-        // When FXAA is enabled, use a separate descriptor set for writing to
-        // FXAA source to avoid the issue where both passes would use the same
-        // descriptor set (which gets updated twice before submission).
-        VkDescriptorSet swap_descriptor_dest =
-            use_fxaa ? fxaa_source_storage_descriptors_[swap_frame_index]
-                     : swap_descriptors_dest_[swap_frame_index];
-        VkDescriptorImageInfo swap_descriptor_dest_image_info;
-        swap_descriptor_dest_image_info.sampler = VK_NULL_HANDLE;
-        swap_descriptor_dest_image_info.imageView = apply_gamma_dest_image_view;
-        swap_descriptor_dest_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        VkWriteDescriptorSet swap_descriptor_dest_write;
-        swap_descriptor_dest_write.sType =
-            VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        swap_descriptor_dest_write.pNext = nullptr;
-        swap_descriptor_dest_write.dstSet = swap_descriptor_dest;
-        swap_descriptor_dest_write.dstBinding = 0;
-        swap_descriptor_dest_write.dstArrayElement = 0;
-        swap_descriptor_dest_write.descriptorCount = 1;
-        swap_descriptor_dest_write.descriptorType =
-            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        swap_descriptor_dest_write.pImageInfo =
-            &swap_descriptor_dest_image_info;
-        swap_descriptor_dest_write.pBufferInfo = nullptr;
-        swap_descriptor_dest_write.pTexelBufferView = nullptr;
-
-        std::array<VkWriteDescriptorSet, 2> swap_descriptor_writes = {
-            swap_descriptor_source_write, swap_descriptor_dest_write};
-        dfn.vkUpdateDescriptorSets(device,
-                                   uint32_t(swap_descriptor_writes.size()),
-                                   swap_descriptor_writes.data(), 0, nullptr);
-
-        // Set push constants.
-        ApplyGammaConstants apply_gamma_constants;
-        apply_gamma_constants.size[0] = frontbuffer_width_scaled;
-        apply_gamma_constants.size[1] = frontbuffer_height_scaled;
-        deferred_command_buffer_.CmdVkPushConstants(
-            swap_apply_gamma_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-            sizeof(apply_gamma_constants), &apply_gamma_constants);
-
-        // Bind descriptor sets.
-        std::array<VkDescriptorSet, kSwapApplyGammaDescriptorSetCount>
-            swap_descriptor_sets{};
-        swap_descriptor_sets[kSwapApplyGammaDescriptorSetRamp] =
-            swap_descriptors_gamma_ramp_[2 * gamma_ramp_frame_index_ref +
-                                         uint32_t(use_pwl_gamma_ramp)];
-        swap_descriptor_sets[kSwapApplyGammaDescriptorSetSource] =
-            swap_descriptor_source;
-        swap_descriptor_sets[kSwapApplyGammaDescriptorSetDest] =
-            swap_descriptor_dest;
-        // TODO(Triang3l): Red / blue swap without imageViewFormatSwizzle.
-        deferred_command_buffer_.CmdVkBindDescriptorSets(
-            VK_PIPELINE_BIND_POINT_COMPUTE, swap_apply_gamma_pipeline_layout_,
-            0, uint32_t(swap_descriptor_sets.size()),
-            swap_descriptor_sets.data(), 0, nullptr);
-
-        // Dispatch compute shader. Local size is 16x8.
-        uint32_t group_count_x = (frontbuffer_width_scaled + 15) / 16;
-        uint32_t group_count_y = (frontbuffer_height_scaled + 7) / 8;
-        ++submission_in_progress_.dispatch_count;
-        deferred_command_buffer_.CmdVkDispatch(group_count_x, group_count_y, 1);
-
-        PopDebugMarker();
-
-        // Apply FXAA if enabled.
-        if (use_fxaa) {
-          PushDebugMarker("FXAA: %s",
-                          swap_post_effect == SwapPostEffect::kFxaaExtreme
-                              ? "Extreme"
-                              : "Standard");
-
-          // Transition FXAA source from storage image write to sampled read.
-          // Transition guest output to storage image write.
-          PushImageMemoryBarrier(
-              fxaa_source_image_,
-              ui::vulkan::util::InitializeSubresourceRange(),
-              VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-              VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-              VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL,
-              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-          if (vulkan_context.image_ever_written_previously()) {
+          // Transition destination image for compute shader storage image
+          // write.
+          if (use_fxaa) {
+            // FXAA source - transition from undefined (we'll be overwriting).
             PushImageMemoryBarrier(
-                vulkan_context.image(),
+                apply_gamma_dest_image,
+                ui::vulkan::util::InitializeSubresourceRange(),
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_IMAGE_LAYOUT_GENERAL);
+          } else if (vulkan_context.image_ever_written_previously()) {
+            // Guest output - insert a barrier after the last presenter's usage.
+            // Will be overwriting all the contents, so oldLayout can be
+            // UNDEFINED.
+            PushImageMemoryBarrier(
+                apply_gamma_dest_image,
                 ui::vulkan::util::InitializeSubresourceRange(),
                 ui::vulkan::VulkanPresenter::kGuestOutputInternalStageMask,
                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -2466,121 +3002,304 @@ void VulkanCommandProcessor::IssueSwap(uint32_t frontbuffer_ptr,
                 VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_GENERAL);
           } else {
+            // Guest output - first write to the image, just transition.
             PushImageMemoryBarrier(
-                vulkan_context.image(),
+                apply_gamma_dest_image,
                 ui::vulkan::util::InitializeSubresourceRange(),
                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
                 VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_GENERAL);
           }
+
+          // End the current render pass before inserting barriers.
           SubmitBarriers(true);
 
-          // Bind FXAA pipeline.
+          PushDebugMarker("Apply Gamma Ramp: %s%s",
+                          use_pwl_gamma_ramp ? "PWL" : "256-entry table",
+                          use_fxaa ? " (with FXAA luma)" : "");
+
+          // Select the appropriate gamma pipeline.
+          VkPipeline gamma_pipeline;
+          if (use_pwl_gamma_ramp) {
+            gamma_pipeline = use_fxaa ? swap_apply_gamma_pwl_fxaa_luma_pipeline_
+                                      : swap_apply_gamma_pwl_pipeline_;
+          } else {
+            gamma_pipeline =
+                use_fxaa ? swap_apply_gamma_256_entry_table_fxaa_luma_pipeline_
+                         : swap_apply_gamma_256_entry_table_pipeline_;
+          }
           deferred_command_buffer_.CmdVkBindPipeline(
-              VK_PIPELINE_BIND_POINT_COMPUTE,
-              swap_post_effect == SwapPostEffect::kFxaaExtreme
-                  ? fxaa_extreme_pipeline_
-                  : fxaa_pipeline_);
+              VK_PIPELINE_BIND_POINT_COMPUTE, gamma_pipeline);
 
-          // Update FXAA source descriptor (combined image sampler).
-          VkDescriptorSet fxaa_source_descriptor =
-              fxaa_source_descriptors_[swap_frame_index];
-          VkDescriptorImageInfo fxaa_source_descriptor_image_info;
-          fxaa_source_descriptor_image_info.sampler = fxaa_sampler_;
-          fxaa_source_descriptor_image_info.imageView = fxaa_source_image_view_;
-          fxaa_source_descriptor_image_info.imageLayout =
+          // Update the source descriptor set with the swap texture.
+          VkDescriptorSet swap_descriptor_source =
+              swap_descriptors_source_[swap_frame_index];
+          VkDescriptorImageInfo swap_descriptor_source_image_info;
+          swap_descriptor_source_image_info.sampler = VK_NULL_HANDLE;
+          swap_descriptor_source_image_info.imageView = swap_texture_view;
+          swap_descriptor_source_image_info.imageLayout =
               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-          VkWriteDescriptorSet fxaa_source_descriptor_write;
-          fxaa_source_descriptor_write.sType =
+          VkWriteDescriptorSet swap_descriptor_source_write;
+          swap_descriptor_source_write.sType =
               VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-          fxaa_source_descriptor_write.pNext = nullptr;
-          fxaa_source_descriptor_write.dstSet = fxaa_source_descriptor;
-          fxaa_source_descriptor_write.dstBinding = 0;
-          fxaa_source_descriptor_write.dstArrayElement = 0;
-          fxaa_source_descriptor_write.descriptorCount = 1;
-          fxaa_source_descriptor_write.descriptorType =
-              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-          fxaa_source_descriptor_write.pImageInfo =
-              &fxaa_source_descriptor_image_info;
-          fxaa_source_descriptor_write.pBufferInfo = nullptr;
-          fxaa_source_descriptor_write.pTexelBufferView = nullptr;
+          swap_descriptor_source_write.pNext = nullptr;
+          swap_descriptor_source_write.dstSet = swap_descriptor_source;
+          swap_descriptor_source_write.dstBinding = 0;
+          swap_descriptor_source_write.dstArrayElement = 0;
+          swap_descriptor_source_write.descriptorCount = 1;
+          swap_descriptor_source_write.descriptorType =
+              VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+          swap_descriptor_source_write.pImageInfo =
+              &swap_descriptor_source_image_info;
+          swap_descriptor_source_write.pBufferInfo = nullptr;
+          swap_descriptor_source_write.pTexelBufferView = nullptr;
 
-          // Update FXAA destination descriptor (guest output image).
-          VkDescriptorSet fxaa_dest_descriptor =
-              swap_descriptors_dest_[swap_frame_index];
-          VkDescriptorImageInfo fxaa_dest_descriptor_image_info;
-          fxaa_dest_descriptor_image_info.sampler = VK_NULL_HANDLE;
-          fxaa_dest_descriptor_image_info.imageView =
-              vulkan_context.image_view();
-          fxaa_dest_descriptor_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-          VkWriteDescriptorSet fxaa_dest_descriptor_write;
-          fxaa_dest_descriptor_write.sType =
+          // Update the destination descriptor set with the destination image.
+          // When FXAA is enabled, use a separate descriptor set for writing to
+          // FXAA source to avoid the issue where both passes would use the same
+          // descriptor set (which gets updated twice before submission).
+          VkDescriptorSet swap_descriptor_dest =
+              use_fxaa ? fxaa_source_storage_descriptors_[swap_frame_index]
+                       : swap_descriptors_dest_[swap_frame_index];
+          VkDescriptorImageInfo swap_descriptor_dest_image_info;
+          swap_descriptor_dest_image_info.sampler = VK_NULL_HANDLE;
+          swap_descriptor_dest_image_info.imageView =
+              apply_gamma_dest_image_view;
+          swap_descriptor_dest_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+          VkWriteDescriptorSet swap_descriptor_dest_write;
+          swap_descriptor_dest_write.sType =
               VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-          fxaa_dest_descriptor_write.pNext = nullptr;
-          fxaa_dest_descriptor_write.dstSet = fxaa_dest_descriptor;
-          fxaa_dest_descriptor_write.dstBinding = 0;
-          fxaa_dest_descriptor_write.dstArrayElement = 0;
-          fxaa_dest_descriptor_write.descriptorCount = 1;
-          fxaa_dest_descriptor_write.descriptorType =
+          swap_descriptor_dest_write.pNext = nullptr;
+          swap_descriptor_dest_write.dstSet = swap_descriptor_dest;
+          swap_descriptor_dest_write.dstBinding = 0;
+          swap_descriptor_dest_write.dstArrayElement = 0;
+          swap_descriptor_dest_write.descriptorCount = 1;
+          swap_descriptor_dest_write.descriptorType =
               VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-          fxaa_dest_descriptor_write.pImageInfo =
-              &fxaa_dest_descriptor_image_info;
-          fxaa_dest_descriptor_write.pBufferInfo = nullptr;
-          fxaa_dest_descriptor_write.pTexelBufferView = nullptr;
+          swap_descriptor_dest_write.pImageInfo =
+              &swap_descriptor_dest_image_info;
+          swap_descriptor_dest_write.pBufferInfo = nullptr;
+          swap_descriptor_dest_write.pTexelBufferView = nullptr;
 
-          std::array<VkWriteDescriptorSet, 2> fxaa_descriptor_writes = {
-              fxaa_source_descriptor_write, fxaa_dest_descriptor_write};
+          std::array<VkWriteDescriptorSet, 2> swap_descriptor_writes = {
+              swap_descriptor_source_write, swap_descriptor_dest_write};
           dfn.vkUpdateDescriptorSets(device,
-                                     uint32_t(fxaa_descriptor_writes.size()),
-                                     fxaa_descriptor_writes.data(), 0, nullptr);
+                                     uint32_t(swap_descriptor_writes.size()),
+                                     swap_descriptor_writes.data(), 0, nullptr);
 
-          // Set FXAA push constants.
-          FxaaConstants fxaa_constants;
-          fxaa_constants.size[0] = frontbuffer_width_scaled;
-          fxaa_constants.size[1] = frontbuffer_height_scaled;
-          fxaa_constants.size_inv[0] =
-              1.0f / static_cast<float>(frontbuffer_width_scaled);
-          fxaa_constants.size_inv[1] =
-              1.0f / static_cast<float>(frontbuffer_height_scaled);
+          // Set push constants.
+          ApplyGammaConstants apply_gamma_constants;
+          apply_gamma_constants.size[0] = frontbuffer_width_scaled;
+          apply_gamma_constants.size[1] = frontbuffer_height_scaled;
           deferred_command_buffer_.CmdVkPushConstants(
-              fxaa_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-              sizeof(fxaa_constants), &fxaa_constants);
+              swap_apply_gamma_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+              sizeof(apply_gamma_constants), &apply_gamma_constants);
 
-          // Bind FXAA descriptor sets.
-          std::array<VkDescriptorSet, 2> fxaa_descriptor_sets = {
-              fxaa_dest_descriptor, fxaa_source_descriptor};
+          // Bind descriptor sets.
+          std::array<VkDescriptorSet, kSwapApplyGammaDescriptorSetCount>
+              swap_descriptor_sets{};
+          swap_descriptor_sets[kSwapApplyGammaDescriptorSetRamp] =
+              swap_descriptors_gamma_ramp_[2 * gamma_ramp_frame_index_ref +
+                                           uint32_t(use_pwl_gamma_ramp)];
+          swap_descriptor_sets[kSwapApplyGammaDescriptorSetSource] =
+              swap_descriptor_source;
+          swap_descriptor_sets[kSwapApplyGammaDescriptorSetDest] =
+              swap_descriptor_dest;
+          // TODO(Triang3l): Red / blue swap without imageViewFormatSwizzle.
           deferred_command_buffer_.CmdVkBindDescriptorSets(
-              VK_PIPELINE_BIND_POINT_COMPUTE, fxaa_pipeline_layout_, 0,
-              uint32_t(fxaa_descriptor_sets.size()),
-              fxaa_descriptor_sets.data(), 0, nullptr);
+              VK_PIPELINE_BIND_POINT_COMPUTE, swap_apply_gamma_pipeline_layout_,
+              0, uint32_t(swap_descriptor_sets.size()),
+              swap_descriptor_sets.data(), 0, nullptr);
 
-          // Dispatch FXAA compute shader.
+          // Dispatch compute shader. Local size is 16x8.
+          uint32_t group_count_x = (frontbuffer_width_scaled + 15) / 16;
+          uint32_t group_count_y = (frontbuffer_height_scaled + 7) / 8;
           ++submission_in_progress_.dispatch_count;
           deferred_command_buffer_.CmdVkDispatch(group_count_x, group_count_y,
                                                  1);
 
           PopDebugMarker();
-        }
 
-        // Insert the release barrier - transition from GENERAL to the
-        // presenter's expected layout.
-        PushImageMemoryBarrier(
-            vulkan_context.image(),
-            ui::vulkan::util::InitializeSubresourceRange(),
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            ui::vulkan::VulkanPresenter::kGuestOutputInternalStageMask,
-            VK_ACCESS_SHADER_WRITE_BIT,
-            ui::vulkan::VulkanPresenter::kGuestOutputInternalAccessMask,
-            VK_IMAGE_LAYOUT_GENERAL,
-            ui::vulkan::VulkanPresenter::kGuestOutputInternalLayout);
+          // Apply FXAA if enabled.
+          if (use_fxaa) {
+            PushDebugMarker("FXAA: %s",
+                            swap_post_effect == SwapPostEffect::kFxaaExtreme
+                                ? "Extreme"
+                                : "Standard");
 
-        // Need to submit all the commands before giving the image back to the
-        // presenter so it can submit its own commands for displaying it to the
-        // queue, and also need to submit the release barrier.
-        EndSubmission(true);
-        return true;
-      });
+            // Transition FXAA source from storage image write to sampled read.
+            // Transition guest output to storage image write.
+            PushImageMemoryBarrier(
+                fxaa_source_image_,
+                ui::vulkan::util::InitializeSubresourceRange(),
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                VK_IMAGE_LAYOUT_GENERAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            if (vulkan_context.image_ever_written_previously()) {
+              PushImageMemoryBarrier(
+                  vulkan_context.image(),
+                  ui::vulkan::util::InitializeSubresourceRange(),
+                  ui::vulkan::VulkanPresenter::kGuestOutputInternalStageMask,
+                  VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                  ui::vulkan::VulkanPresenter::kGuestOutputInternalAccessMask,
+                  VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                  VK_IMAGE_LAYOUT_GENERAL);
+            } else {
+              PushImageMemoryBarrier(
+                  vulkan_context.image(),
+                  ui::vulkan::util::InitializeSubresourceRange(),
+                  VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                  VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                  VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                  VK_IMAGE_LAYOUT_GENERAL);
+            }
+            SubmitBarriers(true);
+
+            // Bind FXAA pipeline.
+            deferred_command_buffer_.CmdVkBindPipeline(
+                VK_PIPELINE_BIND_POINT_COMPUTE,
+                swap_post_effect == SwapPostEffect::kFxaaExtreme
+                    ? fxaa_extreme_pipeline_
+                    : fxaa_pipeline_);
+
+            // Update FXAA source descriptor (combined image sampler).
+            VkDescriptorSet fxaa_source_descriptor =
+                fxaa_source_descriptors_[swap_frame_index];
+            VkDescriptorImageInfo fxaa_source_descriptor_image_info;
+            fxaa_source_descriptor_image_info.sampler = fxaa_sampler_;
+            fxaa_source_descriptor_image_info.imageView =
+                fxaa_source_image_view_;
+            fxaa_source_descriptor_image_info.imageLayout =
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            VkWriteDescriptorSet fxaa_source_descriptor_write;
+            fxaa_source_descriptor_write.sType =
+                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            fxaa_source_descriptor_write.pNext = nullptr;
+            fxaa_source_descriptor_write.dstSet = fxaa_source_descriptor;
+            fxaa_source_descriptor_write.dstBinding = 0;
+            fxaa_source_descriptor_write.dstArrayElement = 0;
+            fxaa_source_descriptor_write.descriptorCount = 1;
+            fxaa_source_descriptor_write.descriptorType =
+                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            fxaa_source_descriptor_write.pImageInfo =
+                &fxaa_source_descriptor_image_info;
+            fxaa_source_descriptor_write.pBufferInfo = nullptr;
+            fxaa_source_descriptor_write.pTexelBufferView = nullptr;
+
+            // Update FXAA destination descriptor (guest output image).
+            VkDescriptorSet fxaa_dest_descriptor =
+                swap_descriptors_dest_[swap_frame_index];
+            VkDescriptorImageInfo fxaa_dest_descriptor_image_info;
+            fxaa_dest_descriptor_image_info.sampler = VK_NULL_HANDLE;
+            fxaa_dest_descriptor_image_info.imageView =
+                vulkan_context.image_view();
+            fxaa_dest_descriptor_image_info.imageLayout =
+                VK_IMAGE_LAYOUT_GENERAL;
+            VkWriteDescriptorSet fxaa_dest_descriptor_write;
+            fxaa_dest_descriptor_write.sType =
+                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            fxaa_dest_descriptor_write.pNext = nullptr;
+            fxaa_dest_descriptor_write.dstSet = fxaa_dest_descriptor;
+            fxaa_dest_descriptor_write.dstBinding = 0;
+            fxaa_dest_descriptor_write.dstArrayElement = 0;
+            fxaa_dest_descriptor_write.descriptorCount = 1;
+            fxaa_dest_descriptor_write.descriptorType =
+                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            fxaa_dest_descriptor_write.pImageInfo =
+                &fxaa_dest_descriptor_image_info;
+            fxaa_dest_descriptor_write.pBufferInfo = nullptr;
+            fxaa_dest_descriptor_write.pTexelBufferView = nullptr;
+
+            std::array<VkWriteDescriptorSet, 2> fxaa_descriptor_writes = {
+                fxaa_source_descriptor_write, fxaa_dest_descriptor_write};
+            dfn.vkUpdateDescriptorSets(
+                device, uint32_t(fxaa_descriptor_writes.size()),
+                fxaa_descriptor_writes.data(), 0, nullptr);
+
+            // Set FXAA push constants.
+            FxaaConstants fxaa_constants;
+            fxaa_constants.size[0] = frontbuffer_width_scaled;
+            fxaa_constants.size[1] = frontbuffer_height_scaled;
+            fxaa_constants.size_inv[0] =
+                1.0f / static_cast<float>(frontbuffer_width_scaled);
+            fxaa_constants.size_inv[1] =
+                1.0f / static_cast<float>(frontbuffer_height_scaled);
+            deferred_command_buffer_.CmdVkPushConstants(
+                fxaa_pipeline_layout_, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                sizeof(fxaa_constants), &fxaa_constants);
+
+            // Bind FXAA descriptor sets.
+            std::array<VkDescriptorSet, 2> fxaa_descriptor_sets = {
+                fxaa_dest_descriptor, fxaa_source_descriptor};
+            deferred_command_buffer_.CmdVkBindDescriptorSets(
+                VK_PIPELINE_BIND_POINT_COMPUTE, fxaa_pipeline_layout_, 0,
+                uint32_t(fxaa_descriptor_sets.size()),
+                fxaa_descriptor_sets.data(), 0, nullptr);
+
+            // Dispatch FXAA compute shader.
+            ++submission_in_progress_.dispatch_count;
+            deferred_command_buffer_.CmdVkDispatch(group_count_x, group_count_y,
+                                                   1);
+
+            PopDebugMarker();
+          }
+
+          // Keep the title mailbox clean. The independent native plane is
+          // sampled by Presenter after title processing, including no-Swap
+          // paints.
+
+          // Insert the release barrier - transition from GENERAL to the
+          // presenter's expected layout.
+          PushImageMemoryBarrier(
+              vulkan_context.image(),
+              ui::vulkan::util::InitializeSubresourceRange(),
+              VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+              ui::vulkan::VulkanPresenter::kGuestOutputInternalStageMask,
+              VK_ACCESS_SHADER_WRITE_BIT,
+              ui::vulkan::VulkanPresenter::kGuestOutputInternalAccessMask,
+              VK_IMAGE_LAYOUT_GENERAL,
+              ui::vulkan::VulkanPresenter::kGuestOutputInternalLayout);
+
+          // Need to submit all the commands before giving the image back to the
+          // presenter so it can submit its own commands for displaying it to
+          // the queue, and also need to submit the release barrier.
+          if (strict_native_presentation) {
+            const uint64_t submission = GetCurrentSubmission();
+            bool submitted = false;
+            try {
+              submitted = EndSubmission(true) && !submission_open_ &&
+                          GetCurrentSubmission() > submission;
+            } catch (...) {
+            }
+            if (!submitted) {
+              FailNativePresentation(0, "title-refresh-submit");
+              return false;
+            }
+          } else {
+            EndSubmission(true);
+          }
+          return true;
+        });
+  } catch (...) {
+    if (strict_native_presentation || native_frame_fatal_) {
+      FailNativePresentation(0, "refresh-or-publication-exception");
+    } else {
+      throw;
+    }
+  }
+
+  if (strict_native_presentation && !refreshed && !native_frame_fatal_) {
+    // Failure may precede the native dispatch/version assignment. The opaque
+    // writable mailbox image can still have CP references; prevent retry or
+    // resize until the terminal native stop boundary has drained them.
+    FailNativePresentation(0, "native-refresh-rejected");
+  }
+  if (native_frame_fatal_ || IsGuestCommandProcessingHalted()) {
+    return;
+  }
 
   // End the frame even if did not present for any reason (the image refresher
   // was not called), to prevent leaking per-frame resources.
@@ -3046,10 +3765,18 @@ void VulkanCommandProcessor::DestroyFramebufferWhenIdle(
 
 VkDescriptorSet VulkanCommandProcessor::AllocateSingleTransientDescriptor(
     SingleTransientDescriptorLayout transient_descriptor_layout) {
-  assert_true(frame_open_);
+  assert_true(HasGuestResourceScope());
+  auto* const native =
+      native_guest_render_bank_selected_
+          ? native_guest_render_bank_->transient_resources.get()
+          : nullptr;
   VkDescriptorSet descriptor_set;
+  auto& free_lists =
+      native ? native->singles_free : single_transient_descriptors_free_;
+  auto& used =
+      native ? native->singles_used : single_transient_descriptors_used_;
   std::vector<VkDescriptorSet>& transient_descriptors_free =
-      single_transient_descriptors_free_[size_t(transient_descriptor_layout)];
+      free_lists[size_t(transient_descriptor_layout)];
   if (!transient_descriptors_free.empty()) {
     descriptor_set = transient_descriptors_free.back();
     transient_descriptors_free.pop_back();
@@ -3064,13 +3791,15 @@ VkDescriptorSet VulkanCommandProcessor::AllocateSingleTransientDescriptor(
     switch (transient_descriptor_layout) {
       case SingleTransientDescriptorLayout::kStorageBuffer:
         transient_descriptor_allocator =
-            &transient_descriptor_allocator_storage_buffer_;
+            native ? &native->storage_descriptors
+                   : &transient_descriptor_allocator_storage_buffer_;
         descriptor_counts[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descriptor_counts[0].descriptorCount = 1;
         break;
       case SingleTransientDescriptorLayout::kStorageBufferAndStorageImage:
         transient_descriptor_allocator =
-            &transient_descriptor_allocator_storage_buffer_and_image_;
+            native ? &native->storage_image_descriptors
+                   : &transient_descriptor_allocator_storage_buffer_and_image_;
         descriptor_counts[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descriptor_counts[0].descriptorCount = 1;
         descriptor_counts[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -3079,7 +3808,8 @@ VkDescriptorSet VulkanCommandProcessor::AllocateSingleTransientDescriptor(
         break;
       default:
         transient_descriptor_allocator =
-            &transient_descriptor_allocator_uniform_buffer_;
+            native ? &native->uniform_descriptors
+                   : &transient_descriptor_allocator_uniform_buffer_;
         descriptor_counts[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptor_counts[0].descriptorCount = 1;
         break;
@@ -3092,10 +3822,10 @@ VkDescriptorSet VulkanCommandProcessor::AllocateSingleTransientDescriptor(
     }
   }
   UsedSingleTransientDescriptor used_descriptor;
-  used_descriptor.frame = frame_current_;
+  used_descriptor.frame = GetCurrentTransientResourceEpoch();
   used_descriptor.layout = transient_descriptor_layout;
   used_descriptor.set = descriptor_set;
-  single_transient_descriptors_used_.emplace_back(used_descriptor);
+  used.emplace_back(used_descriptor);
   return descriptor_set;
 }
 
@@ -3400,6 +4130,147 @@ void VulkanCommandProcessor::SetScissor(const VkRect2D& scissor) {
   }
 }
 
+void VulkanCommandProcessor::InvalidateGuestRenderBankBindings() {
+  // The current RF and every consumer already refer to the selected bank.
+  // Submission/frame counters, shared-memory barriers and residency are real
+  // queue history and intentionally are not restored from a CPU snapshot.
+  dynamic_viewport_update_needed_ = true;
+  dynamic_scissor_update_needed_ = true;
+  dynamic_depth_bias_update_needed_ = true;
+  dynamic_blend_constants_update_needed_ = true;
+  dynamic_stencil_compare_mask_front_update_needed_ = true;
+  dynamic_stencil_compare_mask_back_update_needed_ = true;
+  dynamic_stencil_write_mask_front_update_needed_ = true;
+  dynamic_stencil_write_mask_back_update_needed_ = true;
+  dynamic_stencil_reference_front_update_needed_ = true;
+  dynamic_stencil_reference_back_update_needed_ = true;
+  current_render_pass_ = VK_NULL_HANDLE;
+  current_framebuffer_ = nullptr;
+  in_render_pass_ = false;
+  current_guest_graphics_pipeline_ = VK_NULL_HANDLE;
+  current_external_graphics_pipeline_ = VK_NULL_HANDLE;
+  current_external_compute_pipeline_ = VK_NULL_HANDLE;
+  current_guest_graphics_pipeline_layout_ = nullptr;
+  current_constant_buffers_up_to_date_ = 0;
+  current_graphics_descriptor_sets_bound_up_to_date_ = 0;
+  std::memset(current_graphics_descriptor_sets_, 0,
+              sizeof(current_graphics_descriptor_sets_));
+  current_graphics_descriptor_sets_
+      [SpirvShaderTranslator::kDescriptorSetSharedMemoryAndEdram] =
+          shared_memory_and_edram_descriptor_set_;
+  current_graphics_descriptor_set_values_up_to_date_ =
+      UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetSharedMemoryAndEdram;
+  current_textures_vertex_shader_ = nullptr;
+  current_textures_pixel_shader_ = nullptr;
+  current_samplers_vertex_.clear();
+  current_samplers_pixel_.clear();
+  current_written_samplers_vertex_.clear();
+  current_written_samplers_pixel_.clear();
+  std::memset(current_float_constant_map_vertex_, 0,
+              sizeof(current_float_constant_map_vertex_));
+  std::memset(current_float_constant_map_pixel_, 0,
+              sizeof(current_float_constant_map_pixel_));
+  float_constants_vertex_are_full_ = false;
+  zpd_counter_index_force_update_ = true;
+  texture_cache_->TextureFetchConstantsWritten(0, 31);
+}
+
+bool VulkanCommandProcessor::SelectNativeGuestRenderBankAtClosedSubmission(
+    bool select_native, bool after_gpu_stopped) {
+  // This is not an admission interface. The future executor must first prove
+  // its lease/state and close the preceding submission, then close every
+  // native submission before selecting title again. Never restore CPU pointers
+  // over unsubmitted work merely to make failure look like a rollback.
+  const auto stopped = gpu_completions_.backend_stop_proof();
+  const bool stopped_restore =
+      after_gpu_stopped && !select_native && native_submissions_sealed_ &&
+      stopped.backend_epoch() == gpu_completions_.backend_epoch() &&
+      stopped.stopped();
+  if ((after_gpu_stopped && !stopped_restore) || !worker_thread_ ||
+      !kernel::XThread::IsInThread(worker_thread_.get()) ||
+      native_guest_render_bank_selected_ == select_native ||
+      !native_guest_render_bank_ ||
+      (!stopped_restore &&
+       (!HasNativeQueryIsolation() || submission_open_ || in_render_pass_ ||
+        device_lost_ || GetVulkanDevice()->IsLost() ||
+        completion_timeline_.last_completion_error() != VK_SUCCESS ||
+        active_segment_.segment_active ||
+        active_segment_.segment_pending_begin ||
+        active_query_index_ != UINT32_MAX || active_query_is_fsi_ ||
+        zpd_current_report_.handle != kInvalidReportHandle ||
+        !query_resolves_in_flight_.empty() || !viz_pending_copies_.empty() ||
+        !pending_barriers_.empty() || current_pending_barrier_.src_stage_mask ||
+        current_pending_barrier_.dst_stage_mask))) {
+    return false;
+  }
+  auto& bank = *native_guest_render_bank_;
+  if (!bank.register_file || !bank.render_target_cache ||
+      !bank.pipeline_cache || !bank.primitive_processor ||
+      !bank.texture_cache || !bank.transient_resources ||
+      (select_native && !native_resource_epoch_active_.valid()) ||
+      bank.descriptor_pool == VK_NULL_HANDLE ||
+      bank.descriptor_set == VK_NULL_HANDLE) {
+    return false;
+  }
+  if (bank.immutable_snapshot &&
+      (!bank.shared_memory ||
+       (select_native ? !bank.shared_memory->is_native_snapshot_backing()
+                      : bank.shared_memory.get() !=
+                            native_saved_title_state_.shared_memory))) {
+    return false;
+  }
+  if (select_native) {
+    if (register_file_ != graphics_system_->register_file()) {
+      return false;
+    }
+    native_saved_title_state_ = {register_file_, shared_memory_.get(),
+                                 active_vertex_shader_, active_pixel_shader_,
+                                 active_vertex_shader_ucode_address_};
+    register_file_ = bank.register_file.get();
+    active_vertex_shader_ = nullptr;
+    active_pixel_shader_ = nullptr;
+    active_vertex_shader_ucode_address_ = 0;
+  } else {
+    if (register_file_ != bank.register_file.get() ||
+        native_saved_title_state_.register_file !=
+            graphics_system_->register_file()) {
+      return false;
+    }
+    register_file_ = native_saved_title_state_.register_file;
+    active_vertex_shader_ = native_saved_title_state_.vertex_shader;
+    active_pixel_shader_ = native_saved_title_state_.pixel_shader;
+    active_vertex_shader_ucode_address_ =
+        native_saved_title_state_.vertex_shader_ucode_address;
+    native_saved_title_state_ = {};
+  }
+  // Each cache retains its own stable RF/RTC references. Select the complete
+  // matching bundle, including BOTH shared-memory routing descriptors.
+  if (bank.immutable_snapshot) {
+    std::swap(shared_memory_, bank.shared_memory);
+  }
+  std::swap(primitive_processor_, bank.primitive_processor);
+  std::swap(render_target_cache_, bank.render_target_cache);
+  std::swap(pipeline_cache_, bank.pipeline_cache);
+  std::swap(texture_cache_, bank.texture_cache);
+  std::swap(shared_memory_and_edram_descriptor_pool_, bank.descriptor_pool);
+  std::swap(shared_memory_and_edram_descriptor_set_, bank.descriptor_set);
+  std::swap(shared_memory_host_and_edram_descriptor_set_,
+            bank.host_descriptor_set);
+  std::swap(system_constants_, bank.system_constants);
+  std::swap(previous_viewport_info_args_, bank.viewport_info_args);
+  std::swap(previous_viewport_info_, bank.viewport_info);
+  std::swap(dynamic_stencil_compare_mask_front_,
+            bank.stencil_compare_mask_front);
+  std::swap(dynamic_stencil_compare_mask_back_, bank.stencil_compare_mask_back);
+  std::swap(dynamic_stencil_write_mask_front_, bank.stencil_write_mask_front);
+  std::swap(dynamic_stencil_write_mask_back_, bank.stencil_write_mask_back);
+  std::swap(dynamic_stencil_reference_front_, bank.stencil_reference_front);
+  std::swap(dynamic_stencil_reference_back_, bank.stencil_reference_back);
+  native_guest_render_bank_selected_ = select_native;
+  InvalidateGuestRenderBankBindings();
+  return true;
+}
+
 Shader* VulkanCommandProcessor::LoadShader(xenos::ShaderType shader_type,
                                            const uint32_t* host_address,
                                            uint32_t dword_count) {
@@ -3410,22 +4281,85 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
                                        uint32_t index_count,
                                        IndexBufferInfo* index_buffer_info,
                                        bool major_mode_explicit) {
+  return IssueDrawInternal(prim_type, index_count, index_buffer_info,
+                           major_mode_explicit, nullptr, nullptr);
+}
+
+VulkanCommandProcessor::NativeDrawOutcome
+VulkanCommandProcessor::IssueNativeDraw(
+    xenos::PrimitiveType prim_type, uint32_t index_count,
+    IndexBufferInfo* index_buffer_info, bool major_mode_explicit,
+    const VulkanRenderTargetCache::NativeResolveExpectation* resolve) {
+  NativeDrawOutcome outcome;
+  if (!worker_thread_ || !kernel::XThread::IsInThread(worker_thread_.get()) ||
+      !native_guest_render_bank_selected_ || !HasGuestResourceScope()) {
+    outcome.status = NativeDrawOutcome::Status::kRejected;
+    return outcome;
+  }
+  IssueDrawInternal(prim_type, index_count, index_buffer_info,
+                    major_mode_explicit, &outcome, resolve);
+  return outcome;
+}
+
+bool VulkanCommandProcessor::IssueDrawInternal(
+    xenos::PrimitiveType prim_type, uint32_t index_count,
+    IndexBufferInfo* index_buffer_info, bool major_mode_explicit,
+    NativeDrawOutcome* native_outcome,
+    const VulkanRenderTargetCache::NativeResolveExpectation* resolve) {
+  const bool strict_native = native_outcome != nullptr;
+  if (native_outcome) {
+    *native_outcome = NativeDrawOutcome{};
+  }
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
 
   const RegisterFile& regs = *register_file_;
+  if (strict_native) {
+    const auto initiator = regs.Get<reg::VGT_DRAW_INITIATOR>();
+    // Native input proofs currently cover implicit auto-index geometry only.
+    // No title query/report, VIZ survey or predicate may be consumed here.
+    if (!native_guest_render_bank_selected_ || !HasGuestResourceScope() ||
+        active_segment_.segment_active ||
+        active_segment_.segment_pending_begin ||
+        active_query_index_ != UINT32_MAX || active_query_is_fsi_ ||
+        zpd_current_report_.handle != kInvalidReportHandle ||
+        regs.Get<reg::PA_SC_VIZ_QUERY>().value || index_buffer_info ||
+        major_mode_explicit || initiator.not_eop ||
+        initiator.source_select != xenos::SourceSelect::kAutoIndex ||
+        initiator.prim_type != prim_type ||
+        initiator.num_indices != index_count) {
+      native_outcome->status = NativeDrawOutcome::Status::kRejected;
+      return false;
+    }
+  }
 
   // VIZ survey geometry associated with a specific 0:63 ID.
   // draw_util keeps it normalized, so it only counts coverage here.
   const bool viz_survey = draw_util::IsVIZSurveyDraw(regs);
 
   xenos::EdramMode edram_mode = regs.Get<reg::RB_MODECONTROL>().edram_mode;
+  if (strict_native && edram_mode == xenos::EdramMode::kColorDepth &&
+      !active_pixel_shader()) {
+    native_outcome->status = NativeDrawOutcome::Status::kRejected;
+    return false;
+  }
   if (edram_mode == xenos::EdramMode::kCopy) {
     // Special copy handling.
     if (viz_survey) {
       OnVIZSurveyDraw(false);
       return true;
+    }
+    if (strict_native) {
+      if (!resolve) {
+        native_outcome->status = NativeDrawOutcome::Status::kRejected;
+        return false;
+      }
+      const bool copied = IssueCopyInternal(resolve, &native_outcome->resolve);
+      if (copied && native_outcome->resolve.recorded()) {
+        native_outcome->status = NativeDrawOutcome::Status::kResolveRecorded;
+      }
+      return copied;
     }
     return IssueCopy();
   }
@@ -3434,6 +4368,10 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
     // Doesn't actually draw. Matches the Direct3D 12 backend.
     // TODO(Triang3l): Do something so memexport still works in this case maybe?
     // Unlikely that zero would even really be legal though.
+    if (strict_native) {
+      native_outcome->status = NativeDrawOutcome::Status::kNoRasterWork;
+      return false;
+    }
     return true;
   }
 
@@ -3449,6 +4387,10 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
     return false;
   }
   pipeline_cache_->AnalyzeShaderUcode(*vertex_shader);
+  if (strict_native && vertex_shader->memexport_eM_written()) {
+    native_outcome->status = NativeDrawOutcome::Status::kRejected;
+    return false;
+  }
   // TODO(Triang3l): If the shader uses memory export, but
   // vertexPipelineStoresAndAtomics is not supported, convert the vertex shader
   // to a compute shader and dispatch it after the draw if the draw doesn't use
@@ -3483,8 +4425,16 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
     // cache.
     if (!memexport_used_vertex) {
       // This draw has no effect.
+      if (strict_native) {
+        native_outcome->status = NativeDrawOutcome::Status::kNoRasterWork;
+        return false;
+      }
       return true;
     }
+  }
+  if (strict_native && pixel_shader && pixel_shader->memexport_eM_written()) {
+    native_outcome->status = NativeDrawOutcome::Status::kRejected;
+    return false;
   }
   const bool memexport_used_pixel = pixel_shader &&
                                     pixel_shader->memexport_eM_written() != 0 &&
@@ -3504,7 +4454,7 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
 
   // A draw contributing to its VIZ ID without the kill bit counts
   // at hi-Z before the pixel shader can reject anything.
-  if (!viz_survey && pixel_shader &&
+  if (!strict_native && !viz_survey && pixel_shader &&
       (pixel_shader->kills_pixels() ||
        (pixel_shader->writes_color_target(0) &&
         draw_util::DoesCoverageDependOnAlpha(
@@ -3534,7 +4484,7 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
   // A skipped occlusion query draw counts nothing and gets what it tests
   // culled. A placeholder mostly overcounts as it skips the guest shader's
   // pixel kills. Surveys never count for a report.
-  bool skip_allowed = true;
+  bool skip_allowed = !strict_native;
   // Per shader (vertex, pixel), whether its samplers were gathered.
   bool samplers_gathered[2] = {};
 
@@ -3555,6 +4505,10 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
     }
     if (!primitive_processing_result.host_draw_vertex_count) {
       // Nothing to draw.
+      if (strict_native) {
+        native_outcome->status = NativeDrawOutcome::Status::kNoVertices;
+        return false;
+      }
       return true;
     }
     // TODO(Triang3l): Geometry-type-specific vertex shader, vertex shader as
@@ -3601,13 +4555,15 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
                            normalized_depth_control, normalized_color_mask,
                            apply_host_depth_polygon_offset)
                      : SpirvShaderTranslator::Modification(0);
-    skip_allowed = !active_segment_.report_measuring() || viz_survey;
+    skip_allowed =
+        !strict_native && (!active_segment_.report_measuring() || viz_survey);
     // Hybrid occlusion query draw, counting coverage into the Total counter.
     // Only depth or stencil tested draws w/o depth writes, so scene geometry
     // keeps early depth rejection, and nothing can fail without a test anyway.
     // Surveys never count for a report.
-    zpd_hybrid = zpd_hybrid_supported_ && active_segment_.report_measuring() &&
-                 !viz_survey && !normalized_depth_control.z_write_enable &&
+    zpd_hybrid = !strict_native && zpd_hybrid_supported_ &&
+                 active_segment_.report_measuring() && !viz_survey &&
+                 !normalized_depth_control.z_write_enable &&
                  (normalized_depth_control.z_enable ||
                   normalized_depth_control.stencil_enable);
     if (zpd_hybrid && pixel_shader) {
@@ -3631,12 +4587,13 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
                      : nullptr;
     // The interpreter additionally needs a single shared memory binding and
     // full 32-bit indices.
-    async_draw.async_available = pipeline_cache_->IsAsyncCreationAvailable();
+    async_draw.async_available =
+        !strict_native && pipeline_cache_->IsAsyncCreationAvailable();
     async_draw.skip_allowed = skip_allowed;
     async_draw.has_pixel_shader = pixel_shader != nullptr;
-    async_draw.placeholder_supported = true;
+    async_draw.placeholder_supported = !strict_native;
     async_draw.interpreter_eligible =
-        pipeline_cache_->IsUcodeInterpreterAvailable() &&
+        !strict_native && pipeline_cache_->IsUcodeInterpreterAvailable() &&
         device_properties.fullDrawIndexUint32 &&
         SpirvShaderTranslator::GetSharedMemoryStorageBufferCountLog2(
             device_properties.maxStorageBufferRange) == 0 &&
@@ -3649,7 +4606,8 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
     // the render targets are updated, so this assumes it can unless the
     // storage warm-up runs. ConfigurePipeline translates what a pipeline it
     // creates now needs, and the draw is redone if that leaves samplers out.
-    async_draw.stand_in_allowed = !pipeline_cache_->IsStorageWarmUpRunning();
+    async_draw.stand_in_allowed =
+        !strict_native && !pipeline_cache_->IsStorageWarmUpRunning();
     async_draw.vertex_shader_translated =
         vertex_shader_translation->is_translated();
     AsyncPipelinePlan translation_plan = PlanAsyncPipeline(async_draw);
@@ -3745,12 +4703,23 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
 
   // Put the window offset into the EDRAM bases when possible.
   int32_t window_offset_tiles = render_target_cache_->GetWindowOffsetTiles(
-      regs, normalized_depth_control, normalized_color_mask, frame_current_);
+      regs, normalized_depth_control, normalized_color_mask,
+      GetCurrentTransientResourceEpoch());
 
   // Set up the render targets - this may perform dispatches and draws.
-  if (!render_target_cache_->Update(
-          is_rasterization_done, normalized_depth_control,
-          normalized_color_mask, *vertex_shader, window_offset_tiles)) {
+  const bool render_targets_updated =
+      strict_native
+          ? render_target_cache_->UpdateNative(
+                is_rasterization_done, normalized_depth_control,
+                normalized_color_mask, *vertex_shader, window_offset_tiles)
+          : render_target_cache_->Update(
+                is_rasterization_done, normalized_depth_control,
+                normalized_color_mask, *vertex_shader, window_offset_tiles);
+  if (!render_targets_updated) {
+    if (native_outcome) {
+      native_outcome->status =
+          NativeDrawOutcome::Status::kRenderTargetPreparationFailed;
+    }
     return false;
   }
   const char* stand_in_wait_reason =
@@ -3763,7 +4732,8 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
   // textures.
   VulkanRenderTargetCache::RenderPassKey render_pass_key =
       render_target_cache_->last_update_render_pass_key();
-  async_draw.stand_in_allowed = stand_in_wait_reason == nullptr;
+  async_draw.stand_in_allowed =
+      !strict_native && stand_in_wait_reason == nullptr;
   async_draw.vertex_shader_translated =
       vertex_shader_translation->is_translated();
   const AsyncPipelinePlan async_plan = PlanAsyncPipeline(async_draw);
@@ -3795,6 +4765,10 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
             return pipeline->creation_pending.load(std::memory_order_acquire);
           },
           [&]() { pipeline_cache_->ExpeditePipeline(pipeline); })) {
+    if (strict_native) {
+      native_outcome->status = NativeDrawOutcome::Status::kPipelineUnavailable;
+      return false;
+    }
     OnVIZSurveyDraw(false);
     return true;
   }
@@ -3806,6 +4780,11 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
   bool bound_is_placeholder =
       current_pipeline ==
       pipeline->placeholder_pipeline.load(std::memory_order_acquire);
+  if (strict_native &&
+      (current_pipeline == VK_NULL_HANDLE || bound_is_placeholder)) {
+    native_outcome->status = NativeDrawOutcome::Status::kPlaceholderPipeline;
+    return false;
+  }
   // The interpreter placeholder (interpreter VS + no-op PS) also needs its
   // ucode location + full float constants fed to it.
   bool interpreter_placeholder =
@@ -3827,8 +4806,8 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
   // its samplers were gathered. Redo the draw to gather them.
   if ((!samplers_gathered[0] && !interpreter_placeholder) ||
       (pixel_shader && !samplers_gathered[1] && !placeholder_pixel_shader)) {
-    return IssueDraw(prim_type, index_count, index_buffer_info,
-                     major_mode_explicit);
+    return IssueDrawInternal(prim_type, index_count, index_buffer_info,
+                             major_mode_explicit, native_outcome, resolve);
   }
 
   // Push debug marker with Xbox 360 draw context for RenderDoc annotation.
@@ -3855,6 +4834,18 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
            ? pixel_shader->GetUsedTextureMaskAfterTranslation()
            : 0);
   texture_cache_->RequestTextures(used_texture_mask);
+  if (strict_native &&
+      (!vertex_shader->bindings_ready() ||
+       !texture_cache_->AreNativeTextureBindingsReady(
+           vertex_shader->GetTextureBindingsAfterTranslation()) ||
+       (pixel_shader &&
+        (!pixel_shader->bindings_ready() ||
+         !texture_cache_->AreNativeTextureBindingsReady(
+             pixel_shader->GetTextureBindingsAfterTranslation()))))) {
+    native_outcome->status = NativeDrawOutcome::Status::kTextureUnavailable;
+    PopDebugMarker();
+    return false;
+  }
 
   // Update the graphics pipeline, and if the new graphics pipeline has a
   // different layout, invalidate incompatible descriptor sets before updating
@@ -3930,12 +4921,15 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
   // The predicate value may still need copying outside a pass, so bind it
   // before the segment opens: the pass ending would close it.
   VkDeviceSize predicate_offset = 0;
-  const VkBuffer predicate_buffer = BindVIZPredicate(predicate_offset);
+  const VkBuffer predicate_buffer =
+      strict_native ? VK_NULL_HANDLE : BindVIZPredicate(predicate_offset);
   // Segments can't mix scales, hybrid query Total counting, or VIZ IDs.
   // The resolved sample count is divided by one scale area per segment.
   // Needs to be split before the counter index goes into system constants.
-  UpdateQuerySegment(draw_resolution_scale_x * draw_resolution_scale_y,
-                     zpd_hybrid, viz_survey);
+  if (!strict_native) {
+    UpdateQuerySegment(draw_resolution_scale_x * draw_resolution_scale_y,
+                       zpd_hybrid, viz_survey);
+  }
   draw_util::GetViewportInfoArgs gviargs{};
   gviargs.Setup(
       draw_resolution_scale_x, draw_resolution_scale_y,
@@ -4084,7 +5078,7 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
           case xenos::FetchConstantType::kVertex:
             break;
           case xenos::FetchConstantType::kInvalidVertex:
-            if (cvars::gpu_allow_invalid_fetch_constants) {
+            if (!strict_native && cvars::gpu_allow_invalid_fetch_constants) {
               break;
             }
             XELOGW(
@@ -4098,7 +5092,7 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
           default:
             // Type is kTexture (2) or kInvalidTexture (3) - completely wrong
             // for vertex data
-            if (cvars::gpu_allow_invalid_fetch_constants) {
+            if (!strict_native && cvars::gpu_allow_invalid_fetch_constants) {
               XELOGW(
                   "Vertex fetch constant {} ({:08X} {:08X}) has wrong type {} "
                   "(texture fetch constant in vertex slot) - allowing due to "
@@ -4218,7 +5212,9 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
       render_target_cache_->last_update_render_pass_key().key;
 
   // Draw.
-  OnVIZSurveyDraw(true);
+  if (!strict_native) {
+    OnVIZSurveyDraw(true);
+  }
   if (primitive_processing_result.index_buffer_type ==
           PrimitiveProcessor::ProcessedIndexBufferType::kNone ||
       shader_32bit_index_dma) {
@@ -4228,6 +5224,12 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
     }
     deferred_command_buffer_.CmdVkDraw(
         primitive_processing_result.host_draw_vertex_count, 1, 0, 0);
+    if (native_outcome) {
+      ++native_outcome->draw_commands;
+      native_outcome->host_vertex_count =
+          primitive_processing_result.host_draw_vertex_count;
+      native_outcome->status = NativeDrawOutcome::Status::kDrawRecorded;
+    }
     if (predicate_buffer != VK_NULL_HANDLE) {
       deferred_command_buffer_.CmdVkEndConditionalRenderingEXT();
     }
@@ -4264,6 +5266,12 @@ bool VulkanCommandProcessor::IssueDraw(xenos::PrimitiveType prim_type,
     }
     deferred_command_buffer_.CmdVkDrawIndexed(
         primitive_processing_result.host_draw_vertex_count, 1, 0, 0, 0);
+    if (native_outcome) {
+      ++native_outcome->indexed_draw_commands;
+      native_outcome->host_vertex_count =
+          primitive_processing_result.host_draw_vertex_count;
+      native_outcome->status = NativeDrawOutcome::Status::kIndexedDrawRecorded;
+    }
     if (predicate_buffer != VK_NULL_HANDLE) {
       deferred_command_buffer_.CmdVkEndConditionalRenderingEXT();
     }
@@ -4759,10 +5767,24 @@ bool VulkanCommandProcessor::MirrorScaledResolveToSharedMemory(
 }
 
 bool VulkanCommandProcessor::IssueCopy() {
+  return IssueCopyInternal(nullptr, nullptr);
+}
+
+bool VulkanCommandProcessor::IssueCopyInternal(
+    const VulkanRenderTargetCache::NativeResolveExpectation* expectation,
+    VulkanRenderTargetCache::NativeResolveOutcome* native_outcome) {
 #if XE_GPU_FINE_GRAINED_DRAW_SCOPES
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
 
+  if (native_outcome &&
+      (!expectation || !worker_thread_ ||
+       !kernel::XThread::IsInThread(worker_thread_.get()) ||
+       !native_guest_render_bank_selected_ || !HasGuestResourceScope())) {
+    native_outcome->status =
+        VulkanRenderTargetCache::NativeResolveOutcome::Status::kInvalidOutput;
+    return false;
+  }
   if (!BeginSubmission(true)) {
     return false;
   }
@@ -4772,12 +5794,22 @@ bool VulkanCommandProcessor::IssueCopy() {
     PushDebugMarker("IssueCopy (Resolve)");
   }
 
-  uint32_t written_address, written_length;
-  reg::RB_COPY_DEST_INFO copy_dest_info;
-  bool is_scaled;
-  if (!render_target_cache_->Resolve(*memory_, *shared_memory_, *texture_cache_,
-                                     written_address, written_length,
-                                     &copy_dest_info, &is_scaled)) {
+  uint32_t written_address = 0, written_length = 0;
+  reg::RB_COPY_DEST_INFO copy_dest_info{};
+  bool is_scaled = false;
+  bool resolved;
+  if (native_outcome) {
+    *native_outcome = render_target_cache_->ResolveNative(
+        *memory_, *shared_memory_, *texture_cache_, *expectation);
+    written_address = native_outcome->written_address;
+    written_length = native_outcome->written_length;
+    resolved = native_outcome->recorded();
+  } else {
+    resolved = render_target_cache_->Resolve(
+        *memory_, *shared_memory_, *texture_cache_, written_address,
+        written_length, &copy_dest_info, &is_scaled);
+  }
+  if (!resolved) {
     if (debug_markers_enabled_) {
       PopDebugMarker();
     }
@@ -4789,7 +5821,7 @@ bool VulkanCommandProcessor::IssueCopy() {
   // output isn't overwritten with guest RAM by a later texture load.
   ClearMemexportPages(written_address, written_length);
 
-  if (IsReadbackResolveEnabled() && written_length > 0 &&
+  if (!native_outcome && IsReadbackResolveEnabled() && written_length > 0 &&
       IsResolveDestinationResident(written_address, written_length)) {
     // A CPU access copies the output into guest RAM out of the shared memory
     // buffer, so scaled output has to be there too. With zero-copy that buffer
@@ -4810,14 +5842,19 @@ bool VulkanCommandProcessor::IssueCopy() {
     PopDebugMarker();
   }
 
-  SubmitRequestedResolve();
+  if (!native_outcome) {
+    // Native output is committed/read back only by its explicit transaction;
+    // a title read-watch must not introduce an untracked native submission.
+    SubmitRequestedResolve();
+  }
 
   return true;
 }
 
 void VulkanCommandProcessor::EnsureQueryResources() {
   // VIZ surveys need the pool even when ZPD reports are faked.
-  if ((zpd_mode_ == ZPDMode::kFake && !cvars::occlusion_query_viz) ||
+  if (QueryTransportSuspended() ||
+      (zpd_mode_ == ZPDMode::kFake && !cvars::occlusion_query_viz) ||
       !host_query_pool_) {
     return;
   }
@@ -4905,7 +5942,7 @@ bool VulkanCommandProcessor::IsQueryPoolReady() const {
 }
 
 bool VulkanCommandProcessor::CanOpenQuery() const {
-  if (!submission_open_) {
+  if (QueryTransportSuspended() || !submission_open_) {
     return false;
   }
   return (render_target_cache_ &&
@@ -5120,7 +6157,8 @@ bool VulkanCommandProcessor::CloseQuery(ReportHandle report_handle,
 }
 
 void VulkanCommandProcessor::PumpQueryResolves() {
-  if (!host_query_pool_ || query_resolves_in_flight_.empty()) {
+  if (QueryTransportSuspended() || !host_query_pool_ ||
+      query_resolves_in_flight_.empty()) {
     return;
   }
 
@@ -5423,11 +6461,16 @@ void VulkanCommandProcessor::CheckSubmissionCompletionAndDeviceLoss(
         submission_open_);
     LogRecentSubmissions("submission-check");
     device_lost_ = true;
-    graphics_system_->OnHostGpuLossFromAnyThread(true);
+    if (!native_frame_boundary_active_ &&
+        !(native_shutdown_in_progress_ && native_gpu_work_ever_attempted_)) {
+      graphics_system_->OnHostGpuLossFromAnyThread(true);
+    }
     return;
   }
 
   const uint64_t completed_submission = GetCompletedSubmission();
+
+  ReclaimNativeResourceEpochs();
 
   // Reclaim semaphores.
   while (!submissions_in_flight_semaphores_.empty()) {
@@ -5455,6 +6498,18 @@ void VulkanCommandProcessor::CheckSubmissionCompletionAndDeviceLoss(
   primitive_processor_->CompletedSubmissionUpdated();
 
   render_target_cache_->CompletedSubmissionUpdated();
+
+  if (native_guest_render_bank_) {
+    native_guest_render_bank_->primitive_processor
+        ->CompletedSubmissionUpdated();
+    native_guest_render_bank_->render_target_cache
+        ->CompletedSubmissionUpdated();
+    native_guest_render_bank_->texture_cache->CompletedSubmissionUpdated(
+        completed_submission);
+    // Both active and parked banks must observe real queue progress. Which
+    // bundle is parked changes while the future native executor is selected.
+    native_guest_render_bank_->pipeline_cache->EndSubmission();
+  }
 
   texture_cache_->CompletedSubmissionUpdated(completed_submission);
 
@@ -5516,11 +6571,20 @@ bool VulkanCommandProcessor::BeginSubmission(bool is_guest_command) {
   SCOPE_profile_cpu_f("gpu");
 #endif  // XE_GPU_FINE_GRAINED_DRAW_SCOPES
 
-  if (device_lost_) {
+  if (native_submissions_sealed_ || native_frame_fatal_ ||
+      IsGuestCommandProcessingHalted() || device_lost_) {
     return false;
   }
 
-  bool is_opening_frame = is_guest_command && !frame_open_;
+  // Native owns an explicit query/resource scope. It never creates or closes
+  // a title frame, including when the title has not drawn/presented at all.
+  if (native_guest_render_bank_selected_ &&
+      (!native_frame_boundary_active_ || !HasNativeQueryIsolation() ||
+       !native_resource_epoch_active_.valid())) {
+    return false;
+  }
+  bool is_opening_frame =
+      is_guest_command && !frame_open_ && !native_guest_render_bank_selected_;
   if (submission_open_ && !is_opening_frame) {
     return true;
   }
@@ -5736,6 +6800,11 @@ void VulkanCommandProcessor::CollectCompletedGpuTimeQueries() {
 }
 
 bool VulkanCommandProcessor::EndSubmission(bool is_swap) {
+  // Shutdown must finish its final attempt before sealing; nothing may submit
+  // after the device-wide stop proof, including deferred auxiliary commands.
+  if (native_submissions_sealed_) {
+    return false;
+  }
   ui::vulkan::VulkanDevice* const vulkan_device = GetVulkanDevice();
   const ui::vulkan::VulkanDevice::Functions& dfn = vulkan_device->functions();
   const VkDevice device = vulkan_device->device();
@@ -5786,6 +6855,9 @@ bool VulkanCommandProcessor::EndSubmission(bool is_swap) {
     }
   }
 
+  if (is_swap && native_guest_render_bank_selected_) {
+    return false;
+  }
   bool is_closing_frame = is_swap && frame_open_;
 
   if (is_closing_frame) {
@@ -5805,7 +6877,7 @@ bool VulkanCommandProcessor::EndSubmission(bool is_swap) {
 
     pipeline_cache_->EndSubmission();
 
-    uniform_buffer_pool_->FlushWrites();
+    CurrentUniformBufferPool().FlushWrites();
 
     // Submit sparse binds earlier, before executing the deferred command
     // buffer, to reduce latency.
@@ -5935,6 +7007,7 @@ bool VulkanCommandProcessor::EndSubmission(bool is_swap) {
     const VkResult submit_result = completion_timeline_.AcquireFenceAndSubmit(
         vulkan_device->queue_family_graphics_compute(), 0, 1, &submit_info);
     if (submit_result != VK_SUCCESS) {
+      gpu_completions_.FailPending();
       XELOGE(
           "VulkanCommandProcessor: Failed to submit a Vulkan command buffer - "
           "VkResult: {} (0x{:08X}), submission: {} (completed: {}, in-flight: "
@@ -5957,7 +7030,11 @@ bool VulkanCommandProcessor::EndSubmission(bool is_swap) {
       LogRecentSubmissions("submit-failure");
       if (vulkan_device->IsLost() && !device_lost_) {
         device_lost_ = true;
-        graphics_system_->OnHostGpuLossFromAnyThread(true);
+        if (!native_frame_boundary_active_ &&
+            !(native_shutdown_in_progress_ &&
+              native_gpu_work_ever_attempted_)) {
+          graphics_system_->OnHostGpuLossFromAnyThread(true);
+        }
       }
       return false;
     }
@@ -6397,7 +7474,7 @@ void VulkanCommandProcessor::UpdateSystemConstantValues(
       PrimitiveProcessor::ProcessedIndexBufferType::kHostBuiltinForDMA) {
     flags |= SpirvShaderTranslator::kSysFlag_ComputeOrPrimitiveVertexIndexLoad;
     if (vgt_draw_initiator.index_size == xenos::IndexFormat::kInt32) {
-      flags |= SpirvShaderTranslator ::
+      flags |= SpirvShaderTranslator::
           kSysFlag_ComputeOrPrimitiveVertexIndexLoad32Bit;
     }
   }
@@ -6866,8 +7943,9 @@ bool VulkanCommandProcessor::UpdateBindings(const VulkanShader* vertex_shader,
                                        size_t size) -> uint8_t* {
       VkBuffer buffer = VK_NULL_HANDLE;
       VkDeviceSize offset = 0;
-      uint8_t* mapping = uniform_buffer_pool_->Request(
-          frame_current_, size, uniform_buffer_alignment, buffer, offset);
+      uint8_t* mapping = CurrentUniformBufferPool().Request(
+          GetCurrentTransientResourceEpoch(), size, uniform_buffer_alignment,
+          buffer, offset);
       if (!mapping) {
         return nullptr;
       }
@@ -7147,25 +8225,35 @@ bool VulkanCommandProcessor::UpdateBindings(const VulkanShader* vertex_shader,
   // Constant buffers.
   if (!(current_graphics_descriptor_set_values_up_to_date_ &
         (UINT32_C(1) << SpirvShaderTranslator::kDescriptorSetConstants))) {
+    auto* const native =
+        native_guest_render_bank_selected_
+            ? native_guest_render_bank_->transient_resources.get()
+            : nullptr;
+    auto& constants_free = native ? native->constants_free
+                                  : this->constants_transient_descriptors_free_;
+    auto& constants_used = native ? native->constants_used
+                                  : this->constants_transient_descriptors_used_;
+    auto& uniform_allocator =
+        native ? native->uniform_descriptors
+               : this->transient_descriptor_allocator_uniform_buffer_;
     VkDescriptorSet constants_descriptor_set;
-    if (!constants_transient_descriptors_free_.empty()) {
-      constants_descriptor_set = constants_transient_descriptors_free_.back();
-      constants_transient_descriptors_free_.pop_back();
+    if (!constants_free.empty()) {
+      constants_descriptor_set = constants_free.back();
+      constants_free.pop_back();
     } else {
       VkDescriptorPoolSize constants_descriptor_count;
       constants_descriptor_count.type =
           VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
       constants_descriptor_count.descriptorCount =
           SpirvShaderTranslator::kConstantBufferCount;
-      constants_descriptor_set =
-          transient_descriptor_allocator_uniform_buffer_.Allocate(
-              descriptor_set_layout_constants_, &constants_descriptor_count, 1);
+      constants_descriptor_set = uniform_allocator.Allocate(
+          descriptor_set_layout_constants_, &constants_descriptor_count, 1);
       if (constants_descriptor_set == VK_NULL_HANDLE) {
         return false;
       }
     }
-    constants_transient_descriptors_used_.emplace_back(
-        frame_current_, constants_descriptor_set);
+    constants_used.emplace_back(GetCurrentTransientResourceEpoch(),
+                                constants_descriptor_set);
     // Consecutive bindings updated via a single VkWriteDescriptorSet must have
     // identical stage flags, but for the constants they vary.
     for (uint32_t i = 0; i < SpirvShaderTranslator::kConstantBufferCount; ++i) {
@@ -7308,7 +8396,7 @@ uint32_t VulkanCommandProcessor::WriteTransientTextureBindings(
     const VkDescriptorImageInfo* texture_image_info,
     const VkDescriptorImageInfo* sampler_image_info,
     VkWriteDescriptorSet* descriptor_set_writes_out) {
-  assert_true(frame_open_);
+  assert_true(HasGuestResourceScope());
   if (!texture_count && !sampler_count) {
     return 0;
   }
@@ -7317,9 +8405,19 @@ uint32_t VulkanCommandProcessor::WriteTransientTextureBindings(
   texture_descriptor_set_layout_key.sampler_count = sampler_count;
   texture_descriptor_set_layout_key.is_vertex = uint32_t(is_vertex);
   VkDescriptorSet texture_descriptor_set;
-  auto textures_free_it = texture_transient_descriptor_sets_free_.find(
-      texture_descriptor_set_layout_key);
-  if (textures_free_it != texture_transient_descriptor_sets_free_.end() &&
+  auto* const native =
+      native_guest_render_bank_selected_
+          ? native_guest_render_bank_->transient_resources.get()
+          : nullptr;
+  auto& textures_free = native ? native->textures_free
+                               : this->texture_transient_descriptor_sets_free_;
+  auto& textures_used = native ? native->textures_used
+                               : this->texture_transient_descriptor_sets_used_;
+  auto& texture_allocator =
+      native ? native->texture_descriptors
+             : this->transient_descriptor_allocator_textures_;
+  auto textures_free_it = textures_free.find(texture_descriptor_set_layout_key);
+  if (textures_free_it != textures_free.end() &&
       !textures_free_it->second.empty()) {
     texture_descriptor_set = textures_free_it->second.back();
     textures_free_it->second.pop_back();
@@ -7339,7 +8437,7 @@ uint32_t VulkanCommandProcessor::WriteTransientTextureBindings(
       texture_descriptor_count.descriptorCount = sampler_count;
     }
     assert_not_zero(texture_descriptor_counts_count);
-    texture_descriptor_set = transient_descriptor_allocator_textures_.Allocate(
+    texture_descriptor_set = texture_allocator.Allocate(
         descriptor_set_layout, texture_descriptor_counts.data(),
         texture_descriptor_counts_count);
     if (texture_descriptor_set == VK_NULL_HANDLE) {
@@ -7347,8 +8445,8 @@ uint32_t VulkanCommandProcessor::WriteTransientTextureBindings(
     }
   }
   UsedTextureTransientDescriptorSet& used_texture_descriptor_set =
-      texture_transient_descriptor_sets_used_.emplace_back();
-  used_texture_descriptor_set.frame = frame_current_;
+      textures_used.emplace_back();
+  used_texture_descriptor_set.frame = GetCurrentTransientResourceEpoch();
   used_texture_descriptor_set.layout = texture_descriptor_set_layout_key;
   used_texture_descriptor_set.set = texture_descriptor_set;
   uint32_t descriptor_set_write_count = 0;

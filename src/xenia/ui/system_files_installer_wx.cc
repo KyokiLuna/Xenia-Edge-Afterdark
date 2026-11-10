@@ -25,16 +25,16 @@
 #include "third_party/fmt/include/fmt/format.h"
 #include "third_party/zlib-ng/zlib-ng.h"
 #include "xenia/base/filesystem.h"
+#include "xenia/base/host_storage.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/memory.h"
 #include "xenia/base/utf8.h"
+#include "xenia/kernel/xam/system_font.h"
 #include "xenia/kernel/xam/system_manifest.h"
 #include "xenia/vfs/devices/xcontent_container_device.h"
 #include "xenia/vfs/entry.h"
 #include "xenia/vfs/file.h"
 #include "xenia/xbox.h"
-
-#include "embedded_system_font.h"
 
 namespace xe {
 namespace ui {
@@ -43,17 +43,98 @@ namespace {
 
 constexpr std::string_view kUpdateFolder = "$SystemUpdate/";
 constexpr std::string_view kFlashPrefix = "$flash_";
-constexpr size_t kFontSignatureOffset = 4;
-constexpr size_t kFontSignatureSize = 0x100;
-constexpr size_t kFontHeaderSize = 0x118;
-// Far above the few hundred KiB the tables of a retail font unpack to.
-constexpr size_t kMaxFontTablesSize = 16 * 1024 * 1024;
+constexpr std::string_view kBaseFontName = "xenonjklatin.xtt";
 
-// A flash font the update only patches, and the one built to stand in for it.
-struct BaseFont {
-  std::string_view name;
-  std::span<const uint8_t> data;
+// A complete owned read, not a path supplied as proof. The common root rejects
+// symbolic links and inherits the destination filesystem's existing reserve.
+struct FontRead {
+  bool exists = false;
+  std::filesystem::path leaf;
+  std::vector<uint8_t> bytes;
 };
+
+bool ReadFont(const std::filesystem::path& folder, std::string_view name,
+              FontRead& output) {
+  std::error_code ec;
+  if (!std::filesystem::exists(folder, ec)) {
+    if (!ec) {
+      output = {};
+    }
+    return !ec;
+  }
+  auto root = filesystem::HostStorageRoot::Open(folder, true, ec);
+  if (!root) {
+    return false;
+  }
+  FontRead value;
+  // Match the single FATX spelling without accepting ambiguous host aliases.
+  size_t entries = 0;
+  for (std::filesystem::directory_iterator it(root->path(), ec), end;
+       !ec && it != end; it.increment(ec)) {
+    if (++entries > 4096) {
+      return false;
+    }
+    if (utf8::equal_case(path_to_utf8(it->path().filename()), name)) {
+      if (value.exists) {
+        return false;
+      }
+      value.exists = true;
+      value.leaf = it->path().filename();
+    }
+  }
+  if (ec || (value.exists &&
+             root->ReadFile(value.leaf, kernel::xam::kMaximumSystemFontBytes,
+                            value.bytes))) {
+    return false;
+  }
+  output = std::move(value);
+  return true;
+}
+
+bool SameFont(const FontRead& a, const FontRead& b) {
+  return a.exists == b.exists &&
+         (!a.exists || (a.leaf == b.leaf && a.bytes == b.bytes));
+}
+
+// Content-addressed raw recovery copies are outside staging/previous. Failure
+// (including uncertain partial creation/fsync) preserves that leaf and refuses
+// publication. Never turn a backup directory into profile recovery authority.
+bool BackUpFont(const std::filesystem::path& system, const FontRead& font) {
+  const auto name = kernel::xam::SystemFontRecoveryBackupName(font.bytes);
+  if (!font.exists || !name) {
+    return false;
+  }
+  std::error_code ec;
+  auto root = filesystem::HostStorageRoot::Open(system, false, ec);
+  if (!root) {
+    return false;
+  }
+  ec = root->Create("font-backups", true);
+  if (ec && ec != std::errc::file_exists) {
+    return false;
+  }
+  auto backups = root->Subroot("font-backups", false, ec);
+  if (!backups || root->FlushDirectory()) {
+    return false;
+  }
+  auto written = backups->WriteNewFile(*name, font.bytes, true);
+  if (!written.error) {
+    return written.bytes == font.bytes.size();
+  }
+  if (written.error != std::errc::file_exists) {
+    return false;
+  }
+  std::vector<uint8_t> old;
+  if (backups->ReadFile(*name, kernel::xam::kMaximumSystemFontBytes, old) ||
+      old != font.bytes) {
+    return false;
+  }
+  // Re-establish durability even for an identical file left by an earlier
+  // interrupted repair; do not trust existence as a successful prior fsync.
+  auto file =
+      backups->OpenFile(*name, filesystem::FileAccess::kFileWriteData, ec);
+  return file && !file->FlushResult() && !backups->FlushDirectory();
+}
 
 // Whether |name| names a file in the folder it is written to.
 bool IsPlainFileName(std::string_view name) {
@@ -61,64 +142,81 @@ bool IsPlainFileName(std::string_view name) {
          name.find_first_of("/\\:") == std::string_view::npos;
 }
 
-// The signature of the font a .xttp patch applies to, from its xttf table.
-std::vector<uint8_t> GetPatchedFontSignature(std::span<const uint8_t> patch) {
-  if (patch.size() < kFontHeaderSize || std::memcmp(patch.data(), "xttf", 4)) {
-    return {};
+SystemFilesResult PrepareBaseFont(const std::filesystem::path& system,
+                                  const std::filesystem::path& flash,
+                                  const SystemFilesInstallOptions& options,
+                                  FontRead& original) {
+  using kernel::xam::SystemFontInfo;
+  using kernel::xam::ValidateSystemFont;
+  FontRead patch, staged;
+  SystemFontInfo patch_info;
+  if (!ReadFont(flash, "xenonjklatin.xttp1", patch) || !patch.exists ||
+      !ValidateSystemFont(patch.bytes, patch_info) || patch_info.is_base ||
+      !ReadFont(flash, kBaseFontName, staged) ||
+      !ReadFont(system / "flash", kBaseFontName, original)) {
+    return SystemFilesResult::kNotSystemUpdate;
   }
-  const size_t packed_size = xe::load_and_swap<uint32_t>(patch.data() + 0x10C);
-  size_t unpacked_size = xe::load_and_swap<uint32_t>(patch.data() + 0x110);
-  if (packed_size > patch.size() - kFontHeaderSize ||
-      unpacked_size > kMaxFontTablesSize) {
-    return {};
-  }
-  std::vector<uint8_t> sfnt(unpacked_size);
-  if (zng_uncompress(sfnt.data(), &unpacked_size,
-                     patch.data() + kFontHeaderSize, packed_size) != Z_OK) {
-    return {};
-  }
-  sfnt.resize(unpacked_size);
-  if (sfnt.size() < 12) {
-    return {};
-  }
-  const size_t table_count = xe::load_and_swap<uint16_t>(&sfnt[4]);
-  for (size_t i = 0; i < table_count && 12 + 16 * i + 16 <= sfnt.size(); ++i) {
-    const uint8_t* record = &sfnt[12 + 16 * i];
-    const size_t offset = xe::load_and_swap<uint32_t>(record + 8);
-    if (std::memcmp(record, "xttf", 4) == 0 &&
-        offset + 8 + kFontSignatureSize <= sfnt.size()) {
-      return {sfnt.begin() + offset + 8,
-              sfnt.begin() + offset + 8 + kFontSignatureSize};
-    }
-  }
-  return {};
-}
-
-// Writes the stand-ins for the flash fonts the update only patches.
-bool WriteBaseFonts(const std::filesystem::path& flash_path) {
-  const std::array fonts = {
-      BaseFont{"xenonjklatin.xtt",
-               {embedded_system_font::XenonJKLatin_xtt_data,
-                embedded_system_font::XenonJKLatin_xtt_size}},
+  const auto matches = [&](const std::vector<uint8_t>& bytes) {
+    SystemFontInfo info;
+    return ValidateSystemFont(bytes, info) && info.is_base &&
+           info.signature == patch_info.base_signature;
   };
-  for (const auto& font : fonts) {
-    const auto font_path = flash_path / font.name;
-    std::error_code ec;
-    if (std::filesystem::exists(font_path, ec)) {
-      continue;
-    }
-    std::vector<uint8_t> data(font.data.begin(), font.data.end());
-    // A patch only attaches to the font whose signature it holds.
-    const auto signature = GetPatchedFontSignature(xe::filesystem::ReadAllBytes(
-        flash_path / fmt::format("{}p1", font.name)));
-    if (signature.size() == kFontSignatureSize) {
-      std::ranges::copy(signature, data.begin() + kFontSignatureOffset);
-    }
-    if (!xe::filesystem::WriteAllBytes(font_path, data)) {
-      return false;
+  std::vector<uint8_t> selected;
+  if (original.exists) {
+    SystemFontInfo info;
+    if (ValidateSystemFont(original.bytes, info)) {
+      // A valid installed base is never silently replaced by another version.
+      if (!info.is_base || info.signature != patch_info.base_signature) {
+        return SystemFilesResult::kBaseFontMismatch;
+      }
+      selected = original.bytes;
+    } else if (!kernel::xam::IsGeneratedSystemFontSubstitute(original.bytes)) {
+      return SystemFilesResult::kInvalidBaseFont;
     }
   }
-  return true;
+  if (selected.empty() && !options.base_font.empty()) {
+    FontRead supplied;
+    if (!ReadFont(options.base_font.parent_path().empty()
+                      ? std::filesystem::path(".")
+                      : options.base_font.parent_path(),
+                  path_to_utf8(options.base_font.filename()), supplied) ||
+        !supplied.exists) {
+      return SystemFilesResult::kInvalidBaseFont;
+    }
+    SystemFontInfo info;
+    if (!ValidateSystemFont(supplied.bytes, info) || !info.is_base) {
+      return SystemFilesResult::kInvalidBaseFont;
+    }
+    if (info.signature != patch_info.base_signature) {
+      return SystemFilesResult::kBaseFontMismatch;
+    }
+    selected = std::move(supplied.bytes);
+  }
+  if (selected.empty() && staged.exists) {
+    if (!matches(staged.bytes)) {
+      return SystemFilesResult::kInvalidBaseFont;
+    }
+    selected = staged.bytes;
+  }
+  if (selected.empty()) {
+    return SystemFilesResult::kMissingBaseFont;
+  }
+  if (original.exists && !matches(original.bytes) &&
+      !BackUpFont(system, original)) {
+    return SystemFilesResult::kBackupFailed;
+  }
+  if (!staged.exists || staged.bytes != selected) {
+    std::error_code ec;
+    auto root = filesystem::HostStorageRoot::Open(flash, false, ec);
+    if (!root || (staged.exists && root->Remove(staged.leaf, false))) {
+      return SystemFilesResult::kWriteFailed;
+    }
+    const auto written = root->WriteNewFile(kBaseFontName, selected, true);
+    if (written.error || written.bytes != selected.size()) {
+      return SystemFilesResult::kWriteFailed;
+    }
+  }
+  return SystemFilesResult::kSuccess;
 }
 
 // Copies the flash files out of the update's own package under the names
@@ -288,7 +386,8 @@ std::filesystem::path GetUnrestoredSystemFilesPath(
 SystemFilesResult InstallSystemFiles(
     const std::filesystem::path& zip_path,
     const std::filesystem::path& system_path,
-    const std::function<bool(size_t done, size_t total)>& progress) {
+    const std::function<bool(size_t done, size_t total)>& progress,
+    const SystemFilesInstallOptions& options) {
   const std::array<std::string_view, 3> folders = {"flash", "sysext", "sysaux"};
   const auto staging_path = system_path / "staging";
   const auto unrestored_path = GetUnrestoredSystemFilesPath(system_path);
@@ -299,9 +398,16 @@ SystemFilesResult InstallSystemFiles(
 
   std::error_code ec;
   // A previous install that couldn't be put back stays until it is dealt with.
-  if (std::filesystem::exists(unrestored_path, ec)) {
-    return SystemFilesResult::kRestoreFailed;
+  for (const auto& recovery : {unrestored_path, previous_path}) {
+    if (std::filesystem::exists(recovery, ec)) {
+      return SystemFilesResult::kRestoreFailed;
+    }
+    if (ec) {
+      return SystemFilesResult::kReadFailed;
+    }
   }
+  // A failed rename to unrestored may leave previous in staging. The check
+  // above keeps a later attempt from deleting those uncertain original bytes.
   std::filesystem::remove_all(staging_path, ec);
   if (ec) {
     return SystemFilesResult::kWriteFailed;
@@ -380,8 +486,19 @@ SystemFilesResult InstallSystemFiles(
   if (!has_flash) {
     return fail(SystemFilesResult::kNotSystemUpdate);
   }
-  if (!WriteBaseFonts(flash_path)) {
-    return fail(SystemFilesResult::kWriteFailed);
+  FontRead original_font;
+  if (const auto result =
+          PrepareBaseFont(system_path, flash_path, options, original_font);
+      result != SystemFilesResult::kSuccess) {
+    return fail(result);
+  }
+  FontRead current_font;
+  if (!ReadFont(system_path / "flash", kBaseFontName, current_font) ||
+      !SameFont(original_font, current_font)) {
+    return fail(SystemFilesResult::kReadFailed);
+  }
+  if (!progress(1, 1)) {
+    return fail(SystemFilesResult::kCancelled);
   }
 
   switch (
@@ -397,7 +514,18 @@ SystemFilesResult InstallSystemFiles(
                  xe::path_to_utf8(ec ? previous_path : unrestored_path)));
       return SystemFilesResult::kRestoreFailed;
   }
-  // The previous install is in staging now.
+  // Check the actual displaced file too. An external change between the last
+  // read and rename must never be discarded as a successful repair. Retain
+  // the whole previous installation outside temporary cleanup on uncertainty.
+  FontRead displaced_font;
+  if (!ReadFont(previous_path / "flash", kBaseFontName, displaced_font) ||
+      !SameFont(original_font, displaced_font)) {
+    std::filesystem::rename(previous_path, unrestored_path, ec);
+    XELOGE("System files: previous installation changed; retained in {}",
+           strip_pii(path_to_utf8(ec ? previous_path : unrestored_path)));
+    return SystemFilesResult::kRestoreFailed;
+  }
+  // The verified previous install is in staging now.
   std::filesystem::remove_all(staging_path, ec);
   return SystemFilesResult::kSuccess;
 }

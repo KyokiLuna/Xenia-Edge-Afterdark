@@ -32,7 +32,9 @@ X_STATUS XAudio2AudioSystem::CreateDriver(size_t index,
                                           xe::threading::Semaphore* semaphore,
                                           AudioDriver** out_driver) {
   assert_not_null(out_driver);
-  auto driver = std::make_unique<XAudio2AudioDriver>(semaphore);
+  auto driver = std::make_unique<XAudio2AudioDriver>(
+      semaphore, AudioDriver::kFrameFrequencyDefault,
+      AudioDriver::kFrameChannelsDefault, true, ducker_policy());
   if (!driver->Initialize()) {
     driver->Shutdown();
     return X_STATUS_UNSUCCESSFUL;
@@ -46,7 +48,7 @@ AudioDriver* XAudio2AudioSystem::CreateDriver(
     xe::threading::Semaphore* semaphore, uint32_t frequency, uint32_t channels,
     bool need_format_conversion) {
   return new XAudio2AudioDriver(semaphore, frequency, channels,
-                                need_format_conversion);
+                                need_format_conversion, ducker_policy());
 }
 
 }  // namespace xaudio2

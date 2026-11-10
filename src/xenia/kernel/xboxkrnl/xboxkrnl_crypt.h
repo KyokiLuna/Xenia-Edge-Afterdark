@@ -11,10 +11,22 @@
 #define XENIA_KERNEL_XBOXKRNL_XBOXKRNL_CRYPT_H_
 
 #include <cstdint>
+#include <span>
 
 namespace xe {
 namespace kernel {
 namespace xboxkrnl {
+
+// The 17559 manifest verifier's index 0 selects the retail PIRS public key.
+// Only this verified selector is supported; other indices fail closed.
+// hash is SHA1 (20 bytes); signature is a 2048-bit little-endian integer.
+bool XeKeysVerifyRSASignature(uint32_t index, std::span<const uint8_t> hash,
+                              std::span<const uint8_t> signature);
+
+// Pure host-side XTT metadata authentication with existing retail public key39
+// and XBOX360XTT salted BeSig. No Kernel/TLS/guest memory or mutable key state.
+bool XeKeysVerifyXttFontSignature(std::span<const uint8_t> signature,
+                                  std::span<const uint8_t> signed_bytes);
 
 // HMAC-SHA1 of the inputs under console key |key_num|. False for a key we
 // don't have.

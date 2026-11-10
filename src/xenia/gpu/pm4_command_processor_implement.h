@@ -81,6 +81,9 @@ inline const char* GetEventName(uint32_t event) {
 }
 void COMMAND_PROCESSOR::ExecuteIndirectBuffer(uint32_t ptr,
                                               uint32_t count) XE_RESTRICT {
+  if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+    return;
+  }
   SCOPE_profile_cpu_f("gpu");
 
   trace_writer_.WriteIndirectBufferStart(ptr, count * sizeof(uint32_t));
@@ -97,9 +100,11 @@ void COMMAND_PROCESSOR::ExecuteIndirectBuffer(uint32_t ptr,
     reader_.BeginPrefetchedRead<swcache::PrefetchTag::Level2>(
         COMMAND_PROCESSOR::GetCurrentRingReadCount());
     do {
-      if (COMMAND_PROCESSOR::ExecutePacket()) {
-        continue;
-      } else {
+      const bool packet_executed = COMMAND_PROCESSOR::ExecutePacket();
+      if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+        break;
+      }
+      if (!packet_executed) {
         // Return up a level if we encounter a bad packet.
         XELOGE("**** INDIRECT RINGBUFFER: Failed to execute packet.");
         assert_always();
@@ -340,6 +345,9 @@ void COMMAND_PROCESSOR::DisassembleCurrentPacket() XE_RESTRICT {
   logger.submit('d');
 }
 bool COMMAND_PROCESSOR::ExecutePacket() {
+  if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+    return false;
+  }
 #if XE_ENABLE_PM4_DISASM == 1
   if (cvars::disassemble_pm4 && logging::ShouldLog(LogLevel::Debug)) {
     COMMAND_PROCESSOR::DisassembleCurrentPacket();
@@ -685,6 +693,9 @@ bool COMMAND_PROCESSOR::ExecutePacketType3(uint32_t packet) XE_RESTRICT {
         return COMMAND_PROCESSOR::HitUnimplementedOpcode(opcode, count);
     }
 
+    if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+      return false;
+    }
     trace_writer_.WritePacketEnd();
 #if XE_ENABLE_TRACE_WRITER_INSTRUMENTATION == 1
 
@@ -808,7 +819,21 @@ bool COMMAND_PROCESSOR::ExecutePacketType3_XE_SWAP(uint32_t packet,
   uint32_t frontbuffer_ptr = reader_.ReadAndSwap<uint32_t>();
   uint32_t frontbuffer_width = reader_.ReadAndSwap<uint32_t>();
   uint32_t frontbuffer_height = reader_.ReadAndSwap<uint32_t>();
-  reader_.AdvanceRead((count - 4) * sizeof(uint32_t));
+  uint64_t native_title_ticket = 0;
+  if (count == 6) {
+    native_title_ticket = uint64_t(reader_.ReadAndSwap<uint32_t>()) << 32;
+    native_title_ticket |= reader_.ReadAndSwap<uint32_t>();
+  } else {
+    reader_.AdvanceRead((count - 4) * sizeof(uint32_t));
+  }
+  if (native_title_ticket) {
+    COMMAND_PROCESSOR::ConsumeNativeSystemTitleSwap(
+        native_title_ticket, frontbuffer_ptr, frontbuffer_width,
+        frontbuffer_height);
+    if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+      return false;
+    }
+  }
 
   if (COMMAND_PROCESSOR::debug_markers_enabled()) {
     COMMAND_PROCESSOR::InsertDebugMarker("PM4_XE_SWAP: 0x%08X %ux%u",
@@ -818,6 +843,9 @@ bool COMMAND_PROCESSOR::ExecutePacketType3_XE_SWAP(uint32_t packet,
 
   COMMAND_PROCESSOR::IssueSwap(frontbuffer_ptr, frontbuffer_width,
                                frontbuffer_height);
+  if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+    return false;
+  }
 
   // Advance the present-frame counter shown in the log prefix.
   logging::IncrementFrameNumber();
@@ -894,6 +922,9 @@ bool COMMAND_PROCESSOR::ExecutePacketType3_WAIT_REG_MEM(
   }
 
   do {
+    if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+      return false;
+    }
     uint32_t value = value_ref;
     if (is_memory) {
       trace_writer_.WriteMemoryRead(CpuToGpu(poll_reg_addr & ~uint32_t(0x3)),
@@ -926,27 +957,55 @@ bool COMMAND_PROCESSOR::ExecutePacketType3_WAIT_REG_MEM(
           continue;
         }
       }
+      // All operands and the original title predicate reference are stable.
+      // Typed native work may park/restore the title GPU context, but never
+      // executes general host callbacks or acknowledges this unfinished packet.
+      COMMAND_PROCESSOR::PollGpuCompletions();
+      COMMAND_PROCESSOR::PumpNativeFramesAtSafePoint();
+      if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+        return false;
+      }
+      if (!worker_running_) {
+        COMMAND_PROCESSOR::HaltGuestCommandProcessing();
+        return false;
+      }
       // Wait using the duration specified by the guest.
       if (wait >= 0x100) {
         PrepareForWait();
+        if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+          return false;
+        }
         if (cvars::guest_display_refresh_cap) {
-          // Fixed rate vblank mode - sleep since counter updates at 50/60Hz
-#if XE_PLATFORM_WIN32
-          // Accurate timing: 90% sleep, 10% spin
-          const uint64_t wait_ms = wait / 0x100;
-          const uint64_t sleep_ns =
-              static_cast<uint64_t>(wait_ms * 1000000 * 0.90);
-          xe::threading::NanoSleep(sleep_ns);
-#else
-          xe::threading::Sleep(std::chrono::milliseconds(wait / 0x100));
-#endif
+          const auto deadline = std::chrono::steady_clock::now() +
+                                std::chrono::milliseconds(wait / 0x100);
+          while (worker_running_ &&
+                 std::chrono::steady_clock::now() < deadline) {
+            auto remaining =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    deadline - std::chrono::steady_clock::now()) +
+                std::chrono::milliseconds(1);
+            const auto capacity =
+                COMMAND_PROCESSOR::GetNativeSystemFrameCapacity();
+            if (capacity.state == NativeSystemFrameCapacity::State::kQueued ||
+                capacity.state ==
+                    NativeSystemFrameCapacity::State::kBackpressured) {
+              remaining = std::min(remaining, std::chrono::milliseconds(2));
+            }
+            xe::threading::Wait(write_ptr_index_event_.get(), true, remaining);
+            COMMAND_PROCESSOR::PollGpuCompletions();
+            COMMAND_PROCESSOR::PumpNativeFramesAtSafePoint();
+            if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+              return false;
+            }
+          }
         }
         // Unlimited vblank mode (guest_display_refresh_cap=false) - spin since
         // counter updates rapidly
         ReturnFromWait();
 
         if (!worker_running_) {
-          // Short-circuited exit.
+          // Shutdown cannot acknowledge/write back this unfinished packet.
+          COMMAND_PROCESSOR::HaltGuestCommandProcessing();
           return false;
         }
       }
@@ -1726,6 +1785,9 @@ bool COMMAND_PROCESSOR::ExecutePacketType3_VIZ_QUERY(
 
 uint32_t COMMAND_PROCESSOR::ExecutePrimaryBuffer(uint32_t read_index,
                                                  uint32_t write_index) {
+  if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+    return read_index;
+  }
   SCOPE_profile_cpu_f("gpu");
 #if XE_ENABLE_TRACE_WRITER_INSTRUMENTATION == 1
   // If we have a pending trace stream open it now. That way we ensure we get
@@ -1771,7 +1833,11 @@ uint32_t COMMAND_PROCESSOR::ExecutePrimaryBuffer(uint32_t read_index,
       read_ptr_update_freq_ * uint32_t(sizeof(uint32_t));
   uint32_t remaining_at_writeback = remaining;
   do {
-    if (!COMMAND_PROCESSOR::ExecutePacket()) {
+    const bool packet_executed = COMMAND_PROCESSOR::ExecutePacket();
+    if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+      break;
+    }
+    if (!packet_executed) {
       // This probably should be fatal - but we're going to continue anyways.
       XELOGE("**** PRIMARY RINGBUFFER: Failed to execute packet.");
       assert_always();
@@ -1784,6 +1850,9 @@ uint32_t COMMAND_PROCESSOR::ExecutePrimaryBuffer(uint32_t read_index,
         remaining_at_writeback - remaining >= writeback_stride) {
       // Held-back signals the GPU is past go out at the same pace.
       COMMAND_PROCESSOR::PerformCompletedHeldSignals();
+      if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+        break;
+      }
       // Re-read the target, the guest can re-point or disable the write-back
       // from its own thread while we are draining.
       uint32_t writeback_ptr = read_ptr_writeback_ptr_;
@@ -1799,15 +1868,24 @@ uint32_t COMMAND_PROCESSOR::ExecutePrimaryBuffer(uint32_t read_index,
     }
   } while (remaining);
 
-  COMMAND_PROCESSOR::OnPrimaryBufferEnd();
+  if (!COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+    COMMAND_PROCESSOR::OnPrimaryBufferEnd();
+  }
 
   trace_writer_.WritePrimaryBufferEnd();
 
+  const uint32_t next_read_index =
+      COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()
+          ? uint32_t(reader_.read_offset() / sizeof(uint32_t))
+          : write_index;
   reader_ = old_reader;
-  return write_index;
+  return next_read_index;
 }
 
 void COMMAND_PROCESSOR::ExecutePacket(uint32_t ptr, uint32_t count) {
+  if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+    return;
+  }
   // Execute commands!
   RingBuffer old_reader = reader_;
 
@@ -1817,7 +1895,11 @@ void COMMAND_PROCESSOR::ExecutePacket(uint32_t ptr, uint32_t count) {
   reader_.set_write_offset(count * sizeof(uint32_t));
 
   do {
-    if (!COMMAND_PROCESSOR::ExecutePacket()) {
+    const bool packet_executed = COMMAND_PROCESSOR::ExecutePacket();
+    if (COMMAND_PROCESSOR::IsGuestCommandProcessingHalted()) {
+      break;
+    }
+    if (!packet_executed) {
       XELOGE("**** ExecutePacket: Failed to execute packet.");
       assert_always();
       break;

@@ -1,0 +1,5 @@
+Export table for $install_extender.xex
+xex_load_address=0x9F100000 export_table_va=0x9F154464 count=1
+ordinal(hex) -> function_va(hex)  [resolved_name]
+------------------------------------------------------------
+0x0001 -> 0x9F10B840

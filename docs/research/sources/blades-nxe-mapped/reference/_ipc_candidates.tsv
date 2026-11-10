@@ -1,0 +1,348 @@
+module	caller	caller_va	callsite_va	target_va	port_guess	status	note
+xam.xex	XamUserCreateStatsEnumerator	0x818C0150	0x818C01D4	0x818EA8F0	0xFE	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	Refresh	0x818DDA90	0x818DDBC8	0x818D96A0	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	XamAppLoad	0x818DE018	0x818DE0B8	0x818EB988	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	XamProfileCreateEnumerator	0x818E2E48	0x818E2E8C	0x818EA8F0	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	XamContentGetAttributesInternal	0x818E94D8	0x818E94F4	0x8195EC64	0xFE	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	XamContentCreateEnumeratorInternal	0x818E9740	0x818E978C	0x818EA8F0	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	XamContentAggregateCreateEnumerator	0x818E9858	0x818E98A0	0x818EA8F0	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	XamContentCreateDeviceEnumerator	0x818E9958	0x818E99A0	0x818EA8F0	0xFE	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	XuiElementGetFocusUser	0x81913270	0x819132AC	0x819131A8	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	XuiProcessInput	0x81915F20	0x81915F58	0x819131A8	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	CreateEventA	0x81957540	0x819575B0	0x8195CE88	0xB7	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	CreateFileA	0x819575E0	0x819577B4	0x8195D218	0xB7	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	CreateMutexA	0x819577C8	0x81957824	0x8195D218	0xB7	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	CreateWaitableTimerA	0x81957860	0x819578C0	0x8195D218	0xB7	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	SetFilePointer	0x8195CFF0	0x8195D0A8	0x8195CE88	0x83	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	SetFilePointerEx	0x8195D138	0x8195D1C8	0x8195CE88	0x83	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamUserCreateStatsEnumerator	0x818D02E8	0x818D036C	0x81937588	0xFE	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XNotifyBroadcast	0x818FF718	0x818FF838	0x818FF5D8	0xEF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamPartyGetNetworkCounters	0x81905CF0	0x81905D08	0x81912620	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x819149A8	0x8192FD20	0x8C	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x819149C4	0x8192FD20	0x8D	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x819149DC	0x8192FD20	0x8E	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x81914A1C	0x8192FD20	0x8F	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x81914A30	0x8192FD20	0x90	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x81914A68	0x8192FD20	0x8B	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x81914A9C	0x8192FD20	0x8A	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x81914ABC	0x8192FD20	0x89	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x81914AF8	0x8192FD20	0x84	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x81914B24	0x8192FD20	0x86	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x81914B4C	0x8192FD20	0x87	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamFormatTimeString	0x819148D0	0x81914B7C	0x8192FD20	0x85	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamShowMarketplaceUI	0x81918338	0x81918554	0x8192FD20	0xA8	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamShowMarketplaceUI	0x81918338	0x819185DC	0x8192FD20	0x9F	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamShowMarketplaceUI	0x81918338	0x81918610	0x8192FD20	0xA9	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamShowMarketplaceUI	0x81918338	0x8191861C	0x8192FD20	0xA5	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamShowMarketplaceUI	0x81918338	0x81918708	0x8192FD20	0x9C	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamShowMarketplaceUI	0x81918338	0x81918714	0x8192FD20	0x9B	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamAppLoad	0x8191E228	0x8191E2E0	0x81938E00	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamProfileCreateEnumerator	0x8192A618	0x8192A65C	0x81937588	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamContentGetAttributesInternal	0x81935528	0x81935544	0x81960098	0xFE	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamContentCreateEnumeratorInternal	0x819357A8	0x819357F4	0x81937588	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamContentAggregateCreateEnumerator	0x819358C0	0x81935908	0x81937588	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamContentCreateDeviceEnumerator	0x819359C0	0x81935A08	0x81937588	0xFE	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamIptvGetServiceName	0x81939FC0	0x8193A020	0x8192FD20	0xB2	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamInputSetTextMessengerIndicator	0x8193A658	0x8193A6A8	0x81912620	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XamPackageManagerGetFeatureRequiresUpdateStrings	0x8193D7D8	0x8193D7F8	0x8192FD20	0xA8	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	CreateEventA	0x819506E8	0x81950758	0x819561B8	0xB7	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	CreateFileA	0x81950788	0x8195095C	0x81956540	0xB7	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	CreateMutexA	0x81950970	0x819509CC	0x81956540	0xB7	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	CreateWaitableTimerA	0x81950A08	0x81950A68	0x81956540	0xB7	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	RtlZeroHeap	0x81951BD8	0x81951C30	0x81BD130C	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	RtlDestroyHeap	0x81952900	0x81952948	0x81BD130C	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	RtlSizeHeap	0x81952F98	0x81952FE4	0x81BD130C	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	RtlAllocateHeap	0x81953D20	0x81953D84	0x81BD130C	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	RtlAllocateHeapSlowly	0x819545E8	0x81954650	0x81BD130C	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	RtlFreeHeap	0x81954FC8	0x81955028	0x81BD130C	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	RtlFreeHeapSlowly	0x819552C0	0x81955318	0x81BD130C	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	RtlReAllocateHeap	0x81955590	0x819555FC	0x81BD130C	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	SetFilePointer	0x81956318	0x819563D0	0x819561B8	0x83	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	SetFilePointerEx	0x81956460	0x819564F0	0x819561B8	0x83	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XuiElementGetFocusUser	0x819DA8B8	0x819DA8F4	0x819DA7E8	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_xam.xexp	XuiProcessInput	0x819DD6A8	0x819DD6E0	0x819DA7E8	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+dash.xex	sub_0x920A85F0	0x920A85F0	0x920A8684	0x9245415C	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+dash.xex	sub_0x920ADB70	0x920ADB70	0x920ADB80	0x920ADB20	0xFC	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+dash.xex	sub_0x920ADB70	0x920ADB70	0x920ADBA4	0x920ADB20	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+dash.xex	sub_0x920FCAC8	0x920FCAC8	0x920FCB5C	0x920FBC78	0x80	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_dash.xex	ordinal_0x27DA	0x92188F78	0x92188FB4	0x92188EA8	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_dash.xex	ordinal_0x27DE	0x9218C578	0x9218C5B0	0x92188EA8	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_dash.xex	ordinal_0x28A0	0x921C2410	0x921C2464	0x92188A70	0x94	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_dash.xex	ordinal_0x2A74	0x922C31B0	0x922C31F4	0x92144098	0xE8	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_dash.xex	ordinal_0x2A68	0x922C3E20	0x922C3E60	0x92144098	0xE8	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_dash.xex	ordinal_0x2A70	0x922C3FF0	0x922C4070	0x92144098	0xCC	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x92062510	0x92062510	0x920625C4	0x920808D0	0x86	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x92062510	0x92062510	0x9206268C	0x920808D0	0x86	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x92062510	0x92062510	0x9206268C	0x920808D0	0x87	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x92062510	0x92062510	0x920626DC	0x920808D0	0x89	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x92062510	0x92062510	0x92062710	0x920808D0	0x86	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x92062510	0x92062510	0x920627C4	0x920808D0	0x88	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x92062510	0x92062510	0x9206282C	0x920808D0	0x88	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x92062510	0x92062510	0x9206287C	0x9209ED78	0x8C	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x920A0290	0x920A0290	0x920A0318	0x921BE63C	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x920A3E30	0x920A3E30	0x920A3E94	0x921BE9CC	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x920A4700	0x920A4700	0x920A4764	0x921BE9CC	0xF4	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x920A7988	0x920A7988	0x920A79C4	0x920A8CE8	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x920AB770	0x920AB770	0x920AB780	0x920AB728	0xFC	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x920AB770	0x920AB770	0x920AB788	0x920AB728	0xFF	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+AvatarEditor.xex	sub_0x921300B0	0x921300B0	0x921300D8	0x9210DCD8	0x80	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+deviceselector.xex	sub_0x916D3620	0x916D3620	0x916D36D8	0x916D3DB8	0x80	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+deviceselector.xex	ordinal_0x0001	0x916D38E0	0x916D38F4	0x916D3DB8	0x80	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_signin.xexp	entry_point	0x90108800	0x90108848	0x9010E1BC	0xFC	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+$flash_signin.xexp	sub_0x9010BD28	0x9010BD28	0x9010BD80	0x9010E1BC	0xFC	UNRESOLVED_NO_ENDPOINT	candidate target does not statically reach a registered XMsg* endpoint within the search bound (depth<=4, node_cap<=40) - target may be an ordinary function, or the real path exceeds this scan's bound
+xam.xex	XamUserCreateAchievementEnumerator	0x818C0000	0x818C00F8	0x818D2810	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamUserCreateStatsEnumerator	0x818C0150	0x818C0210	0x818D2810	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamUserCreateTitlesPlayedEnumerator	0x818C02D8	0x818C03C4	0x818D2810	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamPrepareGamerTiles	0x818C0530	0x818C0570	0x818D2880	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamReadTile	0x818C0598	0x818C05EC	0x818D2810	0xFB	PROVEN	FORWARDING_HELPER
+xam.xex	XamReadTileToTexture	0x818C0638	0x818C0690	0x818D2810	0xFB	PROVEN	FORWARDING_HELPER
+xam.xex	XamWriteGamerTile	0x818C06D8	0x818C0730	0x818D2810	0xFB	PROVEN	FORWARDING_HELPER
+xam.xex	XamWriteTile	0x818C0778	0x818C07D4	0x818D2810	0xFB	PROVEN	FORWARDING_HELPER
+xam.xex	XamReadString	0x818C0820	0x818C0870	0x818D2810	0xFB	PROVEN	FORWARDING_HELPER
+xam.xex	XamUserAddRecentPlayer	0x818D6960	0x818D69CC	0x818D2810	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamUserUpdateRecentPlayer	0x818D69E8	0x818D6A54	0x818D2810	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamUserCreatePlayerEnumerator	0x818D6A70	0x818D6B3C	0x818D2810	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamUserReadProfileSettings	0x818D6CB8	0x818D6DE0	0x818D2DE8	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamUserWriteProfileSettings	0x818D6E28	0x818D6E94	0x818D2DE8	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamUserProfileSync	0x818D6ED8	0x818D6F0C	0x818D2DE8	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamProfileRecoverTitle	0x818D6F58	0x818D6F90	0x818D2DE8	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamProfileCreateEnumerator	0x818E2E48	0x818E2ED0	0x818D2810	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamUserCheckPrivilege	0x818E4D88	0x818E4ED4	0x818D2810	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamProfileRenameAccount	0x818E5058	0x818E50E8	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamProfileSaveAccountInfo	0x818E5158	0x818E51A8	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamProfileLoadAccountInfo	0x818E51E8	0x818E5238	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamProfileDelete	0x818E5278	0x818E52C0	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamShowSigninUIp	0x818E6100	0x818E6164	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowSigninUIEx	0x818E6188	0x818E6200	0x818D2DE8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowFriendsUI	0x818E6228	0x818E62A4	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowFriendsUIp	0x818E62D0	0x818E6358	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowPlayersUI	0x818E6388	0x818E640C	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowMessagesUI	0x818E6438	0x818E64BC	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowKeyboardUI	0x818E64E8	0x818E6548	0x818D2DE8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowQuickChatUI	0x818E6570	0x818E65A0	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowVoiceMailUI	0x818E65C8	0x818E6614	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowLiveUpsellUI	0x818E6638	0x818E6680	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowMessageComposeUI	0x818E66A8	0x818E677C	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowGameInviteUI	0x818E6798	0x818E686C	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowFriendRequestUI	0x818E6888	0x818E6928	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowPrivateChatInviteUI	0x818E6958	0x818E69DC	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowCreateProfileUI	0x818E6A08	0x818E6A58	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowLiveSignupUI	0x818E6A80	0x818E6AE0	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowGamerCardUI	0x818E6B28	0x818E6B9C	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowGamerCardUIForXUID	0x818E6BC8	0x818E6CB8	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowAchievementsUI	0x818E6CE0	0x818E6D44	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowGamesUI	0x818E6D70	0x818E6DD4	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowPlayerReviewUI	0x818E6E00	0x818E6EA4	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowComplaintUI	0x818E6ED0	0x818E6F78	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowReputationUI	0x818E6FA8	0x818E704C	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowMarketplaceUI	0x818E7078	0x818E7150	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowSignupCreditCardUI	0x818E7190	0x818E7224	0x818D2DE8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowDeviceSelectorUI	0x818E7268	0x818E7310	0x818D2DE8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowMessageBoxUI	0x818E7360	0x818E74AC	0x818D2DE8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamShowUpdaterUI	0x818E76F0	0x818E7A48	0x818D2880	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamContentCreateInternal	0x818E8F28	0x818E8FA0	0x818D2810	0xFE	PROVEN	WRAPPER_CHAIN_2HOP
+xam.xex	XamContentOpenFileInternal	0x818E8FB0	0x818E9078	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentInstall	0x818E90C8	0x818E9140	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentInstall	0x818E90C8	0x818E91EC	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentGetAttributesInternal	0x818E94D8	0x818E95B8	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentClose	0x818E95E0	0x818E9650	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentFlush	0x818E9690	0x818E9700	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentCreateEnumeratorInternal	0x818E9740	0x818E9804	0x818D2810	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamContentAggregateCreateEnumerator	0x818E9858	0x818E9904	0x818D2810	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamContentCreateDeviceEnumerator	0x818E9958	0x818E9A04	0x818D2810	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+xam.xex	XamContentGetDeviceState	0x818E9A58	0x818E9A80	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentGetMetaDataInternal	0x818E9B50	0x818E9BA8	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentGetThumbnail	0x818E9CD0	0x818E9D38	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentGetCreator	0x818E9D70	0x818E9DE8	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+xam.xex	XamContentGetLicenseMask	0x818E9E28	0x818E9E6C	0x818D2810	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamUserCreateAvatarAssetEnumerator	0x818D0040	0x818D0140	0x818FD548	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserCreateAchievementEnumerator	0x818D0198	0x818D0290	0x818FD548	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserCreateStatsEnumerator	0x818D02E8	0x818D03A8	0x818FD548	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserCreateTitlesPlayedEnumerator	0x818D0470	0x818D055C	0x818FD548	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPrepareGamerTiles	0x818D06F8	0x818D0738	0x818FD5B8	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamClearTitle	0x818D0760	0x818D07A4	0x818FD540	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamReadTile	0x818D07F0	0x818D0844	0x818FD2D8	0xFB	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamReadTileEx	0x818D0890	0x818D0904	0x818FD2D8	0xFB	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamReadTileToTexture	0x818D0950	0x818D09A8	0x818FD548	0xFB	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamReadTileToTextureEx	0x818D09F0	0x818D0A5C	0x818FD548	0xFB	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamWriteGamerTile	0x818D0AA8	0x818D0B0C	0x818FD548	0xFB	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamWriteTile	0x818D0C18	0x818D0C74	0x818FD548	0xFB	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamReadString	0x818D0CC0	0x818D0D10	0x818FD548	0xFB	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamReadStrings	0x818D0D58	0x818D0DAC	0x818FD548	0xFB	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamBackgroundDownloadGetItems	0x818E6180	0x818E6214	0x818FD2D8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamBackgroundDownloadClearItems	0x818E6250	0x818E62B4	0x818FD2D8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamBackgroundDownloadItemAdd	0x818E6300	0x818E6390	0x818FD2D8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamBackgroundDownloadItemRemove	0x818E63D8	0x818E6448	0x818FD2D8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamBackgroundDownloadItemModify	0x818E6488	0x818E6518	0x818FD2D8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamBackgroundDownloadItemMakeFirst	0x818E6560	0x818E65D8	0x818FD2D8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamBackgroundDownloadItemGetStatusAsync	0x818E67D0	0x818E6864	0x818FD2D8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamBackgroundDownloadBindItems	0x818E68A0	0x818E6918	0x818FD2D8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamGetLiveHiveValueW	0x818F7470	0x818F74BC	0x818FD548	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamGetLiveHiveValueW	0x818F7470	0x818F751C	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamGetLiveHiveValueW	0x818F7470	0x818F75B0	0x818FD548	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamGetLiveHiveValueW	0x818F7470	0x818F760C	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XNotifyQueueUI	0x818FFFE0	0x81900048	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamShowOptionalMediaUpdateRequiredUIEx	0x81903408	0x819034C0	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPartyCreate	0x81905678	0x819056B0	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyJoin	0x819056C8	0x81905730	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyLeave	0x81905748	0x81905778	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyAddLocalUsers	0x81905790	0x819057D4	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyRemoveLocalUsers	0x819057F0	0x81905834	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartySendInviteDeprecated	0x81905850	0x819058CC	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyGetUserList	0x819058D8	0x81905908	0x818FD548	0xF4	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPartyGetUserListInternal	0x81905920	0x81905948	0x818FD548	0xF4	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPartySendGameInvites	0x81905960	0x8190599C	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyKickUser	0x819059B0	0x819059DC	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyGetJoinable	0x819059F0	0x81905A1C	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartySetJoinable	0x81905A38	0x81905A64	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyGetInfo	0x81905A80	0x81905AAC	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartySetCustomData	0x81905AC8	0x81905B00	0x818FD548	0xF4	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPartyGetBandwidth	0x81905B18	0x81905B48	0x818FD548	0xF4	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPartyAutomationInprocCall	0x81905B60	0x81905B94	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyGetState	0x81905BB0	0x81905BE0	0x818FD548	0xF4	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPartyIsCoordinator	0x81905BF8	0x81905C34	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyGetFormation	0x81905C50	0x81905CC8	0x818FD540	0xF4	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPartyGetNetworkCounters	0x81905CF0	0x81905D28	0x818FD548	0xF4	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPartyGetAccessLevel	0x81905D58	0x81905D88	0x818FD548	0xF4	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserAddRecentPlayer	0x81906458	0x819064C4	0x818FD548	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserUpdateRecentPlayer	0x819064E0	0x8190654C	0x818FD548	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserCreatePlayerEnumerator	0x81906568	0x81906634	0x818FD548	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPngEncodeEx	0x81907C58	0x81907CCC	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPngDecode	0x81907CD8	0x81907D48	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamUserReadProfileSettingsEx	0x819081A0	0x819082E0	0x818FD540	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserPrefetchProfileSettings	0x81908328	0x819083C0	0x818FD540	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserInvalidateProfileSetting	0x819083F8	0x81908448	0x818FD540	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserWriteProfileSettings	0x81908468	0x819084D4	0x818FD540	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserProfileSync	0x81908518	0x8190854C	0x818FD540	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamProfileRecoverTitle	0x81908598	0x819085D0	0x818FD540	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamAccountRecoveryRecoverTitle	0x81908618	0x81908680	0x818FD2D8	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamProfileGetLastSync	0x819086B8	0x81908708	0x818FD540	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserValidateAvatarManifest	0x81908768	0x819087BC	0x818FD540	0xFB	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamDownloadMarketplaceStoresList	0x81910290	0x819102F8	0x818FD2D8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowSigninUIp	0x81914D70	0x81914E6C	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowSigninUIEx	0x81914E88	0x81914F00	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowFriendsUI	0x81914F28	0x81914FA4	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowFriendsUIp	0x81914FD0	0x81915058	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowPlayersUI	0x81915088	0x8191510C	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowMessagesUIEx	0x81915138	0x819151C4	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowRecentMessageUIEx	0x819151F0	0x81915284	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowKeyboardUI	0x819152A0	0x81915300	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowKeyboardUIMessenger	0x81915328	0x81915390	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowWhatsOnUI	0x819155E8	0x81915670	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowVoiceMailUI	0x819156C0	0x81915744	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowJoinSessionByIdInProgressUI	0x81915768	0x819157DC	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowLiveUpsellUIEx	0x819159A8	0x819159F4	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowVoiceSettingsUI	0x81915C80	0x81915CCC	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowMessageComposeUI	0x81915DE8	0x81915EBC	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowCustomMessageComposeUI	0x81915ED8	0x819160BC	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowGameInviteUI	0x81916100	0x819161D4	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowVideoChatInviteUI	0x819161F0	0x81916294	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowFriendRequestUI	0x819162C0	0x81916360	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowPrivateChatInviteUI	0x81916390	0x81916420	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowPartyInviteUI	0x81916450	0x819164FC	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowCustomPlayerListUI	0x81916528	0x81916700	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowCreateProfileUI	0x81916748	0x819167A4	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowGuideUI	0x819167C8	0x81916810	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowLiveSignupUI	0x81916838	0x81916894	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowGraduateUserUI	0x819168B8	0x8191690C	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowQuickLaunchUI	0x81916950	0x8191699C	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowStorePickerUI	0x819169C0	0x81916A14	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowFirstRunWelcomeUI	0x81916A38	0x81916A98	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowWordRegisterUI	0x81916AC0	0x81916AF8	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowVideoRichPresenceUI	0x81916B20	0x81916B84	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowGamerCardUI	0x81916BF0	0x81916C5C	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowGamerCardUIForXUIDp	0x81916C88	0x81916D64	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowJoinSessionInProgressUI	0x81916D90	0x81916E14	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowJoinPartyUI	0x81916E30	0x81916EB8	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowChangeGamerTileUI	0x81916ED8	0x81916F64	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowAchievementsUIEx	0x81917010	0x81917088	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowAchievementDetailsUI	0x819170B0	0x81917128	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowGamesUI	0x81917148	0x819171C4	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowEditProfileUI	0x81917340	0x819173B4	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowPlayerReviewUI	0x819173E0	0x81917484	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowComplaintUI	0x819174B0	0x81917558	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowReputationUI	0x81917588	0x8191762C	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowMarketplaceUIEx	0x81917658	0x81917740	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowMarketplaceDownloadItemsUI	0x81917768	0x81917894	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowSignupCreditCardUI	0x819178D8	0x8191796C	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowGoldUpgradeUI	0x819179B0	0x81917C0C	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowPaymentOptionsUI	0x81917C30	0x81917CF4	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowTermsOfUseUI	0x81917D20	0x81917DE4	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowDirectAcquireUI	0x81917E10	0x81917F10	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowDeviceSelectorUI	0x81917F30	0x81917FE4	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowMessageBoxUI	0x81918038	0x8191818C	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamShowMarketplaceUI	0x81918338	0x81918738	0x818FD540	0xFE	PROVEN	WRAPPER_CHAIN_2HOP
+$flash_xam.xexp	XamShowMarketplaceUI	0x81918338	0x819188CC	0x818FD540	0xFE	PROVEN	WRAPPER_CHAIN_2HOP
+$flash_xam.xexp	XamShowMarketplaceUI	0x81918338	0x81918ADC	0x818FD5B8	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserGetUserTenure	0x819298E8	0x81929960	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserGetSubscriptionType	0x81929BD0	0x81929C3C	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamProfileSaveAccountInfo	0x8192A328	0x8192A378	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamProfileLoadAccountInfo	0x8192A390	0x8192A3E0	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamProfileDelete	0x8192A3F8	0x8192A43C	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamProfileCreateEnumerator	0x8192A618	0x8192A6A0	0x818FD548	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamUserCheckPrivilege	0x8192DB50	0x8192DCDC	0x818FD548	0xFC	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamProfileRenameAccount	0x8192E620	0x8192E720	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamProfileSaveWindowsLiveCredentials	0x8192EA68	0x8192EB1C	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamProfileLoadWindowsLiveCredentials	0x8192ECA8	0x8192ED28	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamIsDvrRecording	0x81930A08	0x81930A30	0x818FD548	0xF6	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamIptvUninstall	0x81930A58	0x81930A78	0x818FD548	0xF6	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamGetDvrStorage	0x81930A90	0x81930ABC	0x818FD548	0xF6	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamGetDvrStorage	0x81930A90	0x81930AF4	0x818FD548	0xF6	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamSetDvrStorage	0x81930B18	0x81930B44	0x818FD540	0xF6	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamContentGetLocalizedString	0x81934C40	0x81934CD8	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentIsGameInstalledToHDD	0x81934CF0	0x81934D14	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentCreateInternal	0x81934FD8	0x81935050	0x818FD2D8	0xFE	PROVEN	WRAPPER_CHAIN_2HOP
+$flash_xam.xexp	XamContentOpenFileInternal	0x81935060	0x81935128	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentInstallInternal	0x81935178	0x819351F8	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentInstallInternal	0x81935178	0x819352A4	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentGetAttributesInternal	0x81935528	0x81935620	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentClose	0x81935648	0x819356B8	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentFlush	0x819356F8	0x81935768	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentCreateEnumeratorInternal	0x819357A8	0x8193586C	0x818FD548	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamContentAggregateCreateEnumerator	0x819358C0	0x8193596C	0x818FD548	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamContentCreateDeviceEnumerator	0x819359C0	0x81935A6C	0x818FD548	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamContentGetDeviceState	0x81935AC0	0x81935AE8	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentGetDeviceData	0x81935B28	0x81935B68	0x818FD548	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamContentGetDeviceSerialNumber	0x81935C28	0x81935C78	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentGetDefaultDevice	0x81935CB8	0x81935CE0	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentGetDeviceVolumePath	0x81935D20	0x81935D80	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentGetMetaDataInternal	0x81935DC8	0x81935E20	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentSetMediaMetaDataInternal	0x81935E58	0x81935E9C	0x818FD2D8	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentGetThumbnail	0x81935FD0	0x81936038	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentGetCreator	0x81936070	0x819360E8	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentGetLicenseMask	0x81936128	0x8193616C	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentDuplicateFileHandle	0x819363C0	0x8193643C	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentMountInstalledGame	0x81936480	0x819364F0	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentQueryLicenseInternal	0x81936528	0x81936580	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamContentDeviceCheckUpdates	0x81936678	0x819366E0	0x818FD548	0xFE	PROVEN	FORWARDING_HELPER
+$flash_xam.xexp	XamPackageManagerFindPackageContainingIndexedXEX	0x8193D588	0x8193D5E0	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPackageManagerReinitialize	0x8193D608	0x8193D62C	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPackageManagerHasExtendedPartition	0x8193D650	0x8193D6A0	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPackageManagerDeleteExtendedPartition	0x8193D6C8	0x8193D6FC	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPackageManagerGetAuthoritativeManifestVersion	0x8193D720	0x8193D760	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+$flash_xam.xexp	XamPackageManagerGetExperienceMode	0x8193D788	0x8193D7B4	0x818FD540	0xFE	PROVEN	DIRECT_XMSG_EXPORT
+dash.xex	sub_0x9210DA90	0x9210DA90	0x9210DAEC	0x924544CC	0xFA	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2AFB	0x921EA450	0x921EA5C0	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x290C	0x921EA818	0x921EA918	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2933	0x921EB360	0x921EB460	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2933	0x921EB360	0x921EB588	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x292E	0x921EB9A0	0x921EBA4C	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2931	0x921EBBE0	0x921EBC94	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2970	0x922F4D38	0x922F4D90	0x92741154	0xFA	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2971	0x922F4DF0	0x922F4E50	0x92741154	0xFA	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2972	0x922F4EB0	0x922F4F08	0x92741154	0xFA	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x290B	0x92468E08	0x92468E38	0x92741174	0xF7	PROVEN	FORWARDING_HELPER
+$flash_dash.xex	ordinal_0x290A	0x92468EE0	0x92468F0C	0x92741174	0xF7	PROVEN	FORWARDING_HELPER
+$flash_dash.xex	ordinal_0x2907	0x92468FB0	0x92468FE8	0x92741174	0xF7	PROVEN	FORWARDING_HELPER
+$flash_dash.xex	ordinal_0x290D	0x92507918	0x92507A38	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x292F	0x92507D68	0x92507EA8	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2A97	0x92507EE8	0x92507FE8	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2A98	0x92508028	0x92508128	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x290E	0x925097A0	0x925098D0	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x290F	0x92509910	0x925099F8	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2911	0x92509A48	0x92509B68	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2B07	0x9272CB50	0x9272CB78	0x92741174	0xFB	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x29BA	0x9272CD08	0x9272CD48	0x92741164	0xFB	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x292D	0x9272CD90	0x9272CDC4	0x92741174	0xFB	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2B08	0x9272CDD8	0x9272CE08	0x92741174	0xFC	PROVEN	DIRECT_XMSG_THUNK
+$flash_dash.xex	ordinal_0x2927	0x9272CE20	0x9272CE58	0x92741164	0xFC	PROVEN	DIRECT_XMSG_THUNK

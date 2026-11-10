@@ -33,19 +33,16 @@ class NullEntry : public Entry {
 
   bool can_map() const override { return false; }
 
-  // A raw partition takes the cluster size of the FATX header last written to
-  // its start, once there is one.
-  uint32_t sectors_per_allocation_unit() const override;
-  void set_sectors_per_allocation_unit(uint32_t sectors) {
-    sectors_per_allocation_unit_ = sectors;
-  }
+  bool has_open_files() const override;
+  void RetainFile() override { ++open_files_; }
+  void ReleaseFile() override { --open_files_; }
 
  private:
   friend class NullDevice;
 
   bool DeleteEntryInternal(Entry* entry) override;
 
-  std::atomic<uint32_t> sectors_per_allocation_unit_ = 0;
+  std::atomic<size_t> open_files_{0};
 };
 
 }  // namespace vfs

@@ -1,0 +1,19 @@
+{
+  "module": "Guide.NuiTroubleshooter.xex",
+  "program": "78fdbdf37b5d_Guide.NuiTroubleshooter.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "fe386488230785f07a2727855bf985e44ebcbc9cb910dabb1510993453ead29c",
+  "import_envelope_version": 2,
+  "import_mode": "flat_image_fallback",
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100000",
+  "functions": 1868,
+  "calls": 7211,
+  "strings": 4606,
+  "string_xrefs": 1316,
+  "independent_sha256": "fe386488230785f07a2727855bf985e44ebcbc9cb910dabb1510993453ead29c",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

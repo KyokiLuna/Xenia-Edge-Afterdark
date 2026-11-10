@@ -28,20 +28,6 @@ namespace xe {
 namespace kernel {
 namespace xam {
 
-// The packages the game library takes the place of for the dashboard.
-static bool IsGamePackageType(const XContentType type) {
-  switch (type) {
-    case XContentType::kInstalledGame:
-    case XContentType::kXboxTitle:
-    case XContentType::kXbox360Title:
-    case XContentType::kGameDemo:
-    case XContentType::kArcadeTitle:
-      return true;
-    default:
-      return false;
-  }
-}
-
 // A record through license_mask, which is all of it before xam 4532.
 constexpr size_t kLegacyContentRecordSize = 0x148;
 
@@ -69,9 +55,14 @@ dword_result_t XamContentAggregateCreateEnumerator_entry(qword_t xuid,
                                                          lpdword_t handle_out) {
   assert_not_null(handle_out);
 
-  auto device_info = device_id == 0 ? nullptr : GetDummyDeviceInfo(device_id);
-  if ((device_id && device_info == nullptr) || !handle_out) {
+  auto device_info = device_id == 0
+                         ? std::optional<StorageDeviceInfo>{}
+                         : GetStorageDeviceInfo(kernel_state(), device_id);
+  if ((device_id && !device_info) || !handle_out) {
     return X_E_INVALIDARG;
+  }
+  if (device_info && !device_info->available) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
   const bool legacy = BuiltForLegacyXam();
@@ -103,8 +94,13 @@ dword_result_t XamContentAggregateCreateEnumerator_entry(qword_t xuid,
                              kernel_state()->title_id() == kDashboardID;
 
   auto content_manager = kernel_state()->content_manager();
-  auto append_device = [&](DummyDeviceId device, uint64_t device_xuid) {
-    const uint32_t device_index = static_cast<uint32_t>(device);
+  const auto hdd = GetStorageDeviceInfo(
+      kernel_state(), static_cast<uint32_t>(DummyDeviceId::HDD));
+  const bool library_visible =
+      library_games && hdd && hdd->available &&
+      (!device_id || device_id == static_cast<uint32_t>(DummyDeviceId::HDD));
+
+  auto append_device = [&](uint32_t device_index, uint64_t device_xuid) {
     std::vector<uint32_t> title_ids;
     if (title_id) {
       title_ids.push_back(title_id.value());
@@ -128,33 +124,42 @@ dword_result_t XamContentAggregateCreateEnumerator_entry(qword_t xuid,
         types.push_back(static_cast<XContentType>(content_type.value()));
       }
       for (const XContentType type : types) {
-        if (library_games && device == DummyDeviceId::HDD &&
-            IsGamePackageType(type)) {
-          continue;
-        }
         const auto content_datas =
-            device == DummyDeviceId::ODD
+            device_index == static_cast<uint32_t>(DummyDeviceId::ODD)
                 ? content_manager->ListContentODD(device_index, device_xuid,
                                                   item_title_id, type)
                 : content_manager->ListContent(device_index, device_xuid,
                                                item_title_id, type);
         for (const auto& content_data : content_datas) {
+          if (library_visible &&
+              content_manager->LibraryContainsPhysicalContent(device_xuid,
+                                                              content_data)) {
+            continue;
+          }
           e->AppendItem(content_data, other_title);
         }
       }
     }
   };
 
-  if (!device_info || device_info->device_type == DeviceType::HDD) {
+  for (const auto& device : ListStorageDevices(kernel_state(), true)) {
+    if (device_id && device.device_id != device_id) {
+      continue;
+    }
+    if (device.device_type == DeviceType::ODD) {
+      append_device(device.device_id, 0);
+      continue;
+    }
     // XUID -1 only lists the content shared by every user.
     const std::vector<uint64_t> xuids =
-        xuid == 0 ? content_manager->ListContentXuids()
+        xuid == 0 ? content_manager->ListContentXuids(device.device_id)
                   : std::vector<uint64_t>{
                         xuid == -1 ? 0 : static_cast<uint64_t>(xuid)};
     for (const uint64_t hdd_xuid : xuids) {
-      append_device(DummyDeviceId::HDD, hdd_xuid);
+      append_device(device.device_id, hdd_xuid);
     }
-    if (library_games) {
+    if (library_games &&
+        device.device_id == static_cast<uint32_t>(DummyDeviceId::HDD)) {
       for (const auto& content_data : content_manager->ListLibraryContent()) {
         if (content_type == 0xFFFFFFFF ||
             static_cast<uint32_t>(content_data.content_type.get()) ==
@@ -163,11 +168,6 @@ dword_result_t XamContentAggregateCreateEnumerator_entry(qword_t xuid,
         }
       }
     }
-  }
-
-  // Disc content is stored under XUID 0.
-  if (!device_info || device_info->device_type == DeviceType::ODD) {
-    append_device(DummyDeviceId::ODD, 0);
   }
 
   XELOGD(

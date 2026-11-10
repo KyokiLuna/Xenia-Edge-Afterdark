@@ -8,6 +8,11 @@
  */
 
 #include "xenia/kernel/xam/xam_avatar.h"
+#include <array>
+#include <algorithm>
+#include "xenia/kernel/util/guest_io_buffer.h"
+#include "xenia/kernel/xam/avatar_manifest.h"
+#include "xenia/kernel/xam/profile_gpd_transaction.h"
 #include "xenia/base/logging.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/xam_private.h"
@@ -50,66 +55,66 @@ DECLARE_XAM_EXPORT1(XamAvatarShutdown, kAvatars, kStub);
 dword_result_t XamAvatarGetManifestLocalUser_entry(
     dword_t user_index, pointer_t<X_AVATAR_METADATA> avatar_metadata_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
-  auto run = [=](uint32_t& extended_error, uint32_t& length) {
-    extended_error = X_ERROR_SUCCESS;
+  auto* kernel = kernel_state();
+  const uint32_t destination = avatar_metadata_ptr.guest_address();
+  if (user_index >= XUserMaxUserCount || !destination ||
+      !util::GuestIoRangeValid(*kernel->memory(), destination,
+                              kAvatarManifestBytes, true)) {
+    return X_E_INVALIDARG;
+  }
+  std::error_code error;
+  auto writer = kernel->xam_state()->profile_manager()->CaptureGpdWriter(
+      uint8_t(user_index), error);
+  if (!writer.model) {
+    return X_E_NO_SUCH_USER;
+  }
+  const auto read = writer.model->CaptureRead(error);
+  if (!read || error) { return X_E_FAIL; }
+  const auto setting = read->models->Setting(
+      kDashboardID,
+      uint32_t(UserSettingId::XPROFILE_GAMERCARD_AVATAR_INFO_1), error);
+  if (error) { return X_E_FAIL; }
+  const bool present = setting &&
+      setting->get_type() == X_USER_DATA_TYPE::BINARY &&
+      setting->get_extended_data().size() == kAvatarManifestBytes;
+  std::vector<uint8_t> manifest(kAvatarManifestBytes, 0);
+  if (present) {
+    std::copy(setting->get_extended_data().begin(),
+              setting->get_extended_data().end(), manifest.begin());
+  }
+  auto run = [kernel, destination, writer = std::move(writer),
+              origin = read->origin, manifest = std::move(manifest), present](
+                 uint32_t& extended_error, uint32_t& length) {
+    extended_error = X_E_FAIL;
     length = 0;
-
-    if (user_index >= XUserMaxUserCount) {
+    std::error_code identity_error;
+    const auto current = writer.model->CaptureOrigin(identity_error);
+    if (!current || current->xuid != origin.xuid ||
+        current->user_slot != origin.user_slot || current->storage != origin.storage ||
+        current->stamp.sign_in_generation != origin.stamp.sign_in_generation) {
+      return X_ERROR_FUNCTION_FAILED;
+    }
+    // An unrelated durable setting/award may advance model_version. This read
+    // owns its earlier bytes; only identity retirement invalidates delivery.
+    if (XFAILED(util::WriteGuestIoBuffer(*kernel->memory(), destination,
+                                        manifest))) {
       extended_error = X_E_INVALIDARG;
       return X_ERROR_INVALID_PARAMETER;
     }
-
-    if (!avatar_metadata_ptr) {
-      extended_error = X_E_INVALIDARG;
-      return X_ERROR_INVALID_PARAMETER;
-    }
-
-    const auto user_profile =
-        kernel_state()->xam_state()->GetUserProfile(user_index);
-
-    if (!user_profile) {
-      extended_error = X_E_NO_SUCH_USER;
-      return X_ERROR_FUNCTION_FAILED;
-    }
-
-    const uint32_t avatar_info_id =
-        static_cast<uint32_t>(UserSettingId::XPROFILE_GAMERCARD_AVATAR_INFO_1);
-
-    X_USER_PROFILE_SETTING avatar_info_setting_data = {};
-
-    avatar_info_setting_data.user_index = static_cast<uint32_t>(user_index);
-    avatar_info_setting_data.setting_id = avatar_info_id;
-    avatar_info_setting_data.data.type = X_USER_DATA_TYPE::BINARY;
-    avatar_info_setting_data.data.data.binary.size = kMaxUserDataSize;
-    avatar_info_setting_data.data.data.binary.ptr = 0;
-
-    uint32_t avatar_metadata_address = avatar_metadata_ptr.guest_address();
-
-    const bool has_avatar_info_setting =
-        kernel_state()->xam_state()->user_tracker()->GetUserSetting(
-            user_profile->xuid(), kDashboardID, avatar_info_id,
-            &avatar_info_setting_data, avatar_metadata_address);
-
-    // Profile doesn't have avatar info setting
-    if (!avatar_info_setting_data.data.data.binary.ptr) {
-      extended_error = X_E_FAIL;
-      return X_ERROR_FUNCTION_FAILED;
-    }
-
-    return X_ERROR_SUCCESS;
+    // Native17559 F3 reports missing appearance separately from storage or
+    // parse failure, and still publishes its deterministic cleared output.
+    extended_error = present ? X_E_SUCCESS : 0x80990001u;
+    return present ? X_ERROR_SUCCESS : X_ERROR_FUNCTION_FAILED;
   };
-
   if (!overlapped_ptr) {
-    uint32_t extended_error, length;
-    X_RESULT result = run(extended_error, length);
-
+    uint32_t extended_error = 0, length = 0;
+    const auto result = run(extended_error, length);
     return result == X_ERROR_SUCCESS ? result : extended_error;
   }
-
-  kernel_state()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
+  kernel->CompleteOverlappedDeferredEx(std::move(run), overlapped_ptr);
   return X_ERROR_IO_PENDING;
 }
-DECLARE_XAM_EXPORT1(XamAvatarGetManifestLocalUser, kAvatars, kStub);
+DECLARE_XAM_EXPORT1(XamAvatarGetManifestLocalUser, kAvatars, kImplemented);
 
 dword_result_t XamAvatarGetManifestsByXuid_entry(
     dword_t user_index, dword_t xuid_count, lpqword_t xuid, dword_t unk,
@@ -164,48 +169,71 @@ DECLARE_XAM_EXPORT1(XamAvatarSetCustomAsset, kAvatars, kStub)
 dword_result_t XamAvatarSetManifest_entry(
     dword_t user_index, dword_t avatar_info_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
-  auto run = [=](uint32_t& extended_error, uint32_t& length) {
-    extended_error = X_ERROR_SUCCESS;
+  auto* kernel = kernel_state();
+  if (user_index >= XUserMaxUserCount || !avatar_info_ptr) {
+    return X_E_INVALIDARG;
+  }
+  std::vector<uint8_t> manifest(kAvatarManifestBytes);
+  if (XFAILED(util::ReadGuestIoBuffer(*kernel->memory(), avatar_info_ptr,
+                                     manifest))) {
+    return X_E_INVALIDARG;
+  }
+  std::error_code error;
+  auto writer = kernel->xam_state()->profile_manager()->CaptureGpdWriter(
+      uint8_t(user_index), error);
+  if (!writer.model) {
+    return X_E_NO_SUCH_USER;
+  }
+  // Retail17559 F3 stores the offline XUID and clears its five transient
+  // bytes before writing INFO_1. INFO_2 and every other manifest byte survive.
+  if (NormalizeAvatarManifest(manifest, writer.model->xuid())) {
+    return X_E_INVALIDARG;
+  }
+  ProfileGpdMutation command;
+  command.kind = ProfileGpdMutationKind::kSetSetting;
+  command.title_id = kDashboardID;
+  command.request_id = writer.model->AllocateRequestId(error);
+  command.setting.emplace(UserSettingId::XPROFILE_GAMERCARD_AVATAR_INFO_1,
+                           std::move(manifest));
+  if (error) {
+    return X_E_FAIL;
+  }
+  auto origin = writer.CaptureCurrentOrigin(command, error);
+  if (!origin || error) {
+    return X_E_FAIL;
+  }
+  auto run = [kernel, writer = std::move(writer), origin = std::move(*origin),
+              command = std::move(command)](uint32_t& extended_error,
+                                             uint32_t& length) {
     length = 0;
-    // Update and save settings.
-    const auto& user_profile =
-        kernel_state()->xam_state()->GetUserProfile(user_index);
-
-    // Skip writing data about users with id != 0 they're not supported
-    if (!user_profile) {
-      extended_error = X_E_NO_SUCH_USER;
-      return X_ERROR_FUNCTION_FAILED;
+    const auto result = writer.Submit(command, origin.stamp);
+    using State = ProfileGpdTransactionAttempt::State;
+    const bool committed = !result.error &&
+        (result.state == State::kCommitted ||
+         result.state == State::kAlreadyCommitted);
+    extended_error = committed ? X_E_SUCCESS : X_E_FAIL;
+    if (committed && result.state == State::kCommitted) {
+      std::error_code current_error;
+      const auto current = writer.model->CaptureOrigin(current_error);
+      if (current && current->stamp.sign_in_generation ==
+                         origin.stamp.sign_in_generation) {
+        const uint32_t bit = 1u << origin.user_slot;
+        kernel->BroadcastNotification(kXNotificationSystemProfileSettingChanged,
+                                       bit);
+        kernel->BroadcastNotification(kXNotificationSystemAvatarChanged, bit);
+      }
     }
-
-    const uint32_t avatar_info_id =
-        static_cast<uint32_t>(UserSettingId::XPROFILE_GAMERCARD_AVATAR_INFO_1);
-
-    X_USER_PROFILE_SETTING setting_data;
-    setting_data.user_index = static_cast<uint32_t>(user_index);
-    setting_data.setting_id = avatar_info_id;
-    setting_data.data.type = X_USER_DATA_TYPE::BINARY;
-    setting_data.data.data.binary.size = kMaxUserDataSize;
-    setting_data.data.data.binary.ptr = static_cast<uint32_t>(avatar_info_ptr);
-
-    const UserSetting setting = UserSetting(&setting_data);
-
-    kernel_state()->xam_state()->user_tracker()->UpsertSetting(
-        user_profile->xuid(), kDashboardID, &setting);
-
-    return X_STATUS_SUCCESS;
+    return committed ? X_ERROR_SUCCESS : X_ERROR_FUNCTION_FAILED;
   };
-
   if (!overlapped_ptr) {
-    uint32_t extended_error, length;
-    X_RESULT result = run(extended_error, length);
-
+    uint32_t extended_error = 0, length = 0;
+    const auto result = run(extended_error, length);
     return result == X_ERROR_SUCCESS ? result : extended_error;
   }
-
-  kernel_state()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
+  kernel->CompleteOverlappedDeferredEx(std::move(run), overlapped_ptr);
   return X_ERROR_IO_PENDING;
 }
-DECLARE_XAM_EXPORT1(XamAvatarSetManifest, kAvatars, kStub);
+DECLARE_XAM_EXPORT1(XamAvatarSetManifest, kAvatars, kImplemented);
 
 dword_result_t XamAvatarGetMetadataRandom_entry(
     dword_t body_type, dword_t avatars_count,
@@ -248,9 +276,16 @@ DECLARE_XAM_EXPORT1(XamAvatarGetMetadataSignedOutProfile, kAvatars, kStub);
 
 dword_result_t XamAvatarManifestGetBodyType_entry(
     pointer_t<X_AVATAR_METADATA> avatar_metadata_ptr) {
-  return static_cast<uint8_t>(X_AVATAR_BODY_TYPE::Male);
+  std::array<uint8_t, kAvatarManifestBytes> manifest{};
+  if (!avatar_metadata_ptr ||
+      XFAILED(util::ReadGuestIoBuffer(*kernel_memory(),
+                                      avatar_metadata_ptr.guest_address(),
+                                      manifest))) {
+    return uint32_t(AvatarBodyType::kUnknown);
+  }
+  return uint32_t(AvatarManifestBodyType(manifest));
 }
-DECLARE_XAM_EXPORT1(XamAvatarManifestGetBodyType, kAvatars, kStub);
+DECLARE_XAM_EXPORT1(XamAvatarManifestGetBodyType, kAvatars, kImplemented);
 
 dword_result_t XamAvatarGetInstrumentation_entry(qword_t unk1, lpdword_t unk2) {
   /* Notes:

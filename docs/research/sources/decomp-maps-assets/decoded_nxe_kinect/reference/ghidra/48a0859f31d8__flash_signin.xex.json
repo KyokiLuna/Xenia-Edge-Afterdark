@@ -1,0 +1,18 @@
+{
+  "module": "$flash_signin.xex",
+  "program": "48a0859f31d8__flash_signin.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "1dae0e0c27be325ddb87a51c361ad4b9a069d3ce38a6d9023dcc0e0919bd0c4a",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 506,
+  "calls": 1385,
+  "strings": 267,
+  "string_xrefs": 270,
+  "independent_sha256": "1dae0e0c27be325ddb87a51c361ad4b9a069d3ce38a6d9023dcc0e0919bd0c4a",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

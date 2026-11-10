@@ -10,6 +10,7 @@
 #ifndef XENIA_GPU_SHARED_MEMORY_H_
 #define XENIA_GPU_SHARED_MEMORY_H_
 
+#include <span>
 #include "xenia/memory.h"
 
 namespace xe {
@@ -74,6 +75,21 @@ class SharedMemory {
   // ensures the host GPU memory backing the range are resident. Returns true if
   // the range has been fully updated and is usable.
   bool RequestRange(uint32_t start, uint32_t length);
+  // Distinct output initialization path. External sources must explicitly
+  // authorize this exact GPU destination; it never grants an input read.
+  bool RequestRangeForGpuWrite(uint32_t start, uint32_t length);
+  bool ReadRangeForCpu(uint32_t start, std::span<uint8_t> destination) const;
+  bool has_external_read_source() const { return external_source_ != nullptr; }
+  class ExternalSource {
+   public:
+    virtual ~ExternalSource() = default;
+    virtual bool CoversRead(uint32_t start, uint32_t length) const noexcept = 0;
+    virtual bool CoversWrite(uint32_t start,
+                             uint32_t length) const noexcept = 0;
+    virtual bool Read(uint32_t start, std::span<uint8_t>) const noexcept = 0;
+    virtual void GpuWritten(uint32_t start, uint32_t length) noexcept = 0;
+  };
+
   // Returns whether every page in the range is currently valid in the host GPU
   // memory copy. Hold the global critical region if relying on this for state
   // transitions such as watch installation.
@@ -114,7 +130,8 @@ class SharedMemory {
  protected:
   SharedMemory(Memory& memory);
   // Call in implementation-specific initialization.
-  bool InitializeCommon();
+  bool InitializeCommon(bool register_guest_invalidations = true);
+  void SetExternalSource(ExternalSource* source) { external_source_ = source; }
   void InitializeSparseHostGpuMemory(uint32_t granularity_log2);
   // Call last in implementation-specific shutdown, also callable from the
   // destructor.
@@ -175,6 +192,8 @@ class SharedMemory {
 
  private:
   Memory& memory_;
+  ExternalSource* external_source_ = nullptr;  // Backend-owned, never Kernel.
+  bool RequestRangeInternal(uint32_t start, uint32_t length);
 
   // Log2 of invalidation granularity (the system page size, but the dependency
   // on it is not hard - the access callback takes a range as an argument, and

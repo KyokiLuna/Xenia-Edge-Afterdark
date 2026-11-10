@@ -1,0 +1,70 @@
+va	data_type	text
+0x901005bc	string	deviceselector.xex
+0x901005d0	unicode	NuiTitleUpdateConfirmationScene.xur
+0x90100618	unicode	TitleUpdateConfirmationScene
+0x90100690	unicode	scnContentMetaInfo/labContentSize
+0x901006d8	unicode	scnContentMetaInfo/labContentTitle
+0x90100720	unicode	labSaveLocation
+0x90100740	unicode	labSaveLocationTag
+0x90100768	unicode	labOverview
+0x90100780	unicode	btnBack
+0x90100790	unicode	btnCancel
+0x901007a4	unicode	btnChooseStorage
+0x901007c8	unicode	btnDownload
+0x901007e0	unicode	TitleUpdateSizeCheckScene.xur
+0x9010081c	unicode	TitleUpdateSizeCheckScene
+0x90100858	unicode	updater
+0x90100868	unicode	strings.xus
+0x901008b0	unicode	XuiCanvas
+0x901008f0	string	CUpdaterApp Exiting: %08X
+0x90100960	unicode	XuiElement
+0x90100978	unicode	HUDScene
+0x9010098c	unicode	2902_UpdateProgress.xur
+0x901009bc	unicode	UpdateProgressScene
+0x901009fc	unicode	LegendB
+0x90100a0c	unicode	labTimeRemaining
+0x90100a30	unicode	btnB
+0x90100a3c	unicode	prgProgress
+0x90100a54	string	CUpdaterApp Error: %04X - %04X - %04X - %04X - %04X - %04X
+0x90100a90	unicode	%s\n\n%s:\n%04X - %04X - %04X - %04X - %04X - %04X
+0x90100b58	unicode	CLiveDeviceSelector
+0x90100b80	string	deviceselector.xex
+0x90100bbc	string	xam.xex
+0x90100bdc	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\updater\src\obj\xbox\updater.pdb
+0x9010b000	string	ationTag
+0x9010b009	string	Save to:
+0x9010b012	string	labOverview
+0x9010b01e	string	An update is available for this game or app.\r\n\r\nDo you want to download the update now?
+0x9010b076	string	labSceneTitle
+0x9010b084	string	Label_Head
+0x9010b08f	string	Update Required
+0x9010b0a4	string	ico_32x_warning.png
+0x9010b0b8	string	XuiImage
+0x9010b0c1	string	HUDScene
+0x9010b0ca	string	XuiCanvas
+0x9010c21a	string	Updating device...
+0x9010c22d	string	Updating system...
+0x9010c240	string	Downloading...
+0x9010c24f	string	There isn't enough free space on your storage device to download this item. Choose another device?
+0x9010c2b2	string	Can't Download
+0x9010c2c1	string	Extracting...
+0x9010c2cf	string	Can't process the update. If the problem persists, go to www.xbox.com/support.
+0x9010c31e	string	bytes
+0x9010c32d	string	%d %s
+0x9010c33c	string	Can't download the update. To test your connection, open System Settings and select Network Settings, Test Xbox Live Connection.\r\n\r\nIf the problem persists, go to www.xbox.com/support.
+0x9010c3f5	string	Update Failed
+0x9010c403	string	Can't install the update. This disc is unreadable.\r\n\r\n1. Clean the disc with a soft cloth.\r\n2. Restart the console.\r\n\r\nFor more help, go to www.xbox.com/support.
+0x9010c4a5	string	An update is available from Xbox Live.\r\n\r\nDo you want to apply this update now?
+0x9010c587	string	nnen weitere Aktualisierungen erforderlich sein. Nach Abschluss der Aktualisierung startet die Konsole eventuell neu.\r\n                
+0x9010c644	string	\nAbbrechen
+0x9010c67a	string	Jetzt herunterladen
+0x9010c69e	string	Aktualisierung erforderlich
+0x9010c6bd	string	\tSpeichern unter:
+0x9010c70c	string	gbar.\r\n\r\nWollen Sie die Aktualisierung jetzt herunterladen?
+0x9010c74c	string	Wenn Sie diese Aktualisie-\r\nrung ablehnen, werden Sie bei Xbox Live abgemeldet.
+0x9010c7bd	string	t wird aktualisiert ...
+0x9010c7d5	string	System wird aktualisiert ...
+0x9010c7f2	string	Herunterladen ...
+0x9010c887	string	glich
+0x9010c88d	string	Extrahieren ...
+0x9010c89d	string	Die Aktualisierung kann nicht verarbeitet werden. Wenn das Problem weiterhin besteht, gehen Sie zu www.xbox.com/support.

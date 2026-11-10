@@ -1,0 +1,21 @@
+Keyword-filtered strings for Party.xex
+xex_load_address=0x91260000
+(15 matches; full unfiltered dump not kept - re-run strings(1) on the decoded file directly if you need everything)
+xrefs NOT computed (not a priority module) - address/offset only.
+------------------------------------------------------------
+
+[0x91260A2D] file_off=0xA2D (ascii): ' %*/49>CHMRW\\afkpuz'
+[0x91260C25] file_off=0xC25 (ascii): ')l8xam.xex'
+[0x91260C4C] file_off=0xC4C (ascii): 'e:\\xenon\\flash-spring10\\core\\private\\xam\\apps\\party\\app\\obj\\xbox\\party.pdb'
+[0x912650C0] file_off=0x50C0 (ascii): '~\\X0A'
+[0x9126554C] file_off=0x554C (ascii): '}`\\,}@T,yK'
+[0x91265563] file_off=0x5563 (ascii): 'P}`\\,'
+[0x9126C63A] file_off=0xC63A (ascii): 'Cx}=Kx}\\Sx+'
+[0x91275AAC] file_off=0x15AAC (ascii): '}\\Sx+'
+[0x9127F6F8] file_off=0x1F6F8 (ascii): '}\\X8A'
+[0x91286523] file_off=0x26523 (ascii): '\\}KX8'
+[0x91289A3F] file_off=0x29A3F (ascii): 'x}\\XP}['
+[0x9128BCAF] file_off=0x2BCAF (ascii): '>}JHPU\\'
+[0x9128BCB7] file_off=0x2BCB7 (ascii): '>}\\XPUJ'
+[0x9128BE44] file_off=0x2BE44 (ascii): '}\\X8@'
+[0x91293E33] file_off=0x33E33 (ascii): '\\}3Kx9c'

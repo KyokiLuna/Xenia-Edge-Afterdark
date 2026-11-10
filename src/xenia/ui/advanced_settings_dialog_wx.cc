@@ -137,14 +137,14 @@ void AdvancedSettingsDialog::LoadConfigValues() {
   // Reserve so VarInfo* pointers stored in categories_ stay valid as we push.
   size_t total = 0;
   for (const auto& [_, var] : *cvar::ConfigVars) {
-    if (!var->is_transient() && var->category() != "Config") {
+    if (ui::IsUserEditableCvar(*var)) {
       ++total;
     }
   }
   config_vars_.reserve(total);
 
   for (const auto& [name, var] : *cvar::ConfigVars) {
-    if (var->is_transient() || var->category() == "Config") {
+    if (!ui::IsUserEditableCvar(*var)) {
       continue;
     }
     VarInfo info;
@@ -430,6 +430,9 @@ void AdvancedSettingsDialog::Save() {
       continue;
     }
     auto* var = info.var;
+    if (!ui::IsUserEditableCvar(*var)) {
+      continue;
+    }
     std::string trimmed = TrimWhitespace(info.pending_value);
     toml::table tbl;
     bool inserted = true;
@@ -487,8 +490,8 @@ void AdvancedSettingsDialog::DoReset() {
     return;
   }
   for (auto& info : config_vars_) {
-    // Don't blow away which profile is logged into which slot.
-    if (info.name.find("logged_profile_slot_") != std::string::npos) {
+    // Internal state is preserved by the same policy used to list settings.
+    if (!ui::IsUserEditableCvar(*info.var)) {
       continue;
     }
     info.var->ResetConfigValueToDefault();

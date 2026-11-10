@@ -1,0 +1,40 @@
+exports
+=======
+
+$flash_bootanim.xex: 3 entries -> reference/exports/$flash_bootanim.xex.txt
+$flash_createprofile.xex: 2 entries -> reference/exports/$flash_createprofile.xex.txt
+$flash_dash.xex: 1289 entries -> reference/exports/$flash_dash.xex.txt
+$flash_deviceselector.xex: 3 entries -> reference/exports/$flash_deviceselector.xex.txt
+$flash_systemupdate2pre.xex: 2 entries -> reference/exports/$flash_systemupdate2pre.xex.txt
+$flash_vk.xex: 4 entries -> reference/exports/$flash_vk.xex.txt
+$flash_xam.xex: 1324 entries -> reference/exports/$flash_xam.xex.txt
+$install_extender.xex: 1 entries -> reference/exports/$install_extender.xex.txt
+Dash.AttractionScreen.xex: 1 entries -> reference/exports/Dash.AttractionScreen.xex.txt
+Dash.FieldCalibration.lex: 4 entries -> reference/exports/Dash.FieldCalibration.lex.txt
+Dash.MP.Offline.lex: 1 entries -> reference/exports/Dash.MP.Offline.lex.txt
+Dash.NuiTroubleshooter.lex: 4 entries -> reference/exports/Dash.NuiTroubleshooter.lex.txt
+LivePack.xex: 38 entries -> reference/exports/LivePack.xex.txt
+bootanim.xex: 3 entries -> reference/exports/bootanim.xex.txt
+createprofile.xex: 2 entries -> reference/exports/createprofile.xex.txt
+dash.ExtraAVCodecs.xex: 2 entries -> reference/exports/dash.ExtraAVCodecs.xex.txt
+dash.NuiFirstUse.xex: 5 entries -> reference/exports/dash.NuiFirstUse.xex.txt
+dash.firstuse.xex: 1 entries -> reference/exports/dash.firstuse.xex.txt
+dash.natalpregame.xex: 1 entries -> reference/exports/dash.natalpregame.xex.txt
+dash.nuihub.xex: 1 entries -> reference/exports/dash.nuihub.xex.txt
+dash.xex: 1 entries -> reference/exports/dash.xex.txt
+dashnui.xex: 52 entries -> reference/exports/dashnui.xex.txt
+deviceselector.xex: 3 entries -> reference/exports/deviceselector.xex.txt
+hostloader.dll: 1 entries -> reference/exports/hostloader.dll.txt
+natalsu.xex: 1 entries -> reference/exports/natalsu.xex.txt
+runtime/v3.0/netcfusermode.dll: 611 entries -> reference/exports/runtime/v3.0/netcfusermode.dll.txt
+runtime/v3.0/runtimehost.xex: 1 entries -> reference/exports/runtime/v3.0/runtimehost.xex.txt
+packages/su20076000_00000000/$flash_bootanim.xex: 3 entries -> reference/exports/packages/su20076000_00000000/$flash_bootanim.xex.txt
+packages/su20076000_00000000/$flash_createprofile.xex: 2 entries -> reference/exports/packages/su20076000_00000000/$flash_createprofile.xex.txt
+packages/su20076000_00000000/$flash_dash.xex: 1289 entries -> reference/exports/packages/su20076000_00000000/$flash_dash.xex.txt
+packages/su20076000_00000000/$flash_deviceselector.xex: 3 entries -> reference/exports/packages/su20076000_00000000/$flash_deviceselector.xex.txt
+packages/su20076000_00000000/$flash_systemupdate2pre.xex: 2 entries -> reference/exports/packages/su20076000_00000000/$flash_systemupdate2pre.xex.txt
+packages/su20076000_00000000/$flash_vk.xex: 4 entries -> reference/exports/packages/su20076000_00000000/$flash_vk.xex.txt
+packages/su20076000_00000000/$flash_xam.xex: 1324 entries -> reference/exports/packages/su20076000_00000000/$flash_xam.xex.txt
+packages/su20076000_00000000/$install_extender.xex: 1 entries -> reference/exports/packages/su20076000_00000000/$install_extender.xex.txt
+vk.xex: 4 entries -> reference/exports/vk.xex.txt
+xam.xex: 659 entries -> reference/exports/xam.xex.txt

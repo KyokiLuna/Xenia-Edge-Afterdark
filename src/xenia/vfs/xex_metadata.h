@@ -10,16 +10,26 @@
 #ifndef XENIA_VFS_XEX_METADATA_H_
 #define XENIA_VFS_XEX_METADATA_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "third_party/tomlplusplus/toml.hpp"
+#include "xenia/vfs/title_metadata.h"
 
 namespace xe {
 namespace vfs {
+
+// Offline metadata listing never allocates an arbitrary declared executable
+// member/header or decoded image. These limits do not constrain runtime loads.
+inline constexpr size_t kMaxOfflineXexHeaderBytes = 16u * 1024 * 1024;
+inline constexpr size_t kMaxOfflineXexFileBytes = 256u * 1024 * 1024;
+inline constexpr size_t kMaxOfflineXexImageBytes = 256u * 1024 * 1024;
 
 enum class XexFormat {
   kUnknown,
@@ -63,6 +73,11 @@ struct XexMetadata {
   // From the security info
   uint32_t allowed_media_types = 0;
 
+  // Opt-in offline SPA summary; independent of profiles and guest execution.
+  TitleResourcesStatus title_resources_status =
+      TitleResourcesStatus::kNotRequested;
+  std::optional<TitleResourceMetadata> title_resources;
+
   // From XEX_HEADER_GAME_RATINGS
   struct {
     bool present = false;
@@ -81,8 +96,21 @@ struct XexMetadata {
 };
 
 std::optional<XexMetadata> ExtractXexMetadata(
-    const std::filesystem::path& path);
-std::optional<XexMetadata> ExtractXexMetadata(const uint8_t* data, size_t size);
+    const std::filesystem::path& path, bool read_title_resources = false);
+std::optional<XexMetadata> ExtractXexMetadata(
+    const uint8_t* data, size_t size, bool read_title_resources = false);
+
+// Bounded installed/offline module resource snapshot; shares the title decoder.
+enum class XexResourceStatus { kLoaded, kNotFound, kInvalid, kTooLarge };
+struct XexResourceResult {
+  XexResourceStatus status = XexResourceStatus::kInvalid;
+  std::vector<uint8_t> bytes;
+};
+XexResourceResult ExtractXexResource(std::span<const uint8_t> xex,
+                                     std::string_view section);
+
+std::optional<TitleResourceMetadata> ExtractXexTitleResources(
+    std::span<const uint8_t> xex);
 
 }  // namespace vfs
 }  // namespace xe

@@ -1,0 +1,183 @@
+va	data_type	text
+0x980006e8	string	mWorldViewProj
+0x98000938	string	mWorldViewProj
+0x98000a60	string	MatClr
+0x98000b78	string	TextureMapSampler0
+0x98000b9c	string	TextureMapSampler1
+0x98000baf	string	fUOffsets
+0x98000df4	string	mLightProj
+0x98000e10	string	mObjectWorld
+0x98000e1d	string	mWorldViewProj
+0x98000e2c	string	vLightDir
+0x98001070	string	TextureMapSampler
+0x98001194	string	MatClr
+0x980011ac	string	TextureMapSampler
+0x9800136c	string	SampleScalars
+0x9800138c	string	ScrTex
+0x98001594	string	mObjectWorld
+0x980015b4	string	mWorldViewProj
+0x98001810	string	dirLights
+0x98001854	string	spotLights
+0x98001898	string	vAlphaGrad
+0x980018b4	string	vMatAmbient
+0x980018d0	string	vMatClr
+0x980021ac	string	audio
+0x98002470	string	ClrAdd
+0x980026b0	string	mWorldViewProj
+0x98002e60	string	WRN[D3D]: Blank region within stereoscopic 3D front buffer does not contain uniform pixel values. The blank region rect within the front buffer is [ %d %d %d %d ].\n
+0x980031bc	string	VGT_DEBUG
+0x980031c8	string	PA_SU_DEBUG
+0x980031d4	string	PA_SC_DEBUG
+0x980031e0	string	RBBM DEBUG
+0x980031ec	string	CP DEBUG
+0x980031f8	string	PTR_BUFF_STATUS 0xAc24
+0x98003210	string	PIX_TB_STATUS 0x9c24
+0x98003228	string	VTX_TB_STATUS 0x8C24
+0x98003240	string	RB_DEBUG_0
+0x9800324c	string	TPC_CNTL_STATUS
+0x9800325c	string	TP3_CNTL_STATUS
+0x9800326c	string	TP2_CNTL_STATUS
+0x9800327c	string	TP1_CNTL_STATUS
+0x9800328c	string	TP0_CNTL_STATUS
+0x9800329c	string	TC_CNTL_STATUS
+0x980032ac	string	PA_SU_CNTL_STATUS
+0x980032c0	string	PA_SC_CNTL_STATUS
+0x980032d4	string	PA_CL_CNTL_STATUS
+0x980032e8	string	VC_CNTL_STATUS
+0x980032f8	string	VGT_CNTL_STATUS
+0x98003308	string	CP_MEQ_STAT
+0x98003314	string	CP_MEQ_AVAIL
+0x98003324	string	CP_CSQ_IB2_STAT
+0x98003334	string	CP_CSQ_IB1_STAT
+0x98003344	string	CP_CSQ_RB_STAT
+0x98003354	string	CP_CSQ_AVAIL
+0x98003364	string	CP_DEBUG
+0x98003370	string	CP_STAT
+0x98003378	string	CP_IB2_BUFSZ
+0x98003388	string	CP_IB2_BASE
+0x98003394	string	CP_IB1_BUFSZ
+0x980033a4	string	CP_IB1_BASE
+0x980033c8	string	CP_RB_BASE
+0x98003408	string	%s 0x%02x: 
+0x98003418	string	%08x 
+0x98003420	string	RB_SIDEBAND_DATA[0]
+0x98003434	string	   %25s: 0x%08x\n
+0x9800344c	string	CPU Synchronization
+0x98003464	string	   %25s: 0x%08x (
+0x98003478	string	RBBM_STATUS
+0x98003484	string	crashdump.pix2
+0x98003498	string	    command buffers with the D3DCREATECB_DEBUG_ALLOCATOR flag set and\n    build using instrumented or debug versions of the D3D library.\n
+0x98003528	string	\n    A likely potential reason for the hang is a bad growable command\n    allocator.  To rule out that possibility, try creating all growable\n
+0x980035b8	string	        0x%x 0x%x\n
+0x980035d0	string	    Could the contents have become corrupted?  The list of indirect\n    buffer physical addresses and dword counts are as follows:\n
+0x98003658	string	    It was a growable command buffer with its D3DALLOCATECALLBACK routine\n    at address 0x%x and a callback context of 0x%x.\n
+0x980036d8	string	\n  o The GPU appears to have hung while executing the command buffer\n    represented by the D3DCommandBuffer structure at address 0x%x.\n
+0x98003764	string	    - Command buffer at 0x%08p, with PredicationSelect 0x%08x\n
+0x980037a8	string	  o This async call object was fixed up to call %d D3DCommandBuffer(s):\n
+0x980037f8	string	\n  o The GPU appears to have hung while executing an asynchronous\n    command buffer call (D3DAsyncCommandBufferCall) at address 0x%08p\n
+0x98003888	string	\n  o The GPU appears to have hung while executing an asynchronous\n    command buffer set to the D3DCommandBuffer structure at address 0x%x.\n
+0x98003918	string	\n  o The GPU appears to have hung while executing an asynchronous\n    command buffer which was patched to NULL.\n
+0x98003990	string	\nThe GPU state doesn't match any recognized hangs.  Please send a repro\nscenario to gameds@microsoft.com so that we can supply a workaround.\n
+0x98003a20	string	\nIf your hang didn't occur for the above reason, please send a repro\nscenario to gameds@microsoft.com so that we can supply a workaround.\n
+0x98003ab0	string	\nNOTE: It is illegal for two textures to share a base address, but have\n    unique mip addresses, even if the textures are used in different draws.\n
+0x98003b48	string	    the texture were created with Levels = 1, and MipAddress = 0.\n    Note that when Levels = 1, the mip address will be forced to 0.\n
+0x98003bd0	string	\nNOTE: When using XGSetTextureHeader, please ensure all copies of the texture\n    either have a mip tail and were created with Levels != 1, or all copies of\n
+0x98003c70	string	    1) allocate memory for the base level, and point BaseAddress to it, or\n    2) set BaseAddress equal to MipAddress, until you have allocated memory\n    for the base texture level.\n
+0x98003d28	string	\nNOTE: If you are setting a texture's BaseAddress to 0 because you have not yet\n    loaded the base level of the texture, you can work around this in two ways:\n
+0x98003dd0	string	  - Texture %d (context %d) has base addr 0x%08x, mip addr 0x%08x, (min %d, max %d), and\n    Texture %d (context %d) had base addr 0x%08x, mip addr 0x%08x, (min %d, max %d).\n
+0x98003e80	string	\nNOTE: The hang may have occurred because multiple texture constants had\n   unique MipAddress fields, but shared a common BaseAddress field.\n
+0x98003f18	string	\n  - Texture %d (in context %d) had Stacked=1, but is not a 2D texture.\n
+0x98003f68	string	\n  - Texture %d (in context %d) has Dimension=1D and Tiled=true, which is illegal.\n
+0x98003fc0	string	\n  - Texture %d (in context %d) has an invalid combination of values in\n    Tiled, Dimension, and DataFormat fields.\n
+0x98004038	string	\n  - Texture %d (in context %d) has an invalid DataFormat.
+0x98004078	string	\n  - Texture %d (in context %d) is 1D, but has DataFormat=%d, which is illegal.\n
+0x980040cc	string	Collecting texture constants
+0x980040ec	string	   Linking with d3d9d.lib may help catch this problem.\n
+0x98004128	string	\nNOTE: The hang may have occurred because of a corrupted texture constant.\n
+0x98004174	string	    a stack trace may point to the culprit.\n
+0x980041a8	string	    non-debug build is being used and a resource is being locked while\n    in a tiling, Z-pass or XPS bracket.  Since this is likely a software hang,\n
+0x98004240	string	\nNOTE: The GPU appears to be running fine so the hang most likely occurred\n    because of a software problem.  Some possible causes are that a\n
+0x980042d0	string	    If you hit this hang more than once we recommend using\n    D3DCREATE_CLIPPER_MODE_1 to implement a safe workaround which\n    comes at a slight clipper performance cost.\n
+0x98004380	string	\nNOTE: The hang may have occurred because of a known hardware bug\n    in the clipper.  The bug is timing dependent and very rare.\n
+0x98004408	string	    on a draw call doesn't properly match the primitive type (e.g.,\n    by calling DrawVertices using D3DPT_TRILIST with a vertex\n    count of 4).\n
+0x980044a0	string	\nNOTE: The hang may have occurred because a partial primitive was\n    rendered.  A partial primitive occurs when the vertex count\n
+0x98004528	string	It appears there is a deadlock on a NUI internal asynchronous\ncommand buffer lock. The Call involved (0x%p) hasn't been signaled.\n\n
+0x980045b0	string	Please ensure the object is signaled via FixupAndSignal, preferably\nnot on the primary D3D thread.\n
+0x98004618	string	It appears there is a deadlock on an asynchronous command buffer call.\nThe IDirect3DAsyncCommandBufferCall9 involved (0x%p) hasn't been signaled.\n
+0x980046b0	string	It appears there is a deadlock on a NUI internal asynchronous lock.\nThe semaphore involved (0x%08x) hasn't been signaled.\n\n
+0x98004730	string	It appears there is a deadlock on an asynchronous command buffer.\nThe D3DASYNCCBBLOCK involved (0x%08x) hasn't been signaled via the\nSetAsyncCommandBuffer API.\n\n
+0x980047d8	string	It appears that there is a deadlock on an asynchronous resources block.\nThe D3DASYNCBLOCK involved hasn't been signaled via the\nSignalAsyncResources API.\n\n
+0x98004878	string	It appears that there is a deadlock on an asynchronous resources block.\nThe D3DASYNCBLOCK involved (0x%016I64x) hasn't been signaled via the\nSignalAsyncResources API.\n\n
+0x98004928	string	It appears that a callback routine invoked by InsertCallback never\nreturned.  The callback routine is at address 0x%x and was passed\na context value of 0x%x.\n\n
+0x980049c8	string	CPU fence 0x%x, GPU fence 0x%x\n\n
+0x980049ec	string	Device 0x%x, Snooped 0x%x, NonSnooped 0x%x,\n
+0x98004a1c	string	D3D version %i.%i %s, kernel %i, frame %i,\n
+0x98004a48	string	retail
+0x98004a50	string	ERR[D3D]: The GPU is hung!\n\n
+0x98004a70	string	Breaking into the debugger.  The GPU is hung and can't be recovered\nwithout doing a cold boot.\n
+0x98004ad0	string	\nERR[D3D]: Try reproducing the hang with the debug or instrumented\n          versions of D3D (D3D9D.LIB or D3D9I.LIB) to capture a\n          crash-dump PIX file that can be sent to Xbox developer\n          support.\n\n
+0x98004bb0	string	+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n
+0x98004c00	string	xboxkrnl.exe
+0x98005ae0	string	PIX!NO
+0x98005b62	string	33e:\xbperfview.cap
+0x980079a8	string	PIX!OK
+0x980079b0	string	{EndCapture}
+0x980079c0	string	{BeginCapture}
+0x980079d0	string	{EndCaptureFileCreation}
+0x980079ec	string	{BeginCaptureFileCreation}
+0x98007a08	string	{LimitCaptureSize}
+0x98007a1c	string	{Version}
+0x98007a28	string	{Disconnect}
+0x98007a38	string	{Connect}
+0x98007b00	string	PIX!{CaptureEnded}
+0x98007b1c	string	%s:\%s
+0x98007b24	string	xbmovie
+0x98007b2c	string	%s 0x%08X
+0x98007b38	string	PIX!{CaptureFileCreationEnded}
+0x9800a6c0	string	_nextafter
+0x9800a718	string	floor
+0x9800a788	unicode	HH:mm:ss
+0x9800a79c	unicode	dddd, MMMM dd, yyyy
+0x9800a7c4	unicode	MM/dd/yy
+0x9800a7e8	unicode	December
+0x9800a7fc	unicode	November
+0x9800a810	unicode	October
+0x9800a820	unicode	September
+0x9800a834	unicode	August
+0x9800a844	unicode	July
+0x9800a850	unicode	June
+0x9800a85c	unicode	April
+0x9800a868	unicode	March
+0x9800a874	unicode	February
+0x9800a888	unicode	January
+0x9800a8f8	unicode	Saturday
+0x9800a90c	unicode	Friday
+0x9800a91c	unicode	Thursday
+0x9800a930	unicode	Wednesday
+0x9800a944	unicode	Tuesday
+0x9800a954	unicode	Monday
+0x9800a964	unicode	Sunday
+0x9800a9ac	string	HH:mm:ss
+0x9800a9b8	string	dddd, MMMM dd, yyyy
+0x9800a9cc	string	MM/dd/yy
+0x9800a9e0	string	December
+0x9800a9ec	string	November
+0x9800a9f8	string	October
+0x9800aa00	string	September
+0x9800aa0c	string	August
+0x9800aa24	string	April
+0x9800aa2c	string	March
+0x9800aa34	string	February
+0x9800aa40	string	January
+0x9800aa78	string	Saturday
+0x9800aa84	string	Friday
+0x9800aa8c	string	Thursday
+0x9800aa98	string	Wednesday
+0x9800aaa4	string	Tuesday
+0x9800aaac	string	Monday
+0x9800aab4	string	Sunday
+0x9800b958	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\bootanim\dll\obj\xbox\bootanim.pdb
+0x980590a0	string	Xbox360 Startup Animation
+0x9806305c	unicode	B:9B;A9;B7:C$!\n<$\n<\nD/*)/)#ptrabPWTVUVTUSVXNOSXYGQL\^_^Z[_]`\_`gcdefJigjijhkhjlmKIonprsrqstnoPMaRQUTRUOYXWVSSYWQRLL[ZZGL]_^^[]ba\`b\kjggdkJONJNFFeJfeihfiKdcKcHKHlMPIEMIInEmlpsmpqrttoq
+0x98077531	string	abcdefghijklmnopqrstuvwxyz
+0x98077551	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ

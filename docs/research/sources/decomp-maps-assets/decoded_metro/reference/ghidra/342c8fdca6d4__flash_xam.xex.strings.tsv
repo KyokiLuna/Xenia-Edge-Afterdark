@@ -1,0 +1,3729 @@
+va	data_type	text
+0x815f0b60	string	body{t:item,offset:0,size:11532,loc:body}[?{t:item,offset:0,size:11532,loc:dom}[Items{t:item,offset:4,size:11528,loc:dom,max:1,itemsize:11528,countoffset:0,countsize:4}[Images{t:item,offset:4,size:11520,loc:dom,max:20,itemsize:576,countoffset:0,countsize:4}[Purpose{t:str,offset:0,size:64,loc:dom,max:64},ResizeUrl{t:str,offset:64,size:512,loc:dom,max:512}],TitleId{t:uint,offset:11524,size:4,loc:dom}]]]
+0x815f0cf8	string	titleIds{t:str,offset:0,size:64,loc:url,max:64},x-xbl-contract-version{t:str,offset:64,size:4,loc:hdr,max:4},x-xbl-client-type{t:str,offset:68,size:8,loc:hdr,max:8},x-xbl-client-version{t:uint,offset:76,size:4,loc:hdr},x-xbl-device-type{t:str,offset:80,size:8,loc:hdr,max:8}
+0x815f0e10	string	{LiveHive:LiveServiceUrl.modernPresenceImage}/media/en-US/details?desired=Images.TitleId&idType=XboxHexTitle&MediaGroup=Unknown&targetDevices=xboxOne&ids={titleIds}
+0x815f0eb8	string	body{t:item,offset:0,size:44004,loc:body}[?{t:item,offset:0,size:44004,loc:dom}[default{t:item,offset:4,size:44000,loc:dom,max:8,itemsize:5500,countoffset:0,countsize:4}[xuid{t:xuid,offset:0,size:8,loc:dom},state{t:str,offset:8,size:16,loc:dom,max:16},devices{t:item,offset:28,size:5472,loc:dom,max:8,itemsize:684,countoffset:24,countsize:4}[type{t:str,offset:0,size:24,loc:dom,max:24},titles{t:item,offset:28,size:656,loc:dom,max:4,itemsize:164,countoffset:24,countsize:4}[id{t:uint,offset:0,size:4,loc:dom},name{t:wstr,offset:4,size:128,loc:dom,max:64},placement{t:str,offset:132,size:16,loc:dom,max:16},state{t:str,offset:148,size:16,loc:dom,max:16}]]]]]
+0x815f1150	string	x-xbl-contract-version{t:uint,offset:0,size:4,loc:hdr},body{t:item,offset:4,size:68,loc:body,enc:json}[?{t:item,offset:0,size:68,loc:dom}[users{t:xuid,offset:4,size:64,loc:dom,max:8,itemsize:8,countoffset:0,countsize:4}]]
+0x815f1230	string	{LiveHive:LiveServiceUrl.modernPresence}/users/batch
+0x815f1268	string	body{t:item,offset:0,size:5500,loc:body,enc:json}[?{t:item,offset:0,size:5500,loc:dom}[xuid{t:xuid,offset:0,size:8,loc:dom},state{t:str,offset:8,size:16,loc:dom,max:16},devices{t:item,offset:28,size:5472,loc:dom,max:8,itemsize:684,countoffset:24,countsize:4}[type{t:str,offset:0,size:24,loc:dom,max:24},titles{t:item,offset:28,size:656,loc:dom,max:4,itemsize:164,countoffset:24,countsize:4}[id{t:uint,offset:0,size:4,loc:dom},name{t:wstr,offset:4,size:128,loc:dom,max:64},placement{t:str,offset:132,size:16,loc:dom,max:16},state{t:str,offset:148,size:16,loc:dom,max:16}]]]]
+0x815f14a8	string	x-xbl-contract-version{t:uint,offset:0,size:4,loc:hdr},xuid{t:xuid,offset:4,size:8,loc:url}
+0x815f1504	string	{LiveHive:LiveServiceUrl.modernPresence}/users/xuid({xuid})
+0x815f1540	string	body{t:item,offset:0,size:1088,loc:body}[?{t:item,offset:0,size:1088,loc:dom}[Value{t:wstr,offset:0,size:1024,loc:dom,max:512},Key{t:wstr,offset:1024,size:64,loc:dom,max:32}]]
+0x815f15f0	string	Accept{t:wstr,offset:0,size:256,loc:hdr,max:128},Accept-Language{t:wstr,offset:256,size:64,loc:hdr,max:32},ErrorCode{t:wstr,offset:320,size:64,loc:url,max:32}
+0x815f1690	string	{LiveHive:LiveServiceUrl.settings}/settings/strings/{ErrorCode}
+0x815f16d0	string	body{t:item,offset:0,size:58,loc:body}[?{t:item,offset:0,size:58,loc:dom}[CURRENCYDECIMALDIGITS{t:uint,offset:0,size:2,loc:dom},CURRENCYDECIMALSEPARATOR{t:wstr,offset:2,size:8,loc:dom,max:4},CURRENCYGROUPSEPARATOR{t:wstr,offset:10,size:8,loc:dom,max:4},CURRENCYGROUPSIZES{t:uint,offset:18,size:4,loc:dom},CURRENCYNEGATIVEPATTERN{t:uint,offset:22,size:2,loc:dom},CURRENCYPOSITIVEPATTERN{t:uint,offset:24,size:2,loc:dom},CURRENCYSYMBOL{t:wstr,offset:26,size:16,loc:dom,max:8},XBOX360CURRENCYSYMBOL{t:wstr,offset:42,size:16,loc:dom,max:8}]]
+0x815f18ec	string	Locale{t:wstr,offset:0,size:32,loc:url,max:16}
+0x815f1920	string	{LiveHive:LiveServiceUrl.settings}/settings/feature/currencyformat/settings?ClientVersion={Locale}
+0x815f1984	string	MPRESENCE
+0x815f1990	string	TLSCONNECT
+0x815f199c	string	PAGEUSAGE
+0x815f19a8	string	DC_BADSAVES
+0x815f19b4	string	DC_BADAPI
+0x815f19c0	string	MISSINGGLYPH
+0x815f19d0	string	LOCFALLBACK
+0x815f19dc	string	XAMFITNESSENGINE
+0x815f19f0	string	FITNESSXAMAPI
+0x815f1a00	string	XAMFITNESSUI
+0x815f1a10	string	CONTEXTUALNAV
+0x815f1a20	string	SSOTOKENREQ
+0x815f1a2c	string	XSPOSTALL
+0x815f1a38	string	XSPOSTAT
+0x815f1a44	string	NSNETERR2
+0x815f1a50	string	NSFILEMO
+0x815f1a80	string	NSHUDAPPC2
+0x815f1a8c	string	NSHUDAPPE2
+0x815f1a98	string	NSSIGNINTIME
+0x815f1aa8	string	NSSIGNIN
+0x815f1ab4	string	SGPRESPULSE
+0x815f1ac0	string	DNSLOOKUP
+0x815f1ad4	string	BIOACCEPT
+0x815f1ae0	string	FAMACCNT
+0x815f1aec	string	PRIVSET
+0x815f1af4	string	FAMCENTER
+0x815f1b00	string	FAMTITLES
+0x815f1b14	string	FAMPASS
+0x815f1b1c	string	XAMMPSHOWUI
+0x815f1b28	string	CONSET
+0x815f1b30	string	ASETTINGS
+0x815f1b44	string	AUNPLUG2
+0x815f1b50	string	ASTART2
+0x815f1b78	string	UPLDTYPE7
+0x815f1b84	string	UPLDTYPE6
+0x815f1b90	string	UPLDTYPE5
+0x815f1b9c	string	UPLDTYPE4
+0x815f1ba8	string	UPLDTYPE3
+0x815f1bb4	string	STDVRCLIP
+0x815f1bc8	string	SPCHUTTER
+0x815f1bd4	string	XLFSAULERR
+0x815f1bec	string	SYSAPPUE
+0x815f1bf8	string	SYSAPPUN
+0x815f1c04	string	SYSAPPLF
+0x815f1c10	string	SYSAPPLE
+0x815f1c1c	string	SYSAPPLB
+0x815f1ca0	string	DEMANDEND
+0x815f1cac	string	DEMANDBEGIN
+0x815f1cbc	string	LogonFailETX
+0x815f1ccc	string	LOGONTASK
+0x815f1cd8	string	UpdateUriRoot3
+0x815f1ce8	string	UpdateUriRoot2
+0x815f1cf8	string	UpdateUriRoot1
+0x815f30e4	unicode	XuiControl
+0x815f3214	string	FireTestEventSystem
+0x815f3228	string	StopXamUIAutomation
+0x815f323c	string	UIAutomationSpecificWorkFunction
+0x815f3260	string	StartXamUIAutomation
+0x815f3278	string	\Device\Harddisk0\Partition1\XamUIAutomation.xex
+0x815f32ac	string	%016I64X%016I64X
+0x815f3338	string	SysCache
+0x815f3344	string	SysCacheFile
+0x815f3354	string	SysCacheSTFS
+0x815f3364	string	0123456789ABCDEFGHIJKLMNOPQRSTUV
+0x815f33ac	string	\??\%s%d:
+0x815f33b8	string	\System??\%s%d:
+0x815f33c8	string	%sCache
+0x815f33d0	string	%s%u:\%s
+0x815f33dc	string	\System??\%s%u:
+0x815f33f4	string	%s%d:\*
+0x815f33fc	string	%s%d:\%s
+0x815f3424	string	XBox 360 (C) Microsoft
+0x815f343c	string	\??\DEVKIT:
+0x815f3448	string	\Device\Harddisk0\Partition1\
+0x815f3468	string	\??\E:
+0x815f3474	string	\Device\Harddisk0\Partition1\DEVKIT
+0x815f3498	string	CodeCoverageFileOpenTableMutex
+0x815f34b8	string	XamCodeCoverageFileLseek(): NtQueryInformationFile() failed!\n
+0x815f34f8	string	XamCodeCoverageFileLseek() failed for SEEK_SET!\n
+0x815f352c	string	XamCodeCoverageFileLseek() failed for SEEK_CUR!\n
+0x815f3560	string	XamCodeCoverageLseek() failed for SEEK_END!\n
+0x815f3590	string	XamCodeCoverageFileRead failed to read the correct number of bytes!\n
+0x815f35d8	string	XamCodeCoverageFileRead failed!\n
+0x815f3600	string	XamCodeCoverageFileWrite failed to write the correct number of bytes!\n
+0x815f3648	string	XamCodeCoverageFileWrite failed!\n
+0x815f366c	string	Storage
+0x815f3674	string	StorageSystem
+0x815f3684	unicode	Storage Device
+0x815f36a4	unicode	Sapphire
+0x815f36b8	unicode	Transfer Cable
+0x815f36d8	unicode	Optical Drive
+0x815f36f4	unicode	USB Storage
+0x815f370c	unicode	System
+0x815f371c	unicode	Memory Unit
+0x815f3734	unicode	Hard Drive
+0x815f3750	string	\System??\XAMLOADERLAUNCH
+0x815f376c	string	\System??\XAMLOADERLAUNCH:
+0x815f3788	string	XAMLOADERLAUNCH:\default.xex
+0x815f37a8	string	Xbox360
+0x815f37b0	string	PartitionFile
+0x815f382c	string	%sname.txt
+0x815f3838	string	\Device\Harddisk0\partition0
+0x815f3858	string	\Device\NetworkStorageCache
+0x815f3878	string	\Device\BuiltInMuMmc
+0x815f3890	string	\Device\BuiltInMuUsb
+0x815f38a8	string	\Device\BuiltInMuSfc
+0x815f38c0	string	\Device\Mu1
+0x815f38cc	string	\Device\Mu0
+0x815f38de	string	F8\System??\%s:
+0x815f38f8	string	\System??\
+0x815f390c	string	\Device\Package_%.16I64X%.16I64X
+0x815f3930	string	\Device\Package_
+0x815f3954	string	.data
+0x815f395c	string	%.*s%s
+0x815f3964	string	%s\%s\Data%4.4lu
+0x815f3978	string	%s\%s
+0x815f3990	string	NetworkSerialNumber
+0x815f39ac	string	\Device\CdRom0\Content\
+0x815f39c4	string	\Device\FileSystemExtPartition
+0x815f39e4	string	\Device\CdRom0\
+0x815f39f4	string	\Device\CdRom0
+0x815f3a04	string	%sSystem
+0x815f3a10	string	\Device\HdDvdPlayer
+0x815f3a24	string	\Device\Harddisk0\Partition1
+0x815f3a54	string	%.8X\
+0x815f3a5c	string	%08X\
+0x815f3a64	string	%.16I64X\
+0x815f3a70	string	Content\
+0x815f3a84	string	\Data%4.4lu
+0x815f3aa0	string	%08X%08X%08X%08X
+0x815f3ab4	string	System\
+0x815f3ac0	string	\System??\xgic%08x:
+0x815f3ad4	string	.data\
+0x815f3adc	string	System
+0x815f3aec	string	CONTENTINSTALL%08X
+0x815f3b00	string	Data%4.4lu
+0x815f3b0c	string	%s:\Account
+0x815f3b18	string	%.16I64X
+0x815f3b48	string	X360 XAM Crash Uploader v1.0
+0x815f3b68	string	Content-Type: multipart/form-data; boundary=ou812--------------8c405ee4e38917c\r\nCache-Control: no-cache\r\n
+0x815f3bd4	string	"\nContent-type: binary\n\n
+0x815f3bf0	string	\nContent-Disposition: form-data; name="ClientData.cab"; filename="
+0x815f3c38	string	\nContent-Disposition: form-data; name="REPORT_TYPE"\n\nNeedResponse\n
+0x815f3c7c	string	\nContent-Disposition: form-data; name="METHOD"\n\nXboxCrash\n
+0x815f3cb8	string	\nContent-Disposition: form-data; name="CLIENT_VERSION"\n\n5.1.2600.2110\n
+0x815f3d00	string	\nContent-Disposition: form-data; name="SOURCE"\n\nLHC\n
+0x815f3d38	string	\nContent-Disposition: form-data; name="VERSION"\n\n1.0\n
+0x815f3d70	string	--ou812--------------8c405ee4e38917c
+0x815f3da0	string	\n--ou812--------------8c405ee4e38917c--
+0x815f3dc8	string	xcrash.cab
+0x815f3dd4	string	\Device\BuiltInMuMmc\Storage\48F10172A.360
+0x815f3e00	string	\Device\BuiltInMuUsb\Storage\48F10172A.360
+0x815f3e2c	string	\Device\Harddisk0\Partition1\48F10172A.360
+0x815f3e58	string	\Device\BuiltInMuMmc\Storage\
+0x815f3e78	string	\Device\BuiltInMuUsb\Storage\
+0x815f3eb0	string	OcaUploadMaxSize
+0x815f3ec4	string	OcaUploadResource
+0x815f3ed8	string	OcaUploadServer
+0x815f3ee8	string	OcaUploadThrottle
+0x815f3efc	string	DumpPublicKey
+0x815f3f0c	string	DumpEnvironment
+0x815f3f1c	string	48F10172A.360
+0x815f3f2c	string	OcaUploadFromDevkit
+0x815f3f40	unicode	%s %s
+0x815f3f4c	unicode	%s%s
+0x815f3f58	unicode	(%s %s)
+0x815f3f68	unicode	%s- %s
+0x815f3f78	unicode	%s -%s
+0x815f3f88	unicode	%s %s-
+0x815f3f98	unicode	-%s %s
+0x815f3fa8	unicode	%s%s-
+0x815f3fb4	unicode	%s-%s
+0x815f3fc0	unicode	-%s%s
+0x815f3fcc	unicode	(%s%s)
+0x815f3fe8	unicode	%s%dd
+0x815f3ff4	unicode	%s%c%0
+0x815f4008	unicode	CSVDrainage
+0x815f403c	unicode	en-US
+0x815f4058	string	XDC-ConsoleId: %s\r\nXDC-MacAddress: %02x%02x%02x%02x%02x%02x\r\nXDC-Hardware: %s\r\n
+0x815f40a8	string	Retail
+0x815f40c4	string	XamDataCenterShowForceSignInMessage
+0x815f40e8	string	EntryPoint='DATA_SHARING'
+0x815f4104	string	Dash.MP.AccountMgmt.lex
+0x815f4128	string	TDBXBOX36O
+0x815f4140	string	\Device\Harddisk0\Partition1\sudiag.debug
+0x815f416c	string	\Device\Flash\sudiag.debug
+0x815f4188	string	\Device\MU0\sutrace.txt
+0x815f41a0	string	\Device\Harddisk0\Partition1\sutrace.debug
+0x815f41cc	string	\Device\Flash\sutrace.debug
+0x815f41e8	string	\sap\online
+0x815f41f8	string	SOMRevision
+0x815f4204	string	%s/%08x/manifests/%s/%s
+0x815f421c	string	system.online.manifest
+0x815f4244	string	%s\%s.%s
+0x815f42d8	string	test.tmp
+0x815f4310	string	\Device\Nomnil
+0x815f432c	string	\Device\Flash
+0x815f4344	string	\SystemRoot\%s
+0x815f4354	string	EDOffPeriodInMS
+0x815f4364	string	EDOnPeriodInMS
+0x815f4374	string	KdcMACSTimeouts
+0x815f4384	string	KdcKerbTimeouts
+0x815f43c9	string	_Ctdash.ExtraAVCodecs.xex
+0x815f43e4	string	dash.ExtraAVCodecs2.xex
+0x815f440c	unicode	NuiMessageBoxButton
+0x815f4434	unicode	ico_32x_information.png
+0x815f4464	unicode	ico_32x_alert.png
+0x815f4488	unicode	ico_32x_warning.png
+0x815f44b0	unicode	ico_32x_error.png
+0x815f44d4	unicode	MessageBox
+0x815f44ec	unicode	NuiError
+0x815f4500	unicode	NuiFull
+0x815f4510	unicode	Error
+0x815f451c	unicode	Full
+0x815f4528	unicode	Half
+0x815f4534	unicode	Closed
+0x815f4544	unicode	sharedres://ico_64x_cancel.png
+0x815f4584	unicode	sharedres://ico_64x_ok.png
+0x815f45bc	unicode	hudbkgnd.xur
+0x815f45d8	unicode	HUDBkgndScene
+0x815f45f4	unicode	AppHostElementId
+0x815f4620	unicode	HUDScene
+0x815f4634	unicode	GamerPicButton
+0x815f4654	unicode	memorykey://%X,%X_%016I64x
+0x815f46c0	unicode	XuiCanvas
+0x815f46f0	unicode	controlpack://../dash/SimpleCursorScene.xur
+0x815f4748	unicode	controlpack://XamNuiTipsAndProgressScene.xur
+0x815f47a4	unicode	(%ls)
+0x815f47cc	unicode	btnB
+0x815f47d8	unicode	btnA
+0x815f47e4	unicode	ProgressAnimation
+0x815f4810	unicode	XuiTextPresenter
+0x815f4834	unicode	Button0
+0x815f484c	unicode	Spinner
+0x815f485c	unicode	Legend
+0x815f486c	unicode	Gamertag
+0x815f4880	unicode	GamerPic
+0x815f4894	unicode	imgPlayTimerIcon
+0x815f48b8	unicode	DateTimeTextId
+0x815f4900	unicode	End%sTo%s
+0x815f4914	unicode	Visual
+0x815f4924	unicode	NuiHudHoverBack
+0x815f4944	unicode	Magnetism
+0x815f4958	unicode	ControlPackNuiHoverBack
+0x815f4988	unicode	HoverBackGroup
+0x815f49a8	unicode	Button 
+0x815f49b8	unicode	PasscodeMessageBox
+0x815f49e0	unicode	NuiPasscodeMessageBox
+0x815f4a0c	unicode	Xui%sMessageBox%d
+0x815f4a3c	unicode	XuiMessageBox%d
+0x815f4a5c	unicode	ControllerReqMsgBox
+0x815f4aa8	unicode	AText
+0x815f4ab4	unicode	YButton
+0x815f4ac4	unicode	XButton
+0x815f4ad4	unicode	BButton
+0x815f4ae4	unicode	AButton
+0x815f4af4	unicode	ErrorHostElement
+0x815f4b18	unicode	ErrorHUD
+0x815f4b40	unicode	ShowGamerInfo
+0x815f4b5c	unicode	LegendY
+0x815f4b6c	unicode	LegendX
+0x815f4b7c	unicode	LegendB
+0x815f4b8c	unicode	LegendA
+0x815f4b9c	unicode	OpenType
+0x815f4bb0	unicode	XuiScene
+0x815f4bc4	unicode	XuiButton
+0x815f4bd8	string	pam:dash.kiosk.lex
+0x815f4bf4	string	\System??\GAME:
+0x815f4c04	string	\System??\media:
+0x815f4c18	string	\SystemRoot
+0x815f4c24	string	InstrConfig
+0x815f4c30	string	InstrcfgUrl
+0x815f4c3c	string	DistributedMonitoringEnabled
+0x815f4d38	string	Custom
+0x815f4d40	string	ULIntervalSecs
+0x815f4d54	string	%I64X
+0x815f4d64	string	version
+0x815f4d6c	string	mininterval
+0x815f4d78	string	flags
+0x815f4d90	string	target
+0x815f4d9c	string	WebRepGroupID
+0x815f4db0	unicode	nl-NL
+0x815f4dbc	unicode	nb-NO
+0x815f4dc8	unicode	tr-TR
+0x815f4dd4	unicode	sv-SE
+0x815f4de0	unicode	ru-RU
+0x815f4dec	unicode	pl-PL
+0x815f4df8	unicode	zh-CHS
+0x815f4e08	unicode	pt-BR
+0x815f4e14	unicode	zh-TW
+0x815f4e20	unicode	ko-KR
+0x815f4e2c	unicode	it-IT
+0x815f4e38	unicode	es-ES
+0x815f4e44	unicode	fr-FR
+0x815f4e50	unicode	de-DE
+0x815f4e5c	unicode	ja-JP
+0x815f5038	unicode	file://media:/XenonJKLatin.xttp2
+0x815f5080	unicode	file://media:/XenonCLatin.xttp2
+0x815f50c0	unicode	file://media:/XenonSCLatin.xttp2
+0x815f5108	unicode	file://media:/XenonJKLatin.xttp1
+0x815f5150	unicode	file://media:/XenonCLatin.xttp1
+0x815f5190	unicode	file://media:/XenonSCLatin.xttp1
+0x815f51f0	unicode	file://media:/XenonJKLatin.xtt
+0x815f5230	unicode	file://media:/XenonCLatin.xtt
+0x815f526c	unicode	file://
+0x815f527c	unicode	XenonSCLatin.xtt
+0x815f52a8	string	\Device\Mu0\live.hive
+0x815f52c0	string	\Device\Mu1\live.hive
+0x815f5308	string	%u.%u.%u.%u
+0x815f5318	string	\Device\CdRom0\default.xex
+0x815f5334	string	\Device\CdRom0\default.xbe
+0x815f5350	string	\SystemRoot\dash.xex
+0x815f5368	string	\Device\Flash\dash.xex
+0x815f5380	string	\SystemRoot\xbupdate.xex
+0x815f539c	string	\SystemRoot\default.xex
+0x815f53b4	string	\SystemRoot\MfgBootLauncher.xex
+0x815f53d4	string	\Device\Harddisk0\SystemPartition\Compatibility\xbox.xex
+0x815f5410	string	\Device\CdRom0\systemupdate.xex
+0x815f5430	string	\Device\Mass0\$systemupdate\systemupdate.xex
+0x815f5460	string	\SystemRoot\systemupdate.xex
+0x815f5480	string	\Device\Mu0\default.xex
+0x815f5498	string	\Device\Mass0\default.xex
+0x815f54b4	string	\Device\HdDvdPlayer\HdDvdXPlayer.xex
+0x815f54dc	string	\Device\HdDvdPlayer
+0x815f54f0	string	\Device\Harddisk0\Cache0
+0x815f550c	string	\Device\Harddisk0\Cache1
+0x815f5548	string	\??\D:
+0x815f5558	string	\Device\Harddisk0\SystemExtPartition\%08X\dash.xex
+0x815f558c	string	\SystemRoot\ProcessDump.Xex
+0x815f55a8	string	\Device\CdRom0\ProcessDump
+0x815f55c4	string	\Device\CdRom0\ProcessDump\ProcessDump.Xex
+0x815f55f8	unicode	Error: 0x%08X.\nEnd your session and mark it for investigation.
+0x815f5678	string	Loader Failed to load %s. Fatal error: %08X.
+0x815f56a8	string	Loader loading %s - Status: %08X.
+0x815f56cc	string	TitleLoaderPrepareLoadExecutableFile DefaultImageBase=%08X
+0x815f5708	string	TitleLoaderPrepareLoadExecutableFile ShadowPath - ImageName=%s
+0x815f5748	string	\SystemRoot\
+0x815f5758	string	\Device\Flash\
+0x815f5768	string	Datacenter Address=%08X;Magic=%s
+0x815f578c	string	TitleLoaderPrepareLoadExecutableFile - ImageName=%s
+0x815f57c0	string	default.xex
+0x815f57f4	string	\??\GAME:
+0x815f5800	string	\??\CdRom0:
+0x815f5810	string	XamLoaderLaunchTitle:ImagePath=%s;DDrivePath=%s;CommandLine=%s;Flags=0x%08X
+0x815f5f78	string	body{t:item,offset:0,size:203077,loc:body}[?{t:item,offset:0,size:203077,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0},savedGames{t:item,offset:12,size:203000,loc:dom,max:500,itemsize:406,countoffset:8,countsize:4}[clientFileTime{t:datetime,offset:0,size:16,loc:dom},fileName{t:str,offset:16,size:43,loc:dom,max:43},displayName{t:wstr,offset:59,size:258,loc:dom,max:129},size{t:uint,offset:317,size:8,loc:dom},etag{t:str,offset:325,size:65,loc:dom,max:65},titleId{t:uint,offset:390,size:4,loc:dom},noCopy{t:bool,offset:394,size:4,loc:dom},otherHasLock{t:bool,offset:398,size:4,loc:dom},callerHasLock{t:bool,offset:402,size:4,loc:dom}],pagingInfo{t:item,offset:203012,size:65,loc:dom}[continuationToken{t:str,offset:0,size:65,loc:dom,max:65}]]]
+0x815f62a0	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/files
+0x815f62f8	string	body{t:item,offset:0,size:1269,loc:body}[?{t:item,offset:0,size:1269,loc:dom}[titles{t:item,offset:4,size:1200,loc:dom,max:100,itemsize:12,countoffset:0,countsize:4}[id{t:uint,offset:0,size:4,loc:dom},usedBytes{t:uint,offset:4,size:8,loc:dom}],pagingInfo{t:item,offset:1204,size:65,loc:dom}[continuationToken{t:str,offset:0,size:65,loc:dom,max:65}]]]
+0x815f6458	string	xuid{t:xuid,offset:0,size:8,loc:url},continuationToken{t:str,offset:12,size:65,loc:qs,max:65,opt:8},maxItems{t:uint,offset:77,size:4,loc:qs}
+0x815f64e8	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles
+0x815f6540	string	body{t:item,offset:0,size:24,loc:body}[?{t:item,offset:0,size:24,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0},quotaInfo{t:item,offset:8,size:16,loc:dom}[usedBytes{t:uint,offset:0,size:8,loc:dom},quotaBytes{t:uint,offset:8,size:8,loc:dom}]]]
+0x815f6670	string	xuid{t:xuid,offset:0,size:8,loc:url}
+0x815f6698	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames
+0x815f66e8	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}
+0x815f6748	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url},Content-Length{t:uint,offset:12,size:4,loc:hdr},Content-Type{t:str,offset:16,size:20,loc:hdr,max:20}
+0x815f6800	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/lock
+0x815f6868	string	body{t:item,offset:0,size:52,loc:body}[?{t:item,offset:0,size:52,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0},lastModifyTime{t:datetime,offset:8,size:16,loc:dom},usedBytes{t:uint,offset:24,size:8,loc:dom},hasNoCopyFiles{t:bool,offset:32,size:4,loc:dom},callerHasLockedFiles{t:bool,offset:36,size:4,loc:dom},otherHasLockedFiles{t:bool,offset:40,size:4,loc:dom},checkedOutByCaller{t:bool,offset:44,size:4,loc:dom},checkedOutByOther{t:bool,offset:48,size:4,loc:dom}]]
+0x815f6a78	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url}
+0x815f6ac8	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/metadata
+0x815f6b30	string	breakLock{t:bool,offset:0,size:4,loc:qs},Content-Length{t:uint,offset:4,size:4,loc:hdr},Content-Type{t:str,offset:8,size:20,loc:hdr,max:20},xuid{t:xuid,offset:28,size:8,loc:url},titleId{t:uint,offset:36,size:4,loc:url},filename{t:str,offset:40,size:86,loc:url,max:86,enc:url},prefix{t:str,offset:126,size:10,loc:url,max:10}
+0x815f6c78	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/files/{prefix}{filename}/lock
+0x815f6cf8	string	ignoreLock{t:bool,offset:0,size:4,loc:qs},xuid{t:xuid,offset:4,size:8,loc:url},titleId{t:uint,offset:12,size:4,loc:url},filename{t:str,offset:16,size:86,loc:url,max:86,enc:url},prefix{t:str,offset:102,size:10,loc:url,max:10}
+0x815f6de0	string	body{t:item,offset:0,size:8,loc:body}[?{t:item,offset:0,size:8,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0}]]
+0x815f6e90	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url},filename{t:str,offset:12,size:86,loc:url,max:86,enc:url},prefix{t:str,offset:98,size:10,loc:url,max:10},request{t:item,offset:108,size:278,loc:part0,enc:json}[?{t:item,offset:0,size:278,loc:dom}[clientFileTime{t:datetime,offset:0,size:16,loc:dom},displayName{t:wstr,offset:16,size:258,loc:dom,max:129},noCopy{t:bool,offset:274,size:4,loc:dom}]],data{t:stream,offset:386,size:4,loc:part1,enc:binary},blockIndex{t:uint,offset:390,size:4,loc:qs},finalBlock{t:bool,offset:394,size:4,loc:qs},ignoreLock{t:bool,offset:398,size:4,loc:qs}
+0x815f70f0	string	ETag{t:str,offset:0,size:65,loc:hdr,max:65},body{t:stream,offset:65,size:4,loc:body,enc:binary}
+0x815f7150	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url},filename{t:str,offset:12,size:86,loc:url,max:86,enc:url},prefix{t:str,offset:98,size:10,loc:url,max:10},Range{t:str,offset:108,size:32,loc:hdr,max:32},If-Match{t:str,offset:140,size:65,loc:hdr,max:65}
+0x815f7268	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/files/{prefix}{filename}
+0x815f72e0	string	body{t:item,offset:0,size:40677,loc:body}[?{t:item,offset:0,size:40677,loc:dom}[source{t:hrfacility,offset:4,size:4,loc:dom,opt:0},code{t:hrcode,offset:4,size:4,loc:dom,opt:0},savedGames{t:item,offset:12,size:40600,loc:dom,max:100,itemsize:406,countoffset:8,countsize:4}[clientFileTime{t:datetime,offset:0,size:16,loc:dom},fileName{t:str,offset:16,size:43,loc:dom,max:43},displayName{t:wstr,offset:59,size:258,loc:dom,max:129},size{t:uint,offset:317,size:8,loc:dom},etag{t:str,offset:325,size:65,loc:dom,max:65},titleId{t:uint,offset:390,size:4,loc:dom},noCopy{t:bool,offset:394,size:4,loc:dom},otherHasLock{t:bool,offset:398,size:4,loc:dom},callerHasLock{t:bool,offset:402,size:4,loc:dom}],pagingInfo{t:item,offset:40612,size:65,loc:dom}[continuationToken{t:str,offset:0,size:65,loc:dom,max:65}]]]
+0x815f7600	string	xuid{t:xuid,offset:0,size:8,loc:url},titleId{t:uint,offset:8,size:4,loc:url},continuationToken{t:str,offset:16,size:65,loc:qs,max:65,opt:12},maxItems{t:uint,offset:81,size:4,loc:qs}
+0x815f76b8	string	{LiveHive:LiveServiceUrl.savedgames}/storage/users/xuid({xuid})/savedgames/titles/{titleId}/files
+0x815f77c8	string	http://xboxlive.com
+0x815f77dc	string	DELETE
+0x815f77e4	string	CloudStorageStatus
+0x815f7860	string	GetTitleProperties title=0x%08X;hr=0x%08X
+0x815f788c	string	Fail:GetTitleProperties attempt=%d;title=0x%08X;hr=0x%08X
+0x815f78c8	string	LockFromXam
+0x815f78d4	string	LockFileXam title=0x%08X;file=%s;hr=0x%08X
+0x815f7900	string	Fail:LockFileXam attempt=%d;title=0x%08X;file=%s;hr=0x%08X
+0x815f793c	string	application/xml
+0x815f794c	string	utf8-hex,
+0x815f7958	string	SetTitlePropFromXam
+0x815f796c	string	SetTitlePropertiesXam title=0x%08X;hr=0x%08X
+0x815f799c	string	Fail:SetTitlePropertiesXam attempt=%d;title=0x%08X;hr=0x%08X
+0x815f79dc	string	GetUserProp
+0x815f79e8	string	GetUserProperties hr=0x%08X
+0x815f7a04	string	Fail:GetUserProperties attempt=%d;hr=0x%08X
+0x815f7ba8	string	NetworkStorageCache.bin
+0x815f7bc0	string	%s:\%016I64x%08x
+0x815f7bd4	string	netsynctable
+0x815f7be4	string	\System??\netsynctable
+0x815f7bfc	string	\??\netsynctable
+0x815f7c10	string	NetworkSyncTablePackage
+0x815f7c28	string	Setting Disabled
+0x815f7e64	string	smartglass
+0x815f7e70	unicode	xam://ico_32x_MaxBinding.png
+0x815f7eac	unicode	xam://ico_18x_kinectcam.png
+0x815f7ee4	string	awardavatarasset
+0x815f7ef8	unicode	xam://AvatarAward.png
+0x815f7f24	string	gamerpic
+0x815f7f30	string	whatson
+0x815f7f38	string	party
+0x815f7f40	unicode	xam://party.png
+0x815f7f60	string	playtimer
+0x815f7f6c	unicode	xam://playtimer.png
+0x815f7f94	string	download
+0x815f7fa0	string	downloadstoragefull
+0x815f7fb4	unicode	xam://download_complete.png
+0x815f7fec	unicode	xam://ico_32x_controller.png
+0x815f8028	unicode	xam://ico_32x_mu.png
+0x815f8058	unicode	xam://fileComplaint_hamr1_32.png
+0x815f809c	unicode	xam://ico_32x_avoidW.png
+0x815f80d0	unicode	xam://ico_32x_prefPlayW.png
+0x815f8108	unicode	xam://song_playing.png
+0x815f8138	unicode	xam://connection_lost.png
+0x815f8174	string	accountsecurity
+0x815f8184	unicode	xam://signed_in.png
+0x815f81ac	unicode	xam://signed_out.png
+0x815f81d8	unicode	xam://chat.png
+0x815f81f8	unicode	sharedres://ico_32x_Mail.png
+0x815f8234	string	msgcenter
+0x815f8240	unicode	xam://ico_32x_Friend.png
+0x815f8274	string	achievements
+0x815f8284	unicode	xam://Achievement.png
+0x815f8664	unicode	NotifyPopupScene
+0x815f8688	unicode	UserIndicatorBkgnd
+0x815f86b0	unicode	Indicator4
+0x815f86c8	unicode	Indicator3
+0x815f86e0	unicode	Indicator2
+0x815f86fc	unicode	Indicator1
+0x815f8714	unicode	PopupControl
+0x815f8730	unicode	TransFrom
+0x815f8744	unicode	EndTransFrom
+0x815f8764	unicode	PopUpSound
+0x815f877c	unicode	ImagePath
+0x815f8790	unicode	xam://generic.png
+0x815f87b4	unicode	notify.xur
+0x815f883c	unicode	ControlPackSystemGesture1
+0x815f8870	unicode	nuihud.xur
+0x815f88a0	string	\Device\CdRom0\video_ts
+0x815f88b8	string	\Device\CdRom0\audio_ts\audio_ts.ifo
+0x815f88e0	string	\Device\HdDvdRom\HVDVD_TS
+0x815f88fc	string	\Device\HdDvdRom\video_ts
+0x815f8918	string	\Device\HdDvdRom\audio_ts\audio_ts.ifo
+0x815f8940	string	\Device\HdDvdRom\
+0x815f8954	string	\Device\CdRom0\mpegav
+0x815f896c	string	\Device\CdRom0\segment
+0x815f8984	string	\Device\CdRom0\svcd
+0x815f8a0c	string	Unknown
+0x815f8af4	string	\Device\HdDvdPlayer\PlayerCorrupt
+0x815f8b18	string	1.2.35
+0x815f90a4	string	%s\%s%s
+0x815f90ac	string	%s\%ssecexp.xex
+0x815f90bc	string	secdata.bin
+0x815f90c8	string	LiveServiceUrl.
+0x815f90d8	string	system.manifest
+0x815f90e8	string	SMRevision
+0x815f90f4	string	%016I64X%016I64X%08X
+0x815f910c	string	%s/%08x/files/%s/%s
+0x815f912c	string	Xam.DataCenterAgent.xex
+0x815f915c	string	avatarsyscore.xex
+0x815f9170	string	avatarcore.xex
+0x815f9180	string	Xam.Community.xex
+0x815f9194	string	ximecore.xex
+0x815f91a4	string	Xam.LiveMessenger.xex
+0x815f91bc	string	musicplayer.xex
+0x815f91d4	string	uvbase.xex
+0x815f91e0	string	xlivebase.xex
+0x815f92e0	string	minimediaplayer.xex
+0x815f92fc	string	Guide.MP.Purchase.xex
+0x815f9316	string	d.xex
+0x815f931c	unicode	FamilyGold
+0x815f9340	unicode	Silver
+0x815f93a4	unicode	%dx%d%c %c %s
+0x815f93ec	unicode	%d,%d,%d,%d,%d,%d,%d
+0x815f9418	unicode	%d,%d,0,disabled
+0x815f9454	unicode	%d,%d,%d,dy
+0x815f946c	unicode	%d,%d,%d,%d,%d,%d,%d,%d
+0x815f949c	unicode	%d,%d,%d,%d
+0x815f94b4	unicode	unknown
+0x815f9585	string	XX<XXXXXXXXXXXXXX,XX
+0x815f95c0	string	/xsts/xsts.svc/IWSTrust13
+0x815f95dc	string	Content-Type:application/soap+xml\r\n
+0x815f9600	string	trust:requestedsecuritytoken
+0x815f9628	string	(URN too long)
+0x815f9638	string	http://xam.xboxlive.com
+0x815f9650	string	https
+0x815f9688	string	marketmitem
+0x815f9694	string	marketcitem
+0x815f96a0	string	gamercard
+0x815f96ac	string	friends
+0x815f96b4	string	signin
+0x815f96bc	string	SkinAutoRootSrc
+0x815f96cc	string	SkinRoot
+0x815f9774	string	XamShowLiveUpsellUIEx
+0x815f978c	string	%s:\ThematicSkin
+0x815f97a0	string	XamShowVideoChatInviteUI
+0x815f97bc	string	XamShowLiveSignupUI
+0x815f97d0	string	XamShowDirtyDiscErrorUI
+0x815f97e8	string	XamShowBadDiscErrorUI
+0x815f9800	string	XampShowMarketplaceDownloadItemsUI
+0x815f9824	string	XamShowMarketplaceUIEx
+0x815f983c	unicode	event6
+0x815f984c	unicode	0x%08X
+0x815f9860	unicode	Signup
+0x815f9870	unicode	Membership
+0x815f9888	unicode	Membership/GoldUpsellList/
+0x815f98c0	unicode	GoldUpgrade
+0x815f98d8	string	XamShowGoldUpgradeUI
+0x815f98f0	string	System update flags=%08X
+0x815f9914	string	Guide.MP.NuiPurchase.xex
+0x815f9930	string	VIEWTERMSOFUSE
+0x815f9940	string	Guide.MP.LiveAccount.xex
+0x815f995c	string	ACCOUNT_SECURITY
+0x815f9970	string	PURCHASE_ORDER
+0x815f9980	string	PAID_DOWNLOAD_ITEMS
+0x815f9994	string	FREE_DOWNLOAD_ITEMS
+0x815f99a8	string	Guide.MP.PaymentInst.xex
+0x815f99c4	string	PAYMENT_OPTIONS
+0x815f99d4	string	TERMSOFUSE
+0x815f99e0	string	GOLD_UPSELL
+0x815f99ec	string	VIEWDOWNLOADDETAILS
+0x815f9a00	string	Guide.MP.Download.xex
+0x815f9a18	string	VIEWQUEUE
+0x815f9a24	string	SIGNUP_PARENTCREDITCARD
+0x815f9a3c	string	SIGNUP_CREDITCARD
+0x815f9a50	string	GAMERTAGPURCHASE
+0x815f9a68	string	Guide.MP.Payment.xex
+0x815f9a80	string	PREPAIDCODE
+0x815f9a8c	string	CONTENTITEM_BACKGROUND
+0x815f9aa4	string	CONTENTLIST_BACKGROUND
+0x815f9abc	string	MEMBERSHIPITEM
+0x815f9acc	string	Guide.MP.Subscriptions.xex
+0x815f9ae8	string	MEMBERSHIPLIST
+0x815f9af8	string	CONTENTITEM
+0x815f9b04	string	CONTENTLIST
+0x815f9b10	string	XSHOWMARKETPLACEUI_%s
+0x815f9b28	string	XSHOWNUIMARKETPLACEUI_%s
+0x815f9b44	string	deviceselector.xex
+0x815f9b58	string	signin.xex
+0x815f9bac	string	Guide.NetworkStorage.xex
+0x815f9bc8	string	Guide.Beacons.xex
+0x815f9bdc	string	Guide.SocialPost.xex
+0x815f9bf4	string	Guide.NuiCommunity.xex
+0x815f9c0c	string	Guide.NuiTroubleshooter.xex
+0x815f9c28	string	Xam.WordRegister.xex
+0x815f9c40	string	Guide.AvatarMiniCreator.xex
+0x815f9c68	string	Guide.CSVTrans.xex
+0x815f9c7c	string	Guide.Fitness.xex
+0x815f9c90	string	Guide.TFA.xex
+0x815f9ca0	string	createprofile.xex
+0x815f9cb4	string	updater.xex
+0x815f9cc0	string	Guide.PlayerFeedback.xex
+0x815f9cdc	string	gamerprofile.xex
+0x815f9cf0	string	Guide.Voicemail.xex
+0x815f9d04	string	Guide.ChatAndMessenger.xex
+0x815f9d28	string	Guide.Friends.xex
+0x815f9d3c	unicode	SegoeUI
+0x815f9d4c	unicode	disabled-button.png
+0x815f9d74	unicode	y-button.png
+0x815f9d90	unicode	x-button.png
+0x815f9dac	unicode	b-button.png
+0x815f9dc8	unicode	a-button.png
+0x815f9de4	unicode	btn_select.xma
+0x815f9e04	unicode	btn_focus.xma
+0x815f9e20	unicode	splash_360.png
+0x815f9e40	unicode	disabled-button_32.png
+0x815f9e70	unicode	y-button_32.png
+0x815f9e90	unicode	x-button_32.png
+0x815f9eb0	unicode	b-button_32.png
+0x815f9ed0	unicode	a-button_32.png
+0x815f9ef0	unicode	ico_64x_licensestore.png
+0x815f9f24	unicode	shrdres
+0x815f9f34	unicode	dashicon.png
+0x815f9f50	unicode	defaultsystemimage.png
+0x815fa0f8	string	ColorFactor
+0x815fa114	string	CopyAlpha
+0x815fa130	string	TextureSampler
+0x815fa268	string	ColorFactor
+0x815fa284	string	CopyAlpha
+0x815fa2a0	string	TextureSampler
+0x815fa410	string	\SystemRoot\huduiskin.xex
+0x815fa42c	unicode	%s\n\n%s: %08x
+0x815fa448	unicode	file://media:/%s.xzp#%s
+0x815fa478	unicode	section://%X,%s#%s
+0x815fa4a0	unicode	section://@%X,%s#%s
+0x815fa4c8	unicode	gamercrd
+0x815fa4dc	unicode	memory://%X,%X
+0x815fa518	unicode	memory://%.*ws
+0x815fa538	unicode	section://%X,strtable#strings.xus
+0x815fa57c	unicode	fusion
+0x815fa58c	unicode	strings.xus
+0x815fa5a4	unicode	%s\strings.xus
+0x815fa5f0	unicode	langpack://
+0x815fa608	unicode	controlp
+0x815fa61c	unicode	controlpack://
+0x815fa64c	unicode	memorykey://
+0x815fa668	unicode	sharedres://
+0x815fa6a0	unicode	section://
+0x815fa6c0	unicode	skin.xur
+0x815fa6d8	string	\System??\UPDATE:
+0x815fa6ec	string	%sContent\%.16I64X\%08X\%.8X\tu%08x_%08x
+0x815fa718	string	%s\$TitleUpdateAlt\%08x\tu%08x_%08x
+0x815fa73c	string	%s\$SystemUpdateAlt\su%08x_%08x
+0x815fa75c	string	\Device\UpdateStorage%d
+0x815fa774	string	%s\$TitleUpdate\%08x\tu%08x_%08x
+0x815fa798	string	%s\$SystemUpdate\su%08x_%08x
+0x815fa7b8	string	%s\$TitleUpdateEmbedded\%08x\tu%08x_%08x
+0x815fa7e4	string	%s\$SystemUpdateEmbedded\su%08x_%08x
+0x815fa80c	string	\Device\Flash
+0x815fa81c	string	\Device\Harddisk0\SystemExtPartition
+0x815fa844	string	\Device\Harddisk0\SystemAuxPartition
+0x815fa878	string	Title.Zune.xex
+0x815fa888	string	Xna_TitleLauncher.xex
+0x815fa8a8	string	natalsu.xex
+0x815fa8bc	string	%s$SystemUpdate\
+0x815fa8d0	string	\Device\Harddisk
+0x815fa8e4	string	\Device\BuiltInMu
+0x815fa8f8	string	\Device\Mass
+0x815fa914	string	\Device\Cdrom
+0x815fa924	string	%s$SystemUpdate\su%08x_%08x
+0x815fa940	string	\??\UPDATE:
+0x815fa964	string	\System??\%s
+0x815fa974	string	UpdPackDest:
+0x815fa984	string	UpdPackSrc:
+0x815fa9a0	string	%s\%s.tmp
+0x815fa9ac	string	$install_extender.xex
+0x815fa9c4	string	\Device\Harddisk0\TitleURLCachePartition
+0x815fa9f0	string	\Storage\
+0x815faa00	string	{LiveHive:LiveServiceUrl.roamingprofile}/users/xuid({xuid})/devices
+0x815faa48	string	body{t:item,offset:0,size:2870,loc:body}[?{t:item,offset:0,size:2870,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom},pagingInfo/continuationToken{t:str,offset:8,size:42,loc:dom,max:42,opt:4},userDeviceAssociations{t:item,offset:54,size:2816,loc:dom,max:64,itemsize:44,countoffset:50,countsize:4}[machinePuid{t:uint,offset:0,size:8,loc:dom},trustLevel{t:int,offset:8,size:4,loc:dom},lastSignIn{t:datetime,offset:12,size:16,loc:dom},lastSignOut{t:datetime,offset:28,size:16,loc:dom}]]]
+0x815fac60	string	xuid{t:xuid,offset:0,size:8,loc:url},maxItems{t:uint,offset:8,size:4,loc:qs},machinePuid{t:uint,offset:16,size:8,loc:url,opt:12},continuationToken{t:str,offset:28,size:42,loc:qs,max:42,opt:24}
+0x815fad28	string	{LiveHive:LiveServiceUrl.roamingprofile}/users/xuid({xuid})/devices/{machinePuid}
+0x815fad80	string	body{t:item,offset:0,size:4,loc:body}[?{t:item,offset:0,size:4,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom}]]
+0x815fae20	string	xuid{t:xuid,offset:0,size:8,loc:url},machinepuid{t:uint,offset:8,size:8,loc:url},body{t:item,offset:16,size:4,loc:body,enc:json}[?{t:item,offset:0,size:4,loc:dom}[trustLevel{t:int,offset:0,size:4,loc:dom}]]
+0x815faef0	string	{LiveHive:LiveServiceUrl.roamingprofile}/users/xuid({xuid})/devices/{machinepuid}
+0x815faf6c	string	\System??\WLCMount%c
+0x815faf84	string	WLCMount%c:\WLC_%s.dat
+0x815faf9c	string	\System??\WLEMount%016I64x
+0x815fafb8	string	%s:\WLE.dat
+0x815fb068	string	xbox.com
+0x815fb074	string	RgcAuthenticationDelayMax
+0x815fb090	string	RgcAuthenticationDelayMin
+0x815fb0ac	string	event6
+0x815fb0b4	string	LogonFail_Other
+0x815fb0c4	string	LogonFail_Xmacs
+0x815fb0d4	string	LogonFail_As
+0x815fb0e4	string	LogonFail_Tgs
+0x815fb0f4	string	LogonFail_Sg
+0x815fb104	string	LogonFail_Pres
+0x815fb114	string	LogonFail_Hive
+0x815fb124	string	Silver
+0x815fb134	string	FamilyGold
+0x815fb1c4	string	 (PP08@H\Device\Mass2\SMRTNTKY\WSETTING.WFC
+0x815fb1f0	string	\Device\Mass1\SMRTNTKY\WSETTING.WFC
+0x815fb214	string	\Device\Mass0\SMRTNTKY\WSETTING.WFC
+0x815fb238	unicode	xamstrings.xus
+0x815fb348	string	%s XamShowAndWaitForSignin 2...
+0x815fb368	string	%s XamShowAndWaitForSignin 1...
+0x815fb388	string	XamForceOnlineUserSignIn
+0x815fb3a4	string	XSignerMinimumVersion
+0x815fb3bc	unicode	AccountInfoUpdateProbability
+0x815fb3f8	string	AvatarEditor.xex
+0x815fb40c	unicode	Xbox 360
+0x815fb430	unicode	%account%
+0x815fb44c	unicode	SampPercent
+0x815fb464	unicode	WebRep
+0x815fb47c	string	Account
+0x815fb484	string	WebRep
+0x815fb490	unicode	http://%S/msgserver/logstring2.ashx
+0x815fb4d8	unicode	LogonFailure
+0x815fb5a8	unicode	?vid=
+0x815fb5bc	unicode	&products=;
+0x815fb5e0	unicode	&pageName=
+0x815fb604	unicode	&events=
+0x815fb774	unicode	&v22=
+0x815fb780	unicode	&v21=
+0x815fb78c	unicode	&v20=
+0x815fb948	unicode	&events=event6
+0x815fb968	unicode	%d.%03d
+0x815fb978	unicode	&v8=D=pageName&en=UTF-8
+0x815fb9a8	string	X-FLOKEN: %016I64X\r\n
+0x815fb9c0	string	X-IFLCDIGEST: %s\r\nX-FLOKEN: %016I64X\r\n
+0x815fba98	string	Microsoft TLS 1.2
+0x815fbaac	string	\Device\DeviceAuth
+0x815fbac0	string	\Device\Harddisk0\SystemExtPartition\
+0x815fbae8	string	\Device\FileSystemExtPartition%d\
+0x815fbb0c	string	%.*sSystemExtPartition\
+0x815fbb24	string	\Device\Harddisk0\SystemAuxPartition\
+0x815fbb4c	string	%.*sSystemAuxPartition\
+0x815fbb6c	string	online
+0x815fbb84	string	ExtendedSystem.Partition
+0x815fbbb0	string	ExtendedSystem.Temp.Partition
+0x815fbbd0	string	\Device\FileSystemExtPartition%d
+0x815fbbf8	string	flash
+0x815fbc00	string	Content\0000000000000000\%08X\%08X
+0x815fbc24	string	Content\0000000000000000\%08X\%08X\%016I64X
+0x815fbc50	string	Content\0000000000000000\%08X\%08X\%s
+0x815fbc98	string	/%08x/files/%s/%s
+0x815fbcac	string	:;<=>?@!"#$%&'()*+,-./[\]
+0x815fbcc8	string	XamContentExistsOnDeviceInternal_item
+0x815fbcf0	string	\System??\XSYSLAUNCH:
+0x815fbd08	string	XSYSLAUNCH:\
+0x815fbd18	string	\System??\XSYSLAUNCH
+0x815fbf08	string	XlfsAsyncEnabled
+0x815fbf68	string	FALSE
+0x815fbf70	string	XlfsEnableProgressTracking
+0x815fbf8c	string	XlfsBackgroundTimeout
+0x815fbfa4	string	XlfsLoginTimeout
+0x815fbfb8	string	XlfsProgressInterval
+0x815fbfd0	string	XlfsDirectoryHardCap
+0x815fbfe8	string	XlfsDirectoryCap
+0x815fbffc	string	XlfsMaxPackageSize
+0x815fc010	string	XlfsAsyncUploadInterval
+0x815fc028	string	OPTIONAL
+0x815fc03c	string	XlfsBackgroundModeEnabled
+0x815fc058	string	\System??\XlfsUploadCache:
+0x815fc074	string	\??\XlfsUploadCache:
+0x815fc08c	string	\??\XlfsUploadCache:\X%03u.%08lX%08lX.%08lX.%08lX
+0x815fc0c0	string	\Data
+0x815fc0cc	string	XlfsUploadCache
+0x815fc0dc	string	XlfsUploadCache:\
+0x815fc0f0	string	XlfsUploadCache:\*
+0x815fc104	string	\Certificate
+0x815fc114	string	\Metadata
+0x815fc128	string	XlfsUploadCache.dat
+0x815fc148	string	\??\xlfs%04X:
+0x815fc158	string	XlfsTestProxyIP
+0x815fc168	string	XlfsTestIgnoreSSLCert
+0x815fc180	string	XlfsTestSSL
+0x815fc18c	string	XlfsTestFdPort
+0x815fc1bc	string	%08x-%04x-%04x-%04x-%08x%04x
+0x815fc228	string	\Device\Flash\xstudio.xex
+0x815fc250	unicode	zh-CN
+0x815fc2f0	unicode	application/json
+0x815fc314	string	Online
+0x815fc31c	unicode	PresenceDevice_
+0x815fc33c	string	FeaturePromotionalSquareArt
+0x815fc358	string	AppIconSquareArt
+0x815fc36c	string	Background
+0x815fc388	string	XboxOne,WindowsPhone,PC,Web
+0x815fc3cc	unicode	%s%S
+0x815fc3e0	string	Console
+0x815fc3f4	string	ModernPresencePriorityList
+0x815fc410	unicode	Microsoft TLS
+0x815fc42c	unicode	TLSLoggingEnabled
+0x815fc450	unicode	TitleCipherSuites
+0x815fc474	unicode	SystemCipherSuites
+0x815fc49c	unicode	ForceSecurityProvider
+0x815fc4c8	unicode	DefaultSecurityProvider
+0x815fc4f8	unicode	XSTSExpiryPeriod
+0x815fc51c	string	TitlePatchList
+0x815fc52c	string	\System??\TplCache:
+0x815fc540	string	TitlePatchNotify
+0x815fc554	string	FAKE_Refresh
+0x815fc564	string	Microsoft NCSI
+0x815fc574	string	/ncsi.txt
+0x815fc580	string	www.msftncsi.com
+0x815fc594	string	[CAPTIVE PORTAL] File Is the Same\n
+0x815fc5b8	string	[CAPTIVE PORTAL] File Wrong Bytes\n
+0x815fc5dc	string	[CAPTIVE PORTAL] File Wrong Length actual %d expected %d\n
+0x815fc618	string	[CAPTIVE PORTAL] Invalid Download Buffer\n
+0x815fc648	string	[CAPTIVE PORTAL] Captive Portal Test Download Failure hr = %d, win32Status = %d\n
+0x815fc69c	string	[CAPTIVE PORTAL] Captive Portal Test Timed out\n
+0x815fc6cc	string	%s%s%s
+0x815fc6d4	string	[CAPTIVE PORTAL] DNS lookup failed %d\n
+0x815fc6fc	string	[CAPTIVE PORTAL] try %d of %d\n
+0x815fc984	unicode	mplayer
+0x815fca4c	string	janus
+0x815fca54	string	\System??\janus:
+0x815fca74	string	JanusDatastore.dat
+0x815fca9c	string	PackageLoaderRoot
+0x815fcab0	string	\System??\PackageLoaderRoot:
+0x815fcad0	string	\Device\Flash\
+0x815fcae8	string	%s:\%s
+0x815fcea0	string	%08X%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X
+0x815fcedc	string	SSDQSTATUS
+0x815fd084	string	mediacontent:\MediaMetadata
+0x815fd0a0	string	\System??\mediacontent:
+0x815fd0c0	unicode	%I64u
+0x815fd0d0	unicode	SSDQActiveUserPollFrequencyInSeconds
+0x815fd120	unicode	SSDQIdleUserPollFrequencyInSeconds
+0x815fd168	unicode	SSDQPollingDurationUIInSeconds
+0x815fd1a8	unicode	SSDQReportingFrequencyInSeconds
+0x815fd1e8	unicode	DownloadQueue
+0x815fd248	unicode	<RootNode><effectiveTitleId>%u</effectiveTitleId><mediaId>%s</mediaId><mediaType>%u</mediaType><ratingId>%d</ratingId><consoleId>%I64u</consoleId><contentId>%S</contentId><offerId>%s</offerId><offerName>%s</offerName><deviceType>%u</deviceType><size>%I64u</size><percent>%u</percent><state>%u</state><externalUrl>%s</externalUrl><downloadSize>%I64u</downloadSize></RootNode>
+0x815fd538	unicode	downloadSize
+0x815fd554	unicode	deviceType
+0x815fd56c	unicode	state
+0x815fd578	unicode	ratingId
+0x815fd58c	unicode	percent
+0x815fd59c	unicode	size
+0x815fd5a8	unicode	offerName
+0x815fd5bc	unicode	contentId
+0x815fd5d0	unicode	effectiveTitleId
+0x815fd5f4	unicode	externalUrl
+0x815fd60c	unicode	mediaId
+0x815fd61c	unicode	consoleId
+0x815fd630	unicode	mediaType
+0x815fd644	unicode	offerId
+0x815fd658	unicode	<RootNode><dest>%I64u</dest><consoleRegionMask>%u</consoleRegionMask></RootNode>
+0x815fd6fc	unicode	consoleRegionMask
+0x815fd720	unicode	dest
+0x815fd8fe	string	\r\nPress any key to restart\r\n
+0x815fdb30	unicode	GamerCard_Custom.xus
+0x815fdc28	unicode	YouGamercardWorker
+0x815fdc50	unicode	MeGamercardWorker
+0x815fdc74	unicode	YouExpanded
+0x815fdc8c	unicode	Mini
+0x815fdc98	unicode	Macro
+0x815fdca4	unicode	Normal
+0x815fdcb4	unicode	GamerCard.xur
+0x815fdcd0	unicode	XuiGamerCard
+0x815fdcec	unicode	BaseScene
+0x815fdd00	unicode	ExtendedScene
+0x815fdd1c	unicode	GamerCardScene
+0x815fdd3c	unicode	ReputationScene
+0x815fdd64	unicode	DisableTimelineRecursion
+0x815fdd98	unicode	ShowExtendedPanel
+0x815fddbc	unicode	Format
+0x815fde38	unicode	extendedScene
+0x815fde54	unicode	onlineBaseScene
+0x815fde74	unicode	offlineBaseScene
+0x815fdedc	unicode	memory://%08x,%x
+0x815fdf00	string	TENURE
+0x815fdf08	string	crown%d.png
+0x815fdf14	string	milestone%d.png
+0x815fdf44	unicode	TeamAny.png
+0x815fdf5c	unicode	Team360.png
+0x815fdf74	unicode	TeamNXE.png
+0x815fdf8c	unicode	TeamKinect.png
+0x815fdfac	unicode	TenureMilestone
+0x815fdfcc	unicode	TenureLevel
+0x815fdfe4	unicode	credScoreText
+0x815fe000	unicode	WaterMarkLayer3
+0x815fe020	unicode	WaterMarkLayer2
+0x815fe040	unicode	WaterMarkLayer1
+0x815fe060	unicode	WaterMarkLayer0
+0x815fe080	unicode	zoneText
+0x815fe094	unicode	onlineStatusText
+0x815fe0b8	unicode	achievementsText
+0x815fe0dc	unicode	credText
+0x815fe0f0	unicode	titlesPlayedText
+0x815fe114	unicode	reputationScene
+0x815fe134	unicode	membershipTierScene
+0x815fe15c	unicode	gamerTileImage
+0x815fe17c	unicode	gamerTagText
+0x815fe198	unicode	Bronze
+0x815fe1b0	unicode	%u %lc
+0x815fe1e4	unicode	gameImage
+0x815fe1f8	unicode	bottomText
+0x815fe210	unicode	richPresenceText
+0x815fe234	unicode	achievement4Image
+0x815fe258	unicode	achievement3Image
+0x815fe27c	unicode	achievement2Image
+0x815fe2a0	unicode	achievement1Image
+0x815fe2c4	unicode	titleText
+0x815fe2d8	unicode	topText
+0x815fe2e8	unicode	consoleTypeImage
+0x815fe32c	unicode	Offline
+0x815fe33c	unicode	Online
+0x815fe538	unicode	HH:mm:ss
+0x815fe54c	unicode	dddd, MMMM dd, yyyy
+0x815fe574	unicode	MM/dd/yy
+0x815fe588	unicode	December
+0x815fe59c	unicode	November
+0x815fe5b0	unicode	October
+0x815fe5c0	unicode	September
+0x815fe5d4	unicode	August
+0x815fe5e4	unicode	July
+0x815fe5f0	unicode	June
+0x815fe5fc	unicode	April
+0x815fe608	unicode	March
+0x815fe614	unicode	February
+0x815fe628	unicode	January
+0x815fe698	unicode	Saturday
+0x815fe6ac	unicode	Friday
+0x815fe6bc	unicode	Thursday
+0x815fe6d0	unicode	Wednesday
+0x815fe6e4	unicode	Tuesday
+0x815fe6f4	unicode	Monday
+0x815fe704	unicode	Sunday
+0x815fe74c	string	HH:mm:ss
+0x815fe758	string	dddd, MMMM dd, yyyy
+0x815fe76c	string	MM/dd/yy
+0x815fe780	string	December
+0x815fe78c	string	November
+0x815fe798	string	October
+0x815fe7a0	string	September
+0x815fe7ac	string	August
+0x815fe7c4	string	April
+0x815fe7cc	string	March
+0x815fe7d4	string	February
+0x815fe7e0	string	January
+0x815fe818	string	Saturday
+0x815fe824	string	Friday
+0x815fe82c	string	Thursday
+0x815fe838	string	Wednesday
+0x815fe844	string	Tuesday
+0x815fe84c	string	Monday
+0x815fe854	string	Sunday
+0x815ff12c	string	_nextafter
+0x815ff184	string	floor
+0x815ff1f4	string	SIFLC.%sXBOXLIVE.COM
+0x815ff20c	string	PIFLC.%sXBOXLIVE.COM
+0x815ff224	string	NOTICE.%sXBOX.COM
+0x815ff238	string	XEXDS.%sXBOXLIVE.COM
+0x815ff250	string	XETGS.%sXBOXLIVE.COM
+0x815ff268	string	XEAS.%sXBOXLIVE.COM
+0x815ff27c	string	XEMACS.%sXBOXLIVE.COM
+0x815ff2cc	string	XNetCacheKeyData
+0x815ff2e0	unicode	XUACS.%hsXBOXLIVE.COM
+0x815ff314	string	MACS.XBOX.COM
+0x815ff324	string	NewExternalIPAddress
+0x815ff33c	string	NewConnectionStatus
+0x815ff350	string	urn:schemas-upnp-org:service:WANIPConnection:1
+0x815ff380	string	urn:schemas-upnp-org:service:WANPPPConnection:1
+0x815ff3b0	string	GetStatusInfo
+0x815ff3d0	string	GetExternalIPAddress
+0x815ff3f8	string	AddPortMapping
+0x815ff408	string	 <NewRemoteHost></NewRemoteHost>\r\n <NewExternalPort>%u</NewExternalPort>\r\n <NewProtocol>UDP</NewProtocol>\r\n <NewInternalPort>%u</NewInternalPort>\r\n <NewInternalClient>%u.%u.%u.%u</NewInternalClient>\r\n <NewEnabled>1</NewEnabled>\r\n <NewPortMappingDescription>Xbox (%u.%u.%u.%u:%u) %u UDP</NewPortMappingDescription>\r\n <NewLeaseDuration>0</NewLeaseDuration>\r\n
+0x815ff570	string	Connected
+0x815ff57c	string	Envelope
+0x815ff760	string	"\r\nCONTENT-TYPE: text/xml; charset="utf-8"\r\n
+0x815ff790	string	<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">\r\n   <s:Body>\r\n      <u:
+0x815ff848	string	>\r\n   </s:Body>\r\n</s:Envelope>\r\n
+0x815ff86c	string	Response
+0x815ff878	string	Xbox/2.0.17559.0 UPnP/1.0 Xbox/2.0.17559.0
+0x815ff8a4	string	UPnPError
+0x815ff8b0	string	detail
+0x815ff8b8	string	Fault
+0x815ff8c8	string	errorDescription
+0x815ff8dc	string	errorCode
+0x815ff8e8	string	faultactor
+0x815ff8f4	string	faultstring
+0x815ff900	string	faultcode
+0x815ff910	string	M-SEARCH * HTTP/1.1\r\nHost: 239.255.255.250:1900\r\nMan: "ssdp:discover"\r\nMX: 2\r\nST: 
+0x815ff96c	string	ssdp:all
+0x815ff978	string	service:
+0x815ff984	string	device:
+0x815ff994	string	uuid:
+0x815ff99d	string	sdp:byebye
+0x815ff9a8	string	ssdp:alive
+0x815ff9b5	string	39.255.255.250:1900
+0x815ff9cc	string	upnp:rootdevice
+0x815ffd50	string	Xbox/2.0.17559.0 UPnP/1.0 Xbox/2.0.17559.0
+0x815ffd7c	string	service
+0x815ffd84	string	serviceList
+0x815ffd90	string	deviceList
+0x815ffd9c	string	device
+0x815ffda4	string	eventSubURL
+0x815ffdb0	string	controlURL
+0x815ffdbc	string	SCPDURL
+0x815ffdc4	string	serviceId
+0x815ffdd0	string	serviceType
+0x815ffde4	string	serialNumber
+0x815ffdf4	string	modelURL
+0x815ffe00	string	modelNumber
+0x815ffe0c	string	modelName
+0x815ffe18	string	modelDescription
+0x815ffe2c	string	manufacturerURL
+0x815ffe3c	string	manufacturer
+0x815ffe4c	string	friendlyName
+0x815ffe5c	string	deviceType
+0x815ffe8c	string	propertyset
+0x815fff14	string	CALLBACK: <http://
+0x815fff28	string	>\r\nNT: upnp:event\r\nTIMEOUT: Second-1800\r\n
+0x815fff60	string	TIMEOUT: Second-1800\r\n
+0x815fff78	string	HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n
+0x815fffa0	string	Xbox/2.0.17559.0 UPnP/1.0 Xbox/2.0.17559.0
+0x815fffcc	string	property
+0x8160000c	string	infinite
+0x81600018	string	Second-
+0x81600020	string	upnp:propchange
+0x81600030	string	upnp:event
+0x8160003c	string	SUBSCRIBE
+0x81600058	string	UNSUBSCRIBE
+0x8160017c	string	%u.%u.%u.%u.in-addr.arpa
+0x81600198	string	Xbox 360
+0x81600208	string	ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890-.
+0x81600295	string	ttps://
+0x816002a4	string	CONTENT-RANGE
+0x816002bc	string	X-DELAYFLAGS
+0x816002cc	string	X-DELAY
+0x816002d8	string	USER-AGENT
+0x816002e4	string	UNLESS-MODIFIED-SINCE
+0x816002fc	string	TRANSFER-ENCODING
+0x81600310	string	TIMEOUT
+0x81600324	string	SERVER
+0x8160032c	string	REFERER
+0x81600334	string	RANGE
+0x81600348	string	MIME-VERSION
+0x8160035c	string	LOCATION
+0x81600368	string	LAST-MODIFIED
+0x81600378	string	IF-UNMODIFIED-SINCE
+0x8160038c	string	IF-RANGE
+0x81600398	string	IF-NONE-MATCH
+0x816003a8	string	IF-MODIFIED-SINCE
+0x816003bc	string	IF-MATCH
+0x816003d4	string	EXPIRES
+0x816003e4	string	CONTENT-TYPE
+0x816003f4	string	CONTENT-TRANSFER-ENCODING
+0x81600410	string	CONTENT-LENGTH
+0x81600420	string	CONTENT-LANGUAGE
+0x81600434	string	CONNECTION
+0x81600440	string	CACHE-CONTROL
+0x81600450	string	ALLOW
+0x81600458	string	ACCEPT-RANGES
+0x81600468	string	ACCEPT-LANGUAGE
+0x81600478	string	ACCEPT-ENCODING
+0x81600488	string	ACCEPT-CHARSET
+0x81600498	string	ACCEPT
+0x81600710	string	ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
+0x81600774	unicode	Microsoft TLS 1.0
+0x81600798	unicode	Microsoft TLS 1.1
+0x816007bc	unicode	Microsoft TLS 1.2
+0x816007e0	string	md5-sess
+0x816007f0	string	auth-int
+0x816007fc	string	Digest 
+0x81600804	string	Basic
+0x8160080c	string	Authorization: Basic 
+0x81600824	string	no-cache
+0x81600830	string	no-store
+0x8160083c	string	max-age
+0x81600848	string	opaque=
+0x81600858	string	nonce=
+0x81600868	string	algorithm=
+0x81600874	string	Referer: 
+0x81600880	string	\r\nUser-Agent: 
+0x8160089c	string	HTTP/1.1
+0x816008a8	string	http://%s:%u
+0x816008b8	string	opaque="
+0x816008c8	string	response="
+0x816008d4	string	cnonce="
+0x816008e8	string	nonce="
+0x816008f0	string	uri="
+0x816008f8	string	algorithm="
+0x81600904	string	qop="
+0x8160090c	string	realm="
+0x81600918	string	username="
+0x81600924	string	Authorization: Digest 
+0x8160093c	string	00000001
+0x81600948	string	identity
+0x8160095c	string	Content-Length: 
+0x81600974	string	If-Modified-Since:%s, %02i %s %04i %02i:%02i:%02i GMT\r\n
+0x816009ac	string	Host:%s\r\n
+0x816009b8	string	Host:%s:%u\r\n
+0x816009c8	string	Connection: Close\r\n
+0x816009dc	string	Connection: Keep-alive\r\n
+0x816009f8	string	WWW-Authenticate
+0x81600a0c	string	chunked
+0x81600a14	string	close
+0x81600a2c	string	 HTTP/1.1\r\nHost: 
+0x81600a40	string	%s:%u
+0x81600a48	string	CONNECT 
+0x81600b90	string	\Device\CdRom0
+0x81600ba0	string	\Device\CdRom0\default.xex
+0x81600bbc	string	\SystemNamedObjects\DiscSwapInProgress
+0x81600be4	string	%s\default.xex
+0x81600cf4	string	InvViewport
+0x81600d10	string	LocalToTexTransform
+0x81600d24	string	UVTrans
+0x81600d3c	string	WorldViewProj
+0x81600f38	string	InvViewport
+0x81600f54	string	ShadowOffset
+0x81600f74	string	WorldViewProj
+0x81601144	string	AmbientLight
+0x81601164	string	BaseColor
+0x8160116e	string	LightColor
+0x81601179	string	LightDir
+0x81601182	string	SkeletonTransforms
+0x816011a8	string	WorldViewProj
+0x8160151c	string	ColorFactor
+0x81601538	string	SolidColor
+0x8160160c	string	ColorFactor
+0x81601628	string	TextureSampler
+0x81601718	string	ColorFactor
+0x816017fc	string	ColorFactor
+0x81601818	string	TextureSampler0
+0x81601948	string	ColorFactor
+0x81601964	string	TextureSampler0
+0x81601984	string	TextureSampler1
+0x81601b14	string	ColorFactor
+0x81601b30	string	TextureSampler
+0x81601ca0	string	Color1
+0x81601cb8	string	Color2
+0x81601cbf	string	Color3
+0x81601ccd	string	ColorFactor
+0x81601cd9	string	StopPositions
+0x81601ce7	string	StopPositionsInvDist
+0x81601e54	string	ColorFactor
+0x81601e70	string	TextureSampler
+0x81602060	string	Color1
+0x81602078	string	Color2
+0x8160207f	string	Color3
+0x8160208d	string	ColorFactor
+0x81602099	string	StopPositions
+0x816020a7	string	StopPositionsInvDist
+0x816022ac	string	ColorFactor
+0x816022c8	string	TextureSampler
+0x81602588	string	Color1
+0x816025a0	string	Color2
+0x816025a7	string	Color3
+0x816025b5	string	ColorFactor
+0x816025c1	string	StopPositions
+0x816025cf	string	StopPositionsInvDist
+0x816028c0	string	ColorConvertMatrix
+0x816028e4	string	ColorFactor
+0x81602900	string	SolidColor
+0x81602a80	string	ColorConvertMatrix
+0x81602aa4	string	ColorFactor
+0x81602ac0	string	TextureSampler
+0x81602c5c	string	ColorConvertMatrix
+0x81602c80	string	ColorFactor
+0x81602dd8	string	ColorConvertMatrix
+0x81602dfc	string	ColorFactor
+0x81602e18	string	TextureSampler0
+0x81602fb4	string	ColorConvertMatrix
+0x81602fd8	string	ColorFactor
+0x81602ff4	string	TextureSampler0
+0x81603014	string	TextureSampler1
+0x816031e0	string	ColorConvertMatrix
+0x81603204	string	ColorFactor
+0x81603220	string	TextureSampler
+0x81603434	string	Color1
+0x8160344c	string	Color2
+0x81603453	string	Color3
+0x81603461	string	ColorConvertMatrix
+0x81603484	string	ColorFactor
+0x81603490	string	StopPositions
+0x8160349e	string	StopPositionsInvDist
+0x816036b8	string	ColorConvertMatrix
+0x816036dc	string	ColorFactor
+0x816036f8	string	TextureSampler
+0x81603924	string	Color1
+0x8160393c	string	Color2
+0x81603943	string	Color3
+0x81603951	string	ColorConvertMatrix
+0x81603974	string	ColorFactor
+0x81603980	string	StopPositions
+0x8160398e	string	StopPositionsInvDist
+0x81603bd8	string	ColorConvertMatrix
+0x81603bfc	string	ColorFactor
+0x81603c18	string	TextureSampler
+0x81603f0c	string	Color1
+0x81603f24	string	Color2
+0x81603f2b	string	Color3
+0x81603f39	string	ColorConvertMatrix
+0x81603f5c	string	ColorFactor
+0x81603f68	string	StopPositions
+0x81603f76	string	StopPositionsInvDist
+0x8160427c	string	ColorFactor
+0x81604298	string	TextureSampler
+0x816043b0	string	ColorFactor
+0x816043cc	string	ShadowColor
+0x816043d8	string	TextureSampler
+0x816045c8	string	ColorConvertMatrix
+0x816045ec	string	ColorFactor
+0x81604608	string	TextureSampler
+0x816047c4	string	ColorConvertMatrix
+0x816047e8	string	ColorFactor
+0x81604804	string	ShadowColor
+0x81604810	string	TextureSampler
+0x81605280	string	1.2.3
+0x81605394	string	Depth Buffers
+0x816053a4	string	Render Targets
+0x816053b4	string	Textures
+0x816053c0	string	Pixel Shaders
+0x81607dd4	string	unknown compression method
+0x81607df0	string	header crc mismatch
+0x81607e2c	string	incorrect header check
+0x81607e44	string	invalid window size
+0x81607e58	string	invalid distances set
+0x81607e70	string	invalid literal/length code
+0x81607e8c	string	invalid distance code
+0x81607ea4	string	unknown header flags set
+0x81607ec0	string	invalid block type
+0x81607ed4	string	invalid stored block lengths
+0x81607ef4	string	invalid code lengths set
+0x81607f10	string	invalid distance too far back
+0x81607f30	string	incorrect data check
+0x81607f48	string	incorrect length check
+0x81607f60	string	too many length or distance symbols
+0x81607f84	string	invalid bit length repeat
+0x81607fa0	string	invalid literal/lengths set
+0x81607fbc	string	Error decoding compressed text
+0x81608d18	string	incompatible version
+0x81608d30	string	buffer error
+0x81608d40	string	insufficient memory
+0x81608d54	string	data error
+0x81608d60	string	stream error
+0x81608d70	string	file error
+0x81608d7c	string	stream end
+0x81608d88	string	need dictionary
+0x81608f14	unicode	%.6g, %.6g, %.6g, %.6g
+0x81608f68	unicode	0x%02x%02x%02x%02x
+0x81608f9c	unicode	false
+0x81608fa8	unicode	true
+0x81608ff8	unicode	XuiElement
+0x81609014	unicode	XuiText
+0x81609024	unicode	XuiLabel
+0x81609038	unicode	MaxFlowLines
+0x81609070	unicode	XuiFigure
+0x81609084	unicode	XuiVisual
+0x81609098	unicode	XuiNavButton
+0x816090b4	unicode	XuiBackButton
+0x816090d0	unicode	XuiCheckbox
+0x816090e8	unicode	PressKey
+0x816090fc	unicode	XuiRadioButton
+0x8160911c	unicode	XuiRadioGroup
+0x81609138	unicode	XuiGroup
+0x8160914c	unicode	XuiSound
+0x81609160	unicode	XuiTransition
+0x8160917c	unicode	XuiListItem
+0x81609194	unicode	XuiScrollEnd
+0x816091b0	unicode	XuiScrollBar
+0x816091cc	unicode	XuiList
+0x816091dc	unicode	XuiCommonList
+0x816091f8	unicode	XuiProgressBar
+0x81609218	unicode	XuiSlider
+0x81609234	unicode	XuiEdit
+0x81609244	unicode	XuiCaret
+0x81609258	unicode	XuiMessageBox
+0x81609274	unicode	XuiImagePresenter
+0x81609298	unicode	XuiImage
+0x816092ac	unicode	XuiTabScene
+0x816092c4	unicode	XuiPerspectiveScene
+0x816092ec	unicode	XuiNineGrid
+0x81609304	unicode	XuiGridPanel
+0x81609320	unicode	XuiTextureSurface
+0x81609344	unicode	XuiShader
+0x81609358	unicode	XuiVariable
+0x81609394	unicode	0x%08x
+0x816093a4	unicode	%f,%f,%f
+0x816093b8	unicode	%f,%f,%f,%f
+0x816093e0	unicode	StrokeColor
+0x816093f8	unicode	StrokeWidth
+0x81609410	unicode	StopPos
+0x81609420	unicode	StopColor
+0x81609434	unicode	NumStops
+0x81609448	unicode	Radial
+0x81609474	unicode	TransformVersion
+0x81609498	unicode	BrushFlags
+0x816094b0	unicode	WrapY
+0x816094c8	unicode	Rotation
+0x816094dc	unicode	Scale
+0x816094e8	unicode	Translation
+0x81609500	unicode	Gradient
+0x81609514	unicode	TextureFileName
+0x81609534	unicode	FillColor
+0x81609548	unicode	FillType
+0x8160955c	unicode	Points
+0x8160956c	unicode	Fill
+0x81609578	unicode	Stroke
+0x8160959c	unicode	Direction
+0x816095b0	unicode	MinThumbSize
+0x816095cc	unicode	LoadType
+0x816095e0	unicode	DataAssociation
+0x81609600	unicode	SizeMode
+0x81609614	unicode	ProjectionCenterV
+0x81609638	unicode	ProjectionCenterU
+0x8160965c	unicode	ProjectionScale
+0x8160967c	unicode	TextScale
+0x81609690	unicode	LineSpacingAdjust
+0x816096b4	unicode	TextStyle
+0x816096d4	unicode	PointSize
+0x816096e8	unicode	DropShadowColor
+0x81609708	unicode	TextColor
+0x81609728	unicode	RecurseTransitions
+0x81609750	unicode	IgnorePresses
+0x8160976c	unicode	InterruptTransitions
+0x81609798	unicode	TransBackTo
+0x816097b0	unicode	TransBackFrom
+0x816097cc	unicode	TransTo
+0x816097dc	unicode	DefaultFocus
+0x816097f8	unicode	FocusAnimEndFrame
+0x8160981c	unicode	FocusAnimStartFrame
+0x81609844	unicode	FocusAnimObject
+0x81609864	unicode	PressAnimEndFrame
+0x81609888	unicode	PressAnimStartFrame
+0x816098b0	unicode	PressAnimObject
+0x816098d0	unicode	DestTransIndex
+0x816098f0	unicode	SrcTransIndex
+0x8160990c	unicode	StayVisible
+0x81609924	unicode	PressPath
+0x81609938	unicode	Volume
+0x81609948	unicode	Finish
+0x81609958	unicode	Loop
+0x81609964	unicode	State
+0x81609970	unicode	SmoothScrollAcceleration
+0x816099a4	unicode	SmoothScrollMaxSpeed
+0x816099d0	unicode	SmoothScrollBaseSpeed
+0x816099fc	unicode	SmoothScroll
+0x81609a18	unicode	InterItemSpacing
+0x81609a3c	unicode	KeepSizeUnfocused
+0x81609a60	unicode	SelectedSize
+0x81609a7c	unicode	Checkable
+0x81609a90	unicode	Layout
+0x81609aa0	unicode	WrapBump
+0x81609ac0	unicode	ItemsNavPath
+0x81609adc	unicode	ItemsImage
+0x81609af4	unicode	ItemsText
+0x81609b08	unicode	Value
+0x81609b14	unicode	RangeMax
+0x81609b28	unicode	RangeMin
+0x81609b3c	unicode	AccelTime
+0x81609b50	unicode	AccelInc
+0x81609b64	unicode	Vertical
+0x81609b84	unicode	Multiline
+0x81609b98	unicode	ReadOnly
+0x81609bac	unicode	PasswordChar
+0x81609bc8	unicode	AllowedChars
+0x81609be4	unicode	TextLimit
+0x81609bf8	unicode	TextureSurfaceElement
+0x81609c24	unicode	DefaultTab
+0x81609c3c	unicode	NoAutoHide
+0x81609c54	unicode	VerticalTabs
+0x81609c70	unicode	UserInterrupt
+0x81609c8c	unicode	TabCount
+0x81609ca0	unicode	NoCenter
+0x81609cb4	unicode	BottomOffset
+0x81609cd0	unicode	RightOffset
+0x81609ce8	unicode	TopOffset
+0x81609cfc	unicode	LeftOffset
+0x81609d34	unicode	Param1
+0x81609d54	unicode	CellSpacing
+0x81609d78	unicode	Columns
+0x81609d88	unicode	Buffered
+0x81609d9c	unicode	PreRender
+0x81609db0	unicode	DepthStencil
+0x81609dcc	unicode	Offscreen
+0x81609de0	unicode	EffectParams5
+0x81609dfc	unicode	EffectParams4
+0x81609e18	unicode	EffectParams3
+0x81609e34	unicode	EffectParams2
+0x81609e50	unicode	EffectParams1
+0x81609e6c	unicode	ForceComposite
+0x81609e8c	unicode	CompositeEdge
+0x81609ea8	unicode	ShaderFile
+0x81609ec8	unicode	IntegerVariable
+0x81609ee8	unicode	FloatVariable
+0x81609f04	unicode	VectorVariable
+0x81609f24	unicode	QuickInput
+0x81609f3c	unicode	HoverSelectTimer
+0x81609f60	unicode	AutoId
+0x81609f70	unicode	UseNuiAsMouse
+0x81609f8c	unicode	SizeToText
+0x81609fa4	unicode	HasContextMenu
+0x81609fc4	unicode	NavTabBackward
+0x81609fe4	unicode	NavTabForward
+0x8160a01c	unicode	NavRight
+0x8160a040	unicode	UnfocusedInput
+0x8160a060	unicode	Enabled
+0x8160a070	unicode	ClassOverride
+0x8160a08c	unicode	CenterPivot
+0x8160a0a4	unicode	ColorFactor
+0x8160a0bc	unicode	RowSpan
+0x8160a0cc	unicode	ColumnSpan
+0x8160a0ec	unicode	Column
+0x8160a0fc	unicode	LayoutFloat
+0x8160a114	unicode	LayoutLineBreak
+0x8160a134	unicode	Hittable
+0x8160a148	unicode	GripTarget
+0x8160a160	unicode	DisableFocusRecursion
+0x8160a18c	unicode	EnableEffects
+0x8160a1a8	unicode	ClipChildren
+0x8160a1c4	unicode	ColorWriteFlags
+0x8160a1e4	unicode	DesignTime
+0x8160a1fc	unicode	BlendMode
+0x8160a21c	unicode	Pivot
+0x8160a228	unicode	Anchor
+0x8160a238	unicode	Opacity
+0x8160a248	unicode	Position
+0x8160a25c	unicode	Height
+0x8160a26c	unicode	Width
+0x8160a278	unicode	EndPressCheckDisable
+0x8160a2a4	unicode	PressCheckDisable
+0x8160a2c8	unicode	EndNormalPressCheck
+0x8160a2f0	unicode	NormalPressCheck
+0x8160a314	unicode	EndPressCheck
+0x8160a330	unicode	PressCheck
+0x8160a348	unicode	EndScrollMoreKillHover
+0x8160a378	unicode	ScrollMoreKillHover
+0x8160a3a0	unicode	EndNormalSelCheckKillHover
+0x8160a3d8	unicode	NormalSelCheckKillHover
+0x8160a408	unicode	EndNormalSelKillHover
+0x8160a434	unicode	NormalSelKillHover
+0x8160a45c	unicode	EndFocusCheckKillHover
+0x8160a48c	unicode	FocusCheckKillHover
+0x8160a4b4	unicode	EndNormalCheckKillHover
+0x8160a4e4	unicode	NormalCheckKillHover
+0x8160a510	unicode	EndFocusKillHover
+0x8160a534	unicode	FocusKillHover
+0x8160a554	unicode	EndNormalKillHover
+0x8160a57c	unicode	NormalKillHover
+0x8160a59c	unicode	EndKillFocus
+0x8160a5b8	unicode	EndPressDisable
+0x8160a5d8	unicode	PressDisable
+0x8160a5f4	unicode	EndInitFocusCheckDisable
+0x8160a628	unicode	InitFocusCheckDisable
+0x8160a654	unicode	EndInitFocusCheck
+0x8160a678	unicode	InitFocusCheck
+0x8160a698	unicode	EndInitFocusDisable
+0x8160a6c0	unicode	InitFocusDisable
+0x8160a6e4	unicode	EndInitFocus
+0x8160a700	unicode	InitFocus
+0x8160a714	unicode	EndScrollMoreDisable
+0x8160a740	unicode	ScrollMoreDisable
+0x8160a764	unicode	EndScrolling
+0x8160a780	unicode	Scrolling
+0x8160a794	unicode	EndScrollMore
+0x8160a7b0	unicode	ScrollMore
+0x8160a7c8	unicode	EndNormalSelCheckDisable
+0x8160a7fc	unicode	NormalSelCheckDisable
+0x8160a828	unicode	EndNormalSelDisable
+0x8160a850	unicode	NormalSelDisable
+0x8160a874	unicode	EndNormalSelCheck
+0x8160a898	unicode	NormalSelCheck
+0x8160a8b8	unicode	EndNormalSel
+0x8160a8d4	unicode	NormalSel
+0x8160a8e8	unicode	EndFocusCheckDisable
+0x8160a914	unicode	FocusCheckDisable
+0x8160a938	unicode	EndNormalCheckDisable
+0x8160a964	unicode	NormalCheckDisable
+0x8160a98c	unicode	EndFocusCheck
+0x8160a9a8	unicode	FocusCheck
+0x8160a9c0	unicode	EndNormalCheck
+0x8160a9e0	unicode	NormalCheck
+0x8160a9f8	unicode	EndNormalPress
+0x8160aa18	unicode	NormalPress
+0x8160aa30	unicode	EndPress
+0x8160aa44	unicode	Press
+0x8160aa50	unicode	EndFocusDisable
+0x8160aa70	unicode	FocusDisable
+0x8160aa8c	unicode	EndNormalDisable
+0x8160aab0	unicode	NormalDisable
+0x8160aacc	unicode	KillFocus
+0x8160aae0	unicode	EndFocus
+0x8160aaf4	unicode	Focus
+0x8160ab00	unicode	EndNormal
+0x8160ad7c	unicode	FocusHover
+0x8160ad94	unicode	NormalHover
+0x8160adac	unicode	EndNormalHover
+0x8160adcc	unicode	EndFocusHover
+0x8160adf0	unicode	[element][default]|MessageText|XuiEdit;[element][default]|Button0|XuiButton;[element]|Button1|XuiButton;[element]|Button2|XuiButton;[element]|Button3|XuiButton;[element]|Button4|XuiButton;
+0x8160af74	unicode	NormalCheckHover
+0x8160af98	unicode	EndNormalCheckHover
+0x8160afc0	unicode	FocusCheckHover
+0x8160afe0	unicode	EndFocusCheckHover
+0x8160b008	unicode	ScrollMoreHover
+0x8160b028	unicode	EndScrollMoreHover
+0x8160b050	unicode	SliderThumb
+0x8160b068	unicode	ScrollDown
+0x8160b080	unicode	ScrollUp
+0x8160b094	unicode	ScrollRight
+0x8160b0ac	unicode	ScrollLeft
+0x8160b0c4	unicode	Caret
+0x8160b0d8	unicode	Button
+0x8160b0e8	unicode	MessageText
+0x8160b100	unicode	XuiMessageBox 
+0x8160b12c	unicode	%uTo%u
+0x8160b13c	unicode	%uTo1
+0x8160b148	unicode	1To%u
+0x8160b154	unicode	%uTo%uEnd
+0x8160b184	unicode	ScrollBarThumb
+0x8160b1a4	unicode	ScrollBarBody
+0x8160b1c0	unicode	ProgressBody
+0x8160b1dc	unicode	ListItemGroup
+0x8160b230	unicode	EndTransTo
+0x8160b248	unicode	EndTransBackTo
+0x8160b268	unicode	EndTransBackFrom
+0x8160b28c	unicode	ScrollMax
+0x8160b2a0	unicode	ScrollMin
+0x8160b2b4	unicode	SliderBody
+0x8160b330	unicode	%s://%s
+0x8160b340	unicode	memory
+0x8160b350	unicode	file
+0x8160b35c	unicode	langpack://L.%s.%S.xzp
+0x8160b38c	unicode	section
+0x8160b39c	unicode	%s %s://%s#%s
+0x8160b424	unicode	XuiSoundXAudio
+0x8160b444	unicode	File
+0x8160b460	unicode	NormalSelHover
+0x8160b480	unicode	EndNormalSelHover
+0x8160b4a4	unicode	NormalSelCheckHover
+0x8160b4cc	unicode	EndNormalSelCheckHover
+0x8160b4fc	unicode	(unnamed)
+0x8160b510	unicode	ListWatermark
+0x8160b5a0	unicode	FadeOut
+0x8160b5b0	unicode	FadeIn
+0x8160b718	string	&apos;
+0x8160b720	string	&quot;
+0x8160b748	string	Windows Media
+0x8160b800	string	Response
+0x8160b80c	string	<Id>%d</Id><ConfirmationData>%s</ConfirmationData>
+0x8160b840	string	<Request>%s</Request>
+0x8160b858	string	Confirm
+0x8160b860	string	DoHandshake
+0x8160b86c	string	urn:schemas-microsoft-com:service:Handshake:1
+0x8160b8bb	string	8TotalMatches
+0x8160b8cc	string	UpdateID
+0x8160b8d8	string	NumberReturned
+0x8160b8e8	string	Result
+0x8160b8f0	string	<ContainerID>%s</ContainerID>\r\n<BrowseFlag>%s</BrowseFlag>\r\n<Filter>%s</Filter>\r\n<StartingIndex>%u</StartingIndex>\r\n<RequestedCount>%u</RequestedCount>\r\n<SortCriteria>%s</SortCriteria>\r\n
+0x8160b9b0	string	<ContainerID>%s</ContainerID>\r\n<SearchCriteria>%s</SearchCriteria>\r\n<Filter>%s</Filter>\r\n<StartingIndex>%u</StartingIndex>\r\n<RequestedCount>%u</RequestedCount>\r\n<SortCriteria>%s</SortCriteria>\r\n
+0x8160ba74	string	Browse
+0x8160ba7c	string	Search
+0x8160ba84	string	urn:schemas-microsoft-com:service:MSContentDirectory:1
+0x8160babc	string	urn:schemas-upnp-org:service:ContentDirectory:1
+0x8160bb0c	string	AlbumArtist
+0x8160bb18	string	Performer
+0x8160bb24	string	upnp:artist
+0x8160bb30	string	upnp:class
+0x8160bb3c	string	upnp:albumArtURI
+0x8160bb50	string	upnp:originalTrackNumber
+0x8160bb6c	string	upnp:actor
+0x8160bb90	string	duration
+0x8160bb9c	string	protocolInfo
+0x8160bbb4	string	bitrate
+0x8160bbbc	string	sampleFrequency
+0x8160bbcc	string	resolution
+0x8160bbd8	string	bitsPerSample
+0x8160bbe8	string	nrAudioChannels
+0x8160bbf8	string	protection
+0x8160bc04	string	microsoft:codec
+0x8160bc18	string	dc:title
+0x8160bc24	string	childCount
+0x8160bc30	string	container
+0x8160bc6c	string	uuid:%s
+0x8160c1a4	string	natal\altair\audios.bin
+0x8160c1bc	string	audios.bin
+0x8160c1c8	string	MicArrayCalibrate:\MicArrayCalibrate.data
+0x8160c1f4	string	MicArrayCalibrate:\MicArrayCalibrateLowLatency.data
+0x8160c228	string	MicArrayCalibrate
+0x8160c23c	string	MicArrayCalibrate.mec
+0x8160c2a0	string	NATALDEVICEPACKAGE
+0x8160c2b4	string	K:%02d:%02d:%02d:%02d:%02d.%02d.%04d.%02d:%12s
+0x8160c2e4	string	000000000000
+0x8160c2f4	string	natal\fwversions.txt
+0x8160c30c	string	fwversions.txt
+0x8160c31c	string	\System??\XamNatalDevicesDevkit:
+0x8160c39c	unicode	ControlPackVariablesScene
+0x8160c3d0	unicode	Sound
+0x8160c3dc	unicode	SoundEnd
+0x8160c3f0	unicode	ControlPackSimpleCursorScene
+0x8160c448	unicode	SingleHandleVisual
+0x8160c470	unicode	NuiBack
+0x8160c480	unicode	ControlPackNuiBack
+0x8160c4a8	unicode	AutoDisableHandle
+0x8160c4cc	unicode	NuiNotch
+0x8160c4e0	unicode	ControlPackNuiButton
+0x8160c50c	unicode	ControlPackNuiCheckbox
+0x8160c53c	unicode	ControlPackNuiRadioButton
+0x8160c570	unicode	NuiSideNav
+0x8160c588	unicode	ControlPackNuiSideNav
+0x8160c5b4	unicode	UseRightRail
+0x8160c5d0	unicode	UseLeftRail
+0x8160c5e8	unicode	XurPath
+0x8160c5f8	unicode	ControlPackNuiSwipeNav
+0x8160c628	unicode	IsLeftSide
+0x8160c640	unicode	ControlPackNuiTipsScene
+0x8160c670	unicode	NuiVScroll
+0x8160c688	unicode	ControlPackNuiVScroll
+0x8160c6bc	unicode	ControlPackSystemGesture
+0x8160c6f0	unicode	ControlPackNuiHoverButton
+0x8160c724	unicode	MagnetOffset
+0x8160c740	unicode	NuiApproachRadius
+0x8160c764	unicode	NuiSlowDetachRadius
+0x8160c78c	unicode	NuiSlowAttachRadius
+0x8160c7b4	unicode	NuiFastAttachRadius
+0x8160c7dc	unicode	Handedness
+0x8160c7fc	unicode	ControlPackNuiHoverChrome
+0x8160c830	unicode	ControlPackNuiHoverCheckbox
+0x8160c870	unicode	SoundButtonBack
+0x8160c890	unicode	SoundButtonSelect
+0x8160c8b4	unicode	SoundChannelUp
+0x8160c8d4	unicode	SoundChannelDown
+0x8160c8f8	unicode	SoundPanelLeft
+0x8160c918	unicode	SoundPanelRight
+0x8160c938	unicode	SoundPanelFold
+0x8160c958	unicode	SoundPanelUnfold
+0x8160c97c	unicode	SoundSkeletonEngage
+0x8160c9a4	unicode	SoundSkeletonDisengage
+0x8160c9d4	unicode	SoundPageRight
+0x8160c9f4	unicode	SoundPageLeft
+0x8160ca10	unicode	SoundHandleGrab1
+0x8160ca34	unicode	SoundWaveSuccess
+0x8160ca58	unicode	SoundHoverProgress
+0x8160caa8	unicode	controlpack://XamVariables.xur
+0x8160caf0	unicode	AttachEnd
+0x8160cb04	unicode	Attach
+0x8160cb14	unicode	ApproachEnd
+0x8160cb2c	unicode	Approach
+0x8160cb48	unicode	controlpack://../handles/XenonHandle.xur
+0x8160ccb0	string	QuadSize
+0x8160ce7c	string	Angle
+0x8160ce94	string	Mirror
+0x8160ceac	string	ProgressTexture
+0x8160cecc	string	ShadowTexture
+0x8160d0c8	unicode	..\handles\shadow.png
+0x8160d0f4	unicode	..\handles\hand_circle.png
+0x8160d12c	unicode	Cursor
+0x8160d13c	unicode	CursorR
+0x8160d14c	unicode	CursorL
+0x8160d1b4	unicode	Handle
+0x8160d208	unicode	WaveIndicatorGrp/WaveProgressBar
+0x8160d260	unicode	controlpack://../handles/VScrollHandle.xur
+0x8160d2f8	unicode	FadeOutEnd
+0x8160d310	unicode	FadeInEnd
+0x8160d324	unicode	NoArrowsToNeutral
+0x8160d348	unicode	NoArrowsToNeutralEnd
+0x8160d374	unicode	NeutralToGrab
+0x8160d390	unicode	NeutralToGrabEnd
+0x8160d3cc	unicode	Movement2SecondaryEnd
+0x8160d3f8	unicode	Movement2Secondary
+0x8160d420	unicode	Movement2PrimaryEnd
+0x8160d448	unicode	Movement2Primary
+0x8160d46c	unicode	Movement1SecondaryEnd
+0x8160d498	unicode	Movement1Secondary
+0x8160d4c0	unicode	Movement1PrimaryEnd
+0x8160d4e8	unicode	Movement1Primary
+0x8160d50c	unicode	SecondaryMovementEnd
+0x8160d538	unicode	SecondaryMovement
+0x8160d55c	unicode	MovementEnd
+0x8160d574	unicode	Movement
+0x8160d588	unicode	FadeEnd
+0x8160d598	unicode	GrabEnd
+0x8160d5a8	unicode	HoverEnd
+0x8160d5bc	unicode	NeutralEnd
+0x8160d5ec	unicode	Hover
+0x8160d5f8	unicode	Neutral
+0x8160d608	unicode	HandleGlow
+0x8160d620	unicode	HandleObject
+0x8160d63c	unicode	Track
+0x8160d650	unicode	AnalogArrows
+0x8160d670	unicode	controlpack://../handles/NuiButtonHandle.xur
+0x8160d6e0	unicode	controlpack://../handles/BackHandle.xur
+0x8160d754	unicode	_Track
+0x8160d768	unicode	controlpack://../handles/NuiSwipeNavRight.xur
+0x8160d7c8	unicode	controlpack://../handles/NuiSwipeNavLeft.xur
+0x8160d82c	unicode	Failure
+0x8160d83c	unicode	EndFailure
+0x8160d854	unicode	Success
+0x8160d864	unicode	EndSuccess
+0x8160d87c	unicode	Sustain
+0x8160d88c	unicode	EndSustain
+0x8160d8a4	unicode	Default
+0x8160d8b4	unicode	Activate
+0x8160d8c8	unicode	EndActivate
+0x8160d8e0	unicode	WaveIndicatorGrp/group
+0x8160d910	unicode	WaveIndicatorGrp
+0x8160d934	unicode	HideIcon
+0x8160d948	unicode	EndHideIcon
+0x8160d960	unicode	HideAll
+0x8160d970	unicode	EndHideAll
+0x8160d988	unicode	ShowIcon
+0x8160d99c	unicode	EndShowIcon
+0x8160d9b4	unicode	ShowAll
+0x8160d9c4	unicode	EndShowAll
+0x8160dbc8	string	NuiV1FaceLoRes
+0x8160dbd8	string	0.0343,0.0397,0.042,0.039,0.037,0.001
+0x8160dc00	string	NuiV1FaceHiRes
+0x8160dc10	string	0.038,0.0397,0.042,0.039,0.038,0.001
+0x8160dc38	string	NuiV1UpFaceLoRes
+0x8160dc4c	string	NuiV1UpFaceHiRes
+0x8160dc60	string	NuiIdCfgVer
+0x8160dcc0	string	LocalOnlySocketBlackList
+0x8160dcdc	string	LRC_ERROR
+0x8160dce8	string	LRC_SUMMARY
+0x8160dd54	string	Title
+0x8160dd5c	string	Cloud
+0x8160dd68	string	UDP-uni
+0x8160dd70	string	UDP-multi
+0x8160dd80	string	body{t:item,offset:0,size:104,loc:body}[?{t:item,offset:0,size:104,loc:dom}[Items{t:item,offset:4,size:100,loc:dom,max:25,itemsize:4,countoffset:0,countsize:4}[IsDefaultActivity{t:bool,offset:0,size:4,loc:dom}]]]
+0x8160de58	string	x-xbl-contract-version{t:wstr,offset:0,size:16,loc:hdr,max:8},x-xbl-client-type{t:wstr,offset:16,size:16,loc:hdr,max:8},x-xbl-client-version{t:wstr,offset:32,size:14,loc:hdr,max:7},x-xbl-device-type{t:wstr,offset:46,size:16,loc:hdr,max:8},locale{t:wstr,offset:62,size:14,loc:url,max:7},fields{t:wstr,offset:76,size:102,loc:qs,max:51},id{t:wstr,offset:178,size:100,loc:qs,max:50},desiredMediaItemTypes{t:wstr,offset:278,size:40,loc:qs,max:20},mediaItemType{t:wstr,offset:318,size:40,loc:qs,max:20}
+0x8160e04c	string	{LiveHive:SearchDataURL}/{locale}/browse
+0x8160e078	string	body{t:item,offset:0,size:102,loc:body}[?{t:item,offset:0,size:102,loc:dom}[Fields{t:wstr,offset:0,size:102,loc:dom,max:51}]]
+0x8160e0f8	string	x-xbl-contract-version{t:wstr,offset:0,size:16,loc:hdr,max:8},x-xbl-client-type{t:wstr,offset:16,size:16,loc:hdr,max:8},x-xbl-client-version{t:wstr,offset:32,size:14,loc:hdr,max:7},x-xbl-device-type{t:wstr,offset:46,size:16,loc:hdr,max:8},locale{t:wstr,offset:62,size:14,loc:url,max:7}
+0x8160e218	string	{LiveHive:SearchDataURL}/{locale}/fields?desired=hasLayers.hasActivities.isDefaultActivity.mediaItemType
+0x8160e288	string	body{t:item,offset:0,size:192,loc:body}[?{t:item,offset:0,size:192,loc:dom}[Items{t:item,offset:4,size:188,loc:dom,max:1,itemsize:188,countoffset:0,countsize:4}[HasLayers{t:bool,offset:0,size:4,loc:dom},HasActivities{t:bool,offset:4,size:4,loc:dom},MediaItemType{t:wstr,offset:8,size:40,loc:dom,max:20},MediaGroup{t:wstr,offset:48,size:40,loc:dom,max:20},ID{t:wstr,offset:88,size:100,loc:dom,max:50}]]]
+0x8160e420	string	x-xbl-contract-version{t:wstr,offset:0,size:16,loc:hdr,max:8},x-xbl-client-type{t:wstr,offset:16,size:16,loc:hdr,max:8},x-xbl-client-version{t:wstr,offset:32,size:14,loc:hdr,max:7},x-xbl-device-type{t:wstr,offset:46,size:16,loc:hdr,max:8},locale{t:wstr,offset:62,size:14,loc:url,max:7},fields{t:wstr,offset:76,size:102,loc:qs,max:51},idType{t:wstr,offset:178,size:26,loc:qs,max:13},ids{t:wstr,offset:204,size:22,loc:qs,max:11}
+0x8160e5cc	string	{LiveHive:SearchDataURL}/{locale}/details
+0x8160e5f8	string	xuid{t:xuid,offset:0,size:8,loc:url},body{t:item,offset:8,size:266,loc:body,enc:json}[?{t:item,offset:0,size:266,loc:dom}[titleId{t:uint,offset:0,size:4,loc:dom},mediaId{t:str,offset:8,size:256,loc:dom,max:256},titleBoxArt{t:str,offset:264,size:1,loc:dom,max:1},mediaAlbumBoxArt{t:str,offset:265,size:1,loc:dom,max:1}]]
+0x8160e738	string	{LiveHive:LiveServiceUrl.presence}/users/xuid({xuid})/presence/media
+0x8160e7d4	string	title:%x:
+0x8160e7e0	string	title:%x:%s
+0x8160e948	string	PLYT_MEM
+0x8160e954	string	PLYT_PERF
+0x8160e960	string	PLYT_REQ_ERROR
+0x8160e970	string	PLYT_ERROR
+0x8160e9d8	string	SetVolume
+0x8160e9e4	string	SetMute
+0x8160e9ec	string	SetNextAVTransportURI
+0x8160ea04	string	SetAVTransportURI
+0x8160ea18	string	Previous
+0x8160ea34	string	Pause
+0x8160ea4c	string	title:5848085B:PlayTo
+0x8160ea64	string	A_ARG_TYPE_ProtocolInfo
+0x8160ea7c	string	CurrentTrackMetaData
+0x8160ea94	string	CurrentTrackURI
+0x8160eaa4	string	NextAVTransportURIMetaData
+0x8160eac0	string	AVTransportURIMetaData
+0x8160ead8	string	NextAVTransportURI
+0x8160eaec	string	AVTransportURI
+0x8160eafc	string	NO_MEDIA_PRESENT
+0x8160eb10	string	TRANSITIONING
+0x8160eb20	string	PLAYING
+0x8160eb28	string	PAUSED_PLAYBACK
+0x8160eb38	string	STOPPED
+0x8160eb40	string	NumberOfTracks
+0x8160eb50	string	TransportState
+0x8160eb60	string	ERROR_OCCURRED
+0x8160eb74	string	TransportStatus
+0x8160eb84	string	Volume
+0x8160eb94	string	CurrentTrack
+0x8160eba4	string	%hu:%hu
+0x8160ebac	string	%hu:%hu:%hu
+0x8160ebb8	string	%hu:%hu.%lu
+0x8160ebc4	string	%hu:%hu:%hu.%lu
+0x8160ebd4	string	%hu:%hu.%hu/%hu
+0x8160ebe4	string	%hu:%hu:%hu.%hu/%hu
+0x8160ebf8	string	NOT_IMPLEMENTED
+0x8160ec10	string	AVTransport:1
+0x8160ec20	string	ConnectionManager:1
+0x8160ec34	string	RenderingControl:1
+0x8160ec48	string	MediaRenderer:1
+0x8160ec58	string	text/xml; charset="utf-8"
+0x8160ec74	string	%u:%02u:%02u.%03u
+0x8160ec88	string	ZuneLaunch
+0x8160ec94	string	Previous,
+0x8160eca0	string	Next,
+0x8160eca8	string	Seek,X_DLNA_SeekTime,
+0x8160ecc0	string	Pause,
+0x8160ecc8	string	Stop,
+0x8160ecd0	string	Play,
+0x8160ecd8	string	CurrentTransportActions
+0x8160ecf0	string	TransportPlaySpeed
+0x8160ed04	string	CurrentMediaDuration
+0x8160ed1c	string	CurrentTrackDuration
+0x8160ed34	string	RelativeTimePosition
+0x8160ed4c	string	Speed
+0x8160ed54	string	REL_TIME
+0x8160ed60	string	TRACK_NR
+0x8160ed6c	string	Target
+0x8160ed80	string	<?xml version="1.0"?>\r\n<scpd xmlns="urn:schemas-upnp-org:service-1-0"><specVersion><major>%d</major><minor>%d</minor></specVersion><actionList>%s</actionList><serviceStateTable>%s</serviceStateTable></scpd>\r\n
+0x8160ee54	string	SubscriptionID
+0x8160ee64	string	CALLBACK
+0x8160ee74	string	upnp:event
+0x8160ee80	string	SERVER: %s\r\nSID: uuid:%s\r\nTimeout: Second-%d\r\nContent-Length: 0\r\n
+0x8160eec8	string	NOTIFY %*s HTTP/1.1\r\nHOST: %*s:%d\r\nContent-Type: text/xml; charset="utf-8"\r\nNT: upnp:event\r\nNTS: upnp:propchange\r\nSID: uuid:%s\r\nSEQ: %d\r\nContent-Length: %d\r\n\r\n%s\r\n
+0x8160ef70	string	<?xml version="1.0"?>\r\n<e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0">%s</e:propertyset>
+0x8160efd4	string	<e:property><%s>%s</%s></e:property>
+0x8160effc	string	<e:property><LastChange>%s</LastChange></e:property>
+0x8160f038	string	<Event xmlns="urn:schemas-upnp-org:metadata-1-0/%s/"><InstanceID val="0">%s</InstanceID></Event>
+0x8160f09c	string	Second-infinite
+0x8160f0ac	string	Infinite
+0x8160f0bc	string	CurrentURI
+0x8160f0c8	string	LastChange
+0x8160f0d4	string	XboxUpnp/0.1 UPnP/1.0 Xbox/2.0.14042.0
+0x8160f0fc	string	bin.base64
+0x8160f108	string	string
+0x8160f124	string	boolean
+0x8160f160	string	<stateVariable sendEvents="%s"><name>%s</name><dataType>%s</dataType>%s</stateVariable>
+0x8160f1b8	string	<stateVariable sendEvents="%s"><name>%s</name><dataType>%s</dataType>%s<allowedValueList>%s</allowedValueList></stateVariable>
+0x8160f238	string	<allowedValue>%s</allowedValue>
+0x8160f258	string	<defaultValue>%s</defaultValue>
+0x8160f278	string	<stateVariable sendEvents="%s"><name>%s</name><dataType>%s</dataType>%s<allowedValueRange><minimum>%s</minimum><maximum>%s</maximum><step>%s</step></allowedValueRange></stateVariable>
+0x8160f330	string	<%s val="%s"/>
+0x8160f340	string	The specified instanceID is invalid
+0x8160f364	string	Invalid name
+0x8160f374	string	Invalid connection reference
+0x8160f394	string	Invalid InstanceID
+0x8160f3a8	string	Play speed not supported
+0x8160f3c4	string	Resource Not Found
+0x8160f3d8	string	Content 'BUSY'
+0x8160f3e8	string	Illegal MIME-type
+0x8160f3fc	string	Illegal seek target
+0x8160f410	string	Seek mode not supported
+0x8160f428	string	Transport is locked
+0x8160f43c	string	Format not supported for playback
+0x8160f460	string	Read error
+0x8160f46c	string	No contents
+0x8160f478	string	Transition not available
+0x8160f494	string	Action failed
+0x8160f4a4	string	Invalid var
+0x8160f4b0	string	Invalid args
+0x8160f4c0	string	Invalid action
+0x8160f4d0	string	Internal Server Error
+0x8160f4e8	string	Precondition failed
+0x8160f4fc	string	Bad Request
+0x8160f508	string	Content-Language: en-US\r\n
+0x8160f528	string	HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/xml; charset="utf-8"\r\nConnection: close\r\nContent-Length: %d\r\nEXT:\r\nSERVER: %s\r\nDATE: %s\r\n\r\n%s\r\n
+0x8160f5c0	string	HTTP/1.1 %d %s\r\nContent-Type: %s\r\nConnection: close\r\nContent-Length: %d\r\nEXT:\r\nSERVER: %s\r\nDATE: %s\r\n%s\r\n%s\r\n
+0x8160f630	string	HTTP/1.1 %d %s\r\nDATE: %s\r\nConnection: close\r\n%s\r\n
+0x8160f668	string	HTTP/1.1 200 OK\r\nContent-Type: image/%s\r\nConnection: close\r\nContent-Length: %d\r\n\r\n
+0x8160f6bc	string	%3s, %02d %3s %d %02d:%02d:%02d GMT
+0x8160f6e0	string	playtoimages
+0x8160f700	string	xbox360large.png
+0x8160f72c	string	xbox360large.jpeg
+0x8160f760	string	NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nNT: %s\r\nNTS: ssdp:alive\r\nLOCATION: http://%u.%u.%u.%u:%u/\r\nUSN: %s\r\nCACHE-CONTROL: max-age=1800\r\nSERVER: %s\r\nCONSOLENAME.XBOX.COM: %s\r\nDATE: %s\r\n\r\n
+0x8160f824	string	"ssdp:discover"
+0x8160f834	string	M-SEARCH
+0x8160f840	string	NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nNT: %s\r\nNTS: ssdp:byebye\r\nUSN: %s\r\nDATE: %s\r\n\r\n
+0x8160f8a0	string	HTTP/1.1 200 OK\r\nLOCATION: http://%u.%u.%u.%u:%u/\r\nEXT:\r\nUSN: %s\r\nSERVER: %s\r\nCACHE-CONTROL: max-age=1800\r\nST: %s\r\nCONSOLENAME.XBOX.COM: %s\r\nDATE: %s\r\nContent-Length: 0\r\n\r\n
+0x8160f950	string	<service><serviceType>urn:schemas-upnp-org:service:%s</serviceType><serviceId>urn:upnp-org:serviceId:%s</serviceId><controlURL>%s</controlURL><eventSubURL>%s</eventSubURL><SCPDURL>%s</SCPDURL></service>
+0x8160fa1c	string	upnp:rootdevice
+0x8160fa2c	string	uuid:%s::upnp:rootdevice
+0x8160fa48	string	<?xml version="1.0"?>\r\n<root xmlns="urn:schemas-upnp-org:device-1-0" xmlns:ms=" urn:microsoft-com:wmc-1-0" xmlns:microsoft="urn:schemas-microsoft-com:WMPNSS-1-0">\r\n<specVersion><major>%u</major><minor>%u</minor></specVersion><device ms:X_MS_SupportsWMDRM="true"><deviceType>urn:schemas-upnp-org:device:%s</deviceType><pnpx:X_deviceCategory xmlns:pnpx="http://schemas.microsoft.com/windows/pnpx/2005/11">Gaming</pnpx:X_deviceCategory><pnpx:X_hardwareId xmlns:pnpx="http://schemas.microsoft.com/windows/pnpx/2005/11">VEN_0125&amp;DEV_0001&amp;REV_0001 VEN_0125&amp;DEV_0001</pnpx:X_hardwareId><manufacturer>%s</manufacturer><manufacturerURL>%s</manufacturerURL><modelName>%s</modelName><modelNumber>%s</modelNumber><modelDescription>%s</modelDescription><modelURL>%s</modelURL><friendlyName>%s</friendlyName><microsoft:X_DeviceCaps>4754</microsoft:X_DeviceCaps><microsoft:HandshakeFlags>1</microsoft:HandshakeFlags><serialNumber>%s</serialNumber><UDN>uuid:%s</UDN><dlna:X_DLNADOC xmlns:dlna="urn:schemas-dlna-org:device-1-0">DMR-1.50</dlna:X_DLNADOC><serviceList>%s</serviceList><iconList><icon><mimetype>image/png</mimetype><width>48</width><height>48</height><depth>32</depth><url>/xbox360.png</url></icon><icon><mimetype>image/png</mimetype><width>120</width><height>120</height><depth>32</depth><url>/xbox360large.png</url></icon><icon><mimetype>image/jpeg</mimetype><width>48</width><height>48</height><depth>32</depth><url>/xbox360.jpeg</url></icon><icon><mimetype>image/jpeg</mimetype><width>120</width><height>120</height><depth>32</depth><url>/xbox360large.jpeg</url></icon></iconList></device></root>\r\n\r\n
+0x816100b0	string	urn:schemas-upnp-org:device:%s
+0x816100d0	string	urn:schemas-upnp-org:service:%s
+0x816100f0	string	uuid:%s::urn:schemas-upnp-org:device:%s
+0x81610118	string	uuid:%s::%s
+0x8161013c	string	/xbox360large.png
+0x81610160	string	/xbox360large.jpeg
+0x81610174	string	%c%c%c%c%c%c%c%c-%c%c%c%c-2000-0000-%02x%02x%02x%02x%02x%02x
+0x816101b4	string	urn:schemas-upnp-org:device:InternetGatewayDevice:1
+0x81610210	string	%s: %s
+0x81610228	string	<action><name>%s</name><argumentList>%s</argumentList></action>
+0x81610268	string	<argument><name>%s</name><direction>%s</direction><relatedStateVariable>%s</relatedStateVariable></argument>
+0x816102e8	string	  %s: %s
+0x816102f4	string	%s: %d params
+0x81610328	string	<?xml version="1.0"?>\r\n<s:Envelope s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">\r\n <s:Body>\r\n  <u:%sResponse xmlns:u="urn:schemas-upnp-org:service:%s">\r\n   %s\r\n  </u:%sResponse>\r\n </s:Body>\r\n</s:Envelope>\r\n
+0x81610440	string	<?xml version="1.0"?>\r\n<s:Envelope s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">\r\n <s:Body>\r\n  <s:Fault>\r\n   <faultcode>s:Client</faultcode>\r\n   <faultstring>UPnPError</faultstring>\r\n   <detail>\r\n    <UPnPError xmlns="urn:schemas-upnp-org:control-1-0">\r\n     <errorCode>%d</errorCode>\r\n     <errorDescription>%s</errorDescription>\r\n    </UPnPError>\r\n   </detail>\r\n  </s:Fault>\r\n </s:Body>\r\n</s:Envelope>\r\n
+0x81610638	string	UpnpNotifier:Send
+0x8161064c	string	ExpiredNotifier
+0x81610660	unicode	%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x
+0x816106c4	string	%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x
+0x81610cd0	string	WRN[D3D]: Blank region within stereoscopic 3D front buffer does not contain uniform pixel values. The blank region rect within the front buffer is [ %d %d %d %d ].\n
+0x81610ea0	string	VGT_DEBUG
+0x81610eac	string	PA_SU_DEBUG
+0x81610eb8	string	PA_SC_DEBUG
+0x81610ec4	string	RBBM DEBUG
+0x81610ed0	string	CP DEBUG
+0x81610edc	string	PTR_BUFF_STATUS 0xAc24
+0x81610ef4	string	PIX_TB_STATUS 0x9c24
+0x81610f0c	string	VTX_TB_STATUS 0x8C24
+0x81610f24	string	RB_DEBUG_0
+0x81610f30	string	TPC_CNTL_STATUS
+0x81610f40	string	TP3_CNTL_STATUS
+0x81610f50	string	TP2_CNTL_STATUS
+0x81610f60	string	TP1_CNTL_STATUS
+0x81610f70	string	TP0_CNTL_STATUS
+0x81610f80	string	TC_CNTL_STATUS
+0x81610f90	string	PA_SU_CNTL_STATUS
+0x81610fa4	string	PA_SC_CNTL_STATUS
+0x81610fb8	string	PA_CL_CNTL_STATUS
+0x81610fcc	string	VC_CNTL_STATUS
+0x81610fdc	string	VGT_CNTL_STATUS
+0x81610fec	string	CP_MEQ_STAT
+0x81610ff8	string	CP_MEQ_AVAIL
+0x81611008	string	CP_CSQ_IB2_STAT
+0x81611018	string	CP_CSQ_IB1_STAT
+0x81611028	string	CP_CSQ_RB_STAT
+0x81611038	string	CP_CSQ_AVAIL
+0x81611048	string	CP_DEBUG
+0x81611054	string	CP_STAT
+0x8161105c	string	CP_IB2_BUFSZ
+0x8161106c	string	CP_IB2_BASE
+0x81611078	string	CP_IB1_BUFSZ
+0x81611088	string	CP_IB1_BASE
+0x816110ac	string	CP_RB_BASE
+0x816110ec	string	%s 0x%02x: 
+0x81611104	string	RB_SIDEBAND_DATA[0]
+0x81611118	string	   %25s: 0x%08x\n
+0x81611130	string	CPU Synchronization
+0x81611144	string	   %25s: 0x%08x (
+0x81611158	string	RBBM_STATUS
+0x81611164	string	crashdump.pix2
+0x81611178	string	    command buffers with the D3DCREATECB_DEBUG_ALLOCATOR flag set and\n    build using instrumented or debug versions of the D3D library.\n
+0x81611208	string	\n    A likely potential reason for the hang is a bad growable command\n    allocator.  To rule out that possibility, try creating all growable\n
+0x81611298	string	        0x%x 0x%x\n
+0x816112b0	string	    Could the contents have become corrupted?  The list of indirect\n    buffer physical addresses and dword counts are as follows:\n
+0x81611338	string	    It was a growable command buffer with its D3DALLOCATECALLBACK routine\n    at address 0x%x and a callback context of 0x%x.\n
+0x816113b8	string	\n  o The GPU appears to have hung while executing the command buffer\n    represented by the D3DCommandBuffer structure at address 0x%x.\n
+0x81611444	string	    - Command buffer at 0x%08p, with PredicationSelect 0x%08x\n
+0x81611488	string	  o This async call object was fixed up to call %d D3DCommandBuffer(s):\n
+0x816114d8	string	\n  o The GPU appears to have hung while executing an asynchronous\n    command buffer call (D3DAsyncCommandBufferCall) at address 0x%08p\n
+0x81611568	string	\n  o The GPU appears to have hung while executing an asynchronous\n    command buffer set to the D3DCommandBuffer structure at address 0x%x.\n
+0x816115f8	string	\n  o The GPU appears to have hung while executing an asynchronous\n    command buffer which was patched to NULL.\n
+0x81611670	string	\nThe GPU state doesn't match any recognized hangs.  Please send a repro\nscenario to gameds@microsoft.com so that we can supply a workaround.\n
+0x81611700	string	\nIf your hang didn't occur for the above reason, please send a repro\nscenario to gameds@microsoft.com so that we can supply a workaround.\n
+0x81611790	string	\nNOTE: It is illegal for two textures to share a base address, but have\n    unique mip addresses, even if the textures are used in different draws.\n
+0x81611828	string	    the texture were created with Levels = 1, and MipAddress = 0.\n    Note that when Levels = 1, the mip address will be forced to 0.\n
+0x816118b0	string	\nNOTE: When using XGSetTextureHeader, please ensure all copies of the texture\n    either have a mip tail and were created with Levels != 1, or all copies of\n
+0x81611950	string	    1) allocate memory for the base level, and point BaseAddress to it, or\n    2) set BaseAddress equal to MipAddress, until you have allocated memory\n    for the base texture level.\n
+0x81611a08	string	\nNOTE: If you are setting a texture's BaseAddress to 0 because you have not yet\n    loaded the base level of the texture, you can work around this in two ways:\n
+0x81611ab0	string	  - Texture %d (context %d) has base addr 0x%08x, mip addr 0x%08x, (min %d, max %d), and\n    Texture %d (context %d) had base addr 0x%08x, mip addr 0x%08x, (min %d, max %d).\n
+0x81611b60	string	\nNOTE: The hang may have occurred because multiple texture constants had\n   unique MipAddress fields, but shared a common BaseAddress field.\n
+0x81611bf8	string	\n  - Texture %d (in context %d) had Stacked=1, but is not a 2D texture.\n
+0x81611c48	string	\n  - Texture %d (in context %d) has Dimension=1D and Tiled=true, which is illegal.\n
+0x81611ca0	string	\n  - Texture %d (in context %d) has an invalid combination of values in\n    Tiled, Dimension, and DataFormat fields.\n
+0x81611d18	string	\n  - Texture %d (in context %d) has an invalid DataFormat.
+0x81611d58	string	\n  - Texture %d (in context %d) is 1D, but has DataFormat=%d, which is illegal.\n
+0x81611dac	string	Collecting texture constants
+0x81611dcc	string	   Linking with d3d9d.lib may help catch this problem.\n
+0x81611e08	string	\nNOTE: The hang may have occurred because of a corrupted texture constant.\n
+0x81611e54	string	    a stack trace may point to the culprit.\n
+0x81611e88	string	    non-debug build is being used and a resource is being locked while\n    in a tiling, Z-pass or XPS bracket.  Since this is likely a software hang,\n
+0x81611f20	string	\nNOTE: The GPU appears to be running fine so the hang most likely occurred\n    because of a software problem.  Some possible causes are that a\n
+0x81611fb0	string	    If you hit this hang more than once we recommend using\n    D3DCREATE_CLIPPER_MODE_1 to implement a safe workaround which\n    comes at a slight clipper performance cost.\n
+0x81612060	string	\nNOTE: The hang may have occurred because of a known hardware bug\n    in the clipper.  The bug is timing dependent and very rare.\n
+0x816120e8	string	    on a draw call doesn't properly match the primitive type (e.g.,\n    by calling DrawVertices using D3DPT_TRILIST with a vertex\n    count of 4).\n
+0x81612180	string	\nNOTE: The hang may have occurred because a partial primitive was\n    rendered.  A partial primitive occurs when the vertex count\n
+0x81612208	string	It appears there is a deadlock on a NUI internal asynchronous\ncommand buffer lock. The Call involved (0x%p) hasn't been signaled.\n\n
+0x81612290	string	Please ensure the object is signaled via FixupAndSignal, preferably\nnot on the primary D3D thread.\n
+0x816122f8	string	It appears there is a deadlock on an asynchronous command buffer call.\nThe IDirect3DAsyncCommandBufferCall9 involved (0x%p) hasn't been signaled.\n
+0x81612390	string	It appears there is a deadlock on a NUI internal asynchronous lock.\nThe semaphore involved (0x%08x) hasn't been signaled.\n\n
+0x81612410	string	It appears there is a deadlock on an asynchronous command buffer.\nThe D3DASYNCCBBLOCK involved (0x%08x) hasn't been signaled via the\nSetAsyncCommandBuffer API.\n\n
+0x816124b8	string	It appears that there is a deadlock on an asynchronous resources block.\nThe D3DASYNCBLOCK involved hasn't been signaled via the\nSignalAsyncResources API.\n\n
+0x81612558	string	It appears that there is a deadlock on an asynchronous resources block.\nThe D3DASYNCBLOCK involved (0x%016I64x) hasn't been signaled via the\nSignalAsyncResources API.\n\n
+0x81612608	string	It appears that a callback routine invoked by InsertCallback never\nreturned.  The callback routine is at address 0x%x and was passed\na context value of 0x%x.\n\n
+0x816126a8	string	CPU fence 0x%x, GPU fence 0x%x\n\n
+0x816126cc	string	Device 0x%x, Snooped 0x%x, NonSnooped 0x%x,\n
+0x816126fc	string	D3D version %i.%i %s, kernel %i, frame %i,\n
+0x81612728	string	retail
+0x81612730	string	ERR[D3D]: The GPU is hung!\n\n
+0x81612750	string	Breaking into the debugger.  The GPU is hung and can't be recovered\nwithout doing a cold boot.\n
+0x816127b0	string	\nERR[D3D]: Try reproducing the hang with the debug or instrumented\n          versions of D3D (D3D9D.LIB or D3D9I.LIB) to capture a\n          crash-dump PIX file that can be sent to Xbox developer\n          support.\n\n
+0x81612890	string	+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n
+0x81613714	string	PIX!NO
+0x81613798	string	e:\xbperfview.cap
+0x816155e0	string	{EndCapture}
+0x816155f0	string	{BeginCapture}
+0x81615600	string	{EndCaptureFileCreation}
+0x8161561c	string	{BeginCaptureFileCreation}
+0x81615638	string	{LimitCaptureSize}
+0x8161564c	string	{Version}
+0x81615658	string	{Disconnect}
+0x81615668	string	{Connect}
+0x81615730	string	PIX!{CaptureEnded}
+0x8161574c	string	xbmovie
+0x81615754	string	%s 0x%08X
+0x81615760	string	PIX!{CaptureFileCreationEnded}
+0x81618010	string	XLFSULEND6
+0x81618024	string	XLFSULERR6
+0x81618030	string	XLFSSASERR6
+0x8161803c	string	XLFSSTSERR6
+0x81618144	string	</BlockList>
+0x81618154	string	</Latest>
+0x81618160	string	<Latest>
+0x8161816c	string	</Uncommitted>
+0x8161817c	string	<Uncommitted>
+0x8161818c	string	</Committed>
+0x8161819c	string	<Committed>
+0x816181a8	string	/UploadBegin.ashx
+0x816181bc	string	/UploadEnd.ashx
+0x816181d4	string	X-Authorization: XBL1.0 x=
+0x816181f0	string	x-ms-on-behalf-user-xuid: 0x
+0x81618210	string	x-ms-on-behalf-titleid: 0x
+0x8161822c	string	x-ms-transaction-id: 
+0x81618248	string	Content-MD5: 
+0x81618258	string	x-ms-blob-content-md5: 
+0x81618270	string	x-ms-version: 2009-09-19
+0x8161828c	string	x-ms-meta-blocksize: 
+0x816182a4	string	x-ms-meta-blockstart: 00000001
+0x816182c4	string	x-ms-meta-sessionkey: 
+0x816182dc	string	x-ms-meta-certserial: 
+0x816182f4	string	x-ms-meta-padding: None
+0x8161830c	string	x-ms-meta-titleid: 0x
+0x81618324	string	x-ms-xlfs-version: 
+0x81618338	string	x-ms-flow-token: 
+0x8161834c	string	x-ms-sg-nonce: 
+0x8161835c	string	/sts/GetSecurityToken.ashx
+0x81618378	string	?titleID=
+0x8161838c	string	&audience=http%3A%2F%2Fsts.xboxlive.com
+0x816183b4	string	<?xml version="1.0" encoding="utf-8"?>
+0x816183dc	string	<BlockList>
+0x816183ec	string	XlfsClientFD
+0x816183fc	string	XlfsEnabled
+0x81618408	string	XlfsBlockSize
+0x81618418	string	/UploadBegin.ashx
+0x8161842c	string	/UploadEnd.ashx
+0x81618444	string	/sts/GetSecurityToken.ashx
+0x81618460	string	?titleID=
+0x8161846c	string	&xuid1=
+0x81618474	string	&audience=http%3A%2F%2Fsts.xboxlive.com
+0x816184a4	string	%016I64X
+0x816184b0	string	NotOnOrAfter="
+0x81618528	string	X-Authorization: XBL1.0 x=
+0x81618544	string	x-ms-on-behalf-user-xuid: 0x
+0x81618564	string	x-ms-on-behalf-titleid: 0x
+0x81618580	string	x-ms-transaction-id: 
+0x8161859c	string	Content-MD5: 
+0x816185ac	string	x-ms-blob-content-md5: 
+0x816185c4	string	x-ms-version: 2009-09-19
+0x816185e0	string	x-ms-meta-blocksize: 
+0x816185f8	string	x-ms-meta-blockstart: 00000001
+0x81618618	string	x-ms-meta-sessionkey: 
+0x81618630	string	x-ms-meta-certserial: 
+0x81618648	string	x-ms-meta-padding: None
+0x81618660	string	x-ms-meta-xuid0: 0x
+0x81618674	string	x-ms-meta-xuid1: 0x
+0x81618688	string	x-ms-meta-xuid2: 0x
+0x8161869c	string	x-ms-meta-xuid3: 0x
+0x816186b0	string	x-ms-meta-titleid: 0x
+0x816186c8	string	x-ms-xlfs-version: 
+0x816186dc	string	x-ms-flow-token: 
+0x816186f0	string	x-ms-sg-nonce: 
+0x81618723	string	Lx-ms-transaction-id
+0x81618738	string	x-ms-request-id
+0x81618748	string	Location
+0x81618758	string	<?xml version="1.0" encoding="utf-8"?>
+0x81618780	string	<BlockList>
+0x81618794	string	block
+0x8161879c	string	blocklist
+0x816187a8	string	&blockid
+0x816187b4	string	&timeout
+0x81618848	string	default.xbe
+0x81618854	string	%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x
+0x8161887c	string	%0.8x-%0.4x-%0.4x-%0.2x%0.2x-%0.2x%0.2x%0.2x%0.2x%0.2x%0.2x
+0x81618934	string	Media Index
+0x81618ad0	string	dc:title,res,res@protection,res@duration,res@bitrate
+0x81618b08	string	dc:title,res,res@protection,res@duration,res@sampleFrequency,res@bitsPerSample,res@bitrate,res@nrAudioChannels
+0x81618b78	string	dc:title,upnp:artist
+0x81618b90	string	dc:title,res,res@protection,res@duration,res@bitrate,upnp:genre,upnp:actor,res@microsoft:codec
+0x81618bf0	string	dc:title,res,res@resolution
+0x81618c10	string	dc:title,res,res@protection,res@duration,res@sampleFrequency,res@bitsPerSample,res@bitrate,res@nrAudioChannels,upnp:artist,upnp:artist@role,upnp:genre,upnp:album
+0x81618cb4	string	-microsoft:sourceURL,+dc:title
+0x81618cd4	string	-@parentID,+dc:title
+0x81618cec	string	-upnp:class,+dc:title
+0x81618d04	string	-dc:date
+0x81618d10	string	-upnp:actor
+0x81618d1c	string	-upnp:genre
+0x81618d28	string	-upnp:artist@role = "AlbumArtist"
+0x81618d4c	string	-upnp:artist@role = "Performer"
+0x81618d6c	string	-upnp:album
+0x81618d78	string	-upnp:album,+upnp:originalTrackNumber
+0x81618da0	string	-upnp:originalTrackNumber
+0x81618dbc	string	-dc:title
+0x81618dc8	string	+microsoft:sourceURL,+dc:title
+0x81618de8	string	+@parentID,+dc:title
+0x81618e00	string	+upnp:class,+dc:title
+0x81618e18	string	+dc:date
+0x81618e24	string	+upnp:actor
+0x81618e30	string	+upnp:genre
+0x81618e3c	string	+upnp:artist@role = "AlbumArtist"
+0x81618e60	string	+upnp:artist@role = "Performer"
+0x81618e80	string	+upnp:album
+0x81618e8c	string	+upnp:album,+upnp:originalTrackNumber
+0x81618eb4	string	+upnp:originalTrackNumber
+0x81618ed0	string	+dc:title
+0x81618ee0	string	((res@protocolInfo contains "video/x-ms-wmv") or (res@protocolInfo contains "video/mp4") or (res@protocolInfo contains "video/quicktime"))
+0x81618f6c	string	(upnp:artist %s "%s")
+0x81618fc0	string	%s and %s
+0x81618fcc	string	(@id = "%s")
+0x81618fdc	string	contains
+0x81618fe8	string	derivedfrom
+0x81618ff8	string	(upnp:class %s "%s")
+0x81619010	string	BrowseDirectChildren
+0x81619044	string	object.item.audioItem
+0x8161905c	string	object.container.album.musicAlbum
+0x81619080	string	object.container.person.musicArtist
+0x816190a4	string	object.container.genre.musicGenre
+0x816190c8	string	object.container.playlistContainer
+0x816190ec	string	object.item.imageItem.photo
+0x81619108	string	object.container.album.photoAlbum
+0x8161912c	string	object.container.album.photoAlbum.dateTaken
+0x81619158	string	object.item.videoItem
+0x81619170	string	object.item.videoItem.videoBroadcast
+0x81619198	string	object.container.person.movieActor
+0x816191bc	string	object.container.genre.movieGenre
+0x816191e0	string	object.container.StorageFolder
+0x816192e0	string	http-get
+0x816192ec	string	Microsoft WM DRM
+0x81619310	string	DLNA.ORG_CI
+0x8161931c	string	DLNA.ORG_OP
+0x81619338	string	JPEG_MED
+0x81619358	string	WMDRM_WMABASE
+0x81619368	string	WMDRM_WMAFULL
+0x81619378	string	WMDRM_WMAPRO
+0x81619388	string	WMDRM_WMALSL
+0x81619398	string	WMABASE
+0x816193c8	string	audio/mpeg
+0x816193d4	string	audio/wav
+0x816193e0	string	audio/x-ms-wma
+0x81619408	string	audio/mp3
+0x81619420	string	video/mpeg
+0x81619438	string	video/quicktime
+0x81619448	string	video/x-ms-wmv
+0x81619458	string	video/x-ms-dvr
+0x81619468	string	video/x-ms-asf
+0x81619478	string	video/avi
+0x81619484	string	image/jpeg
+0x81619490	string	image/gif
+0x8161949c	string	image/png
+0x816194a8	string	image/bmp
+0x816194b4	string	image/tiff
+0x816194c0	string	image/x-ycbcr-yuv420
+0x816194d8	string	%s?%s
+0x816194e4	string	%s?albumArt=true
+0x816194f8	string	%s?%s=%s,%s=%u,%s=%u
+0x81619510	string	%s?%s=%s,%ux%u,%s=%s,%s=%u:%u,%s=%u,%s=%u,%s=%u
+0x81619540	string	format
+0x81619548	string	formatID
+0x81619554	string	thumbnail
+0x81619560	string	aspectRatio
+0x8161956c	string	width
+0x81619574	string	height
+0x8161957c	string	rFill
+0x81619584	string	gFill
+0x8161958c	string	bFill
+0x8161959c	string	False
+0x816195f8	string	%u:%2u:%2u.%u
+0x81619698	string	Xenon
+0x816196a0	unicode	DCIM
+0x816197d4	string	mtp://
+0x816197dc	string	some mtp device
+0x816197f0	string	some data cd
+0x816198f0	unicode	Unknown Genre
+0x81619910	unicode	Unknown Album %04d/%02d/%02d %02d:%02d:%02d
+0x81619968	unicode	Unknown Artist
+0x81619988	unicode	Track %02d
+0x81619a88	unicode	OUT_PAD:128
+0x81619aa0	unicode	Gateway MP3 Photo Jukebox
+0x81619adc	unicode	Canon
+0x81619ae8	unicode	PENTAX
+0x81619af8	unicode	CASIO
+0x81619b10	unicode	Sony Digital Still Camera
+0x81619b44	unicode	Sony Corporation
+0x81619b68	unicode	microsoft.com/MTPZ
+0x81619b90	unicode	Videos
+0x81619ba0	unicode	Pictures
+0x81619bb4	unicode	Podcasts
+0x81619bc8	unicode	Playlists
+0x81619bdc	unicode	Music
+0x81619c30	unicode	iPod_Control\Music\
+0x81619c58	string	iPod_Control\iTunes\iTunesDB
+0x81619da0	string	MtpStream: Spooling data for offset %d success! Current buffer offsets = %d to %d\n
+0x81619df8	string	MtpStream: Spooling data for offset %d. Current buffer offsets = %d to %d\n
+0x81619e48	string	MtpStream: Desired file offset of %d is not within read buffer so spooling\n
+0x8161a0b0	string	\Device\Harddisk0\Partition1\mindex\media\
+0x8161a0dc	string	\Device\Harddisk0\Partition1\mindex\mindex.xmi
+0x8161a10c	string	\Device\Harddisk0\Partition1\mindex\
+0x8161a29c	unicode	Sample Playlist
+0x8161a2bc	unicode	Sample Album
+0x8161a2d8	unicode	Sample Artist
+0x8161a2f4	unicode	Sample Genre
+0x8161a310	unicode	Sample Song %lu
+0x8161a33b	string	l\Device\Harddisk0\Partition1\DEVKIT\Music1.wma
+0x8161a36c	string	\Device\Harddisk0\Partition1\DEVKIT\Music2.wma
+0x8161a3c4	string	%hs%4.4lX\%4.4lX
+0x81625730	string	/fwlink/?linkid=47952&clcid=0x409&system=xbox&locale=0x%x&geoid=na&version=%s&userlocale=na&
+0x81625790	string	go.microsoft.com
+0x816257a4	string	Xenon WMIS/2.0.17559.0
+0x816257bc	string	METADATA
+0x816259b4	string	Backoff
+0x816259bc	string	track
+0x816259c4	string	MDR-CD
+0x816259d4	string	trackPerformer
+0x816259e4	string	trackNumber
+0x816259f0	string	trackTitle
+0x816259fc	string	genre
+0x81625a04	string	albumArtist
+0x81625a10	string	albumTitle
+0x81625a1d	string	World
+0x81625a25	string	Vocal
+0x81625a2c	string	\tSymphonic
+0x81625a38	string	\nSoundtrack
+0x81625a4c	string	\tReligious
+0x81625a59	string	Reggae
+0x81625a60	string	\rRap & Hip-Hop
+0x81625a70	string	\nOrchestral
+0x81625a7d	string	Opera
+0x81625a85	string	New Age
+0x81625a90	string	\rMiscellaneous
+0x81625aa1	string	Latin
+0x81625aa9	string	Keyboard
+0x81625abd	string	General
+0x81625ad1	string	Electronica & Dance
+0x81625ae9	string	Easy Listening
+0x81625af9	string	Country
+0x81625b05	string	Concerto
+0x81625b10	string	\tClassical
+0x81625b1c	string	\nChildren's
+0x81625b29	string	Chamber
+0x81625b35	string	Blues
+0x81625b3d	string	Avant-Garde
+0x81625b50	string	\Device\Harddisk0\SystemPartition\Tdbx\Tdbx.db
+0x81625c48	string	_XWmdrmCreateCertificate has unexpected reply structure layout!\n
+0x81625c90	string	_XWmdrmCreateCertificate returned a certificate that doesn't match our keys!\n
+0x81625ce0	string	Failed to get device certificate from Live! (error: 0x%08X)\n
+0x81625dbe	string	9Nglobal.secstate
+0x81625eab	unicode	CollaborativePlay
+0x81625ef8	string	version
+0x81625f04	string	encrypted
+0x81625f10	string	LICENSE
+0x81625f1c	string	LICENSERESPONSE
+0x81625f30	string	FALSE
+0x81625f37	unicode	Begin
+0x81625f4f	unicode	BeginDate
+0x81625f83	unicode	FirstUseDate
+0x81625fd3	unicode	BurnToCDCount
+0x81626003	unicode	BeginBurnToCDCount
+0x8162604b	unicode	DeliveryAck
+0x8162608f	unicode	machine.datetime <= #
+0x816260e7	unicode	DRMRESTOREINFO
+0x8162611b	unicode	version
+0x81626143	unicode	user_puid
+0x8162617b	unicode	media_instance_id
+0x816261bb	unicode	ENABLINGBITS
+0x816261eb	unicode	SYMSIGNATURE
+0x8162622b	unicode	VALUE
+0x8162624b	unicode	HASHALGORITHM
+0x816262b7	unicode	global.saveddatetime
+0x816262e7	unicode	secstate.global.saveddatetime > machine.datetime
+0x8162634f	unicode	secstate.global.saveddatetime = machine.datetime
+0x816263d3	unicode	DATA/SECURITYLEVEL
+0x81626417	unicode	DEVCERT
+0x8162644b	unicode	LAINFO
+0x81626463	unicode	CHECKSUM
+0x81626493	unicode	UPLINK
+0x816264b3	unicode	LICENSEREQUEST
+0x816264e3	unicode	V1CHALLENGE
+0x81626517	unicode	ACTIONLIST
+0x8162654f	unicode	MSDRM_SIGNATURE_VALUE
+0x8162658b	unicode	GROUP
+0x816265b3	unicode	AUTHORIZATION_ROOT
+0x816265fb	unicode	DATA/FEATURES/CLOCK
+0x8162665f	unicode	DATA/FEATURES/SECURECLOCK/PUBLICKEY
+0x816266d7	unicode	DATA/FEATURES/LICENSE_ACQ
+0x81626743	unicode	DATA/FEATURES/SYMMETRIC_OPT
+0x816267af	unicode	DATA/LIMITS/MAXCHAINDEPTH
+0x8162681b	unicode	DATA/LIMITS/MAXHEADERSIZE
+0x8162686b	unicode	CLIENTINFO
+0x81626897	unicode	CLIENTVERSION
+0x816268cb	unicode	SUBJECTID1
+0x816268fb	unicode	DRMKVERSION
+0x8162692f	unicode	LICENSE
+0x8162695b	unicode	LICENSORINFO/DATA
+0x8162698b	unicode	REVOCATION
+0x816269d4	string	SLKDATA
+0x816269df	unicode	REVINFOVERSION
+0x81626a13	unicode	PRIORITY
+0x81626a3b	unicode	CONTENTPUBKEY
+0x81626a77	unicode	ACTION/CDATA
+0x81626aaf	unicode	CHAINEDENABLINGBITS
+0x81626b1b	unicode	LICENSORINFO/CERTIFICATECHAIN
+0x81626b6f	unicode	LICENSORINFO/SIGNATURE/HASHALGORITHM
+0x81626bbf	unicode	LICENSORINFO/SIGNATURE/SIGNALGORITHM
+0x81626c47	unicode	LICENSORINFO/SYMSIGNATURE
+0x81626ca7	unicode	CHAINEDENABLINGBITS/UPLINK
+0x81626cfc	string	0.1.0.0
+0x81626d0f	unicode	value
+0x81626d2f	unicode	dateadd
+0x81626d63	unicode	datepart
+0x81626d97	unicode	deletelicense
+0x81626dc3	unicode	ONSELECT
+0x81626deb	unicode	ONSTORE
+0x81626e0f	unicode	ONCLOCKROLLBACK
+0x81626e47	unicode	machine.
+0x81626e67	unicode	secstate.
+0x81626e8f	unicode	content.
+0x81626eb3	unicode	pmlicense.
+0x81626edf	unicode	reason
+0x81626f13	unicode	datetime
+0x81626f33	unicode	minseclevel
+0x81626f5f	unicode	appseclevel
+0x81626f87	unicode	appsubjid
+0x81626fab	unicode	savedatetime
+0x81626fe3	unicode	drmreason
+0x81627014	string	CDATA[
+0x81627063	unicode	level
+0x816270a3	unicode	COMPRESSEDDIGITALVIDEO
+0x81627107	unicode	COMPRESSEDDIGITALAUDIO
+0x8162714f	unicode	EXTENSIONLIST
+0x8162791c	string	wmidtokid
+0x8162792c	string	securestore
+0x8162793c	string	meteringstore
+0x8162794c	string	deviceregstore
+0x8162795c	string	playlistburnstr
+0x81627970	string	LicStore
+0x8162798c	string	DRM_HDS_HASHKEY1DRM_HDS_HASHKEY2
+0x81627ad8	string	 5DM12345678901234567890
+0x81628bf8	unicode	urn:uuid:
+0x81628c0c	unicode	uid:uuid:
+0x81628c28	unicode	%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x
+0x81628c8c	string	%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x
+0x81628cc0	string	body{t:item,offset:0,size:105,loc:body,enc:json}[?{t:item,offset:0,size:105,loc:dom}[Ratings{t:item,offset:4,size:101,loc:dom,max:1,itemsize:101,countoffset:0,countsize:4}[MediaType{t:str,offset:0,size:32,loc:dom,max:32},MediaId{t:str,offset:32,size:37,loc:dom,max:37},Rating{t:str,offset:69,size:32,loc:dom,max:32}]]]
+0x81628e00	string	X-XBL-Contract-Version{t:int,offset:0,size:4,loc:hdr},xuid{t:xuid,offset:4,size:8,loc:url},Accept{t:str,offset:12,size:64,loc:hdr,max:64},MediaId{t:str,offset:76,size:37,loc:qs,max:37}
+0x81628ec0	string	X-XBL-Contract-Version{t:int,offset:0,size:4,loc:hdr},xuid{t:xuid,offset:4,size:8,loc:url},locale{t:str,offset:12,size:6,loc:qs,max:6},body{t:item,offset:18,size:101,loc:body,enc:json}[?{t:item,offset:0,size:101,loc:dom}[Feedback{t:item,offset:0,size:101,loc:dom}[MediaType{t:str,offset:0,size:32,loc:dom,max:32},MediaId{t:str,offset:32,size:37,loc:dom,max:37},FeedbackValue{t:str,offset:69,size:32,loc:dom,max:32}]]]
+0x81629068	string	{LiveHive:XboxMediaFeedbackUriRoot}/users/xuid({xuid})/feedback
+0x816290a8	string	X-XBL-Contract-Version{t:int,offset:0,size:4,loc:hdr},xuid{t:xuid,offset:4,size:8,loc:url},locale{t:str,offset:12,size:6,loc:qs,max:6},body{t:item,offset:18,size:105,loc:body,enc:json}[?{t:item,offset:0,size:105,loc:dom}[Ratings{t:item,offset:4,size:101,loc:dom,max:1,itemsize:101,countoffset:0,countsize:4}[MediaType{t:str,offset:0,size:32,loc:dom,max:32},MediaId{t:str,offset:32,size:37,loc:dom,max:37},Rating{t:str,offset:69,size:32,loc:dom,max:32}]]]
+0x81629270	string	{LiveHive:XboxMediaRatingsUriRoot}/users/xuid({xuid})/ratings
+0x816292cc	string	NotYetRated
+0x816292d8	string	application/json
+0x816292ec	string	Cache-Control: no-cache\r\n
+0x81629308	string	Xbox Live Client/2.0.17559.0
+0x81629350	unicode	sharedres://LiveProfile.xus
+0x81629388	unicode	sharedres://LiveAll.xus
+0x816293c4	unicode	klcc
+0x816293d0	unicode	diners
+0x816293e8	unicode	discover
+0x816293fc	unicode	amex
+0x81629408	unicode	mastercard
+0x81629420	unicode	visa
+0x8162942c	unicode	japanesekatakana
+0x81629450	unicode	japanesehiragana
+0x81629474	unicode	schfull
+0x81629484	unicode	latinextended
+0x816294a0	unicode	russionfull
+0x816294b8	unicode	tchfull
+0x816294c8	unicode	koreanfull
+0x816294e0	unicode	japanesefull
+0x816294fc	unicode	latinalphabet
+0x81629518	unicode	latinnumeric
+0x81629534	unicode	latinipaddress
+0x81629554	unicode	latinphone
+0x8162956c	unicode	latingamertag
+0x81629588	unicode	latinemail
+0x816295a0	unicode	latinfull
+0x816295b4	unicode	phone
+0x816295c0	unicode	contactemail
+0x816295dc	unicode	postalcode
+0x816295f4	unicode	city
+0x81629600	unicode	district
+0x81629614	unicode	street2
+0x81629624	unicode	street1
+0x81629634	unicode	none
+0x81629640	unicode	sharedres://ico_32x_ConsoleTypeWinPC.png
+0x81629698	unicode	sharedres://ico_32x_ConsoleTypeXenon.png
+0x816296f0	unicode	sharedres://ico_32x_ConsoleTypeXbox.png
+0x81629740	unicode	sharedres://secretAchievement.png
+0x81629788	unicode	sharedres://unearnedAchievement.png
+0x816297d0	unicode	sharedres://ico_32x_Zone_Underground.png
+0x81629828	unicode	sharedres://ico_32x_Zone_Family.png
+0x81629870	unicode	sharedres://ico_32x_Zone_Pro.png
+0x816298b8	unicode	sharedres://ico_32x_Zone_RR.png
+0x81629970	string	deviceselector.xex
+0x81629a30	unicode	TV-MA
+0x81629a3c	unicode	TV-14
+0x81629a48	unicode	TV-PG
+0x81629a54	unicode	TV-G
+0x81629a60	unicode	TV-Y7-FV
+0x81629a74	unicode	TV-Y7
+0x81629a80	unicode	TV-Y
+0x81629a90	unicode	NC-17
+0x81629aa0	unicode	PG-13
+0x81629ab0	unicode	EXPLICIT
+0x81629ac4	unicode	USTV
+0x81629ad0	unicode	MPAA
+0x81629e00	string	body{t:stream,offset:0,size:4,loc:body,enc:xml}
+0x81629e30	string	X-XBL-Contract-Version{t:int,offset:0,size:4,loc:hdr},xuid{t:xuid,offset:4,size:8,loc:url},title{t:uint,offset:12,size:4,loc:qs},maxItems{t:int,offset:16,size:4,loc:qs}
+0x81629ee0	string	{LiveHive:LiveServiceUrl.commerce}/users/xuid({xuid})/commerce/purchases
+0x81629f38	string	body{t:item,offset:0,size:516,loc:body}[?{t:item,offset:0,size:516,loc:dom}[notifications/properties{t:item,offset:4,size:512,loc:dom,max:8,itemsize:64,countoffset:0,countsize:4}[controlId{t:str,offset:0,size:32,loc:dom,max:32},controlValue{t:str,offset:32,size:32,loc:dom,max:32}]]]
+0x8162a058	string	body{t:item,offset:0,size:3908,loc:body}[?{t:item,offset:0,size:3908,loc:dom}[notifications{t:item,offset:4,size:3904,loc:dom,max:8,itemsize:488,countoffset:0,countsize:4}[targets{t:item,offset:4,size:96,loc:dom,max:4,itemsize:24,countoffset:0,countsize:4}[userType{t:str,offset:0,size:16,loc:dom,max:16},userId{t:xuid,offset:16,size:8,loc:dom}],sender{t:item,offset:100,size:24,loc:dom}[userType{t:str,offset:0,size:16,loc:dom,max:16},userId{t:xuid,offset:16,size:8,loc:dom}],properties{t:item,offset:124,size:364,loc:dom}[text{t:wstr,offset:0,size:160,loc:dom,max:80},icon{t:str,offset:160,size:16,loc:dom,max:16},priority{t:str,offset:176,size:16,loc:dom,max:16},uri{t:str,offset:196,size:32,loc:dom,max:32,opt:192},destinationData{t:str,offset:228,size:128,loc:dom,max:128},BIIdentifierID{t:uint,offset:356,size:4,loc:dom},sameScreenToast{t:bool,offset:360,size:4,loc:dom}]]]]
+0x8162a3cc	string	CSTOASTBUG
+0x8162a3d8	string	CSTOASTNAV
+0x8162a3e4	string	LIVEDISC
+0x8162a3f0	string	API_FailS32
+0x8162a3fc	string	API_FailS31
+0x8162a408	string	API_FailS30
+0x8162a414	string	API_FailS29
+0x8162a420	string	API_FailS28
+0x8162a42c	string	API_FailS27
+0x8162a438	string	API_FailS26
+0x8162a444	string	API_FailS25
+0x8162a450	string	API_FailS24
+0x8162a45c	string	API_FailS23
+0x8162a468	string	API_FailS22
+0x8162a474	string	API_FailS21
+0x8162a480	string	API_FailS20
+0x8162a48c	string	API_FailS19
+0x8162a498	string	API_FailS18
+0x8162a4a4	string	API_FailS17
+0x8162a4b0	string	API_FailS16
+0x8162a4bc	string	API_FailS15
+0x8162a4c8	string	API_FailS14
+0x8162a4d4	string	API_FailS13
+0x8162a4e0	string	API_FailS12
+0x8162a4ec	string	API_FailS11
+0x8162a4f8	string	API_FailS10
+0x8162a504	string	API_FailS9
+0x8162a510	string	API_FailS8
+0x8162a51c	string	API_FailS7
+0x8162a528	string	API_FailS6
+0x8162a534	string	API_FailS5
+0x8162a540	string	API_FailS4
+0x8162a54c	string	API_FailS3
+0x8162a558	string	API_FailS2
+0x8162a564	string	API_FailS1
+0x8162a578	string	LIVEAPIFAIL
+0x8162a690	string	UpdateDelayMultiplier
+0x8162a6a8	string	LiveHivePollFrequencyInMinutes
+0x8162a6c8	string	WlidSvcTarget
+0x8162a7e7	string	pePublishReply
+0x8162a7f8	string	eQueryReply
+0x8162a804	string	eUnsubscribeReply
+0x8162a818	string	eSubscribeReply
+0x8162a828	string	eDisconnectReply
+0x8162a83c	string	eConnectReply
+0x8162a84c	string	eErrorReply
+0x8162a858	string	ePublish
+0x8162a864	string	eQuery
+0x8162a86c	string	eUnsubscribe
+0x8162a87c	string	eSubscribe
+0x8162a888	string	eDisconnect
+0x8162a894	string	eConnect
+0x8162a8a0	string	QMSG_STATE_COMPLETED
+0x8162a8b8	string	QMSG_STATE_RECEIVING
+0x8162a8d0	string	QMSG_STATE_WAITING_RESPONSE
+0x8162a8ec	string	QMSG_STATE_SENDING
+0x8162a900	string	QMSG_STATE_NOT_SENT
+0x8162a914	string	CSC_RECEIVE_DISCARD
+0x8162a928	string	CSC_RECEIVE_NOTIFICATION_OBJECT
+0x8162a948	string	CSC_RECEIVE_NOTIFICATION_HANDLER
+0x8162a96c	string	CSC_RECEIVE_NOTIFICATION_BASE_DATA_HEADER
+0x8162a998	string	CSC_RECEIVE_NOTIFICATION_HEADER
+0x8162a9b8	string	CSC_RECEIVE_NOTIFICATION
+0x8162a9d4	string	CSC_RECEIVE_QUERY_OBJECT
+0x8162a9f0	string	CSC_RECEIVE_QUERY_BASE_DATA_HEADER
+0x8162aa14	string	CSC_RECEIVE_QUERY_HEADER_NEXT
+0x8162aa34	string	CSC_RECEIVE_QUERY_HEADER
+0x8162aa50	string	CSC_RECEIVE_SUBSCRIBE_OBJECT
+0x8162aa70	string	CSC_RECEIVE_SUBSCRIBE_BASE_DATA_HEADER
+0x8162aa98	string	CSC_RECEIVE_SUBSCRIBE_HEADER_NEXT
+0x8162aabc	string	CSC_RECEIVE_SUBSCRIBE_HEADER
+0x8162aadc	string	CSC_RECEIVE_CONNECT_HEADER
+0x8162aaf8	string	CSC_RECEIVE_BASIC_REPLY
+0x8162ab10	string	CSC_RECEIVE_HEADER
+0x8162ab24	string	CSC_RECEIVE_READY
+0x8162ab38	string	CSC_SEND_WAITING_RESPONSE
+0x8162ab54	string	CSC_SEND_SENDING
+0x8162ab68	string	CSC_SEND_READY
+0x8162ab78	string	CSC_STATE_READY
+0x8162ab88	string	CSC_STATE_LOGGING_CHANGED
+0x8162aba4	string	CSC_STATE_LOGGING_FIRST
+0x8162abbc	string	CSC_STATE_CONNECTING
+0x8162abd4	string	CSC_STATE_NOT_CONNECTED
+0x8162accc	string	preferplayer
+0x8162acdc	string	kinect
+0x8162ace4	string	invite
+0x8162acec	string	friend
+0x8162acf8	unicode	sharedres://ico_32x_beacons.png
+0x8162ad38	string	beacon
+0x8162ad40	string	avoidplayer
+0x8162ad4c	string	avataraward
+0x8162ad58	string	achievement
+0x8162ad99	string	RCXamTask
+0x8162ada4	string	Enable
+0x8162adac	string	Disable
+0x8162ade0	string	InProc
+0x8162adf4	string	titleId:
+0x8162ae7c	string	WiredataPublicKey
+0x8162ae90	string	WiredataKeyVersion
+0x8162aea4	string	X-Server
+0x8162aeb0	string	%sX-Schema-Ver: %u.%u\r\n
+0x8162b658	string	QosHistory
+0x8162b664	string	LiveBaseQosStatsConfig
+0x8162b688	string	//%s.%02x/u:%016I64x/%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x_%02x
+0x8162b71c	string	XCryptoProxy
+0x8162b72c	string	Webstore
+0x8162b738	string	UserAccount
+0x8162b744	string	Threading
+0x8162b750	string	Stats
+0x8162b758	string	RoutingConfigSvc
+0x8162b76c	string	Purchase
+0x8162b778	string	ProgressProxy
+0x8162b788	string	Privacy
+0x8162b790	string	Notification
+0x8162b7a4	string	Messaging
+0x8162b7b0	string	Fitness
+0x8162b7b8	string	FastFail
+0x8162b7c4	string	Common
+0x8162b7cc	string	Authentication
+0x8162b7dc	string	AsyncMultiplayerService
+0x8162b7f4	string	AsyncMatchWorker
+0x8162b808	string	AsyncMatchFrontend
+0x8162b81c	string	AgoraUserDataProxy
+0x8162b830	string	AgoraStringServerProxy
+0x8162b848	string	AgoraProfileProxy
+0x8162b85c	string	AgoraPresenceProxy
+0x8162b870	string	AgoraEventHandler
+0x8162b884	string	AgoraAggregation
+0x8162b898	string	AgoraUserData
+0x8162b8a8	string	FeedsFrontDoor
+0x8162b8b8	string	SavedGames
+0x8162b8c4	string	Devices
+0x8162b8cc	string	Progress
+0x8162b8d8	string	Profile
+0x8162b8e0	string	PaymentInstrument
+0x8162b8f4	string	SocialConnect
+0x8162b968	unicode	Title Content Progress cache
+0x8162b9a4	string	%s\Data%4.4lu
+0x8162b9b4	string	AsfResumeData
+0x8162b9c4	string	:\ResumeData
+0x8162b9d4	string	__tmp%08X
+0x8162b9e0	string	IF-UNMODIFIED-SINCE: %s, %02u %s %u %02u:%02u:%02u GMT\r\nRANGE: bytes=%I64u-\r\n
+0x8162ba30	string	\ResumeData
+0x8162ba88	string	tu%08x_%08x
+0x8162ba98	string	$package
+0x8162baa8	unicode	Package Download Progress cache
+0x8162bae8	unicode	Title Update Progress cache
+0x8162bb20	unicode	System Update Progress cache
+0x8162bb5c	unicode	//xestats/u:%016I64x/%08x/%08x
+0x8162bb9c	unicode	//title.%08x/t:%08x/%ls
+0x8162bbd0	unicode	//tuser.%08x/u:%016I64x/%08x/%ls
+0x8162bc14	string	accesstimes:\%0I64X\%08X
+0x8162bc30	string	accesstimes:\%0I64X\
+0x8162bc48	string	accesstimes
+0x8162bc54	string	InGameAccessTimes
+0x8162bc88	string	/xedl/chalresp/c%uv%u/xosc.xex
+0x8162bd25	string	 Sestoragedl
+0x8162bd34	string	\??\storagedl:\
+0x8162bd44	string	\System??\storagedl:\
+0x8162bd5c	string	%.16I64X%.16I64X
+0x8162bd70	string	$DummyCacheFile
+0x8162bd80	string	Block
+0x8162bd88	string	ValidateCert
+0x8162be68	string	BeginCompress
+0x8162be78	string	BeginSendData
+0x8162be88	string	LiveHive:
+0x8162be94	string	Content-Type: application/json\r\n
+0x8162beb8	string	Content-Type: application/xml\r\n
+0x8162bed8	string	Content-Type: application/octet-stream\r\nContent-Transfer-Encoding: binary\r\n
+0x8162bf28	string	Content-Type: audio/x-wav; codec="audio/pcm"; samplingrate=16000\r\n
+0x8162bf6c	string	Content-Type: audio/sirensr\r\n
+0x8162bf90	string	"; filename="
+0x8162bfa0	string	Content-Disposition: form-data; name="
+0x8162c030	string	Accept
+0x8162c040	string	Accept-Encoding: gzip\r\n
+0x8162c058	string	Content-Encoding: gzip\r\n
+0x8162c074	string	Transfer-Encoding: chunked\r\n
+0x8162c094	string	Authorization: XBL2.0 x=
+0x8162c0b0	string	Content-Type: multipart/form-data; boundary="+-+-+:?:(DK, EH, SM, JL 6/01/2011):?:+-+-+"\r\n
+0x8162c10c	string	Accept: application/json, application/xml, */*\r\n
+0x8162c144	string	X-Payload-
+0x8162c150	string	REQUEST
+0x8162c158	string	BeginGenerate
+0x8162c168	string	HEADERS
+0x8162c170	string	HTTP URL
+0x8162c17c	string	HTTP VERB
+0x8162c188	string	BeginRequest
+0x8162c198	string	BeingWaitForSendData
+0x8162c1c8	string	%c%02d%02d
+0x8162c1d4	string	%c%02d:%02d
+0x8162c1e4	string	%04d-%02d-%02dT%02d:%02d:%02d%s
+0x8162c204	string	%04d-%02d-%02dT%02d:%02d:%02d.%s
+0x8162c228	string	%04d-%02d-%02dT%02d:%02d:%02d.%d%s
+0x8162c24c	string	%04d-%02d-%02dT%02d:%02d:%02d.%03d%04dZ
+0x8162c2a4	string	false
+0x8162c330	string	text/javascript
+0x8162c344	string	Content-Type
+0x8162c35c	string	Content-Encoding
+0x8162c370	string	Transfer-Encoding
+0x8162c384	string	{"default":
+0x8162c390	string	BeginResponse
+0x8162c3a0	string	BeginDecompress
+0x8162c3b0	string	BeginReceive
+0x8162c3c0	string	RESPONSE
+0x8162c3cc	string	BeginParse
+0x8162c3d8	string	BeginWaitForRecvData
+0x8162c3f0	string	body{t:item,offset:0,size:9732,loc:body}[?{t:item,offset:0,size:9732,loc:dom}[XPassportPublicCertificate{t:str,offset:0,size:2560,loc:dom,max:2560},PassportPublicKey{t:item,offset:2560,size:7172,loc:dom}[LoginToken{t:str,offset:0,size:1024,loc:dom,max:1024},LoginTokenMessenger{t:str,offset:1024,size:1024,loc:dom,max:1024},Exponent{t:uint,offset:2048,size:4,loc:dom},Modulus{t:str,offset:2052,size:2560,loc:dom,max:2560},Digest{t:str,offset:4612,size:2560,loc:dom,max:2560}]]]
+0x8162c5d0	string	x-xbl-contract-version{t:uint,offset:0,size:4,loc:hdr}
+0x8162c608	string	{LiveHive:XboxXPassportUriRoot}/xpassport/PublicKeys
+0x8162c660	string	XPDbg
+0x8162c668	string	-----END CERTIFICATE-----
+0x8162c684	string	-----BEGIN CERTIFICATE-----
+0x8162c718	string	GUIDEDUCKING
+0x8162c7fc	string	AWARDAVATARERR
+0x8162c80c	string	WRITEACHERR
+0x8162c818	string	body{t:item,offset:0,size:258824,loc:body}[?{t:item,offset:0,size:258824,loc:dom}[pagingInfo/continuationToken{t:str,offset:4,size:256,loc:dom,max:256,opt:0},items{t:item,offset:264,size:258560,loc:dom,max:256,itemsize:1010,countoffset:260,countsize:4}[dwVal1{t:uint,offset:0,size:4,loc:dom},dwVal2{t:uint,offset:4,size:4,loc:dom},value{t:bin,offset:10,size:1000,loc:dom,max:1000,itemsize:1,countoffset:8,countsize:2,enc:base64}]]]
+0x8162c9c8	string	xuid{t:xuid,offset:0,size:8,loc:url},continuationToken{t:str,offset:12,size:256,loc:qs,max:256,opt:8},maxItems{t:uint,offset:268,size:4,loc:qs}
+0x8162ca58	string	testmockUri
+0x8162ca68	string	body{t:item,offset:0,size:1556,loc:body}[?{t:item,offset:0,size:1556,loc:dom}[pagingInfo/continuationToken{t:uint,offset:8,size:8,loc:dom,opt:4},pagingInfo/totalItems{t:uint,offset:16,size:4,loc:dom},items{t:item,offset:20,size:1536,loc:dom,max:32,itemsize:48,countoffset:0,countsize:4}[aggregate/totalSessions{t:uint,offset:0,size:4,loc:dom},aggregate/totalDurationInSeconds{t:uint,offset:4,size:4,loc:dom},aggregate/totalJoules{t:uint,offset:8,size:4,loc:dom},aggregate/weightedAverageMets{t:str,offset:12,size:16,loc:dom,max:16},aggregate/latestTime{t:datetime,offset:28,size:16,loc:dom},titleId{t:uint,offset:44,size:4,loc:dom}]]]
+0x8162cce8	string	{LiveHive:LiveServiceUrl.fitness}/activity/users/xuid({xuid})/fitness/aggregate/bytitle
+0x8162cd40	string	body{t:item,offset:0,size:1668,loc:body}[?{t:item,offset:0,size:1668,loc:dom}[items{t:item,offset:4,size:1664,loc:dom,max:32,itemsize:52,countoffset:0,countsize:4}[totalSessions{t:uint,offset:0,size:4,loc:dom},totalDurationInSeconds{t:uint,offset:4,size:4,loc:dom},totalJoules{t:uint,offset:8,size:4,loc:dom},weightedAvgMet{t:str,offset:12,size:16,loc:dom,max:16},source{t:uint,offset:28,size:4,loc:dom},latestTime{t:datetime,offset:32,size:16,loc:dom},titleId{t:uint,offset:48,size:4,loc:dom}]]]
+0x8162cf38	string	xuid{t:xuid,offset:0,size:8,loc:url},body{t:item,offset:8,size:1300,loc:body,enc:json}[?{t:item,offset:0,size:1300,loc:dom}[titleId{t:str,offset:0,size:16,loc:dom,max:16},timeRanges{t:item,offset:20,size:1280,loc:dom,max:32,itemsize:40,countoffset:16,countsize:4}[startTimeUtc{t:datetime,offset:4,size:16,loc:dom,opt:0},endTimeUtc{t:datetime,offset:24,size:16,loc:dom,opt:20}]]]
+0x8162d0b8	string	{LiveHive:LiveServiceUrl.fitness}/activity/users/xuid({xuid})/fitness/aggregate/bytimerange
+0x8162d118	string	xuid{t:xuid,offset:0,size:8,loc:url},body{t:item,offset:8,size:1540,loc:body,enc:json}[?{t:item,offset:0,size:1540,loc:dom}[items{t:item,offset:4,size:1536,loc:dom,max:32,itemsize:48,countoffset:0,countsize:4}[durationInSeconds{t:uint,offset:0,size:4,loc:dom},joules{t:uint,offset:4,size:4,loc:dom},mets{t:str,offset:8,size:16,loc:dom,max:16},source{t:uint,offset:24,size:4,loc:dom},timestamp{t:datetime,offset:28,size:16,loc:dom},titleId{t:uint,offset:44,size:4,loc:dom}]]]
+0x8162d2f8	string	body{t:item,offset:0,size:2068,loc:body}[?{t:item,offset:0,size:2068,loc:dom}[items{t:item,offset:4,size:2048,loc:dom,max:32,itemsize:64,countoffset:0,countsize:4}[durationInSeconds{t:uint,offset:0,size:4,loc:dom},joules{t:uint,offset:4,size:4,loc:dom},mets{t:str,offset:8,size:16,loc:dom,max:16},source{t:uint,offset:24,size:4,loc:dom},timestamp{t:datetime,offset:28,size:16,loc:dom},serverTimestamp{t:datetime,offset:44,size:16,loc:dom},titleId{t:uint,offset:60,size:4,loc:dom}],pagingInfo/continuationToken{t:uint,offset:2056,size:8,loc:dom,opt:2052},pagingInfo/totalItems{t:uint,offset:2064,size:4,loc:dom}]]
+0x8162d560	string	xuid{t:xuid,offset:0,size:8,loc:url},continuationToken{t:uint,offset:12,size:8,loc:qs,opt:8},titleId{t:uint,offset:24,size:4,loc:qs,opt:20},maxItems{t:uint,offset:28,size:4,loc:qs}
+0x8162d618	string	titleId{t:uint,offset:4,size:4,loc:url,opt:0},xuid{t:xuid,offset:8,size:8,loc:url}
+0x8162d670	string	{LiveHive:LiveServiceUrl.fitness}/activity/users/xuid({xuid})/fitness/sessions
+0x8162d6c0	string	body{t:item,offset:0,size:4,loc:body}[?{t:item,offset:0,size:4,loc:dom}[numberChanged{t:uint,offset:0,size:4,loc:dom}]]
+0x8162d738	string	xuid{t:xuid,offset:0,size:8,loc:url},body{t:item,offset:8,size:396,loc:body,enc:json}[?{t:item,offset:0,size:396,loc:dom}[items{t:item,offset:4,size:384,loc:dom,max:8,itemsize:48,countoffset:0,countsize:4}[heightInM{t:str,offset:0,size:16,loc:dom,max:16},weightInKg{t:str,offset:16,size:16,loc:dom,max:16},timestamp{t:datetime,offset:32,size:16,loc:dom}],settings{t:item,offset:388,size:8,loc:dom}[gender{t:uint,offset:0,size:4,loc:dom},yearOfBirth{t:uint,offset:4,size:4,loc:dom}]]]
+0x8162d920	string	body{t:item,offset:0,size:540,loc:body}[?{t:item,offset:0,size:540,loc:dom}[items/items{t:item,offset:4,size:512,loc:dom,max:8,itemsize:64,countoffset:0,countsize:4}[heightInM{t:str,offset:0,size:16,loc:dom,max:16},weightInKg{t:str,offset:16,size:16,loc:dom,max:16},timestamp{t:datetime,offset:32,size:16,loc:dom},serverTimestamp{t:datetime,offset:48,size:16,loc:dom}],items/pagingInfo/continuationToken{t:uint,offset:520,size:8,loc:dom,opt:516},items/pagingInfo/totalItems{t:uint,offset:528,size:4,loc:dom},settings/gender{t:uint,offset:532,size:4,loc:dom},settings/yearOfBirth{t:uint,offset:536,size:4,loc:dom}]]
+0x8162db88	string	xuid{t:xuid,offset:0,size:8,loc:url},continuationToken{t:uint,offset:12,size:8,loc:qs,opt:8},maxItems{t:uint,offset:20,size:4,loc:qs}
+0x8162dc10	string	{LiveHive:LiveServiceUrl.fitness}/users/xuid({xuid})/fitness
+0x8162dc50	string	body{t:item,offset:0,size:475420,loc:body}[?{t:item,offset:0,size:475420,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom},pagingInfo/continuationToken{t:str,offset:8,size:256,loc:dom,max:256,opt:4},version{t:datetime,offset:264,size:16,loc:dom},avatarAwards{t:item,offset:284,size:475136,loc:dom,max:16384,itemsize:29,countoffset:280,countsize:4}[titleId{t:uint,offset:0,size:4,loc:dom},id{t:uint,offset:4,size:4,loc:dom},bodyType{t:uint,offset:8,size:1,loc:dom},timeUnlocked{t:datetime,offset:9,size:16,loc:dom},flags{t:uint,offset:25,size:4,loc:dom}]]]
+0x8162dea8	string	{LiveHive:LiveServiceUrl.progress}/users/xuid({xuid})/avatar/awards
+0x8162def0	string	body{t:item,offset:0,size:539932,loc:body}[?{t:item,offset:0,size:539932,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom},pagingInfo/continuationToken{t:str,offset:8,size:256,loc:dom,max:256,opt:4},version{t:datetime,offset:264,size:16,loc:dom},avatarAwards{t:item,offset:284,size:539648,loc:dom,max:1024,itemsize:527,countoffset:280,countsize:4}[titleId{t:uint,offset:0,size:4,loc:dom},id{t:uint,offset:4,size:4,loc:dom},imageId{t:uint,offset:8,size:4,loc:dom},flags{t:uint,offset:12,size:4,loc:dom},assetId{t:str,offset:16,size:37,loc:dom,max:37},name{t:wstr,offset:53,size:66,loc:dom,max:33},description{t:wstr,offset:119,size:202,loc:dom,max:101},lockedDescription{t:wstr,offset:321,size:202,loc:dom,max:101},subCategory{t:uint,offset:523,size:4,loc:dom}]]]
+0x8162e218	string	{LiveHive:LiveServiceUrl.progress}/users/xuid({xuid})/avatar/titleawards
+0x8162e268	string	body{t:item,offset:0,size:459036,loc:body}[?{t:item,offset:0,size:459036,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom},pagingInfo/continuationToken{t:str,offset:8,size:256,loc:dom,max:256,opt:4},version{t:datetime,offset:264,size:16,loc:dom},achievements{t:item,offset:284,size:458752,loc:dom,max:16384,itemsize:28,countoffset:280,countsize:4}[titleId{t:uint,offset:0,size:4,loc:dom},id{t:uint,offset:4,size:4,loc:dom},timeUnlocked{t:datetime,offset:8,size:16,loc:dom},flags{t:uint,offset:24,size:4,loc:dom}]]]
+0x8162e498	string	{LiveHive:LiveServiceUrl.progress}/users/xuid({xuid})/achievements
+0x8162e4e0	string	body{t:item,offset:0,size:502044,loc:body}[?{t:item,offset:0,size:502044,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom},pagingInfo/continuationToken{t:str,offset:8,size:256,loc:dom,max:256,opt:4},version{t:datetime,offset:264,size:16,loc:dom},achievements{t:item,offset:284,size:501760,loc:dom,max:1024,itemsize:490,countoffset:280,countsize:4}[titleId{t:uint,offset:0,size:4,loc:dom},id{t:uint,offset:4,size:4,loc:dom},imageId{t:uint,offset:8,size:4,loc:dom},flags{t:uint,offset:12,size:4,loc:dom},gamerscore{t:uint,offset:16,size:4,loc:dom},name{t:wstr,offset:20,size:66,loc:dom,max:33},description{t:wstr,offset:86,size:202,loc:dom,max:101},lockedDescription{t:wstr,offset:288,size:202,loc:dom,max:101}]]]
+0x8162e7d8	string	{LiveHive:LiveServiceUrl.progress}/users/xuid({xuid})/titleachievements
+0x8162e820	string	body{t:item,offset:0,size:517408,loc:body}[?{t:item,offset:0,size:517408,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom},pagingInfo/continuationToken{t:str,offset:8,size:256,loc:dom,max:256,opt:4},pagingInfo/totalRecords{t:uint,offset:264,size:4,loc:dom},version{t:datetime,offset:268,size:16,loc:dom},settings{t:item,offset:288,size:517120,loc:dom,max:512,itemsize:1010,countoffset:284,countsize:4}[titleId{t:uint,offset:0,size:4,loc:dom},id{t:uint,offset:4,size:4,loc:dom},value{t:bin,offset:10,size:1000,loc:dom,max:1000,itemsize:1,countoffset:8,countsize:2,enc:base64}]]]
+0x8162ea90	string	xuid{t:xuid,offset:0,size:8,loc:url},continuationToken{t:str,offset:12,size:256,loc:qs,max:256,opt:8},maxItems{t:uint,offset:268,size:4,loc:qs},Accept-Language{t:str,offset:272,size:6,loc:hdr,max:6},titleFilter{t:str,offset:282,size:561,loc:qs,max:561,opt:278}
+0x8162eb98	string	{LiveHive:LiveServiceUrl.profile}/users/xuid({xuid})/profile/settings
+0x8162ebe0	string	body{t:item,offset:0,size:336160,loc:body}[?{t:item,offset:0,size:336160,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom},pagingInfo/continuationToken{t:str,offset:8,size:256,loc:dom,max:256,opt:4},pagingInfo/totalRecords{t:uint,offset:264,size:4,loc:dom},version{t:datetime,offset:268,size:16,loc:dom},titles{t:item,offset:288,size:335872,loc:dom,max:4096,itemsize:82,countoffset:284,countsize:4}[titleId{t:uint,offset:0,size:4,loc:dom},name{t:wstr,offset:4,size:46,loc:dom,max:23},lastPlayed{t:datetime,offset:50,size:16,loc:dom},currentGamerscore{t:uint,offset:66,size:4,loc:dom},totalGamerscore{t:uint,offset:70,size:4,loc:dom},currentAchievements{t:uint,offset:74,size:2,loc:dom},totalAchievements{t:uint,offset:76,size:2,loc:dom},sequence{t:uint,offset:78,size:4,loc:dom}]]]
+0x8162ef20	string	xuid{t:xuid,offset:0,size:8,loc:url},continuationToken{t:str,offset:12,size:256,loc:qs,max:256,opt:8},maxItems{t:uint,offset:268,size:4,loc:qs},Accept-Language{t:str,offset:272,size:6,loc:hdr,max:6},titleId{t:str,offset:282,size:561,loc:qs,max:561,opt:278}
+0x8162f028	string	{LiveHive:LiveServiceUrl.progress}/users/xuid({xuid})/history/titles
+0x8162f1c0	string	B&08<@..........!
+0x8162f284	string	%s\spa.bin
+0x8162f290	string	%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x.acp
+0x8162f2c8	string	%s %s Error (0x%08X) %s
+0x8162f2e0	string	Silent
+0x8162f2e8	string	Fatal
+0x8162f344	string	CXgi::CheckLogonPrerequisites
+0x8162f364	string	\System??\AvatarAwards%p
+0x8162f380	string	%s\AvatarAwards
+0x8162f4f8	string	xgiuser%08x
+0x8162f6d0	string	userpec%08x
+0x8162f6dc	string	SystemTimeToFileTime failed. Title = 0x%08X
+0x8162f708	string	SystemTimeToFileTime failed
+0x8162f724	string	XamTaskShouldExit
+0x8162f738	string	%s hr = 0x%08X
+0x8162f748	string	XProfileReadAllTitles failed
+0x8162f768	string	XProfileReadAllTitles
+0x8162f780	string	%s %s ...
+0x8162f78c	string	%s %s hr = 0x%08X
+0x8162f7a0	string	Invalid title id: 0x%08X
+0x8162f7bc	string	RecoverSingleTitleWorker failed. Title = 0x%08X
+0x8162f7ec	string	StringCchCopyA
+0x8162f7fc	string	GetLiveLegalLocale
+0x8162f810	string	RecoverSingleTitleWorker failed for global GPD
+0x8162f840	string	cbWorkspaceBuffer: 0x%08X is smaller than necessary: 0x%08X
+0x8162f87c	string	pbWorkspaceBuffer == NULL
+0x8162f898	string	pUserAvatarAwardsProgressData == NULL
+0x8162f8c0	string	pTitleAvatarAwardsProgressData == NULL
+0x8162f8e8	string	pUserAchievementsProgressData == NULL
+0x8162f910	string	pTitleAchievementsProgressData == NULL
+0x8162f938	string	pTitlesProgressData == NULL
+0x8162f954	string	%s ...
+0x8162f95c	string	UserTracker::RecoverAllTitles
+0x8162f97c	string	User is a guest
+0x8162f98c	string	User not logged into LIVE
+0x8162f9a8	string	UserTracker::RecoverAllProfileData
+0x8162f9cc	string	ProfileSyncIntervalInSeconds
+0x8162fa80	string	XProfileReadAllSettings failed
+0x8162faa0	string	XProfileReadAllSettings
+0x8162fab8	string	Invalid setting size: 0x%08X for setting id: 0x%08X for title id: 0x%08X
+0x8162fb04	string	OpenProfileFile failed. Title = 0x%08X
+0x8162fb2c	string	ReadSyncInfo failed. Title = 0x%08X
+0x8162fb50	string	WriteSyncInfo failed. Title = 0x%08X
+0x8162fb78	string	WriteSettingFromServerSetting failed. Title = 0x%08X Setting = 0x%08X
+0x8162fbc0	string	Invalid setting id: 0x%08X for title id: 0x%08X
+0x8162fbf0	string	Invalid setting type: 0x%02X for setting id: 0x%08X for title id: 0x%08X
+0x8162fc40	string	Invalid setting max size: 0x%08X for setting id: 0x%08X for title id: 0x%08X
+0x8162fc90	string	StringCchPrintfA
+0x8162fcac	string	pUserTracker->GetLiveLegalLocale
+0x8162fcd0	string	pProgressData == NULL
+0x8162fce8	string	pUserTracker == NULL
+0x8162fd00	string	SettingsTracker::RecoverAllSettings
+0x8162fd28	string	POST %s HTTP/1.0\r\nUser-Agent: %u/1.00.%04u\r\nContent-type: xon/%u\r\nContent-Length: %u\r\n\r\n
+0x8162fd84	string	X-Err: 
+0x8162fd8c	string	200 OK
+0x8162fd9f	string	{/XArb/TimeExtend.ashx
+0x8162fdb8	string	/XArb/ReportResult.ashx
+0x8162fdd0	string	tile_64.png
+0x8162fddc	string	tile_32.png
+0x8162fdf4	string	pp_32.png
+0x8162fe00	string	avtr_64.png
+0x8162fe0c	string	avtr_32.png
+0x8162fe20	unicode	64_fffe07d10002%04x0001%04x.png
+0x8162fe60	unicode	32_fffe07d10002%04x0001%04x.png
+0x8162fec4	string	.GamerPicture
+0x8162fed4	string	%08x%04x.GamerPicture
+0x8162feec	string	%s:\%d_%08x%08x%08x.png
+0x8162ff04	string	%s:\32_%08x%016I64x.png
+0x8162ff1c	string	%s:\64_%08x%016I64x.png
+0x8162ff34	string	xgirt%08x
+0x8162ff40	unicode	//global/t:%x/ach/0/%x
+0x8162ff70	unicode	//global/t:%x/icon/0/8000
+0x8162ffa4	unicode	//global/t:%x/tile/0/%x
+0x8162ffd4	string	%s:\32_%08x%08x%08x.png
+0x8162ffec	string	%s:\64_%08x%08x%08x.png
+0x8163001c	string	AvatarPictureUriRoot
+0x81630034	string	AvatarPictureUriPort
+0x8163004c	string	StoragePictureUriRoot
+0x81630064	string	StoragePictureUriPort
+0x8163007c	string	-body
+0x81630084	string	pic-l
+0x8163008c	string	pic-s
+0x81630094	unicode	%08x%08x%08x%08x%08x%08x
+0x816300c8	unicode	//pics/u:%016I64x/%08x/gamerpic.%x
+0x81630110	unicode	//avatar/u:%016I64x/avatar%hs.png
+0x81630154	string	%s&height=64&width=64
+0x8163016c	string	/global/t.%x/ach/0/%x
+0x81630184	string	/global/t.%x/icon/0/8000
+0x816301a0	string	/global/t.%x/tile/0/%x
+0x816301b8	string	/avatar/%ls/avatar%s.png
+0x816301d5	string	ttp://
+0x816301dc	unicode	%08x%08x%08x
+0x81630360	string	%s:\%08X.gpd
+0x81630384	string	pdwNumCollectablesCurrentTitle == NULL. Title = 0x%08X
+0x816303bc	string	pProfileFileGlobal == NULL. Title = 0x%08X
+0x816303e8	string	pProfileFile == NULL. Title = 0x%08X
+0x81630410	string	CollectableTracker::RecoverAllCollectablesFinishTitleGlobalDataWorker
+0x81630458	string	pCurrentTitle == NULL
+0x81630470	string	SetSyncTime failed. Title = 0x%08X
+0x81630494	string	ProcessRecoverContext failed. Title = 0x%08X
+0x816304c4	string	pftSyncTime == NULL. Title = 0x%08X
+0x816304e8	string	ppProfileFile == NULL. Title = 0x%08X
+0x81630510	string	*ppRecoverContext == NULL. Title = 0x%08X
+0x8163053c	string	ppRecoverContext == NULL. Title = 0x%08X
+0x81630568	string	pUserTracker == NULL. Title = 0x%08X
+0x81630590	string	CollectableTracker::RecoverAllCollectablesFinishTitleWorker
+0x816305cc	string	OpenProfileFile failed. New Title = 0x%08X
+0x816305f8	string	InitializeProfileFile failed. New Title = 0x%08X
+0x8163062c	string	AlwaysOpenProfileFile failed. New Title = 0x%08X
+0x81630660	string	GetRecoverContext failed. New Title = 0x%08X
+0x81630690	string	pftSyncTime == NULL. Old Title = 0x%08X New Title = 0x%08X
+0x816306d0	string	pdwNumCollectablesCurrentTitle == NULL. Old Title = 0x%08X New Title = 0x%08X
+0x81630720	string	ppProfileFile == NULL. Old Title = 0x%08X New Title = 0x%08X
+0x81630760	string	ppRecoverContext == NULL. Old Title = 0x%08X New Title = 0x%08X
+0x816307a0	string	pUserTracker == NULL. Old Title = 0x%08X New Title = 0x%08X
+0x816307dc	string	CollectableTracker::RecoverAllCollectablesWorker
+0x81630810	string	pCurrentTitle == NULL. New Title = 0x%08X
+0x8163083c	string	\Device\PEC_%08x
+0x8163086c	string	XProfileReadAllTitleAvatarAwards failed
+0x81630894	string	XProfileReadAllTitleAvatarAwards
+0x816308b8	string	Invalid sub category: 0x%08X for avatar award id: 0x%08X in title id: 0x%08X
+0x81630908	string	ParseStringToGUID failed. GUID = %s Title = 0x%08X Award = 0x%08X
+0x81630950	string	WriteCollectableFromRecovery failed. Title = 0x%08X Award = 0x%08X
+0x81630994	string	Invalid avatar award id: 0x%08X for title id: 0x%08X
+0x816309d0	string	Invalid image id: 0x%08X for avatar award id: 0x%08X in title id: 0x%08X
+0x81630a20	string	Detected earned avatar award (flags: 0x%08X) for avatar award id: 0x%08X in title id: 0x%08X
+0x81630a80	string	Detected earned online avatar award (flags: 0x%08X) for avatar award id: 0x%08X in title id: 0x%08X
+0x81630ae8	string	Detected platform (flags: 0x%08X) for avatar award id: 0x%08X in title id: 0x%08X
+0x81630b40	string	Empty title text for avatar award id: 0x%08X in title id: 0x%08X
+0x81630b88	string	Empty description text for avatar award id: 0x%08X in title id: 0x%08X
+0x81630bd0	string	AvatarAssetTracker::RecoverAllTitleCollectables
+0x81630c00	string	XProfileReadAllUserAvatarAwards failed
+0x81630c28	string	XProfileReadAllUserAvatarAwards
+0x81630c48	string	Invalid body mask: 0x%02X for avatar award id: 0x%08X in title id: 0x%08X
+0x81630c94	string	DeserializeRecord failed. Title = 0x%08X Award = 0x%08X
+0x81630ccc	string	cbDetailsUsed invalid value: %d. Title = 0x%08X Award = 0x%08X
+0x81630d0c	string	cbExtraUsed invalid value: %d. Title = 0x%08X Award = 0x%08X
+0x81630d4c	string	SystemTimeToFileTime failed. Title = 0x%08X Award = 0x%08X
+0x81630d88	string	AvatarAssetTracker::RecoverAllUserCollectables
+0x81630f50	string	AchievementTracker::RecoverAllCollectablesFinishTitleGlobalDataWorker
+0x81630f98	string	SetTitleListRecordInfo failed. Title = 0x%08X
+0x81630fc8	string	RecoverAllCollectablesFinishTitleGlobalDataWorker failed. Title = 0x%08X
+0x81631014	string	XProfileReadAllTitleAchievements failed
+0x8163103c	string	XProfileReadAllTitleAchievements
+0x81631060	string	Invalid image id: 0x%08X for achievement id: 0x%08X in title id: 0x%08X
+0x816310a8	string	Invalid type (flags: 0x%08X) for achievement id: 0x%08X in title id: 0x%08X
+0x816310f8	string	Detected earned achievement (flags: 0x%08X) for achievement id: 0x%08X in title id: 0x%08X
+0x81631158	string	Detected earned online achievement (flags: 0x%08X) for achievement id: 0x%08X in title id: 0x%08X
+0x816311c0	string	Detected platform (flags: 0x%08X) for achievement id: 0x%08X in title id: 0x%08X
+0x81631218	string	WriteCollectableFromRecovery failed. Title = 0x%08X Achievement = 0x%08X
+0x81631264	string	Invalid achievement id: 0x%08X for title id: 0x%08X
+0x81631298	string	Empty title text for achievement id: 0x%08X in title id: 0x%08X
+0x816312d8	string	Empty description text for achievement id: 0x%08X in title id: 0x%08X
+0x81631320	string	AchievementTracker::RecoverAllTitleCollectables
+0x81631350	string	XProfileReadAllUserAchievements failed
+0x81631378	string	XProfileReadAllUserAchievements
+0x81631398	string	DeserializeRecord failed. Title = 0x%08X Achievement = 0x%08X
+0x816313d8	string	cbDetailsUsed invalid value: %d. Title = 0x%08X Achievement = 0x%08X
+0x81631420	string	cbExtraUsed invalid value: %d. Title = 0x%08X Achievement = 0x%08X
+0x81631468	string	SystemTimeToFileTime failed. Title = 0x%08X Achievement = 0x%08X
+0x816314ac	string	AchievementTracker::RecoverAllUserCollectables
+0x816314dc	string	Sleeping for %d ms and retrying...
+0x81631500	string	Attempt %d failed
+0x81631c6c	string	%s:\%08X.fit
+0x81631fc8	unicode	http://www.xbox.com
+0x81631ff0	string	lld2sico
+0x81631ffc	string	lld2lico
+0x81632008	string	signaturekey
+0x81632018	string	Xbox Version=%d.%02d.%04d.%d Title=0x%08X TitleVersion=%d
+0x81632060	string	XBOX.COM
+0x8163206c	string	krbtgt
+0x81632074	string	%s@%s
+0x81632280	string	-%02d
+0x81632288	string	-%04d
+0x81632298	string	+%04d
+0x816322a0	string	.%03d
+0x816322a8	string	.%02d
+0x816322b0	string	.%01d
+0x816322b8	string	%04d%02d%02d%02d%02d%02d
+0x81632744	string	1.2.840.113549.1.1.1
+0x8163277c	unicode	Diffie-Hellman
+0x816327a8	unicode	RSASSA-PKCS1-v1_5
+0x816327d8	unicode	SSL3/TLS1 MD5+SHA1 Combination
+0x81632864	unicode	Triple DES 168/168
+0x816328a4	unicode	AES 128/128
+0x816328d4	unicode	AES 128 GCM
+0x81632904	string	server finished
+0x81632914	string	client finished
+0x81632924	string	master secret
+0x81632934	string	key expansion
+0x81632944	string	client EAP encryption
+0x81632984	string	Diffie Hellman
+0x816329a0	string	SSLCACHEFULL
+0x81632a00	string	Microsoft SSL 3.0
+0x81632a14	string	Microsoft TLS 1.0
+0x81632a28	string	Microsoft TLS 1.1
+0x81632a3c	string	Microsoft TLS
+0x81632b68	unicode	Microsoft SSL 3.0 Security Provider
+0x81632bb0	unicode	Microsoft TLS Security Provider
+0x81632bf0	unicode	Microsoft TLS 1.0 Security Provider
+0x81632c38	unicode	Microsoft TLS 1.1 Security Provider
+0x81632c80	unicode	Microsoft TLS 1.2 Security Provider
+0x81632cc8	string	Microsoft SSL 3.0 Security Provider
+0x81632cec	string	Microsoft TLS Security Provider
+0x81632d0c	string	Microsoft TLS 1.0 Security Provider
+0x81632d30	string	Microsoft TLS 1.1 Security Provider
+0x81632d54	string	Microsoft TLS 1.2 Security Provider
+0x81632dd4	string	%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x%s
+0x81632e08	string	AvatarAssetPackLegacyV1.toc
+0x81632e24	string	AvatarAssetPack.toc
+0x81632e38	string	\System??\AvatarAssetPack
+0x81632e54	string	\System??\Asset%p
+0x81632f50	string	ProfileAssetCache
+0x816330d0	string	%s:%s/global/t.%08x/avataritem/%s/128
+0x816330f8	string	icon.png
+0x81633104	string	%s/%08x/avataritems/v2/%s.bin
+0x81633124	string	asset_v2.bin
+0x81633148	string	AvatarAssetUriRoot
+0x8163315c	string	AvatarPictureUriPort
+0x81633174	string	AvatarPictureUriRoot
+0x8163318c	string	%s\AvatarAssetPack
+0x816331dc	string	isscccccccc
+0x816331e8	string	STRBLocation not recognized as a Structured Binary
+0x8163321c	string	Structured Binary version too high
+0x81634b5c	string	\System??\%s_profile
+0x81634b74	string	%s:\AvatarAssets
+0x81634ba8	string	ProfileAssetCache%p
+0x81634bbc	string	Latest
+0x81634bc4	string	CodecPackLoaderRoot
+0x81634be8	string	%s:\%s%s%s
+0x81634c98	string	Audios
+0x81634ca0	string	RnR_DATA
+0x81634cac	string	SW_DATA
+0x81634cb4	string	UPDATE_IN_PROGRESS
+0x81634cc8	string	PRODUCTION_FILE
+0x81634cd8	string	SAFETY_PARAMS
+0x81634ce8	string	APC_PARAMS
+0x81634cf4	string	TEC_PARAMS
+0x81634d00	string	ID_PARAMS
+0x81634d0c	string	REG_PARAMS
+0x81634d18	string	GAIN_CONTROL
+0x81634d28	string	PRIME_PROCESSOR
+0x81634d38	string	DEBUG_PARAMS
+0x81634d48	string	MAINTENANCE
+0x81634d54	string	VGA_REFERENCE
+0x81634d64	string	QVGA_REFERENCE
+0x81634d74	string	ALGORITHM_PARAMS
+0x81634d88	string	DEPTH_CMOS
+0x81634d94	string	IMAGE_CMOS
+0x81634da0	string	DEFAULT_PARAMS
+0x81634db0	string	DESCRIPTORS
+0x81634dbc	string	FIXED_PARAMS
+0x81634dcc	string	APPLICATION
+0x81634dd8	string	MONITOR
+0x81634de0	string	CODE_DOWNLOADER
+0x81634df0	string	BOOT_MANAGER
+0x81634e00	string	BOOT_SECTOR
+0x81634e0c	string	SCRATCH_FILE
+0x81634e1c	string	FILE_TABLE
+0x81634e30	string	detroit=
+0x81634e3c	string	altair=
+0x81634e44	string	cambridge=
+0x81634e50	string	NATALDEVICEPACKAGE:\
+0x81634e68	string	XamNatalDevicesDevkit:\
+0x81634ec0	string	EtxMaxUploadBusyTime
+0x81634ed8	string	EtxFlushFrequency
+0x81634eec	string	/vortex/logbinary.ashx
+0x81634f04	string	Content-Type: xon/%x\r\nX-IFLCDIGEST: %hs\r\n
+0x81634f30	string	EtxThrottleSettingsVortex
+0x81634f4c	string	EtxExceptionSettingsVortex
+0x81634f68	string	EtxCategorySettingsVortex
+0x81634fb4	string	EtxOmnitureUrl
+0x81634fc4	string	EtxOmnitureAccounts
+0x81634fd8	string	EtxThrottleSettingsOmniture
+0x81634ff4	string	EtxExceptionSettingsOmniture
+0x81635014	string	EtxCategorySettingsOmniture
+0x81635034	string	EtxThrottleSettingsStringSvr
+0x81635054	string	EtxExceptionSettingsStringSvr
+0x81635074	string	EtxCategorySettingsStringSvr
+0x81635130	string	%i,%i,%u,%hs
+0x81635148	string	disabled
+0x81635154	string	%i,%i,%i,%i,%i,%i,%i,%i
+0x8163516c	string	%i,%i,%i,%i,%i,%i,%i
+0x81635184	string	%i,%i,%i,%i
+0x81635190	string	%ux%u%c %c %s
+0x816351b4	string	%i:%02i
+0x816351bc	string	%04u/%02u/%02u %02u:%02u:%02u.%03u
+0x81635218	string	%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X
+0x8163525c	string	events
+0x81635264	string	pageName
+0x81635274	string	en=UTF-8
+0x81635280	unicode	%account%
+0x81635294	unicode	%country%
+0x816352d8	string	IsXlinkEnabled
+0x816352e8	string	Error
+0x816352f0	string	ShowUI
+0x816352f8	string	NoFilesInCloud
+0x81635308	string	AlreadyInSync
+0x81635488	string	\System??\netsynctable
+0x816354a0	string	\??\netsynctable
+0x816354b4	string	netsynctable
+0x816354c4	string	netsynctable:\*
+0x81635598	string	StorageEncodingFormat
+0x816355b0	string	StorageDownloadBlockSize
+0x816355cc	string	StorageUploadCompression
+0x816355e8	string	StorageUploadBlockSize
+0x81635600	string	Fail:%s hr=0x%08X;attempt=%d
+0x81635620	string	Download
+0x8163562c	string	bytes=%d-%d
+0x81635638	string	Enumerate
+0x81635644	string	Upload
+0x8163564c	string	Delete
+0x8163565c	string	SetTitleProp
+0x8163566c	string	\System??\upnetsynctable
+0x81635688	string	\??\upnetsynctable
+0x8163569c	string	upnetsynctable:\*
+0x816356d0	string	Upload failed to check-in because of file: %s;title=0x%08X
+0x8163570c	string	Upload skipping not-locked file: %s;title=0x%08X
+0x81635740	string	Upload file: %s;hr=0x%08X;title=0x%08X
+0x81635768	string	Upload failed no lock for file: %s;title=0x%08X
+0x816357c8	string	Download file=%s;size=%llu
+0x81635898	string	\??\upnetsynctable
+0x816358ac	string	upnetsynctable:\*
+0x816358d0	string	hub:Provider=Epix;Args='signup_landing.xml;epix://signup_landing.xml';SignupLandingMode=true
+0x816359b4	string	MessengerEnvironment
+0x816359cc	string	liveid.bin
+0x81635a10	string	</wsa:Address>
+0x81635a20	string	<wsa:Address>
+0x81635a30	string	<fed:TargetServiceEndpoint>
+0x81635a4c	string	<fed:Federation>
+0x81635a60	string	"token_endpoint"
+0x81635a88	string	<DeviceAddResponse Success="
+0x81635aa8	string	</psf:redirectUrl>
+0x81635abc	string	<psf:redirectUrl>
+0x81635ad0	string	<psf:flowurl>
+0x81635ae0	string	</psf:value>
+0x81635af0	string	<psf:value>
+0x81635afc	string	<S:Detail>
+0x81635b08	string	<S:Fault>
+0x81635b20	string	RefreshToken
+0x81635b30	string	"expires_in"
+0x81635b40	string	"refresh_token"
+0x81635b50	string	"access_token"
+0x81635b60	string	invalid_grant
+0x81635b70	string	</wsu:Created>
+0x81635b80	string	<wsu:Created>
+0x81635b90	string	</wsu:Expires>
+0x81635ba0	string	<wsu:Expires>
+0x81635bb0	string	<wst:Lifetime>
+0x81635bc0	string	</wst:RequestedSecurityToken>
+0x81635be0	string	<wst:RequestedSecurityToken>
+0x81635c00	string	<wst:RequestSecurityTokenResponse
+0x81635c24	string	</wst:BinarySecret>
+0x81635c38	string	<wst:BinarySecret>
+0x81635c4c	string	<wst:RequestedProofToken>
+0x81635c68	string	</wsse:BinarySecurityToken>
+0x81635c84	string	<wsse:BinarySecurityToken Id="Compact0">
+0x81635cb8	string	Content-Type: application/soap+xml
+0x81635ce8	string	<DeviceAddRequest><ClientInfo name="FE5B80E5-82FB-4060-AAFE-AC5C4605EA76" version="1.0"/><Authentication><Membername>11%s</Membername><Password>%s</Password></Authentication></DeviceAddRequest>
+0x81635dac	string	http%s://%s/ppsecure/deviceaddcredential.srf
+0x81635ddc	string	%04u-%02u-%02uT%02u:%02u:%02u.%07uZ
+0x81635e00	string	<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:saml="urn:oasis:names:tc:SAML:1.0:assertion" xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" xmlns:wsa="http://www.w3.org/2005/08/addressing" xmlns:wssc="http://schemas.xmlsoap.org/ws/2005/02/sc" xmlns:wst="http://schemas.xmlsoap.org/ws/2005/02/trust"><s:Header><wlid:ClientInfo xmlns:wlid="http://schemas.microsoft.com/wlid"><wlid:ApplicationID>"FE5B80E5-82FB-4060-AAFE-AC5C4605EA76"</wlid:ApplicationID></wlid:ClientInfo><wsa:Action s:mustUnderstand="1">http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue</wsa:Action><wsa:To s:mustUnderstand="1">%s</wsa:To><wsa:MessageID>%d</wsa:MessageID><wsse:Security><wsse:UsernameToken wsu:Id="devicesoftware"><wsse:Username>%s</wsse:Username><wsse:Password>%s</wsse:Password></wsse:UsernameToken><wsu:Timestamp Id="Timestamp"><wsu:Created>%s</wsu:Created><wsu:Expires>%s</wsu:Expires></wsu:Timestamp></wsse:Security></s:Header><s:Body><wst:RequestSecurityToken xmlns:wst="http://schemas.xmlsoap.org/ws/2005/02/trust"><wst:RequestType>http://schemas.xmlsoap.org/ws/2005/02/trust/Issue</wst:RequestType><wsp:AppliesTo xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy"><wsa:EndpointReference xmlns:wsa="http://www.w3.org/2005/08/addressing"><wsa:Address>http://Passport.NET/tb</wsa:Address></wsa:EndpointReference></wsp:AppliesTo></wst:RequestSecurityToken></s:Body></s:Envelope>
+0x81636458	string	<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:saml="urn:oasis:names:tc:SAML:1.0:assertion" xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" xmlns:wsa="http://www.w3.org/2005/08/addressing" xmlns:wssc="http://schemas.xmlsoap.org/ws/2005/02/sc" xmlns:wst="http://schemas.xmlsoap.org/ws/2005/02/trust"><s:Header><wlid:ClientInfo xmlns:wlid="http://schemas.microsoft.com/wlid"><wlid:ApplicationID>"FE5B80E5-82FB-4060-AAFE-AC5C4605EA76"</wlid:ApplicationID></wlid:ClientInfo><ps:AuthInfo xmlns:ps="http://schemas.microsoft.com/Passport/SoapServices/PPCRL" Id="PPAuthInfo"><ps:HostingApp>DF60E2DF-88AD-4526-AE21-83D130EF0F68</ps:HostingApp><ps:BinaryVersion>5</ps:BinaryVersion><ps:UIVersion>1</ps:UIVersion><ps:Cookies></ps:Cookies><ps:RequestParams>AQAAAAIAAABsYwQAAAAxMDMz</ps:RequestParams></ps:AuthInfo><wsa:Action s:mustUnderstand="1">http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue</wsa:Action><wsa:To s:mustUnderstand="1">%s</wsa:To><wsa:MessageID>%d</wsa:MessageID><wsse:Security><wsse:UsernameToken wsu:Id="user"><wsse:Username>%s</wsse:Username><wsse:Password>%s</wsse:Password></wsse:UsernameToken><wsse:BinarySecurityToken ValueType="urn:liveid:device" id="DeviceDAToken">%s</wsse:BinarySecurityToken><wsu:Timestamp Id="Timestamp"><wsu:Created>%s</wsu:Created><wsu:Expires>%s</wsu:Expires></wsu:Timestamp></wsse:Security></s:Header><s:Body><wst:RequestSecurityToken Id="RST0"><wst:RequestType>http://schemas.xmlsoap.org/ws/2005/02/trust/Issue</wst:RequestType><wsp:AppliesTo><wsa:EndpointReference><wsa:Address>%s</wsa:Address></wsa:EndpointReference></wsp:AppliesTo><wsp:PolicyReference URI="%s"></wsp:PolicyReference></wst:RequestSecurityToken></s:Body></s:Envelope>
+0x81636be0	string	client_id=bba26dcd-9b84-4bdf-885f-8e83bf118bab&grant_type=refresh_token&refresh_token=%s&scope=service::%s::%s
+0x81636c50	string	Content-Type: application/x-www-form-urlencoded
+0x81636c80	string	client_id=bba26dcd-9b84-4bdf-885f-8e83bf118bab&grant_type=password&scope=service::%s::%s&username=%s&password=%s&XboxDeviceID=%I64X
+0x81636d08	string	https://nexus.passport-int.com/federationmetadata/2006-12/FederationMetaData.xml
+0x81636d60	string	https://nexus.passport.com/federationmetadata/2006-12/FederationMetaData.xml
+0x81636db0	string	https://login.live-int.com/.well-known/openid-configuration
+0x81636dec	string	https://login.live.com/.well-known/openid-configuration
+0x81636e24	unicode	MBI_SSL
+0x81636e34	unicode	SAPI
+0x81636e40	unicode	%s(%d)
+0x81636e50	string	msac.xboxlive.com
+0x81636e64	string	XPassportSvcTarget
+0x81636ec0	string	hub:root:Dash.MP.ContentExplorer.lex:ActivityAlerts:%s
+0x81636ef8	string	activityalerts
+0x81636f08	string	hub:root:Dash.MP.ContentExplorer.lex:ActivityDetails:%s
+0x81636f40	string	activitydetails
+0x81636f50	string	hub:root:Dash.MP.ContentExplorer.lex:ActivityFeed:%s
+0x81636f88	string	activityfeed
+0x81636fa8	string	pam:Dash.MP.MicrosoftStore.lex:%s
+0x81636fcc	string	microsoftstore
+0x81637010	string	dash:pamoverlay:BuiltIn.Hub.xzp:overlay:Dash.MP.ContentExplorer.lex:overlay:%s
+0x81637060	string	mediaoverlay
+0x81637070	string	dash:networktroubleshooter
+0x8163708c	string	networkhelp
+0x81637098	string	dash:library:music:%s
+0x816370b0	string	musiclibrary
+0x816370c0	string	dash:library:video:%s
+0x816370d8	string	videolibrary
+0x816370e8	string	dash:library:picture:%s
+0x81637100	string	picturelibrary
+0x81637110	string	pam:Dash.Search.xex:scene=details|itemtype=WebVideoCollection|id=%s
+0x81637154	string	webvideocollection
+0x81637168	string	pam:Dash.Search.xex:scene=details|itemtype=TVShow|id=%s
+0x816371a0	string	tvShowdetails
+0x816371b0	string	pam:Dash.Search.xex:scene=details|itemtype=TVSeries|id=%s
+0x816371ec	string	tvSeriesdetails
+0x816371fc	string	pam:Dash.Search.xex:scene=details|itemtype=TVSeason|id=%s
+0x81637238	string	tvSeasondetails
+0x81637248	string	pam:Dash.Search.xex:scene=details|itemtype=TVEpisode|id=%s
+0x81637284	string	tvEpisodedetails
+0x81637298	string	pam:Dash.Search.xex:scene=details|itemtype=Movie|id=%s
+0x816372d0	string	moviedetails
+0x816372e0	string	pam:Dash.Search.xex:scene=results|%s
+0x81637308	string	search
+0x81637310	string	hub:root:Dash.MP.ContentExplorer.lex:videosmp:%s
+0x81637344	string	videosmp
+0x81637350	string	hub:root:Dash.MP.ContentExplorer.lex:userpins:%s
+0x81637384	string	userpins
+0x81637390	string	hub:root:Dash.MP.ContentExplorer.lex:appsmp:%s
+0x816373c8	string	hub:root:Dash.MP.ContentExplorer.lex:gamesmp:%s
+0x816373f8	string	gamesmp
+0x81637400	string	contentlibrary:PackageType=2;%s
+0x81637420	string	applibrary
+0x8163742c	string	contentlibrary:PackageType=1;%s
+0x8163744c	string	gameslibrary
+0x8163745c	string	hub:root:Dash.MP.ContentExplorer.lex:contentlibrary:%s
+0x81637494	string	hub:root:BuiltIn.ContentApp.xzp:contentlibrary:%s
+0x816374c8	string	contentlibrary
+0x816374d8	string	hub:root:Dash.MP.ContentExplorer.lex:contentlist:%s
+0x8163750c	string	contentlist
+0x81637518	string	hub:root:Dash.MP.ContentExplorer.lex:contentdetails:%s
+0x81637550	string	hub:root:BuiltIn.ContentApp.xzp:contentdetails:%s
+0x81637584	string	contentdetails
+0x81637594	string	hub:root:Dash.MP.ContentExplorer.lex:appdetails:%s
+0x816375c8	string	hub:root:BuiltIn.ContentApp.xzp:appdetails:%s
+0x816375f8	string	appdetails
+0x81637604	string	hub:root:Dash.MP.ContentExplorer.lex:gamedetails:MediaId=%s
+0x81637640	string	hub:root:BuiltIn.ContentApp.xzp:gamedetails:MediaId=%s
+0x81637678	string	gamedetails
+0x81637684	string	hub:root:Epix:%s
+0x816376a0	string	dash:pam:BuiltIn.Hub.xzp:%s
+0x816376c0	string	dash:pam:%s
+0x816376d0	string	newlivesignup
+0x816376e8	string	avatareditor
+0x816379d0	string	title
+0x816379d8	string	Title.NewLiveSignup.xex
+0x81637a00	string	title:%08X:%%s
+0x81637a44	string	\System??\MsgrProf
+0x81637a58	string	MsgrProf
+0x81637a8c	string	TFAEnabled
+0x8163ad4c	unicode	WM/AlbumArtist
+0x8163ad6c	unicode	WM/AlbumTitle
+0x8163ad88	unicode	WM/Genre
+0x8163ad9c	unicode	WM/GenreID
+0x8163adb4	unicode	WM/TrackNumber
+0x8163add4	unicode	WM/Track
+0x8163ade8	unicode	WM/Picture
+0x8163af38	string	WMDRM-ND-Status
+0x8163af48	string	application/vnd.ms-wmdrm-license-response
+0x8163af74	string	com.microsoft.wmdrm-nd
+0x8163af8c	string	WMDRM-ND
+0x8163af98	string	Supported
+0x8163afa4	string	Accept: */*\r\nSupported: com.microsoft.wmdrm-nd\r\nWMDRM-ND: %s\r\n
+0x8163afe8	string	Supported: com.microsoft.wmdrm-nd\r\nContent-Type: application/vnd.ms-wmdrm-license-request\r\n
+0x8163c740	unicode	Synthpop
+0x8163c754	unicode	Jpop
+0x8163c760	unicode	Anime
+0x8163c76c	unicode	Trash Metal
+0x8163c784	unicode	Salsa
+0x8163c790	unicode	Merengue
+0x8163c7a4	unicode	Christian Rock
+0x8163c7c4	unicode	Contemporary Christian
+0x8163c7f4	unicode	Crossover
+0x8163c808	unicode	Black Metal
+0x8163c820	unicode	Heavy Metal
+0x8163c838	unicode	Christian Gangsta Rap
+0x8163c864	unicode	Beat
+0x8163c870	unicode	Polsk Punk
+0x8163c888	unicode	Negerpunk
+0x8163c89c	unicode	BritPop
+0x8163c8ac	unicode	Indie
+0x8163c8b8	unicode	Terror
+0x8163c8c8	unicode	Hardcore
+0x8163c8dc	unicode	Club-House
+0x8163c8f4	unicode	Drum & Bass
+0x8163c914	unicode	Dance Hall
+0x8163c92c	unicode	Euro-House
+0x8163c944	unicode	A capella
+0x8163c958	unicode	Drum Solo
+0x8163c96c	unicode	Punk Rock
+0x8163c980	unicode	Duet
+0x8163c98c	unicode	Freestyle
+0x8163c9a0	unicode	Rhythmic Soul
+0x8163c9bc	unicode	Power Ballad
+0x8163c9d8	unicode	Ballad
+0x8163c9e8	unicode	Folklore
+0x8163c9fc	unicode	Samba
+0x8163ca08	unicode	Tango
+0x8163ca14	unicode	Club
+0x8163ca20	unicode	Slow Jam
+0x8163ca34	unicode	Satire
+0x8163ca44	unicode	Porn Groove
+0x8163ca5c	unicode	Primus
+0x8163ca6c	unicode	Booty Bass
+0x8163ca84	unicode	Symphony
+0x8163ca98	unicode	Sonata
+0x8163caa8	unicode	Chamber Music
+0x8163cac4	unicode	Opera
+0x8163cad0	unicode	Chanson
+0x8163cae0	unicode	Speech
+0x8163caf0	unicode	Humour
+0x8163cb00	unicode	Acoustic
+0x8163cb14	unicode	Easy Listening
+0x8163cb34	unicode	Chorus
+0x8163cb44	unicode	Big Band
+0x8163cb58	unicode	Slow Rock
+0x8163cb6c	unicode	Symphonic Rock
+0x8163cb8c	unicode	Psychedelic Rock
+0x8163cbb0	unicode	Progressive Rock
+0x8163cbd4	unicode	Gothic Rock
+0x8163cbec	unicode	Avantgarde
+0x8163cc04	unicode	Bluegrass
+0x8163cc18	unicode	Celtic
+0x8163cc28	unicode	Revival
+0x8163cc38	unicode	Latin
+0x8163cc44	unicode	Bebob
+0x8163cc50	unicode	Fast Fusion
+0x8163cc68	unicode	Swing
+0x8163cc74	unicode	National Folk
+0x8163cc90	unicode	Folk-Rock
+0x8163cca4	unicode	Folk
+0x8163ccb0	unicode	Hard Rock
+0x8163ccc4	unicode	Rock & Roll
+0x8163ccdc	unicode	Musical
+0x8163ccec	unicode	Retro
+0x8163ccf8	unicode	Polka
+0x8163cd04	unicode	Acid Jazz
+0x8163cd18	unicode	Acid Punk
+0x8163cd2c	unicode	Tribal
+0x8163cd3c	unicode	Lo-Fi
+0x8163cd48	unicode	Trailer
+0x8163cd58	unicode	Showtunes
+0x8163cd6c	unicode	Rave
+0x8163cd78	unicode	Psychadelic
+0x8163cd90	unicode	New Wave
+0x8163cda4	unicode	Cabaret
+0x8163cdb4	unicode	Native American
+0x8163cdd4	unicode	Jungle
+0x8163cde4	unicode	Pop/Funk
+0x8163cdf8	unicode	Christian Rap
+0x8163ce14	unicode	Top 40
+0x8163ce24	unicode	Gangsta
+0x8163ce34	unicode	Cult
+0x8163ce40	unicode	Comedy
+0x8163ce50	unicode	Southern Rock
+0x8163ce6c	unicode	Dream
+0x8163ce78	unicode	Eurodance
+0x8163ce8c	unicode	Pop-Folk
+0x8163cea0	unicode	Electronic
+0x8163ceb8	unicode	Techno-Industrial
+0x8163cedc	unicode	Darkwave
+0x8163cef0	unicode	Gothic
+0x8163cf00	unicode	Ethnic
+0x8163cf10	unicode	Instrumental Rock
+0x8163cf34	unicode	Instrumental Pop
+0x8163cf58	unicode	Meditative
+0x8163cf70	unicode	Space
+0x8163cf7c	unicode	Punk
+0x8163cf88	unicode	Soul
+0x8163cf94	unicode	Bass
+0x8163cfa0	unicode	AlternRock
+0x8163cfb8	unicode	Noise
+0x8163cfc4	unicode	Gospel
+0x8163cfd4	unicode	Sound Clip
+0x8163cfec	unicode	Game
+0x8163cff8	unicode	House
+0x8163d004	unicode	Acid
+0x8163d010	unicode	Instrumental
+0x8163d02c	unicode	Classical
+0x8163d040	unicode	Trance
+0x8163d050	unicode	Fusion
+0x8163d060	unicode	Jazz+Funk
+0x8163d074	unicode	Vocal
+0x8163d080	unicode	Trip-Hop
+0x8163d094	unicode	Ambient
+0x8163d0a4	unicode	Euro-Techno
+0x8163d0bc	unicode	Soundtrack
+0x8163d0d4	unicode	Pranks
+0x8163d0e4	unicode	Death Metal
+0x8163d104	unicode	Alternative
+0x8163d11c	unicode	Industrial
+0x8163d134	unicode	Techno
+0x8163d144	unicode	Rock
+0x8163d150	unicode	Reggae
+0x8163d178	unicode	Other
+0x8163d184	unicode	Oldies
+0x8163d194	unicode	New Age
+0x8163d1a4	unicode	Metal
+0x8163d1b0	unicode	Jazz
+0x8163d1bc	unicode	Hip-Hop
+0x8163d1cc	unicode	Grunge
+0x8163d1dc	unicode	Funk
+0x8163d1e8	unicode	Disco
+0x8163d1f4	unicode	Dance
+0x8163d200	unicode	Country
+0x8163d210	unicode	Classic Rock
+0x8163d22c	unicode	Blues
+0x8163d238	unicode	Cover
+0x8163d244	unicode	Remix
+0x816478d8	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnop
+0x81648882	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklm
+0x8164895e	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLM
+0x81649eb6	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxy
+0x81649faa	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK
+0x8164af32	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[
+0x8164b986	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x8164c818	unicode	Year
+0x8164c824	unicode	Track number/Position in set
+0x8164c860	unicode	Band/orchestra/accompaniment
+0x8164c89c	unicode	Lead performer(s)/Soloist(s)
+0x8164c8d8	unicode	Length
+0x8164c8e8	unicode	Title/songname/content description
+0x8164c930	unicode	Content type
+0x8164c94c	unicode	Album/Movie/Show title
+0x8164c97c	unicode	Attached picture
+0x8164e728	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abc
+0x8164f634	string	RegistrationRespMsg
+0x8164f648	string	<RegistrationReqMsg>%s</RegistrationReqMsg>
+0x8164f674	string	<DeviceID></DeviceID>
+0x8164f68c	string	RegisterDevice
+0x8164f69c	string	IsValidated
+0x8164f6a8	string	IsAuthorized
+0x8164f6b8	string	urn:microsoft.com:service:X_MS_MediaReceiverRegistrar:1
+0x816507c8	string	Invalid image filter
+0x816507e0	string	Unsupported image format
+0x816507fc	string	No suitable image filter found
+0x816513c0	string	LRCMount:\SmartGlassNotificationCount.dat
+0x816513ec	string	LRCMount
+0x81651424	string	LRCPromptCount
+0x81651434	unicode	GameActivity
+0x81651450	unicode	AppActivity
+0x8165146c	unicode	Xbox360
+0x8165147c	unicode	London
+0x8165148c	unicode	Console
+0x816514a4	unicode	XboxHexTitle
+0x816514c4	string	AcceptConnection
+0x816514d8	string	RespondToClient
+0x816514e8	string	BadSocketRecv
+0x816514f8	string	ProcessRequest
+0x81651508	string	BadTypeReceive
+0x81651518	string	BadKindReceive
+0x81651528	string	BadProtocolReceive
+0x8165153c	string	DecryptReceive
+0x8165154c	string	ClientReceiveData
+0x81651560	string	<%s channel="Master" val="%s"/>
+0x81651598	string	SinkProtocolInfo
+0x816515ac	string	SourceProtocolInfo
+0x816515c0	string	CurrentConnectionIDs
+0x816515d8	string	http-get:*:audio/mpeg:DLNA.ORG_PN=MP3,http-get:*:audio/mpeg:DLNA.ORG_PN=MP3X,http-get:*:audio/x-ms-wma:DLNA.ORG_PN=WMABASE,http-get:*:audio/x-ms-wma:DLNA.ORG_PN=WMAFULL,http-get:*:audio/x-ms-wma:DLNA.ORG_PN=WMALSL,http-get:*:audio/x-ms-wma:DLNA.ORG_PN=WMALSL_MULT5,http-get:*:audio/x-ms-wma:DLNA.ORG_PN=WMAPRO,http-get:*:audio/L16:DLNA.ORG_PN=LPCM,http-get:*:audio/L16;rate=44100;channels=1:DLNA.ORG_PN=LPCM,http-get:*:audio/L16;rate=44100;channels=2:DLNA.ORG_PN=LPCM,http-get:*:audio/L16;rate=48000;channels=1:DLNA.ORG_PN=LPCM,http-get:*:audio/L16;rate=48000;channels=2:DLNA.ORG_PN=LPCM,http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_LRG,http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_MED,http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_SM,http-get:*:video/mpeg:DLNA.ORG_PN=MPEG_PS_NTSC,http-get:*:video/mpeg:DLNA.ORG_PN=MPEG_TS_SD_NA_ISO,http-get:*:video/mpeg:DLNA.ORG_PN=AVC_TS_MP_SD_AAC_MULT5_ISO,http-get:*:video/mpeg:DLNA.ORG_PN=AVC_TS_MP_HD_AAC_MULT5_ISO,http-get:*:video/vnd.dlna.mpeg-tts:DLNA.ORG_PN=MPEG_TS_SD_NA,http-get:*:video/vnd.dlna.mpeg-tts:DLNA.ORG_PN=MPEG_TS_SD_NA_T,http-get:*:video/x-ms-asf:DLNA.ORG_PN=VC1_ASF_AP_L1_WMA,http-get:*:video/x-ms-asf:DLNA.ORG_PN=VC1_ASF_AP_L2_WMA,http-get:*:video/x-ms-wmv:DLNA.ORG_PN=WMVHIGH_FULL,http-get:*:video/x-ms-wmv:DLNA.ORG_PN=WMVHIGH_PRO,http-get:*:video/x-ms-wmv:DLNA.ORG_PN=WMVMED_BASE,http-get:*:video/x-ms-wmv:DLNA.ORG_PN=WMVMED_FULL,http-get:*:video/x-ms-wmv:DLNA.ORG_PN=WMVMED_PRO,http-get:*:video/x-ms-wmv:DLNA.ORG_PN=WMVSPLL_BASE,http-get:*:video/x-ms-wmv:DLNA.ORG_PN=WMVSPML_BASE,http-get:*:audio/mp4:*,http-get:*:audio/mpeg:*,http-get:*:audio/x-ms-wma:*,http-get:*:audio/L16:*,http-get:*:image/jpeg:*,http-get:*:video/avi:*,http-get:*:video/mpeg:*,http-get:*:video/vnd.dlna.mpeg-tts:*,http-get:*:video/mp4:*,http-get:*:video/quicktime:*,http-get:*:video/x-ms-asf:*,http-get:*:video/x-ms-wmv:*,microsoft.com:*:application/vnd.ms-playtoapp;target="ms-playtoapp-xboxvideo":*,microsoft.com:*:application/vnd.ms-playtoapp;target="ms-playtoapp-xboxmusic":*
+0x81651f18	string	DesiredVolume
+0x81651f28	string	DesiredMute
+0x81651f34	string	SelectPreset
+0x81651f44	string	A_ARG_TYPE_PresetName
+0x81651f5c	string	PresetName
+0x81651f68	string	FactoryDefaults
+0x81651f78	string	ListPresets
+0x81651f84	string	PresetNameList
+0x81651f94	string	CurrentPresetNameList
+0x81651fac	string	GetVolume
+0x81651fb8	string	CurrentVolume
+0x81651fc8	string	GetMute
+0x81651fd0	string	CurrentMute
+0x81651fdc	string	Master
+0x81651fe4	string	A_ARG_TYPE_Channel
+0x81651ff8	string	Channel
+0x81652000	string	A_ARG_TYPE_InstanceID
+0x81652018	string	InstanceID
+0x81652024	string	RenderingControl
+0x81652038	string	/Control/RenderingControl
+0x81652054	string	/Event/RenderingControl
+0x8165206c	string	/Content/RenderingControl
+0x8165208c	string	GetCurrentConnectionInfo
+0x816520a8	string	Status
+0x816520b0	string	A_ARG_TYPE_ConnectionStatus
+0x816520cc	string	A_ARG_TYPE_Direction
+0x816520e4	string	Direction
+0x816520f0	string	PeerConnectionID
+0x81652104	string	A_ARG_TYPE_ConnectionManager
+0x81652124	string	PeerConnectionManager
+0x8165213c	string	ProtocolInfo
+0x8165214c	string	A_ARG_TYPE_AVTransportID
+0x81652168	string	AVTransportID
+0x81652178	string	A_ARG_TYPE_RcsID
+0x8165218c	string	RcsID
+0x81652194	string	A_ARG_TYPE_ConnectionID
+0x816521ac	string	ConnectionID
+0x816521bc	string	UnreliableChannel
+0x816521d0	string	InsufficientBandwidth
+0x816521e8	string	ContentFormatMismatch
+0x81652200	string	GetCurrentConnectionIDs
+0x81652218	string	ConnectionIDs
+0x81652228	string	GetProtocolInfo
+0x81652240	string	Source
+0x81652248	string	/Control/ConnectionManager
+0x81652264	string	/Event/ConnectionManager
+0x81652280	string	/Content/ConnectionManager
+0x8165229c	string	ConnectionManager
+0x816522b0	string	A_ARG_TYPE_SeekTarget
+0x816522c8	string	A_ARG_TYPE_SeekMode
+0x816522dc	string	GetTransportSettings
+0x816522f4	string	CurrentRecordQualityMode
+0x81652310	string	CurrentPlayMode
+0x81652320	string	PlayMode
+0x8165232c	string	RecQualityMode
+0x8165233c	string	NORMAL
+0x81652344	string	GetTransportInfo
+0x81652358	string	CurrentSpeed
+0x81652368	string	CurrentTransportStatus
+0x81652380	string	CurrentTransportState
+0x81652398	string	GetPositionInfo
+0x816523a8	string	AbsoluteCounterPosition
+0x816523c0	string	AbsCount
+0x816523cc	string	RelativeCounterPosition
+0x816523e4	string	RelCount
+0x816523f0	string	AbsoluteTimePosition
+0x81652408	string	AbsTime
+0x81652410	string	RelTime
+0x81652418	string	TrackURI
+0x81652424	string	TrackMetaData
+0x81652434	string	TrackDuration
+0x81652444	string	Track
+0x8165244c	string	GetMediaInfo
+0x8165245c	string	RecordMediumWriteStatus
+0x81652474	string	WriteStatus
+0x81652480	string	RecordMedium
+0x81652490	string	NextURIMetaData
+0x816524a0	string	PlaybackStorageMedium
+0x816524b8	string	NextURI
+0x816524c0	string	PlayMedium
+0x816524cc	string	RecordStorageMedium
+0x816524e0	string	CurrentURIMetaData
+0x816524f4	string	NrTracks
+0x81652500	string	NETWORK
+0x81652520	string	UNKNOWN
+0x81652528	string	MediaDuration
+0x81652538	string	GetDeviceCapabilities
+0x81652550	string	PossibleRecordQualityModes
+0x8165256c	string	RecQualityModes
+0x8165257c	string	PossibleRecordStorageMedia
+0x81652598	string	RecMedia
+0x816525a4	string	PossiblePlaybackStorageMedia
+0x816525c4	string	PlayMedia
+0x816525d0	string	GetCurrentTransportActions
+0x816525ec	string	Actions
+0x816525f4	string	AVTransport
+0x81652600	string	/Control/AVTransport
+0x81652618	string	/Event/AVTransport
+0x8165262c	string	/Content/AVTransport
+0x81652650	string	http://www.xbox.com/
+0x81652668	string	Microsoft Corporation
+0x81652680	string	http://www.microsoft.com/
+0x8165269c	string	ConnectionManager:GetProtocolInfo
+0x816526c0	string	ConnectionManager:GetCurrentConnectionIDs
+0x816526ec	string	ConnectionManager:GetCurrentConnectionInfo
+0x81652718	string	Input
+0x81652724	string	AVTransport:GetCurrentTransportActions
+0x8165274c	string	AVTransport:GetDeviceCapabilities
+0x81652770	string	NONE,NETWORK
+0x81652780	string	AVTransport:GetMediaInfo
+0x8165279c	string	AVTransport:GetPositionInfo
+0x816527b8	string	AVTransport:GetTransportInfo
+0x816527d8	string	AVTransport:GetTransportSettings
+0x816527fc	string	AVTransport:Next
+0x81652810	string	AVTransport:Pause
+0x81652824	string	AVTransport:Play
+0x81652838	string	AVTransport:Previous
+0x81652850	string	AVTransport:Seek
+0x81652864	string	AVTransport:SetAVTransportURI
+0x81652884	string	AVTransport:SetNextAVTransportURI
+0x816528a8	string	AVTransport:Stop
+0x816528bc	string	RenderingControl:GetMute
+0x816528d8	string	RenderingControl:GetVolume
+0x816528f4	string	RenderingControl:ListPresets
+0x81652914	string	RenderingControl:SelectPreset
+0x81652934	string	RenderingControl:SetMute
+0x81652950	string	RenderingControl:SetVolume
+0x8165296c	string	bytes
+0x81652974	string	Content-Type: xon/%x\r\n
+0x8165298c	string	Content-Type:
+0x816533f8	unicode	code
+0x81653404	unicode	source
+0x81653418	string	stream
+0x81653454	string	binary
+0x81653478	string	itemsize
+0x81653484	string	sirensr
+0x8165348c	string	countoffset
+0x81653498	string	countsize
+0x816534ac	string	datetime
+0x816534bc	string	hrfacility
+0x816534c8	string	hrcode
+0x816534d0	string	offset
+0x8165363f	string	K<Tokens>
+0x8165364c	string	</Tokens>
+0x81653658	string	http://xlink.xboxlive.com
+0x81653674	string	Authorization
+0x81653684	string	X-XBL-AuthorizationRefresh
+0x816536a0	string	X-MS-Activity-ID
+0x816536b4	string	If-None-Match
+0x816536c4	string	Content-Length
+0x816536d4	string	X-XBL-Contract-Version
+0x81653714	string	X-XBL-SigninType
+0x81653730	string	XlinkBaseUri
+0x81653740	string	%s/Messages/%s/%d
+0x81653754	string	application/octet-stream
+0x81653770	string	X-XBL-SessionKey
+0x81653784	string	X-XBL-UserLanKey
+0x81653798	string	X-XBL-SessionUri
+0x816537ac	string	X-XBL-SessionID
+0x816537bc	string	X-XBL-UserIds
+0x816537cc	string	X-XBL-DeviceID
+0x816537dc	string	X-XBL-RetryAfter
+0x816537f0	string	%s/Subscriptions/%s
+0x8165380c	string	%s/auth/refresh
+0x8165381c	string	%s/auth/signin
+0x8165382c	string	%s/Users/%s/Sessions
+0x816538d8	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\xam\console\obj\xbox\xamc.pdb
+0x81744c10	string	8c\t(H
+0x8177d0b0	string	}*Kx}\tCx9
+0x8177d0c0	string	}*Kx}\tCx9
+0x8177d0d0	string	}*Kx}\tCx9
+0x81a81808	unicode	xenon
+0x81a8220c	string	\Device\CdRom0
+0x81a82224	string	\Device\HdDvdRom
+0x81a82f40	string	\Device\Harddisk0\SystemURLCachePartition
+0x81a82f72	string	/@URLCache
+0x81a82f86	string	/t\SystemURLCachePartition
+0x81a82fac	string	Xbox URLCACHE, Copyright (C) Microsoft
+0x81a830a8	unicode	0123456789ABCDEF
+0x81a85628	string	<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
+0x81a85698	string	</s:Envelope>
+0x81a856a8	string	<s:Header>
+0x81a856b4	string	</s:Header>
+0x81a856c0	string	<a:Action s:mustUnderstand="1">
+0x81a856e0	string	http://docs.oasis-open.org/ws-sx/ws-trust/200512/RST/Issue
+0x81a8571c	string	</a:Action>
+0x81a85728	string	<a:MessageID>
+0x81a85744	string	</a:MessageID>
+0x81a85754	string	<a:ReplyTo>
+0x81a85760	string	</a:ReplyTo>
+0x81a85770	string	<a:Address>
+0x81a8577c	string	http://www.w3.org/2005/08/addressing/anonymous
+0x81a857ac	string	</a:Address>
+0x81a857bc	string	<a:To s:mustUnderstand="1">
+0x81a857d8	string	http://10.124.212.44:10330/XSts/xsts.svc/IWSTrust13
+0x81a85830	string	<trust:RequestSecurityToken xmlns:trust="http://docs.oasis-open.org/ws-sx/ws-trust/200512">
+0x81a8588c	string	</trust:RequestSecurityToken>
+0x81a858b0	string	<wsp:AppliesTo xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy">
+0x81a858fc	string	</wsp:AppliesTo>
+0x81a85910	string	<EndpointReference xmlns="http://www.w3.org/2005/08/addressing">
+0x81a85954	string	</EndpointReference>
+0x81a8596c	string	<trust:KeyType>
+0x81a8597c	string	http://docs.oasis-open.org/ws-sx/ws-trust/200512/Bearer
+0x81a859b4	string	</trust:KeyType>
+0x81a859c8	string	<trust:RequestType>
+0x81a859dc	string	http://docs.oasis-open.org/ws-sx/ws-trust/200512/Issue
+0x81a85a14	string	</trust:RequestType>
+0x81a85a2c	string	<trust:TokenType>
+0x81a85a40	string	http://docs.oasis-open.org/wss/oasis-wss-saml-token-profile-1.1#SAMLV2.0
+0x81a85a8c	string	</trust:TokenType>
+0x81a85aa0	string	<auth:AdditionalContext xmlns:auth="http://docs.oasis-open.org/wsfed/authorization/200706">
+0x81a85afc	string	</auth:AdditionalContext>
+0x81a85b18	string	<auth:ContextItem Name="http://schemas.microsoft.com/xbox/2011/07/claims/user/xuid">
+0x81a85b70	string	<auth:ContextItem Name="http://schemas.microsoft.com/xbox/2011/07/claims/device/id">
+0x81a85bc8	string	</auth:ContextItem>
+0x81a85bdc	string	<auth:Value>
+0x81a85bec	string	</auth:Value>
+0x81a86711	string	abcdefghijklmnopqrstuvwxyz
+0x81a86731	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x81a86c30	string	\Device\CdRom0
+0x81a86c90	string	0123456789ABCDEF
+0x81a8ed73	string	/xbos/AssetConsume.ashx
+0x81a8ed8b	string	/msgserver/vetstring2.ashx
+0x81a8eda6	string	/xstats/xstatestimaterankforratings.ashx
+0x81a8edcf	string	/xpnfront/xpresence.srf
+0x81a8ede7	string	/xuacs/XeGetUserInfo.ashx
+0x81a8ee01	string	/xuacs/GetParentalControlGroupTemplates.ashx
+0x81a8ee2e	string	/xuacs/GetParentalControls.ashx
+0x81a8ee4e	string	/xuacs/GetUserParentalControlGroup.ashx
+0x81a8ee76	string	/xuacs/UpdateParentalControlGroup.ashx
+0x81a8ee9d	string	/xbos/GetTitleActivationList.ashx
+0x81a8eebf	string	/xbos/XeContentReferral.ashx
+0x81a8eedc	string	/xsig/RefreshGameLicense.ashx
+0x81a8eefa	string	/xbos/XeContentRefreshLicense.ashx
+0x81a8ef1d	string	/Lists/CreateDownloadQueue.ashx
+0x81a8ef3d	string	/Lists/DeleteDownloadItems.ashx
+0x81a8ef5d	string	/Lists/RevokeDownloadQueueAccess.ashx
+0x81a8ef83	string	/Lists/GrantDownloadQueueAccess.ashx
+0x81a8efa8	string	/Lists/InsertDownloadItems.ashx
+0x81a8efc8	string	/Lists/ModifyDownloadQueue.ashx
+0x81a8efe8	string	/Lists/ModifyDownloadItems.ashx
+0x81a8f008	string	/Lists/MoveDownloadItems.ashx
+0x81a8f026	string	/Lists/QueryDownloadItems.ashx
+0x81a8f045	string	/Lists/QueryDownloadQueues.ashx
+0x81a8f065	string	/xuacs/AddDependent.ashx
+0x81a8f07e	string	/xuacs/FamilySubscriptionAssignGoldUser.ashx
+0x81a8f0ab	string	/xuacs/FamilySubscriptionGoldUserCount.ashx
+0x81a8f0d7	string	/xuacs/RemoveDependent.ashx
+0x81a8f0f3	string	/xuacs/FamilySubscriptionRemoveGoldUser.ashx
+0x81a8f120	string	/Lists/CreateList.ashx
+0x81a8f137	string	/Lists/DeleteItems.ashx
+0x81a8f14f	string	/Lists/RevokeListAccess.ashx
+0x81a8f16c	string	/Lists/GrantListAccess.ashx
+0x81a8f188	string	/Lists/InsertItems.ashx
+0x81a8f1a0	string	/Lists/ModifyList.ashx
+0x81a8f1b7	string	/Lists/ModifyItems.ashx
+0x81a8f1cf	string	/Lists/MoveItems.ashx
+0x81a8f1e5	string	/Lists/QueryItems.ashx
+0x81a8f1fc	string	/Lists/QueryLists.ashx
+0x81a8f213	string	/xbos/GetRevocationList.ashx
+0x81a8f230	string	/vortex/logstring.ashx
+0x81a8f247	string	/liveinfo/getnetworkauthorizationlist.ashx
+0x81a8f272	string	/msgserver/msgserver.ashx
+0x81a8f28c	string	/xpnfront/xmessaging.srf
+0x81a8f2a5	string	/xbos/FindMediaInstanceUrls.ashx
+0x81a8f2c6	string	/xmatch/xmatchhost2.ashx
+0x81a8f2df	string	/xmatch/xmatchhostdelete2.ashx
+0x81a8f2fe	string	/xmatch/xmatchclient2.ashx
+0x81a8f319	string	/xmatch/xmatchsplit.ashx
+0x81a8f332	string	/xbos/PurchaseMediaOffers.ashx
+0x81a8f360	string	/xqry/findfromids.ashx
+0x81a8f377	string	/xqry/remove.ashx
+0x81a8f389	string	/xqry/removeid.ashx
+0x81a8f39d	string	/xqry/search.ashx
+0x81a8f3af	string	/xqry/select.ashx
+0x81a8f3c1	string	/xqry/update.ashx
+0x81a8f3d3	string	/xqry/updateid.ashx
+0x81a8f3e7	string	/xuacs/XeUserGetAge.ashx
+0x81a8f400	string	/xuacs/XeUserGetAgeGroup.ashx
+0x81a8f41e	string	/xpnfront/xnotification.srf
+0x81a8f43a	string	/xuacs/setusersettings2.ashx
+0x81a8f457	string	/xuacs/PassportCreateGenerated.ashx
+0x81a8f47b	string	/stfd/resolvename.ashx
+0x81a8f492	string	/xsig/AcknowledgeLicensesDelivery.ashx
+0x81a8f4b9	string	/xsig/AcquireMediaLicenses.ashx
+0x81a8f4d9	string	/xsig/CreateCertificate.ashx
+0x81a8f4f6	string	/xsig/CheckRevocation.ashx
+0x81a8f511	string	/xsig/CreateCertificate2.ashx
+0x81a8f52f	string	/xsig/ValidateCertificate.ashx
+0x81a8f54e	string	/xsig/VerifySignature.ashx
+0x81a8f569	string	/stfd/removefile.ashx
+0x81a8f57f	string	/stfd/readtitlefiles.ashx
+0x81a8f599	string	/stfd/readfile.ashx
+0x81a8f5ad	string	/stfd/enumeratefiles.ashx
+0x81a8f5c7	string	/stfd/writefile.ashx
+0x81a8f5dc	string	/msgserver/getstring2.ashx
+0x81a8f5f7	string	/xtou/GetLanguagesForCountry.ashx
+0x81a8f619	string	/testfd/MakeFriends.ashx
+0x81a8f632	string	/testfd/PingTestFD.ashx
+0x81a8f64a	string	/xbos/ContentUpdateReferral.ashx
+0x81a8f66b	string	/xbos/AutoupdReferral.ashx
+0x81a8f686	string	/fbserver/enumrecdreview.ashx
+0x81a8f6a4	string	/fbserver/enumsentreview.ashx
+0x81a8f6c2	string	/xuacs/XeUserGetAccountInfo.ashx
+0x81a8f6e3	string	/fbserver/getaggreview.ashx
+0x81a8f6ff	string	/fbserver/submitcomplaint.ashx
+0x81a8f71e	string	/fbserver/submitreview.ashx
+0x81a8f73a	string	/xuacs/XeABCHGetContactlistGamertags.ashx
+0x81a8f764	string	/xuacs/AcceptTou.ashx
+0x81a8f77a	string	/xuacs/XeAcknowledgeDowngrade.ashx
+0x81a8f79d	string	/xuacs/XeAddPaymentInstrument.ashx
+0x81a8f7c0	string	/xuacs/ChangeGamertag.ashx
+0x81a8f7db	string	/xuacs/XeChangeSubscriptionPaymentInstrument.ashx
+0x81a8f80d	string	/xuacs/XeCreateLiveAccount.ashx
+0x81a8f82d	string	/xuacs/XeGetANID.ashx
+0x81a8f843	string	/xuacs/XeGetAccountInfo.ashx
+0x81a8f860	string	/xuacs/XeGetAccountInfoFromPassport.ashx
+0x81a8f889	string	/xuacs/GetUserCredentialsAction.ashx
+0x81a8f8ae	string	/xuacs/XeGetGamertagSuggestions.ashx
+0x81a8f8d3	string	/xuacs/XeGetLinkedGamertag.ashx
+0x81a8f8f3	string	/xuacs/GetKey.ashx
+0x81a8f906	string	/xuacs/XeGetPaymentInstruments.ashx
+0x81a8f92a	string	/xuacs/XeGetPointsBalance.ashx
+0x81a8f949	string	/xuacs/GetPostalCode.ashx
+0x81a8f963	string	/xuacs/GetUserProofUpAction.ashx
+0x81a8f984	string	/xuacs/XeGetStoredValueBalance.ashx
+0x81a8f9a8	string	/xuacs/GetSubscriptionInfo.ashx
+0x81a8f9c8	string	/xuacs/GetUserBillingNotifications.ashx
+0x81a8f9f0	string	/xuacs/XeGetUserSubscriptionDetails.ashx
+0x81a8fa19	string	/xuacs/GetUserTenure.ashx
+0x81a8fa33	string	/xuacs/XeGetUserType.ashx
+0x81a8fa4d	string	/xuacs/XeGraduateUserEx.ashx
+0x81a8fa6a	string	/xuacs/XeLinkXbox1Account.ashx
+0x81a8fa89	string	/xuacs/XeMigrateXbox1User.ashx
+0x81a8faa8	string	/xuacs/XeMigrateXboxComUserEx.ashx
+0x81a8facb	string	/xuacs/PreviewMergeSubscription.ashx
+0x81a8faf0	string	/xuacs/XeAccountQuery.ashx
+0x81a8fb0b	string	/xuacs/RecoverAccount.ashx
+0x81a8fb26	string	/xuacs/XeRemovePaymentInstrument.ashx
+0x81a8fb4c	string	/xuacs/XeReserveGamertag.ashx
+0x81a8fb6a	string	/xuacs/XeSetAccountInfo.ashx
+0x81a8fb87	string	/xuacs/SetUserAccountStatus.ashx
+0x81a8fba8	string	/xuacs/SwitchUserCountry.ashx
+0x81a8fbc6	string	/xuacs/XeTransitionStoredValuePointsToCurrency.ashx
+0x81a8fbfa	string	/xuacs/XeTroubleshootAccount.ashx
+0x81a8fc1c	string	/xuacs/XeUpdateParentalControls.ashx
+0x81a8fc41	string	/xuacs/XeUpdatePaymentInstrument.ashx
+0x81a8fc67	string	/xuacs/XeVerifyBillingInfo.ashx
+0x81a8fc87	string	/xbos/XeOfferingVerifyToken.ashx
+0x81a8fca8	string	/xuacs/XeVerifyParentCreditCardEx.ashx
+0x81a8fccf	string	/xbos/XeVerifyToken.ashx
+0x81a8fce8	string	/xsig/CreatePlayReadyCertificate.ashx
+0x81a8fd0e	string	/xuacs/CreateUserAndBillableAccount.ashx
+0x81a8fd37	string	/xuacs/EnumFamilyMembers.ashx
+0x81a8fd55	string	/xuacs/GenerateGamertag.ashx
+0x81a8fd72	string	/xuacs/GetDependentSignedPuid.ashx
+0x81a8fd95	string	/xsig/GetLicenseTransferState.ashx
+0x81a8fdb8	string	/liveinfo/GetLiveConfig.ashx
+0x81a8fdd5	string	/lsp/enumerate.ashx
+0x81a8fde9	string	/xbos/AssetEnumerate.ashx
+0x81a8fe03	string	/xbox/OfferingCancel.ashx
+0x81a8fe1d	string	/xbos/InGameContentAvailable.ashx
+0x81a8fe3f	string	/xbos/XeContentDetails.ashx
+0x81a8fe5b	string	/xbos/XeContentEnumerate2.ashx
+0x81a8fe7a	string	/xbos/InGameContentEnumerate.ashx
+0x81a8fe9c	string	/xbos/PreviewProductPurchase.ashx
+0x81a8febe	string	/xbos/XeOfferPurchase.ashx
+0x81a8fed9	string	/xbos/XeOfferPurchaseGamertag.ashx
+0x81a8fefc	string	/xbos/XeSubscriptionDetails.ashx
+0x81a8ff1d	string	/xbos/XeSubscriptionEnumerate.ashx
+0x81a8ff40	string	/xbos/TransferMachineLicenses.ashx
+0x81a8ff63	string	/XArb/Register.ashx
+0x81a8ff77	string	/XArb/ReportResult.ashx
+0x81a8ff8f	string	/XArb/TimeExtend.ashx
+0x81a8ffa5	string	/xstats/xstatenumbyrank.ashx
+0x81a8ffc2	string	/xstats/xstatenumbyrating.ashx
+0x81a8ffe1	string	/xstats/xstatenumbyuser.ashx
+0x81a8fffe	string	/xstats/statpost.ashx
+0x81a90014	string	/xstats/xstatread.ashx
+0x81a9002b	string	/xstats/xstatsreset.ashx
+0x81a90044	string	/xuacs/XeReplaceOwnerPassport.ashx
+0x81a90067	string	/xuacs/XePassportChangePassword.ashx
+0x81a9008c	string	/xuacs/XeReplaceUserPassport.ashx
+0x81a900ae	string	/xuacs/XeSwitchUserPassport.ashx
+0x81a900cf	string	/xuacs/XePassportCreate.ashx
+0x81a900ec	string	/xuacs/XePassportGetBuddyGamertag.ashx
+0x81a90113	string	/xuacs/PassportGetMemberName.ashx
+0x81a90135	string	/xuacs/XePassportGetEncryptedProxyParameters.ashx
+0x81a90167	string	/xuacs/XePassportGetFriendMemberName.ashx
+0x81a90191	string	/xuacs/XePassportGetSecretQuestions.ashx
+0x81a901ba	string	/xuacs/XePassportGetUserData.ashx
+0x81a901dc	string	/xuacs/XePassportLogin.ashx
+0x81a901f8	string	/xuacs/PassportMemberNameExists.ashx
+0x81a9021d	string	/xstats/cleartitle.ashx
+0x81a90235	string	/xstats/uploadconsoleauditlist.ashx
+0x81a90259	string	/xstats/xachievementenum.ashx
+0x81a90277	string	/xstats/xavatarassetenum.ashx
+0x81a90295	string	/xstats/enumtitles.ashx
+0x81a902ad	string	/xstats/readsettings.ashx
+0x81a902c7	string	/xstats/syncachievements.ashx
+0x81a902e5	string	/xstats/syncavatarassets.ashx
+0x81a90303	string	/xstats/syncsettings.ashx
+0x81a9031d	string	/xstats/synctitles.ashx
+0x81a90335	string	/xstats/validateavatarmanifest.ashx
+0x81a90359	string	/xsig/UpdateLicenseTransferState.ashx
+0x81a9037f	string	/xstats/usagestore.ashx
+0x81a90397	string	/xbos/XeWmdrmCreateCertificate.ashx
+0x81a903bb	string	/xsig/XmstvCreateCertificate.ashx
+0x81a92188	string	\Device\CdRom0
+0x81a93a18	unicode	AsyncTaskManager0
+0x81a9728a	string	certificate
+0x81b7001f	string	strings.xus
+0x81b70033	string	ja-jp\strings.xus
+0x81b7004d	string	zh-tw\strings.xus
+0x81b70067	string	de-de\strings.xus
+0x81b70081	string	es-es\strings.xus
+0x81b7009b	string	fr-fr\strings.xus
+0x81b700b5	string	it-it\strings.xus
+0x81b700cf	string	ko-kr\strings.xus
+0x81b700e9	string	pt-br\strings.xus
+0x81b70103	string	pl-pl\strings.xus
+0x81b7013a	string	This original Xbox game is not supported on your Xbox 360 console. An update to support this game may be available. For more info, go to www.xbox.com/games.
+0x81b701d7	string	This original Xbox game is not supported on your Xbox 360 console. An update to support this game may be available. For more info, go to www.xbox.com/games.
+0x81b70274	string	This original Xbox game has not been certified. Your experience may vary, and Xbox Live connectivity will be disabled. For more info, go to www.xbox.com/support.
+0x81b70316	string	Xbox Live connectivity will be disabled for this original Xbox game. For more info, go to www.xbox.com/support.
+0x81b70389	string	Original Xbox games are blocked by Family Settings. You can change your Family Settings in the System area of the Xbox Dashboard.
+0x81b7040b	string	The VGA HD AV Cable does not support the PAL-50 setting required by this game. Connect the composite connector of your cable or use an Advanced SCART or Component HD AV Cable. For more info, go to www.xbox.com/support.
+0x81b704e6	string	This original Xbox game has encountered a problem and can't continue. For more info, go to www.xbox.com/support.
+0x81b70557	string	This original Xbox game has encountered a problem and can't continue. For more info, go to www.xbox.com/support.
+0x81b705c8	string	The region code for this game does not match your console's region code. Please insert a game with the correct region code.
+0x81b70644	string	Original Xbox Game
+0x81b71370	string	gbar. Weitere Informationen finden Sie unter www.xbox.com/games.
+0x81b7144f	string	gbar. Weitere Informationen finden Sie unter www.xbox.com/games.
+0x81b71490	string	Dieses Original Xbox Spiel ist nicht zertifiziert. Ihr Erlebnis kann sich unterscheiden, und die Xbox Live-Verbindung wird deaktiviert. Weitere Informationen finden Sie unter www.xbox.com/support.
+0x81b71576	string	r dieses Original Xbox Spiel deaktiviert. Weitere Informationen finden Sie unter www.xbox.com/support.
+0x81b716e9	string	en Sie den Composite-Anschlussstecker Ihres Kabels an oder verwenden Sie ein Xbox RGB-SCART- oder Component-HD-AV-Kabel. Weitere Informationen finden Sie unter www.xbox.com/support.
+0x81b7179f	string	Bei diesem Original Xbox Spiel ist ein Problem aufgetreten und es kann nicht fortgesetzt werden. Weitere Informationen finden Sie unter www.xbox.com/support.
+0x81b7183d	string	Bei diesem Original Xbox Spiel ist ein Problem aufgetreten und es kann nicht fortgesetzt werden. Weitere Informationen finden Sie unter www.xbox.com/support.
+0x81b718ef	string	r dieses Spiel entspricht nicht dem Regionalcode Ihrer Konsole. Bitte legen Sie ein Spiel mit dem richtigen Regionalcode ein.
+0x81b7196d	string	Original Xbox Spiel
+0x81b71a2c	string	n, visita www.xbox.com/games.
+0x81b71ae9	string	n, visita www.xbox.com/games.
+0x81b71b9e	string	n, visita www.xbox.com/support.
+0x81b71c24	string	n, visita www.xbox.com/support.
+0x81b71c44	string	Aceptar
+0x81b71cab	string	rea Sistema de la Interfaz Xbox.
+0x81b71dd9	string	n, visita www.xbox.com/support.
+0x81b71e5f	string	n, visita www.xbox.com/support.
+0x81b71ee5	string	n, visita www.xbox.com/support.
+0x81b71f85	string	fica correcto.
+0x81b71f94	string	Juego Xbox original
+0x81b7202e	string	tre disponible. Pour plus d'informations, rendez-vous sur www.xbox.com/games.
+0x81b720f6	string	tre disponible. Pour plus d'informations, rendez-vous sur www.xbox.com/games.
+0x81b721cd	string	e. Pour plus d'informations, voir www.xbox.com/support.
+0x81b7225e	string	informations, voir www.xbox.com/support.
+0x81b7230c	string	me de l'Interface Xbox.
+0x81b723d3	string	o HD en composante. Pour plus d'informations, rendez-vous sur www.xbox.com/support.
+0x81b72454	string	me et ne peut pas continuer. Pour plus d'informations, rendez-vous sur www.xbox.com/support.
+0x81b724de	string	me et ne peut pas continuer. Pour plus d'informations, rendez-vous sur www.xbox.com/support.
+0x81b725a4	string	gional correct.
+0x81b725b4	string	Jeu Xbox d'origine
+0x81b725f5	string	 supportato sulla tua console Xbox 360. Potrebbe essere disponibile un aggiornamento a supporto di questo gioco. Per maggiori informazioni, vai a www.xbox.com/games.
+0x81b726bd	string	 supportato sulla tua console Xbox 360. Potrebbe essere disponibile un aggiornamento a supporto di questo gioco. Per maggiori informazioni, vai a www.xbox.com/games.
+0x81b727e0	string	 disabilitata. Per maggiori informazioni, vai a www.xbox.com/support.
+0x81b72848	string	 disabilitata per questo gioco originale Xbox. Per maggiori informazioni, vai a www.xbox.com/support.
+0x81b7292e	string	area Sistema dell'Xbox Dashboard.
+0x81b72984	string	impostazione PAL-50 richiesta da questo gioco. Collega il connettore composito del tuo cavo o utilizza un cavo SCART avanzato o un cavo AV ad alta definizione componente. Per maggiori informazioni, vai a www.xbox.com/support.
+0x81b72a66	string	Questo gioco Xbox originale ha riscontrato un problema che ne fa cessare il funzionamento. Per maggiori informazioni, vai a www.xbox.com/support.
+0x81b72b37	string	 in grado di continuare. Per maggiori informazioni, vai a www.xbox.com/support.
+0x81b72b87	string	Il codice regione per questo gioco non corrisponde al codice regione della tua console. Inserisci un gioco col codice regione corretto.
+0x81b72c0f	string	Gioco originale Xbox

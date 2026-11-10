@@ -350,6 +350,55 @@ TEST_CASE("TCP connections carry data both ways and close", "[net][tcp]") {
   CHECK(wire.ends[0]->failure() == Failure::None);
 }
 
+TEST_CASE("TCP keeps unread FIN data when a reset reaches TIME_WAIT",
+          "[net][tcp]") {
+  Wire wire;
+  wire.Connect();
+  // The host half-closes first, while the client may still send data.
+  wire.ends[1]->Finish(wire.now);
+  REQUIRE(wire.RunUntil([&] {
+    return wire.ends[0]->finished_receiving() &&
+           wire.ends[1]->state() == State::FinWait2;
+  }));
+  const auto data = Bytes(5, 4);
+  REQUIRE(wire.ends[0]->Write(data, wire.now) == data.size());
+  wire.ends[0]->Finish(wire.now);
+  // Stop before delivering the host's final ACK to the client. Reusing the
+  // client's ports at this point aborts its still-owned LAST_ACK connection.
+  REQUIRE(wire.RunUntil(
+      [&] { return wire.ends[1]->state() == State::TimeWait; }));
+  REQUIRE(wire.ends[0]->state() == State::LastAck);
+  REQUIRE(wire.ends[1]->readable() == data.size());
+  wire.ends[0]->Abort();
+  auto reset = wire.ends[0]->TakeOutput();
+  REQUIRE(reset.size() == 1);
+  REQUIRE(reset[0].flags == kRst);
+  wire.ends[1]->Input(reset[0], wire.now + 1000);
+  CHECK(wire.ends[1]->state() == State::TimeWait);
+  CHECK(wire.ends[1]->failure() == Failure::None);
+  CHECK(wire.ends[1]->readable() == data.size());
+  CHECK(wire.ends[1]->TakeOutput().empty());
+
+  SECTION("normal expiry keeps the already received bytes") {
+    // Ignoring the reset must not restart the TIME_WAIT timer either.
+    wire.ends[1]->Tick(wire.now + 59999);
+    CHECK(wire.ends[1]->state() == State::TimeWait);
+    wire.ends[1]->Tick(wire.now + 60000);
+  }
+  SECTION("a replacement SYN retires the old route without losing bytes") {
+    // System Link's same-port SYN path uses this operation; the old accepted
+    // socket still owns its receive buffer after retirement.
+    wire.ends[1]->Detach();
+  }
+  CHECK(wire.ends[1]->closed());
+  CHECK(wire.ends[1]->finished_receiving());
+  CHECK(wire.ends[1]->failure() == Failure::None);
+  std::vector<uint8_t> received(data.size());
+  CHECK(wire.ends[1]->Read(received, false, wire.now + 60000) == data.size());
+  CHECK(received == data);
+  CHECK(wire.ends[1]->Read(received, false, wire.now + 60000) == 0);
+}
+
 TEST_CASE("TCP recovers lost and reordered segments", "[net][tcp]") {
   Wire wire;
   unsigned count = 0;

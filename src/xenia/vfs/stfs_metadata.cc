@@ -12,6 +12,8 @@
 #include "third_party/fmt/include/fmt/format.h"
 #include "xenia/base/string.h"
 #include "xenia/vfs/devices/xcontent_container_device.h"
+#include "xenia/vfs/entry.h"
+#include "xenia/vfs/file.h"
 #include "xenia/vfs/xex_metadata.h"
 
 namespace xe {
@@ -23,7 +25,7 @@ std::string U16ToUtf8(const std::u16string& s) {
   if (s.empty()) {
     return {};
   }
-  return xe::to_utf8(s);
+  return xe::to_utf8_lossy(s);
 }
 
 }  // namespace
@@ -38,6 +40,8 @@ toml::table StfsMetadata::ToToml() const {
   content_table.insert("content_type", fmt::format("{:08X}", content_type));
   content_table.insert("version", XexVersion::FromValue(version).ToString());
   content_table.insert("content_size", static_cast<int64_t>(content_size));
+  content_table.insert("package_license_mask", package_license_mask);
+  content_table.insert("native_category", native_category);
   content_table.insert("disc_number", static_cast<int64_t>(disc_number));
   content_table.insert("disc_count", static_cast<int64_t>(disc_count));
   root.insert("content_info", std::move(content_table));
@@ -59,11 +63,19 @@ toml::table StfsMetadata::ToToml() const {
     root.insert("display_info", std::move(display_table));
   }
 
+  if (title_resources_status != TitleResourcesStatus::kNotRequested) {
+    root.insert("title_resources_status", uint32_t(title_resources_status));
+    if (title_resources) {
+      root.insert("title_resources", title_resources->ToToml());
+    }
+  }
+
   return root;
 }
 
 std::optional<StfsMetadata> ExtractStfsMetadata(
-    const std::filesystem::path& path, XLanguage language) {
+    const std::filesystem::path& path, XLanguage language,
+    bool read_title_resources) {
   auto header = XContentContainerDevice::ReadContainerHeader(path);
   if (!header) {
     return std::nullopt;
@@ -73,6 +85,24 @@ std::optional<StfsMetadata> ExtractStfsMetadata(
     return std::nullopt;
   }
 
+  // Fixed guest strings may lack a terminator or contain isolated UTF16
+  // surrogates. Bound the local header copy before its legacy accessors; only
+  // display conversion is repaired, never the file or numeric identities.
+  auto &bounded = header->content_metadata;
+  for (uint32_t i = 0; i < XContentMetadata::kNumLanguagesV1; ++i) {
+    bounded.display_name_raw.uint[i][127] = 0;
+    bounded.description_raw.uint[i][127] = 0;
+  }
+  if (bounded.metadata_version >= 2) {
+    for (uint32_t i = 0; i < XContentMetadata::kNumLanguagesV2 -
+                                 XContentMetadata::kNumLanguagesV1;
+         ++i) {
+      bounded.display_name_ex_raw.uint[i][127] = 0;
+      bounded.description_ex_raw.uint[i][127] = 0;
+    }
+  }
+  bounded.publisher_raw.uint[63] = 0;
+  bounded.title_name_raw.uint[63] = 0;
   StfsMetadata metadata;
   const auto& content_meta = header->content_metadata;
   const auto& exec_info = content_meta.execution_info;
@@ -87,6 +117,9 @@ std::optional<StfsMetadata> ExtractStfsMetadata(
   metadata.content_type = static_cast<uint32_t>(
       static_cast<XContentType>(content_meta.content_type));
   metadata.content_size = content_meta.content_size;
+  metadata.native_category = content_meta.category;
+  metadata.package_license_mask =
+      XContentContainerDevice::LicenseMaskFromHeader(*header);
 
   // Tiered: requested language → English → first populated slot. Publishers
   // routinely misuse slots (e.g. Japanese text in the English slot for
@@ -120,11 +153,43 @@ std::optional<StfsMetadata> ExtractStfsMetadata(
   metadata.title_name = U16ToUtf8(content_meta.title_name());
 
   const uint32_t thumb_size = content_meta.title_thumbnail_size;
-  if (thumb_size > 0 && thumb_size <= XContentMetadata::kThumbLengthV1) {
+  const uint32_t thumb_limit = content_meta.metadata_version >= 2
+                                   ? XContentMetadata::kThumbLengthV2
+                                   : XContentMetadata::kThumbLengthV1;
+  if (thumb_size > 0 && thumb_size <= thumb_limit) {
     metadata.icon_data.assign(content_meta.title_thumbnail,
                               content_meta.title_thumbnail + thumb_size);
   }
 
+  if (read_title_resources) {
+    metadata.title_resources_status = TitleResourcesStatus::kAbsent;
+    auto device = XContentContainerDevice::CreateContentDevice("", path);
+    if (!device || !device->Initialize()) {
+      metadata.title_resources_status = TitleResourcesStatus::kInvalid;
+    } else if (auto* entry =
+                   static_cast<Device&>(*device).ResolvePath("default.xex")) {
+      metadata.title_resources_status = TitleResourcesStatus::kInvalid;
+      File* raw_file = nullptr;
+      if (entry->size() <= kMaxOfflineXexFileBytes &&
+          entry->Open(xe::filesystem::FileAccess::kFileReadData, &raw_file) ==
+              X_STATUS_SUCCESS) {
+        struct CloseFile {
+          void operator()(File* f) const { f->Destroy(); }
+        };
+        std::unique_ptr<File, CloseFile> file(raw_file);
+        std::vector<uint8_t> executable(entry->size());
+        size_t read = 0;
+        if (file->ReadSync(executable, 0, &read) == X_STATUS_SUCCESS &&
+            read == executable.size()) {
+          if (auto xex = ExtractXexMetadata(executable.data(),
+                                            executable.size(), true)) {
+            metadata.title_resources = std::move(xex->title_resources);
+            metadata.title_resources_status = xex->title_resources_status;
+          }
+        }
+      }
+    }
+  }
   return metadata;
 }
 

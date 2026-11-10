@@ -18,8 +18,11 @@
 #include "xenia/base/threading.h"
 #include "xenia/kernel/guest_scheduler.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
 #include "xenia/kernel/xthread.h"
+#include "xenia/vfs/devices/host_path_device.h"
+#include "xenia/vfs/devices/host_path_file.h"
 
 namespace xe {
 namespace kernel {
@@ -250,49 +253,84 @@ X_STATUS XFile::ReadInternal(uint32_t buffer_guest_address,
   return result;
 }
 
-void XFile::PostIo(XThread* thread, std::function<void(bool cancelled)> fn) {
+void XFile::PostIo(XThread* thread, std::function<void(bool cancelled)> fn,
+                    std::function<void()> on_drop) {
   {
     std::lock_guard<std::mutex> lock(posted_lock_);
-    posted_.emplace_back(thread, std::move(fn));
+    posted_.push_back({thread, std::move(fn), std::move(on_drop)});
     if (posted_running_) {
       return;
     }
     posted_running_ = true;
   }
-  // Outside the lock, as a post after shutdown began runs inline.
+  // Both immediate shutdown rejection and later queue-drop settlement may
+  // complete inline, so neither submission nor callbacks hold posted_lock_.
   kernel_state()->guest_scheduler()->PostHostCall(
-      [file = retain_object(this)]() { file->RunPostedIo(); }, io_call_class());
+      [file = retain_object(this)]() { file->RunPostedIo(); }, io_call_class(),
+      [file = retain_object(this)](GuestScheduler::HostCallDropReason reason) {
+        file->DropPostedIo(reason);
+      });
 }
 
-void XFile::RunPostedIo() {
+void XFile::RunPostedIo(bool admission_shutdown) {
   std::unique_lock<std::mutex> lock(posted_lock_);
   while (!posted_.empty()) {
-    auto [thread, fn] = std::move(posted_.front());
+    auto posted = std::move(posted_.front());
     posted_.pop_front();
-    posted_running_thread_ = thread;
+    posted_running_thread_ = posted.thread;
     lock.unlock();
-    fn(false);
+    if (admission_shutdown && posted.on_drop) {
+      posted.on_drop();
+    } else { posted.complete(false); }
     lock.lock();
     posted_running_thread_ = nullptr;
+    // Drop-only captures can own unrelated resources. Release both callback
+    // closures outside queue locks, just like their normal/drop invocation.
+    lock.unlock();
+    posted.complete = {};
+    posted.on_drop = {};
+    lock.lock();
   }
   posted_running_ = false;
 }
 
+void XFile::DropPostedIo(GuestScheduler::HostCallDropReason reason) {
+  if (reason == GuestScheduler::HostCallDropReason::kAdmissionShutdown) {
+    // Keep the existing inline queue serialization for legacy after-stop
+    // submissions, while explicit owned barriers receive only cancellation.
+    RunPostedIo(true);
+    return;
+  }
+  std::deque<PostedIo> dropped;
+  {
+    std::lock_guard<std::mutex> lock(posted_lock_);
+    dropped.swap(posted_);
+    posted_running_thread_ = nullptr;
+    posted_running_ = false;
+  }
+  // Scheduler invokes this only for an unstarted runner. In-flight callbacks
+  // finish normally before Shutdown joins their workers. Legacy callbacks are
+  // destroyed, never invoked against possibly expired guest memory.
+  for (auto& posted : dropped) {
+    if (posted.on_drop) { posted.on_drop(); }
+  }
+}
+
 void XFile::CancelPostedIo(XThread* thread) {
-  std::vector<std::function<void(bool)>> cancelled;
+  std::vector<PostedIo> cancelled;
   {
     std::lock_guard<std::mutex> lock(posted_lock_);
     for (auto it = posted_.begin(); it != posted_.end();) {
-      if (it->first == thread) {
-        cancelled.push_back(std::move(it->second));
+      if (it->thread == thread) {
+        cancelled.push_back(std::move(*it));
         it = posted_.erase(it);
       } else {
         ++it;
       }
     }
   }
-  for (auto& fn : cancelled) {
-    fn(true);
+  for (auto& posted : cancelled) {
+    posted.complete(true);
   }
 }
 
@@ -302,7 +340,7 @@ bool XFile::HasPostedIo(XThread* thread) {
     return true;
   }
   for (const auto& posted : posted_) {
-    if (posted.first == thread) {
+    if (posted.thread == thread) {
       return true;
     }
   }
@@ -493,6 +531,118 @@ X_STATUS XFile::WriteInternal(uint32_t buffer_guest_address,
   return result;
 }
 
+X_STATUS XFile::Flush() {
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  X_STATUS result = X_STATUS_NOT_SUPPORTED;
+  RunSynchronousIo([&]() {
+    std::lock_guard<std::mutex> lock(file_lock_);
+    result = file_->Flush();
+  });
+  return result;
+}
+
+X_STATUS XFile::FlushQueued(std::function<void(X_STATUS)> completion) {
+  if (!completion) { return X_STATUS_INVALID_PARAMETER; }
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  // Concurrent dispatch alone is not storage provenance: discs, null devices
+  // and container readers also opt into it. Require actual HostPath objects.
+  if (!dynamic_cast<vfs::HostPathFile*>(file_) ||
+      !dynamic_cast<vfs::HostPathDevice*>(device()) ||
+      !device()->supports_concurrent_io()) {
+    return X_STATUS_NOT_SUPPORTED;
+  }
+  auto file = retain_object(this);
+  auto thread = XThread::IsInThread()
+      ? retain_object(XThread::GetCurrentThread()) : object_ref<XThread>{};
+  const bool writable = (file_access() &
+      (filesystem::FileAccess::kFileWriteData |
+       filesystem::FileAccess::kFileAppendData |
+       filesystem::FileAccess::kGenericWrite |
+       filesystem::FileAccess::kGenericAll)) != 0;
+  PostIo(thread.get(),
+      [file, thread, completion, writable](bool cancelled) {
+        (void)thread;  // Own the actual issuer until completion/cancellation.
+        X_STATUS status = X_STATUS_CANCELLED;
+        if (!cancelled) {
+          std::lock_guard<std::mutex> lock(file->file_lock_);
+          // Readonly handles have no logical overwrite obligation. A later
+          // common FlushTree supplies all regular-file data barriers.
+          status = writable ? file->file_->Flush() : X_STATUS_SUCCESS;
+        }
+        // Batch completion can perform further host work/release references.
+        // Never call it with file_lock_ or posted_lock_ owned.
+        completion(status);
+      },
+      [completion]() { completion(X_STATUS_CANCELLED); });
+  return X_STATUS_SUCCESS;
+}
+
+std::optional<vfs::File::DeviceControlLayout> XFile::DescribeDeviceControl(
+    uint32_t code) const {
+  return file_->DescribeDeviceControl(code);
+}
+
+X_STATUS XFile::DeviceControl(uint32_t code, uint32_t input_address,
+                              uint32_t input_length, uint32_t output_address,
+                              uint32_t output_length, uint32_t* transferred) {
+  *transferred = 0;
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  const auto layout = DescribeDeviceControl(code);
+  if (!layout) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  if (input_length != layout->input_bytes) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  if (output_length < layout->output_bytes) {
+    return X_STATUS_BUFFER_TOO_SMALL;
+  }
+  X_STATUS result = file_->CheckDeviceControlAccess(code);
+  if (XFAILED(result)) {
+    return result;
+  }
+  // Layouts are trusted backend declarations, not guest allocation requests.
+  // No current supported packet exceeds16 bytes.
+  std::vector<uint8_t> input(layout->input_bytes), output(layout->output_bytes);
+  RunSynchronousIo([&]() {
+    if (!util::GuestIoRangeValid(*memory(), input_address, input_length,
+                                 false) ||
+        !util::GuestIoRangeValid(*memory(), output_address, output_length,
+                                 true)) {
+      result = X_STATUS_ACCESS_VIOLATION;
+      return;
+    }
+    result = util::ReadGuestIoBuffer(*memory(), input_address, input);
+    if (XFAILED(result)) {
+      return;
+    }
+    uint32_t count = 0;
+    {
+      std::lock_guard<std::mutex> lock(file_lock_);
+      result = file_->DeviceControl(code, input, output, &count);
+    }
+    if (XFAILED(result)) {
+      return;
+    }
+    if (count > output.size()) {
+      result = X_STATUS_INVALID_DEVICE_REQUEST;
+      return;
+    }
+    result = util::WriteGuestIoBuffer(*memory(), output_address,
+                                      std::span(output).first(count));
+    if (XSUCCEEDED(result)) {
+      *transferred = count;
+    }
+  });
+  return result;
+}
+
 X_STATUS XFile::SetLength(size_t length) {
   X_STATUS result = X_STATUS_SUCCESS;
   RunSynchronousIo([&]() {
@@ -516,7 +666,8 @@ X_STATUS XFile::Rename(const std::filesystem::path file_path,
   X_STATUS result = X_STATUS_SUCCESS;
   RunSynchronousIo([&]() {
     result = kernel_state()->file_system()->RenameEntry(
-        entry(), xe::path_to_utf8(file_path), replace_existing);
+        entry(), xe::path_to_utf8(file_path), replace_existing,
+        file_->storage_lease());
   });
   return result;
 }

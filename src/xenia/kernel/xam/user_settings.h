@@ -500,6 +500,11 @@ class UserSetting : public UserData {
               std::span<const uint8_t> extended_data);
 
   static std::optional<UserSetting> GetDefaultSetting(uint32_t setting_id);
+  // Missing is success with nullopt. Malformed stored data is an error, never
+  // a default that a later flush could write over an unreadable appearance.
+  // Returned settings own their extended bytes, including for signed-out users.
+  static X_RESULT ReadFromGpd(const GpdInfo& gpd, uint32_t setting_id,
+                             std::optional<UserSetting>& output);
   void WriteToGuest(X_USER_PROFILE_SETTING* setting_ptr,
                     uint32_t& extended_data_address);
   std::vector<uint8_t> Serialize() const;

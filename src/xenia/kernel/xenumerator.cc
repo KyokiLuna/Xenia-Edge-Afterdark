@@ -314,12 +314,22 @@ static xam::XCONTENT_DATA_INTERNAL InternalContentData(
 
   std::vector<uint8_t> metadata;
   if (!kernel_state->content_manager()->GetContentMetadata(data.xuid, data,
-                                                           &metadata)) {
+                                                           &metadata) &&
+      metadata.size() == sizeof(vfs::XContentMetadata)) {
     const auto* header =
         reinterpret_cast<const vfs::XContentMetadata*>(metadata.data());
+    item.category = header->category;
     item.content_size = header->content_size;
     xe::string_util::copy_and_swap_truncating(
         item.title_name, header->title_name(), xe::countof(item.title_name));
+  }
+  if (const auto variant =
+          kernel_state->content_manager()->LibraryContentVariant(data.xuid,
+                                                                 data)) {
+    item.license_mask = variant->presentation.effective_license_mask;
+    if (variant->native_category) {
+      item.category = *variant->native_category;
+    }
   }
   return item;
 }

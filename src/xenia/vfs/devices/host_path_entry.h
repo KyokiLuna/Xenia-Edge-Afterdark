@@ -44,6 +44,7 @@ class HostPathEntry : public Entry {
   void RetainFile() override { open_files_.fetch_add(1); }
   void ReleaseFile() override;
   bool Overwrite() override;
+  InPlaceOverwriteResult OverwriteInPlace() override;
 
   // Sets the FILETIMEs that aren't 0 through |file_handle|, one of this
   // entry's.
@@ -56,12 +57,20 @@ class HostPathEntry : public Entry {
   friend class HostPathFile;
 
   void SetOverwrittenSize(size_t size);
+  void AbortOverwrite();
+  std::error_code CompleteOverwrite(filesystem::FileHandle&);
+  std::error_code ReconcileOverwriteEof(filesystem::FileHandle&);
+  std::error_code RetryRetainedOverwrite();
+  void ReleaseOverwriteOwnership();
+  void FinishOverwrite(std::unique_ptr<filesystem::FileHandle>&);
 
   std::unique_ptr<Entry> CreateEntryInternal(const std::string_view name,
                                              uint32_t attributes) override;
   bool DeleteEntryInternal(Entry* entry) override;
-  bool RenameEntryInternal(Entry* new_parent,
-                           const std::string_view name) override;
+  X_STATUS
+  RenameEntryInternal(Entry* new_parent, const std::string_view name,
+                      std::shared_ptr<const filesystem::HostStorageFileLease>
+                          permitted) override;
 
   std::filesystem::path host_path_;
   std::atomic<size_t> open_files_{0};
@@ -69,9 +78,23 @@ class HostPathEntry : public Entry {
   // collapsed content package) and update() must not overwrite it with the
   // backing file's real size.
   bool reported_size_fixed_ = false;
-  // Set by Overwrite until the last handle closes. The host file still holds
-  // the old bytes past size_, which growing the file brings back.
-  bool overwritten_ = false;
+  // Exclusive metadata owner/session: remains set across explicit Flush until
+  // actual successful close, so namespace update cannot replace owned EOF.
+  std::atomic<bool> overwritten_{false};
+  // Accessed by the serialized XFile consumer, or by GCRC namespace retry
+  // only after its last File has closed. Tail publication is not owner release.
+  bool overwrite_tail_retained_ = false;
+  bool overwrite_durability_pending_ = false;
+  // Nonzero means owned EOF is unknown after a failed physical EOF operation.
+  // Only explicit Flush/close retry may reconcile before data I/O resumes.
+  std::error_code overwrite_metadata_error_;
+  uint64_t overwrite_filesystem_id_ = 0, overwrite_file_id_ = 0;
+  // Reservation survives any completion error, independently of retained-tail
+  // mode. The next Open retries completion without trimming a published EOF.
+  std::unique_ptr<filesystem::FileHandle> overwrite_handle_;
+  std::shared_ptr<const filesystem::HostStorageFileLease> overwrite_lease_;
+  size_t overwrite_original_size_ = 0, overwrite_original_allocation_ = 0;
+  bool overwrite_opened_ = false;
 };
 
 }  // namespace vfs

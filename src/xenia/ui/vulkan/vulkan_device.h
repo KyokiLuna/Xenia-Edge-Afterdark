@@ -11,6 +11,7 @@
 #define XENIA_UI_VULKAN_VULKAN_DEVICE_H_
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -111,6 +112,7 @@ class VulkanDevice {
     bool occlusionQueryPrecise = false;
     bool vertexPipelineStoresAndAtomics = false;
     bool fragmentStoresAndAtomics = false;
+    bool shaderStorageImageExtendedFormats = false;
     bool shaderClipDistance = false;
     bool shaderCullDistance = false;
     bool shaderInt16 = false;
@@ -271,6 +273,21 @@ class VulkanDevice {
 
   VkDevice device() const { return device_; }
 
+  // Guest allocation/module lifetime leases only, never objects whose
+  // destructors call Vulkan. Failed GPU work retains these until device
+  // destruction; callers must stop submitting before destruction begins.
+  void QuarantineGuestMemoryLeases(
+      std::vector<std::shared_ptr<void>> leases,
+      std::function<void()> after_device_destroyed = {});
+
+  // Actual Vulkan wait, even after IsLost(). Locks every queue in canonical
+  // family/index order for Vulkan host synchronization. Caller must own no
+  // Queue::Acquisition, must stop its own submissions before this call, and
+  // must not resume them after using its result as a retirement boundary.
+  // SUCCESS and DEVICE_LOST are retirement proof, not successful rendering.
+  // Every other result leaves resource retirement unproven.
+  VkResult WaitIdleForResourceRetirement();
+
   struct Functions {
 #define XE_UI_VULKAN_FUNCTION(name) PFN_##name name = nullptr;
 #define XE_UI_VULKAN_FUNCTION_PROMOTED(extension_name, core_name) \
@@ -411,6 +428,9 @@ class VulkanDevice {
   Extensions extensions_;
 
   VkDevice device_ = nullptr;
+  std::mutex guest_memory_leases_mutex_;
+  std::vector<std::shared_ptr<void>> guest_memory_leases_;
+  std::vector<std::function<void()>> after_device_destroyed_;
 
   Functions functions_;
 

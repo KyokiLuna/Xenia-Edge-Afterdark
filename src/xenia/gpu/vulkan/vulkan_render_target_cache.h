@@ -134,6 +134,39 @@ class VulkanRenderTargetCache final : public RenderTargetCache {
                reg::RB_COPY_DEST_INFO* copy_dest_info_out = nullptr,
                bool* written_scaled_out = nullptr);
 
+  // A strict native resolve is bounded by a separately authenticated output
+  // allocation. These values are not themselves authority to execute it.
+  struct NativeResolveExpectation {
+    uint32_t physical_address = 0;
+    uint32_t length = 0;
+    xenos::ColorFormat format = xenos::ColorFormat::k_8_8_8_8;
+    bool require_copy = true;
+  };
+  struct NativeResolveOutcome {
+    enum class Status {
+      kFailed,
+      kInvalidOutput,
+      kUnsupported,
+      kEmpty,
+      kCopyNotRecorded,
+      kClearNotRecorded,
+      kTransferFailed,
+      kRecorded,
+    };
+    Status status = Status::kFailed;
+    uint32_t written_address = 0;
+    uint32_t written_length = 0;
+    uint32_t copy_commands = 0;
+    uint32_t clear_commands = 0;
+    bool copy_requested = false;
+    bool depth_clear_requested = false;
+    bool color_clear_requested = false;
+    bool depth_clear_recorded = false;
+    bool color_clear_recorded = false;
+    bool transfers_complete = true;
+    bool recorded() const { return status == Status::kRecorded; }
+  };
+
   bool Update(bool is_rasterization_done,
               reg::RB_DEPTHCONTROL normalized_depth_control,
               uint32_t normalized_color_mask, const Shader& vertex_shader,
@@ -240,6 +273,29 @@ class VulkanRenderTargetCache final : public RenderTargetCache {
   void RequestPixelShaderInterlockBarrier() override;
 
  private:
+  friend class VulkanCommandProcessor;
+  bool UpdateNative(bool is_rasterization_done,
+                    reg::RB_DEPTHCONTROL normalized_depth_control,
+                    uint32_t normalized_color_mask, const Shader& vertex_shader,
+                    int32_t window_offset_tiles);
+  bool UpdateInternal(bool is_rasterization_done,
+                      reg::RB_DEPTHCONTROL normalized_depth_control,
+                      uint32_t normalized_color_mask,
+                      const Shader& vertex_shader, int32_t window_offset_tiles,
+                      bool strict_native);
+  NativeResolveOutcome ResolveNative(
+      const Memory& memory, VulkanSharedMemory& shared_memory,
+      VulkanTextureCache& texture_cache,
+      const NativeResolveExpectation& expectation);
+  bool ResolveInternal(const Memory& memory, VulkanSharedMemory& shared_memory,
+                       VulkanTextureCache& texture_cache,
+                       uint32_t& written_address_out,
+                       uint32_t& written_length_out,
+                       reg::RB_COPY_DEST_INFO* copy_dest_info_out,
+                       bool* written_scaled_out,
+                       const NativeResolveExpectation* expectation,
+                       NativeResolveOutcome* native_outcome);
+
   enum class EdramBufferUsage {
     // There's no need for combined fragment and compute usages.
     // With host render targets, the usual usage sequence is as follows:
@@ -662,7 +718,9 @@ class VulkanRenderTargetCache final : public RenderTargetCache {
       uint32_t render_target_count, RenderTarget* const* render_targets,
       const std::vector<Transfer>* render_target_transfers,
       const uint64_t* render_target_resolve_clear_values = nullptr,
-      const Transfer::Rectangle* resolve_clear_rectangle = nullptr);
+      const Transfer::Rectangle* resolve_clear_rectangle = nullptr,
+      uint32_t* resolve_clear_recorded_mask_out = nullptr,
+      bool* transfers_complete_out = nullptr);
 
   VkPipeline GetDumpPipeline(EdramDumpShaderKey key);
 
@@ -676,12 +734,14 @@ class VulkanRenderTargetCache final : public RenderTargetCache {
       const draw_util::ResolveCopyShaderConstants& copy_shader_constants,
       uint32_t dump_base, uint32_t dump_row_length_used, uint32_t dump_rows,
       uint32_t dump_pitch, bool copy_dest_scaled,
-      VulkanSharedMemory& shared_memory, VulkanTextureCache& texture_cache);
+      VulkanSharedMemory& shared_memory, VulkanTextureCache& texture_cache,
+      uint32_t* recorded_copy_commands_out = nullptr);
 
   // Writes contents of host render targets within rectangles from
   // ResolveInfo::GetCopyEdramTileSpan to edram_buffer_ - with the plain 1x1
-  // tile layout if native_layout is set.
-  void DumpRenderTargets(uint32_t dump_base, uint32_t dump_row_length_used,
+  // tile layout if native_layout is set. Returns false if a required dump
+  // pipeline failed; legacy callers retain best-effort behavior by ignoring it.
+  bool DumpRenderTargets(uint32_t dump_base, uint32_t dump_row_length_used,
                          uint32_t dump_rows, uint32_t dump_pitch,
                          bool native_layout);
 

@@ -1,0 +1,6 @@
+dash.ClosedCaptionDll.xex exports
+=================================
+
+{"confidence": "CONFIRMED", "function_va": "0x9AA36B90", "module": "dash.ClosedCaptionDll.xex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9AA36000", "module": "dash.ClosedCaptionDll.xex", "ordinal": "0x00000002", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9AAF8770", "module": "dash.ClosedCaptionDll.xex", "ordinal": "0x00000003", "resolved_name": ""}

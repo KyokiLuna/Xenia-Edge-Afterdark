@@ -1,0 +1,6 @@
+Dash.Kiosk.lex exports
+======================
+
+{"confidence": "CONFIRMED", "function_va": "0x9B61D668", "module": "Dash.Kiosk.lex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B61CA20", "module": "Dash.Kiosk.lex", "ordinal": "0x00000002", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9B61C110", "module": "Dash.Kiosk.lex", "ordinal": "0x00000003", "resolved_name": ""}

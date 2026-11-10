@@ -1,0 +1,18 @@
+{
+  "module": "Dash.AttractionScreen.xex",
+  "program": "c09e5b9599cb_Dash.AttractionScreen.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "291f55940115c6cd13c7f5b62704c52a3dc05f655e8f9878f9476456fd8ce3ff",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9bf60400",
+  "functions": 474,
+  "calls": 1191,
+  "strings": 178,
+  "string_xrefs": 131,
+  "independent_sha256": "40aca62fbe765bd4ae0726f6f469fa6cc5f8efecf09db71cc1eb791aaf0a0191",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

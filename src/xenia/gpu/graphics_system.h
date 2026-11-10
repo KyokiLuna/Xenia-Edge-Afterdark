@@ -20,6 +20,7 @@
 
 #include "xenia/base/delegate.h"
 #include "xenia/cpu/processor.h"
+#include "xenia/gpu/graphics_interrupt_registry.h"
 #include "xenia/gpu/register_file.h"
 #include "xenia/kernel/xthread.h"
 #include "xenia/memory.h"
@@ -93,11 +94,33 @@ class GraphicsSystem {
   }
 
   virtual void InitializeRingBuffer(uint32_t ptr, uint32_t size_log2);
+  // A diagnostic identity for the title's primary ring setup. Native system UI
+  // must share the GPU without initializing a replacement primary ring.
+  uint64_t ring_initialization_generation() const {
+    return ring_initialization_generation_.load(std::memory_order_acquire);
+  }
   virtual void EnableReadPointerWriteBack(uint32_t ptr,
                                           uint32_t block_size_log2);
 
   virtual void SetInterruptCallback(uint32_t callback, uint32_t user_data);
+  void SetInterruptCallbackForProcess(uint32_t callback, uint32_t user_data,
+                                      uint32_t process_type,
+                                      uint32_t owner_hmodule,
+                                      std::shared_ptr<void> owner_pin);
+  // Existing producers have no verified submission owner. Resolve the latest
+  // legacy registration at delivery, including for held PM4 interrupts.
   void DispatchInterruptCallback(uint32_t source, uint32_t cpu);
+  GraphicsInterruptRegistry::Snapshot CaptureInterruptCallback(
+      uint32_t process_type) const;
+  // One explicitly owned event, not a broadcast or a CPU-mask inference.
+  bool DispatchInterruptCallback(
+      const GraphicsInterruptRegistry::Snapshot& token, uint32_t process_type,
+      uint64_t generation, uint32_t source, uint32_t cpu);
+  bool PrepareInterruptCallbackModuleShutdown(uint32_t hmodule);
+  bool BeginInterruptCallbackModuleShutdown(uint32_t hmodule);
+  void RetireInterruptCallbacksForModule(uint32_t hmodule);
+  bool StopInterruptCallbacksAndWait();
+  void RebindRestoredInterruptCallbackModule();
 
   virtual void ClearCaches();
 
@@ -158,8 +181,8 @@ class GraphicsSystem {
   ui::WindowedAppContext* app_context_ = nullptr;
   std::unique_ptr<ui::GraphicsProvider> provider_;
 
-  uint32_t interrupt_callback_ = 0;
-  uint32_t interrupt_callback_data_ = 0;
+  GraphicsInterruptRegistry interrupt_callbacks_;
+  std::atomic<uint64_t> ring_initialization_generation_{0};
 
   std::atomic<bool> frame_limiter_worker_running_;
   kernel::object_ref<kernel::XHostThread> frame_limiter_worker_thread_;

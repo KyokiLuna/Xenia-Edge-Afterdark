@@ -77,10 +77,18 @@ X_XDBF_GPD_SETTING_HEADER* GpdInfo::GetSetting(uint32_t id) {
   return reinterpret_cast<X_XDBF_GPD_SETTING_HEADER*>(entry->data.data());
 }
 
-std::span<const uint8_t> GpdInfo::GetSettingData(uint32_t id) {
-  const Entry* entry = GetSettingEntry(id);
+const X_XDBF_GPD_SETTING_HEADER* GpdInfo::GetSetting(uint32_t id) const {
+  const auto* entry = GetEntry(uint16_t(GpdSection::kSetting), id);
+  return entry && entry->data.size() >= sizeof(X_XDBF_GPD_SETTING_HEADER)
+             ? reinterpret_cast<const X_XDBF_GPD_SETTING_HEADER*>(
+                   entry->data.data())
+             : nullptr;
+}
 
-  if (!entry) {
+std::span<const uint8_t> GpdInfo::GetSettingData(uint32_t id) const {
+  const Entry* entry = GetEntry(uint16_t(GpdSection::kSetting), id);
+
+  if (!entry || entry->data.size() < sizeof(X_XDBF_GPD_SETTING_HEADER)) {
     return {};
   }
 
@@ -111,6 +119,63 @@ void GpdInfo::UpsertSetting(const UserSetting* setting_data) {
   memcpy(new_entry.data.data(), serialized_data.data(), serialized_data.size());
 
   UpsertEntry(&new_entry);
+}
+
+std::error_code GpdInfo::UpsertSettingPreserving(const UserSetting& setting) {
+  const uint32_t id = setting.get_setting_id();
+  const auto type = UserData::get_type(id);
+  if (!setting.is_valid_type() || setting.get_type() != type ||
+      (setting.requires_additional_data() &&
+       (setting.get_extended_data().size() > UserData::get_max_size(id) ||
+        (type == X_USER_DATA_TYPE::WSTRING &&
+         (setting.get_extended_data().size() & 1))))) {
+    return std::make_error_code(std::errc::invalid_argument);
+  }
+  std::vector<uint8_t> bytes = setting.Serialize();
+  const auto* submitted =
+      reinterpret_cast<const X_XDBF_GPD_SETTING_HEADER*>(bytes.data());
+  if (submitted->RequiresBuffer() && size_t(submitted->base_data.binary.size) !=
+                                         setting.get_extended_data().size()) {
+    return std::make_error_code(std::errc::invalid_argument);
+  }
+  auto* prior = GetEntry(static_cast<uint16_t>(GpdSection::kSetting), id);
+  if (prior) {
+    std::optional<UserSetting> checked;
+    if (UserSetting::ReadFromGpd(*this, id, checked) != X_ERROR_SUCCESS ||
+        !checked || prior->data.size() < sizeof(X_XDBF_GPD_SETTING_HEADER)) {
+      return std::make_error_code(std::errc::bad_message);
+    }
+    X_XDBF_GPD_SETTING_HEADER original;
+    memcpy(&original, prior->data.data(), sizeof(original));
+    const size_t known =
+        sizeof(original) + (original.RequiresBuffer()
+                                ? size_t(original.base_data.binary.size)
+                                : 0);
+    if (known > prior->data.size()) {
+      return std::make_error_code(std::errc::bad_message);
+    }
+    // Capture every potentially relocating byte BEFORE UpsertEntry.
+    bytes.insert(bytes.end(), prior->data.begin() + known, prior->data.end());
+    auto* next = reinterpret_cast<X_XDBF_GPD_SETTING_HEADER*>(bytes.data());
+    next->unknown_1 = original.unknown_1;
+    memcpy(next->unknown, original.unknown, sizeof(next->unknown));
+    if (original.setting_type == type &&
+        (type == X_USER_DATA_TYPE::INT32 || type == X_USER_DATA_TYPE::FLOAT ||
+         type == X_USER_DATA_TYPE::CONTEXT ||
+         type == X_USER_DATA_TYPE::BINARY ||
+         type == X_USER_DATA_TYPE::WSTRING)) {
+      memcpy(reinterpret_cast<uint8_t*>(&next->base_data) + 4,
+             reinterpret_cast<const uint8_t*>(&original.base_data) + 4, 4);
+    }
+  }
+  if (bytes.size() > UINT32_MAX) {
+    return std::make_error_code(std::errc::file_too_large);
+  }
+  Entry replacement(id, static_cast<uint16_t>(GpdSection::kSetting),
+                    static_cast<uint32_t>(bytes.size()));
+  replacement.data = std::move(bytes);
+  UpsertEntry(&replacement);
+  return {};
 }
 
 std::u16string GpdInfo::GetString(uint32_t id) const {
@@ -148,6 +213,46 @@ void GpdInfo::AddString(uint32_t id, std::u16string string_data) {
       string_data.length() + 1);
 
   UpsertEntry(&new_entry);
+}
+
+std::error_code GpdInfo::SerializeChecked(std::vector<uint8_t>& output,
+    uint64_t maximum) const {
+  const auto bad = std::make_error_code(std::errc::bad_message);
+  if (header_.magic != kXdbfSignatureXdbf || header_.version != 0x10000 ||
+      entries_.size() != header_.entry_used ||
+      entries_.size() > header_.entry_count || free_entries_.empty() ||
+      free_entries_.size() != header_.free_used ||
+      free_entries_.size() > header_.free_count) { return bad; }
+  const uint64_t eof = free_entries_.back().offset;
+  const uint64_t tail_size = free_entries_.back().size;
+  // FindFreeLocation advances offset and subtracts the same amount from
+  // remaining size. The terminal range ends at UINT32_MAX; only an empty
+  // producer starts with size==UINT32_MAX. Widen BEFORE adding, no wrap.
+  if (eof + tail_size != UINT32_MAX) { return bad; }
+  const uint64_t total = sizeof(XdbfHeader) +
+      uint64_t(header_.entry_count) * sizeof(XdbfEntry) +
+      uint64_t(header_.free_count) * sizeof(XdbfFileLoc) + eof;
+  // The unchanged serializer uses uint32_t for all these intermediates.
+  if (total > maximum || total > UINT32_MAX || total > SIZE_MAX) {
+    return std::make_error_code(std::errc::file_too_large);
+  }
+  for (const auto& entry : entries_) {
+    const uint64_t offset = entry.info.offset, length = entry.info.size;
+    if (length != entry.data.size() || offset > eof || length > eof - offset) {
+      return bad;
+    }
+  }
+  for (size_t i = 0; i + 1 < free_entries_.size(); ++i) {
+    const uint64_t offset = free_entries_[i].offset;
+    const uint64_t length = free_entries_[i].size;
+    if (length == UINT32_MAX || offset > eof || length > eof - offset) {
+      return bad;
+    }
+  }
+  auto temporary = Serialize();
+  if (temporary.size() != total) { return bad; }
+  output = std::move(temporary);
+  return {};
 }
 
 std::vector<uint8_t> GpdInfo::Serialize() const {

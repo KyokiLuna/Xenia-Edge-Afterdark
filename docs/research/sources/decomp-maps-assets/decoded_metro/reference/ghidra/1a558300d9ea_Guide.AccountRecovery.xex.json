@@ -1,0 +1,18 @@
+{
+  "module": "Guide.AccountRecovery.xex",
+  "program": "1a558300d9ea_Guide.AccountRecovery.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "c535a3c41488031a1754203864d555a95b1f7b9c54ac0be6fdaf6dfa8de25aee",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 2361,
+  "calls": 10931,
+  "strings": 2503,
+  "string_xrefs": 2385,
+  "independent_sha256": "c535a3c41488031a1754203864d555a95b1f7b9c54ac0be6fdaf6dfa8de25aee",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

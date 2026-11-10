@@ -20,18 +20,21 @@
 #include <string>
 #include <utility>
 #include <vector>
-
 #include "xenia/apu/audio_media_player.h"
 #include "xenia/base/delegate.h"
 #include "xenia/base/exception_handler.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/title_execution_state.h"
 #include "xenia/kernel/util/game_info_database.h"
 #include "xenia/kernel/util/xlast.h"
 #include "xenia/memory.h"
 #include "xenia/patcher/patcher.h"
 #include "xenia/patcher/plugin_loader.h"
+#include "xenia/title_catalog.h"
+#include "xenia/title_ids.h"
 #include "xenia/ui/immediate_drawer.h"
 #include "xenia/vfs/device.h"
+#include "xenia/vfs/installed_system_source.h"
 #include "xenia/vfs/virtual_file_system.h"
 #include "xenia/vfs/xbe_metadata.h"
 #include "xenia/xbox.h"
@@ -45,9 +48,18 @@ class ExportResolver;
 class Processor;
 class ThreadState;
 }  // namespace cpu
+namespace filesystem {
+class SnapshotRecoveryOwner;
+}  // namespace filesystem
 namespace gpu {
 class GraphicsSystem;
 }  // namespace gpu
+namespace kernel {
+class ConsoleDataOwner;
+namespace xam {
+struct ProfileGpdReadModels;
+}
+}  // namespace kernel
 namespace hid {
 class InputDriver;
 class InputSystem;
@@ -65,8 +77,6 @@ static constexpr std::string_view kDefaultGameSymbolicLink = "GAME:";
 static constexpr std::string_view kDefaultPartitionSymbolicLink = "D:";
 static constexpr std::string_view kDefaultUpdateSymbolicLink = "UPDATE:";
 
-// The original Xbox backwards compatibility emulator.
-constexpr uint32_t kXeFuTitleId = 0xFFFE07D2;
 
 // The main type that runs the whole emulator.
 // This is responsible for initializing and managing all the various subsystems.
@@ -81,22 +91,48 @@ class Emulator {
   // the proper ordering and hierarchy should be constructed in a single
   // callback (in this example, for the whole subsystem).
   //
+  enum class SetupPurpose { kGuestExecution, kGraphicsReplay };
   explicit Emulator(const std::filesystem::path& command_line,
                     const std::filesystem::path& storage_root,
                     const std::filesystem::path& content_root,
-                    const std::filesystem::path& cache_root);
+                    const std::filesystem::path& cache_root,
+                    SetupPurpose purpose = SetupPurpose::kGuestExecution);
   ~Emulator();
+  // Owned profile model data; excludes concurrent kernel replacement for the
+  // short capture only. Returned data never borrows Kernel/ProfileManager.
+  std::shared_ptr<const kernel::xam::ProfileGpdReadModels> CaptureProfileGpds(
+      uint8_t slot, std::error_code&);
 
   // Full command line used when launching the process.
   const std::filesystem::path& command_line() const { return command_line_; }
 
   // Folder persistent internal emulator data is stored in.
   const std::filesystem::path& storage_root() const { return storage_root_; }
+  // App binds an explicitly requested native reserve before config writes;
+  // retain that authority for every later storage consumer/Reset generation.
+  bool BindProtectedStorageRoot(std::shared_ptr<const filesystem::HostStorageRoot>);
 
   // Folder Tools > Install System Files puts the console's flash and system
   // partitions in.
   std::filesystem::path system_files_path() const {
     return storage_root_ / "system";
+  }
+
+  // Read source is separate from the always-local installer destination.
+  const std::shared_ptr<vfs::InstalledSystemSource>& installed_system_source()
+      const {
+    return installed_system_source_;
+  }
+  std::filesystem::path GetInstalledDashboardPath() const;
+  bool RefreshInstalledSystemSource(bool local_install_changed = false);
+  std::optional<vfs::InstalledSystemOperationGate::Reservation>
+  TryBeginSystemInstallation();
+  std::optional<vfs::InstalledSystemOperationGate::Reservation>
+  TryBeginTitleLaunch() {
+    return system_operations_.TryLaunch();
+  }
+  bool system_installation_pending() const {
+    return system_operations_.installing();
   }
 
   // Folder XeFu and its xbox.xex are in, shown to them as the system partition
@@ -177,6 +213,22 @@ class Emulator {
   bool is_title_open() const { return title_id_.has_value(); }
   // Whether a relaunch or reset is between titles.
   bool is_relaunching() const { return relaunching_; }
+  bool is_restoring() const { return restoring_.load(); }
+
+  // Foreground execution identity, distinct from title metadata published
+  // while a launch is still being prepared. Read by native system services.
+  const kernel::TitleExecutionState& title_execution_state() const {
+    return title_execution_state_;
+  }
+  bool OwnsTitleExecution(kernel::KernelState* owner) const {
+    return owner &&
+           title_execution_owner_.load(std::memory_order_acquire) == owner;
+  }
+  void NotifyTitleExecutionStarted(uint64_t generation, uint32_t hmodule,
+                                   uint32_t thread_id,
+                                   kernel::KernelState* owner);
+  void NotifyTitleExecutionStopped(uint64_t generation,
+                                   kernel::KernelState* owner);
 
   uint32_t main_thread_id();
 
@@ -453,14 +505,7 @@ class Emulator {
   }
 
   // A release in the game library, which the dashboard lists as its games.
-  struct LibraryTitle {
-    uint32_t title_id = 0;
-    uint32_t version = 0;
-    std::string name;
-    std::filesystem::path path;
-    std::filesystem::path icon_path;
-    XContentType content_type = XContentType::kInvalid;
-  };
+  using LibraryTitle = TitleCatalogVariant;
   // The app replaces the list whenever its game library changes, so guest
   // threads never read the library itself.
   void SetLibraryTitles(std::vector<LibraryTitle> titles) {
@@ -550,8 +595,9 @@ class Emulator {
   }
 
   // Called when the game requests an exit to the dashboard. Returns true when
-  // the host takes the title down itself, which the calling guest thread waits
-  // for, false to have the title terminated.
+  // the host queues teardown on another thread, which the calling guest thread
+  // waits for, false to have the title terminated. The callback must not
+  // synchronously destroy its caller's KernelState or guest thread.
   using ExitToDashboardCallback = std::function<bool()>;
   ExitToDashboardCallback on_exit_to_dashboard() const {
     return on_exit_to_dashboard_;
@@ -580,6 +626,13 @@ class Emulator {
   static void SetPersistentEmulatorFlags(uint64_t new_flags);
   static bool ExceptionCallbackThunk(Exception* ex, void* data);
   bool ExceptionCallback(Exception* ex);
+
+  // Native domains can start resident SYSTEM workers. Join their CPU and
+  // callback producers while graphics/audio/input providers are still alive.
+  void StopNativeSystemBeforeProviderShutdown();
+  bool StartNativeSystemFirstRecordProbeBeforeTitle();
+  bool ValidateNativeSystemUiLaunchSelection() const;
+  bool StartNativeSystemUiBeforeTitle();
 
   std::string RemountAndResolveLaunchPath(const std::string& launch_path);
   std::string FindLaunchModule();
@@ -630,9 +683,19 @@ class Emulator {
   mutable std::mutex library_titles_mutex_;
   std::shared_ptr<const std::vector<LibraryTitle>> library_titles_;
   DiscRecorder disc_recorder_;
+  const SetupPurpose setup_purpose_;
   std::filesystem::path storage_root_;
+  std::shared_ptr<const filesystem::HostStorageRoot> protected_storage_root_;
+  std::shared_ptr<vfs::InstalledSystemSource> installed_system_source_;
+  uint64_t mounted_system_generation_ = 0;
+  vfs::InstalledSystemOperationGate system_operations_;
   std::filesystem::path content_root_;
   std::filesystem::path cache_root_;
+  // Console authority survives title resets and is destroyed after Kernel/VFS.
+  std::unique_ptr<kernel::ConsoleDataOwner> console_data_owner_;
+  // Explicit primary managed-storage recovery authority, protected before
+  // guest mounts and retained across title resets independently of settings.
+  std::shared_ptr<const filesystem::SnapshotRecoveryOwner> snapshot_recovery_owner_;
 
   std::string title_name_;
   std::string title_version_;
@@ -658,11 +721,13 @@ class Emulator {
   kernel::object_ref<kernel::XThread> main_thread_;
   kernel::object_ref<kernel::XHostThread> plugin_loader_thread_;
   std::optional<uint32_t> title_id_;  // Currently running title ID
+  kernel::TitleExecutionState title_execution_state_;
+  std::atomic<kernel::KernelState*> title_execution_owner_{nullptr};
   uint8_t current_disc_number_ = 0;
   std::unique_ptr<kernel::util::GameInfoDatabase> game_info_database_;
 
   bool paused_;
-  bool restoring_;
+  std::atomic<bool> restoring_;
   std::atomic<bool> relaunching_{false};
   bool boot_animation_requested_ = false;
   // Held across a launch and a whole relaunch so title teardown waits for a

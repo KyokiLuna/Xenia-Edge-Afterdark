@@ -1,0 +1,8 @@
+dash.NuiFirstUse.xex exports
+============================
+
+{"confidence": "CONFIRMED", "function_va": "0x9D959500", "module": "dash.NuiFirstUse.xex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9D96D2C0", "module": "dash.NuiFirstUse.xex", "ordinal": "0x00000002", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9D95DF48", "module": "dash.NuiFirstUse.xex", "ordinal": "0x00000003", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9D95DFA8", "module": "dash.NuiFirstUse.xex", "ordinal": "0x00000004", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9D96D2C0", "module": "dash.NuiFirstUse.xex", "ordinal": "0x00000005", "resolved_name": ""}

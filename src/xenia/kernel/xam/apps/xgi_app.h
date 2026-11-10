@@ -12,6 +12,7 @@
 
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/xam/app_manager.h"
+#include "xenia/kernel/xam/profile_gpd_transaction.h"
 
 namespace xe {
 namespace kernel {
@@ -21,6 +22,11 @@ namespace apps {
 class XgiApp : public App {
  public:
   explicit XgiApp(KernelState* kernel_state);
+  using AchievementBatch = std::vector<CapturedAchievementAward>;
+  static std::shared_ptr<const AchievementBatch> CaptureAchievementBatch(
+      KernelState&, uint32_t, uint32_t, X_HRESULT&);
+  static X_HRESULT ExecuteAchievementBatch(KernelState&,
+                                           const AchievementBatch&);
 
   X_HRESULT DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
                                 uint32_t buffer_length) override;

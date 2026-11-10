@@ -1,0 +1,18 @@
+{
+  "module": "bootanim.xex",
+  "program": "60ac8cd81fa6_bootanim.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "1699406fe0791960eb9d3346c463a172a88c1423197216865c9f6aa861002244",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x98000400",
+  "functions": 814,
+  "calls": 2819,
+  "strings": 169,
+  "string_xrefs": 27,
+  "independent_sha256": "1699406fe0791960eb9d3346c463a172a88c1423197216865c9f6aa861002244",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

@@ -1,0 +1,4 @@
+$install_extender.xex exports
+=============================
+
+{"confidence": "CONFIRMED", "function_va": "0x9F105EC0", "module": "$install_extender.xex", "ordinal": "0x00000001", "resolved_name": ""}

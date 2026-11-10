@@ -1,0 +1,2020 @@
+va	data_type	text
+0x9010089c	string	TFAReminderScene
+0x901008b0	string	TFALogInCongratsScene
+0x901008c8	string	TFALogInPasswordInputScene
+0x901008e4	string	TFALogInWLIDInputScene
+0x901008fc	string	TFALogInIntroScene
+0x90100910	string	TFAAuthUpRetryScene
+0x90100924	string	TFAProofUpConfirmNoticeScene
+0x90100944	string	TFAAuthUpOTCInputScene
+0x9010095c	string	TFAAuthUpOTCNoticeScene
+0x90100974	string	TFAAuthUpProofTypeSelectionScene
+0x90100998	string	TFAProofUpHalfDoneScene
+0x901009b0	string	TFAProofUpRetryScene
+0x901009c8	string	TFAProofUpCongratsScene
+0x901009e0	string	TFAProofUpOTCInputScene
+0x901009f8	string	TFAProofUpOTCNoticeScene
+0x90100a14	string	TFAProofUpProofDataInputScene
+0x90100a34	string	TFAProofUpCountryCodeSelectionScene
+0x90100a58	string	TFAProofUpProofTypeSelectionScene
+0x90100a7c	string	TFAProofUpMarkLostScene
+0x90100a94	string	TFAProofUpIntroScene
+0x90100aac	string	TFAFirstScene
+0x90100abc	unicode	CXuiEditAutoScroll
+0x90100b38	string	e:\bt\1c10e6\core\private\flash\xam\apps\accountcreation\tfa\src\tfaapp.cpp
+0x90100b84	unicode	section://%X,%S
+0x90100ba4	string	'Main' must return a scene
+0x90100bc0	string	Mode=%d;UserIndex=%d;WLID=%S;Password=%S;
+0x90100bec	string	Missing entry point 'Main'
+0x90100c10	string	luaapp
+0x90100c18	string	media
+0x90100c20	string	luaxbox
+0x90100c30	string	OnPersist
+0x90100c3c	unicode	XuiEdit
+0x90100c4c	string	GetCountryCode
+0x90100c5c	string	ValidateEmail
+0x90100c6c	string	WStringToString
+0x90100c7c	string	GetSignedInUserData
+0x90100c90	string	UpdateReminder
+0x90100ca0	string	GetRequiredNumberOfProofs
+0x90100cbc	string	GetPresetWindowsLiveCreds
+0x90100cd8	string	GetWindowsLiveMemberName
+0x90100cf4	string	GetWindowsLiveCreds
+0x90100d08	string	IsTFASucceeded
+0x90100d18	string	SetTFAResults
+0x90100d28	string	XOnlineMachineLogon
+0x90100d3c	string	IsConnectedToLive
+0x90100d50	string	GetProofs
+0x90100d5c	string	ConsumeProofOTC
+0x90100d6c	string	SendProofOTC
+0x90100d7c	string	DeleteProof
+0x90100d88	string	AddProof
+0x90100df4	string	TFA.Util
+0x90100e00	string	ErrorCodeOverride
+0x90100e14	string	NonFatalErrors
+0x90100e24	string	XamCommonErrorStringIds
+0x90100e3c	string	ErrorStringIds
+0x90100e50	string	e:\bt\1c10e6\core\private\flash\xam\apps\accountcreation\tfa\src\tfautil.cpp
+0x90100ea0	string	_XPassportGetMemberName failed
+0x90100ec0	string	gamertag
+0x90100ecc	string	onlineXuid
+0x90100ed8	string	offlineXuid
+0x90100ee4	string	Xbox.Object.LuaPointerWrapper
+0x90100f18	string	TFAProofCount
+0x90100f28	string	Status
+0x90100f38	string	ProofType
+0x90100f44	string	ProofData
+0x90100f50	string	Proof
+0x90100f6c	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\inc\LuaPub.h
+0x90100fac	string	LoadPersistData
+0x90100fbc	string	SavePersistData
+0x90100fcc	string	TFA.Persist
+0x90100fd8	string	Unable to find 'PersistStack' in the persist data table
+0x90101010	string	Too many entries in the PersistStack!
+0x90101038	string	PersistStack
+0x90101048	string	Unable to find 'Proofs' in the persist data table
+0x9010107c	string	Too many entries in the Proofs!
+0x9010109c	string	Proofs
+0x901010a4	string	PasswordInputScene_ActionOnActivate
+0x901010c8	string	WLIDInputScene_ActionOnActivate
+0x901010e8	string	OTCInputScene_ActionOnActivate
+0x90101108	string	ProofDataInputScene_ActionOnActivate
+0x90101130	string	Password
+0x9010113c	string	Unable to allocate encrypted memory to store password.
+0x90101178	string	e:\bt\1c10e6\core\private\flash\xam\apps\accountcreation\tfa\src\tfapersist.cpp
+0x901011d0	string	Token
+0x901011d8	string	OTCReceipt
+0x901011e8	string	PasswordInterrupt
+0x901011fc	string	UnconfirmedProofCount
+0x90101214	string	ProofCountryCode
+0x90101228	string	UserIndex
+0x9010123c	string	LogCompletion
+0x9010124c	string	LogStartup
+0x90101258	string	LogError
+0x90101264	string	LogScene
+0x90101270	string	TFA_SUCCESS
+0x9010128c	string	TFA_START
+0x901013a4	unicode	HH:mm:ss
+0x901013b8	unicode	dddd, MMMM dd, yyyy
+0x901013e0	unicode	MM/dd/yy
+0x90101404	unicode	December
+0x90101418	unicode	November
+0x9010142c	unicode	October
+0x9010143c	unicode	September
+0x90101450	unicode	August
+0x90101460	unicode	July
+0x9010146c	unicode	June
+0x90101478	unicode	April
+0x90101484	unicode	March
+0x90101490	unicode	February
+0x901014a4	unicode	January
+0x90101514	unicode	Saturday
+0x90101528	unicode	Friday
+0x90101538	unicode	Thursday
+0x9010154c	unicode	Wednesday
+0x90101560	unicode	Tuesday
+0x90101570	unicode	Monday
+0x90101580	unicode	Sunday
+0x901015c8	string	HH:mm:ss
+0x901015d4	string	dddd, MMMM dd, yyyy
+0x901015e8	string	MM/dd/yy
+0x901015fc	string	December
+0x90101608	string	November
+0x90101614	string	October
+0x9010161c	string	September
+0x90101628	string	August
+0x90101640	string	April
+0x90101648	string	March
+0x90101650	string	February
+0x9010165c	string	January
+0x90101694	string	Saturday
+0x901016a0	string	Friday
+0x901016a8	string	Thursday
+0x901016b4	string	Wednesday
+0x901016c0	string	Tuesday
+0x901016c8	string	Monday
+0x901016d0	string	Sunday
+0x90101f04	string	%04u-%02u-%02uT%02u:%02u:%02uZ
+0x90101fe0	string	$Lua: Lua 5.1.4 Copyright (C) 1994-2008 Lua.org, PUC-Rio $\n$Authors: R. Ierusalimschy, L. H. de Figueiredo & W. Celes $\n$URL: www.lua.org $\n
+0x90102070	string	no calling environment
+0x90102088	string	no value
+0x901020ec	string	%s:%d: 
+0x901020f8	string	stack overflow (%s)
+0x9010210c	string	bad argument #%d to '%s' (%s)
+0x9010212c	string	calling '%s' on bad self (%s)
+0x9010214c	string	method
+0x90102158	string	bad argument #%d (%s)
+0x90102170	string	%s expected, got %s
+0x90102184	string	value expected
+0x90102194	string	name conflict for module '%s'
+0x901021b4	string	_LOADED
+0x901021bc	string	invalid option '%s'
+0x90102328	string	(null)
+0x9010233c	string	[string "
+0x90102394	string	not enough memory
+0x901023a8	string	error in error handling
+0x901023c8	string	attempt to yield across metamethod/C-call boundary
+0x901023fc	string	stack overflow
+0x9010240c	string	C stack overflow
+0x90102420	string	cannot resume non-suspended coroutine
+0x90102544	string	(*temporary)
+0x9010256c	string	=(tail call)
+0x90102584	string	upvalue
+0x9010258c	string	global
+0x90102594	string	field
+0x9010259c	string	local
+0x901025a4	string	%s:%d: %s
+0x901025b0	string	attempt to %s a %s value
+0x901025cc	string	attempt to %s %s '%s' (a %s value)
+0x901025f0	string	concatenate
+0x901025fc	string	perform arithmetic on
+0x90102614	string	attempt to compare %s with %s
+0x90102634	string	attempt to compare two %s values
+0x90102658	string	__call
+0x90102660	string	__concat
+0x9010267c	string	__len
+0x90102684	string	__unm
+0x9010268c	string	__pow
+0x90102694	string	__mod
+0x9010269c	string	__div
+0x901026a4	string	__mul
+0x901026ac	string	__sub
+0x901026b4	string	__add
+0x901026c4	string	__mode
+0x901026d4	string	__newindex
+0x901026e0	string	__index
+0x901026e8	string	upval
+0x901026f0	string	proto
+0x901026f8	string	thread
+0x90102700	string	function
+0x9010270c	string	table
+0x90102714	string	string
+0x9010271c	string	number
+0x90102724	string	userdata
+0x90102730	string	boolean
+0x9010288c	string	%.14g
+0x90102894	string	loop in gettable
+0x901028a8	string	index
+0x901028b0	string	loop in settable
+0x901028c4	string	string length overflow
+0x901028dc	string	get length of
+0x901028ec	string	'for' step must be a number
+0x90102908	string	'for' initial value must be a number
+0x90102930	string	'for' limit must be a number
+0x901029b8	string	invalid key to 'next'
+0x901029d0	string	table overflow
+0x901029e0	string	table index is NaN
+0x901029f4	string	table index is nil
+0x90102b6c	string	memory allocation error: block too big
+0x90102bfc	string	'%s' expected
+0x90102c0c	string	function at line %d has more than %d %s
+0x90102c34	string	main function has more than %d %s
+0x90102c58	string	'%s' expected (to close '%s' at line %d)
+0x90102c84	string	too many local variables
+0x90102ca0	string	local variables
+0x90102cb0	string	upvalues
+0x90102cbc	string	chunk has too many syntax levels
+0x90102ce0	string	constant table overflow
+0x90102cf8	string	items in a constructor
+0x90102d14	string	<name> or '...' expected
+0x90102d38	string	ambiguous syntax (function call x new statement)
+0x90102d6c	string	function arguments expected
+0x90102d88	string	unexpected symbol
+0x90102d9c	string	cannot use '...' outside a vararg function
+0x90102dc8	string	variables in assignment
+0x90102de0	string	syntax error
+0x90102df0	string	no loop to break
+0x90102e10	string	(for step)
+0x90102e1c	string	(for limit)
+0x90102e28	string	(for index)
+0x90102e34	string	(for control)
+0x90102e44	string	(for state)
+0x90102e50	string	(for generator)
+0x90102e60	string	'=' or 'in' expected
+0x90102ebc	string	%s: %s in precompiled chunk
+0x90102ed8	string	unexpected end
+0x90102ee8	string	bad integer
+0x90102ef4	string	bad constant
+0x90102f04	string	bad code
+0x90102f10	string	code too deep
+0x90102f28	string	bad header
+0x90102f38	string	binary string
+0x90102f48	string	<eof>
+0x90102f50	string	<string>
+0x90102f5c	string	<name>
+0x90102f64	string	<number>
+0x90102f84	string	while
+0x90102f8c	string	until
+0x90102fa4	string	return
+0x90102fac	string	repeat
+0x90102fc8	string	false
+0x90102fd4	string	elseif
+0x90102fe8	string	break
+0x901030c0	string	lexical element too long
+0x901030e0	string	char(%d)
+0x901030ec	string	%s near '%s'
+0x901030fc	string	chunk has too many lines
+0x90103118	string	malformed number
+0x90103134	string	unfinished long string
+0x9010314c	string	unfinished long comment
+0x90103164	string	nesting of [[...]] is deprecated
+0x90103188	string	unfinished string
+0x9010319c	string	escape sequence too large
+0x901031b8	string	invalid long string delimiter
+0x901031dc	string	VARARG
+0x901031e4	string	CLOSURE
+0x901031ec	string	CLOSE
+0x901031f4	string	SETLIST
+0x901031fc	string	TFORLOOP
+0x90103208	string	FORPREP
+0x90103210	string	FORLOOP
+0x90103218	string	RETURN
+0x90103220	string	TAILCALL
+0x90103234	string	TESTSET
+0x90103254	string	CONCAT
+0x90103288	string	NEWTABLE
+0x90103294	string	SETTABLE
+0x901032a0	string	SETUPVAL
+0x901032ac	string	SETGLOBAL
+0x901032b8	string	GETTABLE
+0x901032c4	string	GETGLOBAL
+0x901032d0	string	GETUPVAL
+0x901032dc	string	LOADNIL
+0x901032e4	string	LOADBOOL
+0x901032f0	string	LOADK
+0x90103478	string	control structure too long
+0x90103494	string	function or expression too complex
+0x901034b8	string	code size overflow
+0x901034d4	string	package
+0x901034dc	string	Milliseconds
+0x901034ec	string	Second
+0x901034f4	string	Minute
+0x90103504	string	DayOfWeek
+0x90103514	string	Month
+0x90103524	string	PasscodeKey4
+0x90103534	string	PasscodeKey3
+0x90103544	string	PasscodeKey2
+0x90103554	string	PasscodeKey1
+0x90103564	string	(Can't convert to string)
+0x90103580	string	tostring
+0x9010358c	string	expected table of options
+0x901035a8	string	hr=0x%x location=%s:%d msg=%s
+0x901035c8	string	Failed to parse unicode string
+0x901035e8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luautil.cpp
+0x9010362c	string	Expected string
+0x9010363c	string	Failed to convert Utf8 string to unicode
+0x90103668	string	Xbox.UnicodeUd
+0x90103678	string	'tostring' must return a string to 'print'
+0x901036b0	string	luadprint
+0x901036bc	string	print
+0x901036c4	string	***********************************************\n
+0x901036f8	string	%s (%u)\n
+0x90103704	string	%s:%u;
+0x9010370c	string	-----------------------------------------------\n
+0x90103740	string	Lua App Name: %s\n
+0x90103754	string	******************* Lua Error *****************\n
+0x9010378c	string	Package module required
+0x901037a4	string	require
+0x901037ac	string	Pointer type cannot be nil
+0x901037c8	string	wrong result type: expected number(double)
+0x901037f4	string	wrong result type: expected number(int)
+0x9010381c	string	wrong result type: expected string(utf8)
+0x90103848	string	wrong result type: expected userdata(Unicode)
+0x90103878	string	wrong result type: expected number(uint)
+0x901038a4	string	invalid option '%c'
+0x901038b8	string	too many arguments
+0x901038cc	string	Not a valid function
+0x901038e4	string	Invalid user index
+0x901038f8	string	expected user index
+0x90103910	string	Invalid milliseconds
+0x90103930	string	Invalid second
+0x90103940	string	Invalid minute
+0x90103958	string	Invalid hour
+0x90103970	string	Invalid day
+0x90103988	string	Invalid day of week
+0x901039a8	string	Invalid month
+0x901039c0	string	Invalid year
+0x901039e0	string	SystemTimeToFileTime failed
+0x901039fc	string	XboxUd.%s
+0x90103a18	string	Invalid string constant
+0x90103a30	string	This function must be called from a coroutine
+0x90103a60	string	Not enough parameters specified to function
+0x90103a8c	string	__tostring
+0x90103a98	string	LocateTitle
+0x90103aa4	string	Xbox.System
+0x90103ab0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\lualocatetitle.cpp
+0x90103af8	string	LocateTitle Failed!
+0x90103b0c	string	AutoShutoff
+0x90103b18	string	ScreenSaver
+0x90103b24	string	GetSystemVersion
+0x90103b38	string	IsDataCenterMode
+0x90103b4c	string	NuiIsDeviceReady
+0x90103b60	string	IsSystemAppAvailable
+0x90103b78	string	IsUIActive
+0x90103b84	string	SetEngagedTrackingID
+0x90103b9c	string	IsScreenSaverActive
+0x90103bb0	string	ResetInactivity
+0x90103bc0	string	SetInactivityTime
+0x90103bd4	string	SetInactivityEnabled
+0x90103bec	string	GetTickDiff
+0x90103bf8	string	GetTickCount
+0x90103c08	string	GetDiffDays
+0x90103c14	string	GetSystemTime
+0x90103c24	string	GetLocalTime
+0x90103c34	string	SystemTimeToFileTime
+0x90103c4c	string	FileTimeToSystemTime
+0x90103c64	string	GetLiveHiveValue
+0x90103c78	string	TryGetInputState
+0x90103c8c	string	ShowSignIn
+0x90103c98	string	LaunchDashApp
+0x90103ca8	string	IsWideScreen
+0x90103d30	string	DpadUp
+0x90103d38	string	DpadDown
+0x90103d44	string	DpadLeft
+0x90103d50	string	DpadRight
+0x90103d5c	string	Start
+0x90103d6c	string	LeftThumb
+0x90103d78	string	RightThumb
+0x90103d84	string	LeftShoulder
+0x90103d94	string	RightShoulder
+0x90103da4	string	BigButton
+0x90103e60	string	LocalSignInOnly
+0x90103e70	string	ShowOnlyOnlineEnabled
+0x90103e88	string	AllowSignout
+0x90103e98	string	DisallowPlayAs
+0x90103ea8	string	AddUser
+0x90103eb0	string	EnableGuest
+0x90103ebc	string	ConvertOfflineToGuest
+0x90103ed4	string	DisallowGuest
+0x90103ee8	string	CompleteSignIn
+0x90103ef8	string	ShowOnlyParentallyControlled
+0x90103f18	string	DisallowReload
+0x90103f28	string	AllowMachineAccountOnly
+0x90103f40	string	ShowOnlySilverTier
+0x90103f54	string	NoErrorUI
+0x90103f60	string	FromDash
+0x90103f6c	string	CheckForMissingAvatars
+0x90103f84	string	StartLogonOnReload
+0x90103f98	string	PasscodeVerified
+0x90103fb8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luaxbox.cpp
+0x90103ffc	string	Unable to retrieve LiveHive value
+0x90104020	string	RightThumbY
+0x9010402c	string	RightThumbX
+0x90104038	string	LeftThumbY
+0x90104044	string	LeftThumbX
+0x90104050	string	RightTrigger
+0x90104060	string	LeftTrigger
+0x9010406c	string	PacketNumber
+0x9010407c	string	Invalid number of panes
+0x90104094	string	LiveHive key name must be specified
+0x901040b8	string	Conversion error
+0x901040cc	string	Invalid
+0x901040d4	string	Unknown
+0x901040dc	string	Untrusted
+0x901040e8	string	Trusted
+0x901040f0	string	ClearConsoleTrustLevels
+0x90104108	string	GetConsoleTrustLevels
+0x90104120	string	SetConsoleTrustLevel
+0x90104138	string	GetMachineId
+0x90104148	string	xuid{t:xuid,offset:0,size:8,loc:url}
+0x90104170	string	{LiveHive:LiveServiceUrl.roamingprofile}/users/xuid({xuid})/devices
+0x901041b8	string	body{t:item,offset:0,size:2870,loc:body}[?{t:item,offset:0,size:2870,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom},pagingInfo/continuationToken{t:str,offset:8,size:42,loc:dom,max:42,opt:4},userDeviceAssociations{t:item,offset:54,size:2816,loc:dom,max:64,itemsize:44,countoffset:50,countsize:4}[machinePuid{t:uint,offset:0,size:8,loc:dom},trustLevel{t:int,offset:8,size:4,loc:dom},lastSignIn{t:datetime,offset:12,size:16,loc:dom},lastSignOut{t:datetime,offset:28,size:16,loc:dom}]]]
+0x901043d0	string	xuid{t:xuid,offset:0,size:8,loc:url},maxItems{t:uint,offset:8,size:4,loc:qs},machinePuid{t:uint,offset:16,size:8,loc:url,opt:12},continuationToken{t:str,offset:28,size:42,loc:qs,max:42,opt:24}
+0x90104498	string	{LiveHive:LiveServiceUrl.roamingprofile}/users/xuid({xuid})/devices/{machinePuid}
+0x901044f0	string	body{t:item,offset:0,size:4,loc:body}[?{t:item,offset:0,size:4,loc:dom}[source{t:hrfacility,offset:0,size:4,loc:dom},code{t:hrcode,offset:0,size:4,loc:dom}]]
+0x90104590	string	xuid{t:xuid,offset:0,size:8,loc:url},machinepuid{t:uint,offset:8,size:8,loc:url},body{t:item,offset:16,size:4,loc:body,enc:json}[?{t:item,offset:0,size:4,loc:dom}[trustLevel{t:int,offset:0,size:4,loc:dom}]]
+0x90104660	string	{LiveHive:LiveServiceUrl.roamingprofile}/users/xuid({xuid})/devices/{machinepuid}
+0x901046dc	string	http://xboxlive.com
+0x901046f4	string	DELETE
+0x901046fc	string	MachineId
+0x90104708	string	TrustLevel
+0x90104714	string	Xbox.ConsoleImpl
+0x90104728	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luaconsole.cpp
+0x9010476c	string	userDeviceAssociations
+0x90104784	string	machinePuid
+0x90104790	string	trustLevel
+0x9010479c	string	continuationToken
+0x901047b0	string	GetWebServiceToken
+0x901047c4	string	ClearLogonTicketCaches
+0x901047dc	string	Xbox.Net
+0x901047e8	string	No token returned!
+0x90104800	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luanettoken.cpp
+0x90104848	string	Unable to retrieve STS token
+0x90104868	string	GetErrorStringFromService
+0x90104884	string	GetCommonString
+0x90104898	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luacommonstrings.cpp
+0x901048e4	string	GetErrorStringFromService failed!
+0x90104908	string	XamGetErrorStringFromWebService API failed.
+0x90104934	string	GetKeyboardText
+0x90104944	string	ShowBrandedKeyboard
+0x90104958	string	ShowKeyboard
+0x90104968	string	DefaultText
+0x90104974	string	Result text size is not valid
+0x90104998	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luashowkeyboardhud.cpp
+0x901049e4	string	Invalid workspace buffer size returned
+0x90104a0c	string	ShowKeyboard not previously called
+0x90104a30	string	GetPasscodeUIResult
+0x90104a44	string	ShowMessageBox
+0x90104a58	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luamessageboxhud.cpp
+0x90104ac4	string	XamShowMessageBox failed.
+0x90104b00	string	Xbox.Object.LuaWaitHudMessageBox
+0x90104b24	string	e:\bt\1c10e6\core\private\flash\corelibs\luaXbox\inc\LuaPub.h
+0x90104b64	string	Button text is too long
+0x90104b7c	string	Already showing a HUD message box
+0x90104ba0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luadata.cpp
+0x90104be8	string	Xbox.Object.LuaXOverlapped
+0x90104c28	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luaxuid.cpp
+0x90104c6c	string	%s%016I64X
+0x90104c78	string	Xuid:
+0x90104c80	string	Invalid xuid
+0x90104c90	string	Xuid expected
+0x90104ca0	string	Xbox.Object.LuaEtxProducer
+0x90104cc0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luaetx.cpp
+0x90104d00	string	Unable to set properties on an Etx producer
+0x90104d2c	string	Invalid name
+0x90104d50	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luabignumber.cpp
+0x90104d98	string	%I64u
+0x90104da0	string	LUASHUTDOWN
+0x90104dac	string	LUASTARTUP
+0x90104ebc	string	\tBeStrict
+0x90104ecb	string	IsBeingStrict
+0x90104edd	string	\rgetmetatable
+0x90104ef8	string	\rsetmetatable
+0x90104f0b	string	__declared
+0x90104f1b	string	__newindex
+0x90104f2b	string	__index
+0x90104f38	string	_GetGlobal
+0x90104f48	string	_SetGlobal
+0x90104f58	string	_BuildClass
+0x90104f69	string	ImplementClass
+0x90104f7d	string	import
+0x90104f89	string	require
+0x90104f95	string	\tSafeCall
+0x90104fa4	string	Curry
+0x90104fae	string	\tDelegate
+0x9010500d	string	debug
+0x90105018	string	getinfo
+0x9010514a	string	__declared
+0x9010516b	string	error
+0x90105175	string	 assign to undeclared variable '
+0x901051ad	string	rawset
+0x90105245	string	__declared
+0x9010525c	string	error
+0x90105267	string	variable '
+0x90105277	string	' is not declared
+0x9010538c	string	string
+0x901054c8	string	string
+0x901054fa	string	rawset
+0x901055fe	string	\rgetmetatable
+0x90105611	string	_GetGlobal
+0x90105620	string	\tBeStrict
+0x90105639	string	__index
+0x9010564e	string	module
+0x9010565a	string	package
+0x90105667	string	seeall
+0x90105672	string	\rsetmetatable
+0x90105685	string	Constructor
+0x9010569f	string	_SetGlobal
+0x901056eb	string	Constructor
+0x90105757	string	\rsetmetatable
+0x9010576a	string	__index
+0x90105777	string	Constructor
+0x901057e4	string	_BuildClass
+0x90105907	string	assert
+0x9010591c	string	\tfunction
+0x9010592a	string	\ncoroutine
+0x9010593a	string	running
+0x90105947	string	pcall
+0x90105951	string	\tSafePack
+0x90105960	string	Start
+0x90105974	string	\nScheduler
+0x90105998	string	SafeUnpack
+0x901059e7	string	\tSafePack
+0x901059f6	string	SafeUnpack
+0x90105abe	string	assert
+0x90105ad3	string	\tfunction
+0x90105ae1	string	\tSafePack
+0x90105b34	string	SafeUnpack
+0x90105b44	string	SafePackAppend
+0x90105be0	string	assert
+0x90105bf6	string	table
+0x90105c00	string	\tuserdata
+0x90105c0f	string	Curry
+0x90105c34	string	Count
+0x90105c3c	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\xlua.cpp
+0x90105c7c	string	SafePackAppend
+0x90105c8c	string	SafeUnpack
+0x90105c98	string	SafePack
+0x90105ca4	string	Out of Memory
+0x90105cb4	string	common.lua
+0x90105cc0	string	MoveOnlyTransfer
+0x90105cd4	string	DeviceTransfer
+0x90105ce4	string	Corrupt
+0x90105cec	string	Partial
+0x90105cf4	string	ContentSize
+0x90105d00	string	TitleId
+0x90105d10	string	FileName
+0x90105d1c	string	DisplayName
+0x90105d28	string	ContentType
+0x90105d34	string	DeviceId
+0x90105d40	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luaxcontent.cpp
+0x90105d88	string	Expected Table
+0x90105e58	string	Default
+0x90105e60	string	LatinFull
+0x90105e6c	string	LatinEmail
+0x90105e78	string	LatinGamerTag
+0x90105e88	string	LatinPhone
+0x90105e94	string	LatinIPAddress
+0x90105ea4	string	LatinNumeric
+0x90105eb4	string	LatinAlphabet
+0x90105ec4	string	LatinPassword
+0x90105ed4	string	LatinSubscription
+0x90105ee8	string	JapaneseFull
+0x90105ef8	string	KoreanFull
+0x90105f04	string	TraditionalChineseFull
+0x90105f1c	string	RussianFull
+0x90105f28	string	LatinExtended
+0x90105f38	string	SimplifiedChineseFull
+0x90105f50	string	JapaneseHiragana
+0x90105f64	string	JapaneseKatakana
+0x90105f78	string	Greek
+0x90105f80	string	CzechSlovakHungarian
+0x90105f98	string	SelectOk
+0x90105fa4	string	HighlightText
+0x90105fb4	string	AutoSignout
+0x90105fc0	string	TurkishFull
+0x901060a8	string	NoIcon
+0x901060b0	string	ErrorIcon
+0x901060bc	string	WarningIcon
+0x901060c8	string	AlertIcon
+0x901060d4	string	InformationIcon
+0x901060e4	string	WaitAnimation
+0x901060f4	string	DeviceStatusAutoDismiss
+0x9010610c	string	PasscodeMode
+0x9010611c	string	LivePasscodeMode
+0x90106130	string	VerifyPasscodeMode
+0x90106144	string	NuiEnabled
+0x90106150	string	ControllerRequiredMode
+0x90106168	string	KinectTunerHwMode
+0x9010617c	string	WaitForAuthenticatedMedia
+0x901061a4	string	ReturnUserIndex
+0x901061b4	string	XMB_YESNO requires focus button to be 0, 1
+0x901061e0	string	XMB_YESNO requires 0, 1 or 2 buttons
+0x90106208	string	XMB_OK requires focus button to be 0
+0x90106230	string	XMB_OK requires 0 or 1 as a button count
+0x9010625c	string	XMB_OK and XMB_YESNO cannot be used simultaneously
+0x90106290	string	No buttons available in passcode mode
+0x901062b8	string	Invalid number of buttons or focus button specified
+0x901062ec	string	Invalid flags specified
+0x90106308	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luamessageboxcommon.cpp
+0x90106358	string	CreateWaitObject
+0x9010636c	string	IsDead
+0x90106384	string	Resume
+0x9010638c	string	Cancel
+0x90106394	string	Sleep
+0x901063a0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luasched.cpp
+0x901063e4	string	Xbox.Sched.Deaths
+0x901063f8	string	Xbox.Sched.Cancels
+0x9010640c	string	Xbox.Sched.Finals
+0x90106424	string	Xbox.Sched.Parents
+0x90106438	string	Thread expected
+0x90106448	string	Cannot link to itself
+0x90106474	string	Xbox.Object.LuaSchedWait
+0x901064b0	string	Xbox.Object.LuaSchedWaitResume
+0x901064f0	string	Xbox.Object.LuaSchedWaitThread
+0x90106530	string	Xbox.Object.LuaSchedWaitTime
+0x90106550	string	Cancelled
+0x9010655c	string	Can't resume itself
+0x90106570	string	interval must be positive
+0x9010658c	string	Coroutine is not suspended
+0x901065a8	string	Xbox.Scheduler
+0x901065c0	string	%s!%s %u %s 
+0x901065d0	string	xbdm.xex
+0x901065dc	string	luadebug
+0x901065f0	string	notify
+0x901065f8	string	escapestring
+0x90106608	string	getvalue
+0x90106614	string	getaddress
+0x90106620	string	getcounters
+0x9010662c	string	getbreakpoints
+0x9010663c	string	removeallbreakpoints
+0x90106654	string	removebreakpoint
+0x90106668	string	addbreakpoint
+0x90106678	string	getstate
+0x90106684	string	stepover
+0x90106690	string	stepinto
+0x9010669c	string	continue
+0x901068dd	string	module
+0x901068e8	string	\tdebugger
+0x901068f7	string	package
+0x90106904	string	seeall
+0x90106938	string	frame
+0x90106962	string	description
+0x90106973	string	sets a breakpoint
+0x9010698a	string	usage
+0x90106995	string	bp{f=<filename>, l=<linenumber>}        -- sets a breakpoint on this line\nbp{fn=<functionname>}                   -- sets a function breakpoint\n
+0x90106a2b	string	lists breakpoints
+0x90106a41	string	Bbl                                      -- lists all breakpoints\n
+0x90106a89	string	clears a breakpoint
+0x90106aa2	string	bc("*")                                 -- clears all breakpoints\nbc(<num>)                               -- clears breakpoint <num>\n
+0x90106b2d	string	dumps a value
+0x90106b40	string	d(var)                                  -- dumps the contents of var\nd(var, <recursion-depth>)               -- dumps var recursively\n
+0x90106bcc	string	dumps upvalues
+0x90106bdf	string	+dup(<function>)                         -- dumps all upvalues of function\ndup(<function>, <recursion-depth>)      -- dumps upvalues recursively\ndup                                     -- dumps upvalues for current frame\ndup(nil, <recursion-depth>)             -- dumps current upvalues recursively\n
+0x90106d0f	string	2dumps locals and upvalues for current stack frame
+0x90106d47	string	dv                    -- dumps locals and upvalues for current stack frame\ndv(<recursion-depth>) -- dumps locals and upvalues recursively\n
+0x90106ddf	string	dumps resource counters
+0x90106dfb	string	6dc                    -- dumps all resource counters\n
+0x90106e36	string	 changes the current stack frame
+0x90106e5c	string	frame(<stack-frame>)                    -- changes the current stack frame\n                                        -- affects dv and dup\n
+0x90106eeb	string	continues execution
+0x90106f03	string	@g                                       -- continues execution\n
+0x90106f52	string	,prints debugger help, see also help("help")
+0x90106f84	string	help                                    -- prints short help for all commands\nhelp("help")                            -- prints the text you're reading\n
+0x90107022	string	prints a stack trace
+0x9010703b	string	Ak                                       -- prints a stack trace\n
+0x90107089	string	steps over
+0x90107098	string	Hp                                       -- steps over the current line\n
+0x901070ed	string	steps into
+0x901070fc	string	Ht                                       -- steps into the current line\n
+0x9010714a	string	notify
+0x90107156	string	where
+0x9010716b	string	_execEnvIndex
+0x9010717e	string	_execEnvNewIndex
+0x90107194	string	_execEnvMt
+0x901071a4	string	__index
+0x901071b1	string	__newindex
+0x901071c0	string	\t_execEnv
+0x901071ce	string	\rsetmetatable
+0x901071e1	string	_valueToString
+0x901071f5	string	pairsByKeys
+0x90107206	string	_getStackFrames
+0x9010721b	string	_getCurrentFrame
+0x90107230	string	\r_bpiToString
+0x9010724c	string	\n_checkBpi
+0x9010725c	string	escapevalue
+0x901072d8	string	\n_checkBpi
+0x901072ef	string	\ndebuggerc
+0x901072ff	string	addbreakpoint
+0x9010739d	string	ipairs
+0x901073a8	string	\ndebuggerc
+0x901073b8	string	getbreakpoints
+0x901073cc	string	print
+0x901073e9	string	\r_bpiToString
+0x9010747e	string	number
+0x90107489	string	\ndebuggerc
+0x90107499	string	removebreakpoint
+0x901074b6	string	removeallbreakpoints
+0x901074d0	string	error
+0x901074da	string	2breakpoint number is invalid or was not specified
+0x901075c5	string	\ndebuggerc
+0x901075d4	string	\tgetstate
+0x901075e3	string	stopped
+0x901075f0	string	error
+0x901075fa	string	,Can't list stack because program is running
+0x9010762c	string	ipairs
+0x90107638	string	_getStackFrames
+0x9010764d	string	print
+0x9010778f	string	_getCurrentFrame
+0x901077af	string	debug
+0x901077ba	string	getupvalue
+0x901077ca	string	print
+0x901077de	string	_valueToString
+0x901078e7	string	\ndebuggerc
+0x901078f6	string	\tgetstate
+0x90107905	string	stopped
+0x90107912	string	error
+0x9010791c	string	0Can't list variables because program is running
+0x90107952	string	_getStackFrames
+0x90107970	string	index
+0x9010797b	string	print
+0x90107986	string	Locals:
+0x9010799c	string	debug
+0x901079a6	string	\tgetlocal
+0x901079be	string	_valueToString
+0x901079d7	string	\nUpvalues:
+0x90107a57	string	print
+0x90107a62	string	_valueToString
+0x90107adb	string	\ndebuggerc
+0x90107aea	string	\tgetstate
+0x90107af9	string	stopped
+0x90107b06	string	error
+0x90107b11	string	Program is already running
+0x90107b39	string	\tcontinue
+0x90107bcc	string	print
+0x90107bd7	string	usage
+0x90107be2	string	pairs
+0x90107c00	string	description
+0x90107c48	string	\ndebuggerc
+0x90107c57	string	\tstepover
+0x90107ca5	string	\ndebuggerc
+0x90107cb5	string	notify
+0x90107cf8	string	\ndebuggerc
+0x90107d07	string	\tstepinto
+0x90107d8d	string	\ndebuggerc
+0x90107d9c	string	\tgetstate
+0x90107dab	string	stopped
+0x90107db8	string	error
+0x90107dc3	string	Program is running
+0x90107ddb	string	_getStackFrames
+0x90107df9	string	print
+0x90107e04	string	string
+0x90107e10	string	format
+0x90107e8c	string	\t_execEnv
+0x90107f92	string	\ndebuggerc
+0x90107fa1	string	\tgetstate
+0x90107fb0	string	stopped
+0x90107fbd	string	_getStackFrames
+0x90107fdb	string	debug
+0x90107fe5	string	\tgetlocal
+0x90107ff4	string	index
+0x90107fff	string	getupvalue
+0x90108161	string	\ndebuggerc
+0x90108170	string	\tgetstate
+0x9010817f	string	stopped
+0x9010818c	string	_getStackFrames
+0x901081aa	string	debug
+0x901081b4	string	\tgetlocal
+0x901081c3	string	index
+0x901081cd	string	\tsetlocal
+0x901081dc	string	getupvalue
+0x901081f6	string	setupvalue
+0x90108213	string	rawset
+0x9010847f	string	\tfunction
+0x9010848e	string	table
+0x901084a8	string	string
+0x901084d3	string	debug
+0x901084de	string	getinfo
+0x901084f5	string	function: 
+0x90108505	string	_valueToString
+0x90108523	string	 Upvalues: 
+0x9010853d	string	getupvalue
+0x9010855f	string	pairsByKeys
+0x9010856f	string	\ttostring
+0x901085f8	string	string
+0x90108604	string	lower
+0x901086a3	string	pairs
+0x901086ae	string	table
+0x901086b9	string	insert
+0x9010887b	string	debug
+0x90108886	string	getinfo
+0x901088b7	string	source
+0x901088cd	string	currentline
+0x901088e8	string	index
+0x901088f3	string	table
+0x901088fe	string	insert
+0x90108956	string	_getStackFrames
+0x9010896b	string	index
+0x90108a39	string	string
+0x90108a45	string	format
+0x90108b24	string	\ttostring
+0x90108b33	string	string
+0x90108c7d	string	pairs
+0x90108c99	string	string
+0x90108ca5	string	error
+0x90108cb0	string	f (filename) must be a string
+0x90108cda	string	4l (line) is required when f (filename) is specified
+0x90108d14	string	number
+0x90108d20	string	l (line) must be a number
+0x90108d47	string	fn (function) must be a string
+0x90108d6a	string	?f (function) and l (line) are not allowed when fn is specified
+0x90108daf	string	Invalid option '
+0x90108fa2	string	boolean
+0x90108faf	string	string
+0x90108fbb	string	format
+0x90108fd3	string	\ttostring
+0x90108fe2	string	number
+0x90109009	string	\ndebuggerc
+0x90109019	string	getaddress
+0x90109028	string	\rescapestring
+0x9010903b	string	table
+0x90109057	string	\tfunction
+0x90109066	string	f[%x]"function"
+0x9010907b	string	thread
+0x90109099	string	\tuserdata
+0x901090b7	string	error
+0x901090c1	string	\rUnknown type
+0x901090ec	string	Debugger not initialized
+0x90109108	string	\n[ERROR] %s\n
+0x90109118	string	debug
+0x9010912c	string	CpuTimeLastSecondMs
+0x90109140	string	CpuTimeLastFrameUs
+0x90109154	string	UnmanagedMemoryBytes
+0x9010916c	string	ManagedMemoryBytes
+0x90109180	string	running
+0x90109188	string	stopped
+0x90109190	string	debugger.lua
+0x901091a0	string	Invalid breakpoint index
+0x901091bc	string	Program is already stopped
+0x901091d8	string	Invalid value type. Value must be an object
+0x9010920c	string	state
+0x9010921c	string	probe
+0x90109238	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luadebugstate.cpp
+0x90109280	string	Can't find function '%s'
+0x9010929c	string	'debugger' module not loaded
+0x901092bc	string	debugger
+0x901092c8	string	This command can't be called while program is running
+0x90109304	string	start
+0x90109310	string	DebugBreak
+0x9010931c	string	debuggerc
+0x90109328	string	Xbox.Object.LuaWaitObject
+0x90109358	string	LuaWaitObject
+0x90109388	string	Xbox.Object.LuaWaitObjectWait
+0x901093a8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luawait.cpp
+0x901093ec	string	Reset
+0x90109400	string	CloseFile
+0x9010940c	string	WriteFile
+0x90109418	string	CreateFile
+0x90109424	string	Xbox.Object.LuaFileHandleWrapper
+0x90109448	string	Xbox.Coverage
+0x90109458	string	set_hook
+0x90109468	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luacoverage.cpp
+0x901094c4	string	Failed to Create File
+0x901094dc	string	IsValidObject
+0x901094ec	string	SetProperty
+0x901094f8	string	GetProperty
+0x90109504	string	SetTimer
+0x90109510	string	ReadFile
+0x9010951c	string	LoadVisual
+0x90109528	string	LoadObject
+0x90109534	string	KillTimer
+0x90109540	string	GetObjectClass
+0x90109550	string	GetClassName
+0x90109560	string	GetBaseClass
+0x90109570	string	FreeVisuals
+0x9010957c	string	DestroyOrphan
+0x9010958c	string	DestroyObject
+0x9010959c	string	CreateObject
+0x901095ac	string	ClassDerivesFrom
+0x901095c0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuibaseimpl.cpp
+0x90109608	string	_XboxXuiBaseTerm
+0x9010961c	string	Xbox.XuiAppId
+0x9010962c	string	Xbox.Rm
+0x90109634	string	%s#%s
+0x9010963c	string	Can't expand resource locator. Unknown alias.
+0x9010966c	string	Resource locators must start with '#'
+0x90109694	string	Xbox.XuiBaseImpl
+0x901096bc	string	Xbox.Object.LuaHXuiResourceWrapper
+0x901096e0	string	File too big
+0x901096f0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxzploader.cpp
+0x90109738	string	loaded
+0x90109740	string	error loading module '%s'
+0x9010975c	string	\n\tno file '%s' in xzp package
+0x9010977c	unicode	.lub
+0x90109788	unicode	.lux
+0x90109794	unicode	.lua
+0x901097a0	string	loaders
+0x901097a8	string	_xzpmap
+0x901097b0	string	%s%s%s
+0x901097b8	string	Remote
+0x901097c0	string	Voice
+0x901097c8	string	NuiGesture
+0x901097d4	string	Controller
+0x901097e0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuiutil.cpp
+0x90109824	string	hObj is invalid
+0x90109834	string	_handle
+0x9010983c	string	!LUA[%d]~%s
+0x90109848	unicode	!LUA[
+0x90109854	string	expected XUI object
+0x90109868	string	ValueChanged
+0x90109878	string	VideoEnd
+0x90109884	string	SelectionChanged
+0x90109898	string	SetFocus
+0x901098a4	string	KillFocus
+0x901098b0	string	Pressing
+0x901098bc	string	Press
+0x901098c4	string	LeaveTab
+0x901098d0	string	EnterTab
+0x901098dc	string	ParentChanged
+0x901098f4	string	TransitionStart
+0x90109904	string	TransitionEnd
+0x90109914	string	Timer
+0x9010991c	string	TimelineEnd
+0x90109930	string	KeyDown
+0x90109938	string	Destroy
+0x90109940	string	Unsubscribe
+0x9010994c	string	Subscribe
+0x90109958	string	Xbox.XuiEvents
+0x90109968	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuievents.cpp
+0x90109a04	string	VK_PAD_BIGBUTTON
+0x90109a18	string	VK_PAD_RTHUMB_DOWNLEFT
+0x90109a30	string	VK_PAD_RTHUMB_DOWNRIGHT
+0x90109a48	string	VK_PAD_RTHUMB_UPRIGHT
+0x90109a60	string	VK_PAD_RTHUMB_UPLEFT
+0x90109a78	string	VK_PAD_RTHUMB_LEFT
+0x90109a8c	string	VK_PAD_RTHUMB_RIGHT
+0x90109aa0	string	VK_PAD_RTHUMB_DOWN
+0x90109ab4	string	VK_PAD_RTHUMB_UP
+0x90109ac8	string	VK_PAD_LTHUMB_DOWNLEFT
+0x90109ae0	string	VK_PAD_LTHUMB_DOWNRIGHT
+0x90109af8	string	VK_PAD_LTHUMB_UPRIGHT
+0x90109b10	string	VK_PAD_LTHUMB_UPLEFT
+0x90109b28	string	VK_PAD_LTHUMB_LEFT
+0x90109b3c	string	VK_PAD_LTHUMB_RIGHT
+0x90109b50	string	VK_PAD_LTHUMB_DOWN
+0x90109b64	string	VK_PAD_LTHUMB_UP
+0x90109b78	string	VK_PAD_RTHUMB_PRESS
+0x90109b8c	string	VK_PAD_LTHUMB_PRESS
+0x90109ba0	string	VK_PAD_BACK
+0x90109bac	string	VK_PAD_START
+0x90109bbc	string	VK_PAD_DPAD_RIGHT
+0x90109bd0	string	VK_PAD_DPAD_LEFT
+0x90109be4	string	VK_PAD_DPAD_DOWN
+0x90109bf8	string	VK_PAD_DPAD_UP
+0x90109c08	string	VK_PAD_RTRIGGER
+0x90109c18	string	VK_PAD_LTRIGGER
+0x90109c28	string	VK_PAD_LSHOULDER
+0x90109c3c	string	VK_PAD_RSHOULDER
+0x90109c50	string	VK_PAD_Y
+0x90109c5c	string	VK_PAD_X
+0x90109c68	string	VK_PAD_B
+0x90109c74	string	VK_PAD_A
+0x90109c80	string	XUI_TRANSITION_TO
+0x90109c94	string	XUI_TRANSITION_FROM
+0x90109ca8	string	XUI_TRANSITION_BACKTO
+0x90109cc0	string	XUI_TRANSITION_BACKFROM
+0x90109cd8	string	XUI_TRANSITION_ACTION_RELINK
+0x90109cf8	string	XUI_TRANSITION_ACTION_UNLINK
+0x90109d18	string	XUI_TRANSITION_ACTION_DESTROY
+0x90109d5c	string	Can't subscribe to notifications because object has no parent
+0x90109d9c	string	Event can't be subscribed to as a notification
+0x90109dcc	string	number or string expected
+0x90109de8	string	Invalid XUI event
+0x90109dfc	string	Event handler not found
+0x90109e14	string	MeasureText
+0x90109e20	string	SetText
+0x90109e28	string	GetText
+0x90109e30	string	Xbox.XuiTextImpl
+0x90109e48	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuitextimpl.cpp
+0x90109e98	string	GetCurrentTab
+0x90109ea8	string	GetCount
+0x90109eb8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuitabsceneimpl.cpp
+0x90109f04	string	Xbox.XuiTabSceneImpl
+0x90109f1c	string	LookupByKey
+0x90109f28	string	Lookup
+0x90109f38	string	Xbox.Object.LuaXuiStringTable
+0x90109f58	string	Xbox.XuiStringTableImpl
+0x90109f70	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuistringtableimpl.cpp
+0x90109fd4	string	SetValue
+0x90109fe0	string	SetStep
+0x90109fe8	string	SetRange
+0x90109ff4	string	GetValue
+0x9010a000	string	GetStep
+0x9010a008	string	GetRange
+0x9010a018	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuisliderimpl.cpp
+0x9010a064	string	Xbox.XuiSliderImpl
+0x9010a078	string	nRangeMin must be less than nRangeMax
+0x9010a0a0	string	InterruptTransitions
+0x9010a0b8	string	EnableTransitionDependency
+0x9010a0d4	string	SetBackScene
+0x9010a0e4	string	GetBackScene
+0x9010a0f4	string	PlayBackFromTransition
+0x9010a10c	string	PlayBackToTransition
+0x9010a124	string	PlayFromTransition
+0x9010a138	string	PlayToTransition
+0x9010a14c	string	NavigateForward
+0x9010a15c	string	NavigateFirstEx
+0x9010a16c	string	NavigateBack
+0x9010a17c	string	Create
+0x9010a188	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuisceneimpl.cpp
+0x9010a1d0	string	Invalid action
+0x9010a1e0	string	Xbox.XuiSceneImpl
+0x9010a1f4	string	SetChecked
+0x9010a200	string	GetItemControl
+0x9010a210	string	GetChecked
+0x9010a21c	string	Xbox.XuiRadioGroupImpl
+0x9010a238	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuiradiogroupimpl.cpp
+0x9010a288	string	Invalid item index
+0x9010a2a0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuiprogressbarimpl.cpp
+0x9010a2f0	string	Xbox.XuiProgressBarImpl
+0x9010a308	string	PressItem
+0x9010a314	string	TwistRight
+0x9010a320	string	TwistLeft
+0x9010a32c	string	SetCurSel
+0x9010a338	string	InsertItems
+0x9010a344	string	GetItemCount
+0x9010a354	string	GetCurSel
+0x9010a360	string	Xbox.XuiTwistImpl
+0x9010a378	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuitwistimpl.cpp
+0x9010a3c0	string	SetTopItem
+0x9010a3cc	string	SetItemEnable
+0x9010a3dc	string	SetItemCheck
+0x9010a3ec	string	SetImagePath
+0x9010a3fc	string	SetCurSelVisible
+0x9010a410	string	IsItemVisible
+0x9010a420	string	IsItemEnabled
+0x9010a430	string	IsItemChecked
+0x9010a440	string	GetVisibleItemCount
+0x9010a454	string	GetTopItem
+0x9010a460	string	GetMaxVisibleItemCount
+0x9010a478	string	GetImagePath
+0x9010a488	string	GetDefaultItemSize
+0x9010a49c	string	DeleteItems
+0x9010a4a8	string	Xbox.XuiListImpl
+0x9010a4c0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuilistimpl.cpp
+0x9010a508	string	Unsupported type of size
+0x9010a524	string	InterItemSize
+0x9010a534	string	SelectedItemSize
+0x9010a548	string	UnselectedItemSize
+0x9010a560	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuiimageimpl.cpp
+0x9010a5a8	string	Xbox.XuiImageImpl
+0x9010a5bc	string	SetTextureTranslation
+0x9010a5d4	string	SetTextureScale
+0x9010a5e4	string	SetTextureRotation
+0x9010a5f8	string	SetTextureFileName
+0x9010a60c	string	GetTextureTranslation
+0x9010a624	string	GetTextureScale
+0x9010a634	string	GetTextureRotation
+0x9010a648	string	GetTextureFileName
+0x9010a65c	string	Xbox.XuiFigureImpl
+0x9010a670	unicode	TransformVersion
+0x9010a698	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuifigureimpl.cpp
+0x9010a6e4	string	Figure is not a texture fill type
+0x9010a708	unicode	FillType
+0x9010a71c	unicode	Fill
+0x9010a728	unicode	TextureFileName
+0x9010a748	unicode	Rotation
+0x9010a75c	unicode	Scale
+0x9010a768	unicode	Translation
+0x9010a784	string	InitResources
+0x9010a794	string	TreeHasFocus
+0x9010a7a4	string	GetDescendantById
+0x9010a7b8	string	Unlink
+0x9010a7c0	string	SkinChanged
+0x9010a7cc	string	SetWidth
+0x9010a7d8	string	SetVisualPrefix
+0x9010a7e8	string	SetShow
+0x9010a7f0	string	SetScale
+0x9010a7fc	string	SetRotation
+0x9010a808	string	SetPosition
+0x9010a814	string	SetPivot
+0x9010a820	string	SetOpacity
+0x9010a82c	string	SetHeight
+0x9010a838	string	PlayTimeline
+0x9010a848	string	IsShown
+0x9010a850	string	IsDescendant
+0x9010a860	string	InsertChild
+0x9010a86c	string	InputEnabled
+0x9010a87c	string	InitFocus
+0x9010a888	string	GetWidth
+0x9010a894	string	GetVisualPrefix
+0x9010a8a4	string	GetScale
+0x9010a8b0	string	GetPrevious
+0x9010a8bc	string	GetPosition
+0x9010a8c8	string	GetPivot
+0x9010a8d4	string	GetParent
+0x9010a8e0	string	GetOpacity
+0x9010a8ec	string	GetNext
+0x9010a8f4	string	GetLastChild
+0x9010a904	string	GetId
+0x9010a90c	string	GetHeight
+0x9010a918	string	GetFocus
+0x9010a924	string	GetFirstChild
+0x9010a934	string	GetChildById
+0x9010a944	string	FindNamedFrame
+0x9010a954	string	EnableInput
+0x9010a960	string	DisallowRecursiveTimelineControl
+0x9010a984	string	AddChild
+0x9010a990	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuielementimpl.cpp
+0x9010a9dc	string	Named frame does not exist
+0x9010a9f8	string	Xbox.XuiElementImpl
+0x9010aa0c	unicode	Height
+0x9010aa1c	unicode	Width
+0x9010aa2f	string	5SetTopLine
+0x9010aa3c	string	Xbox.XuiEditImpl
+0x9010aa50	string	InvalidateAll
+0x9010aa60	string	InvalidateNonItems
+0x9010aa74	string	Invalidate
+0x9010aa80	string	SetItemOverrideFunc
+0x9010aa94	string	SetSourceImageFunc
+0x9010aaa8	string	SetSourceTextFunc
+0x9010aabc	string	SetItemCount
+0x9010aad4	string	GameIcon
+0x9010aae0	string	GamerTileSmall
+0x9010aaf0	string	GamerTile
+0x9010ab00	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuidatacache.cpp
+0x9010ab48	string	Xbox.Object.LuaXuiDataCache
+0x9010ab64	string	Xbox.XuiDataCache
+0x9010ab90	string	__listCache
+0x9010ab9c	string	XUI object
+0x9010abd0	string	Callback must return a string or a table
+0x9010abfc	string	titleId
+0x9010ac04	string	imageType
+0x9010ac10	string	imageUserIndex
+0x9010ac20	string	imageXuid
+0x9010ac2c	string	Callback must return a table or nil
+0x9010ac50	string	checked
+0x9010ac58	string	enabled
+0x9010ac60	string	height
+0x9010ac68	string	width
+0x9010ac70	string	Callback must return a string or a custom provider
+0x9010aca4	string	Invalid XUI handle
+0x9010acb8	string	WantsUnfocusedInput
+0x9010accc	string	SetVisual
+0x9010acd8	string	SetPress
+0x9010ace4	string	SetEnable
+0x9010acf0	string	IsPressed
+0x9010acfc	string	IsEnabled
+0x9010ad08	string	GetVisual
+0x9010ad14	string	Xbox.XuiControlImpl
+0x9010ad28	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuicontrolimpl.cpp
+0x9010ad74	unicode	Visual
+0x9010ad84	string	SetCheck
+0x9010ad90	string	IsChecked
+0x9010ad9c	string	Xbox.XuiCheckboxImpl
+0x9010adb8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuicheckboximpl.cpp
+0x9010ae08	string	pamxam
+0x9010ae10	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\guideapp\luaguideapp.cpp
+0x9010ae5c	unicode	XuiCanvas
+0x9010ae70	string	hr=0x
+0x9010af00	string	Package wasn't open
+0x9010af14	string	DisableAutoLogoutRestoreDownloadState
+0x9010af3c	string	EnableAutoLogoutRestoreDownloadState
+0x9010af64	string	SetAutoLogoutDeleteProfiles
+0x9010af80	string	DisableAutoLogout
+0x9010af94	string	EnableAutoLogout
+0x9010afa8	string	Xbox.App
+0x9010afb8	string	%.16I64X
+0x9010afc4	string	GetSessionId
+0x9010afd4	string	UnloadStack
+0x9010b000	unicode	FadeOut
+0x9010b010	unicode	FadeOutEnd
+0x9010b028	unicode	FadeIn
+0x9010b038	unicode	FadeInEnd
+0x9010b04c	unicode	klcc
+0x9010b058	unicode	diners
+0x9010b070	unicode	discover
+0x9010b084	unicode	amex
+0x9010b090	unicode	mastercard
+0x9010b0a8	unicode	visa
+0x9010b0b4	unicode	japanesekatakana
+0x9010b0d8	unicode	japanesehiragana
+0x9010b0fc	unicode	schfull
+0x9010b10c	unicode	latinextended
+0x9010b128	unicode	russionfull
+0x9010b140	unicode	tchfull
+0x9010b150	unicode	koreanfull
+0x9010b168	unicode	japanesefull
+0x9010b184	unicode	latinalphabet
+0x9010b1a0	unicode	latinnumeric
+0x9010b1bc	unicode	latinipaddress
+0x9010b1dc	unicode	latinphone
+0x9010b1f4	unicode	latingamertag
+0x9010b210	unicode	latinemail
+0x9010b228	unicode	latinfull
+0x9010b23c	unicode	phone
+0x9010b248	unicode	contactemail
+0x9010b264	unicode	postalcode
+0x9010b27c	unicode	state
+0x9010b288	unicode	city
+0x9010b294	unicode	district
+0x9010b2a8	unicode	street2
+0x9010b2b8	unicode	street1
+0x9010b2c8	unicode	none
+0x9010b378	string	deviceselector.xex
+0x9010b394	unicode	sharedres://LiveProfile.xus
+0x9010b3cc	unicode	sharedres://LiveAll.xus
+0x9010b400	string	body{t:item,offset:0,size:8,loc:body}[?{t:item,offset:0,size:8,loc:dom}[Puid{t:uint,offset:0,size:8,loc:dom}]]
+0x9010b470	string	{LiveHive:XboxXPassportUriRoot}/xpassport/GetPuid
+0x9010b4a8	string	body{t:item,offset:0,size:2048,loc:body}[?{t:item,offset:0,size:2048,loc:dom}[Receipt{t:str,offset:0,size:2048,loc:dom,max:2048}]]
+0x9010b530	string	x-xbl-contract-version{t:uint,offset:0,size:4,loc:hdr},body{t:item,offset:4,size:2182,loc:body,enc:json}[?{t:item,offset:0,size:2182,loc:dom}[RpsTicket{t:str,offset:0,size:2048,loc:dom,max:2048},Proof{t:item,offset:2048,size:118,loc:dom}[ProofType{t:uint,offset:0,size:4,loc:dom},ProofData{t:str,offset:4,size:114,loc:dom,max:114}],Purpose{t:uint,offset:2166,size:4,loc:dom},OneTimeCode{t:str,offset:2170,size:12,loc:dom,max:12}]]
+0x9010b6e0	string	{LiveHive:XboxXPassportUriRoot}/xpassport/ConsumeOneTimeCode
+0x9010b720	string	x-xbl-contract-version{t:uint,offset:0,size:4,loc:hdr},body{t:item,offset:4,size:2170,loc:body,enc:json}[?{t:item,offset:0,size:2170,loc:dom}[RpsTicket{t:str,offset:0,size:2048,loc:dom,max:2048},Proof{t:item,offset:2048,size:118,loc:dom}[ProofType{t:uint,offset:0,size:4,loc:dom},ProofData{t:str,offset:4,size:114,loc:dom,max:114}],Purpose{t:uint,offset:2166,size:4,loc:dom}]]
+0x9010b89c	string	{LiveHive:XboxXPassportUriRoot}/xpassport/SendOneTimeCode
+0x9010b8d8	string	body{t:item,offset:0,size:1894,loc:body}[?{t:item,offset:0,size:1894,loc:dom}[Proofs{t:item,offset:4,size:1890,loc:dom,max:15,itemsize:126,countoffset:0,countsize:4}[IsConfirmed{t:bool,offset:0,size:4,loc:dom},IsLost{t:bool,offset:4,size:4,loc:dom},ProofType{t:uint,offset:8,size:4,loc:dom},ProofData{t:str,offset:12,size:114,loc:dom,max:114}]]]
+0x9010ba38	string	x-xbl-contract-version{t:uint,offset:0,size:4,loc:hdr},body{t:item,offset:4,size:2048,loc:body,enc:json}[?{t:item,offset:0,size:2048,loc:dom}[RpsTicket{t:str,offset:0,size:2048,loc:dom,max:2048}]]
+0x9010bb00	string	{LiveHive:XboxXPassportUriRoot}/xpassport/GetProofs
+0x9010bb38	string	x-xbl-contract-version{t:uint,offset:0,size:4,loc:hdr},body{t:item,offset:4,size:2166,loc:body,enc:json}[?{t:item,offset:0,size:2166,loc:dom}[RpsTicket{t:str,offset:0,size:2048,loc:dom,max:2048},Proof{t:item,offset:2048,size:118,loc:dom}[ProofType{t:uint,offset:0,size:4,loc:dom},ProofData{t:str,offset:4,size:114,loc:dom,max:114}]]]
+0x9010bc88	string	{LiveHive:XboxXPassportUriRoot}/xpassport/Proof
+0x9010bddc	string	XPDbg
+0x9010bde4	string	TFAErrorToMode
+0x9010bdf4	string	TFAIsTFAError
+0x9010be04	string	TFAHUDShowTFAUIResult
+0x9010be1c	string	TFAHUDShowTFAUI
+0x9010be2c	string	GetCreateProfilePolicy
+0x9010be44	string	GetDownloadProfilePolicy
+0x9010be60	string	GetSignInPolicy
+0x9010be70	string	GetCreateProfileKillSwitch
+0x9010be8c	string	GetDownloadProfileKillSwitch
+0x9010beac	string	GetSignInKillSwitch
+0x9010bec0	string	e:\bt\1c10e6\core\private\flash\xam\apps\accountcreation\tfa\shared\src\tfasharedutillua.cpp
+0x9010bf20	string	Xbox.Account.TFAPolicy
+0x9010bf4c	string	\System??\TFAProf
+0x9010bf60	string	TFAProf
+0x9010bf68	string	TFAPeriodicReminder
+0x9010bf7c	string	%s:\%s
+0x9010bfac	string	TFAEnabled
+0x9010bfb8	string	EncryptCtpData
+0x9010bfc8	string	IsUserConnectedToLive
+0x9010bfe0	string	XPassportGetRPSToken
+0x9010bff8	string	XPassportGetServiceTarget
+0x9010c014	string	MarkProfileInCompleteBit
+0x9010c030	string	GetOnlineUserType
+0x9010c044	string	RecoverXenonAccount
+0x9010c058	string	RecoverXenonAccount_old
+0x9010c070	string	RecoverXboxComAccount
+0x9010c088	string	GetDeviceData
+0x9010c098	string	SetGamerPic
+0x9010c0a4	string	CheckGamerPic
+0x9010c0b4	string	SetGamerZone
+0x9010c0c4	string	CheckGamerZone
+0x9010c0d4	string	SetNickName
+0x9010c0e0	string	VerifyParentCreditCard
+0x9010c0f8	string	LogOffAllUsers
+0x9010c108	string	LogOffUserByXuid
+0x9010c11c	string	LogOffUser
+0x9010c128	string	LogOnRoamingUser
+0x9010c13c	string	SetWindowsLiveCreds
+0x9010c150	string	LogOnUser
+0x9010c15c	string	XAMProfileSync
+0x9010c16c	string	CheckIfDeviceConnected
+0x9010c184	string	CheckDefaultDeviceId
+0x9010c19c	string	DoMachineLogon
+0x9010c1ac	string	WaitForLiveStartupTask
+0x9010c1c4	string	LoginPassport
+0x9010c1d4	string	GetLinkedGamertag
+0x9010c1e8	string	GetAccountInfo
+0x9010c1f8	string	GetPassportUserProfile
+0x9010c210	string	WlidStoreCredentials
+0x9010c228	string	SetCachedUserPassportMembername
+0x9010c248	string	GetCachedUserPassportMembername
+0x9010c268	string	MergeOfflineProfileWithLiveAccount
+0x9010c28c	string	DeleteOfflineProfile
+0x9010c2a4	string	CreateOfflineProfile
+0x9010c2bc	string	ShowDeviceSelectorUI
+0x9010c2d4	string	GenerateGamertag
+0x9010c2e8	string	CreateLiveAccount_6_7
+0x9010c300	string	CreateLiveAccount
+0x9010c314	string	GetDependentPassportToken
+0x9010c330	string	PassportCreate
+0x9010c340	string	PassportGetEncryptedProxyParameters
+0x9010c364	string	PassportMemberNameExists
+0x9010c380	string	PassportGetSecretQuestions
+0x9010c39c	string	AltEmail
+0x9010c3b4	string	Xbox1LinkedUser
+0x9010c3c4	string	XenonUser
+0x9010c3d0	string	XboxComUser
+0x9010c3dc	string	Xbox1User
+0x9010c3e8	string	Xbox.Account
+0x9010c3f8	string	e:\bt\1c10e6\core\private\flash\xam\apps\accountcreation\liveprofile\shared\src\accountcore.cpp
+0x9010c458	string	PassportGetSecretQuestions Failed!
+0x9010c47c	string	PassportMemberNameExists Failed!
+0x9010c4a0	string	PassportEncryptedProxyParameters
+0x9010c4c4	string	PassportGetEncryptedProxyParameters Failed!
+0x9010c4f0	string	PassportSessionToken
+0x9010c508	string	PassportCreate Failed!
+0x9010c520	string	Xenon Key
+0x9010c52c	string	CreateLiveAccount Failed!
+0x9010c548	string	VerifyParentCreditCard Failed!
+0x9010c568	string	GenerateGamertag Failed!
+0x9010c584	string	Device not connected
+0x9010c59c	string	Fatal Error while creating offline profile
+0x9010c5c8	string	DeleteOfflineProfile Failed!
+0x9010c5e8	string	Fatal Error while saving profile
+0x9010c60c	string	WaitForLiveStartupTask Failed!
+0x9010c62c	string	GetDependentPassport Failed!
+0x9010c64c	string	LoginPassport Failed!
+0x9010c664	string	GetLinkedGamertag Failed!
+0x9010c684	string	LanguageId
+0x9010c690	string	CountryId
+0x9010c69c	string	GetAccountInfo Failed!
+0x9010c6b4	string	FName
+0x9010c6c8	string	GetPassportUserProfile Failed!
+0x9010c6e8	string	LogOffUser Failed!
+0x9010c6fc	string	LogOffUserByXuid Failed!
+0x9010c718	string	LogOffAllUsers Failed!
+0x9010c730	string	XAMProfileSync Failed!
+0x9010c748	string	CheckGamerZone_Complete Failed!
+0x9010c768	string	XamUserReadProfileSettings Returned 0 for *pcbResultBuffer
+0x9010c7a8	string	XamUserReadProfileSettings Didn't return ERROR_INSUFFICIENT_BUFFER
+0x9010c7ec	string	SetGamerZone Failed!
+0x9010c804	string	CheckGamerPic Failed!
+0x9010c81c	string	SetGamerPic Failed!
+0x9010c830	string	XenonKey
+0x9010c83c	string	Realm
+0x9010c844	string	Domain
+0x9010c84c	string	GamerTag
+0x9010c858	string	OnlineXuid
+0x9010c864	string	OfflineXuid
+0x9010c870	string	RecoverXenonAccount Failed!
+0x9010c88c	string	RecoverXboxComAccount Failed!
+0x9010c8ac	string	FreeBytes
+0x9010c8b8	string	Invalid device id or device missing
+0x9010c8dc	string	Profile count more than max allowed
+0x9010c900	string	Show select new device.
+0x9010c918	string	GetOnlineUserType Failed!
+0x9010c934	string	msac.xboxlive.com
+0x9010c948	string	Invalid date
+0x9010c958	string	Expected table
+0x9010c968	string	Unable to logon
+0x9010c978	string	Flash needs to be Updated
+0x9010c994	string	DoMachineLogon Failed!
+0x9010c9ac	string	LogOnUser Failed!
+0x9010c9c0	string	XPassportSvcTarget
+0x9010c9d4	unicode	MBI_SSL
+0x9010c9ec	string	Fatal Error while merging profile
+0x9010ca10	string	e:\bt\1c10e6\core\private\flash\xam\apps\accountcreation\liveprofile\shared\src\ctpasync.cpp
+0x9010ca90	string	Xbox.Object.EncryptCtpDataTask
+0x9010cab0	string	IsSystemOrPartyTitle
+0x9010cac8	string	LaunchXNATitle
+0x9010cad8	string	IsXNACommunityTitle
+0x9010caec	string	LaunchNuiMarketplaceForTitleOffer
+0x9010cb10	string	GetMediaDisableAutoLaunch
+0x9010cb2c	string	IsTitleSignedInToLive
+0x9010cb44	string	SysUiDisableAutoClose
+0x9010cb5c	string	GetCachedTitleName
+0x9010cb70	string	LaunchMedia
+0x9010cb7c	string	GetMediaInfo
+0x9010cb8c	string	GetContentType
+0x9010cb9c	string	LaunchImageInternal
+0x9010cbb0	string	GetDashContext
+0x9010cbc0	string	GetCurrentTitleId
+0x9010cbd4	string	Xbox.Title
+0x9010cbe0	string	e:\bt\1c10e6\core\private\flash\xam\common\luaxbox\title\src\luatitle.cpp
+0x9010ce64	string	_nextafter
+0x9010ce84	string	frexp
+0x9010cea4	string	ldexp
+0x9010cebc	string	floor
+0x9010cee0	string	atan2
+0x9010cf18	string	log10
+0x9010cf2c	string	xam.xex
+0x9010cf34	string	PiKeyList
+0x9010cf40	unicode	00000000T
+0x9010cf64	string	remove
+0x9010cf6c	string	insert
+0x9010cf84	string	foreachi
+0x9010cf90	string	foreach
+0x9010cf98	string	concat
+0x9010d038	string	'setn' is obsolete
+0x9010d04c	string	wrong number of arguments to 'insert'
+0x9010d074	string	invalid value (%s) at index %d in table for 'concat'
+0x9010d0ac	string	invalid order function for sorting
+0x9010d0d0	string	upper
+0x9010d0dc	string	reverse
+0x9010d0e8	string	match
+0x9010d0f0	string	lower
+0x9010d104	string	gmatch
+0x9010d10c	string	gfind
+0x9010d114	string	format
+0x9010d208	string	string slice too long
+0x9010d220	string	invalid value
+0x9010d230	string	unable to dump given function
+0x9010d250	string	invalid capture index
+0x9010d268	string	invalid pattern capture
+0x9010d280	string	malformed pattern (ends with '%%')
+0x9010d2a4	string	malformed pattern (missing ']')
+0x9010d2c4	string	unbalanced pattern
+0x9010d2d8	string	too many captures
+0x9010d2ec	string	missing '[' after '%%f' in pattern
+0x9010d310	string	unfinished capture
+0x9010d324	string	^$*+?.([%-
+0x9010d330	string	'string.gfind' was renamed to 'string.gmatch'
+0x9010d360	string	invalid replacement value (a %s)
+0x9010d384	string	string/function/table expected
+0x9010d3b0	string	invalid format (width or precision too long)
+0x9010d3e0	string	invalid format (repeated flags)
+0x9010d400	string	-+ #0
+0x9010d408	string	invalid option '%%%c' to 'format'
+0x9010d42c	string	module
+0x9010d434	string	seeall
+0x9010d43c	string	loadlib
+0x9010d4c8	string	dynamic libraries not enabled; check your Lua installation
+0x9010d504	string	_LOADLIB
+0x9010d518	string	LOADLIB: 
+0x9010d52c	string	absent
+0x9010d534	string	\n\tno field package.preload['%s']
+0x9010d558	string	'package.preload' must be a table
+0x9010d57c	string	preload
+0x9010d584	string	module '%s' not found:%s
+0x9010d5a0	string	'package.loaders' must be a table
+0x9010d5c4	string	loop or previous error loading module '%s'
+0x9010d5f0	string	'module' not called from a Lua function
+0x9010d618	string	_PACKAGE
+0x9010d624	string	_NAME
+0x9010d630	string	config
+0x9010d638	string	\\n;\n?\n!\n-
+0x9010d644	string	cpath
+0x9010d64c	string	.\?.dll;!\?.dll;!\loadall.dll
+0x9010d66c	string	.\?.lua;!\lua\?.lua;!\lua\?\init.lua;!\?.lua;!\?\init.lua
+0x9010d6a8	string	randomseed
+0x9010d6b4	string	random
+0x9010d80f	string	9interval is empty
+0x9010d824	string	wrong number of arguments
+0x9010d868	string	traceback
+0x9010d874	string	setupvalue
+0x9010d880	string	setmetatable
+0x9010d890	string	setlocal
+0x9010d89c	string	sethook
+0x9010d8a4	string	setfenv
+0x9010d8ac	string	getupvalue
+0x9010d8b8	string	getmetatable
+0x9010d8c8	string	getregistry
+0x9010d8d4	string	getlocal
+0x9010d8e0	string	getinfo
+0x9010d8e8	string	gethook
+0x9010d8f0	string	getfenv
+0x9010d8f8	string	tail return
+0x9010d904	string	count
+0x9010d9e8	string	nil or table expected
+0x9010da00	string	'setfenv' cannot change environment of given object
+0x9010da34	string	function or level expected
+0x9010da58	string	activelines
+0x9010da64	string	namewhat
+0x9010da78	string	currentline
+0x9010da8c	string	lastlinedefined
+0x9010da9c	string	linedefined
+0x9010daa8	string	short_src
+0x9010dab4	string	source
+0x9010dabc	string	invalid option
+0x9010dad0	string	flnSu
+0x9010dad8	string	level out of range
+0x9010daec	string	external hook
+0x9010dafc	string	\n\t...
+0x9010db14	string	 in function '%s'
+0x9010db28	string	 in main chunk
+0x9010db3c	string	 in function <%s:%d>
+0x9010db54	string	stack traceback:
+0x9010db6c	string	yield
+0x9010db7c	string	status
+0x9010db84	string	resume
+0x9010db8c	string	create
+0x9010db9c	string	normal
+0x9010dba4	string	suspended
+0x9010dbb0	string	xpcall
+0x9010dbb8	string	unpack
+0x9010dbc8	string	tonumber
+0x9010dbd4	string	select
+0x9010dbdc	string	rawset
+0x9010dbe4	string	rawget
+0x9010dbec	string	rawequal
+0x9010dbf8	string	pcall
+0x9010dc08	string	loadstring
+0x9010dc1c	string	gcinfo
+0x9010dc24	string	error
+0x9010dc2c	string	collectgarbage
+0x9010dc3c	string	assert
+0x9010dc44	string	setstepmul
+0x9010dc50	string	setpause
+0x9010dc64	string	collect
+0x9010dc6c	string	restart
+0x9010ddf8	string	base out of range
+0x9010de0c	string	__metatable
+0x9010de18	string	cannot change a protected metatable
+0x9010de3c	string	no function environment for tail call at level %d
+0x9010de70	string	invalid level
+0x9010de80	string	level must be non-negative
+0x9010dea8	string	reader function must return a string
+0x9010ded0	string	too many nested functions
+0x9010deec	string	=(load)
+0x9010def4	string	assertion failed!
+0x9010df08	string	too many results to unpack
+0x9010df24	string	index out of range
+0x9010df38	string	%s: %p
+0x9010df40	string	boolean or proxy expected
+0x9010df5c	string	coroutine expected
+0x9010df70	string	too many results to resume
+0x9010df8c	string	cannot resume %s coroutine
+0x9010dfa8	string	too many arguments to resume
+0x9010dfc8	string	Lua function expected
+0x9010dfe0	string	newproxy
+0x9010dff0	string	pairs
+0x9010dff8	string	ipairs
+0x9010e000	string	_VERSION
+0x9010e00c	string	Lua 5.1
+0x9010e018	string	coroutine
+0x9010e06c	string	%s in precompiled chunk
+0x9010e084	string	invalid string id
+0x9010e0a0	string	bad block
+0x9010e0ac	string	LDIDecompress failed
+0x9010e0c4	string	decoding mismatch
+0x9010e0d8	string	LDICreateDecompression failed
+0x9010e0f8	string	bad section
+0x9010e104	string	\n\tno file '%s' in binary package
+0x9010e128	string	package module required
+0x9010e140	string	unexpected
+0x9010e14c	string	Xbox.Unknown
+0x9010e160	unicode	sharedres://ico_32x_ConsoleTypeWinPC.png
+0x9010e1b8	unicode	sharedres://ico_32x_ConsoleTypeXenon.png
+0x9010e210	unicode	sharedres://ico_32x_ConsoleTypeXbox.png
+0x9010e260	unicode	sharedres://secretAchievement.png
+0x9010e2a8	unicode	sharedres://unearnedAchievement.png
+0x9010e2f0	unicode	sharedres://ico_32x_Zone_Underground.png
+0x9010e348	unicode	sharedres://ico_32x_Zone_Family.png
+0x9010e390	unicode	sharedres://ico_32x_Zone_Pro.png
+0x9010e3d8	unicode	sharedres://ico_32x_Zone_RR.png
+0x9010e490	unicode	XNA Creators Club Game Launcher
+0x9010e4d0	string	xna_titlelauncher.xex
+0x9010e4e8	unicode	TV-MA
+0x9010e4f4	unicode	TV-14
+0x9010e500	unicode	TV-PG
+0x9010e50c	unicode	TV-G
+0x9010e518	unicode	TV-Y7-FV
+0x9010e52c	unicode	TV-Y7
+0x9010e538	unicode	TV-Y
+0x9010e550	unicode	NC-17
+0x9010e560	unicode	PG-13
+0x9010e580	unicode	EXPLICIT
+0x9010e594	unicode	USTV
+0x9010e5a0	unicode	MPAA
+0x9010ea18	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\accountcreation\tfa\src\obj\xbox\Guide.TFA.pdb
+0x90161899	string	abcdefghijklmnopqrstuvwxyz
+0x901618b9	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x90167ed3	string	/xbos/AssetConsume.ashx
+0x90167eeb	string	/msgserver/vetstring2.ashx
+0x90167f06	string	/xstats/xstatestimaterankforratings.ashx
+0x90167f2f	string	/xpnfront/xpresence.srf
+0x90167f47	string	/xuacs/XeGetUserInfo.ashx
+0x90167f61	string	/xuacs/GetParentalControlGroupTemplates.ashx
+0x90167f8e	string	/xuacs/GetParentalControls.ashx
+0x90167fae	string	/xuacs/GetUserParentalControlGroup.ashx
+0x90167fd6	string	/xuacs/UpdateParentalControlGroup.ashx
+0x90167ffd	string	/xbos/GetTitleActivationList.ashx
+0x9016801f	string	/xbos/XeContentReferral.ashx
+0x9016803c	string	/xsig/RefreshGameLicense.ashx
+0x9016805a	string	/xbos/XeContentRefreshLicense.ashx
+0x9016807d	string	/Lists/CreateDownloadQueue.ashx
+0x9016809d	string	/Lists/DeleteDownloadItems.ashx
+0x901680bd	string	/Lists/RevokeDownloadQueueAccess.ashx
+0x901680e3	string	/Lists/GrantDownloadQueueAccess.ashx
+0x90168108	string	/Lists/InsertDownloadItems.ashx
+0x90168128	string	/Lists/ModifyDownloadQueue.ashx
+0x90168148	string	/Lists/ModifyDownloadItems.ashx
+0x90168168	string	/Lists/MoveDownloadItems.ashx
+0x90168186	string	/Lists/QueryDownloadItems.ashx
+0x901681a5	string	/Lists/QueryDownloadQueues.ashx
+0x901681c5	string	/xuacs/AddDependent.ashx
+0x901681de	string	/xuacs/FamilySubscriptionAssignGoldUser.ashx
+0x9016820b	string	/xuacs/FamilySubscriptionGoldUserCount.ashx
+0x90168237	string	/xuacs/RemoveDependent.ashx
+0x90168253	string	/xuacs/FamilySubscriptionRemoveGoldUser.ashx
+0x90168280	string	/Lists/CreateList.ashx
+0x90168297	string	/Lists/DeleteItems.ashx
+0x901682af	string	/Lists/RevokeListAccess.ashx
+0x901682cc	string	/Lists/GrantListAccess.ashx
+0x901682e8	string	/Lists/InsertItems.ashx
+0x90168300	string	/Lists/ModifyList.ashx
+0x90168317	string	/Lists/ModifyItems.ashx
+0x9016832f	string	/Lists/MoveItems.ashx
+0x90168345	string	/Lists/QueryItems.ashx
+0x9016835c	string	/Lists/QueryLists.ashx
+0x90168373	string	/xbos/GetRevocationList.ashx
+0x90168390	string	/vortex/logstring.ashx
+0x901683a7	string	/liveinfo/getnetworkauthorizationlist.ashx
+0x901683d2	string	/msgserver/msgserver.ashx
+0x901683ec	string	/xpnfront/xmessaging.srf
+0x90168405	string	/xbos/FindMediaInstanceUrls.ashx
+0x90168426	string	/xmatch/xmatchhost2.ashx
+0x9016843f	string	/xmatch/xmatchhostdelete2.ashx
+0x9016845e	string	/xmatch/xmatchclient2.ashx
+0x90168479	string	/xmatch/xmatchsplit.ashx
+0x90168492	string	/xbos/PurchaseMediaOffers.ashx
+0x901684c0	string	/xqry/findfromids.ashx
+0x901684d7	string	/xqry/remove.ashx
+0x901684e9	string	/xqry/removeid.ashx
+0x901684fd	string	/xqry/search.ashx
+0x9016850f	string	/xqry/select.ashx
+0x90168521	string	/xqry/update.ashx
+0x90168533	string	/xqry/updateid.ashx
+0x90168547	string	/xuacs/XeUserGetAge.ashx
+0x90168560	string	/xuacs/XeUserGetAgeGroup.ashx
+0x9016857e	string	/xpnfront/xnotification.srf
+0x9016859a	string	/xuacs/setusersettings2.ashx
+0x901685b7	string	/xuacs/PassportCreateGenerated.ashx
+0x901685db	string	/stfd/resolvename.ashx
+0x901685f2	string	/xsig/AcknowledgeLicensesDelivery.ashx
+0x90168619	string	/xsig/AcquireMediaLicenses.ashx
+0x90168639	string	/xsig/CreateCertificate.ashx
+0x90168656	string	/xsig/CheckRevocation.ashx
+0x90168671	string	/xsig/CreateCertificate2.ashx
+0x9016868f	string	/xsig/ValidateCertificate.ashx
+0x901686ae	string	/xsig/VerifySignature.ashx
+0x901686c9	string	/stfd/removefile.ashx
+0x901686df	string	/stfd/readtitlefiles.ashx
+0x901686f9	string	/stfd/readfile.ashx
+0x9016870d	string	/stfd/enumeratefiles.ashx
+0x90168727	string	/stfd/writefile.ashx
+0x9016873c	string	/msgserver/getstring2.ashx
+0x90168757	string	/xtou/GetLanguagesForCountry.ashx
+0x90168779	string	/testfd/MakeFriends.ashx
+0x90168792	string	/testfd/PingTestFD.ashx
+0x901687aa	string	/xbos/ContentUpdateReferral.ashx
+0x901687cb	string	/xbos/AutoupdReferral.ashx
+0x901687e6	string	/fbserver/enumrecdreview.ashx
+0x90168804	string	/fbserver/enumsentreview.ashx
+0x90168822	string	/xuacs/XeUserGetAccountInfo.ashx
+0x90168843	string	/fbserver/getaggreview.ashx
+0x9016885f	string	/fbserver/submitcomplaint.ashx
+0x9016887e	string	/fbserver/submitreview.ashx
+0x9016889a	string	/xuacs/XeABCHGetContactlistGamertags.ashx
+0x901688c4	string	/xuacs/AcceptTou.ashx
+0x901688da	string	/xuacs/XeAcknowledgeDowngrade.ashx
+0x901688fd	string	/xuacs/XeAddPaymentInstrument.ashx
+0x90168920	string	/xuacs/ChangeGamertag.ashx
+0x9016893b	string	/xuacs/XeChangeSubscriptionPaymentInstrument.ashx
+0x9016896d	string	/xuacs/XeCreateLiveAccount.ashx
+0x9016898d	string	/xuacs/XeGetANID.ashx
+0x901689a3	string	/xuacs/XeGetAccountInfo.ashx
+0x901689c0	string	/xuacs/XeGetAccountInfoFromPassport.ashx
+0x901689e9	string	/xuacs/GetUserCredentialsAction.ashx
+0x90168a0e	string	/xuacs/XeGetGamertagSuggestions.ashx
+0x90168a33	string	/xuacs/XeGetLinkedGamertag.ashx
+0x90168a53	string	/xuacs/GetKey.ashx
+0x90168a66	string	/xuacs/XeGetPaymentInstruments.ashx
+0x90168a8a	string	/xuacs/XeGetPointsBalance.ashx
+0x90168aa9	string	/xuacs/GetPostalCode.ashx
+0x90168ac3	string	/xuacs/GetUserProofUpAction.ashx
+0x90168ae4	string	/xuacs/XeGetStoredValueBalance.ashx
+0x90168b08	string	/xuacs/GetSubscriptionInfo.ashx
+0x90168b28	string	/xuacs/GetUserBillingNotifications.ashx
+0x90168b50	string	/xuacs/XeGetUserSubscriptionDetails.ashx
+0x90168b79	string	/xuacs/GetUserTenure.ashx
+0x90168b93	string	/xuacs/XeGetUserType.ashx
+0x90168bad	string	/xuacs/XeGraduateUserEx.ashx
+0x90168bca	string	/xuacs/XeLinkXbox1Account.ashx
+0x90168be9	string	/xuacs/XeMigrateXbox1User.ashx
+0x90168c08	string	/xuacs/XeMigrateXboxComUserEx.ashx
+0x90168c2b	string	/xuacs/PreviewMergeSubscription.ashx
+0x90168c50	string	/xuacs/XeAccountQuery.ashx
+0x90168c6b	string	/xuacs/RecoverAccount.ashx
+0x90168c86	string	/xuacs/XeRemovePaymentInstrument.ashx
+0x90168cac	string	/xuacs/XeReserveGamertag.ashx
+0x90168cca	string	/xuacs/XeSetAccountInfo.ashx
+0x90168ce7	string	/xuacs/SetUserAccountStatus.ashx
+0x90168d08	string	/xuacs/SwitchUserCountry.ashx
+0x90168d26	string	/xuacs/XeTransitionStoredValuePointsToCurrency.ashx
+0x90168d5a	string	/xuacs/XeTroubleshootAccount.ashx
+0x90168d7c	string	/xuacs/XeUpdateParentalControls.ashx
+0x90168da1	string	/xuacs/XeUpdatePaymentInstrument.ashx
+0x90168dc7	string	/xuacs/XeVerifyBillingInfo.ashx
+0x90168de7	string	/xbos/XeOfferingVerifyToken.ashx
+0x90168e08	string	/xuacs/XeVerifyParentCreditCardEx.ashx
+0x90168e2f	string	/xbos/XeVerifyToken.ashx
+0x90168e48	string	/xsig/CreatePlayReadyCertificate.ashx
+0x90168e6e	string	/xuacs/CreateUserAndBillableAccount.ashx
+0x90168e97	string	/xuacs/EnumFamilyMembers.ashx
+0x90168eb5	string	/xuacs/GenerateGamertag.ashx
+0x90168ed2	string	/xuacs/GetDependentSignedPuid.ashx
+0x90168ef5	string	/xsig/GetLicenseTransferState.ashx
+0x90168f18	string	/liveinfo/GetLiveConfig.ashx
+0x90168f35	string	/lsp/enumerate.ashx
+0x90168f49	string	/xbos/AssetEnumerate.ashx
+0x90168f63	string	/xbox/OfferingCancel.ashx
+0x90168f7d	string	/xbos/InGameContentAvailable.ashx
+0x90168f9f	string	/xbos/XeContentDetails.ashx
+0x90168fbb	string	/xbos/XeContentEnumerate2.ashx
+0x90168fda	string	/xbos/InGameContentEnumerate.ashx
+0x90168ffc	string	/xbos/PreviewProductPurchase.ashx
+0x9016901e	string	/xbos/XeOfferPurchase.ashx
+0x90169039	string	/xbos/XeOfferPurchaseGamertag.ashx
+0x9016905c	string	/xbos/XeSubscriptionDetails.ashx
+0x9016907d	string	/xbos/XeSubscriptionEnumerate.ashx
+0x901690a0	string	/xbos/TransferMachineLicenses.ashx
+0x901690c3	string	/XArb/Register.ashx
+0x901690d7	string	/XArb/ReportResult.ashx
+0x901690ef	string	/XArb/TimeExtend.ashx
+0x90169105	string	/xstats/xstatenumbyrank.ashx
+0x90169122	string	/xstats/xstatenumbyrating.ashx
+0x90169141	string	/xstats/xstatenumbyuser.ashx
+0x9016915e	string	/xstats/statpost.ashx
+0x90169174	string	/xstats/xstatread.ashx
+0x9016918b	string	/xstats/xstatsreset.ashx
+0x901691a4	string	/xuacs/XeReplaceOwnerPassport.ashx
+0x901691c7	string	/xuacs/XePassportChangePassword.ashx
+0x901691ec	string	/xuacs/XeReplaceUserPassport.ashx
+0x9016920e	string	/xuacs/XeSwitchUserPassport.ashx
+0x9016922f	string	/xuacs/XePassportCreate.ashx
+0x9016924c	string	/xuacs/XePassportGetBuddyGamertag.ashx
+0x90169273	string	/xuacs/PassportGetMemberName.ashx
+0x90169295	string	/xuacs/XePassportGetEncryptedProxyParameters.ashx
+0x901692c7	string	/xuacs/XePassportGetFriendMemberName.ashx
+0x901692f1	string	/xuacs/XePassportGetSecretQuestions.ashx
+0x9016931a	string	/xuacs/XePassportGetUserData.ashx
+0x9016933c	string	/xuacs/XePassportLogin.ashx
+0x90169358	string	/xuacs/PassportMemberNameExists.ashx
+0x9016937d	string	/xstats/cleartitle.ashx
+0x90169395	string	/xstats/uploadconsoleauditlist.ashx
+0x901693b9	string	/xstats/xachievementenum.ashx
+0x901693d7	string	/xstats/xavatarassetenum.ashx
+0x901693f5	string	/xstats/enumtitles.ashx
+0x9016940d	string	/xstats/readsettings.ashx
+0x90169427	string	/xstats/syncachievements.ashx
+0x90169445	string	/xstats/syncavatarassets.ashx
+0x90169463	string	/xstats/syncsettings.ashx
+0x9016947d	string	/xstats/synctitles.ashx
+0x90169495	string	/xstats/validateavatarmanifest.ashx
+0x901694b9	string	/xsig/UpdateLicenseTransferState.ashx
+0x901694df	string	/xstats/usagestore.ashx
+0x901694f7	string	/xbos/XeWmdrmCreateCertificate.ashx
+0x9016951b	string	/xsig/XmstvCreateCertificate.ashx
+0x9016a2f6	unicode	)<>@,;:\".[]
+0x9016e01f	string	TFABlankScene.xur
+0x9016f000	string	uiButton
+0x9016f009	string	cntLoadingAnimation
+0x9016f01d	string	Loading_Small
+0x9016f02b	string	HUDScene
+0x9016f034	string	XuiCanvas
+0x9016f16f	string	Before you can sign in here, you'll need to sign in at Xbox.com. \r\n\r\nYour parent will also need to sign in there so they can give permission.\r\n
+0x9016f1ff	string	Sorry, something's wrong with your Microsoft account. Go to https://account.live.com for help.
+0x9016f25e	string	Add Security
+0x9016f26b	string	Cancel
+0x9016f272	string	Continue
+0x9016f286	string	Select Your Country Code
+0x9016f2a4	string	Want your password to be remembered?
+0x9016f2c9	string	Your password will be remembered on this console. You won't have to enter it when you sign in.
+0x9016f328	string	Select Remember Password to remember your Microsoft account password on this console. Leave it unselected if you want to require your password every time.
+0x9016f3c3	string	Your password won't be remembered on this console. You'll have to enter it when you sign in.
+0x9016f420	string	Remember Password
+0x9016f432	string	Sign in with your email and password?
+0x90170200	string	\n\r\nWhen you get the code, select Next.\r\n\r\nIf you don't get a code in the next few minutes, you can check your email address and have another code sent to you.
+0x9017029f	string	We're going to call {1} to tell you a security code.\r\n\r\nWhen you get the code, select Next.\r\n\r\nIf you don't get a code in the next few minutes, you can check your phone number, and we'll try calling you again.
+0x90170371	string	We're texting a code to {1}.\r\n\r\nWhen you get the code, select Next. \r\n\r\nIf you don't get a code in the next few minutes, you can check your mobile number and have another code sent to you.
+0x9017042e	string	Great! Now we need just one more way to reach you.\r\n\r\nAlready on your account:\r\n{1}\r\nPick one more:
+0x90170492	string	I Can't Get Messages There
+0x901704ad	string	Yes, This One Works
+0x901704c1	string	Your account needs to be more secure. This is the only way we can send you security codes:\r\n{1}\r\nCan you get messages there?
+0x9017053e	string	How it works: We'll call, text, or email you with a security code. When you send that code back to us, we'll know it's really you.\r\n\r\nWe only use this for security. \r\n\r\nThis helps protect your account and recover your password. For more info, go to Xbox.com/proofs
+0x90170647	string	Enter the password for your Microsoft account. Go to Xbox.com/forgot if you don't remember it.
+0x901706a6	string	Before you can use this proof, it needs to be confirmed.\r\n\r\nTo confirm, go to https://account.live.com/p or use the link we send you.
+0x9017072c	string	Enter a different email (not {1}) where we can send you a security code.
+0x90170775	string	Enter a phone number we can call with a security code, starting with the country code.
+0x901707cc	string	Enter a phone number we can call with a security code, starting with the country code.\r\n\r\n{1} (+{2})
+0x90170831	string	Enter a mobile phone number where we can text a security code, starting with the country code.
+0x90170890	string	Enter a mobile phone number where we can text a security code, starting with the country code.\r\n\r\n{1} (+{2})
+0x901708fd	string	Email {1}
+0x90170907	string	Call {1}
+0x90170910	string	Text to {1}
+0x9017091c	string	Pick which one to set up first:\r\n        
+0x90170946	string	How it works: We'll call, text, or email you with a security code. When you send that code back to us, we'll know it's really you. \r\n\r\nThis helps protect your account and recover your password.
+0x90170a08	string	Already on your account:\r\n{1}\r\nPick which one to set up next:\r\n        
+0x90170a50	string	To increase security on your account, we need ways to make sure you're you, like a phone number and a different email address.\r\n\r\nHow it works: We'll call, text, or email you with a security code. When you send that code back to us, we'll know it's really you. \r\n\r\nWe only use this for security. \r\n\r\nThis helps protect your account and recover your password. For more info, go to Xbox.com/proofs
+0x90170bdc	string	Set Up Email
+0x90170be9	string	Set Up Phone Call
+0x90170bfb	string	Set Up Text
+0x90170c07	string	I Don't Have Those
+0x90170c1a	string	Alternate email:\r\n{1}
+0x90170c30	string	Please check the security info you gave us. This helps protect your account and recover your password.\r\n\r\nIf you want to make changes, learn how at Xbox.com/proofs 
+0x90170cd5	string	Phone number:\r\n{1}
+0x90170ce8	string	On your account:\r\n\r\n{1}
+0x90170d00	string	Phone number:\r\n{1}
+0x90170d13	string	Security Info
+0x90170d21	string	Security Check
+0x90170d30	string	Where should we send your security code this time?
+0x90170d63	string	How it works: We'll call, text, or email you with a security code. When you send that code back to us, we'll know it's really you. \r\n\r\nThis helps protect your account and recover your password. If none of these will work, please visit Xbox.com/proofs to learn more.
+0x90170e6d	string	Enter the email address for your Microsoft account. If you forgot it, go to Xbox.com/forgot
+0x90170ec9	string	Argentina
+0x90170ed3	string	Australia
+0x90170edd	string	Austria
+0x90170ee5	string	Belgium
+0x90170ef4	string	Canada
+0x90170efb	string	Chile
+0x90170f01	string	China
+0x90170f07	string	Colombia
+0x90170f10	string	Czech Republic
+0x90170f1f	string	Denmark
+0x90170f27	string	Finland
+0x90170f2f	string	France
+0x90170f36	string	Germany
+0x90170f3e	string	United Kingdom
+0x90170f4d	string	Greece
+0x90170f54	string	Hong Kong SAR
+0x90170f62	string	Hungary
+0x90170f6a	string	India
+0x90170f70	string	Ireland
+0x90170f7f	string	Italy
+0x90170f85	string	Japan
+0x90170f8b	string	Korea
+0x90170f91	string	Mexico
+0x90170f98	string	Netherlands
+0x90170fa4	string	New Zealand
+0x90170fb0	string	Norway
+0x90170fb7	string	Poland
+0x90170fbe	string	Portugal
+0x90170fc7	string	Russia
+0x90170fce	string	Saudi Arabia
+0x90170fdb	string	Singapore
+0x90170fe5	string	Slovakia
+0x90170fee	string	South Africa
+0x90170ffb	string	Spain
+0x90171001	string	Sweden
+0x90171008	string	Switzerland
+0x9017101b	string	Turkey
+0x90171022	string	United Arab Emirates
+0x90171037	string	United States
+0x90171045	string	Other
+0x90171101	string	Etwas stimmt mit Ihrem Microsoft-Konto nicht. Gehen Sie zu https://account.live.com, um Hilfe zu erhalten.
+0x90171183	string	Abbrechen
+0x9017118d	string	Fortfahren
+0x90171199	string	Wahl der Landeskennzahl
+0x901711b1	string	Weiter
+0x901711b8	string	Wollen Sie, dass Ihr Passwort gespeichert wird?
+0x901711e8	string	Ihr Passwort wird auf dieser Konsole gespeichert. Sie brauchen es nicht einzugeben, wenn Sie sich anmelden.
+0x901712da	string	hlen, wird Ihr Passwort jedes Mal abgefragt.
+0x90171346	string	ssen es jedes Mal eingeben, wenn Sie sich anmelden.
+0x9017137a	string	Passwort merken
+0x9017138a	string	Jetzt mit Ihrer E-Mail und Ihrem Passwort anmelden?
+0x90171455	string	nnen.\r\n\r\nWeitere Informationen erhalten Sie unter Xbox.com/proof
+0x901714d5	string	ter noch einmal.
+0x90171526	string	ter wieder.\r\nCode: {1}
+0x9017153d	string	Kontoinformationen
+0x90171729	string	tigen.
+0x9017173f	string	fen Sie die Landeskennzahl Ihrer Telefonnummer und versuchen Sie es erneut.
+0x901717d0	string	fen Sie sie und geben Sie die Nummer erneut ein.
+0x90171841	string	fen Sie sie und geben Sie die Nummer erneut ein.
+0x90171872	string	Dieser Code wurde bereits verwendet. Bitte fordern Sie einen neuen Code an.
+0x901718f1	string	fen Sie ihn und versuchen Sie es erneut.
+0x9017199d	string	Dieser Code ist abgelaufen. Bitte fordern Sie stattdessen einen neuen Code an.
+0x90171a0e	string	ltigt von der Anzahl Codes, die Sie uns bereits gesendet haben. Bitte versuchen Sie es erneut in einigen Stunden.
+0x90171a80	string	Diese E-Mail-Adresse funktioniert hier leider nicht. Bitte verwenden Sie einen andere.
+0x90171ad7	string	Diese E-Mail-Adresse funktioniert hier leider nicht. Bitte verwenden Sie einen andere.
+0x90171b2e	string	Dies ist dieselbe Adresse, wie die, die Sie in Ihrem Konto haben. Bitte verwenden Sie eine andere E-Mail-Adresse.
+0x90171ba0	string	Diese E-Mail-Adresse funktioniert hier leider nicht. Bitte verwenden Sie einen andere.
+0x90171bf7	string	Diese E-Mail-Adresse funktioniert hier leider nicht. Bitte verwenden Sie einen andere.
+0x90171ca3	string	fungen jederzeit unter https://account.live.com/p 
+0x90171d2f	string	gen, entfernen Sie einen anderen.
+0x90171d70	string	nnen wir nicht verwenden. Bitte geben Sie eine andere ein.
+0x90171dab	string	Das sieht nicht wie eine Telefonnummer aus. Bitte beginnen Sie mit der Landeskennzahl und versuchen Sie es erneut.
+0x90171e1e	string	Das sieht nicht wie eine Handynummer aus. Bitte beginnen Sie mit der Landeskennzahl und versuchen Sie es erneut.
+0x90171e8f	string	Leider kann sich dieses Profil auf dieser Konsole nicht mit Xbox Live verbinden. Bitte laden Sie es erneut herunter.
+0x90171f0b	string	nnen nicht auf Ihr Konto zugreifen?
+0x90171f2f	string	Einen Moment bitte, dies funktioniert
+0x90171f55	string	Ich habe dies gerade online behoben
+0x9017200c	string	nnen Zugriff auf Ihr Konto verlieren.\r\nMehr Info erhalten Sie auf Xbox.com/lostproofs
+0x90172062	string	Fertig
+0x90172176	string	chstes einrichten wollen:
+0x9017227b	string	tzen und Ihr Passwort wiederherzustellen.
+0x901722a5	string	Um fortzufahren, muss Ihr Konto sicherer sein. Weitere Informationen erhalten Sie unter www.xbox.com/proofs.
+0x90172416	string	tzen und Ihr Passwort wiederherzustellen.
+0x90172440	string	Sicherheit einrichten
+0x90172456	string	Auf einem anderen Weg senden
+0x90172473	string	Senden Sie mir eine andere E-Mail
+0x90172495	string	Rufen Sie mich wieder an
+0x901724ae	string	Senden Sie mir einen anderen Text
+0x901724d0	string	Code erneut eingeben
+0x901724e5	string	Dies ist leider nicht der Sicherheitscode, den wir gesendet haben.
+0x90172528	string	Geben Sie den Code ein, den wir an {1} gemailt haben.
+0x9017255e	string	Geben Sie den Code ein, den wir Ihnen mitgeteilt haben, als wir {1} angerufen haben.
+0x901725b3	string	Geben Sie den Code ein, den wir an {1} getextet haben.
+0x901725ea	string	Sicherheitscode eingeben
+0x90172603	string	Ich habe keinen Code bekommen
+0x90172621	string	Weiter
+0x901726ed	string	fen und sich einen neuen Code zusenden lassen.
+0x901727ee	string	fen und wir werden erneut versuchen, Sie anzurufen.
+0x901728f5	string	fen und sich einen neuen Code zusenden lassen.
+0x90172982	string	hlen Sie einen weiteren aus:
+0x9017299f	string	Nein, es funktioniert nicht
+0x901729bb	string	Ja, es funktioniert
+0x90172a47	string	nnen Sie dort Nachrichten empfangen?
+0x90172bb3	string	r mehr Info, gehen Sie zu Xbox.com/proofs
+0x90172bf7	string	r Ihr neues Microsoft-Konto ein. Gehen Sie zu Xbox.com/forgot, wenn Sie es vergessen haben.
+0x90172cae	string	tigen gehen Sie zu  https://account.live.com/p oder verwenden Sie den Link, den wir Ihnen gesendet haben.
+0x90172dcc	string	nnen, beginnend mit der Landeskennzahl.
+0x90172e41	string	nnen, beginnend mit der Landeskennzahl.\r\n\r\n{1} (+{2})
+0x90172ec9	string	nnen, beginnend mit der Landeskennzahl.
+0x90172f43	string	nnen, beginnend mit der Landeskennzahl.\r\n\r\n{1} (+{2})
+0x90172f79	string	{1} e-mailen
+0x90172f86	string	{1} anrufen
+0x90172f92	string	{1} texten
+0x90172fa0	string	hlen Sie, was zuerst eingerichtet werden soll:\r\n        
+0x901730c0	string	tzen und Ihr Passwort wiederherzustellen.
+0x90173120	string	chstes eingerichtet werden soll:\r\n        
+0x9017334c	string	r mehr Info, gehen Sie zu Xbox.com/proofs
+0x90173376	string	E-Mail einrichten
+0x90173388	string	Telefonanruf einrichten
+0x901733a0	string	Text einrichten
+0x901733b0	string	Ich habe jene nicht
+0x901733c4	string	Alternative E-Mail-Adresse:\r\n{1}
+0x901734d1	string	rungen in Xbox.com/proofs
+0x901734eb	string	Telefonnummer:\r\n{1}
+0x901734ff	string	Auf Ihr Konto:\r\n\r\n{1}
+0x90173515	string	Telefonnummer:\r\n{1}
+0x90173529	string	Sicherheitsinformationen
+0x90173556	string	Wohin sollen wir Ihren Sicherheitscode diesmal senden?
+0x90173679	string	rungen in Xbox.com/proofs
+0x901736b3	string	r Ihr Microsoft-Konto ein. Wenn Sie es vergessen haben, gehen Sie zu Xbox.com/forgot
+0x90173708	string	Argentinien
+0x90173714	string	Australien
+0x90173721	string	sterreich
+0x9017372b	string	Belgien
+0x90173733	string	Brasilien
+0x9017373d	string	Kanada
+0x90173746	string	Kolumbien
+0x90173750	string	Tschechische Republik
+0x90173769	string	nemark
+0x90173770	string	Finnland
+0x90173779	string	Frankreich
+0x90173784	string	Deutschland
+0x90173795	string	britannien
+0x901737a0	string	Griechenland
+0x901737ad	string	Hongkong SAR
+0x901737ba	string	Ungarn
+0x901737c1	string	Indien
+0x901737c8	string	Irland
+0x901737d0	string	Italien
+0x901737e1	string	Niederlande
+0x901737ed	string	Neuseeland
+0x901737f8	string	Norwegen
+0x90173801	string	Polen
+0x90173808	string	Russland
+0x90173811	string	Saudi-Arabien
+0x9017381f	string	Singapur
+0x90173828	string	Slowakei
+0x9017383c	string	Spanien
+0x90173844	string	Schweden
+0x9017385e	string	Vereinigte Arabische Emirate
+0x9017387b	string	Vereinigte Staaten
+0x9017388e	string	Andere
+0x90173962	string	 para que puedan darte permiso.\r\n
+0x90173984	string	Lo sentimos, algo va mal con tu cuenta de Microsoft. Ve a https://account.live.com en busca de ayuda.
+0x901739ed	string	adir seguridad 
+0x901739fd	string	Cancelar
+0x90173a06	string	Continuar
+0x90173a33	string	Siguiente
+0x90173b5a	string	a cada vez que entres.
+0x90173cc8	string	n, ve a Xbox.com/proofs
+0x90173d1b	string	s tarde.
+0x90173d7e	string	digo de error: {1}
+0x90173d9c	string	n de la cuenta
+0x90173e2f	string	, aprovecha para verificar el resto de tu cuenta.
+0x90173efd	string	n en dos pasos. Consulta xbox.com/forgot si necesitas ayuda.
+0x90173f78	string	fono y vuelve a intentarlo.
+0x90173ff3	string	balo y escribe uno nuevo.
+0x90174070	string	belo otra vez.
+0x90174109	string	balo y vuelve a intentarlo.
+0x9017423a	string	ntalo de nuevo en unas horas.
+0x9017428f	string	. Por favor, usa otro.
+0x901742dd	string	. Por favor, usa otro.
+0x90174314	string	nico que ya tienes en tu cuenta. Por favor, usa otro diferente.
+0x9017438b	string	. Por favor, usa otro.
+0x901743d9	string	. Por favor, usa otro.
+0x90174402	string	ste a tu cuenta. Revisa tus pruebas en cualquier momento en https://account.live.com/p
+0x901744b8	string	adir otra.
+0x90174505	string	nico. Por favor, introduce una diferente.
+0x9017465a	string	rgalo de nuevo.
+0x9017466c	string	No puedes acceder a tu cuenta?
+0x9017468b	string	Espera, esto funciona
+0x90174776	string	n en Xbox.com/lostproofs
+0x9017478f	string	Listo
+0x901747c8	string	s segura. \r\n\r\nVe a  www.xbox.com/proofs para hacer cambios en cualquier momento.
+0x90174819	string	Seguridad agregada
+0x9017487a	string	mo configuras el siguiente:
+0x901749e2	string	n, ve a Xbox.com/proofs
+0x90174b12	string	n de seguridad
+0x90174b26	string	alo de una manera diferente
+0x90174b68	string	lveme a llamar
+0x90174b7a	string	ndame otro mensaje
+0x90174bcb	string	digo de seguridad que te enviamos.
+0x90174c40	string	digo que te dijimos cuando te llamamos {1}.
+0x90174c7c	string	digo que te enviamos {1}.
+0x90174ca4	string	digo de seguridad
+0x90174cca	string	Siguiente
+0x90174e6d	string	fono y te enviaremos otro.\r\n
+0x90174fbd	string	No, no funciona
+0x90174fd0	string	, esto funciona
+0x901751a7	string	n, visita Xbox.com/proofs
+0x901751d8	string	a de tu cuenta Microsoft. Ve a Xbox.com/forgot si no la recuerdas.
+0x90175279	string	s en la web, ve a https://account.live.com/p
+0x90175304	string	digo de seguridad.
+0x9017553e	string	Llamar {1}
+0x90175549	string	Mensaje a {1}
+0x90175561	string	l vas a establecer en primer lugar:\r\n        
+0x9017567d	string	Ya en tu cuenta:\r\n{1}\r\nElige una para continuar:\r\n        

@@ -23,6 +23,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -32,6 +33,8 @@
 #include "xenia/base/cvar.h"
 #include "xenia/base/math.h"
 #include "xenia/base/platform.h"
+#include "xenia/gpu/gpu_completion.h"
+#include "xenia/gpu/native_overlay.h"
 #include "xenia/ui/surface.h"
 #include "xenia/ui/ui_drawer.h"
 
@@ -54,6 +57,143 @@ namespace ui {
 class Presenter;
 class Window;
 class Win32Window;
+
+// Resident native UI permission, independent of a frozen frame or Request.
+// Implementations expose host metadata only: no PPC, GPU work or blocking
+// teardown while checking liveness. Native FE supplies visibility revisions.
+struct NativeUiPlaneOwner {
+  memory::PhysicalAllocationOwner allocation_owner;
+  uint64_t backend_epoch = 0;
+  uint64_t foreground_generation = 0;
+  bool valid() const {
+    return allocation_owner.valid() && backend_epoch && foreground_generation;
+  }
+  bool operator==(const NativeUiPlaneOwner&) const = default;
+};
+class NativeUiPlaneAuthority {
+ public:
+  virtual ~NativeUiPlaneAuthority() = default;
+  virtual NativeUiPlaneOwner owner() const noexcept = 0;
+  virtual bool IsLive() const noexcept = 0;
+};
+// A shared native nonmodal lifetime. Full liveness may inspect bounded host
+// metadata and must be queried outside backend locks. The revoked query is
+// atomic-only and safe while selecting/recording under a backend lock.
+class NativeUiPlaneImageEpoch {
+ public:
+  virtual ~NativeUiPlaneImageEpoch() = default;
+  virtual bool IsLive() const noexcept = 0;
+  virtual bool IsRevoked() const noexcept = 0;
+};
+class NativeUiPlaneImagePermission {
+ public:
+  NativeUiPlaneImagePermission(
+      gpu::NativeFrameSubmissionIdentity image,
+      std::shared_ptr<const NativeUiPlaneImageEpoch> epoch,
+      std::optional<gpu::NativeOverlayPresentation> presentation = std::nullopt)
+      : image_(image),
+        epoch_(std::move(epoch)),
+        presentation_(std::move(presentation)) {}
+  const gpu::NativeFrameSubmissionIdentity& image() const { return image_; }
+  const std::shared_ptr<const NativeUiPlaneImageEpoch>& epoch() const {
+    return epoch_;
+  }
+  const std::optional<gpu::NativeOverlayPresentation>& presentation() const {
+    return presentation_;
+  }
+  bool IsRevoked() const noexcept {
+    return !image_.valid() || !epoch_ ||
+           (presentation_ && !presentation_->valid()) || epoch_->IsRevoked();
+  }
+  bool IsLive() const noexcept {
+    return !IsRevoked() && epoch_->IsLive() && !IsRevoked();
+  }
+
+ private:
+  const gpu::NativeFrameSubmissionIdentity image_;
+  const std::shared_ptr<const NativeUiPlaneImageEpoch> epoch_;
+  // Normalized producer metadata for this exact image permission. No raw
+  // overlay-register interpretation, native latch or GPU authority lives here.
+  const std::optional<gpu::NativeOverlayPresentation> presentation_;
+};
+
+// Host paint geometry only. The unclipped quad defines texture coordinates;
+// the scissor clips it to the aspect-fitted native canvas and target. This
+// helper grants no image, visibility, Source completion or paint permission.
+struct NativeUiPlanePaintProjection {
+  float x = 0, y = 0, width = 0, height = 0, opacity = 1;
+  uint32_t scissor_x = 0, scissor_y = 0;
+  uint32_t scissor_width = 0, scissor_height = 0;
+  bool drawable() const noexcept {
+    return scissor_width && scissor_height && opacity > 0;
+  }
+};
+std::optional<NativeUiPlanePaintProjection> ProjectNativeUiPlanePresentation(
+    const gpu::NativeOverlayPresentation&, uint32_t target_width,
+    uint32_t target_height) noexcept;
+
+struct NativeUiPlaneVisibility {
+  std::shared_ptr<const NativeUiPlaneAuthority> authority;
+  uint64_t revision = 0;
+  bool visible = false;
+  // Null preserves existing modal permission. A nonmodal permission names one
+  // exact source and retains its genuine native epoch independently of frames.
+  std::shared_ptr<const NativeUiPlaneImagePermission> image_permission;
+};
+
+// Host metadata and an owned opaque publication, never native/GPU readiness.
+// Vulkan supplies its real immutable publication and retains actual sampling
+// fences separately. The shared selector is also exercised without a GPU.
+struct NativeUiPlaneImageReference {
+  gpu::NativeFrameSubmissionIdentity image;
+  std::shared_ptr<const NativeUiPlaneAuthority> authority;
+  uint64_t backend_epoch = 0;
+  std::shared_ptr<void> publication;
+  bool valid() const noexcept;
+};
+class NativeUiPlaneImageSelection {
+ public:
+  struct Selection {
+    NativeUiPlaneImageReference reference;
+    std::shared_ptr<const NativeUiPlaneImagePermission> permission;
+    uint64_t visibility_revision = 0;
+    explicit operator bool() const { return bool(reference.publication); }
+  };
+  struct Preflight {
+    NativeUiPlaneVisibility visibility;
+    Selection previous;
+    bool authority_live = false, desired_live = false, previous_live = false;
+    // Call only outside backend/submission locks. No selection mutation.
+    void CheckLiveness() noexcept;
+  };
+  // All methods except CheckLiveness require the caller's backend lock. Only
+  // actual paint may change selection. Receipt/status never promote an image.
+  Preflight Prepare(const NativeUiPlaneVisibility&) const;
+  Selection Select(const Preflight&, const NativeUiPlaneVisibility& current,
+                   const NativeUiPlaneImageReference& desired,
+                   const NativeUiPlaneImageReference& modal);
+  Selection Current(const Preflight&, const NativeUiPlaneVisibility& current,
+                    const NativeUiPlaneImageReference& modal) const;
+  static bool CanRecord(const NativeUiPlaneVisibility&,
+                        const Selection&) noexcept;
+  const std::shared_ptr<void>& retained_publication() const {
+    return qualified_.reference.publication;
+  }
+  void Reset() noexcept { qualified_ = {}; }
+
+ private:
+  bool Matches(const Preflight&, const NativeUiPlaneVisibility&) const;
+  Selection qualified_;
+};
+struct NativeUiPlaneStatus {
+  gpu::NativeFrameSubmissionIdentity identity;
+  uint64_t producer_backend_epoch = 0, presentation_backend_epoch = 0;
+  uint64_t image_version = 0, visibility_revision = 0;
+  uint64_t paint_submission = 0;
+  bool image_ready = false, visible = false, presenter_accepted = false;
+  bool failed = false;
+  gpu::GpuCompletion paint_completion;
+};
 
 class UIDrawContext {
  public:
@@ -345,7 +485,37 @@ class Presenter {
   // guest would never be painted again.
   bool IsGuestOutputDrivingPaints() const;
 
+  bool BindNativeUiPlaneAuthority(
+      std::shared_ptr<const NativeUiPlaneAuthority> authority);
+  bool SetNativeUiPlaneVisibility(
+      const std::shared_ptr<const NativeUiPlaneAuthority>& authority,
+      uint64_t revision, bool visible,
+      std::shared_ptr<const NativeUiPlaneImagePermission> image_permission =
+          {});
+  bool WithdrawNativeUiPlaneAuthority(
+      const std::shared_ptr<const NativeUiPlaneAuthority>& authority);
+  std::shared_ptr<const NativeUiPlaneAuthority> GetNativeUiPlaneAuthority(
+      const memory::PhysicalAllocationOwner& owner,
+      uint64_t backend_epoch) const;
+  virtual NativeUiPlaneStatus GetNativeUiPlaneStatus(
+      const gpu::NativeFrameSubmissionIdentity&, uint64_t) {
+    return {};
+  }
+  // Lifetime mode only, not readiness/admission. Drains an active ordinary
+  // capture before native work and excludes further legacy capture attempts.
+  virtual bool BeginNativeGpuCohort(uint64_t backend_epoch) { return false; }
+  // Permanent backend shutdown, not ordinary hide. A supporting backend must
+  // close and drain every CPU path able to submit painting/refresh/capture.
+  virtual bool SealForBackendStop() { return false; }
+  virtual bool ReleaseNativeUiPlaneAfterBackendStopped(
+      const gpu::GpuBackendStopProof&) {
+    return false;
+  }
+
  protected:
+  NativeUiPlaneVisibility SnapshotNativeUiPlaneVisibility() const;
+  void SealNativeUiPlanePublication();
+  void RequestNativeUiPlaneRepaint();
   enum class PaintResult {
     kPresented,
     kPresentedSuboptimal,
@@ -707,6 +877,9 @@ class Presenter {
   void ExecuteUIDrawersFromUIThread(UIDrawContext& ui_draw_context);
 
  private:
+  mutable std::mutex native_ui_plane_mutex_;
+  NativeUiPlaneVisibility native_ui_plane_visibility_;
+  bool native_ui_plane_sealed_ = false;
   enum class PaintMode {
     // Don't paint at all.
     // Painting lifecycle is accessible only by the UI thread.

@@ -483,15 +483,15 @@ std::string SpaInfo::GetStringTableEntry(XLanguage language,
   return entry->second;
 }
 
-const AchievementTableEntry* SpaInfo::GetAchievement(uint32_t id) {
+const AchievementTableEntry* SpaInfo::GetAchievement(uint32_t id) const {
   return GetSpaEntry<const AchievementTableEntry*>(achievements_, id);
 }
 
-const XdbfContextTableEntry* SpaInfo::GetContext(uint32_t id) {
+const XdbfContextTableEntry* SpaInfo::GetContext(uint32_t id) const {
   return GetSpaEntry<const XdbfContextTableEntry*>(contexts_, id);
 }
 
-const XdbfPropertyTableEntry* SpaInfo::GetProperty(uint32_t id) {
+const XdbfPropertyTableEntry* SpaInfo::GetProperty(uint32_t id) const {
   return GetSpaEntry<const XdbfPropertyTableEntry*>(properties_, id);
 }
 
@@ -515,7 +515,7 @@ const std::optional<ViewTable> SpaInfo::GetStatsView(uint32_t id) {
 }
 
 template <typename T>
-T SpaInfo::GetSpaEntry(std::vector<T>& container, uint32_t id) {
+T SpaInfo::GetSpaEntry(const std::vector<T>& container, uint32_t id) {
   for (const auto& entry : container) {
     if (entry->id != id) {
       continue;

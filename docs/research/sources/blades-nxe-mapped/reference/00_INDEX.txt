@@ -1,0 +1,841 @@
+decoded_dump master module index (v2)
+=========================================
+One record per file in the dump (relative to decoded_dump/,
+mirrors the original 'Blades + NXE Classic/' layout).
+Regenerate with: python3 _tool/build_01_modules.py
+
+IMPORTANT - address space note:
+  xex_load_address / xex_entry_va = XEX2 runtime virtual
+    address space (xex2_security_info.load_address, and the
+    XEX_HEADER_ENTRY_POINT optional header). THIS is the
+    address space used everywhere else in this corpus
+    (exports, imports, call graph, IPC map).
+  pe_image_base / pe_entry_rva = the standalone PE32 header's
+    own ImageBase/AddressOfEntryPoint, embedded inside the
+    decoded body by the Xbox toolchain. These often equal the
+    XEX values for un-relocated modules but are NOT guaranteed
+    to and must never be assumed interchangeable.
+  decoded_file_size = size of the file sitting in decoded_dump/.
+  pe_size_of_image = the PE header's own SizeOfImage field.
+  xex_security_image_size = xex2_security_info.image_size.
+    These three sizes are DIFFERENT fields, recorded separately
+    on purpose - do not assume they're equal.
+
+Confidence: CONFIRMED (structurally parsed from headers) |
+  INFERRED (derived/fallback value) | UNKNOWN (field absent) |
+  UNRESOLVED (file still encrypted) | SUSPECT_METADATA (patch
+  header reconstruction may be incomplete)
+----------------------------------------------------------------------------------------------------
+
+### XEX2-derived files (55) ###
+
+$flash_aac.xexp
+    confidence=UNRESOLVED  status=RAW - no base module in dump
+    xex_load_address=0x91380000  xex_entry_va=-
+    pe_image_base=-  pe_entry_rva=-
+    decoded_file_size=16384  pe_size_of_image=-  xex_security_image_size=0x48000
+    title_id=-  module_version=None  base_version=None
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=$flash_aac.xexp  header_sidecar=-
+    original_sha256=3c76bc88c43b7b905ce3ecfae2907fdc7ff69d154ecf012c06808fd9cfb91e30
+    decoded_sha256=3c76bc88c43b7b905ce3ecfae2907fdc7ff69d154ecf012c06808fd9cfb91e30
+    notes: still encrypted/compressed - see 10_UNRESOLVED.txt
+    file(1)=Microsoft Xbox 360 executable, all regions
+
+$flash_bootanim.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=bootanim.xex)
+    xex_load_address=0x98000000  xex_entry_va=-
+    pe_image_base=0x10000000  pe_entry_rva=0x0
+    decoded_file_size=61440  pe_size_of_image=0x75400  xex_security_image_size=0xF000
+    title_id=0x0  module_version=0.7.24640.0  base_version=4.12.18754.67
+    export_table_va=-  export_count=-
+    base_module=bootanim.xex  patch_module=$flash_bootanim.xexp  header_sidecar=$flash_bootanim.xexp.header
+    original_sha256=a14fc87111a29f7895fe916c5d5d915002002e9c65df15763689e9ee62013f68
+    decoded_sha256=66a704498226ca6f8390b5a4491ceb9cdbe229c8021ebf37826dcae73ba3b9ab
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_createprofile.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=createprofile.xex)
+    xex_load_address=0x90100000  xex_entry_va=0x901069D0
+    pe_image_base=0x10000000  pe_entry_rva=0x8A10
+    decoded_file_size=65536  pe_size_of_image=0x19E00  xex_security_image_size=0x10000
+    title_id=0x20000  module_version=5.8.20302.76  base_version=5.8.20037.80
+    export_table_va=-  export_count=-
+    base_module=createprofile.xex  patch_module=$flash_createprofile.xexp  header_sidecar=$flash_createprofile.xexp.header
+    original_sha256=c2a9e10fb839faf8ad7b55626bb39d9a0b6fb91bbab8dc58fb3d56e245541a9d
+    decoded_sha256=bd300ef874b9029e3dbc4b43cfd7a09559dd91f886e1a3fd405d9c976787a29e
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_dash.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x92000000  xex_entry_va=0x92146DC8
+    pe_image_base=0x92000000  pe_entry_rva=0x146DC8
+    decoded_file_size=15085568  pe_size_of_image=0x978800  xex_security_image_size=0xE63000
+    title_id=0xFFFE07D1  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x92742B44  export_count=806
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=7dd4dd087e1ff8874951446f5870445dcaaac383ddd49818f9ac84fcc2a61c48
+    decoded_sha256=8320581ad4ba97d2312e3a74eb2998c4e433c4f7c907954e7b6ff6fc00936b29
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 18 sections
+
+$flash_deviceselector.xexp
+    confidence=CONFIRMED  status=depatched (base=deviceselector.xex)
+    xex_load_address=0x916D0000  xex_entry_va=0x916D3CD8
+    pe_image_base=0x10000000  pe_entry_rva=0x4B88
+    decoded_file_size=16814445  pe_size_of_image=0xA400  xex_security_image_size=0x100916D
+    title_id=0x0  module_version=2.0.1888.0  base_version=5.8.1888.0
+    export_table_va=-  export_count=-
+    base_module=deviceselector.xex  patch_module=$flash_deviceselector.xexp  header_sidecar=$flash_deviceselector.xexp.header
+    original_sha256=c84131db1792562c9b14a0736454cef8a91ba366bb4e28ecb88eb4c2060e1eda
+    decoded_sha256=51551580ff094e27bbe0c50b285edcdceee7827a29e25e185ca3a58431e56534
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_gamerprofile.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=gamerprofile.xex)
+    xex_load_address=0x90100000  xex_entry_va=0x901109A0
+    pe_image_base=0x10000000  pe_entry_rva=0x16808
+    decoded_file_size=368640  pe_size_of_image=0x34000  xex_security_image_size=0x5A000
+    title_id=0x58424F58  module_version=0.0.512.0  base_version=5.8.24576.0
+    export_table_va=-  export_count=-
+    base_module=gamerprofile.xex  patch_module=$flash_gamerprofile.xexp  header_sidecar=$flash_gamerprofile.xexp.header
+    original_sha256=97e658f9ea13fe40dd6f15a1803f619bed2dc1ef31313a6b97bbda7aede3497f
+    decoded_sha256=348db2344fbbfcf052cc13b786e2e6a46aa8cf8f6c1e26cbdd80e780bc87944c
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_hud.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=hud.xex)
+    xex_load_address=0x913E0000  xex_entry_va=0x913EE8C0
+    pe_image_base=0x10000000  pe_entry_rva=0x1C0A0
+    decoded_file_size=36864  pe_size_of_image=0x35A00  xex_security_image_size=0x9000
+    title_id=0x20000  module_version=5.8.20302.76  base_version=5.8.20037.80
+    export_table_va=-  export_count=-
+    base_module=hud.xex  patch_module=$flash_hud.xexp  header_sidecar=$flash_hud.xexp.header
+    original_sha256=b6b6d8ae0a68e16225671472089afd3c4d926db12e64f26fe73ff36a6e8cdfc3
+    decoded_sha256=54717987eae67c37e2c9612d51e2b7e4552c924dd32b9a97e6a092e7830152d2
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_huduiskin.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x91110000  xex_entry_va=-
+    pe_image_base=-  pe_entry_rva=-
+    decoded_file_size=745472  pe_size_of_image=-  xex_security_image_size=0xB6000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=f2b89cf1577417d5bf923fcc010591dc48a4009c74a739dc17409c16c7478543
+    decoded_sha256=29628e2cbb8f24d3932ab084e03dbce78ae3e63802d5fb491222680bfc1a9bcd
+    notes: decoded body is a xui_resource, not executable code (verified via LZX block-hash match)
+    file(1)=data
+
+$flash_mfgbootlauncher.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=mfgbootlauncher.xex)
+    xex_load_address=0x9FEA0000  xex_entry_va=0x92007108
+    pe_image_base=0x92000000  pe_entry_rva=0x75E0
+    decoded_file_size=24576  pe_size_of_image=0x1C000  xex_security_image_size=0x6000
+    title_id=-  module_version=None  base_version=None
+    export_table_va=-  export_count=-
+    base_module=mfgbootlauncher.xex  patch_module=$flash_mfgbootlauncher.xexp  header_sidecar=$flash_mfgbootlauncher.xexp.header
+    original_sha256=62764aca7d25324aa873d776846af23033ac0b1e12bd9486d65e5c238977e8eb
+    decoded_sha256=406f8c72210a233374a397f99724f0c06fb198c1b48e9ebf1d69b1f90fb527f6
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_minimediaplayer.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=minimediaplayer.xex)
+    xex_load_address=0x90100000  xex_entry_va=0x901088A8
+    pe_image_base=0x10000000  pe_entry_rva=0xC250
+    decoded_file_size=286720  pe_size_of_image=0x19400  xex_security_image_size=0x46000
+    title_id=0x0  module_version=0.7.24640.0  base_version=5.8.19792.0
+    export_table_va=-  export_count=-
+    base_module=minimediaplayer.xex  patch_module=$flash_minimediaplayer.xexp  header_sidecar=$flash_minimediaplayer.xexp.header
+    original_sha256=124dd77a4f69d5ce81e88312e2d189eb6aa6fc52756e1be8f37eff0b8ecaef5e
+    decoded_sha256=fe5365db8f9e5b3c8ea034db6124b9335815500d271f2900a9dd6e718666b9fa
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_nomni.xexp
+    confidence=UNRESOLVED  status=RAW - no base module in dump
+    xex_load_address=0x91090000  xex_entry_va=-
+    pe_image_base=-  pe_entry_rva=-
+    decoded_file_size=59392  pe_size_of_image=-  xex_security_image_size=0x4E000
+    title_id=-  module_version=None  base_version=None
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=$flash_nomni.xexp  header_sidecar=-
+    original_sha256=ea8867cc61bb7c93b82c704df0b7dd668f2b6a14e2d8da92eb1414cc327ac998
+    decoded_sha256=ea8867cc61bb7c93b82c704df0b7dd668f2b6a14e2d8da92eb1414cc327ac998
+    notes: still encrypted/compressed - see 10_UNRESOLVED.txt
+    file(1)=Microsoft Xbox 360 executable, all regions
+
+$flash_nomnifwm.xexp
+    confidence=UNRESOLVED  status=RAW - no base module in dump
+    xex_load_address=0x91070000  xex_entry_va=-
+    pe_image_base=-  pe_entry_rva=-
+    decoded_file_size=20480  pe_size_of_image=-  xex_security_image_size=0x17000
+    title_id=-  module_version=None  base_version=None
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=$flash_nomnifwm.xexp  header_sidecar=-
+    original_sha256=c84c6dd3403a0e72669935d4370d247927d6a0f88bd8ff3dcbc762faa92656b4
+    decoded_sha256=c84c6dd3403a0e72669935d4370d247927d6a0f88bd8ff3dcbc762faa92656b4
+    notes: still encrypted/compressed - see 10_UNRESOLVED.txt
+    file(1)=Microsoft Xbox 360 executable, all regions
+
+$flash_signin.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=signin.xex)
+    xex_load_address=0x90100000  xex_entry_va=0x90108800
+    pe_image_base=0x10000000  pe_entry_rva=0xB0F0
+    decoded_file_size=196608  pe_size_of_image=0x13200  xex_security_image_size=0x30000
+    title_id=0x7600000  module_version=4.9.20037.80  base_version=5.8.512.0
+    export_table_va=-  export_count=-
+    base_module=signin.xex  patch_module=$flash_signin.xexp  header_sidecar=$flash_signin.xexp.header
+    original_sha256=e3477bb8d3fba6a3ee920bad076c38ab6840ae955fbd59d3e7391a6db604a122
+    decoded_sha256=12acba85052c7bc9509abbf108063fadd4803420782b1a91cc8b7025a991b9ef
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_systemupdate.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x92000000  xex_entry_va=0x9200F420
+    pe_image_base=0x400000  pe_entry_rva=0xF420
+    decoded_file_size=622592  pe_size_of_image=0xA5000  xex_security_image_size=0x98000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=715bbece555ec365aa5299e5f56e8de5e38116879a6c3ff44d2492dbe7c47f5d
+    decoded_sha256=5169acbc6d0f4eca3ef171fb5b9de2515d546c62e80e83f1a54cf399bc6f0dcd
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 7 sections
+
+$flash_updater.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=updater.xex)
+    xex_load_address=0x90100000  xex_entry_va=0x90102550
+    pe_image_base=0x10000000  pe_entry_rva=0x2830
+    decoded_file_size=53248  pe_size_of_image=0x8200  xex_security_image_size=0xD000
+    title_id=0x7600000  module_version=4.9.20037.80  base_version=5.8.512.0
+    export_table_va=-  export_count=-
+    base_module=updater.xex  patch_module=$flash_updater.xexp  header_sidecar=$flash_updater.xexp.header
+    original_sha256=c5e6ab7a9ea3c378a84a7b53d1bb602d03926e0a5a21c02ed45c2b3dfc9087e5
+    decoded_sha256=71c13d8348d67ae045012f1c4b6cb6d704548132ed58f58f398458da52b15c0b
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_vk.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=vk.xex)
+    xex_load_address=0x917D0000  xex_entry_va=0x917E6048
+    pe_image_base=0x10000000  pe_entry_rva=0xF300
+    decoded_file_size=290816  pe_size_of_image=0x16A00  xex_security_image_size=0x47000
+    title_id=0x0  module_version=0.0.512.0  base_version=5.8.24640.0
+    export_table_va=0x917E02CC  export_count=4
+    base_module=vk.xex  patch_module=$flash_vk.xexp  header_sidecar=$flash_vk.xexp.header
+    original_sha256=c95bb98614ef2cae2ddd4bd1c1814775416d97f4ad9046b3abd43cb65c71f790
+    decoded_sha256=76e8727ee5790031b2b734e4d58d013926688689e228ebadc3c1331d55268d3e
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+$flash_xam.xexp
+    confidence=SUSPECT_METADATA  status=depatched (base=xam.xex)
+    xex_load_address=0x81870000  xex_entry_va=0x818E7EA0
+    pe_image_base=0x10000000  pe_entry_rva=0x85128
+    decoded_file_size=4523624  pe_size_of_image=0x4BCC00  xex_security_image_size=0x450668
+    title_id=0x2DB6D43C  module_version=3.8.14740.166  base_version=0.5.40833.18
+    export_table_va=0x81BD255C  export_count=1027
+    base_module=xam.xex  patch_module=$flash_xam.xexp  header_sidecar=$flash_xam.xexp.header
+    original_sha256=5ce35c60f235d9dd72043c71391915c46a787baaa18c352034c5a0b00467123d
+    decoded_sha256=6773f8220f8e3dd247130d3a26739de9b95bb6fcf61e3593677854b4afcde849
+    notes: title_id/module_version disagree with base module - reconstructed sidecar's execution_info header may not be fully relocated; treat title_id/module_version/base_version for this row with caution
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 9 sections
+
+$flash_ximecore.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x91680000  xex_entry_va=0x91689D40
+    pe_image_base=0x10000000  pe_entry_rva=0x9D40
+    decoded_file_size=159744  pe_size_of_image=0x2CC00  xex_security_image_size=0x27000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=f256f3bb8aeb824286bf9457aceb9026bb17e04a7ed6681feec8ccb5f82079cb
+    decoded_sha256=c43399b58bed9e04ed83fcd8a7e9cffb15c5c0d27f4957efc57b5450b4c6677a
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 9 sections
+
+$flash_ximedic.xexp
+    confidence=UNRESOLVED  status=RAW - depatch failed
+    xex_load_address=0x81720000  xex_entry_va=-
+    pe_image_base=-  pe_entry_rva=-
+    decoded_file_size=8192  pe_size_of_image=-  xex_security_image_size=0xB0000
+    title_id=-  module_version=None  base_version=None
+    export_table_va=-  export_count=-
+    base_module=XIMEDIC.XEX  patch_module=$flash_ximedic.xexp  header_sidecar=-
+    original_sha256=e78e7b2e035f5c74f32738654ae3aacedffd4ff3281c99cbea02acf908336a96
+    decoded_sha256=e78e7b2e035f5c74f32738654ae3aacedffd4ff3281c99cbea02acf908336a96
+    notes: still encrypted/compressed - see 10_UNRESOLVED.txt
+    file(1)=Microsoft Xbox 360 executable, all regions
+
+$install_extender.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x9F100000  xex_entry_va=0x9F10F8C8
+    pe_image_base=0x98000000  pe_entry_rva=0xF8C8
+    decoded_file_size=684032  pe_size_of_image=0xA9A00  xex_security_image_size=0xA7000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x9F154464  export_count=1
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=94a15677081b50b5c1d4f41f0986d484c1af06a561ee056e13621ac12fd73d11
+    decoded_sha256=99dc8de33fe344f5067ba53cd8c3abc7391aa888b13fab025f09a2ad40093e91
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+AvatarEditor.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x92000000  xex_entry_va=0x920A05B8
+    pe_image_base=0x92000000  pe_entry_rva=0xA05B8
+    decoded_file_size=54386688  pe_size_of_image=0x247F000  xex_security_image_size=0x33DE000
+    title_id=0x584D07D1  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=8e68952be33204e2c616242d4c56aa8e58bd1961a7b5d353eaf5b2c1ce0d3ca1
+    decoded_sha256=7f69f1bdf9465eee48c04fb9124b3c7fe3f2a08db18104b6311c30a75c1bfecc
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+AvatarMiniCreator.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x90104878
+    pe_image_base=0x10000000  pe_entry_rva=0x4878
+    decoded_file_size=507904  pe_size_of_image=0x1A800  xex_security_image_size=0x7C000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=5cf1c6e0d10a509ea7d1574fab2c676dc7a7f2d3b69e1cfe220a1fca04f24aa8
+    decoded_sha256=e440bad12dd48519922e1bb2a8ba0f75db2e3ddeae2ca8362536768e4b3a190b
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+bootanim.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x98000000  xex_entry_va=-
+    pe_image_base=0x10000000  pe_entry_rva=0x0
+    decoded_file_size=581632  pe_size_of_image=0x74400  xex_security_image_size=0x8E000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=0x9804115C  export_count=3
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=352764f79181c628a1cfe88037da0e812654dfeb5eb037b41f1617eafa9fab5f
+    decoded_sha256=1699406fe0791960eb9d3346c463a172a88c1423197216865c9f6aa861002244
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+createprofile.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x901069D0
+    pe_image_base=0x10000000  pe_entry_rva=0x69D0
+    decoded_file_size=110592  pe_size_of_image=0x17E00  xex_security_image_size=0x1B000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=0x90109B34  export_count=2
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=890f10a3754a4119d135fa6c9a99e4a0eed067bacf556f7ff51cf797baef0497
+    decoded_sha256=3cfbcb0191047296666ffd2f78bcfa97945c4dcddc37d82c32904c4d05847e31
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+dash.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x92000000  xex_entry_va=0x920A8848
+    pe_image_base=0x400000  pe_entry_rva=0xA8848
+    decoded_file_size=8343552  pe_size_of_image=0x529000  xex_security_image_size=0x7F5000
+    title_id=0xFFFE07D1  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=0x9245562C  export_count=1
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=38f9d594b923d2aaee0a0b79cc2a511172c6b8ed48d6ad4f243d8d05033f3ad1
+    decoded_sha256=3d3bf5c1a3c27e91d6cbdeaa8c22ecee836a12d872ed0a34c60454698bdfc4f1
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 10 sections
+
+deviceselector.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x916D0000  xex_entry_va=0x916D3CD8
+    pe_image_base=0x10000000  pe_entry_rva=0x3CD8
+    decoded_file_size=40960  pe_size_of_image=0x9200  xex_security_image_size=0xA000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=0x916D48D4  export_count=3
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=4b4af73507d788cc715cbfacc1b129151cb1487d6ee2e1c1217534ba880329ed
+    decoded_sha256=f62f06b36907a0957a006e8557d2231acd9bd667e8ecdd7652afcd8b864843c7
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+Feedback.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x90108690
+    pe_image_base=0x10000000  pe_entry_rva=0x8690
+    decoded_file_size=278528  pe_size_of_image=0x1AA00  xex_security_image_size=0x44000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=8a878a77829424ddee398144b44cb609c971de08488694e2c1c37d3cbf383717
+    decoded_sha256=dfccde5bf262adee5f2880918e1c7b8927ca3f6bd782664b02d339c1eea38c07
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+Friends.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x90130488
+    pe_image_base=0x10000000  pe_entry_rva=0x30488
+    decoded_file_size=729088  pe_size_of_image=0x5A000  xex_security_image_size=0xB2000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=e2a06a29f4fb0b924076cd7722e01ca31c003cdf6975dd840c9124f9110a303b
+    decoded_sha256=9bcc9ded2a17d600b47cca7835811a20c68202169b61c1f8ad82b078fb0604ce
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+gamerprofile.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x901109A0
+    pe_image_base=0x10000000  pe_entry_rva=0x109A0
+    decoded_file_size=262144  pe_size_of_image=0x29800  xex_security_image_size=0x40000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=9609cf72233d97df98da06a2c346d522bfa7de5a5e9c567e4512d427c5ac629f
+    decoded_sha256=24c1d30ab3945f20aa0d13bd017eb606d2b310bb0b2e248be5f63ec2863cf13d
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+hostloader.dll
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x8A000000  xex_entry_va=0x8A058140
+    pe_image_base=0x88000000  pe_entry_rva=0x58140
+    decoded_file_size=2293760  pe_size_of_image=0x1F7000  xex_security_image_size=0x230000
+    title_id=0x584E07D2  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x8A170164  export_count=1
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=ef772d02d506af0e42cbefd60cc29109b41f57489a43263e2f84c47103828814
+    decoded_sha256=4e0a1d81b2be233b6123af3830a417d7162722f40fa99001e1abcf22d1e43bee
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 9 sections
+
+hud.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x913E0000  xex_entry_va=0x913EE8C0
+    pe_image_base=0x10000000  pe_entry_rva=0xE8C0
+    decoded_file_size=262144  pe_size_of_image=0x20600  xex_security_image_size=0x40000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=7fd4e1445da417d6e328cd532e1cc50054be9ae8316f194a4e1deae52baed071
+    decoded_sha256=e2977ea9f78d769b931ac63e8625cd218cc9637b2a8f0240822317ee8fa55a13
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+huduiskin.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x91440000  xex_entry_va=-
+    pe_image_base=-  pe_entry_rva=-
+    decoded_file_size=212992  pe_size_of_image=-  xex_security_image_size=0x34000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=e74b6d03595a2fb51b24016628a2006879c86ac7606454c223bbe5b6c88579bf
+    decoded_sha256=5aa543c0369a4cedef9592483b83824ff1f2e5143c718b9691063f24f0fdc451
+    notes: decoded body is a xui_resource, not executable code (verified via LZX block-hash match)
+    file(1)=data
+
+LivePack.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x9F680000  xex_entry_va=0x9F6E8158
+    pe_image_base=0x98000000  pe_entry_rva=0x68158
+    decoded_file_size=5410816  pe_size_of_image=0x3C9400  xex_security_image_size=0x529000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x9F91D494  export_count=64
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=d4ae93f0a6f06da9688c0ce4ae0320363e889bbe81d4d2d9dca6398e8f767467
+    decoded_sha256=80bcb5c204ea281e943ccc561686bb9f8c834009126f766f248b251ab105d9b4
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 17 sections
+
+Marketplace.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x901412F8
+    pe_image_base=0x10000000  pe_entry_rva=0x412F8
+    decoded_file_size=1134592  pe_size_of_image=0x76E00  xex_security_image_size=0x115000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=4d945bb077cf87abe00a4c2e54c10544a0f6577b2d01abaaa985f299d7296416
+    decoded_sha256=7a9a47e6e54a31e9d50bc945de29b10be36b9fa6840c96c12c3d31ce6140518b
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+mfgbootlauncher.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x9FEA0000  xex_entry_va=0x9FEA7108
+    pe_image_base=0x400000  pe_entry_rva=0x7108
+    decoded_file_size=86016  pe_size_of_image=0x18200  xex_security_image_size=0x15000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=c83392de6e79e841aacb0775c5122e6ae076c0607a953bd555762c152b657786
+    decoded_sha256=8711d797ea09e29d4aba4223b5d960eb75afd1c34fa30efd76a326ea636abca4
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+minimediaplayer.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x901088A8
+    pe_image_base=0x10000000  pe_entry_rva=0x88A8
+    decoded_file_size=114688  pe_size_of_image=0x12C00  xex_security_image_size=0x1C000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=45a573ca96f7d78493f81a9b2dd865ba4dab0fcf1058d361075c22f9fa217eff
+    decoded_sha256=2dff081e5cad5d2c034af4915133cc2ebfe331a73f4e429c566f018564c69aa9
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+Party.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x91260000  xex_entry_va=0x91263938
+    pe_image_base=0x10000000  pe_entry_rva=0x3938
+    decoded_file_size=245760  pe_size_of_image=0x4A800  xex_security_image_size=0x3C000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=e0ef9a19e9ba3903cb6c6b0a0d1d3513c5a5ffd46e81f90494be74b7caff98ca
+    decoded_sha256=fad51e035f232907eb308282acf9c3f45d7ea5257d7e637a0b77fca265fcdcf1
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+Quickchat.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x90110910
+    pe_image_base=0x10000000  pe_entry_rva=0x10910
+    decoded_file_size=315392  pe_size_of_image=0x2DC00  xex_security_image_size=0x4D000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=8306de31d9cfd435dcb564eb0ca1c3ea8a737f4c71789e276bc4fd9e4f908db2
+    decoded_sha256=80f63e429bdecda2251ff14f8836f85dea8894c213e4d0773cfe3643ce96228d
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+runtime/v3.0/BackCompatShim.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x83000000  xex_entry_va=0x83030000
+    pe_image_base=0x88000000  pe_entry_rva=0x30000
+    decoded_file_size=1703936  pe_size_of_image=0x17BC00  xex_security_image_size=0x1A0000
+    title_id=0x584E07D2  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x8311D2F4  export_count=3
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=ea525232c71dcd09961c9b9e1c265bde87f6298d00e5e7df98bc5d3a30f8137c
+    decoded_sha256=ff72bda7bc9712fa944a6bdf216835b9cdd7c8fa46f7115252f194b904dedeef
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 9 sections
+
+runtime/v3.0/netcfusermode.dll
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x88500000  xex_entry_va=0x88521A10
+    pe_image_base=0x88500000  pe_entry_rva=0x21A10
+    decoded_file_size=589824  pe_size_of_image=0x99000  xex_security_image_size=0x90000
+    title_id=0x584E07D2  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x88520000  export_count=611
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=693f14ac1eb8acffe2a9ffec6fe9f3a4ccafdc001dad1f24254491d494e5a5d5
+    decoded_sha256=2b5ee33640aac709832f95a6f9135e02b38a3f0dcdc7ead632646bf3dbea68e8
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+runtime/v3.0/runtimehost.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x8B000000  xex_entry_va=0x8B166D68
+    pe_image_base=0x88000000  pe_entry_rva=0x166D68
+    decoded_file_size=7208960  pe_size_of_image=0x789400  xex_security_image_size=0x6E0000
+    title_id=0x584E07D2  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x8B5D1464  export_count=2
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=0dc0e911ac01b607452227d182a6bac3b9c04acf0ebf76d6da36bd4210006b34
+    decoded_sha256=b69069773808e5cf42083acea9c76072cededbadfda897d04881665bf372ee68
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 18 sections
+
+runtime/v3.1/BackCompatShim.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x83000000  xex_entry_va=0x83050000
+    pe_image_base=0x88000000  pe_entry_rva=0x50000
+    decoded_file_size=2097152  pe_size_of_image=0x1E3A00  xex_security_image_size=0x200000
+    title_id=0x584E07D2  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x83160A54  export_count=3
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=f4d00fa281549e4118704c6b4d7a50c515b2cb80bcb01c5703b3c8fcb1435b28
+    decoded_sha256=8cbdde48b64b9a66c88aa06113964481a66e6b11761de619c677b2f87b90d335
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 9 sections
+
+runtime/v3.1/netcfusermode.dll
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x88500000  xex_entry_va=0x88521A10
+    pe_image_base=0x88500000  pe_entry_rva=0x21A10
+    decoded_file_size=589824  pe_size_of_image=0x99000  xex_security_image_size=0x90000
+    title_id=0x584E07D2  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x88520000  export_count=611
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=f35e05143a53f3367615ed6f3dda336ccaf017b3eff595c4f4eb1b50a4a88e69
+    decoded_sha256=b0a7341bd966d111820fbb00461b8eafa50b51ea5aba0ec1ae19eb2136044232
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+runtime/v3.1/runtimehost.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x8B000000  xex_entry_va=0x8B103910
+    pe_image_base=0x88000000  pe_entry_rva=0x103910
+    decoded_file_size=7602176  pe_size_of_image=0x7F1000  xex_security_image_size=0x740000
+    title_id=0x584E07D2  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=0x8B628494  export_count=2
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=93198831dc36b4529085a02afd1096e9a4e28d6625d2dcb3145913e6f3fc66d8
+    decoded_sha256=ea19913198832c5ba2ff85d3575dc51c6553ab99fc3186876c0ead4020a7c84a
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 18 sections
+
+signin.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x90108800
+    pe_image_base=0x10000000  pe_entry_rva=0x8800
+    decoded_file_size=143360  pe_size_of_image=0x19600  xex_security_image_size=0x23000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=e87cd23f7dea25ae0c1d9af60cd79f462575939d3737ce9d89aa83151a629a01
+    decoded_sha256=56f95330636c1ce38ec1999a0bbe2a240aba20d1ee741010ab0703cfb74a7291
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+titlelauncher.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x82000000  xex_entry_va=0x8204BF20
+    pe_image_base=0x82000000  pe_entry_rva=0x4BF20
+    decoded_file_size=1441792  pe_size_of_image=0x170000  xex_security_image_size=0x160000
+    title_id=0x584E07D2  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=e3eb096b17f42aaefb3c5365732725679cf8ce910bc53cd09f24c00806b5d346
+    decoded_sha256=4a9b90123f287eae46af02fabb56bc5b0d5d74a476a5e32204f478ffd4beb1e4
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 9 sections
+
+updater.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x90102550
+    pe_image_base=0x10000000  pe_entry_rva=0x2550
+    decoded_file_size=45056  pe_size_of_image=0xC200  xex_security_image_size=0xB000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=f8ab1be60ab8698157907368a42de5a48445997431db793c30c81e734202790b
+    decoded_sha256=32e672c81c1d8a5b9f100730e37e2881720a2e7ffc1848c10f35ecf7178a1682
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+vk.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x917D0000  xex_entry_va=0x917E6048
+    pe_image_base=0x10000000  pe_entry_rva=0x16048
+    decoded_file_size=241664  pe_size_of_image=0x30400  xex_security_image_size=0x3B000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=0x917F4428  export_count=4
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=50c42afd760b59d9a8f47c7f318411cf8c7c161e6c65fc0e5a9d86f4d334f38a
+    decoded_sha256=18758100d0dea26ea4e38c31dc8211f94b43c216c188950452dff554c730ea99
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 9 sections
+
+Voicemail.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x90116A30
+    pe_image_base=0x10000000  pe_entry_rva=0x16A30
+    decoded_file_size=249856  pe_size_of_image=0x33400  xex_security_image_size=0x3D000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=125dc3ec98bbaf0b783a7749889fc5282fe09421e4b01f49d6010dfcc69645e4
+    decoded_sha256=87cba5580ba8b124390343b85e1eb17807a0db2cd3dfec5c27d277c53ef56fc6
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+WORDREGISTER.XEX
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x90100000  xex_entry_va=0x90105818
+    pe_image_base=0x10000000  pe_entry_rva=0x5818
+    decoded_file_size=45056  pe_size_of_image=0xBE00  xex_security_image_size=0xB000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=ef67b063cfbecb5d5a8551f10525e6aff4c74772549766a58e6d0a786171b68c
+    decoded_sha256=e9ac4047ae31fc0ec51edb8f54804d281f7b0607da6686d9665f177e21d32ae7
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+xam.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x81870000  xex_entry_va=0x818E7EA0
+    pe_image_base=0x10000000  pe_entry_rva=0x77EA0
+    decoded_file_size=3211264  pe_size_of_image=0x319000  xex_security_image_size=0x310000
+    title_id=0x0  module_version=2.0.1888.0  base_version=2.0.1888.0
+    export_table_va=0x81A9C0D4  export_count=659
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=4a32c297179112c411abf8ae9f7ca40c776375b0443b4ecb79cd8952042ccbcf
+    decoded_sha256=1733db65e4609b9567ddfc461933e957baac52a4783c0615133db31ab13407fd
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 9 sections
+
+XIMEDIC.XEX
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x81720000  xex_entry_va=-
+    pe_image_base=-  pe_entry_rva=-
+    decoded_file_size=655360  pe_size_of_image=-  xex_security_image_size=0xA0000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=4f56d511c8375a0f9678e2b71b7a2d0d0279d23f214790789fa8468c65fd4e88
+    decoded_sha256=7144f8f309c80c2ee94c827a90fbae66cc085cee39f6dd049f5dc2be1570d003
+    notes: decoded body is a ime_dictionary, not executable code (verified via LZX block-hash match)
+    file(1)=data
+
+XIMEDICCH.XEX
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x81670000  xex_entry_va=-
+    pe_image_base=-  pe_entry_rva=-
+    decoded_file_size=196608  pe_size_of_image=-  xex_security_image_size=0x30000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=9d0f9467e2a6c81d76b1eb3546bfa8a3360aacda25015ef72b4cc8a7993dfdb0
+    decoded_sha256=96593abf568ebe41d3ef98c3cd89ad775aa274a8e53b6b431d5f11d0fbebaf78
+    file(1)=data
+
+XIMEDICEX.XEX
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x816A0000  xex_entry_va=-
+    pe_image_base=-  pe_entry_rva=-
+    decoded_file_size=458752  pe_size_of_image=-  xex_security_image_size=0x70000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=ccb79931587a6b5f458ccc24815041cb0428749bc328aa79f8f65e90ce6aeaa4
+    decoded_sha256=43c324ed8d6b05531f63c6e97aabfa0eb6289df69f5dbf2779034566c4de2bd6
+    notes: decoded body is a ime_dictionary, not executable code (verified via LZX block-hash match)
+    file(1)=data
+
+XMsgr.xex
+    confidence=CONFIRMED  status=decoded
+    xex_load_address=0x91720000  xex_entry_va=0x91729550
+    pe_image_base=0x10000000  pe_entry_rva=0x9550
+    decoded_file_size=270336  pe_size_of_image=0x4E400  xex_security_image_size=0x42000
+    title_id=0x0  module_version=2.0.9199.0  base_version=2.0.9199.0
+    export_table_va=-  export_count=-
+    base_module=-  patch_module=-  header_sidecar=-
+    original_sha256=cce48668a85acb0fcf0b6c42968ad3d33dcddfc1c08d2ccf43a7c63d198693ea
+    decoded_sha256=f10ba735bae85f12570fab62b8ee9aa67ed7ef3eb88642104a64aacd24bca363
+    file(1)=PE32 executable for XBOX, PowerPC 64-bit (big-endian), 8 sections
+
+
+### Non-XEX2 files (129) - copied through unchanged ###
+
+$flash_XenonCLatin.xttp  (86016 bytes)  data
+$flash_XenonJKLatin.xttp  (12288 bytes)  data
+1888.fsroot.bin  (16896 bytes)  data
+AvatarAssetPack.toc  (13866532 bytes)  OpenPGP Public Key
+certpack.ini  (45 bytes)  ASCII text, with CRLF line terminators
+crown1.png  (2497 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+crown10.png  (2506 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+crown2.png  (2538 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+crown3.png  (2533 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+crown4.png  (2520 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+crown5.png  (2492 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+crown6.png  (2506 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+crown7.png  (2503 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+crown8.png  (2524 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+crown9.png  (2531 bytes)  PNG image data, 55 x 55, 8-bit colormap, non-interlaced
+data.bin  (2528 bytes)  data
+gtecybertrust.cer  (606 bytes)  DER Encoded Certificate, ? bits (01a5), ? Encryption (2a864886f70d010104), countryName=US
+mediasite.xzp  (1023205 bytes)  data
+MigrationVideo.wmv  (24549963 bytes)  Microsoft ASF
+milestone1.png  (1350 bytes)  PNG image data, 410 x 35, 8-bit colormap, non-interlaced
+milestone2.png  (2028 bytes)  PNG image data, 410 x 35, 8-bit colormap, non-interlaced
+milestone3.png  (2928 bytes)  PNG image data, 410 x 35, 8-bit colormap, non-interlaced
+rsaroot.cer  (568 bytes)  data
+runtime/v3.0/big5.nlp  (66728 bytes)  data
+runtime/v3.0/bopomofo.nlp  (82172 bytes)  data
+runtime/v3.0/ksc.nlp  (116756 bytes)  data
+runtime/v3.0/l_except_3_5.nlp  (9696 bytes)  data
+runtime/v3.0/l_intl_3_5.nlp  (7120 bytes)  data
+runtime/v3.0/Microsoft.Xna.Framework.dlx  (675840 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.0/Microsoft.Xna.Framework.Game.dlx  (77824 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.0/mscorlib.dlx  (794112 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.0/prc.nlp  (83748 bytes)  data
+runtime/v3.0/prcp.nlp  (83748 bytes)  data
+runtime/v3.0/sortkey_3_5.nlp  (262148 bytes)  data
+runtime/v3.0/sorttbls_3_5.nlp  (20320 bytes)  Adobe Photoshop Color swatch, version 0, 6 colors; 1st RGB space (0), w 0x40c, x 0, y 0x80c, z 0; 2nd space (3084), w 0, x 0x100c, y 0, z 0x140c
+runtime/v3.0/system.core.dlx  (78336 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.0/system.dlx  (276480 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.0/system.sr.dlx  (334848 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.0/system.xml.dlx  (1027072 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.0/system.xml.linq.dlx  (82944 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.0/xjis.nlp  (28288 bytes)  data
+runtime/v3.1/big5.nlp  (66728 bytes)  data
+runtime/v3.1/bopomofo.nlp  (82172 bytes)  data
+runtime/v3.1/ksc.nlp  (116756 bytes)  data
+runtime/v3.1/l_except_3_5.nlp  (9696 bytes)  data
+runtime/v3.1/l_intl_3_5.nlp  (7120 bytes)  data
+runtime/v3.1/Microsoft.Xna.Framework.dlx  (704512 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.1/Microsoft.Xna.Framework.Game.dlx  (77824 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.1/mscorlib.dlx  (794112 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.1/prc.nlp  (83748 bytes)  data
+runtime/v3.1/prcp.nlp  (83748 bytes)  data
+runtime/v3.1/sortkey_3_5.nlp  (262148 bytes)  data
+runtime/v3.1/sorttbls_3_5.nlp  (20320 bytes)  Adobe Photoshop Color swatch, version 0, 6 colors; 1st RGB space (0), w 0x40c, x 0, y 0x80c, z 0; 2nd space (3084), w 0, x 0x100c, y 0, z 0x140c
+runtime/v3.1/System.Core.dlx  (78336 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.1/System.dlx  (276480 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.1/System.sr.dlx  (334848 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.1/System.xml.dlx  (1027072 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.1/System.xml.linq.dlx  (82944 bytes)  PE32 executable for MS Windows 4.00 (DLL), Intel i386 Mono/.Net assembly, 3 sections
+runtime/v3.1/xjis.nlp  (28288 bytes)  data
+StoresList.xml  (4763 bytes)  XML 1.0 document, Unicode text, UTF-8 (with BOM) text, with very long lines (4641), with no line terminators
+system.manifest  (2372 bytes)  data
+Theme0/Wallpaper1  (57498 bytes)  JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 1280x720, components 3
+Theme0/Wallpaper2  (74540 bytes)  JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 1280x720, components 3
+Theme0/Wallpaper3  (88217 bytes)  JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 1280x720, components 3
+Theme0/Wallpaper4  (83185 bytes)  JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 1280x720, components 3
+Theme1/BackgroundLayer1.png  (198904 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme1/BackgroundLayer2.png  (283722 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme1/BackgroundLayer3.png  (265521 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme1/BackgroundLayer4.png  (234062 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme1/BackgroundLayer5.png  (222638 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme1/BackgroundLayer6.png  (170168 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme1/BannerLayer1.png  (37055 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme1/BannerLayer2.png  (37055 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme1/BannerLayer3.png  (37055 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme1/BannerLayer4.png  (37055 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme1/BannerLayer5.png  (37055 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme1/BannerLayer6.png  (37055 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme1/ChannelBackgroundBanner.png  (330722 bytes)  PNG image data, 1280 x 340, 8-bit/color RGBA, non-interlaced
+Theme1/ForegroundLayer1.png  (37800 bytes)  PNG image data, 700 x 390, 8-bit/color RGBA, non-interlaced
+Theme1/ForegroundLayer2.png  (34005 bytes)  PNG image data, 700 x 390, 8-bit/color RGBA, non-interlaced
+Theme1/ForegroundLayer3.png  (36425 bytes)  PNG image data, 700 x 390, 8-bit/color RGBA, non-interlaced
+Theme1/MidgroundLayer1.png  (142810 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme1/MidgroundLayer2.png  (42711 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme1/MidgroundLayer3.png  (47007 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme1/MidgroundLayer4.png  (65282 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme1/MidgroundLayer5.png  (42746 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme1/MidgroundLayer6.png  (61702 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme1/parameters.ini  (15 bytes)  ASCII text, with CRLF line terminators
+Theme1/Wallpaper1  (32913 bytes)  JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 1280x720, components 3
+Theme2/BackgroundLayer1.png  (412576 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme2/BackgroundLayer10.png  (71045 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme2/BackgroundLayer2.png  (176646 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme2/BackgroundLayer3.png  (184430 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme2/BackgroundLayer4.png  (173661 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme2/BackgroundLayer5.png  (341678 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme2/BackgroundLayer7.png  (159879 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme2/BackgroundLayer8.png  (362357 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme2/BackgroundLayer9.png  (86642 bytes)  PNG image data, 700 x 420, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer1.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer10.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer2.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer3.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer4.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer5.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer6.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer7.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer8.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/BannerLayer9.png  (33480 bytes)  PNG image data, 500 x 360, 8-bit/color RGBA, non-interlaced
+Theme2/ChannelBackgroundBanner.png  (285059 bytes)  PNG image data, 1280 x 340, 8-bit/color RGBA, non-interlaced
+Theme2/ForegroundLayer10.png  (18452 bytes)  PNG image data, 700 x 390, 8-bit/color RGBA, non-interlaced
+Theme2/ForegroundLayer2.png  (18747 bytes)  PNG image data, 700 x 390, 8-bit/color RGBA, non-interlaced
+Theme2/ForegroundLayer9.png  (38280 bytes)  PNG image data, 700 x 390, 8-bit/color RGBA, non-interlaced
+Theme2/MidgroundLayer10.png  (304845 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme2/MidgroundLayer2.png  (159359 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme2/MidgroundLayer4.png  (203177 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme2/MidgroundLayer6.png  (191908 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme2/MidgroundLayer7.png  (283798 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme2/MidgroundLayer8.png  (28916 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme2/MidgroundLayer9.png  (155321 bytes)  PNG image data, 700 x 405, 8-bit/color RGBA, non-interlaced
+Theme2/parameters.ini  (105 bytes)  ASCII text, with CRLF line terminators
+Theme2/Wallpaper1  (105491 bytes)  JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 1280x720, components 3
+Theme2/Wallpaper2  (94749 bytes)  JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 1280x720, components 3
+Theme2/Wallpaper3  (80696 bytes)  JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 1280x720, components 3
+Theme2/Wallpaper4  (80970 bytes)  JPEG image data, JFIF standard 1.02, aspect ratio, density 100x100, segment length 16, baseline, precision 8, 1280x720, components 3
+verisign.cer  (1239 bytes)  Certificate, Version=3
+verisign2.cer  (576 bytes)  data
+xboxupd.bin  (352992 bytes)  data
+xenonclatin.xtt  (1159168 bytes)  data
+xenonjklatin.xtt  (1736704 bytes)  data

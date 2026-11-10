@@ -1,0 +1,18 @@
+{
+  "module": "deviceselector.xex",
+  "program": "e5708845dfa8_deviceselector.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "f62f06b36907a0957a006e8557d2231acd9bd667e8ecdd7652afcd8b864843c7",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x916d0400",
+  "functions": 167,
+  "calls": 277,
+  "strings": 25,
+  "string_xrefs": 49,
+  "independent_sha256": "f62f06b36907a0957a006e8557d2231acd9bd667e8ecdd7652afcd8b864843c7",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

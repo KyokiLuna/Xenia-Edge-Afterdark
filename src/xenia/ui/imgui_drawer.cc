@@ -15,11 +15,15 @@
 
 #include "embedded_font.h"
 #include "third_party/imgui/imgui.h"
+#include "third_party/imgui/imgui_internal.h"
 #include "xenia/base/assert.h"
 #include "xenia/base/clock.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/math.h"
 #include "xenia/ui/imgui_dialog.h"
+#if !XE_PLATFORM_ANDROID
+#include "xenia/ui/imgui_clipboard.h"
+#endif
 #include "xenia/ui/imgui_notification.h"
 #include "xenia/ui/resources.h"
 #include "xenia/ui/ui_event.h"
@@ -108,6 +112,8 @@ void ImGuiDrawer::AddDialog(ImGuiDialog* dialog) {
     }
   }
   dialogs_.push_back(dialog);
+  input_capture_popup_rebase_pending_ = true;
+  input_capture_generation_.fetch_add(1, std::memory_order_release);
 }
 
 void ImGuiDrawer::RemoveDialog(ImGuiDialog* dialog) {
@@ -124,7 +130,26 @@ void ImGuiDrawer::RemoveDialog(ImGuiDialog* dialog) {
     }
   }
   dialogs_.erase(it);
+  input_capture_popup_rebase_pending_ = true;
+  input_capture_generation_.fetch_add(1, std::memory_order_release);
   DetachIfLastWindowRemoved();
+}
+
+void ImGuiDrawer::RefreshInputCaptureState() {
+  ImGui::SetCurrentContext(internal_state_);
+  const auto& popups = ImGui::GetCurrentContext()->OpenPopupStack;
+  const uint32_t top_popup = popups.empty() ? 0 : popups.back().PopupId;
+  if (input_capture_popup_rebase_pending_) {
+    input_capture_top_popup_id_ = top_popup;
+    if (top_popup || dialogs_.empty()) {
+      input_capture_popup_rebase_pending_ = false;
+    }
+    return;
+  }
+  if (input_capture_top_popup_id_ != top_popup) {
+    input_capture_top_popup_id_ = top_popup;
+    input_capture_generation_.fetch_add(1, std::memory_order_release);
+  }
 }
 
 void ImGuiDrawer::AddNotification(ImGuiNotification* dialog) {
@@ -162,6 +187,10 @@ void ImGuiDrawer::Initialize() {
   // This will give us state we can swap to the ImGui globals when in use.
   internal_state_ = ImGui::CreateContext();
   ImGui::SetCurrentContext(internal_state_);
+
+#if !XE_PLATFORM_ANDROID
+  ConfigureImGuiClipboardForWx();
+#endif
 
   auto& io = ImGui::GetIO();
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -244,10 +273,11 @@ void ImGuiDrawer::LoadInputSystem(hid::InputSystem* input_system) {
   input_system_ = input_system;
 }
 
-void ImGuiDrawer::PostDeferredCallback(std::function<void()> callback) {
+bool ImGuiDrawer::PostDeferredCallback(std::function<void()> callback) {
   if (window_) {
-    window_->app_context().CallInUIThreadDeferred(std::move(callback));
+    return window_->app_context().CallInUIThreadDeferred(std::move(callback));
   }
+  return false;
 }
 
 std::optional<ImGuiKey> ImGuiDrawer::VirtualKeyToImGuiKey(VirtualKey vkey) {
@@ -599,6 +629,7 @@ void ImGuiDrawer::Draw(UIDrawContext& ui_draw_context) {
 
   ImGui::SetCurrentContext(internal_state_);
 
+  RefreshInputCaptureState();
   ImGuiIO& io = ImGui::GetIO();
 
   uint64_t current_frame_time_ticks = Clock::QueryHostTickCount();
@@ -684,6 +715,7 @@ void ImGuiDrawer::Draw(UIDrawContext& ui_draw_context) {
   }
 
   ImGui::Render();
+  RefreshInputCaptureState();
   ImDrawData* draw_data = ImGui::GetDrawData();
   if (draw_data) {
     RenderDrawLists(draw_data, ui_draw_context);
@@ -799,6 +831,16 @@ void ImGuiDrawer::OnKeyChar(KeyEvent& e) {
   unsigned int character = static_cast<unsigned int>(e.virtual_key());
   if (character > 0 && character < 0x10000) {
     io.AddInputCharacter(character);
+    if (io.WantTextInput) {
+      e.set_handled(true);
+    }
+  }
+}
+
+void ImGuiDrawer::OnTextInput(TextInputEvent& e) {
+  // Legacy OnKeyChar already fed ImGui. Reserve a whole commit for an actual
+  // host text field without adding it twice or starving an idle native sink.
+  if (GetIO().WantTextInput) {
     e.set_handled(true);
   }
 }
@@ -923,6 +965,13 @@ void ImGuiDrawer::ClearInput() {
 
 void ImGuiDrawer::OnKey(KeyEvent& e, bool is_down) {
   auto& io = GetIO();
+  // Modern ImGui derives modifiers from its event queue at NewFrame. Direct
+  // KeyCtrl/KeyShift assignments are overwritten before InputText sees them.
+  // Submit the aggregate snapshot before the key that uses those modifiers.
+  io.AddKeyEvent(ImGuiMod_Ctrl, e.is_ctrl_pressed());
+  io.AddKeyEvent(ImGuiMod_Shift, e.is_shift_pressed());
+  io.AddKeyEvent(ImGuiMod_Alt, e.is_alt_pressed());
+  io.AddKeyEvent(ImGuiMod_Super, e.is_super_pressed());
   const VirtualKey virtual_key = e.virtual_key();
   if (auto imGuiKey = VirtualKeyToImGuiKey(virtual_key); imGuiKey) {
     // Repeats of a key held since before the drawer attached aren't presses.
@@ -933,23 +982,6 @@ void ImGuiDrawer::OnKey(KeyEvent& e, bool is_down) {
       keys_down_.insert(virtual_key);
       io.AddKeyEvent(*imGuiKey, true);
     }
-  }
-  switch (virtual_key) {
-    case VirtualKey::kShift:
-      io.KeyShift = is_down;
-      break;
-    case VirtualKey::kControl:
-      io.KeyCtrl = is_down;
-      break;
-    case VirtualKey::kMenu:
-      // FIXME(Triang3l): Doesn't work in xenia-ui-window-demo.
-      io.KeyAlt = is_down;
-      break;
-    case VirtualKey::kLWin:
-      io.KeySuper = is_down;
-      break;
-    default:
-      break;
   }
 }
 
@@ -1030,8 +1062,18 @@ void ImGuiDrawer::UpdateGamepads() {
 
   auto& io = GetIO();
 
+  const auto release_gamepad_keys = [&io] {
+    // Do not clear physical keyboard/modifier state when a pad is idle or
+    // disconnects. A Ctrl shortcut may span several controller-idle frames.
+    for (int key = ImGuiKey_GamepadStart; key <= ImGuiKey_GamepadRStickDown;
+         ++key) {
+      io.AddKeyAnalogEvent(static_cast<ImGuiKey>(key), false, 0.0f);
+    }
+  };
+
   if (!is_gamepad_connected) {
     io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
+    release_gamepad_keys();
     return;
   }
 
@@ -1047,12 +1089,22 @@ void ImGuiDrawer::UpdateGamepads() {
     }
   }
   if (controller_to_poke == XUserIndexNone) {
-    io.ClearInputKeys();
+    release_gamepad_keys();
     return;
   }
 
   io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
   hid::X_INPUT_GAMEPAD& gamepad = gamepad_state.gamepad;
+
+  // ImGui records a default NavId without showing its navigation cursor.
+  // Activation is gated by cursor visibility at NewFrame, so a fresh A must
+  // select controller modality before that frame processes its key event.
+  // Preserve an existing selection; held A does not re-enable navigation.
+  if ((io.ConfigFlags & ImGuiConfigFlags_NavEnableGamepad) &&
+      (gamepad.buttons & hid::X_INPUT_GAMEPAD_A) &&
+      !ImGui::GetKeyData(ImGuiKey_GamepadFaceDown)->Down) {
+    ImGui::SetNavCursorVisible(true);
+  }
 
 #define IM_SATURATE(V) (V < 0.0f ? 0.0f : V > 1.0f ? 1.0f : V)
 #define MAP_BUTTON(KEY_NO, BUTTON_ENUM)                           \

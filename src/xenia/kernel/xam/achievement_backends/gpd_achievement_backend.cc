@@ -31,34 +31,14 @@ void GpdAchievementBackend::EarnAchievement(const uint64_t xuid,
 }
 
 const std::optional<Achievement> GpdAchievementBackend::GetAchievementInfo(
-    const uint64_t xuid, const uint32_t title_id,
-    const uint32_t achievement_id) const {
-  const auto user = kernel_state()->xam_state()->GetUserProfile(xuid);
-  if (!user) {
-    return std::nullopt;
-  }
-
-  auto entry = user->games_gpd_.find(title_id);
-  if (entry == user->games_gpd_.cend()) {
-    return std::nullopt;
-  }
-
-  const auto achievement_entry =
-      entry->second.GetAchievementEntry(achievement_id);
-
-  if (!achievement_entry) {
-    return std::nullopt;
-  }
-
-  Achievement achievement(achievement_entry);
-  achievement.achievement_name =
-      entry->second.GetAchievementTitle(achievement_id);
-  achievement.unlocked_description =
-      entry->second.GetAchievementDescription(achievement_id);
-  achievement.locked_description =
-      entry->second.GetAchievementUnachievedDescription(achievement_id);
-
-  return achievement;
+    uint64_t xuid, uint32_t title_id, uint32_t id) const {
+  const auto achievements = kernel_state()->xam_state()->user_tracker()->GetUserTitleAchievements(xuid, title_id);
+  const auto found = std::find_if(
+      achievements.begin(), achievements.end(),
+      [id](const auto& item) {
+    return item.achievement_id == id; });
+  return found == achievements.end() ? std::nullopt
+                                     : std::make_optional(*found);
 }
 
 bool GpdAchievementBackend::IsAchievementUnlocked(
@@ -85,7 +65,7 @@ const std::vector<Achievement> GpdAchievementBackend::GetTitleAchievements(
       xuid, title_id);
 }
 
-const std::span<const uint8_t> GpdAchievementBackend::GetAchievementIcon(
+std::vector<uint8_t> GpdAchievementBackend::GetAchievementIcon(
     const uint64_t xuid, const uint32_t title_id,
     const uint32_t achievement_id) const {
   const auto user = kernel_state()->xam_state()->GetUserProfile(xuid);

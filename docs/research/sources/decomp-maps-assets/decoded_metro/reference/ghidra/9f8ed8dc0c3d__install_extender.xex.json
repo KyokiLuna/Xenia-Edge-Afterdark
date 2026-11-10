@@ -1,0 +1,15 @@
+{
+  "module": "packages/su20076000_00000000/$install_extender.xex",
+  "program": "9f8ed8dc0c3d__install_extender.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "94e013bd99919412b1e58a6ff47457950d2d72413b62c973d7c910217ee9da15",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9f100400",
+  "functions": 323,
+  "calls": 750,
+  "strings": 101,
+  "string_xrefs": 68,
+  "independent_decode_error": "java.lang.ArrayIndexOutOfBoundsException"
+}

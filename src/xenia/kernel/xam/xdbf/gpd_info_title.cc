@@ -14,6 +14,16 @@ namespace xe {
 namespace kernel {
 namespace xam {
 
+const X_XDBF_GPD_ACHIEVEMENT* GpdInfoTitle::GetAchievementEntry(
+    uint32_t id) const {
+  const Entry* entry =
+      GetEntry(static_cast<uint16_t>(GpdSection::kAchievement), id);
+  return entry && entry->data.size() >= sizeof(X_XDBF_GPD_ACHIEVEMENT)
+             ? reinterpret_cast<const X_XDBF_GPD_ACHIEVEMENT*>(
+                   entry->data.data())
+             : nullptr;
+}
+
 X_XDBF_GPD_ACHIEVEMENT* GpdInfoTitle::GetAchievementEntry(const uint32_t id) {
   Entry* entry = GetEntry(static_cast<uint16_t>(GpdSection::kAchievement), id);
 
@@ -26,7 +36,7 @@ X_XDBF_GPD_ACHIEVEMENT* GpdInfoTitle::GetAchievementEntry(const uint32_t id) {
 
 // The strings sit one after another past the header, each one terminated
 std::u16string GpdInfoTitle::GetAchievementString(const uint32_t id,
-                                                  uint32_t index) {
+                                                  uint32_t index) const {
   const Entry* entry =
       GetEntry(static_cast<uint16_t>(GpdSection::kAchievement), id);
 
@@ -52,16 +62,16 @@ std::u16string GpdInfoTitle::GetAchievementString(const uint32_t id,
   return string_util::read_u16string_and_swap(strings.data(), strings.size());
 }
 
-std::u16string GpdInfoTitle::GetAchievementTitle(const uint32_t id) {
+std::u16string GpdInfoTitle::GetAchievementTitle(const uint32_t id) const {
   return GetAchievementString(id, 0);
 }
 
-std::u16string GpdInfoTitle::GetAchievementDescription(const uint32_t id) {
+std::u16string GpdInfoTitle::GetAchievementDescription(const uint32_t id) const {
   return GetAchievementString(id, 1);
 }
 
 std::u16string GpdInfoTitle::GetAchievementUnachievedDescription(
-    const uint32_t id) {
+    const uint32_t id) const {
   return GetAchievementString(id, 2);
 }
 

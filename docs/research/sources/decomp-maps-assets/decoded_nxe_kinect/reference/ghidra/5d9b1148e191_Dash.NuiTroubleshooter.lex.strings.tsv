@@ -1,0 +1,214 @@
+va	data_type	text
+0x9cb5074c	string	FIELDCALSUMMARY
+0x9cb5075c	string	FIELDCALIBLOG
+0x9cb5076c	string	TURNITUP
+0x9cb50778	string	CAMSET
+0x9cb50780	string	PLAYSPACETEST
+0x9cb50790	string	PLAYSPACEPREP
+0x9cb507a0	string	CLEARSPACE
+0x9cb507ac	string	AUDIOSPH
+0x9cb507b8	string	AUDIOAMB
+0x9cb507c4	string	AUDIOCAL
+0x9cb507d0	string	IDENTITY
+0x9cb507e4	string	PLAYSPACE
+0x9cb507f8	string	CAMLOC
+0x9cb50800	string	SUNLIGHT
+0x9cb50820	string	AUDIOLAUNCH
+0x9cb5082c	string	LAUNCH
+0x9cb50ad0	string	BuildResourceLocator
+0x9cb50ae8	string	NuiTroubleshooterDashDll
+0x9cb50b04	string	GetActiveMicrophoneType
+0x9cb50b28	string	AudioTroubleshooterDll
+0x9cb50b40	string	e:\bt\248805\core\private\xam\dash\apps\nuitroubleshooter\app\audiotroubleshooterdll.cpp
+0x9cb50b9c	unicode	Front
+0x9cb50bc8	unicode	AudioVUMeter
+0x9cb50be4	unicode	Loop
+0x9cb50c00	string	NuiTroubleshooter
+0x9cb50c34	string	Xbox.Object.AudioCalibrationWait
+0x9cb50c58	string	E:\bt\248805\core\private\corelibs\luaxbox\inc\LuaPub.h
+0x9cb50c98	string	wavfile
+0x9cb50ca0	unicode	XuiControl
+0x9cb50cb8	string	InitAudioVUMeter
+0x9cb50ccc	string	ReInitializeVUMeter
+0x9cb50ce0	string	ConfigureVUMeterSettings
+0x9cb50cfc	string	UpdateVUMeterVolume
+0x9cb50d10	string	Calibrate
+0x9cb50d1c	string	StopCalibration
+0x9cb50d2c	string	PlayVolumeSound
+0x9cb50d3c	string	StopVolumeSound
+0x9cb50d4c	string	GetRawMicLevel
+0x9cb50d5c	string	OOBE_NavContinue
+0x9cb50d70	string	StartListeningThread
+0x9cb50d88	string	StopListeningThread
+0x9cb50d9c	string	IsLanguageSupported
+0x9cb50db0	string	ReadProfileOptInSetting
+0x9cb50dc8	string	WriteProfileOptInSetting
+0x9cb50de4	string	IsSpeechDisabled
+0x9cb50df8	string	EnableSpeech
+0x9cb50e08	string	IsProfileEligibleForOptIn
+0x9cb50e24	string	EnableTransitionDependency
+0x9cb50e40	string	FitBackgroundSceneToScreen
+0x9cb50e5c	string	MuteSound
+0x9cb50e68	string	IsChatEnabled
+0x9cb50e78	string	SetEnableChat
+0x9cb50fe7	string	xUnknown exception
+0x9cb51003	string	xbad allocation
+0x9cb510b8	unicode	HH:mm:ss
+0x9cb510cc	unicode	dddd, MMMM dd, yyyy
+0x9cb510f4	unicode	MM/dd/yy
+0x9cb51118	unicode	December
+0x9cb5112c	unicode	November
+0x9cb51140	unicode	October
+0x9cb51150	unicode	September
+0x9cb51164	unicode	August
+0x9cb51174	unicode	July
+0x9cb51180	unicode	June
+0x9cb5118c	unicode	April
+0x9cb51198	unicode	March
+0x9cb511a4	unicode	February
+0x9cb511b8	unicode	January
+0x9cb51228	unicode	Saturday
+0x9cb5123c	unicode	Friday
+0x9cb5124c	unicode	Thursday
+0x9cb51260	unicode	Wednesday
+0x9cb51274	unicode	Tuesday
+0x9cb51284	unicode	Monday
+0x9cb51294	unicode	Sunday
+0x9cb512dc	string	HH:mm:ss
+0x9cb512e8	string	dddd, MMMM dd, yyyy
+0x9cb512fc	string	MM/dd/yy
+0x9cb51310	string	December
+0x9cb5131c	string	November
+0x9cb51328	string	October
+0x9cb51330	string	September
+0x9cb5133c	string	August
+0x9cb51354	string	April
+0x9cb5135c	string	March
+0x9cb51364	string	February
+0x9cb51370	string	January
+0x9cb513a8	string	Saturday
+0x9cb513b4	string	Friday
+0x9cb513bc	string	Thursday
+0x9cb513c8	string	Wednesday
+0x9cb513d4	string	Tuesday
+0x9cb513dc	string	Monday
+0x9cb513e4	string	Sunday
+0x9cb51408	string	e+000
+0x9cb51410	unicode	runtime error 
+0x9cb51434	unicode	TLOSS error\n
+0x9cb51450	unicode	SING error\n
+0x9cb51468	unicode	DOMAIN error\n
+0x9cb51488	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9cb51678	unicode	R6032\n- not enough space for locale information\n
+0x9cb516e0	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9cb517a4	unicode	R6030\n- CRT not initialized\n
+0x9cb517e0	unicode	R6028\n- unable to initialize heap\n
+0x9cb51828	unicode	R6027\n- not enough space for lowio initialization\n
+0x9cb51890	unicode	R6026\n- not enough space for stdio initialization\n
+0x9cb518f8	unicode	R6025\n- pure virtual function call\n
+0x9cb51940	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9cb519a8	unicode	R6019\n- unable to open console device\n
+0x9cb519f8	unicode	R6018\n- unexpected heap error\n
+0x9cb51a38	unicode	R6017\n- unexpected multithread lock error\n
+0x9cb51a90	unicode	R6016\n- not enough space for thread data\n
+0x9cb51ae8	unicode	R6010\n- abort() has been called\n
+0x9cb51b30	unicode	R6009\n- not enough space for environment\n
+0x9cb51b88	unicode	R6008\n- not enough space for arguments\n
+0x9cb51bd8	unicode	R6002\n- floating point support not loaded\n
+0x9cb5253c	string	 Complete Object Locator'
+0x9cb52558	string	 Class Hierarchy Descriptor'
+0x9cb52578	string	 Base Class Array'
+0x9cb5258c	string	 Base Class Descriptor at (
+0x9cb525a8	string	 Type Descriptor'
+0x9cb525bc	string	`local static thread guard'
+0x9cb525d8	string	`managed vector copy constructor iterator'
+0x9cb52604	string	`vector vbase copy constructor iterator'
+0x9cb52630	string	`vector copy constructor iterator'
+0x9cb52654	string	`dynamic atexit destructor for '
+0x9cb52678	string	`dynamic initializer for '
+0x9cb52694	string	`eh vector vbase copy constructor iterator'
+0x9cb526c0	string	`eh vector copy constructor iterator'
+0x9cb526e8	string	`managed vector destructor iterator'
+0x9cb52710	string	`managed vector constructor iterator'
+0x9cb52738	string	`placement delete[] closure'
+0x9cb52758	string	`placement delete closure'
+0x9cb52774	string	`omni callsig'
+0x9cb52784	string	 delete[]
+0x9cb52790	string	 new[]
+0x9cb52798	string	`local vftable constructor closure'
+0x9cb527bc	string	`local vftable'
+0x9cb527cc	string	`RTTI
+0x9cb527d8	string	`udt returning'
+0x9cb527e8	string	`copy constructor closure'
+0x9cb52804	string	`eh vector vbase constructor iterator'
+0x9cb5282c	string	`eh vector destructor iterator'
+0x9cb5284c	string	`eh vector constructor iterator'
+0x9cb52870	string	`virtual displacement map'
+0x9cb5288c	string	`vector vbase constructor iterator'
+0x9cb528b0	string	`vector destructor iterator'
+0x9cb528d0	string	`vector constructor iterator'
+0x9cb528f0	string	`scalar deleting destructor'
+0x9cb52910	string	`default constructor closure'
+0x9cb52930	string	`vector deleting destructor'
+0x9cb52950	string	`vbase destructor'
+0x9cb52964	string	`string'
+0x9cb52970	string	`local static guard'
+0x9cb52988	string	`typeof'
+0x9cb52994	string	`vcall'
+0x9cb5299c	string	`vbtable'
+0x9cb529a8	string	`vftable'
+0x9cb52a30	string	operator
+0x9cb52a58	string	 delete
+0x9cb52a68	string	__unaligned
+0x9cb52a74	string	__restrict
+0x9cb52a80	string	__ptr64
+0x9cb52a88	string	__eabi
+0x9cb52a90	string	__clrcall
+0x9cb52a9c	string	__fastcall
+0x9cb52aa8	string	__thiscall
+0x9cb52ab4	string	__stdcall
+0x9cb52ac0	string	__pascal
+0x9cb52acc	string	__cdecl
+0x9cb52ad4	string	__based(
+0x9cb52ccc	unicode	XuiFigure
+0x9cb52d10	string	GetLastLoggedEvent
+0x9cb52d24	string	SessionStorageGetSessionData
+0x9cb52d44	string	SessionStorageFetchSessions
+0x9cb52d60	string	LogAudioSpeechLevelTestUsage
+0x9cb52d80	string	LogAudioAmbientNoiseTestUsage
+0x9cb52da0	string	LogAudioCalibrationUsage
+0x9cb52dbc	string	LogTurnItUp
+0x9cb52dc8	string	LogCameraSettings
+0x9cb52ddc	string	LogPlayspaceTest
+0x9cb52df0	string	LogPlayspacePrep
+0x9cb52e04	string	LogClearPlayspace
+0x9cb52e18	string	LogTilt1Usage
+0x9cb52e28	string	LogCameraLocation
+0x9cb52e3c	string	LogFatalHardwareError
+0x9cb52e54	string	LogHardwareCheckResult
+0x9cb52e6c	string	LogAudioLaunchInfo
+0x9cb52e80	string	LogLaunchInfo
+0x9cb52eb8	string	TsCacheEntryUserData
+0x9cb52ee0	string	TsLog
+0x9cb52ee8	unicode	%I64u
+0x9cb52f14	string	MicArrayCalibrate:\MicArrayCalibrate.data
+0x9cb52f40	string	MicArrayCalibrate:\MicArrayCalibrateLowLatency.data
+0x9cb52f74	string	MicArrayCalibrate
+0x9cb52f88	string	MicArrayCalibrate.mec
+0x9cb52fa0	unicode	Microphone Array Calibration Data
+0x9cb53038	string	* Detected Latency:%ums (%u samples), Mode:%u\n
+0x9cb53394	string	%.10f\n
+0x9cb533a0	string	threshold
+0x9cbaa5df	string	\_nextafter
+0x9cbaa638	string	floor
+0x9cbaa6c0	string	e:\bt\248805\core\private\xam\dash\apps\nuitroubleshooter\app\obj\xbox\Dash.NuiTroubleshooter.pdb
+0x9cc07520	string	.?AVbad_alloc@std@@
+0x9cc0753c	string	.?AVexception@std@@
+0x9cc07bd9	string	abcdefghijklmnopqrstuvwxyz
+0x9cc07bf9	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9cc08228	string	?]'N@ 
+0x9ccc5054	string	Dash.NuiTroubleshooter.xex
+0x9ccc506f	string	PamInitializeDll
+0x9ccc5080	string	PamInitializeState
+0x9ccc5093	string	PamRunFrame
+0x9ccc509f	string	PamTerminateDll

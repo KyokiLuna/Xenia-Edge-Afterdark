@@ -9,6 +9,7 @@
 
 #include "xenia/vfs/devices/xcontent_devices/stfs_container_entry.h"
 #include "xenia/vfs/devices/xcontent_devices/stfs_container_file.h"
+#include "xenia/vfs/devices/xcontent_devices/stfs_container_device.h"
 
 namespace xe {
 namespace vfs {
@@ -28,6 +29,11 @@ std::unique_ptr<StfsContainerEntry> StfsContainerEntry::Create(
 }
 
 X_STATUS StfsContainerEntry::Open(uint32_t desired_access, File** out_file) {
+  auto lock = global_critical_region::AcquireDirect();
+  *out_file = nullptr;
+  if (static_cast<const StfsContainerDevice*>(device())->retired()) {
+    return X_STATUS(0xC000009D);  // DEVICE_NOT_CONNECTED.
+  }
   *out_file = new StfsContainerFile(desired_access, this);
   return X_STATUS_SUCCESS;
 }

@@ -1,0 +1,18 @@
+{
+  "module": "packages/su20076000_00000000/$flash_gamerprofile.xex",
+  "program": "236435bedc3f__flash_gamerprofile.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "25975c0c2fad9bb3ee66ca89f0a7bd5ab64b32b3051ccce1fa0a762ec697c3b7",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 1029,
+  "calls": 2742,
+  "strings": 557,
+  "string_xrefs": 542,
+  "independent_sha256": "c632a4fd26cd4f8a79260474f63d4f941d1dde651322ca98730b8586e8388f81",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

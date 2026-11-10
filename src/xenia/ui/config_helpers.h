@@ -11,11 +11,14 @@
 #define XENIA_UI_CONFIG_HELPERS_H_
 
 #include <algorithm>
+#include <array>
 #include <map>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "xenia/base/cvar.h"
 #include "xenia/base/platform.h"
 #include "xenia/net/host_interfaces.h"
 
@@ -23,6 +26,75 @@
 
 namespace xe {
 namespace ui {
+
+// Visibility is independent of persistence. These values remain readable from
+// global config and explicit diagnostic launch arguments, but are not ordinary
+// user preferences and must never be replaced by a title's per-game config.
+// Enumerate audited names rather than hiding a prefix/category that may also
+// contain useful emulator options.
+inline bool IsInternalCvarSetting(std::string_view name) {
+  static constexpr auto names = std::to_array<std::string_view>({
+      "default_achievements_backend",
+      "logged_profile_slot_0_xuid",
+      "logged_profile_slot_1_xuid",
+      "logged_profile_slot_2_xuid",
+      "logged_profile_slot_3_xuid",
+      "kernel_build_version",
+      "staging_mode",
+      "data_center_mode",
+      "system_readonly_source_root",
+      "host_storage_protected_root",
+      "managed_device_state_root",
+      "native_system_ui",
+      "native_system_ui_startup_plan",
+      "native_system_ui_trace",
+      "native_guide_bootstrap_probe",
+      "native_xui_probe",
+      "native_system_first_record_probe",
+      "native_system_first_record_report",
+      "native_file_io_contract_report",
+      "native_notification_preferences_probe_report",
+      "native_notification_queue_probe_report",
+      "native_notification_render_probe_report",
+      "native_xui_runtime_plan",
+      "native_xui_render_probe",
+      "native_guide_scene_probe",
+      "native_xui_record_capture",
+      "native_hud_controller_probe",
+      "native_xui_target_probe",
+      "native_system_device_binding_probe",
+      "native_gpu_context_probe",
+      "native_guide_host_probe",
+      "native_guide_real_time_probe",
+      "native_frame_lease_probe",
+      "native_frame_execute_probe",
+      "native_frame_composite_probe",
+      "native_system_ui_output_capture_base",
+      "native_system_ui_output_capture_source",
+      "native_system_ui_output_capture_b_down",
+  });
+  return std::find(names.begin(), names.end(), name) != names.end();
+}
+
+inline bool CanOverrideCvarForGame(const cvar::IConfigVar& variable) {
+  if (variable.is_transient() || variable.category() == "Config" ||
+      IsInternalCvarSetting(variable.name())) {
+    return false;
+  }
+  // These choose the process's physical storage namespace before a title is
+  // loaded. Keep their global user controls; a game must not change identity or
+  // report a root different from the one actually mounted by the Emulator.
+  const auto& name = variable.name();
+  return name != "storage_root" && name != "content_root" &&
+         name != "cache_root";
+}
+
+inline bool IsUserEditableCvar(const cvar::IConfigVar& variable,
+                               bool per_game = false) {
+  return !variable.is_transient() && variable.category() != "Config" &&
+         !IsInternalCvarSetting(variable.name()) &&
+         (!per_game || CanOverrideCvarForGame(variable));
+}
 
 struct CvarAlias {
   std::string old_name;

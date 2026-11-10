@@ -83,8 +83,8 @@ ZArchiveNodeHandle FindDefaultXex(ZArchiveReader* reader,
 
 }  // namespace
 
-std::optional<XexMetadata> ExtractZarMetadata(
-    const std::filesystem::path& path) {
+std::optional<XexMetadata> ExtractZarMetadata(const std::filesystem::path& path,
+                                              bool read_title_resources) {
   std::unique_ptr<ZArchiveReader> reader(ZArchiveReader::OpenFromFile(path));
   if (!reader) {
     return std::nullopt;
@@ -118,7 +118,8 @@ std::optional<XexMetadata> ExtractZarMetadata(
 
   uint32_t header_size = (base_header[8] << 24) | (base_header[9] << 16) |
                          (base_header[10] << 8) | base_header[11];
-  if (header_size < 24 || header_size > file_size) {
+  if (header_size < 24 || header_size > file_size ||
+      header_size > kMaxOfflineXexHeaderBytes) {
     return std::nullopt;
   }
 
@@ -128,6 +129,22 @@ std::optional<XexMetadata> ExtractZarMetadata(
     return std::nullopt;
   }
 
+  if (read_title_resources) {
+    if (file_size > kMaxOfflineXexFileBytes) {
+      auto metadata =
+          ExtractXexMetadata(header_data.data(), header_data.size(), false);
+      if (metadata) {
+        metadata->title_resources_status = TitleResourcesStatus::kInvalid;
+      }
+      return metadata;
+    }
+    std::vector<uint8_t> executable(static_cast<size_t>(file_size));
+    if (reader->ReadFromFile(handle, 0, file_size, executable.data()) !=
+        file_size) {
+      return std::nullopt;
+    }
+    return ExtractXexMetadata(executable.data(), executable.size(), true);
+  }
   return ExtractXexMetadata(header_data.data(), header_data.size());
 }
 

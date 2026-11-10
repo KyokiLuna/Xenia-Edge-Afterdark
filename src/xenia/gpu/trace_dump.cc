@@ -160,7 +160,8 @@ bool TraceDump::Setup() {
   cvars::async_shader_compilation = false;
 
   // Create the emulator but don't initialize so we can setup the window.
-  emulator_ = std::make_unique<Emulator>("", "", "", "");
+  emulator_ = std::make_unique<Emulator>(
+      "", "", "", "", Emulator::SetupPurpose::kGraphicsReplay);
   X_STATUS result = emulator_->Setup(
       nullptr, nullptr, false, nullptr,
       [this]() { return CreateGraphicsSystem(); }, nullptr);

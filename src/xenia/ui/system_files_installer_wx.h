@@ -24,20 +24,31 @@ enum class SystemFilesResult {
   kNotSystemUpdate,
   kReadFailed,
   kWriteFailed,
+  kMissingBaseFont,
+  kInvalidBaseFont,
+  kBaseFontMismatch,
+  kBackupFailed,
   // The install failed and the previous one couldn't be put back. Its folders
-  // are left in the unrestored folder. Installs are refused until it's gone.
+  // are left in unrestored (or staging/previous if that move failed). Further
+  // installs refuse either recovery location until it is dealt with.
   kRestoreFailed,
 };
 
-// Installs the files of a USB system update zip in |system_path| as a console
-// holds them: flash, sysext (the system extended partition) and an empty
-// sysaux, replacing what is there. A flash font the update only patches is
-// filled in with one built from the bundled fonts. |progress| gets the files
-// done out of a total and cancels the install by returning false.
+struct SystemFilesInstallOptions {
+  // Optional explicitly selected user-owned retail JK base. Never modified.
+  std::filesystem::path base_font;
+};
+
+// Stages a USB system update and a verified matching retail base before any
+// installed-folder replacement. MissingBaseFont is a prepublication result;
+// an update supplying only a patch cannot create its missing base. A valid
+// existing installed base is reused. Known generated substitutes are backed
+// up durably outside temporary staging before an explicit repair is published.
 SystemFilesResult InstallSystemFiles(
     const std::filesystem::path& zip_path,
     const std::filesystem::path& system_path,
-    const std::function<bool(size_t done, size_t total)>& progress);
+    const std::function<bool(size_t done, size_t total)>& progress,
+    const SystemFilesInstallOptions& options = {});
 
 // Where InstallSystemFiles leaves a previous install it couldn't put back.
 std::filesystem::path GetUnrestoredSystemFilesPath(

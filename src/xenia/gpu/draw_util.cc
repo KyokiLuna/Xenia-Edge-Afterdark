@@ -9,12 +9,14 @@
 
 #include "xenia/gpu/draw_util.h"
 
+#include <array>
 #include "xenia/base/cvar.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/math.h"
 #include "xenia/base/memory.h"
 #include "xenia/gpu/gpu_flags.h"
 #include "xenia/gpu/registers.h"
+#include "xenia/gpu/shared_memory.h"
 #include "xenia/gpu/texture_address.h"
 #include "xenia/gpu/texture_cache.h"
 #include "xenia/ui/graphics_util.h"
@@ -1240,7 +1242,7 @@ bool GetResolveInfo(const RegisterFile& regs, const Memory& memory,
                     uint32_t draw_resolution_scale_y,
                     bool fixed_rg16_truncated_to_minus_1_to_1,
                     bool fixed_rgba16_truncated_to_minus_1_to_1,
-                    ResolveInfo& info_out) {
+                    ResolveInfo& info_out, const SharedMemory* read_source) {
   // Don't pass uninitialized values to shaders, not to leak data to frame
   // captures. Also initialize an invalid resolve to empty.
   info_out.coordinate_info.packed = 0;
@@ -1271,10 +1273,22 @@ bool GetResolveInfo(const RegisterFile& regs, const Memory& memory,
     assert_always();
     return false;
   }
-  trace_writer.WriteMemoryRead(fetch.address * sizeof(uint32_t),
-                               fetch.size * sizeof(uint32_t));
-  const float* vertices_guest = reinterpret_cast<const float*>(
-      memory.TranslatePhysical(fetch.address * sizeof(uint32_t)));
+  std::array<float, 6> snapshot_vertices;
+  const float* vertices_guest;
+  if (read_source) {
+    if (!read_source->ReadRangeForCpu(
+            fetch.address * sizeof(uint32_t),
+            {reinterpret_cast<uint8_t*>(snapshot_vertices.data()),
+             sizeof(snapshot_vertices)})) {
+      return false;
+    }
+    vertices_guest = snapshot_vertices.data();
+  } else {
+    trace_writer.WriteMemoryRead(fetch.address * sizeof(uint32_t),
+                                 fetch.size * sizeof(uint32_t));
+    vertices_guest = reinterpret_cast<const float*>(
+        memory.TranslatePhysical(fetch.address * sizeof(uint32_t)));
+  }
   // Most vertices have a negative half-pixel offset applied, which we reverse.
   float half_pixel_offset =
       regs.Get<reg::PA_SU_VTX_CNTL>().pix_center == xenos::PixelCenter::kD3DZero

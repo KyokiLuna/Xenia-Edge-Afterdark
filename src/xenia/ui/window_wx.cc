@@ -37,6 +37,10 @@ DEFINE_bool(disable_doubleclick_fullscreen, false,
 #include "xenia/ui/surface_win.h"
 #elif XE_PLATFORM_LINUX
 #include <gtk/gtk.h>
+#ifdef GDK_WINDOWING_X11
+#include <gdk/gdkx.h>
+#include <X11/Xutil.h>
+#endif
 #include "xenia/ui/surface_gnulinux.h"
 #elif XE_PLATFORM_MAC
 #include "xenia/ui/surface_mac.h"
@@ -44,6 +48,38 @@ DEFINE_bool(disable_doubleclick_fullscreen, false,
 
 namespace xe {
 namespace ui {
+
+#if XE_PLATFORM_LINUX && defined(GDK_WINDOWING_X11)
+namespace {
+constexpr char kDesktopIdDataKey[] = "xenia-desktop-id";
+
+// GTK creates the X11 window in its realize handler. Set both class fields
+// afterwards, before Show maps it and the desktop assigns a taskbar group.
+void ApplyDesktopClassHint(GtkWidget* widget, gpointer) {
+  GdkWindow* const window = gtk_widget_get_window(widget);
+  if (!window || !GDK_IS_X11_WINDOW(window)) {
+    return;
+  }
+  GdkDisplay* const display = gdk_window_get_display(window);
+  if (!GDK_IS_X11_DISPLAY(display)) {
+    return;
+  }
+  auto* const desktop_id =
+      static_cast<char*>(g_object_get_data(G_OBJECT(widget), kDesktopIdDataKey));
+  if (!desktop_id || !*desktop_id) {
+    return;
+  }
+  XClassHint hints{desktop_id, desktop_id};
+  gdk_x11_display_error_trap_push(display);
+  const int status = XSetClassHint(gdk_x11_display_get_xdisplay(display),
+                                   gdk_x11_window_get_xid(window), &hints);
+  const int error = gdk_x11_display_error_trap_pop(display);
+  if (!status || error) {
+    XELOGW("Failed to apply the desktop class to the X11 frame");
+  }
+}
+}  // namespace
+#endif
 
 std::unique_ptr<Window> Window::Create(WindowedAppContext& app_context,
                                        const std::string_view title,
@@ -189,9 +225,12 @@ WxWindow::WxWindow(WindowedAppContext& app_context,
 WxWindow::~WxWindow() {
   EnterDestructor();
 #if XE_PLATFORM_LINUX
-  if (pending_paint_source_) {
-    g_source_remove(pending_paint_source_);
-    pending_paint_source_ = 0;
+  {
+    std::lock_guard<std::mutex> lock(pending_paint_mutex_);
+    if (pending_paint_source_) {
+      g_source_remove(pending_paint_source_);
+      pending_paint_source_ = 0;
+    }
   }
 #endif
 #if XE_PLATFORM_WIN32
@@ -243,6 +282,30 @@ bool WxWindow::OpenImpl() {
 #else
   frame_ = new wxFrame(nullptr, wxID_ANY, wxString::FromUTF8(GetTitle()),
                        initial_pos, initial_size, wxDEFAULT_FRAME_STYLE);
+#if XE_PLATFORM_LINUX && defined(GDK_WINDOWING_X11)
+  const auto* wx_context =
+      dynamic_cast<const WxWindowedAppContext*>(&app_context());
+  if (wx_context && !wx_context->desktop_id().empty()) {
+    GtkWidget* const widget = static_cast<GtkWidget*>(frame_->GetHandle());
+    if (widget) {
+      // The widget owns its copied ID through deferred destruction. The
+      // callback captures neither this Window nor the application context.
+      g_object_set_data_full(G_OBJECT(widget), kDesktopIdDataKey,
+                            g_strdup(wx_context->desktop_id().c_str()), g_free);
+      const gulong handler = g_signal_connect_after(
+          widget, "realize", G_CALLBACK(ApplyDesktopClassHint), nullptr);
+      if (!handler) {
+        XELOGW("Could not connect the desktop class realization callback");
+      }
+      // Normally wxFrame is still unrealized here. Cover an already realized
+      // constructor without forcing realization solely for branding, and keep
+      // the callback for a later unrealize/realize cycle.
+      if (gtk_widget_get_realized(widget)) {
+        ApplyDesktopClassHint(widget, nullptr);
+      }
+    }
+  }
+#endif
   {
     wxMemoryInputStream stream(embedded_app_icon::_256_png_data,
                                embedded_app_icon::_256_png_size);
@@ -268,6 +331,8 @@ bool WxWindow::OpenImpl() {
   render_panel_ = new wxWindow(frame_, wxID_ANY, wxDefaultPosition,
                                wxDefaultSize, wxBORDER_NONE | wxWANTS_CHARS);
 #endif
+
+
 
   aui_manager_.SetManagedWindow(frame_);
 
@@ -389,6 +454,33 @@ bool WxWindow::OpenImpl() {
 #endif
 
   frame_->Show(true);
+  // wxGTK creates m_imContext in GTKHandleRealized(), during Show().
+  // Attach to that actual context after realization, before HID setup and
+  // before focus-driven input; construction-time probing observes nullptr.
+#if XE_PLATFORM_LINUX
+  // wxGTK's generic IM callback splits UTF-8 commits into wxEVT_CHARs. Observe
+  // the SAME context after that callback, retaining the complete commit and
+  // its actual GDK physical source instead of guessing FIFO key correlation.
+#ifdef GDK_WINDOWING_X11
+  native_text_physical_recovery_available_ =
+      GDK_IS_X11_DISPLAY(gdk_display_get_default());
+#endif
+  native_text_context_ = render_panel_->m_imContext;
+  if (native_text_context_) {
+    native_text_commit_signal_ = g_signal_connect_after(
+        native_text_context_, "commit",
+        G_CALLBACK(+[](GtkIMContext*, const gchar* text, gpointer owner) {
+          static_cast<WxWindow*>(owner)->OnNativeTextCommit(text);
+        }),
+        this);
+    native_text_preedit_signal_ = g_signal_connect_after(
+        native_text_context_, "preedit-start",
+        G_CALLBACK(+[](GtkIMContext*, gpointer owner) {
+          static_cast<WxWindow*>(owner)->native_text_composing_ = true;
+        }),
+        this);
+  }
+#endif
   render_target()->SetFocus();
 
   wxSize client_size = render_target()->GetClientSize();
@@ -593,6 +685,10 @@ void WxWindow::RequestPaintImpl() {
 #elif XE_PLATFORM_LINUX
   // Schedule via glib's main loop (not wx's pending-event queue) so X11 input
   // events at higher priority preempt back-to-back paints.
+  // Requests may also arrive from the guest output thread. The idle callback
+  // can run before g_idle_add_full returns there, so serialize publishing its
+  // ID with clearing it. Otherwise a stale ID can suppress all future paints.
+  std::lock_guard<std::mutex> lock(pending_paint_mutex_);
   if (pending_paint_source_) {
     return;
   }
@@ -600,7 +696,10 @@ void WxWindow::RequestPaintImpl() {
       G_PRIORITY_LOW,
       [](gpointer user_data) -> gboolean {
         auto* self = static_cast<WxWindow*>(user_data);
-        self->pending_paint_source_ = 0;
+        {
+          std::lock_guard<std::mutex> lock(self->pending_paint_mutex_);
+          self->pending_paint_source_ = 0;
+        }
         if (self->render_panel_) {
           self->OnPaint(true);
         }
@@ -685,28 +784,137 @@ void WxWindow::OnFrameKillFocus(wxFocusEvent& event) { event.Skip(); }
 
 void WxWindow::OnPanelSetFocus(wxFocusEvent& event) {
   event.Skip();
+  native_text_focus_keys_valid_ =
+      ReadNativePhysicalKeys(native_text_focus_keys_);
+  if (native_text_focus_keys_valid_) {
+    native_text_keys_.Reconcile(native_text_focus_keys_);
+    keys_down_.clear();
+    for (uint16_t vk = 1; vk < 256; ++vk) {
+      const auto key = static_cast<VirtualKey>(vk);
+      if (native_text_keys_.IsHeld(key)) {
+        keys_down_.insert(key);
+      }
+    }
+  }
   WindowDestructionReceiver destruction_receiver(this);
   OnFocusUpdate(true, destruction_receiver);
+  if (destruction_receiver.IsWindowDestroyed()) {
+    return;
+  }
+  native_text_focus_keys_valid_ = false;
 }
 
 void WxWindow::OnPanelKillFocus(wxFocusEvent& event) {
   event.Skip();
   // Releases while unfocused aren't seen.
   keys_down_.clear();
+  native_text_focus_keys_valid_ = false;
+#if XE_PLATFORM_LINUX
+  if (!native_text_physical_recovery_available_) {
+    native_text_keys_.Clear();
+  }
+#else
+  native_text_keys_.Clear();
+#endif
+#if XE_PLATFORM_LINUX
+  native_text_composing_ = false;
+#endif
   WindowDestructionReceiver destruction_receiver(this);
   OnFocusUpdate(false, destruction_receiver);
 }
 
+bool WxWindow::ReadNativePhysicalKeys(PhysicalKeyTracker::Bitmap& keys) const {
+#if XE_PLATFORM_LINUX && defined(GDK_WINDOWING_X11)
+  auto* display = gdk_display_get_default();
+  if (!display || !GDK_IS_X11_DISPLAY(display)) {
+    return false;
+  }
+  char sampled[32]{};
+  if (!XQueryKeymap(gdk_x11_display_get_xdisplay(display), sampled)) {
+    return false;
+  }
+  for (size_t i = 0; i < keys.size(); ++i) {
+    keys[i] = uint8_t(sampled[i]);
+  }
+  return true;
+#else
+  return false;
+#endif
+}
+
+Window::PhysicalKeyState WxWindow::QueryPhysicalKeyState(VirtualKey key) const {
+  // All regain queries share the SAME fresh sample that reconciled retained
+  // hardware press identities before the focus callbacks started.
+  if (!native_text_focus_keys_valid_) {
+    return PhysicalKeyState::kUnknown;
+  }
+  switch (native_text_keys_.Classify(key, native_text_focus_keys_)) {
+    case PhysicalKeyTracker::State::kPressed:
+      return PhysicalKeyState::kPressed;
+    case PhysicalKeyTracker::State::kReleased:
+      return PhysicalKeyState::kReleased;
+    default:
+      return PhysicalKeyState::kUnknown;
+  }
+}
+
+uint32_t WxWindow::NativeTextPhysicalKey(const wxKeyEvent& event) const {
+#if XE_PLATFORM_LINUX
+  return event.GetRawKeyFlags();  // vendored wxGTK: GDK hardware_keycode.
+#else
+  return 0;
+#endif
+}
+
+#if XE_PLATFORM_LINUX
+void WxWindow::OnNativeTextCommit(const char* text) {
+  WindowDestructionReceiver destruction_receiver(this);
+  uint64_t source = 0;
+  bool repeat = false;
+  if (render_panel_ && render_panel_->m_imKeyEvent) {
+    const auto edge =
+        native_text_keys_.Source(render_panel_->m_imKeyEvent->hardware_keycode);
+    source = edge.id;
+    repeat = edge.logical_repeat;
+  }
+  std::u32string committed;
+  bool unsupported = !text || !g_utf8_validate(text, -1, nullptr);
+  if (!unsupported && g_utf8_strlen(text, -1) == 1) {
+    committed.push_back(char32_t(g_utf8_get_char(text)));
+  } else {
+    unsupported = true;
+  }
+  const bool composed = native_text_composing_ || unsupported;
+  native_text_composing_ = false;
+  TextInputEvent event(this, std::move(committed), source, repeat, composed);
+  OnTextInput(event, destruction_receiver);
+}
+#endif
+
 void WxWindow::OnPanelKeyDown(wxKeyEvent& event) {
   VirtualKey vk = TranslateKeyCode(event.GetKeyCode());
-  if (vk == VirtualKey::kNone) {
-    event.Skip();
-    return;
+  const auto physical = NativeTextPhysicalKey(event);
+  uint64_t source = 0;
+  bool prev_state;
+  if (physical && physical < 256) {
+    const auto edge = native_text_keys_.Down(physical, vk);
+    if (!edge.deliver) {
+      event.Skip();
+      return;
+    }
+    vk = edge.key;  // Original VK survives translation changes while held.
+    source = edge.id;
+    prev_state = edge.logical_repeat;
+    keys_down_.insert(vk);
+  } else {
+    if (vk == VirtualKey::kNone) {
+      event.Skip();
+      return;
+    }
+    prev_state = !keys_down_.insert(vk).second;
   }
-  // wx doesn't flag auto-repeat on every platform, so held keys are tracked.
-  const bool prev_state = !keys_down_.insert(vk).second;
   KeyEvent key_event(this, vk, 1, prev_state, event.ShiftDown(),
-                     event.ControlDown(), event.AltDown(), false);
+                     event.ControlDown(), event.AltDown(), false, source);
   WindowDestructionReceiver destruction_receiver(this);
   OnKeyDown(key_event, destruction_receiver);
   if (destruction_receiver.IsWindowDestroyed()) {
@@ -736,14 +944,16 @@ void WxWindow::OnPanelKeyDown(wxKeyEvent& event) {
 }
 
 void WxWindow::OnPanelKeyUp(wxKeyEvent& event) {
-  VirtualKey vk = TranslateKeyCode(event.GetKeyCode());
-  if (vk == VirtualKey::kNone) {
+  const auto edge = native_text_keys_.Up(NativeTextPhysicalKey(event));
+  auto vk = edge.id ? edge.key : TranslateKeyCode(event.GetKeyCode());
+  if ((edge.id && !edge.deliver) || vk == VirtualKey::kNone ||
+      (!edge.id && native_text_keys_.IsHeld(vk))) {
     event.Skip();
-    return;
+    return;  // Another hardware source still holds the same logical VK.
   }
   keys_down_.erase(vk);
   KeyEvent key_event(this, vk, 0, true, event.ShiftDown(), event.ControlDown(),
-                     event.AltDown(), false);
+                     event.AltDown(), false, edge.id);
   WindowDestructionReceiver destruction_receiver(this);
   OnKeyUp(key_event, destruction_receiver);
   event.Skip();
@@ -762,6 +972,26 @@ void WxWindow::OnPanelChar(wxKeyEvent& event) {
                      false);
   WindowDestructionReceiver destruction_receiver(this);
   OnKeyChar(key_event, destruction_receiver);
+  if (destruction_receiver.IsWindowDestroyed()) {
+    return;
+  }
+#if XE_PLATFORM_LINUX
+  if (!render_panel_->m_imKeyEvent) {
+    // Direct, non-IM fallback char. Asynchronous IM chars have raw flags zero
+    // and therefore cannot claim a physical source ID or enter native text.
+    uint64_t source = 0;
+    bool repeat = false;
+    const auto edge = native_text_keys_.Source(NativeTextPhysicalKey(event));
+    source = edge.id;
+    repeat = edge.logical_repeat;
+    TextInputEvent committed(this, std::u32string(1, char32_t(uc)), source,
+                             repeat);
+    OnTextInput(committed, destruction_receiver);
+    if (destruction_receiver.IsWindowDestroyed()) {
+      return;
+    }
+  }
+#endif
   if (!key_event.is_handled()) {
     event.Skip();
   }
@@ -867,6 +1097,23 @@ void WxWindow::OnMenuOpen(wxMenuEvent& event) {
 void WxWindow::OnMenuClose(wxMenuEvent& event) { menu_open_ = false; }
 
 void WxWindow::UnbindFrameAndPanelEvents() {
+#if XE_PLATFORM_LINUX
+  // Frame/panel destruction is deferred. Disconnect both raw-this callbacks
+  // while the same IM context is still alive, before releasing their owner.
+  if (native_text_context_) {
+    if (native_text_commit_signal_) {
+      g_signal_handler_disconnect(native_text_context_,
+                                  native_text_commit_signal_);
+    }
+    if (native_text_preedit_signal_) {
+      g_signal_handler_disconnect(native_text_context_,
+                                  native_text_preedit_signal_);
+    }
+  }
+  native_text_context_ = nullptr;
+  native_text_physical_recovery_available_ = false;
+  native_text_commit_signal_ = native_text_preedit_signal_ = 0;
+#endif
   if (frame_) {
     frame_->Unbind(wxEVT_CLOSE_WINDOW, &WxWindow::OnFrameClose, this);
     frame_->Unbind(wxEVT_DPI_CHANGED, &WxWindow::OnFrameDpiChanged, this);

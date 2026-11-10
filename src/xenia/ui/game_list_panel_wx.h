@@ -25,6 +25,7 @@
 
 #include "xenia/app/game_compat_db.h"
 #include "xenia/app/game_library.h"
+#include "xenia/title_catalog.h"
 #include "xenia/ui/game_grid_wx.h"
 #include "xenia/ui/game_info_panel_wx.h"
 
@@ -65,14 +66,19 @@ class GameListPanel : public wxPanel {
  private:
   struct Disc {
     std::filesystem::path path;
+    LibraryKey key;
+    std::string label;
   };
   struct Entry {
     uint32_t title_id = 0;
     // Two releases of one title are separate entries; the pair identifies
     // which library folder this row came from.
     uint32_t version = 0;
+    uint64_t variant_id = 0;
     std::string title_name;
     std::filesystem::path path;
+    std::filesystem::path icon_path;
+    vfs::TitlePresentationDescriptor presentation;
     std::vector<Disc> discs;
     time_t last_run_time = 0;
     // Art with the compat badge burned in, at card size. Built on demand.
@@ -131,6 +137,7 @@ class GameListPanel : public wxPanel {
   GameInfoPanel* info_panel_ = nullptr;
   wxSearchCtrl* search_ = nullptr;
   wxChoice* sort_choice_ = nullptr;
+  wxChoice *category_choice_ = nullptr;
   wxButton* sort_dir_button_ = nullptr;
   ui::GameGrid* grid_ = nullptr;
   wxPanel* loading_panel_ = nullptr;
@@ -148,6 +155,7 @@ class GameListPanel : public wxPanel {
   wxTimer pane_open_timer_;
   // Survives the entries_ rebuild so sort/filter/reload can restore the row.
   LibraryKey selected_key_;
+  uint64_t selected_variant_id_ = 0;
   std::vector<Entry> entries_;
   std::vector<size_t> visible_indices_;
   LaunchCallback launch_cb_;

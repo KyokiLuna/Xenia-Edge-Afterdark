@@ -131,6 +131,9 @@ void VulkanGPUCompletionTimeline::UpdateCompletedSubmission() {
         vulkan_device_->device(), pending_submission_fences_.front().second);
     if (fence_status != VK_SUCCESS) {
       // Not ready, or an error.
+      if (fence_status < 0) {
+        last_completion_error_ = fence_status;
+      }
       if (fence_status == VK_ERROR_DEVICE_LOST) {
         XELOGE(
             "VulkanGPUCompletionTimeline[{}]: DEVICE_LOST polling fence for "
@@ -171,6 +174,9 @@ void VulkanGPUCompletionTimeline::AwaitSubmissionImpl(
             vulkan_device_->device(), 1,
             &std::prev(submission_end_iterator)->second, VK_TRUE, UINT64_MAX);
     if (fence_wait_result != VK_SUCCESS) {
+      if (fence_wait_result < 0) {
+        last_completion_error_ = fence_wait_result;
+      }
       XELOGE(
           "VulkanGPUCompletionTimeline[{}]: vkWaitForFences -> {} (awaited "
           "submission {}, last-pending {}, {} fences pending)",

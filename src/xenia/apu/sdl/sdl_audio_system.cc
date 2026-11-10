@@ -31,7 +31,9 @@ X_STATUS SDLAudioSystem::CreateDriver(size_t index,
                                       xe::threading::Semaphore* semaphore,
                                       AudioDriver** out_driver) {
   assert_not_null(out_driver);
-  auto driver = std::make_unique<SDLAudioDriver>(semaphore);
+  auto driver = std::make_unique<SDLAudioDriver>(
+      semaphore, AudioDriver::kFrameFrequencyDefault,
+      AudioDriver::kFrameChannelsDefault, true, ducker_policy());
   if (!driver->Initialize()) {
     driver->Shutdown();
     return X_STATUS_UNSUCCESSFUL;
@@ -45,7 +47,7 @@ AudioDriver* SDLAudioSystem::CreateDriver(xe::threading::Semaphore* semaphore,
                                           uint32_t frequency, uint32_t channels,
                                           bool need_format_conversion) {
   return new SDLAudioDriver(semaphore, frequency, channels,
-                            need_format_conversion);
+                            need_format_conversion, ducker_policy());
 }
 
 }  // namespace sdl

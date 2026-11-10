@@ -1,0 +1,121 @@
+va	data_type	text
+0x9b5f05e0	unicode	runtime error 
+0x9b5f0604	unicode	TLOSS error\n
+0x9b5f0620	unicode	SING error\n
+0x9b5f0638	unicode	DOMAIN error\n
+0x9b5f0658	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9b5f0848	unicode	R6032\n- not enough space for locale information\n
+0x9b5f08b0	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9b5f0974	unicode	R6030\n- CRT not initialized\n
+0x9b5f09b0	unicode	R6028\n- unable to initialize heap\n
+0x9b5f09f8	unicode	R6027\n- not enough space for lowio initialization\n
+0x9b5f0a60	unicode	R6026\n- not enough space for stdio initialization\n
+0x9b5f0ac8	unicode	R6025\n- pure virtual function call\n
+0x9b5f0b10	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9b5f0b78	unicode	R6019\n- unable to open console device\n
+0x9b5f0bc8	unicode	R6018\n- unexpected heap error\n
+0x9b5f0c08	unicode	R6017\n- unexpected multithread lock error\n
+0x9b5f0c60	unicode	R6016\n- not enough space for thread data\n
+0x9b5f0cb8	unicode	R6010\n- abort() has been called\n
+0x9b5f0d00	unicode	R6009\n- not enough space for environment\n
+0x9b5f0d58	unicode	R6008\n- not enough space for arguments\n
+0x9b5f0da8	unicode	R6002\n- floating point support not loaded\n
+0x9b5f1694	string	RevocationListTimeout
+0x9b5f42e0	unicode	Playready License Store
+0x9b5f4310	string	LicenseStore.dat
+0x9b5f437f	unicode	priv.dat
+0x9b5f4894	string	securestore
+0x9b5f48a4	string	meteringstore
+0x9b5f48b4	string	deviceregstore
+0x9b5f48c4	string	transientstore
+0x9b5f4df8	string	ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!*
+0x9b5f4e40	string	ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
+0x9b5f51f2	string	wBLicStore
+0x9b5f5204	string	LicStorexmr
+0x9b5f5214	string	LicStoreTemp
+0x9b5f5595	unicode	ATA/PROTECTINFO/ALGID
+0x9b5f55ef	unicode	<CUSTOMATTRIBUTES xmlns="">
+0x9b5f57bc	string	removaldatestr
+0x9b5f64c1	unicode	rmstore.dat
+0x9b5f99b8	string	xcoreclr.dll
+0x9b5f9a0c	string	xapiapp.xex
+0x9b5f9a1c	string	GL_LOADLIBRARY_%s:End
+0x9b5f9a34	string	GL_LOADLIBRARY_%s:Start
+0x9b5f9a4c	string	game:\xapiapp.xex
+0x9b5f9a60	string	GAME:\
+0x9b5f9a68	string	UPDATE:\
+0x9b5f9a74	string	InitializeTracingImpl
+0x9b5f9a8c	string	TraceMarkerImpl
+0x9b5fa150	string	global.secstate
+0x9b5fa690	string	REVOCATIONINFO
+0x9b5fa6a0	string	REVOCATIONINFO2
+0x9b5fa6b0	string	DeviceRevocationWMDRMNET_RVK
+0x9b5fa6d0	string	RevocationList
+0x9b5fa6e0	string	PRRTRevocList
+0x9b5fa6f0	string	PRAppRevocList
+0x9b5fbc99	unicode	gpriv.dat
+0x9b5fbcc7	unicode	ndrgpriv.dat
+0x9b5fbd13	unicode	devcerttemplate.dat
+0x9b5fbd4b	unicode	bgroupcert.dat
+0x9b5fbd7b	unicode	ndrcert.dat
+0x9b5fd8b0	string	PRNDREGR
+0x9b5fda60	string	PRNDREGS
+0x9b5fdae8	string	PRNDREGE
+0x9b5fdc20	string	PRNDPXCH
+0x9b5fdd78	string	PRNDPXRT
+0x9b5fdee0	string	PRNDLICR
+0x9b5fe028	string	PRNDLICT
+0x9b5fe0c0	string	PRNDLICE
+0x9b6febb8	string	e+000
+0x9b6febc0	unicode	HH:mm:ss
+0x9b6febd4	unicode	dddd, MMMM dd, yyyy
+0x9b6febfc	unicode	MM/dd/yy
+0x9b6fec20	unicode	December
+0x9b6fec34	unicode	November
+0x9b6fec48	unicode	October
+0x9b6fec58	unicode	September
+0x9b6fec6c	unicode	August
+0x9b6fec7c	unicode	July
+0x9b6fec88	unicode	June
+0x9b6fec94	unicode	April
+0x9b6feca0	unicode	March
+0x9b6fecac	unicode	February
+0x9b6fecc0	unicode	January
+0x9b6fed30	unicode	Saturday
+0x9b6fed44	unicode	Friday
+0x9b6fed54	unicode	Thursday
+0x9b6fed68	unicode	Wednesday
+0x9b6fed7c	unicode	Tuesday
+0x9b6fed8c	unicode	Monday
+0x9b6fed9c	unicode	Sunday
+0x9b6fede4	string	HH:mm:ss
+0x9b6fedf0	string	dddd, MMMM dd, yyyy
+0x9b6fee04	string	MM/dd/yy
+0x9b6fee18	string	December
+0x9b6fee24	string	November
+0x9b6fee30	string	October
+0x9b6fee38	string	September
+0x9b6fee44	string	August
+0x9b6fee5c	string	April
+0x9b6fee64	string	March
+0x9b6fee6c	string	February
+0x9b6fee78	string	January
+0x9b6feeb0	string	Saturday
+0x9b6feebc	string	Friday
+0x9b6feec4	string	Thursday
+0x9b6feed0	string	Wednesday
+0x9b6feedc	string	Tuesday
+0x9b6feee4	string	Monday
+0x9b6feeec	string	Sunday
+0x9b6ff724	string	1#QNAN
+0x9b6ff72c	string	1#INF
+0x9b6ff734	string	1#IND
+0x9b6ff73c	string	1#SNAN
+0x9b6ff744	string	4d505247-ffd7a0e2-c068-41e2-bfcb-be7650744780
+0x9b70013c	string	s:\bt\4211\obj_xex\source\pk\wmdrm-md\source\xbox\playreadydll\obj\ia64\PlayReady.pdb
+0x9b8e55a8	string	UPDFILES
+0x9b8e7f69	unicode	eyfile.dat
+0x9b8f2c19	string	abcdefghijklmnopqrstuvwxyz
+0x9b8f2c39	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9b9160be	string	PlayReady.dll
+0x9b9160cc	string	DllMain

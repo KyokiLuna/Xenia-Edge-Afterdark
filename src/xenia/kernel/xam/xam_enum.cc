@@ -12,6 +12,7 @@
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/xam_module.h"
+#include "xenia/kernel/xam/xam_content_device.h"
 #include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xam/xam_state.h"
 #include "xenia/kernel/xenumerator.h"
@@ -25,7 +26,8 @@ namespace xam {
 
 uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, lpvoid_t buffer_ptr,
                         uint32_t buffer_size, uint32_t* items_returned,
-                        uint32_t overlapped_ptr) {
+                        uint32_t overlapped_ptr,
+                        object_ref<XEnumerator>* completed_device_enum = nullptr) {
   auto e = kernel_state()->object_table()->LookupObject<XEnumerator>(handle);
   if (!e) {
     return X_ERROR_INVALID_HANDLE;
@@ -55,6 +57,8 @@ uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, lpvoid_t buffer_ptr,
     uint32_t item_count;
     X_RESULT result = run(extended_error, item_count);
     *items_returned = result == X_ERROR_SUCCESS ? item_count : 0;
+    if (completed_device_enum && result == X_ERROR_SUCCESS)
+      *completed_device_enum = e;
     return result;
   } else if (overlapped_ptr) {
     assert_true(!items_returned);
@@ -71,13 +75,20 @@ dword_result_t XamEnumerate_entry(dword_t handle, dword_t flags,
                                   lpdword_t items_returned,
                                   pointer_t<XAM_OVERLAPPED> overlapped) {
   uint32_t dummy = 0;
+  object_ref<XEnumerator> completed_device_enum;
   // The console's XamEnumerate sets the top bit of the flags it passes on, so
   // a title enumerating content aggregated for title 0 gets every title's.
   auto result = xeXamEnumerate(
       handle, flags | ContentAggregateEnumerator::kAllTitlesFlag, buffer,
-      buffer_length, !overlapped ? &dummy : nullptr, overlapped);
+      buffer_length, !overlapped ? &dummy : nullptr, overlapped,
+      &completed_device_enum);
   if (!overlapped && items_returned) {
     *items_returned = dummy;
+    // Only after successful row AND count output, retaining the exact object
+    // from the call rather than relooking up a possibly recycled handle.
+    if (result == X_ERROR_SUCCESS && completed_device_enum)
+      ObserveManagedDeviceEnumeration(*completed_device_enum, kernel_state(),
+                                       buffer.guest_address(), dummy);
   }
   return result;
 }

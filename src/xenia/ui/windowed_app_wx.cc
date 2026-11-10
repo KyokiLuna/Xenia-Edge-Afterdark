@@ -93,6 +93,16 @@ bool XeniaWxApp::OnInit() {
   SetAppName(wxString::FromUTF8(id));
   SetVendorName(wxString::FromUTF8(app_->GetName()));
 
+#if XE_PLATFORM_LINUX
+  const std::string desktop_id(app_->GetDesktopId());
+  if (!desktop_id.empty()) {
+    // wxGTK uses this as Wayland app_id. X11 WM_CLASS is applied separately
+    // by WxWindow before mapping; neither changes wxConfig's app name.
+    SetClassName(wxString::FromUTF8(desktop_id));
+    app_context_->SetDesktopId(desktop_id);
+  }
+#endif
+
   if (!app_->OnInitialize()) {
     return false;
   }

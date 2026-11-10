@@ -17,6 +17,7 @@
 #include "xenia/kernel/xam/xdbf/gpd_info.h"
 #include "xenia/ui/audio_helper.h"
 #include "xenia/ui/imgui_guest_notification.h"
+#include "xenia/kernel/xam/profile_gpd_transaction.h"
 
 DEFINE_bool(show_achievement_notification, true,
             "Show achievement notification on screen.", "UI");
@@ -43,53 +44,61 @@ AchievementManager::AchievementManager() {
 
   // Add any optional backend here.
 };
-void AchievementManager::EarnAchievement(const uint32_t user_index,
-                                         const uint32_t title_id,
-                                         const uint32_t achievement_id) const {
-  const auto user = kernel_state()->xam_state()->GetUserProfile(user_index);
-  if (!user) {
+void AchievementManager::EarnAchievement(const uint32_t slot,
+                                         const uint32_t title,
+                                         const uint32_t id) const {
+  if (slot >= XUserMaxUserCount) {
     return;
   }
-
-  EarnAchievement(user->xuid(), title_id, achievement_id);
+  std::error_code error;
+  auto captured = kernel_state()->xam_state()->user_tracker()->CaptureAward(
+      uint8_t(slot), title, id, error);
+  if (captured) {
+    CompleteCapturedAward(*captured);
+  }
 };
 
 void AchievementManager::EarnAchievement(const uint64_t xuid,
-                                         const uint32_t title_id,
-                                         const uint32_t achievement_id) const {
-  if (!DoesAchievementExist(achievement_id)) {
-    XELOGW(
-        "{}: Achievement with ID: {} for title: {:08X} doesn't exist in "
-        "database!",
-        __func__, achievement_id, title_id);
-    return;
+                                         const uint32_t title,
+                                         const uint32_t id) const {
+  std::error_code error;
+  auto captured = kernel_state()->xam_state()->user_tracker()->CaptureAward(
+      xuid, title, id, error);
+  if (captured) {
+    CompleteCapturedAward(*captured);
   }
-  // Always send request to unlock in 3PP backends. It's up to them to check if
-  // achievement was unlocked
+}
+X_HRESULT AchievementManager::CompleteCapturedAward(
+    const CapturedAchievementAward& award) const {
+  const auto result = award.Execute();
+  using S = ProfileGpdTransactionAttempt::State;
+  if (result.error ||
+      (result.state != S::kCommitted && result.state != S::kAlreadyCommitted &&
+       result.state != S::kAlreadyUnlocked)) {
+    return X_E_FAIL;
+  }
+  if (!result.event) {
+    return X_E_SUCCESS;
+  }  // Historical/retry/already-unlocked never re-toasts.
+  const auto& origin = result.event->origin();
+  const auto& command = result.event->command();
+  if (!result.event->Current()) {
+    return X_E_SUCCESS;
+  }
   for (auto& backend : achievement_backends_) {
-    backend->EarnAchievement(xuid, title_id, achievement_id);
+    backend->EarnAchievement(origin.xuid, command.title_id, command.record_id);
   }
+  // Existing host fallback remains in force until native visible/hide/cue
+  // acceptance. This candidate does NOT enable the public native family.
+  if (cvars::show_achievement_notification) {
+    const auto achievement = default_achievements_backend_->GetAchievementInfo(
+        origin.xuid, command.title_id, command.record_id);
 
-  if (default_achievements_backend_->IsAchievementUnlocked(xuid, title_id,
-                                                           achievement_id)) {
-    return;
+  if (achievement) {
+      ShowAchievementEarnedNotification(&*achievement, result.event);
+    }
   }
-
-  default_achievements_backend_->EarnAchievement(xuid, title_id,
-                                                 achievement_id);
-
-  if (!cvars::show_achievement_notification) {
-    return;
-  }
-
-  const auto achievement = default_achievements_backend_->GetAchievementInfo(
-      xuid, title_id, achievement_id);
-
-  if (!achievement) {
-    // Something went really wrong!
-    return;
-  }
-  ShowAchievementEarnedNotification(&achievement.value());
+  return X_E_SUCCESS;
 }
 
 void AchievementManager::LoadTitleAchievements(const uint64_t xuid) const {
@@ -108,7 +117,7 @@ const std::vector<Achievement> AchievementManager::GetTitleAchievements(
   return default_achievements_backend_->GetTitleAchievements(xuid, title_id);
 }
 
-const std::span<const uint8_t> AchievementManager::GetAchievementIcon(
+std::vector<uint8_t> AchievementManager::GetAchievementIcon(
     const uint64_t xuid, const uint32_t title_id,
     const uint32_t achievement_id) const {
   return default_achievements_backend_->GetAchievementIcon(xuid, title_id,
@@ -142,12 +151,14 @@ AchievementManager::GetTitleAchievementsInfo(const uint64_t xuid,
 
 bool AchievementManager::DoesAchievementExist(
     const uint32_t achievement_id) const {
-  return kernel_state()->xam_state()->spa_info()->GetAchievement(
+  const auto spa = kernel_state()->xam_state()->AcquireSpaInfo();
+  return spa && spa->GetAchievement(
       achievement_id);
 }
 
 void AchievementManager::ShowAchievementEarnedNotification(
-    const Achievement* achievement) const {
+    const Achievement* achievement,
+    std::shared_ptr<const DurableAchievementEvent> event) const {
   const std::string description =
       fmt::format("{}G - {}", achievement->gamerscore,
                   xe::to_utf8(achievement->achievement_name));
@@ -162,8 +173,11 @@ void AchievementManager::ShowAchievementEarnedNotification(
                                ? kernel_state()->notification_position_
                                : 2;
 
-  app_context.CallInUIThread([imgui_drawer, description, position]() {
-    // Play achievement sound
+  app_context.CallInUIThread([imgui_drawer, description, position, event = std::move(event)]() {
+        if (!event || !event->Current() || !event->TryConsume()) {
+          return;
+        }
+        // Play achievement sound
     ui::AudioHelper::Instance().PlayAchievementSound();
 
     // Show notification

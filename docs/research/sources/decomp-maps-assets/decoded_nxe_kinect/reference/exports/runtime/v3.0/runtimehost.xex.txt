@@ -1,0 +1,4 @@
+runtime/v3.0/runtimehost.xex exports
+====================================
+
+{"confidence": "CONFIRMED", "function_va": "0x8B0E37F8", "module": "runtime/v3.0/runtimehost.xex", "ordinal": "0x00000001", "resolved_name": ""}

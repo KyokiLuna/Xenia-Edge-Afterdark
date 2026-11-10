@@ -1,0 +1,7 @@
+vk.xex exports
+==============
+
+{"confidence": "CONFIRMED", "function_va": "0x917E0FB8", "module": "vk.xex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x917DC300", "module": "vk.xex", "ordinal": "0x00000002", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x917DC1E8", "module": "vk.xex", "ordinal": "0x00000003", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x917DC2A8", "module": "vk.xex", "ordinal": "0x00000004", "resolved_name": ""}

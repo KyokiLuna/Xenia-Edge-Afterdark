@@ -1,0 +1,15 @@
+{
+  "module": "packages/su20076000_00000000/$flash_mfgbootlauncher.xex",
+  "program": "26607eb44d82__flash_mfgbootlauncher.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "f399142ea3a1b315cb98cb221aecd7648bf999af1116940848d4e2a6ea86abb4",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9fea0400",
+  "functions": 314,
+  "calls": 758,
+  "strings": 177,
+  "string_xrefs": 158,
+  "independent_decode_error": "java.lang.ArrayIndexOutOfBoundsException: Index 28672 out of bounds for length 28672"
+}

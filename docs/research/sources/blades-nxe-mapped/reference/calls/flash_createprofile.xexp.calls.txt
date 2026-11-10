@@ -1,0 +1,14 @@
+Call graph for $flash_createprofile.xexp
+xex_load_address=0x90100000
+0 exported functions (boundary = next export's VA), 1 BFS-discovered internal functions (boundary = hard cap/return, capped at 250) - see each function's discovery= line for exactly how it was found (entry-point reachability vs. callback-registration provenance are tracked separately and honestly, not collapsed).
+Neither boundary method is verified prologue/epilogue analysis - see per-function confidence tags below.
+======================================================================
+
+entry_point  [bfs_root]  va=0x901069D0
+    discovery: bfs (entry point)
+    disassembled 7 insns, INFERRED (boundary-truncated/BFS)
+    internal_callees:
+      0x901069D4 -> 0x901069F0
+    tail_calls:
+      0x901069E8 -> 0x90106350
+

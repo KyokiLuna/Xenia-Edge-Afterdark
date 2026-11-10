@@ -1,0 +1,19 @@
+{
+  "module": "packages/su20076000_00000000/$flash_bootanim.xex",
+  "program": "2b74eaeae4dd__flash_bootanim.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "b2bc842157ea7fbc6fde9adede7d55a5b6b9a4bdb88f73fbdb01f03371b1835b",
+  "import_envelope_version": 2,
+  "import_mode": "XEXLoaderWV envelope",
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x98000400",
+  "functions": 1004,
+  "calls": 3659,
+  "strings": 182,
+  "string_xrefs": 122,
+  "independent_sha256": "b591a38f6e2effc447190bc3083f714ee11b663202869f887dd34f72ffc13e26",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

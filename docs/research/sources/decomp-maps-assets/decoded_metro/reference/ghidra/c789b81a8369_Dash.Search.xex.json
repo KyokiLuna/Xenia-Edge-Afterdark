@@ -1,0 +1,18 @@
+{
+  "module": "Dash.Search.xex",
+  "program": "c789b81a8369_Dash.Search.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "f71e424dd72e22ed5cbe62397685591d159e09e33fdb04574488357a560dd83f",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9ad00400",
+  "functions": 2098,
+  "calls": 7997,
+  "strings": 1839,
+  "string_xrefs": 4248,
+  "independent_sha256": "f71e424dd72e22ed5cbe62397685591d159e09e33fdb04574488357a560dd83f",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

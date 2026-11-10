@@ -1,0 +1,573 @@
+va	data_type	text
+0x920007c0	string	bad allocation
+0x920007d7	string	0Unknown exception
+0x920007ec	string	runtime error 
+0x92000800	string	TLOSS error\n
+0x92000810	string	SING error\n
+0x9200081c	string	DOMAIN error\n
+0x92000830	string	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x92000928	string	R6032\n- not enough space for locale information\n
+0x92000960	string	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x920009c4	string	R6030\n- CRT not initialized\n
+0x920009e4	string	R6028\n- unable to initialize heap\n
+0x92000a08	string	R6027\n- not enough space for lowio initialization\n
+0x92000a3c	string	R6026\n- not enough space for stdio initialization\n
+0x92000a70	string	R6025\n- pure virtual function call\n
+0x92000a94	string	R6024\n- not enough space for _onexit/atexit table\n
+0x92000ac8	string	R6019\n- unable to open console device\n
+0x92000af0	string	R6018\n- unexpected heap error\n
+0x92000b10	string	R6017\n- unexpected multithread lock error\n
+0x92000b3c	string	R6016\n- not enough space for thread data\n
+0x92000b68	string	\nThis application has requested the Runtime to terminate it in an unusual way.\nPlease contact the application's support team for more information.\n
+0x92000bfc	string	R6009\n- not enough space for environment\n
+0x92000c28	string	R6008\n- not enough space for arguments\n
+0x92000c50	string	R6002\n- floating point not loaded\n
+0x92000c98	string	 Complete Object Locator'
+0x92000cb4	string	 Class Hierarchy Descriptor'
+0x92000cd4	string	 Base Class Array'
+0x92000ce8	string	 Base Class Descriptor at (
+0x92000d04	string	 Type Descriptor'
+0x92000d18	string	`local static thread guard'
+0x92000d34	string	`managed vector copy constructor iterator'
+0x92000d60	string	`vector vbase copy constructor iterator'
+0x92000d8c	string	`vector copy constructor iterator'
+0x92000db0	string	`dynamic atexit destructor'
+0x92000dcc	string	`dynamic initializer'
+0x92000de4	string	`eh vector vbase copy constructor iterator'
+0x92000e10	string	`eh vector copy constructor iterator'
+0x92000e38	string	`managed vector destructor iterator'
+0x92000e60	string	`managed vector constructor iterator'
+0x92000e88	string	`placement delete[] closure'
+0x92000ea8	string	`placement delete closure'
+0x92000ec4	string	`omni callsig'
+0x92000ed4	string	 delete[]
+0x92000ee0	string	 new[]
+0x92000ee8	string	`local vftable constructor closure'
+0x92000f0c	string	`local vftable'
+0x92000f1c	string	`RTTI
+0x92000f28	string	`udt returning'
+0x92000f38	string	`copy constructor closure'
+0x92000f54	string	`eh vector vbase constructor iterator'
+0x92000f7c	string	`eh vector destructor iterator'
+0x92000f9c	string	`eh vector constructor iterator'
+0x92000fc0	string	`virtual displacement map'
+0x92000fdc	string	`vector vbase constructor iterator'
+0x92001000	string	`vector destructor iterator'
+0x92001020	string	`vector constructor iterator'
+0x92001040	string	`scalar deleting destructor'
+0x92001060	string	`default constructor closure'
+0x92001080	string	`vector deleting destructor'
+0x920010a0	string	`vbase destructor'
+0x920010b4	string	`string'
+0x920010c0	string	`local static guard'
+0x920010d8	string	`typeof'
+0x920010e4	string	`vcall'
+0x920010ec	string	`vbtable'
+0x920010f8	string	`vftable'
+0x92001180	string	operator
+0x920011a8	string	 delete
+0x920011b8	string	__unaligned
+0x920011c4	string	__restrict
+0x920011d0	string	__ptr64
+0x920011d8	string	__clrcall
+0x920011e4	string	__fastcall
+0x920011f0	string	__thiscall
+0x920011fc	string	__stdcall
+0x92001208	string	__pascal
+0x92001214	string	__cdecl
+0x9200121c	string	__based(
+0x92001410	string	HH:mm:ss
+0x9200141c	string	dddd, MMMM dd, yyyy
+0x92001430	string	MM/dd/yy
+0x92001444	string	December
+0x92001450	string	November
+0x9200145c	string	October
+0x92001464	string	September
+0x92001470	string	August
+0x92001488	string	April
+0x92001490	string	March
+0x92001498	string	February
+0x920014a4	string	January
+0x920014dc	string	Saturday
+0x920014e8	string	Friday
+0x920014f0	string	Thursday
+0x920014fc	string	Wednesday
+0x92001508	string	Tuesday
+0x92001510	string	Monday
+0x92001518	string	Sunday
+0x92001d48	string	SunMonTueWedThuFriSat
+0x92001d60	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x920027f8	string	[XAPI RETURN VALUE] %d\n
+0x92002860	string	\Device\Harddisk0\Partition1\$SystemUpdate
+0x9200288c	string	\System??
+0x92002898	string	\System??\SOURCE:
+0x920028ac	string	\??\SOURCE:
+0x920028b8	string	xboxupd.bin
+0x920028c4	string	sysupdate.xex
+0x920028d4	string	crl.bin
+0x920028dc	string	dae.bin
+0x920035d8	string	TARGET:\
+0x920035e4	string	SOURCE:\$flash_
+0x920035f4	string	SOURCE:\%s
+0x92003600	string	\Device\BuiltInMu
+0x92003614	string	\Device\Mass
+0x92003634	string	\Device\FileSystemExt
+0x92003658	string	\Device\Harddisk
+0x9200366c	string	\Device\CdRom
+0x9200367c	string	\System??\TARGET:\updatedata.bin
+0x92003704	string	voicemail.xex
+0x92003714	string	marketplace.xex
+0x92003724	string	quickchat.xex
+0x92003734	string	friends.xex
+0x92003740	string	feedback.xex
+0x9200375c	string	xenonjklatin.xtt
+0x92003770	string	xenonclatin.xtt
+0x92003780	string	SegoeXbox-Light.xtt
+0x920037a0	string	oddupd2.xex
+0x920037b8	string	updatedata.bin
+0x920037c8	string	systemupdate.xex
+0x920037dc	string	systemupdate2pre.xex
+0x920037fc	string	updater.xex
+0x92003808	string	signin.xex
+0x92003814	string	minimediaplayer.xex
+0x92003828	string	gamerprofile.xex
+0x9200383c	string	deviceselector.xex
+0x9200385c	string	createprofile.xex
+0x92003870	string	sysupdate.xex
+0x92003880	string	ximedic.xex
+0x9200388c	string	ximecore.xex
+0x920038d0	string	mfgbootlauncher.xex
+0x920038e4	string	huduiskin.xex
+0x920038fc	string	bootanim.xex
+0x9200390c	string	aac.xex
+0x92003d88	string	%s%s%s%s
+0x92003d98	string	xboxkrnl.exe
+0x92003da8	unicode	strings.xus
+0x92003df0	unicode	XuiCanvas
+0x92003ec4	string	\??\font:
+0x92003ed0	unicode	Background.xur
+0x92003ef0	unicode	MEDIA
+0x92003efc	unicode	skin.xur
+0x92003f54	unicode	ConvectionUI
+0x92003f70	unicode	file://font:/XenonJKLatin.xttp2
+0x92003fb0	unicode	file://font:/XenonJKLatin.xttp1
+0x92003ff0	unicode	file://font:/XenonJKLatin.xtt
+0x9200402c	unicode	file://font:/XenonCLatin.xttp2
+0x9200406c	unicode	file://font:/XenonCLatin.xttp1
+0x920040ac	unicode	file://font:/XenonCLatin.xtt
+0x92004124	unicode	ja-jp
+0x92004130	unicode	de-de
+0x9200413c	unicode	fr-fr
+0x92004148	unicode	es-es
+0x92004154	unicode	it-it
+0x92004160	unicode	ko-kr
+0x9200416c	unicode	zh-tw
+0x92004178	unicode	pt-br
+0x92004184	unicode	zh-chs
+0x92004194	unicode	pl-pl
+0x920041a0	unicode	ru-ru
+0x920041b0	unicode	%s: %04X - %04X - %04X - %04X - %04X - %04X
+0x92004208	string	\SystemRoot
+0x92004214	unicode	XuiScene
+0x92004228	string	\Device\BuiltInMuSfc\ExtendedSystem.Partition
+0x92004258	string	\Device\Mu1\ExtendedSystem.Partition
+0x92004280	string	\Device\Mu0\ExtendedSystem.Partition
+0x920042a8	string	\Device\UpdateStorage%d\$SystemUpdate\su%08x_%08x
+0x920042dc	string	\Device\Mass
+0x920042ec	string	\Device\FileSystemExtPartition
+0x9200430c	string	\Device\FileSystemExtPartitionSU
+0x92004338	string	\SystemExtPartition\
+0x92004350	string	\SystemAuxPartition\
+0x92004378	unicode	versionText
+0x92004390	unicode	labHeader
+0x920043a4	unicode	statusText
+0x920043bc	unicode	MessageScene.xur
+0x920043e0	unicode	MessageScene
+0x92004404	unicode	UpdateInProgressScene.xur
+0x92004438	unicode	UpdateInProgressScene
+0x92004474	unicode	updateProgressBar
+0x92004498	unicode	file://media:/%s.xzp#%s
+0x920044c8	unicode	section://%X,%s#%s
+0x92004500	string	e+000
+0x9200451c	string	1#QNAN
+0x92004524	string	1#INF
+0x9200452c	string	1#IND
+0x92004534	string	1#SNAN
+0x92004720	string	ERR[D3D]: Unanticipated CPU_INTERRUPT.  Sign of a corrupt command buffer?\n
+0x92004790	string	D3D: GPU initialization (HSIO training) has failed so no graphics will render.\n
+0x92004888	string	PIX!OK
+0x92004890	string	PIX!NO
+0x920048bc	string	unnamed.pix2
+0x920048d0	string	\nThe PIX capture is now saved to xe:\pix\crashdump.pix2.  Please power cycle your\ndevkit and use the 'Open Crash Dump' option from the PIX File menu to load the file\nfor postmortem debugging.\n\n
+0x92004994	string	PIX!Gpu
+0x9200499c	string	crashdump.pix2
+0x920049b0	string	e:\xbperfview.cap
+0x92004e80	string	VGT_DEBUG
+0x92004e8c	string	PA_SU_DEBUG
+0x92004e98	string	PA_SC_DEBUG
+0x92004ea4	string	RBBM DEBUG
+0x92004eb0	string	CP DEBUG
+0x92004ebc	string	PTR_BUFF_STATUS 0xAc24
+0x92004ed4	string	PIX_TB_STATUS 0x9c24
+0x92004eec	string	VTX_TB_STATUS 0x8C24
+0x92004f04	string	RB_DEBUG_0
+0x92004f10	string	TPC_CNTL_STATUS
+0x92004f20	string	TP3_CNTL_STATUS
+0x92004f30	string	TP2_CNTL_STATUS
+0x92004f40	string	TP1_CNTL_STATUS
+0x92004f50	string	TP0_CNTL_STATUS
+0x92004f60	string	TC_CNTL_STATUS
+0x92004f70	string	PA_SU_CNTL_STATUS
+0x92004f84	string	PA_SC_CNTL_STATUS
+0x92004f98	string	PA_CL_CNTL_STATUS
+0x92004fac	string	VC_CNTL_STATUS
+0x92004fbc	string	VGT_CNTL_STATUS
+0x92004fcc	string	CP_MEQ_STAT
+0x92004fd8	string	CP_MEQ_AVAIL
+0x92004fe8	string	CP_CSQ_IB2_STAT
+0x92004ff8	string	CP_CSQ_IB1_STAT
+0x92005008	string	CP_CSQ_RB_STAT
+0x92005018	string	CP_CSQ_AVAIL
+0x92005028	string	CP_DEBUG
+0x92005034	string	CP_STAT
+0x9200503c	string	CP_IB2_BUFSZ
+0x9200504c	string	CP_IB2_BASE
+0x92005058	string	CP_IB1_BUFSZ
+0x92005068	string	CP_IB1_BASE
+0x9200508c	string	CP_RB_BASE
+0x92005098	string	RBBM_STATUS
+0x920050d8	string	CPU Synchronization
+0x920050f0	string	The GPU appears to be hung!  Specifically: 
+0x9200511c	string	%s 0x%02x: 
+0x92005128	string	%08x 
+0x92005134	string	   %25s: 0x%08x\n
+0x92005148	string	The GPU state doesn't match any known hangs.  Please send a repro\nscenario to xboxds@xbox.com so that we can supply a workaround.\n\n
+0x920051d0	string	If your hang didn't occur for the above reason, please send a repro\nscenario to xboxds@xbox.com so that we can supply a workaround.\n\n
+0x92005258	string	  o The hang may have occurred because a partial primitive was\n    rendered.  A partial primitive occurs when the vertex count\n    on a draw call doesn't properly match the primitive type (e.g.,\n    by calling DrawVertices using D3DPT_TRILIST with a vertex\n    count of 4).\n\n
+0x92005370	string	It appears that a callback routine invoked by InsertCallback never\nreturned.  The callback routine is at address 0x%x and was passed\na context value of 0x%x.\n\n
+0x92005410	string	\nD3D version is %i.%i %s, frame is %i.\n\n
+0x9200543c	string	retail
+0x92005448	string	Breaking into the debugger.  The GPU is hung and can't be recovered\nwithout doing a cold boot.\n
+0x920054a8	string	ERR[D3D]: Try reproducing the hang with the debug or instrumented\n          versions of D3D (D3D9D.LIB or D3D9I.LIB) to capture a\n          crash-dump PIX file that can be sent to Xbox developer\n          support.\n\n
+0x92005580	string	+++++++++++++++++++++++++++++++++++++++++++++++++++++++\n
+0x92005808	string	InvViewport
+0x92005824	string	LocalToTexTransform
+0x92005838	string	Params
+0x92005850	string	UVTrans
+0x92005858	string	WorldViewProj
+0x9200586d	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92005a64	string	InvViewport
+0x92005a80	string	Params
+0x92005a98	string	ShadowOffset
+0x92005ab8	string	WorldViewProj
+0x92005acd	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92005c58	string	ColorFactor
+0x92005c74	string	SolidColor
+0x92005c86	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92005d58	string	ColorFactor
+0x92005d74	string	TextureSampler
+0x92005d9b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92005ebc	string	ColorFactor
+0x92005ed8	string	TextureSampler
+0x92005eff	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92006058	string	ColorConvertMatrix
+0x9200607c	string	ColorFactor
+0x92006098	string	SolidColor
+0x920060aa	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x920061cc	string	ColorConvertMatrix
+0x920061f0	string	ColorFactor
+0x9200620c	string	TextureSampler
+0x92006233	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92006418	string	ColorConvertMatrix
+0x9200643c	string	ColorFactor
+0x92006458	string	TextureSampler
+0x9200647f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92006640	string	ColorFactor
+0x9200665c	string	TextureSampler
+0x92006683	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x920067c8	string	ColorFactor
+0x920067e4	string	ShadowColor
+0x920067f0	string	TextureSampler
+0x92006817	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92006a18	string	ColorConvertMatrix
+0x92006a3c	string	ColorFactor
+0x92006a58	string	TextureSampler
+0x92006a7f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92006c04	string	ColorConvertMatrix
+0x92006c28	string	ColorFactor
+0x92006c44	string	ShadowColor
+0x92006c50	string	TextureSampler
+0x92006c77	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92006fbc	string	read error
+0x92006fc8	string	1.0.5
+0x92007003	string	90123456789ABCDEF1.0.5
+0x92007090	string	1.1.3
+0x920070d0	string	NULL row buffer
+0x920070e8	string	XBOX360XTT
+0x92007124	string	need dictionary
+0x92007134	string	unknown compression method
+0x92007150	string	invalid window size
+0x92007164	string	incorrect header check
+0x9200717c	string	incorrect data check
+0x92007224	string	Missing IHDR before sRGB
+0x9200779c	string	invalid bit length repeat
+0x920077b8	string	too many length or distance symbols
+0x920077dc	string	invalid stored block lengths
+0x920077fc	string	invalid block type
+0x92007810	string	incompatible version
+0x92007828	string	buffer error
+0x92007838	string	insufficient memory
+0x9200784c	string	data error
+0x92007858	string	stream error
+0x92007868	string	file error
+0x92007874	string	stream end
+0x920082d4	string	invalid literal/length code
+0x920082f0	string	invalid distance code
+0x920084f7	string	\rincomplete dynamic bit lengths tree
+0x9200851c	string	oversubscribed dynamic bit lengths tree
+0x92008544	string	incomplete literal/length tree
+0x92008564	string	oversubscribed literal/length tree
+0x92008588	string	empty distance tree with lengths
+0x920085ac	string	incomplete distance tree
+0x920085c8	string	oversubscribed distance tree
+0x920085e8	unicode	EndPressDisable
+0x92008608	unicode	PressDisable
+0x92008624	unicode	EndInitFocusCheckDisable
+0x92008658	unicode	InitFocusCheckDisable
+0x92008684	unicode	EndInitFocusCheck
+0x920086a8	unicode	InitFocusCheck
+0x920086c8	unicode	EndInitFocusDisable
+0x920086f0	unicode	InitFocusDisable
+0x92008714	unicode	EndInitFocus
+0x92008730	unicode	InitFocus
+0x92008744	unicode	EndScrollMoreDisable
+0x92008770	unicode	ScrollMoreDisable
+0x92008794	unicode	EndScrolling
+0x920087b0	unicode	Scrolling
+0x920087c4	unicode	EndScrollMore
+0x920087e0	unicode	ScrollMore
+0x920087f8	unicode	EndNormalSelCheckDisable
+0x9200882c	unicode	NormalSelCheckDisable
+0x92008858	unicode	EndNormalSelDisable
+0x92008880	unicode	NormalSelDisable
+0x920088a4	unicode	EndNormalSelCheck
+0x920088c8	unicode	NormalSelCheck
+0x920088e8	unicode	EndNormalSel
+0x92008904	unicode	NormalSel
+0x92008918	unicode	EndFocusCheckDisable
+0x92008944	unicode	FocusCheckDisable
+0x92008968	unicode	EndNormalCheckDisable
+0x92008994	unicode	NormalCheckDisable
+0x920089bc	unicode	EndFocusCheck
+0x920089d8	unicode	FocusCheck
+0x920089f0	unicode	EndNormalCheck
+0x92008a10	unicode	NormalCheck
+0x92008a28	unicode	EndNormalPress
+0x92008a48	unicode	NormalPress
+0x92008a60	unicode	EndPress
+0x92008a74	unicode	Press
+0x92008a80	unicode	EndFocusDisable
+0x92008aa0	unicode	FocusDisable
+0x92008abc	unicode	EndNormalDisable
+0x92008ae0	unicode	NormalDisable
+0x92008afc	unicode	KillFocus
+0x92008b10	unicode	EndFocus
+0x92008b24	unicode	Focus
+0x92008b30	unicode	EndNormal
+0x92008b44	unicode	Normal
+0x92008cc8	unicode	ClassOverride
+0x92008cf0	unicode	Pivot
+0x92008cfc	unicode	Width
+0x92008d08	unicode	Height
+0x92008d3c	unicode	XuiTransition
+0x92008d60	unicode	XuiElement
+0x92008d78	unicode	XuiText
+0x92008d88	unicode	XuiLabel
+0x92008d9c	unicode	XuiControl
+0x92008dd0	unicode	XuiFigure
+0x92008de4	unicode	XuiVisual
+0x92008df8	unicode	XuiButton
+0x92008e0c	unicode	PressKey
+0x92008e20	unicode	XuiNavButton
+0x92008e3c	unicode	XuiBackButton
+0x92008e58	unicode	XuiCheckbox
+0x92008e70	unicode	XuiRadioButton
+0x92008e90	unicode	XuiRadioGroup
+0x92008eac	unicode	XuiTextPresenter
+0x92008ed0	unicode	XuiGroup
+0x92008ee4	unicode	XuiSound
+0x92008ef8	unicode	XuiListItem
+0x92008f10	unicode	XuiScrollEnd
+0x92008f2c	unicode	XuiList
+0x92008f3c	unicode	XuiCommonList
+0x92008f58	unicode	XuiProgressBar
+0x92008f78	unicode	XuiSlider
+0x92008f90	unicode	XuiEdit
+0x92008fa0	unicode	XuiCaret
+0x92008fb4	unicode	XuiMessageBox
+0x92008fd0	unicode	XuiImagePresenter
+0x92008ff4	unicode	XuiImage
+0x92009008	unicode	XuiTabScene
+0x92009020	unicode	XuiPerspectiveScene
+0x92009048	unicode	XuiNineGrid
+0x9200907c	unicode	BrushFlags
+0x92009094	unicode	DataAssociation
+0x920090b4	unicode	SizeMode
+0x920090c8	unicode	false
+0x920090d4	unicode	true
+0x920090f8	unicode	0x%08x
+0x92009108	unicode	%f,%f,%f
+0x9200911c	unicode	%f,%f,%f,%f
+0x92009164	unicode	StrokeColor
+0x9200917c	unicode	StrokeWidth
+0x92009194	unicode	StopColor
+0x920091a8	unicode	StopPos
+0x920091b8	unicode	NumStops
+0x920091cc	unicode	Radial
+0x920091f8	unicode	WrapY
+0x92009204	unicode	WrapX
+0x92009210	unicode	Rotation
+0x92009224	unicode	Scale
+0x92009230	unicode	Translation
+0x92009248	unicode	Gradient
+0x9200925c	unicode	TextureFileName
+0x9200927c	unicode	FillColor
+0x92009290	unicode	FillType
+0x920092a4	unicode	Fill
+0x920092b0	unicode	Points
+0x920092c0	unicode	Closed
+0x920092d0	unicode	Stroke
+0x920092e4	unicode	Direction
+0x920092f8	unicode	ProjectionCenterV
+0x9200931c	unicode	ProjectionCenterU
+0x92009340	unicode	ProjectionScale
+0x92009360	unicode	LineSpacingAdjust
+0x92009384	unicode	TextStyle
+0x92009398	unicode	Font
+0x920093a4	unicode	PointSize
+0x920093b8	unicode	DropShadowColor
+0x920093d8	unicode	TextColor
+0x920093ec	unicode	Text
+0x920093f8	unicode	IgnorePresses
+0x92009414	unicode	InterruptTransitions
+0x92009440	unicode	TransBackTo
+0x92009458	unicode	TransBackFrom
+0x92009474	unicode	TransTo
+0x92009484	unicode	TransFrom
+0x92009498	unicode	DefaultFocus
+0x920094b4	unicode	DestTransIndex
+0x920094d4	unicode	SrcTransIndex
+0x920094f0	unicode	StayVisible
+0x92009508	unicode	PressPath
+0x9200951c	unicode	Volume
+0x9200952c	unicode	Finish
+0x9200953c	unicode	Loop
+0x92009548	unicode	State
+0x92009554	unicode	InterItemSpacing
+0x92009578	unicode	KeepSizeUnfocused
+0x9200959c	unicode	SelectedSize
+0x920095b8	unicode	Checkable
+0x920095cc	unicode	Layout
+0x920095dc	unicode	WrapBump
+0x920095f0	unicode	Wrap
+0x920095fc	unicode	ItemsImage
+0x92009614	unicode	ItemsText
+0x92009628	unicode	Value
+0x92009634	unicode	RangeMax
+0x92009648	unicode	RangeMin
+0x9200965c	unicode	AccelTime
+0x92009670	unicode	AccelInc
+0x92009684	unicode	Vertical
+0x92009698	unicode	Step
+0x920096a4	unicode	SmoothScroll
+0x920096c0	unicode	Multiline
+0x920096d4	unicode	ReadOnly
+0x920096e8	unicode	PasswordChar
+0x92009704	unicode	AllowedChars
+0x92009720	unicode	TextLimit
+0x92009734	unicode	ImagePath
+0x92009748	unicode	DefaultTab
+0x92009760	unicode	NoAutoHide
+0x92009778	unicode	VerticalTabs
+0x92009794	unicode	UserInterrupt
+0x920097b0	unicode	TabCount
+0x920097c4	unicode	NoCenter
+0x920097d8	unicode	BottomOffset
+0x920097f4	unicode	RightOffset
+0x9200980c	unicode	TopOffset
+0x92009820	unicode	LeftOffset
+0x92009838	unicode	ColorWriteFlags
+0x92009858	unicode	DesignTime
+0x92009870	unicode	DisableTimelineRecursion
+0x920098a4	unicode	BlendMode
+0x920098b8	unicode	Show
+0x920098c4	unicode	Anchor
+0x920098d4	unicode	Opacity
+0x920098e4	unicode	Position
+0x920098f8	unicode	NavDown
+0x92009908	unicode	NavUp
+0x92009914	unicode	NavRight
+0x92009928	unicode	NavLeft
+0x92009938	unicode	UnfocusedInput
+0x92009958	unicode	Enabled
+0x92009968	unicode	Visual
+0x920099d0	unicode	%s://%s
+0x920099e0	unicode	section
+0x920099f0	unicode	memory
+0x92009a44	unicode	ProgressBody
+0x92009a60	unicode	SliderThumb
+0x92009a78	unicode	ScrollDown
+0x92009a90	unicode	ScrollUp
+0x92009aa4	unicode	ScrollRight
+0x92009abc	unicode	ScrollLeft
+0x92009ad4	unicode	Caret
+0x92009ae8	unicode	Button
+0x92009af8	unicode	Tab%u
+0x92009b0c	unicode	%uTo%u
+0x92009b1c	unicode	%uTo1
+0x92009b28	unicode	1To%u
+0x92009b34	unicode	%uTo%uEnd
+0x92009b48	unicode	2To1End
+0x92009b60	unicode	ScrollMax
+0x92009b74	unicode	ScrollMin
+0x92009b88	unicode	SliderBody
+0x92009ba0	unicode	%f,%f,%f,%f,%f,%f,%d,
+0x92009bd4	unicode	EndTransTo
+0x92009bec	unicode	EndTransFrom
+0x92009c08	unicode	EndTransBackTo
+0x92009c28	unicode	EndTransBackFrom
+0x92009c58	unicode	(unnamed)
+0x92009cc0	unicode	0x%02x%02x%02x%02x
+0x92009d54	unicode	file
+0x92009dc4	string	\Device\Mass2
+0x92009dd4	string	\Device\Mass1
+0x92009de4	string	\Device\Mass0
+0x9200a558	string	\Device\Flash
+0x9200a568	string	\System??\TARGET:
+0x9200a57c	string	\??\TARGET:
+0x9200a708	string	_nextafter
+0x9200a760	string	floor
+0x9200ab60	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\update\pass2\console\flash\obj\xbox\systemupdatefc.pdb
+0x9208e08c	string	.?AVbad_alloc@std@@
+0x9208e0a8	string	.?AVexception@std@@
+0x9208e6f6	string	abcdefghijklmnopqrstuvwxyz
+0x9208e716	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9208e901	string	abcdefghijklmnopqrstuvwxyz
+0x9208e921	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9209601f	unicode	background.xur
+0x92096044	unicode	MessageScene.xur
+0x9209606d	unicode	UpdateInProgressScene.xur
+0x920960a8	unicode	skin.xur
+0x920960c1	unicode	Strings.xus
+0x920960e0	unicode	loadingRingTop.png
+0x9209610d	unicode	loadingRingBottom.png
+0x92096140	unicode	de-de\background.xus
+0x92096171	unicode	de-de\MessageScene.xus
+0x920961a6	unicode	de-de\skin.xus
+0x920961cb	unicode	de-de\Strings.xus
+0x920961f6	unicode	de-de\UpdateInProgressScene.xus
+0x9209623d	unicode	es-es\background.xus
+0x9209626e	unicode	es-es\MessageScene.xus
+0x920962a3	unicode	es-es\skin.xus
+0x920962c8	unicode	es-es\Strings.xus
+0x92097300	string	PDATA

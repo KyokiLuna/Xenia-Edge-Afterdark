@@ -1,0 +1,1231 @@
+va	data_type	text
+0x9bd1004d	string	!This program cannot be run in DOS mode.\r\r\n$
+0x9bd101f8	string	.rdata
+0x9bd10298	string	.edata
+0x9bd102bf	string	@.idata
+0x9bd1030f	string	B.reloc
+0x9bd106dc	string	FIELDCALSUMMARY
+0x9bd106ec	string	FIELDCALIBLOG
+0x9bd106fc	string	TURNITUP2
+0x9bd10708	string	CAMSET
+0x9bd10710	string	PLAYSPACETEST
+0x9bd10720	string	PLAYSPACEPREP
+0x9bd10730	string	CLEARSPACE
+0x9bd1073c	string	AUDIOSPH2
+0x9bd10748	string	AUDIOAMB2
+0x9bd10754	string	AUDIOCAL
+0x9bd10760	string	IDENTITY
+0x9bd10774	string	PLAYSPACE
+0x9bd10788	string	CAMLOC
+0x9bd10790	string	SUNLIGHT
+0x9bd107b0	string	AUDIOLAUNCH
+0x9bd107bc	string	LAUNCH
+0x9bd10a60	string	BuildResourceLocator
+0x9bd10a78	string	FieldCalibrationDll
+0x9bd10a8c	unicode	RGBControl
+0x9bd10aa4	unicode	XuiControl
+0x9bd10abc	string	Unknown exception
+0x9bd10ad8	string	bad allocation
+0x9bd10b88	unicode	HH:mm:ss
+0x9bd10b9c	unicode	dddd, MMMM dd, yyyy
+0x9bd10bc4	unicode	MM/dd/yy
+0x9bd10be8	unicode	December
+0x9bd10bfc	unicode	November
+0x9bd10c10	unicode	October
+0x9bd10c20	unicode	September
+0x9bd10c34	unicode	August
+0x9bd10c44	unicode	July
+0x9bd10c50	unicode	June
+0x9bd10c5c	unicode	April
+0x9bd10c68	unicode	March
+0x9bd10c74	unicode	February
+0x9bd10c88	unicode	January
+0x9bd10cf8	unicode	Saturday
+0x9bd10d0c	unicode	Friday
+0x9bd10d1c	unicode	Thursday
+0x9bd10d30	unicode	Wednesday
+0x9bd10d44	unicode	Tuesday
+0x9bd10d54	unicode	Monday
+0x9bd10d64	unicode	Sunday
+0x9bd10dac	string	HH:mm:ss
+0x9bd10db8	string	dddd, MMMM dd, yyyy
+0x9bd10dcc	string	MM/dd/yy
+0x9bd10de0	string	December
+0x9bd10dec	string	November
+0x9bd10df8	string	October
+0x9bd10e00	string	September
+0x9bd10e0c	string	August
+0x9bd10e24	string	April
+0x9bd10e2c	string	March
+0x9bd10e34	string	February
+0x9bd10e40	string	January
+0x9bd10e78	string	Saturday
+0x9bd10e84	string	Friday
+0x9bd10e8c	string	Thursday
+0x9bd10e98	string	Wednesday
+0x9bd10ea4	string	Tuesday
+0x9bd10eac	string	Monday
+0x9bd10eb4	string	Sunday
+0x9bd10efc	unicode	runtime error 
+0x9bd10f20	unicode	TLOSS error\n
+0x9bd10f3c	unicode	SING error\n
+0x9bd10f54	unicode	DOMAIN error\n
+0x9bd10f70	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9bd11160	unicode	R6032\n- not enough space for locale information\n
+0x9bd111c8	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9bd1128c	unicode	R6030\n- CRT not initialized\n
+0x9bd112c8	unicode	R6028\n- unable to initialize heap\n
+0x9bd11310	unicode	R6027\n- not enough space for lowio initialization\n
+0x9bd11378	unicode	R6026\n- not enough space for stdio initialization\n
+0x9bd113e0	unicode	R6025\n- pure virtual function call\n
+0x9bd11428	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9bd11490	unicode	R6019\n- unable to open console device\n
+0x9bd114e0	unicode	R6018\n- unexpected heap error\n
+0x9bd11520	unicode	R6017\n- unexpected multithread lock error\n
+0x9bd11578	unicode	R6016\n- not enough space for thread data\n
+0x9bd115d0	unicode	R6010\n- abort() has been called\n
+0x9bd11618	unicode	R6009\n- not enough space for environment\n
+0x9bd11670	unicode	R6008\n- not enough space for arguments\n
+0x9bd116c0	unicode	R6002\n- floating point support not loaded\n
+0x9bd11fd0	string	 Complete Object Locator'
+0x9bd11fec	string	 Class Hierarchy Descriptor'
+0x9bd1200c	string	 Base Class Array'
+0x9bd12020	string	 Base Class Descriptor at (
+0x9bd1203c	string	 Type Descriptor'
+0x9bd12050	string	`local static thread guard'
+0x9bd1206c	string	`managed vector copy constructor iterator'
+0x9bd12098	string	`vector vbase copy constructor iterator'
+0x9bd120c4	string	`vector copy constructor iterator'
+0x9bd120e8	string	`dynamic atexit destructor for '
+0x9bd1210c	string	`dynamic initializer for '
+0x9bd12128	string	`eh vector vbase copy constructor iterator'
+0x9bd12154	string	`eh vector copy constructor iterator'
+0x9bd1217c	string	`managed vector destructor iterator'
+0x9bd121a4	string	`managed vector constructor iterator'
+0x9bd121cc	string	`placement delete[] closure'
+0x9bd121ec	string	`placement delete closure'
+0x9bd12208	string	`omni callsig'
+0x9bd12218	string	 delete[]
+0x9bd12224	string	 new[]
+0x9bd1222c	string	`local vftable constructor closure'
+0x9bd12250	string	`local vftable'
+0x9bd12260	string	`RTTI
+0x9bd1226c	string	`udt returning'
+0x9bd1227c	string	`copy constructor closure'
+0x9bd12298	string	`eh vector vbase constructor iterator'
+0x9bd122c0	string	`eh vector destructor iterator'
+0x9bd122e0	string	`eh vector constructor iterator'
+0x9bd12304	string	`virtual displacement map'
+0x9bd12320	string	`vector vbase constructor iterator'
+0x9bd12344	string	`vector destructor iterator'
+0x9bd12364	string	`vector constructor iterator'
+0x9bd12384	string	`scalar deleting destructor'
+0x9bd123a4	string	`default constructor closure'
+0x9bd123c4	string	`vector deleting destructor'
+0x9bd123e4	string	`vbase destructor'
+0x9bd123f8	string	`string'
+0x9bd12404	string	`local static guard'
+0x9bd1241c	string	`typeof'
+0x9bd12428	string	`vcall'
+0x9bd12430	string	`vbtable'
+0x9bd1243c	string	`vftable'
+0x9bd124c4	string	operator
+0x9bd124ec	string	 delete
+0x9bd124fc	string	__unaligned
+0x9bd12508	string	__restrict
+0x9bd12514	string	__ptr64
+0x9bd1251c	string	__eabi
+0x9bd12524	string	__clrcall
+0x9bd12530	string	__fastcall
+0x9bd1253c	string	__thiscall
+0x9bd12548	string	__stdcall
+0x9bd12554	string	__pascal
+0x9bd12560	string	__cdecl
+0x9bd12568	string	__based(
+0x9bd12740	string	StorePamSessionId
+0x9bd12754	unicode	fieldxzp
+0x9bd12770	unicode	EndNextTargetClose
+0x9bd12798	unicode	StartNextTargetClose
+0x9bd127c4	unicode	EndNextTargetFar
+0x9bd127e8	unicode	StartNextTargetFar
+0x9bd12810	unicode	EndBucketSuccess
+0x9bd12834	unicode	StartBucketSuccess
+0x9bd1285c	unicode	EndFinalSuccess
+0x9bd1287c	unicode	StartFinalSuccess
+0x9bd128a0	unicode	Frame%i
+0x9bd128b4	unicode	%s%s
+0x9bd128c0	unicode	calibrationUI-%i.png
+0x9bd128ec	string	StoreHr
+0x9bd128f4	string	StoreSamplesCompleted
+0x9bd1290c	string	StartCameraCalibration
+0x9bd12924	string	StopCameraCalibration
+0x9bd1293c	string	RegisterSceneControls
+0x9bd12954	string	UnregisterSceneControls
+0x9bd1296c	string	GetSampleCount
+0x9bd1297c	string	SwitchRenderMode
+0x9bd12990	string	IsCalibrationComplete
+0x9bd129a8	string	ZoomInToDefault
+0x9bd129b8	string	StartToSaveCalibration
+0x9bd129d0	string	SetDefaultCalibrationValues
+0x9bd129ec	string	EnsureNuiIsOn
+0x9bd129fc	string	IsSavingSettings
+0x9bd12a10	string	IsFrameAvailable
+0x9bd12a24	string	IsCalibrationRunning
+0x9bd12a3c	string	HasEnoughDataPoints
+0x9bd12a50	string	ZoomingInProgress
+0x9bd12a64	string	IsSaveSettingsProblemDetected
+0x9bd12a84	string	IsCalibrationPaused
+0x9bd12a98	string	IsCameraMoving
+0x9bd12ad3	string	he:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\apps\fieldcalibration\lib\obj\xbox\RGBVertexShader.updb
+0x9bd12c33	string	ge:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\apps\fieldcalibration\lib\obj\xbox\RGBPixelShader.updb
+0x9bd12cf8	string	boxDimensions
+0x9bd12d18	string	innerBoxDimensions
+0x9bd12d2b	string	myTexture
+0x9bd12fab	string	ke:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\apps\fieldcalibration\lib\obj\xbox\DefaultPixelShader.updb
+0x9bd1304c	string	myTexture
+0x9bd13228	string	unknown exception
+0x9bd13260	string	CALIBRATION COMPLETE -- A: %f B: %f\n
+0x9bd13288	string	ESTIMATED CALIB %f (%f) -- %f %f\n
+0x9bd132bc	string	invalid map/set<T> iterator
+0x9bd132d8	string	map/set<T> too long
+0x9bd132ec	string	%f, %f, %f\n
+0x9bd132f8	string	POINTS USED\n
+0x9bd13450	string	GetLastLoggedEvent
+0x9bd13464	string	SessionStorageGetSessionData
+0x9bd13484	string	SessionStorageFetchSessions
+0x9bd134a0	string	LogAudioSpeechLevelTestUsage
+0x9bd134c0	string	LogAudioAmbientNoiseTestUsage
+0x9bd134e0	string	LogAudioCalibrationUsage
+0x9bd134fc	string	LogTurnItUp
+0x9bd13508	string	LogCameraSettings
+0x9bd1351c	string	LogPlayspaceTest
+0x9bd13530	string	LogPlayspacePrep
+0x9bd13544	string	LogClearPlayspace
+0x9bd13558	string	LogTilt1Usage
+0x9bd13568	string	LogCameraLocation
+0x9bd1357c	string	LogFatalHardwareError
+0x9bd13594	string	LogHardwareCheckResult
+0x9bd135ac	string	LogAudioLaunchInfo
+0x9bd135c0	string	LogLaunchInfo
+0x9bd135f8	string	TsCacheEntryUserData
+0x9bd13620	unicode	%I64u
+0x9bd13750	string	e+000
+0x9bd137c8	unicode	(null)
+0x9bd13910	string	floor
+0x9bd13c8c	string	1#QNAN
+0x9bd13c94	string	1#INF
+0x9bd13c9c	string	1#IND
+0x9bd13ca4	string	1#SNAN
+0x9bd13cd0	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\apps\fieldcalibration\app\obj\xbox\Dash.FieldCalibration.pdb
+0x9bd3d3c8	string	.?AVbad_alloc@std@@
+0x9bd3d3e4	string	.?AVexception@std@@
+0x9bd3da29	string	abcdefghijklmnopqrstuvwxyz
+0x9bd3da49	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9bd3e8f8	string	.?AVlogic_error@std@@
+0x9bd3e918	string	.?AVlength_error@std@@
+0x9bd3e938	string	.?AVout_of_range@std@@
+0x9bd40054	string	Dash.FieldCalibration.xex
+0x9bd4006e	string	PamInitializeDll
+0x9bd4007f	string	PamInitializeState
+0x9bd40092	string	PamRunFrame
+0x9bd4009e	string	PamTerminateDll
+0x9bd4011f	string	strings.lub
+0x9bd40144	string	main.lub
+0x9bd40154	string	\rConstants.lub
+0x9bd4016b	string	WelcomeScene.lub
+0x9bd40184	string	DirectionsScene.lub
+0x9bd401a0	string	CompletedScene.lub
+0x9bd401bb	string	CalibrationScene.lub
+0x9bd401d8	string	ErrorScene.lub
+0x9bd401ef	string	NoCardScene.lub
+0x9bd4029c	string	module
+0x9bd402a8	string	Strings
+0x9bd402b4	string	\rIDS_CARDINFO
+0x9bd402d0	string	IDS_DIRECTIONS
+0x9bd402ec	string	\rIDS_FINISHED
+0x9bd40308	string	IDS_PROBLEM
+0x9bd40321	string	'IDS_QUIT_ENOUGHSAMPLES_MESSAGEBOX_DESC
+0x9bd40356	string	(IDS_QUIT_ENOUGHSAMPLES_MESSAGEBOX_TITLE
+0x9bd4038c	string	*IDS_QUIT_NOTENOUGHSAMPLES_MESSAGEBOX_DESC
+0x9bd403c4	string	+IDS_QUIT_NOTENOUGHSAMPLES_MESSAGEBOX_TITLE
+0x9bd403fe	string	IDS_SAVINGSETTINGS
+0x9bd4041f	string	IDS_WELCOME
+0x9bd4058d	string	module
+0x9bd405a3	string	package
+0x9bd405b0	string	seeall
+0x9bd405bc	string	require
+0x9bd405c8	string	\rXbox.PamDash
+0x9bd405db	string	Xbox.XuiStringTable
+0x9bd405f4	string	Strings
+0x9bd40600	string	\rWelcomeScene
+0x9bd40613	string	DirectionsScene
+0x9bd40628	string	CalibrationScene
+0x9bd4063e	string	CompletedScene
+0x9bd40652	string	ErrorScene
+0x9bd40662	string	NoCardScene
+0x9bd40672	string	\r_StringTable
+0x9bd40684	string	\n_OobeMode
+0x9bd40694	string	SECTION_XZP_MEDIA
+0x9bd406b9	string	_SceneTable
+0x9bd406ca	string	_SceneIndex
+0x9bd406e4	string	_AvatarMetadataNoProp
+0x9bd406ff	string	_AvatarMetadata
+0x9bd40714	string	_CreateNextScene
+0x9bd4072a	string	CreateFirstScene
+0x9bd40740	string	NavigateToNextScene
+0x9bd40759	string	NavigateToPreviousScene
+0x9bd40776	string	NavigateToErrorScene
+0x9bd40790	string	NavigateToNoCardScene
+0x9bd407ab	string	BuildMediaResource
+0x9bd407c2	string	\nGetString
+0x9bd407d2	string	QuitApp
+0x9bd407df	string	StartAvatarAnimationCoroutine
+0x9bd40846	string	_SceneIndex
+0x9bd40860	string	_SceneTable
+0x9bd40871	string	Create
+0x9bd408b5	string	_CreateNextScene
+0x9bd4093f	string	_SceneIndex
+0x9bd40950	string	_SceneTable
+0x9bd40961	string	FieldCalibrationDll
+0x9bd4097a	string	StoreHr
+0x9bd40986	string	\nConstants
+0x9bd40996	string	HResult
+0x9bd409ad	string	QuitApp
+0x9bd409ba	string	NavigateForward
+0x9bd409cf	string	_CreateNextScene
+0x9bd40a3d	string	_SceneIndex
+0x9bd40a57	string	QuitApp
+0x9bd40a63	string	\rNavigateBack
+0x9bd40ab6	string	NavigateForward
+0x9bd40acb	string	ErrorScene
+0x9bd40adb	string	Create
+0x9bd40b27	string	NavigateForward
+0x9bd40b3c	string	NoCardScene
+0x9bd40b4d	string	Create
+0x9bd40b9d	string	FieldCalibrationDll
+0x9bd40bb6	string	BuildResourceLocator
+0x9bd40bd0	string	SECTION_XZP_MEDIA
+0x9bd40c52	string	\r_StringTable
+0x9bd40c71	string	XuiStringTable
+0x9bd40c8f	string	BuildMediaResource
+0x9bd40ca7	string	Strings.xus
+0x9bd40cb8	string	Lookup
+0x9bd40d0a	string	PamDash
+0x9bd40d16	string	\rNavigateBack
+0x9bd40d85	string	\tLoopLast
+0x9bd40d96	string	Start
+0x9bd40f26	string	_AvatarMetadata
+0x9bd40f47	string	Avatar
+0x9bd40f53	string	LoadAvatarFromResource
+0x9bd40f6f	string	BuildMediaResource
+0x9bd40f87	string	avatar_metadata08.bin
+0x9bd40fa2	string	LoadCustomAsset
+0x9bd40fb7	string	CarryableIdlesOnly
+0x9bd40fd0	string	\tLoopLast
+0x9bd40fdf	string	SetMetadata
+0x9bd4101f	string	FreeCustomAsset
+0x9bd41034	string	PlayAnimations
+0x9bd41052	string	LoadAnimation
+0x9bd4110d	string	module
+0x9bd41119	string	dash.FieldCalibration
+0x9bd41134	string	package
+0x9bd41141	string	seeall
+0x9bd4114d	string	require
+0x9bd41176	string	Xbox.System
+0x9bd41187	string	_scene
+0x9bd411a5	string	OnLiveConnectionChanged
+0x9bd41216	string	_scene
+0x9bd4122c	string	CreateFirstScene
+0x9bd41242	string	FieldCalibrationDll
+0x9bd4125b	string	StorePamSessionId
+0x9bd41284	string	\rGetSessionId
+0x9bd412ca	string	\nKeepAlive
+0x9bd41352	string	module
+0x9bd4135d	string	\nConstants
+0x9bd4136d	string	package
+0x9bd4137a	string	seeall
+0x9bd41386	string	require
+0x9bd41393	string	Strings
+0x9bd413a0	string	HResult
+0x9bd413c0	string	E_ABORT
+0x9bd413d6	string	E_FAIL
+0x9bd4149f	string	module
+0x9bd414aa	string	\rWelcomeScene
+0x9bd414bd	string	package
+0x9bd414ca	string	seeall
+0x9bd414d6	string	require
+0x9bd414ff	string	Xbox.System
+0x9bd4151a	string	_scene
+0x9bd41525	string	\r_CreateScene
+0x9bd41538	string	Create
+0x9bd41544	string	OnTransitionStart
+0x9bd4155b	string	_OnBack
+0x9bd41567	string	\rReadyPressed
+0x9bd4157a	string	NoCardPressed
+0x9bd415da	string	\tXuiScene
+0x9bd415e9	string	Create
+0x9bd415ff	string	BuildMediaResource
+0x9bd41617	string	WelcomeScene.xur
+0x9bd41719	string	_scene
+0x9bd41724	string	\r_CreateScene
+0x9bd41737	string	AutoSubscribe
+0x9bd4174a	string	SectionText
+0x9bd4175b	string	SetText
+0x9bd41771	string	\nGetString
+0x9bd41781	string	Strings
+0x9bd4178e	string	IDS_WELCOME
+0x9bd4179f	string	StartAvatarAnimationCoroutine
+0x9bd417c2	string	Avatar
+0x9bd417cd	string	\tLoopLast
+0x9bd417de	string	BuildMediaResource
+0x9bd417f6	string	00_wave-retrieve-card.bin
+0x9bd41815	string	ReadyButton
+0x9bd41825	string	\nSubscribe
+0x9bd41835	string	Press
+0x9bd4183f	string	\rNoCardButton
+0x9bd41851	string	\tlegend_b
+0x9bd41860	string	_OnBack
+0x9bd41894	string	\rReadyPressed
+0x9bd418db	string	NoCardPressed
+0x9bd41986	string	XUI_TRANSITION_TO
+0x9bd4199d	string	_scene
+0x9bd419a8	string	\nGetParent
+0x9bd419b7	string	\rGetChildById
+0x9bd419ca	string	AuraControl
+0x9bd419db	string	Unlink
+0x9bd419e7	string	InsertChild
+0x9bd419f8	string	SetProperty
+0x9bd41a09	string	BackgroundImage
+0x9bd41a28	string	BuildMediaResource
+0x9bd41a40	string	Background.jpg
+0x9bd41a54	string	SetShow
+0x9bd41aaf	string	NavigateToPreviousScene
+0x9bd41acc	string	_scene
+0x9bd41b1e	string	NavigateToNextScene
+0x9bd41b37	string	_scene
+0x9bd41b89	string	NavigateToNoCardScene
+0x9bd41ba4	string	_scene
+0x9bd41c9c	string	module
+0x9bd41ca8	string	DirectionsScene
+0x9bd41cbd	string	package
+0x9bd41cca	string	seeall
+0x9bd41cd6	string	require
+0x9bd41cff	string	Xbox.System
+0x9bd41d10	string	_scene
+0x9bd41d1c	string	MAX_WAIT_DURATION
+0x9bd41d3c	string	RECHECK_PERIOD
+0x9bd41d58	string	\r_timesWaited
+0x9bd41d74	string	_fStartedTimeline
+0x9bd41d8b	string	_fSkipEnabled
+0x9bd41d9d	string	\r_CreateScene
+0x9bd41db0	string	Create
+0x9bd41dbc	string	OnTransitionEnd
+0x9bd41dd1	string	OnTimelineEnd
+0x9bd41de4	string	GoToNextScene
+0x9bd41df6	string	\nOnKeyDown
+0x9bd41e06	string	_OnLegendA
+0x9bd41e16	string	ExceededWaitTime
+0x9bd41e79	string	\tXuiScene
+0x9bd41e88	string	Create
+0x9bd41e9e	string	BuildMediaResource
+0x9bd41eb6	string	DirectionsScene.xur
+0x9bd41f57	string	_scene
+0x9bd41f62	string	\r_CreateScene
+0x9bd41f75	string	AutoSubscribe
+0x9bd41f88	string	SectionText
+0x9bd41f99	string	SetText
+0x9bd41faf	string	\nGetString
+0x9bd41fbf	string	Strings
+0x9bd41fcc	string	IDS_DIRECTIONS
+0x9bd41fdf	string	\tlegend_a
+0x9bd41fed	string	\nSubscribe
+0x9bd42008	string	_OnLegendA
+0x9bd42068	string	XUI_TRANSITION_TO
+0x9bd42098	string	SetDefaultCalibrationValues
+0x9bd420b9	string	_scene
+0x9bd420c5	string	Start
+0x9bd42144	string	_scene
+0x9bd4214f	string	\rPlayTimeline
+0x9bd42162	string	StartTimeline
+0x9bd42175	string	EndTimeline
+0x9bd42186	string	_fStartedTimeline
+0x9bd4219d	string	_fSkipEnabled
+0x9bd4223c	string	_handle
+0x9bd42249	string	_fStartedTimeline
+0x9bd42262	string	_fSkipEnabled
+0x9bd42275	string	FieldCalibrationDll
+0x9bd4228e	string	IsSavingSettings
+0x9bd422a4	string	Start
+0x9bd422af	string	GoToNextScene
+0x9bd4232a	string	FieldCalibrationDll
+0x9bd42343	string	IsSavingSettings
+0x9bd42359	string	ExceededWaitTime
+0x9bd4237a	string	RECHECK_PERIOD
+0x9bd4238d	string	\r_timesWaited
+0x9bd423a9	string	GoToNextScene
+0x9bd42454	string	_scene
+0x9bd4245f	string	\rPlayTimeline
+0x9bd4247c	string	FieldCalibrationDll
+0x9bd42495	string	IsSaveSettingsProblemDetected
+0x9bd424b8	string	ExceededWaitTime
+0x9bd424d8	string	NavigateToErrorScene
+0x9bd424f2	string	NavigateToNextScene
+0x9bd4259d	string	_fSkipEnabled
+0x9bd425b0	string	_fStartedTimeline
+0x9bd425c7	string	GoToNextScene
+0x9bd42629	string	\r_timesWaited
+0x9bd4263c	string	RECHECK_PERIOD
+0x9bd42650	string	MAX_WAIT_DURATION
+0x9bd42713	string	module
+0x9bd4271f	string	CompletedScene
+0x9bd42733	string	package
+0x9bd42740	string	seeall
+0x9bd4274c	string	require
+0x9bd42775	string	Xbox.System
+0x9bd42786	string	_scene
+0x9bd42792	string	_RecheckPeriod
+0x9bd427af	string	_MinTimeWaited
+0x9bd427cb	string	\r_CreateScene
+0x9bd427de	string	Create
+0x9bd427e9	string	\nOnKeyDown
+0x9bd42846	string	\tXuiScene
+0x9bd42855	string	Create
+0x9bd4286b	string	BuildMediaResource
+0x9bd42883	string	CompletedScene.xur
+0x9bd42927	string	_scene
+0x9bd42932	string	\r_CreateScene
+0x9bd42945	string	AutoSubscribe
+0x9bd42962	string	StartAvatarAnimationCoroutine
+0x9bd42985	string	Avatar
+0x9bd42991	string	BuildMediaResource
+0x9bd429a8	string	&generic_celebration.MsLiveAvatarAsset
+0x9bd429d3	string	\tLoopLast
+0x9bd429e4	string	Start
+0x9bd42b13	string	_scene
+0x9bd42b1f	string	SectionText
+0x9bd42b30	string	SetText
+0x9bd42b46	string	\nGetString
+0x9bd42b56	string	Strings
+0x9bd42b63	string	IDS_SAVINGSETTINGS
+0x9bd42b7a	string	\tlegend_a
+0x9bd42b88	string	\nSetEnable
+0x9bd42b98	string	Spinner
+0x9bd42ba5	string	SetShow
+0x9bd42bbb	string	FieldCalibrationDll
+0x9bd42bd4	string	IsSavingSettings
+0x9bd42bea	string	_MinTimeWaited
+0x9bd42bfe	string	_RecheckPeriod
+0x9bd42c26	string	IsSaveSettingsProblemDetected
+0x9bd42c49	string	NavigateToErrorScene
+0x9bd42c62	string	\rIDS_FINISHED
+0x9bd42d0b	string	VK_PAD_BACK
+0x9bd42d29	string	\rVK_PAD_START
+0x9bd42d3c	string	FieldCalibrationDll
+0x9bd42d55	string	IsSavingSettings
+0x9bd42d75	string	NavigateToNextScene
+0x9bd42d8e	string	_scene
+0x9bd42e5e	string	module
+0x9bd42e6a	string	CalibrationScene
+0x9bd42e80	string	package
+0x9bd42e8d	string	seeall
+0x9bd42e99	string	require
+0x9bd42ec2	string	Xbox.System
+0x9bd42ed3	string	_scene
+0x9bd42edf	string	MIN_WAIT_TIME
+0x9bd42efb	string	MAX_WAIT_TIME
+0x9bd42f16	string	\r_CreateScene
+0x9bd42f29	string	Create
+0x9bd42f35	string	OnTransitionEnd
+0x9bd42f49	string	\nOnKeyDown
+0x9bd42f59	string	GoToNextScene
+0x9bd42f6c	string	CanUserAdvance
+0x9bd42fcd	string	\tXuiScene
+0x9bd42fdc	string	Create
+0x9bd42ff2	string	BuildMediaResource
+0x9bd4300a	string	CalibrationScene.xur
+0x9bd430d0	string	_scene
+0x9bd430db	string	\r_CreateScene
+0x9bd430ee	string	AutoSubscribe
+0x9bd43101	string	FieldCalibrationDll
+0x9bd4311a	string	RegisterSceneControls
+0x9bd43135	string	RGBControl
+0x9bd43145	string	CalibrationVisualGroup
+0x9bd43161	string	TargetImage
+0x9bd43172	string	ProgressGroup
+0x9bd43184	string	\rTooCloseText
+0x9bd43197	string	TooFarText
+0x9bd431a7	string	SetShow
+0x9bd4321c	string	XUI_TRANSITION_TO
+0x9bd4323d	string	System
+0x9bd43248	string	\rGetTickCount
+0x9bd4325b	string	FieldCalibrationDll
+0x9bd43274	string	EnsureNuiIsOn
+0x9bd43287	string	_scene
+0x9bd43293	string	Start
+0x9bd4343a	string	FieldCalibrationDll
+0x9bd43453	string	IsCameraMoving
+0x9bd43484	string	IsFrameAvailable
+0x9bd434a4	string	System
+0x9bd434af	string	\rGetTickCount
+0x9bd434c2	string	MIN_WAIT_TIME
+0x9bd434d5	string	MAX_WAIT_TIME
+0x9bd434e8	string	_scene
+0x9bd434f3	string	\rPlayTimeline
+0x9bd43506	string	BlendToRGBStart
+0x9bd4351b	string	BlendToRGBEnd
+0x9bd4352e	string	ZoomInToDefault
+0x9bd43543	string	ZoomingInProgress
+0x9bd4355a	string	StartCameraCalibration
+0x9bd43576	string	InstructionText
+0x9bd4358b	string	SetShow
+0x9bd43598	string	CalibrationVisualGroup
+0x9bd435b4	string	CanUserAdvance
+0x9bd435c8	string	GoToNextScene
+0x9bd43675	string	VK_PAD_BACK
+0x9bd43686	string	CanUserAdvance
+0x9bd4369a	string	GoToNextScene
+0x9bd436ad	string	FieldCalibrationDll
+0x9bd436c6	string	IsCalibrationComplete
+0x9bd436e1	string	Start
+0x9bd4384c	string	FieldCalibrationDll
+0x9bd43865	string	HasEnoughDataPoints
+0x9bd43888	string	System
+0x9bd43894	string	ShowMessageBox
+0x9bd438ba	string	\nGetString
+0x9bd438ca	string	Strings
+0x9bd438d6	string	(IDS_QUIT_ENOUGHSAMPLES_MESSAGEBOX_TITLE
+0x9bd43903	string	'IDS_QUIT_ENOUGHSAMPLES_MESSAGEBOX_DESC
+0x9bd43930	string	GetCommonString
+0x9bd43960	string	WarningIcon
+0x9bd4397c	string	IsCalibrationComplete
+0x9bd43997	string	GoToNextScene
+0x9bd439a9	string	+IDS_QUIT_NOTENOUGHSAMPLES_MESSAGEBOX_TITLE
+0x9bd439d9	string	*IDS_QUIT_NOTENOUGHSAMPLES_MESSAGEBOX_DESC
+0x9bd43a09	string	QuitApp
+0x9bd43a96	string	_scene
+0x9bd43aa1	string	\rLoadingImage
+0x9bd43ab4	string	SetShow
+0x9bd43ac1	string	FieldCalibrationDll
+0x9bd43ada	string	UnregisterSceneControls
+0x9bd43af7	string	StopCameraCalibration
+0x9bd43b12	string	StartToSaveCalibration
+0x9bd43b38	string	NavigateToNextScene
+0x9bd43ba5	string	FieldCalibrationDll
+0x9bd43bbe	string	IsCalibrationComplete
+0x9bd43bd9	string	IsCalibrationRunning
+0x9bd43c8f	string	module
+0x9bd43c9b	string	ErrorScene
+0x9bd43cab	string	package
+0x9bd43cb8	string	seeall
+0x9bd43cc4	string	require
+0x9bd43ced	string	Xbox.System
+0x9bd43cfe	string	_scene
+0x9bd43d09	string	\r_CreateScene
+0x9bd43d1c	string	Create
+0x9bd43d27	string	\nOnKeyDown
+0x9bd43d84	string	\tXuiScene
+0x9bd43d93	string	Create
+0x9bd43da9	string	BuildMediaResource
+0x9bd43dc1	string	ErrorScene.xur
+0x9bd43e79	string	_scene
+0x9bd43e84	string	\r_CreateScene
+0x9bd43e97	string	AutoSubscribe
+0x9bd43eaa	string	SectionText
+0x9bd43ebb	string	SetText
+0x9bd43ed1	string	\nGetString
+0x9bd43ee1	string	Strings
+0x9bd43eee	string	IDS_PROBLEM
+0x9bd43eff	string	Avatar
+0x9bd43f0c	string	StartAvatarAnimationCoroutine
+0x9bd43f2e	string	\tLoopLast
+0x9bd43fb1	string	VK_PAD_BACK
+0x9bd43fcf	string	\rVK_PAD_START
+0x9bd43fec	string	QuitApp
+0x9bd44095	string	module
+0x9bd440a1	string	NoCardScene
+0x9bd440b2	string	package
+0x9bd440bf	string	seeall
+0x9bd440cb	string	require
+0x9bd440f4	string	Xbox.System
+0x9bd44105	string	_scene
+0x9bd44110	string	\r_CreateScene
+0x9bd44123	string	Create
+0x9bd4412f	string	_OnBack
+0x9bd44189	string	\tXuiScene
+0x9bd44198	string	Create
+0x9bd441ae	string	BuildMediaResource
+0x9bd441c6	string	NoCardScene.xur
+0x9bd442a7	string	_scene
+0x9bd442b2	string	\r_CreateScene
+0x9bd442c5	string	AutoSubscribe
+0x9bd442d8	string	SectionText
+0x9bd442e9	string	SetText
+0x9bd442ff	string	\nGetString
+0x9bd4430f	string	Strings
+0x9bd4431b	string	\rIDS_CARDINFO
+0x9bd4432e	string	Avatar
+0x9bd4433b	string	StartAvatarAnimationCoroutine
+0x9bd4435d	string	\tLoopLast
+0x9bd4436e	string	BuildMediaResource
+0x9bd44386	string	00_wave-retrieve-card.bin
+0x9bd443a4	string	\tlegend_b
+0x9bd443b2	string	\nSubscribe
+0x9bd443c2	string	Press
+0x9bd443cd	string	_OnBack
+0x9bd4441a	string	_scene
+0x9bd44425	string	\rNavigateBack
+0x9bd4444f	string	<pam><deps></deps></pam>
+0x9bd4449f	string	WelcomeScene.xur
+0x9bd444b8	string	DirectionsScene.xur
+0x9bd444d4	string	CompletedScene.xur
+0x9bd444ef	string	CalibrationScene.xur
+0x9bd4450c	string	ErrorScene.xur
+0x9bd44523	string	NoCardScene.xur
+0x9bd44538	string	/=%generic_celebration.MsLiveAvatarAsset
+0x9bd44569	string	00_wave-retrieve-card.bin
+0x9bd4458b	string	avatar_metadata08.bin
+0x9bd445a9	string	Strings.xus
+0x9bd445bd	string	calibrationUI-1.png
+0x9bd445d9	string	calibrationUI-2.png
+0x9bd445f5	string	calibrationUI-3.png
+0x9bd44611	string	calibrationUI-4.png
+0x9bd4462d	string	calibrationUI-5.png
+0x9bd44649	string	nineGrid_glow.png
+0x9bd44663	string	progress_1.png
+0x9bd4467a	string	progress_2.png
+0x9bd44691	string	progress_3.png
+0x9bd446a8	string	progress_4.png
+0x9bd446bf	string	progress_5.png
+0x9bd446d6	string	progress_6.png
+0x9bd446ed	string	progress_7.png
+0x9bd44704	string	progress_8.png
+0x9bd4471b	string	progress_9.png
+0x9bd44732	string	Background.jpg
+0x9bd44749	string	dropShadow.png
+0x9bd44760	string	dropShadow_below.png
+0x9bd4477c	string	\rhowToHold.png
+0x9bd44790	string	UE\nbutton.png
+0x9bd447a6	string	successSound.xma
+0x9bd447bf	string	dropShadow2.png
+0x9bd447d6	string	\rcard_icon.png
+0x9bd447ed	string	no-card_icon.png
+0x9bd44804	string	e\rcard_test.png
+0x9bd4481c	string	completedSound.xma
+0x9bd44837	string	de-de\CalibrationScene.xus
+0x9bd4485a	string	de-de\CompletedScene.xus
+0x9bd4487b	string	de-de\DirectionsScene.xus
+0x9bd4489d	string	de-de\ErrorScene.xus
+0x9bd448ba	string	de-de\NoCardScene.xus
+0x9bd448d8	string	de-de\Strings.xus
+0x9bd448f2	string	de-de\WelcomeScene.xus
+0x9bd44911	string	es-es\CalibrationScene.xus
+0x9bd44934	string	es-es\CompletedScene.xus
+0x9bd44955	string	es-es\DirectionsScene.xus
+0x9bd44977	string	es-es\ErrorScene.xus
+0x9bd44994	string	es-es\NoCardScene.xus
+0x9bd449b2	string	es-es\Strings.xus
+0x9bd449cc	string	es-es\WelcomeScene.xus
+0x9bd449eb	string	fr-fr\CalibrationScene.xus
+0x9bd44a0e	string	fr-fr\CompletedScene.xus
+0x9bd44a2f	string	fr-fr\DirectionsScene.xus
+0x9bd44a51	string	fr-fr\ErrorScene.xus
+0x9bd44a6e	string	fr-fr\NoCardScene.xus
+0x9bd44a8c	string	fr-fr\Strings.xus
+0x9bd44aa6	string	fr-fr\WelcomeScene.xus
+0x9bd44ac5	string	it-it\CalibrationScene.xus
+0x9bd44ae8	string	it-it\CompletedScene.xus
+0x9bd44b09	string	it-it\DirectionsScene.xus
+0x9bd44b2b	string	it-it\ErrorScene.xus
+0x9bd44b48	string	it-it\NoCardScene.xus
+0x9bd44b66	string	it-it\Strings.xus
+0x9bd44b80	string	it-it\WelcomeScene.xus
+0x9bd44b9f	string	ko-kr\CalibrationScene.xus
+0x9bd44bc2	string	ko-kr\CompletedScene.xus
+0x9bd44be3	string	ko-kr\DirectionsScene.xus
+0x9bd44c05	string	ko-kr\ErrorScene.xus
+0x9bd44c22	string	ko-kr\NoCardScene.xus
+0x9bd44c40	string	ko-kr\Strings.xus
+0x9bd44c5a	string	ko-kr\WelcomeScene.xus
+0x9bd44c79	string	ja-jp\CalibrationScene.xus
+0x9bd44c9c	string	ja-jp\CompletedScene.xus
+0x9bd44cbd	string	ja-jp\DirectionsScene.xus
+0x9bd44cdf	string	ja-jp\ErrorScene.xus
+0x9bd44cfc	string	ja-jp\NoCardScene.xus
+0x9bd44d1a	string	ja-jp\Strings.xus
+0x9bd44d34	string	ja-jp\WelcomeScene.xus
+0x9bd44d53	string	pl-pl\CalibrationScene.xus
+0x9bd44d76	string	pl-pl\CompletedScene.xus
+0x9bd44d97	string	pl-pl\DirectionsScene.xus
+0x9bd44db9	string	pl-pl\ErrorScene.xus
+0x9bd44dd6	string	pl-pl\NoCardScene.xus
+0x9bd44df4	string	pl-pl\Strings.xus
+0x9bd44e0e	string	pl-pl\WelcomeScene.xus
+0x9bd44e2d	string	pt-br\CalibrationScene.xus
+0x9bd44e50	string	pt-br\CompletedScene.xus
+0x9bd44e71	string	pt-br\DirectionsScene.xus
+0x9bd44e93	string	pt-br\ErrorScene.xus
+0x9bd44eb0	string	pt-br\NoCardScene.xus
+0x9bd44ece	string	pt-br\Strings.xus
+0x9bd44ee8	string	pt-br\WelcomeScene.xus
+0x9bd44f07	string	ru-ru\CalibrationScene.xus
+0x9bd44f2a	string	ru-ru\CompletedScene.xus
+0x9bd44f4b	string	ru-ru\DirectionsScene.xus
+0x9bd44f6d	string	ru-ru\ErrorScene.xus
+0x9bd44f8a	string	ru-ru\NoCardScene.xus
+0x9bd44fa8	string	ru-ru\Strings.xus
+0x9bd44fc2	string	ru-ru\WelcomeScene.xus
+0x9bd44fe1	string	zh-tw\CalibrationScene.xus
+0x9bd45004	string	zh-tw\CompletedScene.xus
+0x9bd45025	string	zh-tw\DirectionsScene.xus
+0x9bd45047	string	zh-tw\ErrorScene.xus
+0x9bd45064	string	zh-tw\NoCardScene.xus
+0x9bd45082	string	zh-tw\Strings.xus
+0x9bd4509c	string	zh-tw\WelcomeScene.xusXUIB
+0x9bd450dd	string	\tVECT
+0x9bd4511f	string	-Scene_main
+0x9bd4512b	string	ReadyButton
+0x9bd45137	string	FadeOut
+0x9bd4513f	string	FadeIn
+0x9bd45146	string	AuraControl
+0x9bd45152	string	ControlPackAuraControl
+0x9bd45169	string	legend_y
+0x9bd45172	string	legend_Y
+0x9bd4517b	string	XuiNavButton
+0x9bd45188	string	legend_x
+0x9bd45191	string	legend_X
+0x9bd4519a	string	legend_a
+0x9bd451a3	string	legend_A
+0x9bd451ac	string	Select
+0x9bd451b3	string	legend_b
+0x9bd451bc	string	legend_B
+0x9bd451ca	string	XuiBackButton
+0x9bd451d8	string	LegacyControl1
+0x9bd451e7	string	ControlPackLegacyControl
+0x9bd45200	string	SectionText
+0x9bd4520c	string	Label_BodyWhite_18
+0x9bd4521f	string	XuiLabel
+0x9bd45228	string	btn_calibration
+0x9bd45238	string	NoCardButton
+0x9bd45245	string	I have my card
+0x9bd45254	string	button.png
+0x9bd4525f	string	XuiButton
+0x9bd45269	string	I don't have a card
+0x9bd4527d	string	Avatar
+0x9bd45284	string	XuiAvatar
+0x9bd45295	string	card_icon.png
+0x9bd452a3	string	XuiImage
+0x9bd452b3	string	no-card_icon.png
+0x9bd452c4	string	header
+0x9bd452cb	string	Kinect Calibration
+0x9bd452de	string	XuiText
+0x9bd452f0	string	dropShadow2.png
+0x9bd4530f	string	DashScene
+0x9bd45319	string	XuiCanvas
+0x9bd4554e	string	PCUST
+0x9bd45596	string	\rDATA
+0x9bd455a8	string	JScene_main
+0x9bd455b4	string	FadeOut
+0x9bd455bc	string	FadeIn
+0x9bd455c3	string	legend_y
+0x9bd455cc	string	legend_Y
+0x9bd455d5	string	XuiNavButton
+0x9bd455e2	string	legend_x
+0x9bd455eb	string	legend_X
+0x9bd455f4	string	legend_a
+0x9bd455fd	string	legend_A
+0x9bd4560b	string	legend_b
+0x9bd45614	string	legend_B
+0x9bd4561d	string	XuiBackButton
+0x9bd4562b	string	LegacyControl1
+0x9bd4563a	string	ControlPackLegacyControl
+0x9bd45653	string	dropShadowBelow
+0x9bd45663	string	dropShadow_below.png
+0x9bd45678	string	XuiImage
+0x9bd45681	string	dropShadowBehind
+0x9bd45692	string	dropShadow.png
+0x9bd456a1	string	XuiNineGrid
+0x9bd456ad	string	header
+0x9bd456b4	string	How to Calibrate
+0x9bd456c5	string	XuiText
+0x9bd456cd	string	SectionText
+0x9bd456d9	string	Label_BodyWhite_18
+0x9bd456ec	string	XuiLabel
+0x9bd456f5	string	perspectiveScene
+0x9bd45709	string	Background.jpg
+0x9bd45718	string	TargetImage
+0x9bd45724	string	calibrationUI-2.png
+0x9bd4573d	string	card_test.png
+0x9bd4574b	string	overlay
+0x9bd45753	string	XuiFigure
+0x9bd4575d	string	TargetShadedArea1
+0x9bd45779	string	Right
+0x9bd45784	string	Bottom
+0x9bd4578f	string	XuiGroup
+0x9bd457a2	string	TargetImage1
+0x9bd457af	string	text_alignTheEyes
+0x9bd457c1	string	Line up the eyes with the glasses.
+0x9bd457e4	string	text_youGotIt!
+0x9bd457f3	string	Success!
+0x9bd45818	string	spark
+0x9bd4581e	string	XuiSoundXAudio1
+0x9bd4582e	string	XuiSoundXAudio
+0x9bd45842	string	successSound.xma
+0x9bd45853	string	progress_1.png
+0x9bd45862	string	progress_2.png
+0x9bd45871	string	progress_3.png
+0x9bd45880	string	progress_4.png
+0x9bd4588f	string	progress_5.png
+0x9bd4589e	string	progress_6.png
+0x9bd458ad	string	progress_7.png
+0x9bd458bc	string	progress_8.png
+0x9bd458cb	string	progress_9.png
+0x9bd458da	string	XuiPerspectiveScene
+0x9bd458ee	string	StartTimeline
+0x9bd458fc	string	EndTimeline
+0x9bd45908	string	DashScene
+0x9bd45912	string	XuiCanvas
+0x9bd46562	string	!Scene_main
+0x9bd4656e	string	FadeOut
+0x9bd46576	string	FadeIn
+0x9bd4657d	string	legend_y
+0x9bd46586	string	legend_Y
+0x9bd4658f	string	XuiNavButton
+0x9bd4659c	string	legend_x
+0x9bd465a5	string	legend_X
+0x9bd465ae	string	legend_a
+0x9bd465b7	string	legend_A
+0x9bd465c5	string	legend_b
+0x9bd465ce	string	legend_B
+0x9bd465d7	string	XuiBackButton
+0x9bd465e5	string	LegacyControl1
+0x9bd465f4	string	ControlPackLegacyControl
+0x9bd4660d	string	header
+0x9bd46614	string	Calibration Complete
+0x9bd46629	string	XuiText
+0x9bd46631	string	SectionText
+0x9bd4663d	string	Label_BodyWhite_18
+0x9bd46650	string	XuiLabel
+0x9bd46659	string	Spinner
+0x9bd46661	string	Loading_Large
+0x9bd4666f	string	XuiControl
+0x9bd4667a	string	Avatar
+0x9bd46681	string	XuiAvatar
+0x9bd4668b	string	XuiSoundXAudio1
+0x9bd4669b	string	completedSound.xma
+0x9bd466ae	string	XuiSoundXAudio
+0x9bd466c2	string	DashScene
+0x9bd466cc	string	XuiCanvas
+0x9bd468ad	string	oDATA
+0x9bd468bf	string	kScene_main
+0x9bd468cb	string	FadeOut
+0x9bd468d3	string	FadeIn
+0x9bd468da	string	legend_y
+0x9bd468e3	string	legend_Y
+0x9bd468ec	string	XuiNavButton
+0x9bd468f9	string	legend_x
+0x9bd46902	string	legend_X
+0x9bd4690b	string	LegacyControl1
+0x9bd4691a	string	ControlPackLegacyControl
+0x9bd46933	string	dropShadowBelow
+0x9bd46943	string	dropShadow_below.png
+0x9bd46958	string	XuiImage
+0x9bd46961	string	dropShadowBehind
+0x9bd46972	string	dropShadow.png
+0x9bd46981	string	XuiNineGrid
+0x9bd4698d	string	RGBControl
+0x9bd46998	string	LoadingImage
+0x9bd469a5	string	howToHold.png
+0x9bd469b3	string	getReadyText
+0x9bd469c0	string	Get ready...
+0x9bd469cd	string	XuiText
+0x9bd469d5	string	legend_a
+0x9bd469de	string	legend_A
+0x9bd469e7	string	legend_b
+0x9bd469f0	string	legend_B
+0x9bd469fe	string	XuiBackButton
+0x9bd46a0c	string	DebugText
+0x9bd46a16	string	CalibrationVisualGroup
+0x9bd46a2d	string	TargetShadedArea
+0x9bd46a43	string	XuiFigure
+0x9bd46a52	string	Right
+0x9bd46a5d	string	Bottom
+0x9bd46a68	string	XuiGroup
+0x9bd46a71	string	FinalSuccessText
+0x9bd46a82	string	That's it! You're done!
+0x9bd46a9a	string	BucketSuccessText
+0x9bd46aac	string	You got it!
+0x9bd46ab8	string	NextTargetCloseText
+0x9bd46acc	string	Move forward for the \r\nnext target.
+0x9bd46af0	string	NextTargetFarText
+0x9bd46b02	string	Back up for the \r\nnext target.
+0x9bd46b21	string	progressFill_complete!
+0x9bd46b38	string	progress_9.png
+0x9bd46b47	string	ProgressGroup
+0x9bd46ba5	string	progress_1.png
+0x9bd46bb4	string	progress_2.png
+0x9bd46bc3	string	progress_3.png
+0x9bd46bd2	string	progress_4.png
+0x9bd46be1	string	progress_5.png
+0x9bd46bf0	string	progress_6.png
+0x9bd46bff	string	progress_7.png
+0x9bd46c0e	string	TooFarText
+0x9bd46c19	string	Come closer.
+0x9bd46c26	string	TooCloseText
+0x9bd46c33	string	Move back.
+0x9bd46c3e	string	LineUpText
+0x9bd46c49	string	Line up the eyes with the glasses.
+0x9bd46c88	string	spark
+0x9bd46c8e	string	TargetImage
+0x9bd46c9a	string	calibrationUI-2.png
+0x9bd46cae	string	XuiSoundXAudio1
+0x9bd46cbe	string	XuiSoundXAudio
+0x9bd46cd2	string	StartBucketSuccess
+0x9bd46ce5	string	EndBucketSuccess
+0x9bd46cf6	string	StartNextTargetClose
+0x9bd46d0b	string	EndNextTargetClose
+0x9bd46d1e	string	StartNextTargetFar
+0x9bd46d31	string	EndNextTargetFar
+0x9bd46d42	string	StartFinalSuccess
+0x9bd46d54	string	EndFinalSuccess
+0x9bd46d64	string	StartSuccess1
+0x9bd46d72	string	EndSuccess1
+0x9bd46d7e	string	StartSuccess2
+0x9bd46d8c	string	EndSuccess2
+0x9bd46d98	string	StartSuccess3
+0x9bd46da6	string	EndSuccess3
+0x9bd46db2	string	StartSuccess4
+0x9bd46dc0	string	EndSuccess4
+0x9bd46dcc	string	successSound.xma
+0x9bd46ddd	string	InstructionText
+0x9bd46ded	string	Line up the eyes on the card with the glasses.
+0x9bd46e1c	string	BlendToRGBStart
+0x9bd46e2c	string	BlendToRGBEnd
+0x9bd46e3a	string	DashScene
+0x9bd46e44	string	XuiCanvas
+0x9bd47b1a	string	Scene_main
+0x9bd47b25	string	FadeOut
+0x9bd47b2d	string	FadeIn
+0x9bd47b34	string	legend_y
+0x9bd47b3d	string	legend_Y
+0x9bd47b46	string	XuiNavButton
+0x9bd47b53	string	legend_x
+0x9bd47b5c	string	legend_X
+0x9bd47b65	string	legend_a
+0x9bd47b6e	string	legend_A
+0x9bd47b7c	string	legend_b
+0x9bd47b85	string	legend_B
+0x9bd47b8e	string	XuiBackButton
+0x9bd47b9c	string	LegacyControl1
+0x9bd47bab	string	ControlPackLegacyControl
+0x9bd47bc4	string	header
+0x9bd47bcb	string	Kinect Calibration
+0x9bd47bde	string	XuiText
+0x9bd47be6	string	SectionText
+0x9bd47bf2	string	Label_BodyWhite_18
+0x9bd47c05	string	XuiLabel
+0x9bd47c0e	string	Avatar
+0x9bd47c15	string	XuiAvatar
+0x9bd47c24	string	DashScene
+0x9bd47c2e	string	XuiCanvas
+0x9bd47dbb	string	Scene_main
+0x9bd47dc6	string	FadeOut
+0x9bd47dce	string	FadeIn
+0x9bd47dd5	string	legend_y
+0x9bd47dde	string	legend_Y
+0x9bd47de7	string	XuiNavButton
+0x9bd47df4	string	legend_x
+0x9bd47dfd	string	legend_X
+0x9bd47e06	string	legend_a
+0x9bd47e0f	string	legend_A
+0x9bd47e18	string	legend_b
+0x9bd47e21	string	legend_B
+0x9bd47e2f	string	XuiBackButton
+0x9bd47e3d	string	LegacyControl1
+0x9bd47e4c	string	ControlPackLegacyControl
+0x9bd47e65	string	header
+0x9bd47e6c	string	Kinect Calibration
+0x9bd47e7f	string	XuiText
+0x9bd47e87	string	SectionText
+0x9bd47e93	string	Label_BodyWhite_18
+0x9bd47ea6	string	XuiLabel
+0x9bd47eaf	string	Avatar
+0x9bd47eb6	string	XuiAvatar
+0x9bd47ec5	string	DashScene
+0x9bd47ecf	string	XuiCanvas
+0x9bd5ca92	string	\nA calibration card was included with the game that came with your Kinect Sensor.\r\n\r\nIf you can't find your card, visit www.xbox.com/support.
+0x9bd5cb20	string	Line up the eyes on the card with the glasses.
+0x9bd5cb4f	string	You've successfully calibrated your Kinect Sensor.\r\n\r\nRun calibration again if you move it to another room.
+0x9bd5cbbb	string	There's a problem with your Kinect Sensor.\r\n\r\nTo resolve the problem, go to the Kinect Tuner.
+0x9bd5cc19	string	There's enough info to calibrate your sensor, but you should complete all of the calibration steps. Are you sure you want to quit anyway?
+0x9bd5cca3	string	Kinect Calibration
+0x9bd5ccb6	string	Calibration isn't finished. Are you sure you want to quit?
+0x9bd5ccf1	string	Kinect Calibration
+0x9bd5cd04	string	Saving your calibration settings.\r\n\r\nDon't turn off your console or unplug the sensor.
+0x9bd5cd5b	string	To calibrate, find your calibration card.\r\n\r\nWhen you're ready, you'll be shown a quick demo.
+0x9bd9ceb5	string	\nMachen Sie sich bereit ...
+0x9bd9ced5	string	Das war's! Fertig!
+0x9bd9ceec	string	Geschafft!
+0x9bd9cf1f	string	chsten Ziel.
+0x9bd9cf56	string	chsten Ziel.
+0x9bd9cf9c	string	Richten Sie die Augen an der Brille aus.
+0x9bd9cfc9	string	Richten Sie Ihre Augen an der Karte mit der Brille aus.
+0x9bd9d004	string	%Verlassen
+0x9bd9d01f	string	Kalibrierung fertig!
+0x9bd9d038	string	Fertig
+0x9bd9d04f	string	Kalibrierung
+0x9bd9d060	string	Richten Sie die Augen an der Brille aus.
+0x9bd9d0b3	string	berspringen
+0x9bd9d0cf	string	Kinect-Kalibrierung
+0x9bd9d0e7	string	Fertig
+0x9bd9d0fe	string	Kinect-Kalibrierung
+0x9bd9d1af	string	nnen, besuchen Sie www.xbox.com/support.
+0x9bd9d1d8	string	Richten Sie Ihre Augen an der Karte mit der Brille aus.
+0x9bd9d24c	string	hren Sie die Kalibrierung erneut aus, wenn Sie in einen anderen Raum wechseln.
+0x9bd9d29b	string	Es gibt ein Problem mit Ihrem Kinect Sensor.\r\n\r\nUm das Problem zu beheben, gehen Sie zum Kinect Tuner.
+0x9bd9d37f	string	en. Wirklich beenden?
+0x9bd9d395	string	Kinect-Kalibrierung
+0x9bd9d3d2	string	chten Sie wirklich beenden?
+0x9bd9d3ee	string	Kinect-Kalibrierung
+0x9bd9d402	string	Ihre Kalibrierungseinstellungen werden gespeichert.\r\n\r\nSchalten Sie Ihre Konsole nicht aus und trennen Sie die Verbindung zum Sensor nicht.
+0x9bd9d48e	string	Halten Sie Ihre Kalibrierungskarte bereit.\r\n\r\nWenn Sie bereit sind, wird eine kurze Demo angezeigt.
+0x9bd9d4fe	string	Kinect-Kalibrierung
+0x9bd9d531	string	Ich habe meine Karte
+0x9bd9d54a	string	Ich habe keine Karte
+0x9bd9d575	string	rate...
+0x9bd9d595	string	s listo!
+0x9bd9d5a4	string	Lo has conseguido!
+0x9bd9d5bb	string	Avanza hacia el \r\nsiguiente objetivo.
+0x9bd9d5e5	string	Retrocede para el \r\nsiguiente objetivo.
+0x9bd9d615	string	rcate.
+0x9bd9d63b	string	Alinea los ojos con las gafas.
+0x9bd9d65e	string	Alinea los ojos de la cartulina con las gafas.
+0x9bd9d690	string	%Salir
+0x9bd9d6b2	string	n completa
+0x9bd9d6c1	string	Listo
+0x9bd9d6da	string	mo calibrar Kinect
+0x9bd9d6f1	string	Alinea los ojos con las gafas.
+0x9bd9d716	string	Conseguido!
+0x9bd9d726	string	Omitir
+0x9bd9d748	string	n de Kinect
+0x9bd9d758	string	Listo
+0x9bd9d779	string	n de Kinect
+0x9bd9d7f0	string	n.\r\n\r\nSi no encuentras la tarjeta, visita http://www.xbox.com/support.
+0x9bd9d837	string	Alinea los ojos de la cartulina con las gafas.
+0x9bd9d8da	string	Hay un problema con el sensor de Kinect.\r\n\r\nPara resolverlo, abre el configurador de Kinect.
+0x9bd9d9ad	string	s seguro de que quieres salir de todas formas?
+0x9bd9d9e7	string	n de Kinect
+0x9bd9da1b	string	s seguro de que quieres salir?
+0x9bd9da45	string	n de Kinect
+0x9bd9da7b	string	n.\r\n\r\nNo apagues la consola ni desconectes el sensor.
+0x9bd9db06	string	s una demo breve.
+0x9bd9db2f	string	n de Kinect
+0x9bd9db3e	string	\rSeleccionar
+0x9bd9db5a	string	Tengo mi tarjeta
+0x9bd9db6f	string	No tengo tarjeta
+0x9bd9dbd3	string	Avancer pour la cible\r\nsuivante
+0x9bd9dbf7	string	Reculez pour la cible\r\nsuivante
+0x9bd9dc1b	string	Approchez-vous.
+0x9bd9dc3c	string	Alignez les yeux sur les lunettes.
+0x9bd9dc63	string	Alignez les yeux sur la carte avec les lunettes.
+0x9bd9dc97	string	%Quitter
+0x9bd9dce1	string	Comment calibrer
+0x9bd9dcf6	string	Alignez les yeux sur les lunettes.
+0x9bd9dd2d	string	Ignorer
+0x9bd9dd45	string	Calibrage de Kinect
+0x9bd9dd76	string	Calibrage de Kinect
+0x9bd9dd8e	string	Retour
+0x9bd9dda4	string	\nLa carte de calibrage est fournie avec le capteur Kinect.\r\n\r\nSi vous ne trouvez pas la carte, rendez-vous sur www.xbox.com/support.
+0x9bd9de29	string	Alignez les yeux sur la carte avec les lunettes.
+0x9bd9def8	string	me, allez dans le calibrage Kinect.
+0x9bd9dfb5	string	Calibrage de Kinect
+0x9bd9e00c	string	Calibrage de Kinect
+0x9bd9e079	string	branchez le capteur.
+0x9bd9e10b	string	monstration.
+0x9bd9e124	string	Calibrage de Kinect
+0x9bd9e13f	string	lectionner
+0x9bd9e14e	string	Retour
+0x9bd9e15d	string	ai ma carte
+0x9bd9e174	string	ai pas de carte
+0x9bd9e193	string	\nPreparati...
+0x9bd9e1a5	string	Ce l'hai fatta! Hai finito!
+0x9bd9e1c5	string	Operazione completata
+0x9bd9e1df	string	Per l'obiettivo successivo, \r\nvai avanti.
+0x9bd9e20d	string	Per l'obiettivo successivo, \r\nspostati indietro.
+0x9bd9e242	string	Avvicinati.
+0x9bd9e252	string	Spostati indietro.
+0x9bd9e269	string	Allinea gli occhi agli occhiali.
+0x9bd9e28e	string	Allinea gli occhi sulla scheda con gli occhiali.
+0x9bd9e2d8	string	Taratura completata
+0x9bd9e2f0	string	Fatto
+0x9bd9e306	string	Come tarare il sensore
+0x9bd9e321	string	Allinea gli occhi agli occhiali.
+0x9bd9e346	string	Complimenti!
+0x9bd9e357	string	Salta
+0x9bd9e36d	string	Taratura Kinect
+0x9bd9e381	string	Fatto
+0x9bd9e397	string	Taratura Kinect
+0x9bd9e3ab	string	Indietro
+0x9bd9e3c3	string	\nIl gioco fornito con il sensore Kinect include una scheda di taratura.\r\n\r\nSe non trovi la scheda, visita il sito www.xbox.com/support.
+0x9bd9e44b	string	Allinea gli occhi sulla scheda con gli occhiali.
+0x9bd9e49d	string	 terminata.\r\n\r\nSe ti sposti in un'altra stanza, ripeti la taratura.
+0x9bd9e4e6	string	 verificato un problema con il tuo sensore Kinect.\r\n\r\nPer risolvere il problema, accedi al sintonizzatore Kinect.
+0x9bd9e558	string	Le informazioni disponibili sono sufficienti per tarare il sensore, ma devi completare tutti i passaggi di taratura. Uscire comunque?
+0x9bd9e5de	string	Taratura Kinect
+0x9bd9e600	string	 terminata. Sei sicuro di voler uscire?
+0x9bd9e628	string	Taratura Kinect
+0x9bd9e638	string	Salvataggio delle impostazioni di taratura.\r\n\r\nNon spegnere la console o scollegare il sensore.
+0x9bd9e6ee	string	 mostrata una breve dimostrazione.
+0x9bd9e71d	string	Taratura Kinect
+0x9bd9e730	string	\rSeleziona
+0x9bd9e73f	string	Indietro
+0x9bd9e74c	string	Ho la mia scheda
+0x9bd9e761	string	Non trovo la scheda
+0x9bd9f560	string	To wszystko!\r\nGotowe!
+0x9bd9f586	string	Kolejny cel.
+0x9bd9f5a2	string	 do nast. celu.
+0x9bd9f5f7	string	Ustaw w jednej linii oczy na karcie z okularami.
+0x9bd9f6d0	string	Kalibracja sensora Kinect
+0x9bd9f705	string	Kalibracja sensora Kinect
+0x9bd9f7c5	string	: http://www.xbox.com/support.
+0x9bd9f7e4	string	Ustaw w jednej linii oczy na karcie z okularami.
+0x9bd9f86b	string	li przeniesiesz go do innego pomieszczenia.
+0x9bd9f8dc	string	 do kalibratora Kinect.
+0x9bd9f994	string	Kalibracja sensora Kinect
+0x9bd9f9ea	string	Kalibracja sensora Kinect
+0x9bd9fa4e	string	czaj sensora.
+0x9bd9faca	string	 demonstracyjny.
+0x9bd9fae7	string	Kalibracja sensora Kinect
+0x9bd9fb31	string	Nie mam karty
+0x9bd9fb4e	string	\nPrepare-se...
+0x9bd9fb88	string	 conseguiu!
+0x9bd9fbac	string	ximo destino.
+0x9bd9fbdd	string	ximo destino.
+0x9bd9fbef	string	Chegue mais perto.
+0x9bd9fc33	string	culos.
+0x9bd9fc4e	string	o na altura dos olhos.
+0x9bd9fcb3	string	Como Calibrar
+0x9bd9fcde	string	culos.
+0x9bd9fce9	string	Sucesso!
+0x9bd9fcf6	string	Ignorar
+0x9bd9fd19	string	o do Kinect
+0x9bd9fd4f	string	o do Kinect
+0x9bd9fd5f	string	Voltar
+0x9bd9fde8	string	o, visite http://www.xbox.com/support.\r\n    
+0x9bd9fe25	string	o na altura dos olhos.
+0x9bd9fe96	string	-lo para um outro ambiente.\r\n
+0x9bd9fef3	string	 para o Sintonizador do Kinect.\r\n    
+0x9bd9ff89	string	o. Tem certeza que deseja sair?
+0x9bd9ffb4	string	o do Kinect
+0x9bd9ffe4	string	da. Deseja sair assim mesmo?
+0x9bda000c	string	o do Kinect
+0x9bda004b	string	o desligue seu console ou desconecte o sensor.
+0x9bda0112	string	o do Kinect
+0x9bda0121	string	\rSelecionar
+0x9bda0131	string	Voltar
+0x9bda0415	string	 Kinect
+0x9bda0452	string	 Kinect
+0x9bda056e	string	 www.xbox.com/support.
+0x9bda073d	string	 Kinect.
+0x9bda0822	string	 Kinect
+0x9bda0893	string	 Kinect
+0x9bda0a07	string	 Kinect

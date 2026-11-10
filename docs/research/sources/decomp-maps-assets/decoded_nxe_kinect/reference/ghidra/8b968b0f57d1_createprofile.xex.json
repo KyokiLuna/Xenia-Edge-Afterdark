@@ -1,0 +1,18 @@
+{
+  "module": "createprofile.xex",
+  "program": "8b968b0f57d1_createprofile.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "3cfbcb0191047296666ffd2f78bcfa97945c4dcddc37d82c32904c4d05847e31",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 305,
+  "calls": 609,
+  "strings": 160,
+  "string_xrefs": 71,
+  "independent_sha256": "3cfbcb0191047296666ffd2f78bcfa97945c4dcddc37d82c32904c4d05847e31",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

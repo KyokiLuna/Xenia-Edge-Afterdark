@@ -16,6 +16,7 @@
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -23,6 +24,7 @@
 
 #include "xenia/base/memory.h"
 #include "xenia/base/mutex.h"
+#include "xenia/base/physical_range_leases.h"
 #include "xenia/cpu/mmio_handler.h"
 #include "xenia/guest_pointers.h"
 namespace xe {
@@ -355,6 +357,15 @@ class PhysicalHeap : public BaseHeap {
                   uint32_t alignment, uint32_t allocation_type,
                   uint32_t protect, bool top_down,
                   uint32_t* out_address) override;
+  // Real physical allocation with an opaque host owner, recorded atomically
+  // before returning the alias. The default AllocRange path stays untagged.
+  bool AllocRangeOwned(uint32_t low_address, uint32_t high_address,
+                       uint32_t size, uint32_t alignment,
+                       uint32_t allocation_type, uint32_t protect,
+                       bool top_down,
+                       const memory::PhysicalAllocationOwner& owner,
+                       uint32_t* out_address,
+                       uint64_t* out_allocation_id = nullptr);
   bool AllocSystemHeap(uint32_t size, uint32_t alignment,
                        uint32_t allocation_type, uint32_t protect,
                        bool top_down, uint32_t* out_address) override;
@@ -467,6 +478,15 @@ class PhysicalHeap : public BaseHeap {
   }
 
  protected:
+  friend class Memory;
+  bool AllocRangeInternal(uint32_t low_address, uint32_t high_address,
+                          uint32_t size, uint32_t alignment,
+                          uint32_t allocation_type, uint32_t protect,
+                          bool top_down, uint32_t* out_address,
+                          const memory::PhysicalAllocationOwner* owner,
+                          uint64_t* out_allocation_id);
+  bool ReleaseLocked(uint32_t base_address, uint32_t* out_region_size,
+                     global_unique_lock_type global_lock);
   VirtualHeap* parent_heap_;
 
   uint32_t system_page_size_;
@@ -511,8 +531,9 @@ class Memory {
   // mapping to the file system fails.
   bool Initialize();
 
-  // Resets all memory to zero and resets all allocations.
-  void Reset();
+  // Refuses before changing any heap if an owned physical range is pinned.
+  // A reset never restores serialized host allocation authority.
+  bool Reset();
 
   // Full file name and path of the memory-mapped file backing all memory.
   const std::filesystem::path& file_name() const { return file_name_; }
@@ -844,6 +865,14 @@ class Memory {
   // Gets the physical base heap.
   VirtualHeap* GetPhysicalHeap();
 
+  memory::PhysicalRangePinResult PinOwnedPhysicalRanges(
+      const memory::PhysicalAllocationOwner& owner,
+      std::span<const memory::PhysicalRange> ranges);
+  // Explicit first-boundary refusal: kPinned performs no mutation and queues
+  // no implicit free. The owner retries after strict GPU retirement.
+  memory::PhysicalLeaseStatus ReleaseOwnedPhysicalAllocation(
+      const memory::PhysicalAllocationOwner& owner, uint64_t allocation_id);
+
   void GetHeapsPageStatsSummary(const BaseHeap* const* provided_heaps,
                                 size_t heaps_count, uint32_t& unreserved_pages,
                                 uint32_t& reserved_pages, uint32_t& used_pages,
@@ -1136,6 +1165,17 @@ class Memory {
   friend class BaseHeap;
 
   friend class PhysicalHeap;
+  bool CanMutatePhysicalRangeLocked(const BaseHeap& heap, uint32_t address,
+                                    uint32_t length) const;
+  void ForgetPhysicalRangeLocked(const BaseHeap& heap, uint32_t address,
+                                 uint32_t length);
+  uint64_t RegisterOwnedPhysicalAllocationLocked(
+      const memory::PhysicalAllocationOwner& owner, uint32_t virtual_address,
+      uint32_t physical_address, uint32_t actual_size);
+  bool LookupOwnedPhysicalAllocationLocked(
+      uint32_t physical_address,
+      memory::PhysicalAllocationIdentity* identity) const;
+  memory::PhysicalRangeLeaseRegistry physical_range_leases_;
   xe::global_critical_region global_critical_region_;
   std::vector<std::pair<PhysicalMemoryInvalidationCallback, void*>*>
       physical_memory_invalidation_callbacks_;

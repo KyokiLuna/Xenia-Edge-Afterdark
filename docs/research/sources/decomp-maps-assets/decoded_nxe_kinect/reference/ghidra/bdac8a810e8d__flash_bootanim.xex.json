@@ -1,0 +1,18 @@
+{
+  "module": "$flash_bootanim.xex",
+  "program": "bdac8a810e8d__flash_bootanim.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "b268bc1f3104d3e9df03888f8bbdd6023974928fbf75d91730aef57cf66db182",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x98000400",
+  "functions": 802,
+  "calls": 2762,
+  "strings": 111,
+  "string_xrefs": 30,
+  "independent_sha256": "6f134d465d5646a81d5878ccfdd14bc74295904a3af7406cdadf31643c73f8b1",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

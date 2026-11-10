@@ -1,0 +1,102 @@
+va	data_type	text
+0x9f100590	string	\System??
+0x9f10059c	string	rsrc0000
+0x9f1005a8	string	rsrc0001
+0x9f1005e4	string	\Device\Flash
+0x9f1005f4	string	xboxkrnl.exe
+0x9f10064c	string	\Device\Flash
+0x9f10065c	string	\System??\TARGET:
+0x9f100670	string	\??\TARGET:
+0x9f10068b	string	p\Device\Mass2
+0x9f10069c	string	\Device\Mass1
+0x9f1006ac	string	\Device\Mass0
+0x9f1054a0	string	xam.xex
+0x9f1054b0	string	\Device\Cdrom0
+0x9f1054c0	string	\System??\TARGET:\oddupd%d.xex
+0x9f1054f0	string	PLDS    DG-16D4S        9504
+0x9f105510	string	PLDS    DG-16D4S        J504
+0x9f105570	string	PLDS    DG-16D2S        9345
+0x9f1055b0	string	SATA    DVD-ROM         6243
+0x9f1055d0	string	TSSTcorpDVD-ROM TS-H943Ams25
+0x9f1055f0	string	TSSTcorpDVD-ROM TS-H943Ams28
+0x9f105610	string	\Device\Harddisk0\Partition1\$SystemUpdate
+0x9f10563c	string	\System??
+0x9f105648	string	\System??\SOURCE:
+0x9f10565c	string	\??\SOURCE:
+0x9f105668	string	xboxupd.bin
+0x9f105674	string	sysupdate.xex
+0x9f105684	string	crl.bin
+0x9f10568c	string	dae.bin
+0x9f1056a2	string	V\TARGET:\
+0x9f1056b0	string	SOURCE:\$flash_
+0x9f1056c0	string	SOURCE:\%s
+0x9f1056cc	string	TARGET:\secdata.bin
+0x9f1056e0	string	TARGET:\crl.bin
+0x9f1056f0	string	TARGET:\dae.bin
+0x9f105718	string	\Device\BuiltInMu
+0x9f10572c	string	\Device\Mass
+0x9f10574c	string	\Device\FileSystemExt
+0x9f105770	string	\Device\Harddisk
+0x9f105784	string	\Device\CdRom
+0x9f105794	string	\System??\TARGET:\updatedata.bin
+0x9f1057f0	string	TSSTcorpDVD-ROM TS-H943Ams28
+0x9f105810	string	TSSTcorpDVD-ROM TS-H943Ams25
+0x9f105830	string	ms28p2f9
+0x9f10583c	string	ms28p1f9
+0x9f105848	string	ms25p2f9
+0x9f105854	string	ms25p1f9
+0x9f105860	string	\Device\Cdrom0
+0x9f10588f	string	@\Device\Cdrom0
+0x9f1058b4	string	voicemail.xex
+0x9f1058c4	string	marketplace.xex
+0x9f1058d4	string	quickchat.xex
+0x9f1058e4	string	friends.xex
+0x9f1058f0	string	feedback.xex
+0x9f10590c	string	xenonjklatin.xtt
+0x9f105920	string	xenonclatin.xtt
+0x9f105930	string	SegoeXbox-Light.xtt
+0x9f105950	string	oddupd2.xex
+0x9f105968	string	updatedata.bin
+0x9f105978	string	systemupdate.xex
+0x9f10598c	string	systemupdate2pre.xex
+0x9f1059ac	string	updater.xex
+0x9f1059b8	string	signin.xex
+0x9f1059c4	string	minimediaplayer.xex
+0x9f1059d8	string	gamerprofile.xex
+0x9f1059ec	string	deviceselector.xex
+0x9f105a0c	string	createprofile.xex
+0x9f105a20	string	sysupdate.xex
+0x9f105a30	string	ximedic.xex
+0x9f105a3c	string	ximecore.xex
+0x9f105a78	string	mfgbootlauncher.xex
+0x9f105a8c	string	huduiskin.xex
+0x9f105aa4	string	bootanim.xex
+0x9f105ab4	string	aac.xex
+0x9f105f30	string	%s%s%s%s
+0x9f105f40	string	\Device\CdRom0
+0x9f105f6c	string	PLDSSATA    
+0x9f106fa0	string	\Device\CdRom0
+0x9f107028	string	\Device\CdRom0
+0x9f107038	string	HH:mm:ss
+0x9f107044	string	dddd, MMMM dd, yyyy
+0x9f107058	string	MM/dd/yy
+0x9f10706c	string	December
+0x9f107078	string	November
+0x9f107084	string	October
+0x9f10708c	string	September
+0x9f107098	string	August
+0x9f1070b0	string	April
+0x9f1070b8	string	March
+0x9f1070c0	string	February
+0x9f1070cc	string	January
+0x9f107104	string	Saturday
+0x9f107110	string	Friday
+0x9f107118	string	Thursday
+0x9f107124	string	Wednesday
+0x9f107130	string	Tuesday
+0x9f107138	string	Monday
+0x9f107140	string	Sunday
+0x9f107970	string	SunMonTueWedThuFriSat
+0x9f107988	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x9f1079c8	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\update\pass1\extender\console\obj\xbox\sysupd1ec.pdb
+0x9f114030	string	installsu.dll

@@ -25,6 +25,22 @@ class SvodContainerDevice : public XContentContainerDevice {
                       const std::filesystem::path& host_path);
   ~SvodContainerDevice() override;
 
+  std::optional<std::vector<filesystem::GuestHostBacking>> GuestBackings()
+      const override {
+    if (host_path_.empty() || files_.size() > 1023) {
+      return std::nullopt;
+    }
+    std::vector<filesystem::GuestHostBacking> result{{host_path_, false}};
+    for (const auto& [index, file] : files_) {
+      std::error_code error;
+      const auto info = file->QueryInfo(error);
+      if (!info || !info->regular) {
+        return std::nullopt;
+      }
+      result.push_back({file->path(), false, *info});
+    }
+    return result;
+  }
   bool is_read_only() const override { return true; }
 
   bool supports_concurrent_io() const override { return true; }

@@ -1,0 +1,18 @@
+{
+  "module": "Guide.CSVTrans.xex",
+  "program": "1023bdddf98b_Guide.CSVTrans.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "7b76d75332ffa9d12738cea5f1acaeba5cdd2021fd346155e9fb27ca88f7e21c",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 184,
+  "calls": 344,
+  "strings": 92,
+  "string_xrefs": 77,
+  "independent_sha256": "7b76d75332ffa9d12738cea5f1acaeba5cdd2021fd346155e9fb27ca88f7e21c",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

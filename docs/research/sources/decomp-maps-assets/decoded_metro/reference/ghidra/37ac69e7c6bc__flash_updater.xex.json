@@ -1,0 +1,18 @@
+{
+  "module": "packages/su20076000_00000000/$flash_updater.xex",
+  "program": "37ac69e7c6bc__flash_updater.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "c7fac2b1fcde6c1e665e0facf0d2f106062f069dff079be676312b80969612a3",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 249,
+  "calls": 440,
+  "strings": 69,
+  "string_xrefs": 59,
+  "independent_sha256": "dd26a2764bd60697faba8bf3d6c5b2b22d640cd5bb65e79d8d1d02bc6d051bdd",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

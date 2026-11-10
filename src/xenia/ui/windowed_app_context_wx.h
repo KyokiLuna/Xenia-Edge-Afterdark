@@ -10,6 +10,9 @@
 #ifndef XENIA_UI_WINDOWED_APP_CONTEXT_WX_H_
 #define XENIA_UI_WINDOWED_APP_CONTEXT_WX_H_
 
+#include <string>
+#include <string_view>
+
 #include <wx/wx.h>
 
 #include "xenia/base/platform.h"
@@ -27,6 +30,13 @@ class WxWindowedAppContext final : public WindowedAppContext {
   WxWindowedAppContext();
   ~WxWindowedAppContext();
 
+  // UI startup only, before the application creates any windows. Own the
+  // desktop ID independently of wxApp's persistent configuration name.
+  void SetDesktopId(std::string_view desktop_id) {
+    desktop_id_.assign(desktop_id);
+  }
+  const std::string& desktop_id() const { return desktop_id_; }
+
 #if XE_PLATFORM_WIN32
   HINSTANCE hinstance() const { return hinstance_; }
 #endif
@@ -35,6 +45,8 @@ class WxWindowedAppContext final : public WindowedAppContext {
   void PlatformQuitFromUIThread() override;
 
  private:
+  std::string desktop_id_;
+
 #if XE_PLATFORM_WIN32
   HINSTANCE hinstance_ = nullptr;
 #endif

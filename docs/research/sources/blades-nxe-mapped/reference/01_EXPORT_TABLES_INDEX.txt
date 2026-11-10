@@ -1,0 +1,29 @@
+Which decoded modules have full ordinal->address export dumps
+===============================================================
+Regenerate with: python3 _tool/build_02_exports.py
+
+Each line below is a module that had a readable XEX export table;
+see reference/exports/<name>.exports.txt for the full ordinal list.
+For xam.xex / $flash_xam.xexp, ordinal names are resolved against
+xenia-edge/src/xenia/kernel/xam/xam_table.inc directly (CONFIRMED).
+Other modules' exports are unnamed (no comparable ordinal database
+exists for them in this corpus) - ordinal + VA only.
+
+$flash_dash.xex  ->  reference/exports/flash_dash.xex.exports.txt  (806 exports)
+$flash_vk.xexp  ->  reference/exports/flash_vk.xexp.exports.txt  (4 exports)
+$flash_xam.xexp  ->  reference/exports/flash_xam.xexp.exports.txt  (1027 exports)
+$install_extender.xex  ->  reference/exports/install_extender.xex.exports.txt  (1 exports)
+LivePack.xex  ->  reference/exports/LivePack.xex.exports.txt  (64 exports)
+bootanim.xex  ->  reference/exports/bootanim.xex.exports.txt  (3 exports)
+createprofile.xex  ->  reference/exports/createprofile.xex.exports.txt  (2 exports)
+dash.xex  ->  reference/exports/dash.xex.exports.txt  (1 exports)
+deviceselector.xex  ->  reference/exports/deviceselector.xex.exports.txt  (3 exports)
+hostloader.dll  ->  reference/exports/hostloader.dll.exports.txt  (1 exports)
+runtime/v3.0/BackCompatShim.xex  ->  reference/exports/runtime__v3.0__BackCompatShim.xex.exports.txt  (3 exports)
+runtime/v3.0/netcfusermode.dll  ->  reference/exports/runtime__v3.0__netcfusermode.dll.exports.txt  (611 exports)
+runtime/v3.0/runtimehost.xex  ->  reference/exports/runtime__v3.0__runtimehost.xex.exports.txt  (2 exports)
+runtime/v3.1/BackCompatShim.xex  ->  reference/exports/runtime__v3.1__BackCompatShim.xex.exports.txt  (3 exports)
+runtime/v3.1/netcfusermode.dll  ->  reference/exports/runtime__v3.1__netcfusermode.dll.exports.txt  (611 exports)
+runtime/v3.1/runtimehost.xex  ->  reference/exports/runtime__v3.1__runtimehost.xex.exports.txt  (2 exports)
+vk.xex  ->  reference/exports/vk.xex.exports.txt  (4 exports)
+xam.xex  ->  reference/exports/xam.xex.exports.txt  (659 exports)

@@ -13,10 +13,8 @@
 #include "xenia/kernel/xam/achievement_manager.h"
 #include "xenia/kernel/xam/xdbf/gpd_info.h"
 #include "xenia/kernel/xam/xdbf/xdbf_io.h"
-
 #include <string>
 #include <vector>
-
 #include "xenia/base/memory.h"
 #include "xenia/base/string_util.h"
 #include "xenia/xbox.h"
@@ -39,9 +37,10 @@ class GpdInfoTitle : public GpdInfo {
   void AddAchievement(const AchievementDetails* header);
 
   X_XDBF_GPD_ACHIEVEMENT* GetAchievementEntry(const uint32_t id);
-  std::u16string GetAchievementTitle(const uint32_t id);
-  std::u16string GetAchievementDescription(const uint32_t id);
-  std::u16string GetAchievementUnachievedDescription(const uint32_t id);
+  const X_XDBF_GPD_ACHIEVEMENT* GetAchievementEntry(uint32_t id) const;
+  std::u16string GetAchievementTitle(const uint32_t id) const;
+  std::u16string GetAchievementDescription(const uint32_t id) const;
+  std::u16string GetAchievementUnachievedDescription(const uint32_t id) const;
 
   uint32_t GetTotalGamerscore() const;
   uint32_t GetGamerscore() const;
@@ -49,7 +48,7 @@ class GpdInfoTitle : public GpdInfo {
   uint32_t GetUnlockedAchievementCount() const;
 
  private:
-  std::u16string GetAchievementString(const uint32_t id, uint32_t index);
+  std::u16string GetAchievementString(const uint32_t id, uint32_t index) const;
 };
 
 }  // namespace xam

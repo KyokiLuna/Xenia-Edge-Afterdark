@@ -144,31 +144,20 @@ jobs:
           chmod +x $binary
           mkdir -p artifacts/xenia_edge
 
-          # Install icons with proper naming for linuxdeploy
-          mkdir -p artifacts/xenia_edge/usr/share/icons/hicolor/16x16/apps
-          mkdir -p artifacts/xenia_edge/usr/share/icons/hicolor/32x32/apps
-          mkdir -p artifacts/xenia_edge/usr/share/icons/hicolor/48x48/apps
-          mkdir -p artifacts/xenia_edge/usr/share/icons/hicolor/64x64/apps
-          mkdir -p artifacts/xenia_edge/usr/share/icons/hicolor/128x128/apps
-          mkdir -p artifacts/xenia_edge/usr/share/icons/hicolor/256x256/apps
-          mkdir -p artifacts/xenia_edge/usr/share/icons/hicolor/512x512/apps
-          mkdir -p artifacts/xenia_edge/usr/share/icons/hicolor/1024x1024/apps
-
-          cp assets/icon/16.png artifacts/xenia_edge/usr/share/icons/hicolor/16x16/apps/xenia_edge.png
-          cp assets/icon/32.png artifacts/xenia_edge/usr/share/icons/hicolor/32x32/apps/xenia_edge.png
-          cp assets/icon/48.png artifacts/xenia_edge/usr/share/icons/hicolor/48x48/apps/xenia_edge.png
-          cp assets/icon/64.png artifacts/xenia_edge/usr/share/icons/hicolor/64x64/apps/xenia_edge.png
-          cp assets/icon/128.png artifacts/xenia_edge/usr/share/icons/hicolor/128x128/apps/xenia_edge.png
-          cp assets/icon/256.png artifacts/xenia_edge/usr/share/icons/hicolor/256x256/apps/xenia_edge.png
-          cp assets/icon/512.png artifacts/xenia_edge/usr/share/icons/hicolor/512x512/apps/xenia_edge.png
-          cp assets/icon/1024.png artifacts/xenia_edge/usr/share/icons/hicolor/1024x1024/apps/xenia_edge.png
+          # Match the Afterdark desktop entry's icon name at every size.
+          for size in 16 24 32 48 64 128 256 512 1024; do
+            icon_dir="artifacts/xenia_edge/usr/share/icons/hicolor/${size}x${size}/apps"
+            mkdir -p "$icon_dir"
+            cp "assets/icon/afterdark/generated/${size}.png" \
+              "$icon_dir/xenia-edge-afterdark.png"
+          done
 
           mkdir -p artifacts/xenia_edge/usr/bin
 
           ~/linuxdeploy/linuxdeploy --appdir artifacts/xenia_edge \
             --executable $binary \
-            --desktop-file assets/xenia_edge.desktop \
-            --icon-file assets/icon/256.png \
+            --desktop-file assets/xenia-edge-afterdark.desktop \
+            --icon-file artifacts/xenia_edge/usr/share/icons/hicolor/256x256/apps/xenia-edge-afterdark.png \
             --output appimage
 
           # linuxdeploy creates the AppImage in the current directory
@@ -186,6 +175,11 @@ jobs:
 
           # Also copy LICENSE
           cp LICENSE artifacts/release/
+          mkdir -p artifacts/release/icon-notices/afterdark
+          cp assets/icon/LICENSE artifacts/release/icon-notices/
+          cp assets/icon/afterdark/README.md \
+            assets/icon/afterdark/PROMPT.md assets/icon/afterdark/PROVENANCE.json \
+            assets/icon/afterdark/DERIVATION.md artifacts/release/icon-notices/afterdark/
       - name: Upload xenia edge artifacts
         if: steps.prepare_artifacts.outcome == 'success'
         uses: actions/upload-artifact@v7

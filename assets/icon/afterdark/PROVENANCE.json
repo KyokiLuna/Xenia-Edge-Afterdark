@@ -1,0 +1,28 @@
+{
+  "name": "Xenia Edge Afterdark",
+  "revision": "material-v2",
+  "created_utc": "2026-11-07T04:13:21.245896+00:00",
+  "method": "built-in image_gen with transparent_background=true; original generated PNG preserved without pixel edits",
+  "tool_output_source": "/home/kyoki/.codex/generated_images/01a1a25a-d070-7be1-8edb-3af627f6da67/exec-4ae7b005-4218-4e2c-a35f-bcde47838b42.png",
+  "file": "afterdark-material-v2.png",
+  "bytes": 1579873,
+  "sha256": "960b1e7c4e71c5b1b1af3bc06d25ce9b41c594d64bb07069302588d02020ee52",
+  "width": 1254,
+  "height": 1254,
+  "actual_image_metadata": "1254x1254 srgba 4.0 False",
+  "license": "CC-BY-SA-4.0; adaptation of repository icon artwork",
+  "upstream_reference": {
+    "repository": "https://github.com/has207/xenia-edge",
+    "path": "assets/icon/256.png",
+    "sha256": "8daf7b92de4f4e54c812ebf013b9938609d4bb1dbfaa1e9ff470e6ad98959b46",
+    "license_path": "../LICENSE",
+    "license_sha256": "6d4e2239c9605f95e1031309e8bd156dec62c55817427655003c57baceafb1e2"
+  },
+  "prior_draft_reference": {
+    "path": "/home/kyoki/.local/state/xenia-edge-research/evidence/hdd-gate/afterdark-branding-private-v1/root-render-v1/256.png",
+    "superseded": true
+  },
+  "creative_direction": "User requested a substantially changed X, older Xbox influence, physical materials and less minimalism. Dark machined processor; sculpted luminous green X.",
+  "prompt_file": "PROMPT.md",
+  "integration_status": "Linux host embedding built. Linux AppImage workflow uses Afterdark icons and desktop entry; finished AppImage acceptance remains pending. Windows and macOS resources are wired but execution is unverified. Original icons and storage defaults are preserved."
+}

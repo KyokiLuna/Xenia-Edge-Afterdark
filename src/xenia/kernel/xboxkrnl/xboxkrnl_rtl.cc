@@ -7,6 +7,7 @@
  ******************************************************************************
  */
 
+#include <cstring>
 #include <cwctype>
 
 #include "xenia/kernel/xboxkrnl/xboxkrnl_rtl.h"
@@ -213,6 +214,27 @@ dword_result_t RtlCompareString_entry(lpvoid_t string_1, lpvoid_t string_2,
       kmem->TranslateVirtual<uint8_t*>(ptr_2), length_2, case_insensitive);
 }
 DECLARE_XBOXKRNL_EXPORT1(RtlCompareString, kNone, kImplemented);
+// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-rtlappendstringtostring
+dword_result_t RtlAppendStringToString_entry(
+    pointer_t<X_ANSI_STRING> destination, pointer_t<X_ANSI_STRING> source) {
+  // Length and MaximumLength count bytes. Keep the sum wide until capacity
+  // admission so a USHORT wrap cannot admit a partial or oversized append.
+  const uint32_t source_length = source->length;
+  const uint32_t destination_length = destination->length;
+  const uint32_t length = destination_length + source_length;
+  if (length > static_cast<uint32_t>(destination->maximum_length)) {
+    return X_STATUS_BUFFER_TOO_SMALL;
+  }
+  if (source_length) {
+    auto dst_buf = kernel_memory()->TranslateVirtual(destination->pointer);
+    auto src_buf = kernel_memory()->TranslateVirtual(source->pointer);
+    std::memmove(dst_buf + destination_length, src_buf, source_length);
+  }
+  destination->length = static_cast<uint16_t>(length);
+  return X_STATUS_SUCCESS;
+}
+DECLARE_XBOXKRNL_EXPORT1(RtlAppendStringToString, kNone, kImplemented);
+
 // https://msdn.microsoft.com/en-us/library/ff561918
 void RtlInitAnsiString_entry(pointer_t<X_ANSI_STRING> destination,
                              lpstring_t source) {
@@ -296,7 +318,7 @@ void RtlCopyUnicodeString_entry(pointer_t<X_UNICODE_STRING> destination,
   if (length > 0) {
     auto dst_buf = kernel_memory()->TranslateVirtual(destination->pointer);
     auto src_buf = kernel_memory()->TranslateVirtual(source->pointer);
-    std::memcpy(dst_buf, src_buf, length * 2);
+    std::memcpy(dst_buf, src_buf, length);
   }
   destination->length = length;
 }

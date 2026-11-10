@@ -1,0 +1,327 @@
+va	data_type	text
+0x9d95071c	unicode	dashLanguageSettings
+0x9d9507f0	unicode	nuifu
+0x9d950800	unicode	controlpack://DashCursorScene.xur
+0x9d950844	unicode	%s%s
+0x9d950856	unicode	DPlayer%u
+0x9d950870	unicode	AvatarAssets/EndSelectCelebration.AvatarAnimation
+0x9d9508d8	unicode	AvatarAssets/ProfileCreationCelebration.AvatarAnimation
+0x9d950948	unicode	AvatarAssets/IdleOffScreen.AvatarAnimation
+0x9d9509a0	unicode	AvatarAssets/Idle_PickMe.AvatarAnimation
+0x9d9509f8	unicode	AvatarAssets/EndFloat.AvatarAnimation
+0x9d950a48	unicode	AvatarAssets/Float.AvatarAnimation
+0x9d950a90	unicode	AvatarAssets/BeginFloat.AvatarAnimation
+0x9d950ae0	unicode	AvatarAssets/RunOutRightToLeft.AvatarAnimation
+0x9d950b40	unicode	AvatarAssets/RunOutLeftToRight.AvatarAnimation
+0x9d950ba0	unicode	AvatarAssets/JumpInRightToLeft.AvatarAnimation
+0x9d950c00	unicode	AvatarAssets/JumpInLeftToRight.AvatarAnimation
+0x9d950c60	unicode	AvatarAssets/WalkInRightToLeft.AvatarAnimation
+0x9d950cc0	unicode	AvatarAssets/WalkInLeftToRight.AvatarAnimation
+0x9d950d20	unicode	AvatarAssets/RunInRightToLeft.AvatarAnimation
+0x9d950d80	unicode	AvatarAssets/RunInLeftToRight.AvatarAnimation
+0x9d950de0	unicode	AvatarAssets/SelectCelebration.AvatarAnimation
+0x9d950e40	unicode	AvatarAssets/Wave.AvatarAnimation
+0x9d950e84	unicode	texture6
+0x9d950e98	unicode	texture5
+0x9d950eac	unicode	texture4
+0x9d950ec0	unicode	texture3
+0x9d950ed4	unicode	texture2
+0x9d950ee8	unicode	texture1
+0x9d950efc	unicode	oobe_texture
+0x9d950f1c	unicode	dashNuiFirstUseStrings.xus
+0x9d950f5c	unicode	Welcome.xur
+0x9d950f94	unicode	nuifu
+0x9d9513f8	unicode	AvatarAssets/GenericUnisex.Avatar
+0x9d95143c	unicode	Front
+0x9d951448	unicode	PlayspaceVisualControl
+0x9d951478	unicode	Welcome
+0x9d951488	unicode	SafetyAnimation
+0x9d9514a8	unicode	ViewCamera
+0x9d9514c0	unicode	HoverTraining
+0x9d9514dc	unicode	AvatarSelect
+0x9d9514f8	unicode	PackInTitle
+0x9d951510	unicode	TrayVisual
+0x9d95152c	unicode	XuiScene
+0x9d951540	unicode	XuiControl
+0x9d951558	unicode	NuiFirstUseBackground.xur
+0x9d95158c	unicode	%s.xur
+0x9d9515a4	unicode	EndTransToScene6
+0x9d9515c8	unicode	TransToScene6
+0x9d9515e4	unicode	EndTransBackToScene5
+0x9d951610	unicode	TransBackToScene5
+0x9d951634	unicode	EndTransToScene5
+0x9d951658	unicode	TransToScene5
+0x9d951674	unicode	EndTransBackToScene4
+0x9d9516a0	unicode	TransBackToScene4
+0x9d9516c4	unicode	EndTransToScene4
+0x9d9516e8	unicode	TransToScene4
+0x9d951704	unicode	EndTransBackToScene3
+0x9d951730	unicode	TransBackToScene3
+0x9d951754	unicode	EndTransToScene3
+0x9d951778	unicode	TransToScene3
+0x9d951794	unicode	EndTransToScene2
+0x9d9517b8	unicode	TransToScene2
+0x9d9517d8	unicode	EndTransToScene1
+0x9d9517fc	unicode	TransToScene1
+0x9d95189c	unicode	ncStart
+0x9d9518ac	unicode	ncEnd
+0x9d9518dc	unicode	animStart
+0x9d9518f0	unicode	animEnd
+0x9d951900	unicode	noControllerAnimation
+0x9d95192c	unicode	legend_y
+0x9d951940	unicode	legend_x
+0x9d951954	unicode	Safety.xur
+0x9d951990	unicode	SafetyPlay
+0x9d9519a8	unicode	SafetyEnd
+0x9d9519c0	unicode	XuiScene1\noControllerAnimation
+0x9d951a00	unicode	ViewCamera.xur
+0x9d951a24	unicode	GreenZoom
+0x9d951a38	unicode	sndDisengage
+0x9d951a54	unicode	sndEngage
+0x9d951a68	unicode	sndWave
+0x9d951a78	unicode	labelSubhead
+0x9d951a94	unicode	PlayspaceVisual
+0x9d951ad8	unicode	BothDotsVanish
+0x9d951af8	unicode	BothDotsVanishEnd
+0x9d951b1c	unicode	BothDotsReset
+0x9d951b38	unicode	BothDotsResetEnd
+0x9d951b5c	unicode	GreenZoomEnd
+0x9d951b78	unicode	HoverTraining.xur
+0x9d951bc0	unicode	_ButtonVisuals/_ReplayBtnVisual/_Slot/_ReplayBtn
+0x9d951c28	unicode	_ButtonVisuals/_ForwardBtnVisual/_Slot/_ForwardBtn
+0x9d951cb0	unicode	AvatarSelect.xur
+0x9d951cf8	unicode	HideLabelsPlay
+0x9d951d18	unicode	HideLabelsStop
+0x9d951d38	unicode	ShowLabelsPlay
+0x9d951d58	unicode	ShowLabelsStop
+0x9d951d78	unicode	Avatar6Label
+0x9d951d94	unicode	Avatar5Label
+0x9d951db0	unicode	Avatar4Label
+0x9d951dcc	unicode	Avatar3Label
+0x9d951de8	unicode	Avatar2Label
+0x9d951e04	unicode	Avatar1Label
+0x9d951e20	unicode	Avatar6Button
+0x9d951e3c	unicode	Avatar5Button
+0x9d951e58	unicode	Avatar4Button
+0x9d951e74	unicode	Avatar3Button
+0x9d951e90	unicode	Avatar2Button
+0x9d951eac	unicode	Avatar1Button
+0x9d951ec8	unicode	Avatar6
+0x9d951ed8	unicode	Avatar5
+0x9d951ee8	unicode	Avatar4
+0x9d951ef8	unicode	Avatar3
+0x9d951f08	unicode	Avatar2
+0x9d951f18	unicode	Avatar1
+0x9d951f28	unicode	btnHoverB
+0x9d951f3c	unicode	LoadingControl
+0x9d951f5c	unicode	RefreshButton
+0x9d951f78	unicode	PackInTitle.xur
+0x9d951fc8	unicode	_ButtonVisuals/_TrayButtonVisual/_Slot/_TrayButton
+0x9d952030	unicode	_ButtonVisuals/_TrayButtonVisual
+0x9d952074	unicode	_ButtonVisuals/Avatar
+0x9d9520ab	string	 Unknown exception
+0x9d9520c7	string	 bad allocation
+0x9d952180	string	e+000
+0x9d95221c	unicode	runtime error 
+0x9d952240	unicode	TLOSS error\n
+0x9d95225c	unicode	SING error\n
+0x9d952274	unicode	DOMAIN error\n
+0x9d952290	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9d952480	unicode	R6032\n- not enough space for locale information\n
+0x9d9524e8	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9d9525ac	unicode	R6030\n- CRT not initialized\n
+0x9d9525e8	unicode	R6028\n- unable to initialize heap\n
+0x9d952630	unicode	R6027\n- not enough space for lowio initialization\n
+0x9d952698	unicode	R6026\n- not enough space for stdio initialization\n
+0x9d952700	unicode	R6025\n- pure virtual function call\n
+0x9d952748	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9d9527b0	unicode	R6019\n- unable to open console device\n
+0x9d952800	unicode	R6018\n- unexpected heap error\n
+0x9d952840	unicode	R6017\n- unexpected multithread lock error\n
+0x9d952898	unicode	R6016\n- not enough space for thread data\n
+0x9d9528f0	unicode	R6010\n- abort() has been called\n
+0x9d952938	unicode	R6009\n- not enough space for environment\n
+0x9d952990	unicode	R6008\n- not enough space for arguments\n
+0x9d9529e0	unicode	R6002\n- floating point support not loaded\n
+0x9d952ae8	unicode	HH:mm:ss
+0x9d952afc	unicode	dddd, MMMM dd, yyyy
+0x9d952b24	unicode	MM/dd/yy
+0x9d952b48	unicode	December
+0x9d952b5c	unicode	November
+0x9d952b70	unicode	October
+0x9d952b80	unicode	September
+0x9d952b94	unicode	August
+0x9d952ba4	unicode	July
+0x9d952bb0	unicode	June
+0x9d952bbc	unicode	April
+0x9d952bc8	unicode	March
+0x9d952bd4	unicode	February
+0x9d952be8	unicode	January
+0x9d952c58	unicode	Saturday
+0x9d952c6c	unicode	Friday
+0x9d952c7c	unicode	Thursday
+0x9d952c90	unicode	Wednesday
+0x9d952ca4	unicode	Tuesday
+0x9d952cb4	unicode	Monday
+0x9d952cc4	unicode	Sunday
+0x9d952d0c	string	HH:mm:ss
+0x9d952d18	string	dddd, MMMM dd, yyyy
+0x9d952d2c	string	MM/dd/yy
+0x9d952d40	string	December
+0x9d952d4c	string	November
+0x9d952d58	string	October
+0x9d952d60	string	September
+0x9d952d6c	string	August
+0x9d952d84	string	April
+0x9d952d8c	string	March
+0x9d952d94	string	February
+0x9d952da0	string	January
+0x9d952dd8	string	Saturday
+0x9d952de4	string	Friday
+0x9d952dec	string	Thursday
+0x9d952df8	string	Wednesday
+0x9d952e04	string	Tuesday
+0x9d952e0c	string	Monday
+0x9d952e14	string	Sunday
+0x9d952e38	unicode	(null)
+0x9d95373c	string	1#QNAN
+0x9d953744	string	1#INF
+0x9d95374c	string	1#IND
+0x9d953754	string	1#SNAN
+0x9d95375c	string	 Complete Object Locator'
+0x9d953778	string	 Class Hierarchy Descriptor'
+0x9d953798	string	 Base Class Array'
+0x9d9537ac	string	 Base Class Descriptor at (
+0x9d9537c8	string	 Type Descriptor'
+0x9d9537dc	string	`local static thread guard'
+0x9d9537f8	string	`managed vector copy constructor iterator'
+0x9d953824	string	`vector vbase copy constructor iterator'
+0x9d953850	string	`vector copy constructor iterator'
+0x9d953874	string	`dynamic atexit destructor for '
+0x9d953898	string	`dynamic initializer for '
+0x9d9538b4	string	`eh vector vbase copy constructor iterator'
+0x9d9538e0	string	`eh vector copy constructor iterator'
+0x9d953908	string	`managed vector destructor iterator'
+0x9d953930	string	`managed vector constructor iterator'
+0x9d953958	string	`placement delete[] closure'
+0x9d953978	string	`placement delete closure'
+0x9d953994	string	`omni callsig'
+0x9d9539a4	string	 delete[]
+0x9d9539b0	string	 new[]
+0x9d9539b8	string	`local vftable constructor closure'
+0x9d9539dc	string	`local vftable'
+0x9d9539ec	string	`RTTI
+0x9d9539f8	string	`udt returning'
+0x9d953a08	string	`copy constructor closure'
+0x9d953a24	string	`eh vector vbase constructor iterator'
+0x9d953a4c	string	`eh vector destructor iterator'
+0x9d953a6c	string	`eh vector constructor iterator'
+0x9d953a90	string	`virtual displacement map'
+0x9d953aac	string	`vector vbase constructor iterator'
+0x9d953ad0	string	`vector destructor iterator'
+0x9d953af0	string	`vector constructor iterator'
+0x9d953b10	string	`scalar deleting destructor'
+0x9d953b30	string	`default constructor closure'
+0x9d953b50	string	`vector deleting destructor'
+0x9d953b70	string	`vbase destructor'
+0x9d953b84	string	`string'
+0x9d953b90	string	`local static guard'
+0x9d953ba8	string	`typeof'
+0x9d953bb4	string	`vcall'
+0x9d953bbc	string	`vbtable'
+0x9d953bc8	string	`vftable'
+0x9d953c50	string	operator
+0x9d953c78	string	 delete
+0x9d953c88	string	__unaligned
+0x9d953c94	string	__restrict
+0x9d953ca0	string	__ptr64
+0x9d953ca8	string	__eabi
+0x9d953cb0	string	__clrcall
+0x9d953cbc	string	__fastcall
+0x9d953cc8	string	__thiscall
+0x9d953cd4	string	__stdcall
+0x9d953ce0	string	__pascal
+0x9d953cec	string	__cdecl
+0x9d953cf4	string	__based(
+0x9d954314	unicode	ViewCamera/Shadow.png
+0x9d954340	unicode	ViewCamera/UserArrow.png
+0x9d9543a3	string	^E:\bt\248805\core\private\xam\common\tsoobeshared\controls\dash\obj\xbox\DepthPixelShader.updb
+0x9d954488	string	DepthColorMap
+0x9d9544a8	string	c_DepthScaleFactor
+0x9d9544cc	string	myTexture
+0x9d9544d6	string	oldTexture1
+0x9d9544e2	string	oldTexture2
+0x9d95475b	string	eE:\bt\248805\core\private\xam\common\tsoobeshared\controls\dash\obj\xbox\PerspectiveVertexShader.updb
+0x9d95490b	string	cE:\bt\248805\core\private\xam\common\tsoobeshared\controls\dash\obj\xbox\IsometricVertexShader.updb
+0x9d954a8b	string	aE:\bt\248805\core\private\xam\common\tsoobeshared\controls\dash\obj\xbox\TexturedPixelShader.updb
+0x9d954b24	string	myTexture
+0x9d954c00	unicode	sharedres://ico_32x_ConsoleTypeWinPC.png
+0x9d954c58	unicode	sharedres://ico_32x_ConsoleTypeXenon.png
+0x9d954cb0	unicode	sharedres://ico_32x_ConsoleTypeXbox.png
+0x9d954d00	unicode	sharedres://secretAchievement.png
+0x9d954d48	unicode	sharedres://unearnedAchievement.png
+0x9d954d90	unicode	sharedres://ico_32x_Zone_Underground.png
+0x9d954de8	unicode	sharedres://ico_32x_Zone_Family.png
+0x9d954e30	unicode	sharedres://ico_32x_Zone_Pro.png
+0x9d954e78	unicode	sharedres://ico_32x_Zone_RR.png
+0x9d954f30	string	deviceselector.xex
+0x9d954f4c	unicode	TV-MA
+0x9d954f58	unicode	TV-14
+0x9d954f64	unicode	TV-PG
+0x9d954f70	unicode	TV-G
+0x9d954f7c	unicode	TV-Y7-FV
+0x9d954f90	unicode	TV-Y7
+0x9d954f9c	unicode	TV-Y
+0x9d954fb4	unicode	NC-17
+0x9d954fc4	unicode	PG-13
+0x9d954fe4	unicode	EXPLICIT
+0x9d954ff8	unicode	USTV
+0x9d955004	unicode	MPAA
+0x9d955010	string	/vm_ems/DetailsPages/RatingsDescriptorIcons/
+0x9d955040	string	/vm_ems/DetailsPages/RatingIcons/
+0x9d9550b8	unicode	sharedres://LiveProfile.xus
+0x9d9550f0	unicode	sharedres://LiveAll.xus
+0x9d955388	string	_nextafter
+0x9d9553e0	string	floor
+0x9d955468	string	e:\bt\248805\core\private\xam\dash\apps\nuifirstuse\src\obj\xbox\dash.NuiFirstUse.pdb
+0x9d972088	string	.?AVbad_alloc@std@@
+0x9d9720a4	string	.?AVexception@std@@
+0x9d9729e9	string	abcdefghijklmnopqrstuvwxyz
+0x9d972a09	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9d97505e	string	dash.NuiFirstUse.xex
+0x9d975073	string	CallProcessNuiFrameData
+0x9d97508b	string	CreateDashAppInstance
+0x9d9750a1	string	RegisterDashNuiFrameCallback
+0x9d9750be	string	SetUseMockXamApis
+0x9d9750d0	string	WaveForward
+0x9d976000	string	inue_wtext.png
+0x9d976017	string	AvatarSelect.xur
+0x9d976030	string	ja-jp\AvatarSelect.xus
+0x9d97604e	string	 ja-jp\dashNuiFirstUseStrings.xus
+0x9d976078	string	ja-jp\hovertraining.xus
+0x9d976098	string	ja-jp\NuiFirstUseBackground.xus
+0x9d9760c0	string	ja-jp\packintitle.xus
+0x9d9760de	string	ja-jp\safety.xus
+0x9d9760f7	string	ja-jp\viewcamera.xus
+0x9d976114	string	ja-jp\welcome.xus
+0x9d97612e	string	zh-tw\AvatarSelect.xus
+0x9d97614b	string	' zh-tw\dashNuiFirstUseStrings.xus
+0x9d976176	string	zh-tw\hovertraining.xus
+0x9d976196	string	zh-tw\NuiFirstUseBackground.xus
+0x9d9761be	string	zh-tw\packintitle.xus
+0x9d9761dc	string	zh-tw\safety.xus
+0x9d9761f5	string	zh-tw\viewcamera.xus
+0x9d976212	string	zh-tw\welcome.xus
+0x9d97622c	string	de-de\AvatarSelect.xus
+0x9d976249	string	Q de-de\dashNuiFirstUseStrings.xus
+0x9d976274	string	de-de\hovertraining.xus
+0x9d976294	string	de-de\NuiFirstUseBackground.xus
+0x9d9762bc	string	de-de\packintitle.xus
+0x9d9762da	string	de-de\safety.xus
+0x9d9762f3	string	de-de\viewcamera.xus
+0x9d976310	string	de-de\welcome.xus
+0x9d97632a	string	es-es\AvatarSelect.xus
+0x9d976347	string	7 es-es\dashNuiFirstUseStrings.xus
+0x9d976372	string	es-es\hovertraining.xus
+0x9d976392	string	es-es\NuiFirstUseBackground.xus
+0x9d9763ba	string	es-es\packintitle.xus

@@ -14,7 +14,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-
 #include "xenia/kernel/xam/achievement_manager.h"
 #include "xenia/kernel/xam/xdbf/gpd_info.h"
 #include "xenia/xbox.h"
@@ -37,7 +36,7 @@ class GpdAchievementBackend : public AchievementBackendInterface {
       const uint32_t achievement_id) const override;
   const std::vector<Achievement> GetTitleAchievements(
       const uint64_t xuid, const uint32_t title_id) const override;
-  const std::span<const uint8_t> GetAchievementIcon(
+  std::vector<uint8_t> GetAchievementIcon(
       const uint64_t xuid, const uint32_t title_id,
       const uint32_t achievement_id) const override;
   bool LoadAchievementsData(const uint64_t xuid) override;

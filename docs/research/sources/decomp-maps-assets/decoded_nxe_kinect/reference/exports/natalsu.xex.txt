@@ -1,0 +1,4 @@
+natalsu.xex exports
+===================
+
+{"confidence": "CONFIRMED", "function_va": "0x980013F0", "module": "natalsu.xex", "ordinal": "0x00000001", "resolved_name": ""}

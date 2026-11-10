@@ -601,6 +601,16 @@ void Window::OnKeyChar(KeyEvent& e,
   }
 }
 
+void Window::OnTextInput(TextInputEvent& e,
+                         WindowDestructionReceiver& destruction_receiver) {
+  PropagateEventThroughInputListeners(
+      [&e](auto listener) {
+        listener->OnTextInput(e);
+        return e.is_handled();
+      },
+      destruction_receiver);
+}
+
 void Window::OnMouseDown(MouseEvent& e,
                          WindowDestructionReceiver& destruction_receiver) {
   PropagateEventThroughInputListeners(

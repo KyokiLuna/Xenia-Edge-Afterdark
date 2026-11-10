@@ -1,0 +1,19 @@
+{
+  "module": "dash.ClosedCaptionDll.xex",
+  "program": "7fbe943628cd_dash.ClosedCaptionDll.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "d5137f1c246afc8da3647fea9da72026950d0def4c9a0c2426bbdbdbdb29a608",
+  "import_envelope_version": 2,
+  "import_mode": "flat_image_fallback",
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9a9e0000",
+  "functions": 7915,
+  "calls": 24556,
+  "strings": 1485,
+  "string_xrefs": 3015,
+  "independent_sha256": "d5137f1c246afc8da3647fea9da72026950d0def4c9a0c2426bbdbdbdb29a608",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

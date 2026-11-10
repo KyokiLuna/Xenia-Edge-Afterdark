@@ -9,9 +9,12 @@
 
 #include "xenia/kernel/xam/xam_state.h"
 #include "xenia/emulator.h"
+#include "xenia/vfs/installed_system_source.h"
 #include "xenia/vfs/virtual_file_system.h"
-
 #include "third_party/fmt/include/fmt/format.h"
+
+DECLARE_bool(mount_memory_unit);
+DECLARE_path(managed_device_state_root);
 
 namespace xe {
 namespace kernel {
@@ -25,12 +28,64 @@ XamState::XamState(Emulator* emulator, KernelState* kernel_state)
   if (!content_root.empty()) {
     content_root = std::filesystem::absolute(content_root);
   }
-  content_manager_ =
-      std::make_unique<ContentManager>(kernel_state, content_root);
+  // Retain explicit native storage inputs independently of guest execution.
+  // ConsoleDataOwner is not a general data-parent producer.
+  std::error_code storage_error;
+  auto data_parent = filesystem::HostStorageRoot::Open(emulator->storage_root(),
+                                                       false, storage_error, 0);
+  std::shared_ptr<filesystem::HostStorageRoot> state_parent;
+  if (data_parent && !cvars::managed_device_state_root.empty()) {
+    state_parent = filesystem::HostStorageRoot::Open(
+        cvars::managed_device_state_root, false, storage_error, 0);
+  }
+  std::shared_ptr<const filesystem::ManagedStorageContext> storage_context;
+  if (!storage_error) {
+    storage_context = filesystem::ManagedStorageContext::Capture(
+        std::move(data_parent), kernel_state->snapshot_recovery_owner(),
+        std::move(state_parent), storage_error);
+  }
+  content_manager_ = std::make_unique<ContentManager>(
+      std::move(storage_context), content_root, kernel_state);
+  if (const auto image = emulator->installed_system_source()) {
+    const auto source = image->snapshot();
+    std::error_code source_error;
+    auto content = source->ContentRoot(source_error);
+    // Missing local/system content stays absent until an explicit host refresh.
+    // The common root was validated before XAM construction.
+    content_manager_->sources().RegisterReadOnly(
+        {"installed-system", static_cast<uint32_t>(DummyDeviceId::HDD),
+         DeviceType::HDD, ContentSourceKind::kInstalledSystem,
+         source->path() / "sysext" / "Content",
+         "\\Device\\Harddisk0\\SystemExtPartition\\Content", u"System Content",
+         true, 0, "\\Device\\Harddisk0\\SystemExtPartition"},
+        std::move(content), source->generation());
+  } else {
+    content_manager_->sources().Register(
+        {"installed-system", static_cast<uint32_t>(DummyDeviceId::HDD),
+         DeviceType::HDD, ContentSourceKind::kInstalledSystem,
+         emulator->system_files_path() / "sysext" / "Content",
+         "\\Device\\Harddisk0\\SystemExtPartition\\Content", u"System Content",
+         true, 0, "\\Device\\Harddisk0\\SystemExtPartition"});
+  }
+  if (cvars::mount_memory_unit) {
+    // Preserve the existing MU: folder/mount, while making it an actual XAM
+    // content source too. 17559 presents such storage as USB mass storage.
+    content_manager_->RegisterRequiredManagedSource(
+        {"memory-unit", 3, DeviceType::USBMASS, ContentSourceKind::kManaged,
+         emulator->storage_root() / "mu" / "Content",
+         "\\Device\\Mass0\\Content", u"USB Storage", false,
+         0, "\\Device\\Mass0", emulator->storage_root() / "mu",
+         emulator->storage_root()});
+  }
+
+  if (const auto installed = emulator->installed_system_source()) {
+    stock_tiles_ = std::make_shared<TileService::StockProvider>(installed);
+  }
 
   user_tracker_ = std::make_unique<UserTracker>();
   profile_manager_ =
-      std::make_unique<ProfileManager>(kernel_state, user_tracker_.get());
+      std::make_unique<ProfileManager>(kernel_state, user_tracker_.get(),
+                                       *content_manager_);
   achievement_manager_ = std::make_unique<AchievementManager>();
 
   LoadLanguageLocaleFallback();
@@ -160,18 +215,16 @@ void XamState::LoadSpaInfo(const SpaInfo* info) {
   if (!info) {
     return;
   }
-  // Check if we have loaded SpaInfo already. If yes then check currently loaded
-  // version.
-  if (spa_info_) {
-    // Trying to load spa with lower version, for whatever reason.
-    if (*info <= *spa_info_) {
+  auto loaded = std::make_shared<SpaInfo>(*info);
+  loaded->Load();  // No metadata/GCRC lock is held across resource parsing.
+  {
+    std::lock_guard lock(spa_mutex_);
+    if (spa_info_ && *loaded <= *spa_info_) {
       return;
     }
+    spa_info_ = loaded;
   }
-
-  spa_info_ = std::make_unique<SpaInfo>(*info);
-  spa_info_->Load();
-  user_tracker_->UpdateSpaInfo(spa_info_.get());
+  user_tracker_->UpdateSpaInfo(loaded);
 }
 
 void XamState::SetContentRegisterCallback(uint32_t callback) {

@@ -1,0 +1,243 @@
+va	data_type	text
+0x9ce8076c	string	KHUBSELO
+0x9ce80778	string	KHUBSEL
+0x9ce80780	string	KHUBIMPO
+0x9ce80794	string	KHUBEXTO
+0x9ce807a8	string	IDS_HUB_PROMPT_KINECTID
+0x9ce807c0	string	IDS_HUB_PROMPT_ACHIEVEMENTS
+0x9ce807dc	string	IDS_HUB_PROMPT_SIGNINOUT
+0x9ce807f8	string	IDS_HUB_PROMPT_KINECTTUNER
+0x9ce80814	string	IDS_HUB_PROMPT_AVATAREDITOR
+0x9ce80830	string	IDS_HUB_PROMPT_PLAYDISC
+0x9ce80848	string	IDS_HUB_SLOT_KINECTID
+0x9ce80860	string	IDS_HUB_SLOT_ACHIEVEMENTS
+0x9ce8087c	string	IDS_HUB_SLOT_SIGNINOUT
+0x9ce80894	string	IDS_HUB_SLOT_KINECTTUNER
+0x9ce808b0	string	IDS_HUB_SLOT_AVATAREDITOR
+0x9ce808cc	string	IDS_HUB_SLOT_PLAYDISC
+0x9ce808e4	string	IDS_HUB_PAGE_HOME
+0x9ce809b0	unicode	emb_nuihub.xml
+0x9ce809d0	unicode	nuihub.xml
+0x9ce809e8	unicode	mainscene.xur
+0x9ce80a04	unicode	MainScene
+0x9ce80a1c	unicode	BackFromNuiHub
+0x9ce80a40	unicode	Column
+0x9ce80a50	unicode	controlpack://DashCursorScene.xur
+0x9ce80a94	unicode	common://MiniGamercard.xur
+0x9ce80ae8	unicode	_TransitionAnimations/_Background
+0x9ce80b2c	unicode	_Touch/_GridPanel
+0x9ce80b50	unicode	_Touch
+0x9ce80b60	unicode	_AnchorScene/_GamercardContainer
+0x9ce80ba4	unicode	_AnchorScene/_Spinner
+0x9ce80bd0	unicode	_AnchorScene/_HandleNavRight
+0x9ce80c0c	unicode	_AnchorScene/_HandleNavLeft
+0x9ce80c44	unicode	_AnchorScene
+0x9ce80c60	unicode	_btnB
+0x9ce80c78	unicode	Columns
+0x9ce80c88	unicode	,%d,
+0x9ce80c9c	unicode	TransTo
+0x9ce80cd4	unicode	nuihub.
+0x9ce80ce4	unicode	nuihub.xzp
+0x9ce80cfc	unicode	skin_nuihub.xur
+0x9ce80d1c	unicode	strings.xus
+0x9ce80d58	string	dash.nuihub.xex
+0x9ce80d68	unicode	XuiPerspectiveScene
+0x9ce80d90	unicode	XuiButton
+0x9ce80da4	unicode	ControlPackNuiTile
+0x9ce80dcc	unicode	XuiScene
+0x9ce80de0	string	nuihub.xzp
+0x9ce80dec	unicode	hubpagescene.xur
+0x9ce80e10	unicode	HubPageScene
+0x9ce80e30	unicode	_PreviewGroup/_PreviewIdentifier
+0x9ce80e74	unicode	_PreviewGroup/_PreviewDesc
+0x9ce80eac	unicode	_PreviewGroup
+0x9ce80ec8	unicode	PageTitle
+0x9ce80edc	unicode	GridPanel
+0x9ce80ef8	unicode	Tile_%d_%d
+0x9ce80f10	unicode	HubSlotXzpButton
+0x9ce80f34	unicode	HubSlotDiscInTrayScene
+0x9ce80f6c	unicode	Slot\icon
+0x9ce80f80	unicode	traystrings.xus
+0x9ce80fa0	unicode	%s/traystrings.xus
+0x9ce80fc8	unicode	_slotGroup
+0x9ce80fe0	unicode	ExitActiveLCU
+0x9ce80ffc	unicode	ExitActiveLCA
+0x9ce81018	unicode	ExitActiveLCUEnd
+0x9ce8103c	unicode	ExitActiveLCAEnd
+0x9ce81060	unicode	EnterActiveLCU
+0x9ce81080	unicode	EnterActiveLCA
+0x9ce810a0	unicode	EnterActiveLCUEnd
+0x9ce810c4	unicode	EnterActiveLCAEnd
+0x9ce810e8	unicode	ico_32x_control.png
+0x9ce81118	unicode	_descGroupDark
+0x9ce81138	unicode	_descGroup
+0x9ce81150	unicode	HubSlotXzpScene.xur
+0x9ce81178	unicode	HubSlotXzpScene
+0x9ce811a0	unicode	%s#%s
+0x9ce811ac	unicode	section://%X,hubslots
+0x9ce811fc	unicode	DASHBOARD_HUB_SLOT
+0x9ce81278	unicode	play disc
+0x9ce8128c	unicode	close tray
+0x9ce812a4	unicode	open tray
+0x9ce812b8	unicode	ACTIVE_LISTENING
+0x9ce812e0	unicode	speechpack://vuiblinginstructions.xur
+0x9ce8132c	string	Event6
+0x9ce81334	string	ExitNHubOmni
+0x9ce81344	string	NuiHubEtx
+0x9ce81350	string	ImpressionNHubOmni
+0x9ce81364	string	SelectNHubOmni
+0x9ce81374	string	Kinect Hub
+0x9ce81380	string	event6
+0x9ce81388	string	event13
+0x9ce81398	string	Unknown exception
+0x9ce813b4	string	bad allocation
+0x9ce81498	string	e+000
+0x9ce81510	unicode	runtime error 
+0x9ce81534	unicode	TLOSS error\n
+0x9ce81550	unicode	SING error\n
+0x9ce81568	unicode	DOMAIN error\n
+0x9ce81588	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9ce81778	unicode	R6032\n- not enough space for locale information\n
+0x9ce817e0	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9ce818a4	unicode	R6030\n- CRT not initialized\n
+0x9ce818e0	unicode	R6028\n- unable to initialize heap\n
+0x9ce81928	unicode	R6027\n- not enough space for lowio initialization\n
+0x9ce81990	unicode	R6026\n- not enough space for stdio initialization\n
+0x9ce819f8	unicode	R6025\n- pure virtual function call\n
+0x9ce81a40	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9ce81aa8	unicode	R6019\n- unable to open console device\n
+0x9ce81af8	unicode	R6018\n- unexpected heap error\n
+0x9ce81b38	unicode	R6017\n- unexpected multithread lock error\n
+0x9ce81b90	unicode	R6016\n- not enough space for thread data\n
+0x9ce81be8	unicode	R6010\n- abort() has been called\n
+0x9ce81c30	unicode	R6009\n- not enough space for environment\n
+0x9ce81c88	unicode	R6008\n- not enough space for arguments\n
+0x9ce81cd8	unicode	R6002\n- floating point support not loaded\n
+0x9ce81de0	unicode	HH:mm:ss
+0x9ce81df4	unicode	dddd, MMMM dd, yyyy
+0x9ce81e1c	unicode	MM/dd/yy
+0x9ce81e40	unicode	December
+0x9ce81e54	unicode	November
+0x9ce81e68	unicode	October
+0x9ce81e78	unicode	September
+0x9ce81e8c	unicode	August
+0x9ce81e9c	unicode	July
+0x9ce81ea8	unicode	June
+0x9ce81eb4	unicode	April
+0x9ce81ec0	unicode	March
+0x9ce81ecc	unicode	February
+0x9ce81ee0	unicode	January
+0x9ce81f50	unicode	Saturday
+0x9ce81f64	unicode	Friday
+0x9ce81f74	unicode	Thursday
+0x9ce81f88	unicode	Wednesday
+0x9ce81f9c	unicode	Tuesday
+0x9ce81fac	unicode	Monday
+0x9ce81fbc	unicode	Sunday
+0x9ce82004	string	HH:mm:ss
+0x9ce82010	string	dddd, MMMM dd, yyyy
+0x9ce82024	string	MM/dd/yy
+0x9ce82038	string	December
+0x9ce82044	string	November
+0x9ce82050	string	October
+0x9ce82058	string	September
+0x9ce82064	string	August
+0x9ce8207c	string	April
+0x9ce82084	string	March
+0x9ce8208c	string	February
+0x9ce82098	string	January
+0x9ce820d0	string	Saturday
+0x9ce820dc	string	Friday
+0x9ce820e4	string	Thursday
+0x9ce820f0	string	Wednesday
+0x9ce820fc	string	Tuesday
+0x9ce82104	string	Monday
+0x9ce8210c	string	Sunday
+0x9ce82130	unicode	(null)
+0x9ce82300	string	 Complete Object Locator'
+0x9ce8231c	string	 Class Hierarchy Descriptor'
+0x9ce8233c	string	 Base Class Array'
+0x9ce82350	string	 Base Class Descriptor at (
+0x9ce8236c	string	 Type Descriptor'
+0x9ce82380	string	`local static thread guard'
+0x9ce8239c	string	`managed vector copy constructor iterator'
+0x9ce823c8	string	`vector vbase copy constructor iterator'
+0x9ce823f4	string	`vector copy constructor iterator'
+0x9ce82418	string	`dynamic atexit destructor for '
+0x9ce8243c	string	`dynamic initializer for '
+0x9ce82458	string	`eh vector vbase copy constructor iterator'
+0x9ce82484	string	`eh vector copy constructor iterator'
+0x9ce824ac	string	`managed vector destructor iterator'
+0x9ce824d4	string	`managed vector constructor iterator'
+0x9ce824fc	string	`placement delete[] closure'
+0x9ce8251c	string	`placement delete closure'
+0x9ce82538	string	`omni callsig'
+0x9ce82548	string	 delete[]
+0x9ce82554	string	 new[]
+0x9ce8255c	string	`local vftable constructor closure'
+0x9ce82580	string	`local vftable'
+0x9ce82590	string	`RTTI
+0x9ce8259c	string	`udt returning'
+0x9ce825ac	string	`copy constructor closure'
+0x9ce825c8	string	`eh vector vbase constructor iterator'
+0x9ce825f0	string	`eh vector destructor iterator'
+0x9ce82610	string	`eh vector constructor iterator'
+0x9ce82634	string	`virtual displacement map'
+0x9ce82650	string	`vector vbase constructor iterator'
+0x9ce82674	string	`vector destructor iterator'
+0x9ce82694	string	`vector constructor iterator'
+0x9ce826b4	string	`scalar deleting destructor'
+0x9ce826d4	string	`default constructor closure'
+0x9ce826f4	string	`vector deleting destructor'
+0x9ce82714	string	`vbase destructor'
+0x9ce82728	string	`string'
+0x9ce82734	string	`local static guard'
+0x9ce8274c	string	`typeof'
+0x9ce82758	string	`vcall'
+0x9ce82760	string	`vbtable'
+0x9ce8276c	string	`vftable'
+0x9ce827f4	string	operator
+0x9ce8281c	string	 delete
+0x9ce8282c	string	__unaligned
+0x9ce82838	string	__restrict
+0x9ce82844	string	__ptr64
+0x9ce8284c	string	__eabi
+0x9ce82854	string	__clrcall
+0x9ce82860	string	__fastcall
+0x9ce8286c	string	__thiscall
+0x9ce82878	string	__stdcall
+0x9ce82884	string	__pascal
+0x9ce82890	string	__cdecl
+0x9ce82898	string	__based(
+0x9ce83284	string	1#QNAN
+0x9ce8328c	string	1#INF
+0x9ce83294	string	1#IND
+0x9ce8329c	string	1#SNAN
+0x9ce83428	string	%s\%S
+0x9ce83430	string	\Device\Harddisk0\Partition1\DEVKIT
+0x9ce8346c	unicode	section://%X,%S#%s
+0x9ce83494	string	%s%s%s
+0x9ce834b4	string	en-gb
+0x9ce834bc	string	xx-xx
+0x9ce834e0	string	https://
+0x9ce834ec	string	http://
+0x9ce83504	unicode	memory://%X,%X
+0x9ce83594	string	%s\%s
+0x9ce8359c	string	https:\
+0x9ce835a4	unicode	section://%X,%S#%S
+0x9ce83654	string	e:\bt\248805\core\private\xam\dash\apps\nuihub\src\obj\xbox\dash.nuihub.pdb
+0x9ce9f21c	string	.?AVbad_alloc@std@@
+0x9ce9f238	string	.?AVexception@std@@
+0x9ce9fb99	string	abcdefghijklmnopqrstuvwxyz
+0x9ce9fbb9	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9cea1036	string	dash.nuihub.xex
+0x9cea1046	string	CreateDashAppInstance
+0x9cea20a0	string	HubSlotAvatarScene
+0x9cea20bf	string	background.JPG
+0x9cea20ce	string	XuiImage
+0x9cea20de	string	avatar_3.png
+0x9cea20f2	string	avatar_2.png
+0x9cea2106	string	avatar_1.png
+0x9cea2113	string	XuiGroup
+0x9cea211c	string	XuiPerspectiveScene
+0x9cea2130	string	XuiCanvas

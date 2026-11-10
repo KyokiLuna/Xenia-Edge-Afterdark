@@ -1,0 +1,244 @@
+va	data_type	text
+0x917206ac	unicode	strings.xus
+0x91720738	unicode	XuiCanvas
+0x91720778	unicode	xmsgr
+0x91720808	string	MessengerEnvironment
+0x91720820	unicode	MESSENGER/SETTINGS/PSM/TITLENAME
+0x91720864	unicode	MESSENGER/SETTINGS/PSM/TEXT
+0x917208a4	unicode	prod
+0x917208b0	unicode	MESSENGER/SETTINGS/SERVER
+0x917208e4	unicode	noisy
+0x917208f0	unicode	normal
+0x91720900	unicode	quiet
+0x9172090c	unicode	MESSENGER/SETTINGS/POPUPS
+0x91720940	unicode	MESSENGER/SETTINGS/PASSPORT%d
+0x9172097c	unicode	MESSENGER/SETTINGS/PASSWORD%d
+0x917209b8	unicode	TRUE
+0x917209c8	unicode	MESSENGER/SETTINGS/ALWAYSUSETHESECREDENTIALS
+0x91720a28	unicode	MESSENGER/SETTINGS/PROXYSERVER
+0x91720a68	string	\Device\Harddisk0\Partition1\DEVKIT\messenger.xml
+0x91720a9c	unicode	Ride the Metro!
+0x91720ae8	string	HH:mm:ss
+0x91720af4	string	dddd, MMMM dd, yyyy
+0x91720b08	string	MM/dd/yy
+0x91720b1c	string	December
+0x91720b28	string	November
+0x91720b34	string	October
+0x91720b3c	string	September
+0x91720b48	string	August
+0x91720b60	string	April
+0x91720b68	string	March
+0x91720b70	string	February
+0x91720b7c	string	January
+0x91720bb4	string	Saturday
+0x91720bc0	string	Friday
+0x91720bc8	string	Thursday
+0x91720bd4	string	Wednesday
+0x91720be0	string	Tuesday
+0x91720be8	string	Monday
+0x91720bf0	string	Sunday
+0x91721420	string	SunMonTueWedThuFriSat
+0x91721438	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x91721480	string	0123456789ABCDEF
+0x91721494	string	relay.voice.messenger.msn-int.com
+0x917214b8	string	contacts.msn-int.com
+0x917214d0	string	https://contacts.msn-int.com/abservice/sharingservice.asmx
+0x9172150c	string	https://contacts.msn-int.com/abservice/abservice.asmx
+0x91721544	string	IE*%NG3ZU!6H@5DR
+0x91721558	string	TEST0127D?NG56NB
+0x9172156c	string	messengerclear.live-int.com
+0x91721588	string	gateway.messenger.hotmail-int.com
+0x917215b0	string	https://nexus.passport-int.com/federationmetadata/2006-12/FederationMetaData.xml
+0x91721604	string	messenger.hotmail-int.com
+0x91721620	string	relay.voice.messenger.msn.com
+0x91721640	string	contacts.msn.com
+0x91721654	string	https://contacts.msn.com/abservice/sharingservice.asmx
+0x9172168c	string	https://contacts.msn.com/abservice/abservice.asmx
+0x917216c0	string	PRXSC!2$!KJ7_MVW
+0x917216d4	string	PROD0123E1_08UHK
+0x917216e8	string	messengerclear.live.com
+0x91721700	string	gateway.messenger.hotmail.com
+0x91721720	string	https://nexus.passport.com/federationmetadata/2006-12/FederationMetaData.xml
+0x91721770	string	messenger.hotmail.com
+0x91721788	string	MessengerABCHPolicy
+0x9172179c	string	MessengerPolicy
+0x917219f9	string	epid={
+0x91721a00	string	From: 
+0x91721a10	string	Routing: 1.0\r\n
+0x91721abc	string	00000000-0000-0000-0000-000000000000@live.com
+0x91721aec	string	Content-Type: text/x-msmsgsprofile; charset=UTF-8
+0x91721b20	string	Nickname: 
+0x91721b30	string	Signal/AudioTunnel
+0x91721b44	string	</msg>
+0x91721b50	string	SIP/2.0 100 Trying\r\ni: %s\r\nl: 0\r\nCSeq: 1 INVITE\r\nf: %s\r\nt: <sip:%s>\r\nUser-Agent: UCCAPI/4.0.7417.0\r\nv: SIP/2.0/TCP 127.0.0.1:12317\r\n\r\n
+0x91721be0	string	<msg>
+0x91721be8	string	<sip e="base64" i="%s"><msg>%s</msg></sip>
+0x91721c68	unicode	XBOXMSGR\0Game\01\0{0}: {1} ({2})\0Xbox 360\0%ws\0%ws\0%ws\0%ws\0\0
+0x91721cf0	unicode	http://live.xbox.com/profile/profile.aspx?GamerTag=%ws&amp;appid=messenger
+0x91721d88	unicode	61056
+0x91721da0	unicode	%ws:
+0x91721dbc	string	MSGRLOGOFF
+0x91721dc8	string	MSGRLOGON
+0x91721e4c	unicode	&quot;
+0x91721e5c	unicode	&apos;
+0x91721e6c	unicode	&amp;
+0x91721e78	unicode	&gt;
+0x91721e84	unicode	&lt;
+0x91721ea0	string	<wsa:Address>
+0x91721eb0	string	<fed:Federation>
+0x91721ec4	string	<fed:TargetServiceEndpoint>
+0x91721ee0	string	</wsa:Address>
+0x91721ef0	string	<psf:redirectUrl>
+0x91721f04	string	</psf:redirectUrl>
+0x91721f18	string	<psf:value>
+0x91721f24	string	<S:Detail>
+0x91721f30	string	<S:Fault>
+0x91721f3c	string	<S:Body>
+0x91721f48	string	</psf:value>
+0x91721f58	string	WS-SecureConversation
+0x91721f70	string	SESSION KEY ENCRYPTION
+0x91721f88	string	SESSION KEY HASH
+0x91721f9c	string	liveid.bin
+0x91721fa8	string	</puid>
+0x91721fb8	string	<DeviceAddResponse Success="
+0x91721fd8	string	<puid>
+0x91721fe4	string	<wsu:Created>
+0x91721ff4	string	</wsu:Created>
+0x91722004	string	<wst:Lifetime>
+0x91722014	string	<wsu:Expires>
+0x91722024	string	</wsu:Expires>
+0x91722034	string	</wst:RequestedSecurityToken>
+0x91722054	string	<wst:RequestedSecurityToken>
+0x91722074	string	<wst:RequestSecurityTokenResponse
+0x91722098	string	<wst:RequestedProofToken>
+0x917220b4	string	<wst:BinarySecret>
+0x917220c8	string	</wst:BinarySecret>
+0x917220dc	string	<wsse:BinarySecurityToken Id="Compact0">
+0x91722108	string	</wsse:BinarySecurityToken>
+0x9172212c	string	Content-Type: application/soap+xml
+0x91722160	string	<DeviceAddRequest><ClientInfo name="FE5B80E5-82FB-4060-AAFE-AC5C4605EA76" version="1.0"/><Authentication><Membername>11%s</Membername><Password>%s</Password></Authentication></DeviceAddRequest>
+0x91722224	string	http%s://%s/ppsecure/deviceaddcredential.srf
+0x91722258	string	%04u-%02u-%02uT%02u:%02u:%02u.%07uZ
+0x91722280	string	<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:saml="urn:oasis:names:tc:SAML:1.0:assertion" xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" xmlns:wsa="http://www.w3.org/2005/08/addressing" xmlns:wssc="http://schemas.xmlsoap.org/ws/2005/02/sc" xmlns:wst="http://schemas.xmlsoap.org/ws/2005/02/trust"><s:Header><wlid:ClientInfo xmlns:wlid="http://schemas.microsoft.com/wlid"><wlid:ApplicationID>"FE5B80E5-82FB-4060-AAFE-AC5C4605EA76"</wlid:ApplicationID></wlid:ClientInfo><wsa:Action s:mustUnderstand="1">http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue</wsa:Action><wsa:To s:mustUnderstand="1">%s</wsa:To><wsa:MessageID>%d</wsa:MessageID><wsse:Security><wsse:UsernameToken wsu:Id="devicesoftware"><wsse:Username>%s</wsse:Username><wsse:Password>%s</wsse:Password></wsse:UsernameToken><wsu:Timestamp Id="Timestamp"><wsu:Created>%s</wsu:Created><wsu:Expires>%s</wsu:Expires></wsu:Timestamp></wsse:Security></s:Header><s:Body><wst:RequestSecurityToken xmlns:wst="http://schemas.xmlsoap.org/ws/2005/02/trust"><wst:RequestType>http://schemas.xmlsoap.org/ws/2005/02/trust/Issue</wst:RequestType><wsp:AppliesTo xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy"><wsa:EndpointReference xmlns:wsa="http://www.w3.org/2005/08/addressing"><wsa:Address>http://Passport.NET/tb</wsa:Address></wsa:EndpointReference></wsp:AppliesTo></wst:RequestSecurityToken></s:Body></s:Envelope>
+0x917228d8	string	<?xml version="1.0"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:saml="urn:oasis:names:tc:SAML:1.0:assertion" xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" xmlns:wsa="http://www.w3.org/2005/08/addressing" xmlns:wssc="http://schemas.xmlsoap.org/ws/2005/02/sc" xmlns:wst="http://schemas.xmlsoap.org/ws/2005/02/trust"><s:Header><wlid:ClientInfo xmlns:wlid="http://schemas.microsoft.com/wlid"><wlid:ApplicationID>"FE5B80E5-82FB-4060-AAFE-AC5C4605EA76"</wlid:ApplicationID></wlid:ClientInfo><ps:AuthInfo xmlns:ps="http://schemas.microsoft.com/Passport/SoapServices/PPCRL" Id="PPAuthInfo"><ps:HostingApp>DF60E2DF-88AD-4526-AE21-83D130EF0F68</ps:HostingApp><ps:BinaryVersion>5</ps:BinaryVersion><ps:UIVersion>1</ps:UIVersion><ps:Cookies></ps:Cookies><ps:RequestParams>AQAAAAIAAABsYwQAAAAxMDMz</ps:RequestParams></ps:AuthInfo><wsa:Action s:mustUnderstand="1">http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue</wsa:Action><wsa:To s:mustUnderstand="1">%s</wsa:To><wsa:MessageID>%d</wsa:MessageID><wsse:Security><wsse:UsernameToken wsu:Id="user"><wsse:Username>%s</wsse:Username><wsse:Password>%s</wsse:Password></wsse:UsernameToken><wsse:BinarySecurityToken ValueType="urn:liveid:device" id="DeviceDAToken">%s</wsse:BinarySecurityToken><wsu:Timestamp Id="Timestamp"><wsu:Created>%s</wsu:Created><wsu:Expires>%s</wsu:Expires></wsu:Timestamp></wsse:Security></s:Header><s:Body><wst:RequestSecurityToken Id="RST0"><wst:RequestType>http://schemas.xmlsoap.org/ws/2005/02/trust/Issue</wst:RequestType><wsp:AppliesTo><wsa:EndpointReference><wsa:Address>%s</wsa:Address></wsa:EndpointReference></wsp:AppliesTo><wsp:PolicyReference URI="%s"></wsp:PolicyReference></wst:RequestSecurityToken></s:Body></s:Envelope>
+0x9172306c	string	10:%s
+0x91723074	string	\System??\MsgrCache
+0x91723088	string	MsgrCache
+0x917230a4	string	%s:\xmsgrcache.bin
+0x917230d0	string	MSNP21
+0x917230dc	string	text/plain; charset=UTF-8
+0x917230f8	string	text/plain
+0x91723104	string	text/x-msmsgscontrol
+0x91723124	string	Control/Typing
+0x91723134	string	Nudge
+0x9172313c	string	Signal/AudioTunnel
+0x91723150	string	Content-Type: 
+0x91723160	string	Message-Type: 
+0x91723170	string	Content-Length: 
+0x9172318c	string	circle
+0x91723194	string	MessengerVChat
+0x917231b8	string	1210056720:263312
+0x917231e0	string	<user><s n="IM"><Status>%s</Status><CurrentMedia>%s</CurrentMedia></s><sep n="IM"><Capabilities>%s</Capabilities></sep><s n="PE">%s</s><sep n="PE"><VER>2.0.5612</VER><TYP>4</TYP></sep>%s</user>
+0x917232a4	string	<PSM>%s</PSM>
+0x917232b8	string	<sep n="PD"><EpName>Xbox</EpName><ClientType>4</ClientType><State>%s</State></sep>
+0x91723358	string	{cb035851-3954-46b4-bb74-082bdeac9638}
+0x91723394	string	&lt;/Service&gt;
+0x917233a8	string	ABCHInternal
+0x917233b8	string	&lt;Service&gt;
+0x917233d0	string	NotifType: 
+0x917233dc	string	Uri: /
+0x917233e4	string	Notification: 1.0\r\n
+0x917233f8	string	epid="{
+0x91723400	string	<sep n="PD"
+0x9172341c	string	<user><id>1:
+0x9172342c	string	<roster>
+0x91723438	string	<circle>
+0x917234ca	string	 l="%d" n="%s"/>
+0x917234dc	string	<ml><d n="%s"><c n="%s" t="1">%s</c></d></ml>
+0x9172350c	string	%s %d %d\r\n%s
+0x9172351c	string	VER %d %s\r\n
+0x91723550	string	CVR %d %s %s %s 0\r\n
+0x91723564	string	0x040c Xbox 360 Xenon XBOXMSGR 2.0.5612 msmsgs
+0x917235bc	string	&amp;
+0x917235c4	string	USR %d SSO S %s %s %s\r\n
+0x917235dc	string	USR %d SSO I %s\r\n
+0x9172360c	string	QRY %d %s %d\r\n%s
+0x91723622	string	L %d 67 0\r\n
+0x91723658	string	<circle><roster><id>IM</id><user><id>1:%s</id></user></roster></circle>
+0x917236a0	string	circles
+0x917236a8	string	Publication: 1.0\r\nUri: /%s\r\nContent-Length: %d\r\nContent-Type: application/%s+xml\r\n\r\n%s
+0x91723700	string	Routing: 1.0\r\nTo: %d:%s\r\nFrom: 1:%s;epid=%s\r\n\r\nReliability: 1.0\r\nStream: 0\r\n\r\n
+0x91723750	string	PUT %d %d\r\n%s
+0x91723788	string	%s %d %s
+0x917237a0	string	<sep n="IM"
+0x917237b0	string	By: 1:
+0x917237b8	string	<FriendlyName>
+0x917237c8	string	</PSM>
+0x917237d0	string	<PSM>
+0x917237d8	string	<s n="PE"
+0x917237e4	string	</Capabilities>
+0x917237f4	string	<Capabilities>
+0x91723804	string	</Status>
+0x91723810	string	<Status>
+0x9172381c	string	<s n="IM"
+0x91723828	string	Content-Type: application/user+xml\r\n
+0x91723850	string	</FriendlyName>
+0x91723860	string	%s%d\r\n
+0x91723869	string	s%s\r\n
+0x91723870	string	Messaging: 2.0\r\nMIME-Version: 1.0\r\nContent-Transfer-Encoding: 7bit\r\n
+0x917238b8	string	Routing: 1.0\r\nTo: %d:%s\r\nFrom: 1:%s;epid=%s\r\n\r\nReliability: 1.0\r\n\r\n
+0x917238fe	string	G %d %d\r\n%s\r\n%s
+0x91723910	string	MS-Conversation-ID:
+0x91723924	string	CSeq: 1 INVITE
+0x91723934	string	CANCEL sip:
+0x91723940	string	INVITE sip:
+0x9172394c	string	Messaging: 2.0\r\n
+0x91723960	string	circle/roster(IM)/user(1:%s)
+0x91723980	string	</user>
+0x91723988	string	<sep n="IM" epid="{%s}"/><sep n="PE" epid="{%s}"/>
+0x917239bc	string	DEL %d %d\r\n%s
+0x917239ec	string	\System??\MsgrProf
+0x91723a00	string	MsgrProf
+0x91723a10	unicode	%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x
+0x91723a74	string	%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x
+0x91723abc	string	%s:\%s
+0x91723b34	string	XFR 3 NS %s:1863 U D 0\r\n
+0x91723b51	string	15 %d\r\n
+0x91723b68	string	MSMSGS
+0x91723c04	string	0123456789abcdefclose
+0x91723c2c	string	/gateway/gateway.dll
+0x91723cbc	string	http://
+0x91723cc4	string	Action=%s&SessionID=%s
+0x91723cdc	string	SessionID=%s
+0x91723cec	string	Action=%s&Server=%s&IP=%s
+0x91723d08	string	%d.%d.%d.%d
+0x91723d14	string	close
+0x91723d1c	string	Content-Length:
+0x91723d2c	string	Connection:
+0x91723d38	string	SessionID=
+0x91723d44	string	GW-IP=
+0x91723d4c	string	Session=close
+0x91723d5c	string	Proxy-Authenticate:
+0x91723d70	string	Basic
+0x91723d78	string	realm="
+0x91723d90	unicode	amp;
+0x91723d9c	unicode	quot;
+0x91723da8	unicode	apos;
+0x91723de8	string	ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/deviceselector.xex
+0x91723e8c	string	xam.xex
+0x91723eac	string	e:\bt\248805\core\private\xam\apps\messenger\src\obj\xbox\Xam.LiveMessenger.pdb
+0x91741c48	string	}d(P}k
+0x91749430	string	MBI_KEY_OLD
+0x9174958c	string	POST http://%s/%s?%s
+0x917495a8	string	 HTTP/1.1\r\nAccept: */*\r\nAccept-Language: en-us\r\nAccept-Encoding: gzip, deflate\r\nUser-Agent: MSMSGS\r\nHost: %s\r\nProxy-Connection: Keep-Alive\r\nConnection: Keep-Alive\r\nPragma: no-cache\r\nContent-Type: application/x-msn-messenger\r\nContent-Length: %d\r\n
+0x917496a0	string	Proxy-Authorization: Basic %s\r\n
+0x9174b01f	string	strings.xus
+0x9174c006	string	%s ti ha inviato un trillo!
+0x9174c022	string	Il tuo messaggio non ha raggiunto tutti i destinatari.
+0x9174c059	string	vuole parlare in Video Kinect
+0x9174c09d	string	 posizioni.
+0x9174c0aa	string	Visione di un video
+0x9174c0c8	string	 unito alla conversazione.
+0x9174c0e3	string	%s ha abbandonato la conversazione.
+0x9174c107	string	%s ha effettuato l'accesso.
+0x9174c12b	string	 disconnesso.

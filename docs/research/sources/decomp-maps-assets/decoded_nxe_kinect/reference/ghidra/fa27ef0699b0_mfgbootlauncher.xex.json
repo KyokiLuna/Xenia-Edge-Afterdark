@@ -1,0 +1,18 @@
+{
+  "module": "mfgbootlauncher.xex",
+  "program": "fa27ef0699b0_mfgbootlauncher.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "8711d797ea09e29d4aba4223b5d960eb75afd1c34fa30efd76a326ea636abca4",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9fea0400",
+  "functions": 349,
+  "calls": 934,
+  "strings": 172,
+  "string_xrefs": 154,
+  "independent_sha256": "8711d797ea09e29d4aba4223b5d960eb75afd1c34fa30efd76a326ea636abca4",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

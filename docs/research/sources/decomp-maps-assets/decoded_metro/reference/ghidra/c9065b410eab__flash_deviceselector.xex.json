@@ -1,0 +1,18 @@
+{
+  "module": "packages/su20076000_00000000/$flash_deviceselector.xex",
+  "program": "c9065b410eab__flash_deviceselector.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "1e30e6eee8b5e2c0414faafa128f55ef24c961ede4d947d4815acbde2c83e63c",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x916d0400",
+  "functions": 248,
+  "calls": 481,
+  "strings": 108,
+  "string_xrefs": 78,
+  "independent_sha256": "625a5b7728bd8ca6cdce2324fd67844b2393439468ec182594a341b0afbb278f",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

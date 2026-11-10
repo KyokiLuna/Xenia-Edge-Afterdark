@@ -1,0 +1,18 @@
+{
+  "module": "Guide.Fitness.xex",
+  "program": "66a929dbb69a_Guide.Fitness.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "1c4c8191d900080901b65fb465d039cc36823b545e1328cbcc2d3f4f1b178d7a",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 339,
+  "calls": 768,
+  "strings": 187,
+  "string_xrefs": 167,
+  "independent_sha256": "1c4c8191d900080901b65fb465d039cc36823b545e1328cbcc2d3f4f1b178d7a",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

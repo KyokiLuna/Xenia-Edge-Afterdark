@@ -1,0 +1,118 @@
+va	data_type	text
+0x9c78056c	string	dash.natalpregame.xex
+0x9c78058c	string	Unknown exception
+0x9c7805a8	string	bad allocation
+0x9c78067c	unicode	runtime error 
+0x9c7806a0	unicode	TLOSS error\n
+0x9c7806bc	unicode	SING error\n
+0x9c7806d4	unicode	DOMAIN error\n
+0x9c7806f0	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9c7808e0	unicode	R6032\n- not enough space for locale information\n
+0x9c780948	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9c780a0c	unicode	R6030\n- CRT not initialized\n
+0x9c780a48	unicode	R6028\n- unable to initialize heap\n
+0x9c780a90	unicode	R6027\n- not enough space for lowio initialization\n
+0x9c780af8	unicode	R6026\n- not enough space for stdio initialization\n
+0x9c780b60	unicode	R6025\n- pure virtual function call\n
+0x9c780ba8	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9c780c10	unicode	R6019\n- unable to open console device\n
+0x9c780c60	unicode	R6018\n- unexpected heap error\n
+0x9c780ca0	unicode	R6017\n- unexpected multithread lock error\n
+0x9c780cf8	unicode	R6016\n- not enough space for thread data\n
+0x9c780d50	unicode	R6010\n- abort() has been called\n
+0x9c780d98	unicode	R6009\n- not enough space for environment\n
+0x9c780df0	unicode	R6008\n- not enough space for arguments\n
+0x9c780e40	unicode	R6002\n- floating point support not loaded\n
+0x9c780f47	string	| Complete Object Locator'
+0x9c780f64	string	 Class Hierarchy Descriptor'
+0x9c780f84	string	 Base Class Array'
+0x9c780f98	string	 Base Class Descriptor at (
+0x9c780fb4	string	 Type Descriptor'
+0x9c780fc8	string	`local static thread guard'
+0x9c780fe4	string	`managed vector copy constructor iterator'
+0x9c781010	string	`vector vbase copy constructor iterator'
+0x9c78103c	string	`vector copy constructor iterator'
+0x9c781060	string	`dynamic atexit destructor for '
+0x9c781084	string	`dynamic initializer for '
+0x9c7810a0	string	`eh vector vbase copy constructor iterator'
+0x9c7810cc	string	`eh vector copy constructor iterator'
+0x9c7810f4	string	`managed vector destructor iterator'
+0x9c78111c	string	`managed vector constructor iterator'
+0x9c781144	string	`placement delete[] closure'
+0x9c781164	string	`placement delete closure'
+0x9c781180	string	`omni callsig'
+0x9c781190	string	 delete[]
+0x9c78119c	string	 new[]
+0x9c7811a4	string	`local vftable constructor closure'
+0x9c7811c8	string	`local vftable'
+0x9c7811d8	string	`RTTI
+0x9c7811e4	string	`udt returning'
+0x9c7811f4	string	`copy constructor closure'
+0x9c781210	string	`eh vector vbase constructor iterator'
+0x9c781238	string	`eh vector destructor iterator'
+0x9c781258	string	`eh vector constructor iterator'
+0x9c78127c	string	`virtual displacement map'
+0x9c781298	string	`vector vbase constructor iterator'
+0x9c7812bc	string	`vector destructor iterator'
+0x9c7812dc	string	`vector constructor iterator'
+0x9c7812fc	string	`scalar deleting destructor'
+0x9c78131c	string	`default constructor closure'
+0x9c78133c	string	`vector deleting destructor'
+0x9c78135c	string	`vbase destructor'
+0x9c781370	string	`string'
+0x9c78137c	string	`local static guard'
+0x9c781394	string	`typeof'
+0x9c7813a0	string	`vcall'
+0x9c7813a8	string	`vbtable'
+0x9c7813b4	string	`vftable'
+0x9c78143c	string	operator
+0x9c781464	string	 delete
+0x9c781474	string	__unaligned
+0x9c781480	string	__restrict
+0x9c78148c	string	__ptr64
+0x9c781494	string	__eabi
+0x9c78149c	string	__clrcall
+0x9c7814a8	string	__fastcall
+0x9c7814b4	string	__thiscall
+0x9c7814c0	string	__stdcall
+0x9c7814cc	string	__pascal
+0x9c7814d8	string	__cdecl
+0x9c7814e0	string	__based(
+0x9c781f00	unicode	natalpregame.xzp
+0x9c781f24	unicode	NatalPreGame
+0x9c781f40	string	PreGame
+0x9c781f7c	unicode	XuiScene
+0x9c781f90	unicode	HealthSafetyMessageScene.xur
+0x9c781fcc	unicode	HealthSafetyMessageScene
+0x9c782000	unicode	_WaitCursor
+0x9c782020	unicode	HealthSafetyTipScene.xur
+0x9c782054	unicode	HealthSafetyTipScene
+0x9c782080	unicode	LightTipStart
+0x9c78209c	unicode	LookTipStart
+0x9c7820b8	unicode	GameTipStart
+0x9c7820d4	unicode	KinectIdTipStart
+0x9c7820f8	unicode	GestureTipStart
+0x9c782118	unicode	WaveTipStart
+0x9c782134	unicode	NoDropTipStart
+0x9c782154	unicode	sceneLightTip
+0x9c782170	unicode	sceneLookTip
+0x9c78218c	unicode	sceneGameTip
+0x9c7821a8	unicode	sceneKinectIdTip
+0x9c7821cc	unicode	sceneGestureTip
+0x9c7821ec	unicode	sceneWaveTip
+0x9c782208	unicode	sceneNoDropTip
+0x9c782228	unicode	strings.xus
+0x9c782248	unicode	txtTitle
+0x9c78225c	unicode	HealthSafetyLegalScene.xur
+0x9c782294	unicode	HealthSafetyLegalScene
+0x9c7822c4	unicode	LegalEnd
+0x9c7822e0	unicode	txtTitle3
+0x9c7822f4	unicode	txtTitle2
+0x9c782308	unicode	txtTitle1
+0x9c78237c	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\apps\natalpregame\app\obj\xbox\dash.natalpregame.pdb
+0x9c78c048	string	.?AVbad_alloc@std@@
+0x9c78c064	string	.?AVexception@std@@
+0x9c78c471	string	abcdefghijklmnopqrstuvwxyz
+0x9c78c491	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9c78d036	string	dash.natalpregame.xex
+0x9c78d04c	string	CreateDashAppInstance

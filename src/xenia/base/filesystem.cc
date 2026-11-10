@@ -20,6 +20,38 @@
 namespace xe {
 namespace filesystem {
 
+FileLengthFlushResult FileHandle::FlushLengthResult(size_t length) {
+  FileLengthFlushResult result;
+  std::error_code error;
+  const auto info = QueryInfo(error);
+  if (!info) {
+    result.error = error ? error : std::make_error_code(std::errc::io_error);
+    return result;
+  }
+  if (!info->regular || length > uint64_t(INT64_MAX)) {
+    result.error = std::make_error_code(
+        !info->regular ? std::errc::operation_not_supported
+                      : std::errc::value_too_large);
+    return result;
+  }
+  if (info->size != length) {
+    result.error = ResizeResult(length);
+    if (result.error) {
+      // A failing backend may still have published EOF. Observe it without
+      // replacing the original failure or inventing a rollback/durable ack.
+      const auto observed = QueryInfo(error);
+      if (observed && observed->size == length) {
+        result.published_length = length;
+      }
+      return result;
+    }
+  }
+  result.published_length = length;
+  result.error = FlushResult();
+  result.durable = !result.error;
+  return result;
+}
+
 std::vector<uint8_t> ReadAllBytes(const std::filesystem::path& path) {
   std::ifstream f(path, std::ios::binary | std::ios::ate);
   if (!f) {

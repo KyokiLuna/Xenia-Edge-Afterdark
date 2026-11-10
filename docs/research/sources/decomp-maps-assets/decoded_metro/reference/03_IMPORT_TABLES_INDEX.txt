@@ -1,0 +1,45 @@
+imports
+=======
+
+AvatarEditor.xex: 348 entries -> reference/imports/AvatarEditor.xex.txt
+BiometricSetup.xex: 260 entries -> reference/imports/BiometricSetup.xex.txt
+Dash.FieldCalibration.lex: 170 entries -> reference/imports/Dash.FieldCalibration.lex.txt
+Dash.Kiosk.lex: 128 entries -> reference/imports/Dash.Kiosk.lex.txt
+Dash.NetworkStorage.lex: 87 entries -> reference/imports/Dash.NetworkStorage.lex.txt
+Dash.NuiTroubleshooter.lex: 210 entries -> reference/imports/Dash.NuiTroubleshooter.lex.txt
+Dash.Search.xex: 274 entries -> reference/imports/Dash.Search.xex.txt
+Guide.AccountRecovery.xex: 346 entries -> reference/imports/Guide.AccountRecovery.xex.txt
+Guide.AvatarMiniCreator.xex: 86 entries -> reference/imports/Guide.AvatarMiniCreator.xex.txt
+Guide.CSVTrans.xex: 65 entries -> reference/imports/Guide.CSVTrans.xex.txt
+Guide.Fitness.xex: 95 entries -> reference/imports/Guide.Fitness.xex.txt
+Guide.NuiTroubleshooter.xex: 302 entries -> reference/imports/Guide.NuiTroubleshooter.xex.txt
+Guide.TFA.xex: 285 entries -> reference/imports/Guide.TFA.xex.txt
+PlayReady.xex: 62 entries -> reference/imports/PlayReady.xex.txt
+Title.Zune.xex: 516 entries -> reference/imports/Title.Zune.xex.txt
+Xam.Community.xex: 123 entries -> reference/imports/Xam.Community.xex.txt
+Xam.WordRegister.xex: 66 entries -> reference/imports/Xam.WordRegister.xex.txt
+Xna_TitleLauncher.xex: 146 entries -> reference/imports/Xna_TitleLauncher.xex.txt
+dash.ClosedCaptionDll.xex: 123 entries -> reference/imports/dash.ClosedCaptionDll.xex.txt
+dash.ExtraAVCodecs.xex: 65 entries -> reference/imports/dash.ExtraAVCodecs.xex.txt
+dash.ExtraAVCodecs2.xex: 57 entries -> reference/imports/dash.ExtraAVCodecs2.xex.txt
+dash.natalpregame.xex: 81 entries -> reference/imports/dash.natalpregame.xex.txt
+dash.xex: 823 entries -> reference/imports/dash.xex.txt
+dashnui.xex: 279 entries -> reference/imports/dashnui.xex.txt
+natalsu.xex: 29 entries -> reference/imports/natalsu.xex.txt
+nuihud.xex: 106 entries -> reference/imports/nuihud.xex.txt
+packages/su20076000_00000000/$flash_bootanim.xex: 114 entries -> reference/imports/packages/su20076000_00000000/$flash_bootanim.xex.txt
+packages/su20076000_00000000/$flash_createprofile.xex: 126 entries -> reference/imports/packages/su20076000_00000000/$flash_createprofile.xex.txt
+packages/su20076000_00000000/$flash_dash.xex: 823 entries -> reference/imports/packages/su20076000_00000000/$flash_dash.xex.txt
+packages/su20076000_00000000/$flash_deviceselector.xex: 90 entries -> reference/imports/packages/su20076000_00000000/$flash_deviceselector.xex.txt
+packages/su20076000_00000000/$flash_gamerprofile.xex: 212 entries -> reference/imports/packages/su20076000_00000000/$flash_gamerprofile.xex.txt
+packages/su20076000_00000000/$flash_hud.xex: 254 entries -> reference/imports/packages/su20076000_00000000/$flash_hud.xex.txt
+packages/su20076000_00000000/$flash_mfgbootlauncher.xex: 86 entries -> reference/imports/packages/su20076000_00000000/$flash_mfgbootlauncher.xex.txt
+packages/su20076000_00000000/$flash_minimediaplayer.xex: 88 entries -> reference/imports/packages/su20076000_00000000/$flash_minimediaplayer.xex.txt
+packages/su20076000_00000000/$flash_signin.xex: 250 entries -> reference/imports/packages/su20076000_00000000/$flash_signin.xex.txt
+packages/su20076000_00000000/$flash_systemupdate.xex: 159 entries -> reference/imports/packages/su20076000_00000000/$flash_systemupdate.xex.txt
+packages/su20076000_00000000/$flash_systemupdate2pre.xex: 147 entries -> reference/imports/packages/su20076000_00000000/$flash_systemupdate2pre.xex.txt
+packages/su20076000_00000000/$flash_updater.xex: 99 entries -> reference/imports/packages/su20076000_00000000/$flash_updater.xex.txt
+packages/su20076000_00000000/$flash_vk.xex: 96 entries -> reference/imports/packages/su20076000_00000000/$flash_vk.xex.txt
+packages/su20076000_00000000/$flash_xam.xex: 463 entries -> reference/imports/packages/su20076000_00000000/$flash_xam.xex.txt
+packages/su20076000_00000000/$flash_ximecore.xex: 55 entries -> reference/imports/packages/su20076000_00000000/$flash_ximecore.xex.txt
+packages/su20076000_00000000/$install_extender.xex: 89 entries -> reference/imports/packages/su20076000_00000000/$install_extender.xex.txt

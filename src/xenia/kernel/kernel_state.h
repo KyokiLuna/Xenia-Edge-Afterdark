@@ -16,12 +16,16 @@
 #include <deque>
 #include <functional>
 #include <list>
+#include <memory>
 #include <mutex>
+#include <system_error>
 #include <vector>
 
 #include "xenia/base/bit_map.h"
+#include "xenia/base/physical_range_leases.h"
 #include "xenia/cpu/backend/backend.h"
 #include "xenia/cpu/export_resolver.h"
+#include "xenia/kernel/guest_runtime.h"
 #include "xenia/kernel/guest_scheduler.h"
 #include "xenia/kernel/kernel.h"
 #include "xenia/kernel/nui.h"
@@ -39,9 +43,18 @@ class ByteStream;
 class Emulator;
 namespace cpu {
 class Processor;
+class GuestImportProvider;
 }  // namespace cpu
+namespace filesystem {
+class SnapshotRecoveryOwner;
+}  // namespace filesystem
 namespace kernel {
 class SystemManagementController;
+class NativeImportDomain;
+class NativeSystemAllocationAuthority;
+class NativeNotificationPreferenceCoordinator;
+class XStfsDevice;
+struct NativeSystemPhysicalAllocationDecision;
 namespace xam {
 class AchievementManager;
 class AppManager;
@@ -150,9 +163,25 @@ struct KernelGuestGlobals {
   // KeQueryBackgroundProcessors and written by KeSetBackgroundProcessors.
   // 0x3C (CPUs 2-5) is the console's boot value.
   xe::be<uint32_t> background_processors;
+
+  // Virtual-kernel work/error events, shared by SYSTEM and title clients.
+  // Appended so existing guest-global offsets remain unchanged.
+  X_KEVENT UsbdDriverLoadRequiredEvent;
+  X_KEVENT StfsDeviceErrorEvent;
 };
 struct DPCImpersonationScope {
-  uint8_t previous_irql_;
+  uint8_t previous_irql_ = 0;
+  uint8_t previous_process_type_ = 0;
+  uint8_t previous_cpu_ = 0;
+  uint8_t previous_dpc_active_ = 0;
+  void Enter(X_KPCR& pcr, uint32_t process_type = UINT32_MAX);
+  void Leave(X_KPCR& pcr) const;
+  // The same context helper is used by CP dispatch and tests. Deferred work
+  // retains the selected process/CPU until the final restoration.
+  static void Run(X_KPCR& pcr, uint32_t process_type, uint8_t cpu,
+                  const std::function<void(uint8_t)>& select_cpu,
+                  const std::function<void()>& callback,
+                  const std::function<void()>& deferred_dpcs);
 };
 
 struct KernelVersion {
@@ -177,7 +206,11 @@ struct KernelVersion {
 
 class KernelState {
  public:
-  explicit KernelState(Emulator* emulator);
+  explicit KernelState(
+      Emulator* emulator,
+      std::shared_ptr<ConsoleSettingsStore> console_settings = {},
+      std::error_code console_settings_error = {},
+      std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery_owner = {});
   ~KernelState();
 
   static KernelState* shared();
@@ -186,6 +219,9 @@ class KernelState {
   Memory* memory() const { return memory_; }
   cpu::Processor* processor() const { return processor_; }
   vfs::VirtualFileSystem* file_system() const { return file_system_; }
+  // Conservative native STFS body/context lifetime; never owns retired mounts
+  // or file/source leases. Reclaimed only after actual Kernel CPU shutdown.
+  bool KeepNativeStfsDevice(const object_ref<XStfsDevice>& device);
 
   uint32_t title_id() const;
   bool is_title_open() const;
@@ -219,6 +255,12 @@ class KernelState {
   void InitXmpVolumePatch();
 
   XConfig* xconfig() const { return xconfig_.get(); }
+  const std::shared_ptr<const filesystem::SnapshotRecoveryOwner>&
+  snapshot_recovery_owner() const { return snapshot_recovery_owner_; }
+  const std::shared_ptr<NativeNotificationPreferenceCoordinator>&
+  notification_preferences() const {
+    return notification_preferences_;
+  }
 
   std::bitset<4> GetConnectedUsers() const;
 
@@ -255,19 +297,105 @@ class KernelState {
                                 bool user_only = false);
   // Returns the loaded XEX module whose image contains the guest address.
   object_ref<UserModule> GetUserModuleForAddress(uint32_t address);
+  // Atomically check loaded-module lifetime and publish callback admission
+  // against UnloadUserModule's claim. Unclassified callbacks remain legacy.
+  bool RegisterGraphicsInterruptCallback(uint32_t callback, uint32_t user_data,
+                                         uint32_t process_type);
 
   object_ref<XThread> LaunchModule(object_ref<UserModule> module);
   object_ref<UserModule> GetExecutableModule();
   void SetExecutableModule(object_ref<UserModule> module);
-  object_ref<UserModule> LoadUserModule(const std::string_view name,
-                                        bool call_entry = true);
-  object_ref<UserModule> LoadUserModuleFromMemory(const std::string_view name,
-                                                  const void* addr,
-                                                  const size_t length);
+  object_ref<UserModule> LoadUserModule(
+      const std::string_view name, bool call_entry = true,
+      bool system_app_module = false,
+      std::shared_ptr<const cpu::GuestImportProvider> import_provider = {},
+      std::shared_ptr<NativeImportDomain> import_domain = {});
+  object_ref<UserModule> LoadUserModuleFromMemory(
+      const std::string_view name, const void* addr, const size_t length,
+      std::shared_ptr<NativeImportDomain> import_domain = {});
+  struct NativeImportCaller {
+    object_ref<UserModule> module;
+    std::shared_ptr<NativeImportDomain> domain;
+    bool scoped = false;
+  };
+  // Registration is explicit for the KRNL-only root; it does not redirect
+  // unrelated callers or establish native task/subsystem readiness.
+  std::shared_ptr<NativeImportDomain> CreateNativeImportDomain(
+      const object_ref<UserModule>& root,
+      std::shared_ptr<const cpu::GuestImportProvider> profile);
+  bool RegisterNativeImportDomainMember(
+      const std::shared_ptr<NativeImportDomain>& domain,
+      const object_ref<UserModule>& module);
+  NativeImportCaller ResolveNativeImportCaller(uint32_t return_address);
+  bool RetireNativeImportDomain(
+      const std::shared_ptr<NativeImportDomain>& domain);
+  // Retired domains remain recorded: their native workers may still require
+  // an explicit early stop/drain before providers disappear.
+  bool HasNativeImportDomains();
+  NativeSystemPhysicalAllocationDecision DecideNativeSystemPhysicalAllocation(
+      uint32_t return_address);
+  // Includes pre-domain partial startup and closed/retained tombstones.
+  bool HasNativeSystemAllocationAuthorities();
+  void CloseNativeSystemAllocationAdmission();
+  bool RetireNativeSystemAllocationsAfterKernelStop(
+      const std::function<bool(const memory::PhysicalAllocationOwner&)>& proof);
+  object_ref<XModule> GetNativeImportModule(const NativeImportCaller& caller,
+                                            std::string_view name);
+  uint32_t GetNativeImportProcedure(const NativeImportCaller& caller,
+                                    const object_ref<XModule>& module,
+                                    uint16_t ordinal,
+                                    std::string_view name = {});
   X_RESULT FinishLoadingUserModule(const object_ref<UserModule> module,
-                                   bool call_entry = true);
-  void UnloadUserModule(const object_ref<UserModule>& module,
-                        bool call_entry = true);
+                                   bool call_entry = true,
+                                   bool compile_discovered = true);
+  X_STATUS UnloadUserModule(const object_ref<UserModule>& module,
+                            bool call_entry = true);
+
+  // Internal SysApp lifecycle. The caller must be a system-process XThread;
+  // this never replaces the title's executable module or launch environment.
+  X_HRESULT LoadGuestSystemApp(
+      uint32_t app_id, std::string_view module_path, uint32_t user_index,
+      uint32_t options_ptr = 0,
+      std::shared_ptr<const cpu::GuestImportProvider> import_provider = {});
+  X_HRESULT UnloadGuestSystemApp(uint32_t app_id);
+  class UserModuleExecutionLease {
+   public:
+    uint32_t hmodule() const { return hmodule_; }
+    UserModuleExecutionLease(const UserModuleExecutionLease&) = delete;
+    UserModuleExecutionLease& operator=(const UserModuleExecutionLease&) =
+        delete;
+    UserModuleExecutionLease(UserModuleExecutionLease&&) = delete;
+    UserModuleExecutionLease& operator=(UserModuleExecutionLease&&) = delete;
+
+   private:
+    friend class KernelState;
+    UserModuleExecutionLease(KernelState* kernel, const UserModule* owner,
+                             uint32_t hmodule)
+        : kernel_(kernel), owner_(owner), hmodule_(hmodule) {}
+    KernelState* const kernel_;
+    const UserModule* const owner_;
+    const uint32_t hmodule_;
+  };
+  X_HRESULT UnloadGuestSystemApp(
+      uint32_t app_id,
+      std::shared_ptr<UserModuleExecutionLease> execution_lease);
+  // Protect direct native callbacks/objects against explicit module unload,
+  // not merely object destruction. Admission is atomic with the unload claim.
+  std::shared_ptr<UserModuleExecutionLease> AcquireUserModuleExecutionLease(
+      const object_ref<UserModule>& module);
+  // Guest-only resources with uncertain cleanup remain until guest threads
+  // have stopped at full kernel teardown. Never pass host GPU handles here.
+  void RetainNativeResourceUntilTeardown(std::shared_ptr<void> resource);
+  // Explicit diagnostic until native HUD rendering/input is available.
+  void StartNativeGuideBootstrapProbe(uint32_t user_index);
+  void ShutdownNativeGuideBootstrapProbe();
+
+  // Separately owned native-runtime readiness. Resource loading and the legacy
+  // DLL attachment compatibility flag never create a Ready runtime. Native
+  // system runtimes are resident until full kernel/memory teardown.
+  std::shared_ptr<GuestRuntime> GetGuestRuntime(uint32_t hmodule);
+  std::shared_ptr<GuestRuntime> CreateGuestRuntime(
+      const object_ref<UserModule>& module);
 
   object_ref<KernelModule> GetKernelModule(const std::string_view name);
   template <typename T>
@@ -310,6 +438,9 @@ class KernelState {
   void RegisterNotifyListener(XNotifyListener* listener);
   void UnregisterNotifyListener(XNotifyListener* listener);
   void BroadcastNotification(XNotificationID id, uint32_t data);
+  // Native XAM already delivered to its own native listeners. Mirror this
+  // actual SYS_UI event only into emulator TITLE listener objects.
+  void BroadcastNativeSystemUiNotification(bool visible);
 
   util::NativeList* dpc_list() { return &dpc_list_; }
 
@@ -392,12 +523,15 @@ class KernelState {
 
   void EmulateCPInterruptDPC(uint32_t interrupt_callback,
                              uint32_t interrupt_callback_data, uint32_t source,
-                             uint32_t cpu);
+                             uint32_t cpu,
+                             uint32_t process_type = X_PROCTYPE_TITLE);
 
   void InitializeXbdmCpuCounters();
   std::array<uint32_t, 0x11> xbdm_counters_address = {};
 
  private:
+  void CompleteUserModuleUnload(const object_ref<UserModule>& module,
+                                bool call_entry);
   void LoadKernelModule(object_ref<KernelModule> kernel_module);
   object_ref<XEvent> AcquireIoEvent();
   void ReleaseIoEvent(object_ref<XEvent> event);
@@ -424,6 +558,10 @@ class KernelState {
   cpu::Processor* processor_;
   vfs::VirtualFileSystem* file_system_;
   std::unique_ptr<xam::XamState> xam_state_;
+  std::vector<object_ref<XStfsDevice>> native_stfs_devices_;
+  object_ref<XHostThread> native_guide_probe_thread_;
+  std::atomic<bool> native_guide_probe_stop_{false};
+  std::atomic_flag system_app_operation_active_ = ATOMIC_FLAG_INIT;
   std::unique_ptr<GuestScheduler> guest_scheduler_;
   // Pooled completion events for RunBlockingIo so a request creates no kernel
   // object.
@@ -432,6 +570,11 @@ class KernelState {
   std::unique_ptr<SystemManagementController> smc_;
   std::unique_ptr<XmpVolumePatch> xmp_volume_patch_;
   std::unique_ptr<XConfig> xconfig_;
+  std::shared_ptr<const filesystem::SnapshotRecoveryOwner> snapshot_recovery_owner_;
+  // Console authority and native cache handover outlive the resident service.
+  // No service/coordinator ownership cycle or second settings store.
+  std::shared_ptr<NativeNotificationPreferenceCoordinator>
+      notification_preferences_;
   std::unique_ptr<NUIController> nui_;
 
   KernelVersion kernel_version_;
@@ -449,6 +592,15 @@ class KernelState {
   object_ref<UserModule> executable_module_;
   std::vector<object_ref<KernelModule>> kernel_modules_;
   std::vector<object_ref<UserModule>> user_modules_;
+  std::unordered_map<uint32_t, std::shared_ptr<GuestRuntime>> guest_runtimes_;
+  std::unordered_map<uint64_t, std::shared_ptr<NativeImportDomain>>
+      native_import_domains_;
+  uint64_t next_native_import_domain_ = 1;
+  std::vector<std::shared_ptr<NativeSystemAllocationAuthority>>
+      native_system_allocation_authorities_;
+  std::vector<std::shared_ptr<void>> resident_native_resources_;
+  std::unordered_map<uint32_t, std::shared_ptr<void>> native_system_app_leases_;
+  uint64_t next_guest_runtime_generation_ = 1;
   std::vector<TerminateNotification> terminate_notifications_;
   uint32_t kernel_guest_globals_ = 0;
 
@@ -484,6 +636,7 @@ class KernelState {
   uint32_t strange_hardcoded_location_ = 0x8E038634;
 
   friend class XObject;
+  friend class NativeSystemAllocationAuthority;
 
  public:
   uint32_t dash_context_ = 0;

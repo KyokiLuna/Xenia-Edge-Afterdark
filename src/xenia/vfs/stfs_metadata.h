@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "third_party/tomlplusplus/toml.hpp"
+#include "xenia/vfs/title_metadata.h"
 #include "xenia/xbox.h"
 
 namespace xe {
@@ -30,6 +31,9 @@ struct StfsMetadata {
   // Packed XEX version, the form XexVersion::FromValue() takes.
   uint32_t version = 0;
   uint64_t content_size = 0;
+  uint32_t package_license_mask = 0;
+  // Physical STFS category, not SPA TitleType or a host-derived substitute.
+  uint32_t native_category = 0;
 
   std::string display_name;
   std::string description;
@@ -42,14 +46,18 @@ struct StfsMetadata {
   // Raw bytes of the embedded title_thumbnail (PNG). Empty if absent.
   std::vector<uint8_t> icon_data;
 
+  TitleResourcesStatus title_resources_status =
+      TitleResourcesStatus::kNotRequested;
+  std::optional<TitleResourceMetadata> title_resources;
+
   toml::table ToToml() const;
 };
 
 // `language` selects which localized title/description slot to read.
 // Falls back to English automatically if the requested slot is empty.
 std::optional<StfsMetadata> ExtractStfsMetadata(
-    const std::filesystem::path& path,
-    XLanguage language = XLanguage::kEnglish);
+    const std::filesystem::path& path, XLanguage language = XLanguage::kEnglish,
+    bool read_title_resources = false);
 
 }  // namespace vfs
 }  // namespace xe

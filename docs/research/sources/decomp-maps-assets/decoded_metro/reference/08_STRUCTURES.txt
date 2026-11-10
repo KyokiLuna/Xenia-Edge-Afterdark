@@ -1,0 +1,13 @@
+Structures and confidence
+=========================
+
+XEX2, PE, STFS and XUIZ fields are structurally parsed; code and evidence live in dashboard_tools/.
+Managed type/member metadata: managed_types.tsv and managed_api.tsv.
+Recovered function signatures in functions.tsv are Ghidra estimates, not verified SDK prototypes.
+Import thunks retain encoded ordinal markers; guest-kernel import fixups are not applied to original bytes.
+Call target names are enriched from import/export tables when those markers prevent Ghidra function discovery.
+Flat-image recovery restores PE section permissions and seeds packed-unwind function extents; see ghidra/specs/ and fallback.log.
+IPC register/structure arguments remain heuristic; no old-build structure offsets are reused.
+BDES signatures are preserved but not cryptographically authenticated.
+Parent-relative archive keys are stored under __parent__; duplicate keys under __duplicates/<entry>/.
+Original lookup keys and offsets remain in assets.tsv. Opaque formats are preserved without conversion.

@@ -35,8 +35,10 @@ class XContentContainerFile : public File {
   X_STATUS SetLength(size_t length) override { return X_STATUS_ACCESS_DENIED; }
 
  private:
-  virtual size_t Read(std::span<uint8_t> buffer, size_t offset,
-                      size_t record_file) = 0;
+  // A failed package read can have copied a prefix. Carry both facts through
+  // the logical file walker instead of returning a fabricated successful EOF.
+  virtual X_STATUS Read(std::span<uint8_t> buffer, size_t offset,
+                        size_t record_file, size_t* transferred) = 0;
 
   XContentContainerEntry* entry_;
 };

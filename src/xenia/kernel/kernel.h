@@ -200,7 +200,7 @@ struct X_OBJECT_HEADER_NAME_INFO {
 struct X_OBJECT_ATTRIBUTES {
   xe::be<uint32_t> root_directory;  // 0x0
   xe::be<uint32_t> name_ptr;        // 0x4 PANSI_STRING
-  xe::be<uint32_t> attributes;      // 0xC
+  xe::be<uint32_t> attributes;      // 0x8
 };
 
 struct X_OBJECT_TYPE {

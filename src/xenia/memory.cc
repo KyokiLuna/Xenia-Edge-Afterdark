@@ -178,6 +178,12 @@ Memory::Memory() {
 Memory::~Memory() {
   assert_true(active_memory_ == this);
   active_memory_ = nullptr;
+  {
+    auto lock = global_critical_region_.Acquire();
+    // Backend/device shutdown must precede Memory destruction. Surviving host
+    // tokens become invalid and can later die without dereferencing Memory.
+    physical_range_leases_.StopLocked();
+  }
 
   // Uninstall the MMIO handler, as we won't be able to service more
   // requests.
@@ -630,13 +636,19 @@ bool Memory::ClaimUserWindow(uint8_t* user_membase) {
                                   xe::memory::DeallocationType::kRelease);
 }
 
-void Memory::Reset() {
+bool Memory::Reset() {
+  auto lock = global_critical_region_.Acquire();
+  if (!physical_range_leases_.ClearLocked()) {
+    XELOGE("Memory reset refused: owned physical allocations are pinned");
+    return false;
+  }
   heaps_.v00000000.Reset();
   ReserveKernelPageTable();
   heaps_.v40000000.Reset();
   heaps_.v80000000.Reset();
   heaps_.v90000000.Reset();
   heaps_.physical.Reset();
+  return true;
 }
 // clang does not like non-standard layout offsetof
 #if XE_COMPILER_MSVC == 1 && XE_COMPILER_CLANG_CL == 0
@@ -737,6 +749,132 @@ BaseHeap* Memory::LookupHeapByType(bool physical, uint32_t page_size) {
 }
 
 VirtualHeap* Memory::GetPhysicalHeap() { return &heaps_.physical; }
+
+memory::PhysicalRangePinResult Memory::PinOwnedPhysicalRanges(
+    const memory::PhysicalAllocationOwner& owner,
+    std::span<const memory::PhysicalRange> ranges) {
+  using Status = memory::PhysicalLeaseStatus;
+  auto lock = global_critical_region_.Acquire();
+  if (!owner.valid()) {
+    return {Status::kInvalidOwner};
+  }
+  if (ranges.empty() || ranges.size() > 4096) {
+    return {Status::kInvalidRange};
+  }
+  for (size_t i = 0; i < ranges.size(); ++i) {
+    const auto& range = ranges[i];
+    if (!range.length || range.address >= 0x20000000u ||
+        range.length > 0x20000000u - range.address) {
+      return {Status::kInvalidRange, uint32_t(i)};
+    }
+    if (heaps_.physical.QueryRangeAccess(range.address,
+                                         range.address + range.length - 1) ==
+        memory::PageAccess::kNoAccess) {
+      return {Status::kNotCommitted, uint32_t(i)};
+    }
+  }
+  auto result = physical_range_leases_.PinLocked(owner, ranges);
+  if (result) {
+    // An arena pin covers its actual complete backing allocation, not only a
+    // readable suballocation surrounded by decommitted parent pages.
+    for (const auto& allocation : result.pin->allocations()) {
+      if (heaps_.physical.QueryRangeAccess(
+              allocation.physical_address,
+              allocation.physical_address + allocation.length - 1) ==
+          memory::PageAccess::kNoAccess) {
+        result.pin.reset();
+        result.status = Status::kNotCommitted;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+memory::PhysicalLeaseStatus Memory::ReleaseOwnedPhysicalAllocation(
+    const memory::PhysicalAllocationOwner& owner, uint64_t allocation_id) {
+  using Status = memory::PhysicalLeaseStatus;
+  auto lock = global_critical_region_.Acquire();
+  memory::PhysicalAllocationIdentity identity;
+  const auto status =
+      physical_range_leases_.FindLocked(owner, allocation_id, &identity);
+  if (status != Status::kSuccess) {
+    return status;
+  }
+  auto* heap = LookupHeap(identity.virtual_address);
+  if (!heap || heap == &heaps_.physical ||
+      heap->heap_type() != HeapType::kGuestPhysical) {
+    return Status::kStaleAllocation;
+  }
+  // Transfer the single held lock into the normal physical free path. Its
+  // callback boundary must not be wrapped in another recursive global lock.
+  return static_cast<PhysicalHeap*>(heap)->ReleaseLocked(
+             identity.virtual_address, nullptr, std::move(lock))
+             ? Status::kSuccess
+             : Status::kAllocationFailed;
+}
+
+bool Memory::CanMutatePhysicalRangeLocked(const BaseHeap& heap,
+                                          uint32_t address,
+                                          uint32_t length) const {
+  if (!length) {
+    return true;
+  }
+  uint32_t physical = address;
+  if (&heap != &heaps_.physical) {
+    const PhysicalHeap* actual_alias = nullptr;
+    for (const auto* alias : {&heaps_.v7F000000, &heaps_.vA0000000,
+                              &heaps_.vC0000000, &heaps_.vE0000000}) {
+      if (&heap == alias) {
+        actual_alias = alias;
+        break;
+      }
+    }
+    // HeapType is guest allocation semantics, not a C++ dynamic type.
+    // Independent VirtualHeap/PhysicalHeap fixtures own no backing here.
+    if (!actual_alias) {
+      return true;
+    }
+    physical = actual_alias->GetPhysicalAddress(address);
+  }
+  return !physical_range_leases_.HasPinsLocked(physical, length);
+}
+
+void Memory::ForgetPhysicalRangeLocked(const BaseHeap& heap, uint32_t address,
+                                       uint32_t length) {
+  if (!length) {
+    return;
+  }
+  uint32_t physical = address;
+  if (&heap != &heaps_.physical) {
+    const PhysicalHeap* actual_alias = nullptr;
+    for (const auto* alias : {&heaps_.v7F000000, &heaps_.vA0000000,
+                              &heaps_.vC0000000, &heaps_.vE0000000}) {
+      if (&heap == alias) {
+        actual_alias = alias;
+        break;
+      }
+    }
+    if (!actual_alias) {
+      return;
+    }
+    physical = actual_alias->GetPhysicalAddress(address);
+  }
+  physical_range_leases_.ForgetLocked(physical, length);
+}
+
+uint64_t Memory::RegisterOwnedPhysicalAllocationLocked(
+    const memory::PhysicalAllocationOwner& owner, uint32_t virtual_address,
+    uint32_t physical_address, uint32_t actual_size) {
+  return physical_range_leases_.RegisterLocked(
+      {0, owner, physical_address, actual_size, virtual_address});
+}
+
+bool Memory::LookupOwnedPhysicalAllocationLocked(
+    uint32_t physical_address,
+    memory::PhysicalAllocationIdentity* identity) const {
+  return physical_range_leases_.LookupLocked(physical_address, identity);
+}
 
 void Memory::GetHeapsPageStatsSummary(const BaseHeap* const* provided_heaps,
                                       size_t heaps_count,
@@ -2243,6 +2381,10 @@ void Memory::DumpMap() {
 }
 
 bool Memory::Save(ByteStream* stream) {
+  auto lock = global_critical_region_.Acquire();
+  if (physical_range_leases_.HasPinsLocked(0, 0x20000000)) {
+    return false;
+  }
   XELOGD("Serializing memory...");
   heaps_.v00000000.Save(stream);
   heaps_.v40000000.Save(stream);
@@ -2254,6 +2396,10 @@ bool Memory::Save(ByteStream* stream) {
 }
 
 bool Memory::Restore(ByteStream* stream) {
+  auto lock = global_critical_region_.Acquire();
+  if (!physical_range_leases_.ClearLocked()) {
+    return false;
+  }
   XELOGD("Restoring memory...");
   heaps_.v00000000.Restore(stream);
   heaps_.v40000000.Restore(stream);
@@ -2311,6 +2457,18 @@ void BaseHeap::Initialize(Memory* memory, uint8_t* membase, HeapType heap_type,
 }
 
 void BaseHeap::Dispose() {
+  if (page_table_.empty()) {
+    return;
+  }
+  auto lock = global_critical_region_.Acquire();
+  if (memory_ &&
+      !memory_->CanMutatePhysicalRangeLocked(*this, heap_base_, heap_size_)) {
+    XELOGE("Heap dispose refused: owned physical allocations are pinned");
+    return;
+  }
+  if (memory_) {
+    memory_->ForgetPhysicalRangeLocked(*this, heap_base_, heap_size_);
+  }
   // Walk table and release all regions.
   for (uint32_t page_number = 0; page_number < page_table_.size();
        ++page_number) {
@@ -2377,6 +2535,11 @@ void BaseHeap::DumpMap() {
 }
 
 bool BaseHeap::Save(ByteStream* stream) {
+  auto lock = global_critical_region_.Acquire();
+  if (memory_ &&
+      !memory_->CanMutatePhysicalRangeLocked(*this, heap_base_, heap_size_)) {
+    return false;
+  }
   XELOGD("Heap {:08X}-{:08X}", heap_base_, heap_base_ + (heap_size_ - 1));
 
   for (size_t i = 0; i < page_table_.size(); i++) {
@@ -2405,6 +2568,15 @@ bool BaseHeap::Save(ByteStream* stream) {
 }
 
 bool BaseHeap::Restore(ByteStream* stream) {
+  auto lock = global_critical_region_.Acquire();
+  if (memory_ &&
+      !memory_->CanMutatePhysicalRangeLocked(*this, heap_base_, heap_size_)) {
+    return false;
+  }
+  // Serialized page contents carry no host allocation-owner authority.
+  if (memory_) {
+    memory_->ForgetPhysicalRangeLocked(*this, heap_base_, heap_size_);
+  }
   XELOGD("Heap {:08X}-{:08X}", heap_base_, heap_base_ + (heap_size_ - 1));
 
   for (size_t i = 0; i < page_table_.size(); i++) {
@@ -2528,6 +2700,15 @@ void BaseHeap::InsertFreeBlock(uint32_t start_page, uint32_t page_count) {
 }
 
 void BaseHeap::Reset() {
+  auto lock = global_critical_region_.Acquire();
+  if (memory_ &&
+      !memory_->CanMutatePhysicalRangeLocked(*this, heap_base_, heap_size_)) {
+    XELOGE("Heap reset refused: owned physical allocations are pinned");
+    return;
+  }
+  if (memory_) {
+    memory_->ForgetPhysicalRangeLocked(*this, heap_base_, heap_size_);
+  }
   // TODO(DrChat): protect pages.
   std::memset(page_table_.data(), 0, sizeof(PageEntry) * page_table_.size());
   unreserved_page_count_ = uint32_t(page_table_.size());
@@ -2576,6 +2757,11 @@ bool BaseHeap::AllocFixed(uint32_t base_address, uint32_t size,
   }
 
   auto global_lock = global_critical_region_.Acquire();
+  if (memory_ && !memory_->CanMutatePhysicalRangeLocked(
+                     *this, heap_base_ + start_page_number * page_size_,
+                     page_count * page_size_)) {
+    return false;
+  }
 
   // - If we are reserving, the entire range must not be already reserved.
   // - If we are committing it's ok for pages within the range to already be
@@ -2617,6 +2803,11 @@ bool BaseHeap::AllocFixed(uint32_t base_address, uint32_t size,
   }
 
   // Set page state.
+  if (memory_) {
+    memory_->ForgetPhysicalRangeLocked(
+        *this, heap_base_ + start_page_number * page_size_,
+        page_count * page_size_);
+  }
   bool had_free_pages = false;
   for (uint32_t page_number = start_page_number; page_number <= end_page_number;
        ++page_number) {
@@ -2840,6 +3031,13 @@ bool BaseHeap::Decommit(uint32_t address, uint32_t size) {
   end_page_number = std::min(uint32_t(page_table_.size()) - 1, end_page_number);
 
   auto global_lock = global_critical_region_.Acquire();
+  const uint32_t touched_address = heap_base_ + start_page_number * page_size_;
+  const uint32_t touched_size =
+      (end_page_number - start_page_number + 1) * page_size_;
+  if (memory_ && !memory_->CanMutatePhysicalRangeLocked(*this, touched_address,
+                                                        touched_size)) {
+    return false;
+  }
 
   // Release from host.
   // TODO(benvanik): find a way to actually decommit memory;
@@ -2853,6 +3051,9 @@ bool BaseHeap::Decommit(uint32_t address, uint32_t size) {
   }*/
 
   // Perform table change.
+  if (memory_) {
+    memory_->ForgetPhysicalRangeLocked(*this, touched_address, touched_size);
+  }
   for (uint32_t page_number = start_page_number; page_number <= end_page_number;
        ++page_number) {
     auto& page_entry = page_table_[page_number];
@@ -2875,6 +3076,11 @@ bool BaseHeap::Release(uint32_t base_address, uint32_t* out_region_size) {
 
   if (heap_base_ == 0x00000000 && base_page_number == 0) {
     XELOGE("BaseHeap::Release: Attempt to free 0!");
+    return false;
+  }
+  if (memory_ && !memory_->CanMutatePhysicalRangeLocked(
+                     *this, heap_base_ + base_page_number * page_size_,
+                     base_page_entry.region_page_count * page_size_)) {
     return false;
   }
 
@@ -2909,6 +3115,11 @@ bool BaseHeap::Release(uint32_t base_address, uint32_t* out_region_size) {
   }
 
   // Perform table change.
+  if (memory_) {
+    memory_->ForgetPhysicalRangeLocked(
+        *this, heap_base_ + base_page_number * page_size_,
+        base_page_entry.region_page_count * page_size_);
+  }
   uint32_t end_page_number =
       base_page_number + base_page_entry.region_page_count - 1;
   for (uint32_t page_number = base_page_number; page_number <= end_page_number;
@@ -3099,6 +3310,11 @@ bool BaseHeap::Protect(uint32_t address, uint32_t size, uint32_t protect,
   }
 
   auto global_lock = global_critical_region_.Acquire();
+  if (memory_ && !memory_->CanMutatePhysicalRangeLocked(
+                     *this, heap_base_ + start_page_number * page_size_,
+                     (end_page_number - start_page_number + 1) * page_size_)) {
+    return false;
+  }
 
   // Ensure all pages are in the same reserved region and all are committed.
   uint32_t first_base_address = UINT_MAX;
@@ -3445,7 +3661,55 @@ bool PhysicalHeap::AllocRange(uint32_t low_address, uint32_t high_address,
                               uint32_t size, uint32_t alignment,
                               uint32_t allocation_type, uint32_t protect,
                               bool top_down, uint32_t* out_address) {
+  return AllocRangeInternal(low_address, high_address, size, alignment,
+                            allocation_type, protect, top_down, out_address,
+                            nullptr, nullptr);
+}
+
+bool PhysicalHeap::AllocRangeOwned(uint32_t low_address, uint32_t high_address,
+                                   uint32_t size, uint32_t alignment,
+                                   uint32_t allocation_type, uint32_t protect,
+                                   bool top_down,
+                                   const memory::PhysicalAllocationOwner& owner,
+                                   uint32_t* out_address,
+                                   uint64_t* out_allocation_id) {
+  return AllocRangeInternal(low_address, high_address, size, alignment,
+                            allocation_type, protect, top_down, out_address,
+                            &owner, out_allocation_id);
+}
+
+bool PhysicalHeap::AllocRangeInternal(
+    uint32_t low_address, uint32_t high_address, uint32_t size,
+    uint32_t alignment, uint32_t allocation_type, uint32_t protect,
+    bool top_down, uint32_t* out_address,
+    const memory::PhysicalAllocationOwner* owner, uint64_t* out_allocation_id) {
   *out_address = 0;
+  if (out_allocation_id) {
+    *out_allocation_id = 0;
+  }
+  if (owner) {
+    // Keep the actual parent allocation at least as large as the alias's
+    // alignment-rounded AllocFixed extent. Do not change legacy allocation
+    // rounding when no host owner was supplied.
+    const uint64_t owned_alignment =
+        xe::round_up(uint64_t(alignment), uint64_t(page_size_));
+    if (!memory_ || memory_->LookupHeap(heap_base_) != this ||
+        parent_heap_ != memory_->GetPhysicalHeap() || !owner->valid() ||
+        !size || !xe::is_pow2(owned_alignment) ||
+        owned_alignment > 0x20000000ull ||
+        allocation_type !=
+            (kMemoryAllocationReserve | kMemoryAllocationCommit)) {
+      return false;
+    }
+    const uint64_t owned_size = xe::round_up(uint64_t(size), owned_alignment);
+    if (owned_size > 0x20000000ull ||
+        std::max(low_address, heap_base_) >
+            std::min(high_address, heap_base_ + heap_size_ - 1)) {
+      return false;
+    }
+    alignment = uint32_t(owned_alignment);
+    size = uint32_t(owned_size);
+  }
 
   // Adjust alignment size our page size differs from the parent.
   size = xe::round_up(size, page_size_);
@@ -3483,9 +3747,23 @@ bool PhysicalHeap::AllocRange(uint32_t low_address, uint32_t high_address,
     parent_heap_->Release(parent_address);
     return false;
   }
+  uint64_t allocation_id = 0;
+  if (owner) {
+    allocation_id = memory_->RegisterOwnedPhysicalAllocationLocked(
+        *owner, address, parent_address, size);
+    if (!allocation_id) {
+      // Neither address nor ownership was published. Preserve the allocator's
+      // normal callback lock boundary while rolling back both real views.
+      ReleaseLocked(address, nullptr, std::move(global_lock));
+      return false;
+    }
+  }
   TriggerCallbacks(std::move(global_lock), address, xe::align(size, alignment),
                    true, true, true, true, true);
   *out_address = address;
+  if (out_allocation_id) {
+    *out_allocation_id = allocation_id;
+  }
   return true;
 }
 
@@ -3514,8 +3792,47 @@ bool PhysicalHeap::Decommit(uint32_t address, uint32_t size) {
 
 bool PhysicalHeap::Release(uint32_t base_address, uint32_t* out_region_size) {
   auto global_lock = global_critical_region_.Acquire();
+  return ReleaseLocked(base_address, out_region_size, std::move(global_lock));
+}
 
+bool PhysicalHeap::ReleaseLocked(uint32_t base_address,
+                                 uint32_t* out_region_size,
+                                 global_unique_lock_type global_lock) {
   uint32_t parent_base_address = GetPhysicalAddress(base_address);
+  memory::PhysicalAllocationIdentity owned;
+  if (memory_->LookupOwnedPhysicalAllocationLocked(parent_base_address,
+                                                   &owned)) {
+    // A tracked allocation is released through its original view only. Finish
+    // BOTH allocator metadata releases under this one lock, before callbacks
+    // can recursively allocate or another thread can reuse this address. The
+    // legacy parent -> callback -> alias order could free a replacement alias
+    // and forget its new allocation ID on returning from that callback.
+    HeapAllocationInfo alias_info{}, parent_info{};
+    if (owned.virtual_address != base_address ||
+        !QueryRegionInfo(base_address, &alias_info) ||
+        !parent_heap_->QueryRegionInfo(parent_base_address, &parent_info) ||
+        alias_info.allocation_base != base_address ||
+        parent_info.allocation_base != parent_base_address ||
+        alias_info.allocation_size != owned.length ||
+        parent_info.allocation_size != owned.length ||
+        !memory_->CanMutatePhysicalRangeLocked(*this, base_address,
+                                               owned.length)) {
+      return false;
+    }
+    if (!parent_heap_->Release(parent_base_address, nullptr) ||
+        !BaseHeap::Release(base_address, nullptr)) {
+      return false;
+    }
+    if (out_region_size) {
+      *out_region_size = owned.length;
+    }
+    // Metadata is already gone and protect_on_release has been applied. Only
+    // invalidate the discarded range; never unprotect an old mapping or touch
+    // its metadata after a callback may have installed a replacement.
+    TriggerCallbacks(std::move(global_lock), base_address, owned.length, true,
+                     true, false, true, true);
+    return true;
+  }
   if (!parent_heap_->Release(parent_base_address, out_region_size)) {
     XELOGE("PhysicalHeap::Release failed due to parent heap failure");
     return false;
@@ -3541,6 +3858,16 @@ bool PhysicalHeap::Release(uint32_t base_address, uint32_t* out_region_size) {
 bool PhysicalHeap::Protect(uint32_t address, uint32_t size, uint32_t protect,
                            uint32_t* old_protect) {
   auto global_lock = global_critical_region_.Acquire();
+  // Refuse before firing invalidation watches as well as before the parent
+  // protection changes. Include both partially covered alias pages.
+  const uint64_t first = uint64_t(address) & ~uint64_t(page_size_ - 1);
+  const uint64_t end =
+      xe::align(uint64_t(address) + size, uint64_t(page_size_));
+  if (size && end > first && end - first <= UINT32_MAX &&
+      !memory_->CanMutatePhysicalRangeLocked(*this, uint32_t(first),
+                                             uint32_t(end - first))) {
+    return false;
+  }
 
   // Only invalidate if making writable again, for simplicity - not when simply
   // marking some range as immutable, for instance. The guest is announcing a

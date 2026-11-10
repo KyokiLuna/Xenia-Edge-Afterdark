@@ -111,6 +111,32 @@ class Win32FileHandle : public FileHandle {
     CloseHandle(handle_);
     handle_ = nullptr;
   }
+  intptr_t native_handle() const override {
+    return reinterpret_cast<intptr_t>(handle_);
+  }
+  std::error_code LastError() const override {
+    return {int(::GetLastError()), std::system_category()};
+  }
+  std::optional<FileHandleInfo> QueryInfo(
+      std::error_code& error) const override {
+    BY_HANDLE_FILE_INFORMATION value;
+    if (!GetFileInformationByHandle(handle_, &value)) {
+      error = LastError();
+      return std::nullopt;
+    }
+    error.clear();
+    return FileHandleInfo{
+        (uint64_t(value.nFileSizeHigh) << 32) | value.nFileSizeLow,
+        value.nNumberOfLinks,
+        bool(value.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY),
+        GetFileType(handle_) == FILE_TYPE_DISK &&
+            !(value.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY),
+        value.dwVolumeSerialNumber,
+        (uint64_t(value.nFileIndexHigh) << 32) | value.nFileIndexLow};
+  }
+  std::error_code FlushResult() override {
+    return FlushFileBuffers(handle_) ? std::error_code{} : LastError();
+  }
   bool Read(size_t file_offset, void* buffer, size_t buffer_length,
             size_t* out_bytes_read) override {
     *out_bytes_read = 0;
@@ -174,6 +200,11 @@ class Win32FileHandle : public FileHandle {
  private:
   HANDLE handle_ = nullptr;
 };
+
+std::unique_ptr<FileHandle> FileHandle::AdoptNative(intptr_t handle, bool) {
+  return std::make_unique<Win32FileHandle>(std::filesystem::path(),
+                                           reinterpret_cast<HANDLE>(handle));
+}
 
 std::unique_ptr<FileHandle> FileHandle::OpenExisting(
     const std::filesystem::path& path, uint32_t desired_access) {

@@ -14,10 +14,10 @@
 #include <optional>
 #include <string>
 #include <vector>
-
 #include "xenia/kernel/util/xfiletime.h"
 #include "xenia/kernel/xam/xdbf/gpd_info.h"
 #include "xenia/kernel/xam/xdbf/spa_info.h"
+#include <memory>
 
 namespace xe {
 namespace kernel {
@@ -180,7 +180,7 @@ class AchievementBackendInterface {
       const uint32_t achievement_id) const = 0;
   virtual const std::vector<Achievement> GetTitleAchievements(
       const uint64_t xuid, const uint32_t title_id) const = 0;
-  virtual const std::span<const uint8_t> GetAchievementIcon(
+  virtual std::vector<uint8_t> GetAchievementIcon(
       const uint64_t xuid, const uint32_t title_id,
       const uint32_t achievement_id) const = 0;
   virtual bool LoadAchievementsData(const uint64_t xuid) = 0;
@@ -192,9 +192,12 @@ class AchievementBackendInterface {
                                    const Achievement* achievement) = 0;
 };
 
+struct CapturedAchievementAward;
+class DurableAchievementEvent;
 class AchievementManager {
  public:
   AchievementManager();
+  X_HRESULT CompleteCapturedAward(const CapturedAchievementAward&) const;
 
   void LoadTitleAchievements(const uint64_t xuid) const;
 
@@ -209,13 +212,14 @@ class AchievementManager {
       const uint64_t xuid, const uint32_t title_id) const;
   const std::optional<TitleAchievementsProfileInfo> GetTitleAchievementsInfo(
       const uint64_t xuid, const uint32_t title_id) const;
-  const std::span<const uint8_t> GetAchievementIcon(
+  std::vector<uint8_t> GetAchievementIcon(
       const uint64_t xuid, const uint32_t title_id,
       const uint32_t achievement_id) const;
 
  private:
   bool DoesAchievementExist(const uint32_t achievement_id) const;
-  void ShowAchievementEarnedNotification(const Achievement* achievement) const;
+  void ShowAchievementEarnedNotification(const Achievement* achievement,
+      std::shared_ptr<const DurableAchievementEvent>) const;
 
   // This contains all backends with exception of default storage.
   std::vector<std::unique_ptr<AchievementBackendInterface>>

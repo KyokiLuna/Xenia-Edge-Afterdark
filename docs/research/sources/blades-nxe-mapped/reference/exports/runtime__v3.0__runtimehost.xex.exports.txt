@@ -1,0 +1,6 @@
+Export table for runtime/v3.0/runtimehost.xex
+xex_load_address=0x8B000000 export_table_va=0x8B5D1464 count=2
+ordinal(hex) -> function_va(hex)  [resolved_name]
+------------------------------------------------------------
+0x0001 -> 0x8B0E3808
+0x0002 -> 0x8B0E1398

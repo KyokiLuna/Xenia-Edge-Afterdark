@@ -1,0 +1,51 @@
+Which decoded modules have parsed import-library tables
+===========================================================
+Regenerate with: python3 _tool/build_03_imports.py
+
+Structural parse of each module's XEX_HEADER_IMPORT_LIBRARIES
+optional header (xex2_import_library records). Each import is a
+(variable_slot, thunk) pair sharing an ordinal - see
+xenia-edge/src/xenia/cpu/xex_module.cc:SetupLibraryImports for the
+original semantics this was reverse-engineered against (that's
+Xenia's own loader code, so CONFIRMED, not guessed).
+
+Names are resolved ONLY when the imported library is xam.xex,
+xboxkrnl.exe, or xbdm.xex (Xenia ships ordinal->name databases
+for those three). Imports of anything else (e.g. one dashboard
+module importing from another) are ordinal-only - do not invent
+names for them.
+
+$flash_dash.xex  ->  reference/imports/flash_dash.xex.imports.txt  (1164 import records, 5 libraries: xam.xex, xboxkrnl.exe, xboxkrnl.exe, xam.xex, xboxkrnl.exe)
+$flash_systemupdate.xex  ->  reference/imports/flash_systemupdate.xex.imports.txt  (277 import records, 3 libraries: xam.xex, xboxkrnl.exe, xam.xex)
+$flash_xam.xexp  ->  reference/imports/flash_xam.xexp.imports.txt  (7148 import records, 1 libraries: )
+$flash_ximecore.xex  ->  reference/imports/flash_ximecore.xex.imports.txt  (95 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+$install_extender.xex  ->  reference/imports/install_extender.xex.imports.txt  (478 import records, 2 libraries: xboxkrnl.exe, xam.xex)
+AvatarEditor.xex  ->  reference/imports/AvatarEditor.xex.imports.txt  (496 import records, 4 libraries: xam.xex, xboxkrnl.exe, xam.xex, xboxkrnl.exe)
+AvatarMiniCreator.xex  ->  reference/imports/AvatarMiniCreator.xex.imports.txt  (161 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+Feedback.xex  ->  reference/imports/Feedback.xex.imports.txt  (199 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+Friends.xex  ->  reference/imports/Friends.xex.imports.txt  (478 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+LivePack.xex  ->  reference/imports/LivePack.xex.imports.txt  (1118 import records, 5 libraries: dash.xex, dash.xex, xboxkrnl.exe, xam.xex, xam.xex)
+Marketplace.xex  ->  reference/imports/Marketplace.xex.imports.txt  (463 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+Party.xex  ->  reference/imports/Party.xex.imports.txt  (149 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+Quickchat.xex  ->  reference/imports/Quickchat.xex.imports.txt  (301 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+Voicemail.xex  ->  reference/imports/Voicemail.xex.imports.txt  (219 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+WORDREGISTER.XEX  ->  reference/imports/WORDREGISTER.XEX.imports.txt  (120 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+XMsgr.xex  ->  reference/imports/XMsgr.xex.imports.txt  (294 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+bootanim.xex  ->  reference/imports/bootanim.xex.imports.txt  (183 import records, 1 libraries: xboxkrnl.exe)
+createprofile.xex  ->  reference/imports/createprofile.xex.imports.txt  (196 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+dash.xex  ->  reference/imports/dash.xex.imports.txt  (736 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+deviceselector.xex  ->  reference/imports/deviceselector.xex.imports.txt  (117 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+gamerprofile.xex  ->  reference/imports/gamerprofile.xex.imports.txt  (265 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+hostloader.dll  ->  reference/imports/hostloader.dll.imports.txt  (318 import records, 2 libraries: xboxkrnl.exe, xam.xex)
+hud.xex  ->  reference/imports/hud.xex.imports.txt  (285 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+mfgbootlauncher.xex  ->  reference/imports/mfgbootlauncher.xex.imports.txt  (122 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+minimediaplayer.xex  ->  reference/imports/minimediaplayer.xex.imports.txt  (146 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+runtime/v3.0/BackCompatShim.xex  ->  reference/imports/runtime__v3.0__BackCompatShim.xex.imports.txt  (242 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+runtime/v3.0/runtimehost.xex  ->  reference/imports/runtime__v3.0__runtimehost.xex.imports.txt  (511 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+runtime/v3.1/BackCompatShim.xex  ->  reference/imports/runtime__v3.1__BackCompatShim.xex.imports.txt  (248 import records, 2 libraries: xboxkrnl.exe, xam.xex)
+runtime/v3.1/runtimehost.xex  ->  reference/imports/runtime__v3.1__runtimehost.xex.imports.txt  (530 import records, 2 libraries: xboxkrnl.exe, xam.xex)
+signin.xex  ->  reference/imports/signin.xex.imports.txt  (186 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+titlelauncher.xex  ->  reference/imports/titlelauncher.xex.imports.txt  (351 import records, 2 libraries: xboxkrnl.exe, xam.xex)
+updater.xex  ->  reference/imports/updater.xex.imports.txt  (100 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+vk.xex  ->  reference/imports/vk.xex.imports.txt  (184 import records, 2 libraries: xam.xex, xboxkrnl.exe)
+xam.xex  ->  reference/imports/xam.xex.imports.txt  (641 import records, 1 libraries: xboxkrnl.exe)

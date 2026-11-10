@@ -8,6 +8,7 @@
  */
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 #include "xenia/base/filesystem.h"
@@ -89,16 +90,33 @@ dword_result_t xeXamContentResolve(
   auto run = [user_index, content_data_ptr, content_data_size, path_ptr,
               path_size, create_directory, root_name_ptr](
                  uint32_t& extended_error, uint32_t& length) -> X_RESULT {
-    XCONTENT_AGGREGATE_DATA content_data;
-    if (content_data_size == sizeof(XCONTENT_DATA)) {
-      content_data = *content_data_ptr.as<XCONTENT_DATA*>();
-    } else if (content_data_size == sizeof(XCONTENT_DATA_INTERNAL)) {
-      // Due to the current implementation of content data we can't use
-      // XCONTENT_DATA_INTERNAL
-      content_data = *content_data_ptr.as<XCONTENT_AGGREGATE_DATA*>();
-    } else {
-      assert_always();
-      return X_ERROR_INVALID_PARAMETER;
+    auto* state = kernel_state();
+    auto finish = [&](X_RESULT result) {
+      extended_error = X_HRESULT_FROM_WIN32(result);
+      length = 0;
+      return result;
+    };
+    if (!content_data_ptr || root_name_ptr ||
+        (content_data_size != sizeof(XCONTENT_DATA) &&
+         content_data_size != sizeof(XCONTENT_DATA_INTERNAL))) {
+      return finish(X_ERROR_INVALID_PARAMETER);
+    }
+    const auto source_access = state->memory()->QueryRangeAccess(
+        content_data_ptr.guest_address(), content_data_size);
+    if (source_access != memory::PageAccess::kReadOnly &&
+        source_access != memory::PageAccess::kReadWrite) {
+      return finish(X_ERROR_INVALID_PARAMETER);
+    }
+    XCONTENT_AGGREGATE_DATA content_data{};
+    static_cast<XCONTENT_DATA&>(content_data) =
+        *content_data_ptr.as<XCONTENT_DATA*>();
+    content_data.title_id = kCurrentlyRunningTitleId;
+    if (content_data_size == sizeof(XCONTENT_DATA_INTERNAL)) {
+      // Internal records put category before XUID. They are not an aggregate
+      // record despite sharing the first XCONTENT_DATA fields.
+      const auto* internal = content_data_ptr.as<XCONTENT_DATA_INTERNAL*>();
+      content_data.xuid = internal->xuid;
+      content_data.title_id = internal->title_id;
     }
     uint64_t xuid = 0;
     if (user_index < XUserMaxUserCount) {
@@ -110,43 +128,31 @@ dword_result_t xeXamContentResolve(
       }
     }
 
-    std::string root_device_path = "";
-
-    if (root_name_ptr) {
-      // Check if root_name is valid.
-      // root_device_path = std::string(root_name_ptr);
-      // Unsupported for now.
-      return X_ERROR_INVALID_PARAMETER;
-    } else {
-      if (content_data.device_id == static_cast<uint32_t>(DummyDeviceId::HDD)) {
-        root_device_path = "\\Device\\Harddisk0\\Partition1\\Content\\";
-      } else if (content_data.device_id ==
-                 static_cast<uint32_t>(DummyDeviceId::ODD)) {
-        root_device_path = kernel_state()->title_mount_path_ + "\\content\\";
-      } else {
-        return X_ERROR_INVALID_PARAMETER;
+    std::string package_path;
+    const auto resolved = state->content_manager()->ResolveGuestContentPath(
+        xuid, content_data, create_directory != 0, package_path);
+    if (resolved) {
+      return finish(resolved);
+    }
+    if (!path_ptr || package_path.size() + 1 > path_size) {
+      return finish(X_ERROR_INSUFFICIENT_BUFFER);
+    }
+    if (state->memory()->QueryRangeAccess(path_ptr.guest_address(),
+                                          path_size) !=
+        memory::PageAccess::kReadWrite) {
+      return finish(X_ERROR_INVALID_PARAMETER);
+    }
+    // The caller creates the package file itself, so the directory must exist.
+    if (create_directory) {
+      const auto separator = package_path.find_last_of('\\');
+      if (separator == std::string::npos ||
+          !state->file_system()->CreatePath(package_path.substr(0, separator),
+                                            vfs::kFileAttributeDirectory)) {
+        return finish(X_ERROR_ACCESS_DENIED);
       }
     }
-
-    const std::string relative_dir =
-        fmt::format("{:016X}\\{:08X}\\{:08X}", xuid, kernel_state()->title_id(),
-                    static_cast<uint32_t>(content_data.content_type.get()));
-    const std::string content_dir = root_device_path + relative_dir;
-
-    // The caller creates the package file itself, so the directory must exist.
-    if (create_directory && !kernel_state()->file_system()->CreatePath(
-                                content_dir, vfs::kFileAttributeDirectory)) {
-      XELOGW("XamContentResolve: Cannot create content directory {}",
-             content_dir);
-    }
-
-    string_util::copy_truncating(
-        path_ptr, content_dir + "\\" + content_data.file_name(), path_size);
-
-    // Check if it exists and try to mount that package
-    // Result of buffer_ptr is sent to RtlInitAnsiString.
-    // buffer_size is usually 260 (max path).
-    return X_ERROR_SUCCESS;
+    string_util::copy_truncating(path_ptr, package_path, path_size);
+    return finish(X_ERROR_SUCCESS);
   };
 
   if (!overlapped_ptr) {
@@ -183,16 +189,21 @@ dword_result_t XamContentCreateEnumeratorInternal_entry(
     qword_t xuid, dword_t device_id, dword_t content_type, dword_t title_id,
     dword_t content_flags, dword_t items_per_enumerate,
     lpdword_t buffer_size_ptr, lpdword_t handle_out) {
-  assert_not_null(handle_out);
-
-  auto device_info = device_id == 0 ? nullptr : GetDummyDeviceInfo(device_id);
-  if ((device_id && device_info == nullptr) || !handle_out) {
+  auto device_info = device_id == 0
+                         ? std::optional<StorageDeviceInfo>{}
+                         : GetStorageDeviceInfo(kernel_state(), device_id);
+  if ((device_id && !device_info) || !handle_out ||
+      items_per_enumerate >
+          std::numeric_limits<uint32_t>::max() / sizeof(XCONTENT_DATA)) {
     if (buffer_size_ptr) {
       *buffer_size_ptr = 0;
     }
 
     // TODO(benvanik): memset 0 the data?
     return X_E_INVALIDARG;
+  }
+  if (device_info && !device_info->available) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
   if (buffer_size_ptr) {
@@ -216,12 +227,19 @@ dword_result_t XamContentCreateEnumeratorInternal_entry(
   std::vector<XCONTENT_AGGREGATE_DATA> enumerated_content =
       {};  // XCONTENT_DATA_INTERNAL
 
-  if (!device_info || device_info->device_id == DummyDeviceId::HDD) {
-    auto content_manager = kernel_state()->content_manager();
+  auto content_manager = kernel_state()->content_manager();
+  for (const auto& device : ListStorageDevices(kernel_state(), true)) {
+    if ((device_id && device.device_id != device_id) ||
+        device.device_type == DeviceType::ODD) {
+      continue;
+    }
     const auto type = static_cast<XContentType>(content_type.value());
+    const size_t device_start = enumerated_content.size();
     if (xuid) {
-      enumerated_content = content_manager->ListContent(
-          static_cast<uint32_t>(DummyDeviceId::HDD), xuid, title, type);
+      auto own =
+          content_manager->ListContent(device.device_id, xuid, title, type);
+      enumerated_content.insert(enumerated_content.end(), own.begin(),
+                                own.end());
     }
 
     if (!xuid || !(content_flags & vfs::XContentFlag::kExcludeCommon)) {
@@ -229,10 +247,10 @@ dword_result_t XamContentCreateEnumeratorInternal_entry(
       // set, unless one of the user's own has that name. DLC is common
       // whatever its name so it keeps the name it's stored under.
       const size_t own_count = enumerated_content.size();
-      for (auto& data : content_manager->ListContent(
-               static_cast<uint32_t>(DummyDeviceId::HDD), 0, title, type)) {
+      for (auto& data :
+           content_manager->ListContent(device.device_id, 0, title, type)) {
         if (xuid && type != XContentType::kMarketplaceContent) {
-          if (std::any_of(enumerated_content.begin(),
+          if (std::any_of(enumerated_content.begin() + device_start,
                           enumerated_content.begin() + own_count,
                           [&](const XCONTENT_AGGREGATE_DATA& own) {
                             return own.file_name() == data.file_name();
@@ -247,7 +265,10 @@ dword_result_t XamContentCreateEnumeratorInternal_entry(
     }
   }
 
-  if (!device_info || device_info->device_id == DummyDeviceId::ODD) {
+  const auto optical = GetStorageDeviceInfo(
+      kernel_state(), static_cast<uint32_t>(DummyDeviceId::ODD));
+  if ((!device_info || device_info->device_type == DeviceType::ODD) &&
+      optical && optical->available) {
     auto disc_enumerated_data =
         kernel_state()->content_manager()->ListContentODD(
             static_cast<uint32_t>(DummyDeviceId::ODD), 0, title,
@@ -464,11 +485,10 @@ dword_result_t xeXamContentCreate(dword_t user_index, lpstring_t root_name,
     }
     if (root_in_use && disposition != kDispositionState::Unknown) {
       if (disposition == kDispositionState::Create) {
-        if (!content_manager->ContentExists(xuid, content_data) &&
-            !content_manager->CreatePackage(xuid, content_data)) {
-          content_manager->WriteContentHeaderFile(xuid, content_data);
+        if (!content_manager->ContentExists(xuid, content_data)) {
+          result = content_manager->CreatePackage(xuid, content_data);
         }
-        result = X_ERROR_DUP_NAME;
+        if (!result) { result = X_ERROR_DUP_NAME; }
       } else {
         result = X_ERROR_ALREADY_EXISTS;
       }
@@ -478,9 +498,6 @@ dword_result_t xeXamContentCreate(dword_t user_index, lpstring_t root_name,
     uint32_t content_license = 0;
     if (disposition == kDispositionState::Create) {
       result = content_manager->CreateContent(root_name, xuid, content_data);
-      if (!result) {
-        content_manager->WriteContentHeaderFile(xuid, content_data);
-      }
     } else if (disposition == kDispositionState::Open) {
       result = content_manager->OpenContent(root_name, xuid, content_data,
                                             content_license);
@@ -599,15 +616,12 @@ dword_result_t XamContentFlush_entry(lpstring_t root_name,
   if (!root_name || !ValidRootName(root_name.value())) {
     return X_ERROR_INVALID_NAME;
   }
-  X_RESULT result = X_ERROR_SUCCESS;
-  if (overlapped_ptr) {
-    kernel_state()->CompleteOverlappedImmediate(overlapped_ptr, result);
-    return X_ERROR_IO_PENDING;
-  } else {
-    return result;
-  }
+  // Preserve the real caller's overlap/event/APC completion policy. The
+  // host barrier owns its retained package, files and source outside GCRC.
+  return CompleteRequest(overlapped_ptr,
+      kernel_state()->content_manager()->FlushContent(root_name.value()));
 }
-DECLARE_XAM_EXPORT1(XamContentFlush, kContent, kStub);
+DECLARE_XAM_EXPORT1(XamContentFlush, kContent, kImplemented);
 
 dword_result_t XamContentClose_entry(lpstring_t root_name,
                                      pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
@@ -1178,20 +1192,26 @@ DECLARE_XAM_EXPORT1(XamContentRegisterChangeCallback, kContent, kImplemented);
 dword_result_t XamContentGetDeviceVolumePath_entry(dword_t device_id,
                                                    lpvoid_t path_ptr,
                                                    dword_t path_size,
-                                                   dword_t append_backslash) {
-  std::string volume_path = "hdd0\\";
-  if (device_id != static_cast<uint32_t>(DummyDeviceId::HDD)) {
-    return X_ERROR_FUNCTION_FAILED;
+                                                   dword_t omit_backslash) {
+  const auto device = GetStorageDeviceInfo(kernel_state(), device_id);
+  if (!device || !device->available) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
   }
-
-  char* path =
-      kernel_memory()->TranslateVirtual<char*>(path_ptr.guest_address());
-
-  string_util::copy_truncating(path, volume_path, path_size);
-
+  const auto volume_path = GetStorageDeviceVolumePath(*device, omit_backslash);
+  if (!volume_path) {
+    return X_ERROR_NOT_SUPPORTED;
+  }
+  if (!path_ptr || !path_size ||
+      kernel_memory()->QueryRangeAccess(path_ptr.guest_address(), path_size) !=
+          memory::PageAccess::kReadWrite) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+  // Native FE20024 returns a truncating, NUL-terminated volume path. The
+  // explicit source metadata names the mount itself, never its Content root.
+  string_util::copy_truncating(path_ptr.as<char*>(), *volume_path, path_size);
   return X_ERROR_SUCCESS;
 }
-DECLARE_XAM_EXPORT1(XamContentGetDeviceVolumePath, kContent, kStub);
+DECLARE_XAM_EXPORT1(XamContentGetDeviceVolumePath, kContent, kImplemented);
 
 // XamCache* keep files on the system cache partitions, each described by a
 // block the title owns. The id and key name the file for some cache types. No

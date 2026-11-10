@@ -9,6 +9,7 @@
 
 #ifndef XENIA_KERNEL_XAM_USER_PROFILE_H_
 #define XENIA_KERNEL_XAM_USER_PROFILE_H_
+#include <atomic>
 
 #include <map>
 #include <memory>
@@ -16,7 +17,6 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-
 #include "xenia/kernel/xam/user_property.h"
 #include "xenia/kernel/xam/xam.h"
 #include "xenia/kernel/xam/xdbf/gpd_info_profile.h"
@@ -26,6 +26,8 @@
 namespace xe {
 namespace kernel {
 namespace xam {
+class ProfileGpdModelAuthority;
+struct ProfileGpdReadModels;
 
 enum class X_USER_PROFILE_SETTING_SOURCE : uint32_t {
   NO_VALUE = 0,
@@ -101,12 +103,14 @@ enum class SignInState : uint32_t {
 
 class UserProfile {
  public:
-  UserProfile(const uint64_t xuid, const X_XAMACCOUNTINFO* account_info);
+  UserProfile(const uint64_t xuid, const X_XAMACCOUNTINFO* account_info,
+              std::shared_ptr<ProfileGpdModelAuthority> model);
 
   uint64_t xuid() const { return xuid_; }
   uint64_t GetOnlineXUID() const {
-    return IsLiveEnabled() ? static_cast<uint64_t>(account_info_.xuid_online)
-                           : 0;
+    const auto account = account_info_.load(std::memory_order_acquire);
+    return account->IsLiveEnabled() ? static_cast<uint64_t>(account->xuid_online)
+                                    : 0;
   }
   // Titles know a user signed in to Live by the online XUID.
   uint64_t GetLogonXUID() const {
@@ -115,80 +119,68 @@ class UserProfile {
                : xuid_;
   }
 
-  std::string name() const { return account_info_.GetGamertagString(); }
-  // With no Live service to sign in to, a Live-enabled profile counts as
-  // signed in to Live.
+  std::string name() const { return account_info_.load(std::memory_order_acquire)->GetGamertagString(); }
+  // Account Live eligibility and subscription metadata do not establish an
+  // active service connection. Assigned users remain local until a real
+  // connected-service provider can publish actual sign-in state.
   uint32_t signin_state() const {
-    return static_cast<uint32_t>(IsLiveEnabled()
-                                     ? SignInState::SignedInToLive
-                                     : SignInState::SignedInLocally);
+    return static_cast<uint32_t>(SignInState::SignedInLocally);
   };
 
   uint32_t GetReservedFlags() const {
-    return account_info_.GetReservedFlags();
+    return account_info_.load(std::memory_order_acquire)->GetReservedFlags();
   };
-  uint32_t GetCachedFlags() const { return account_info_.GetCachedFlags(); };
+  uint32_t GetCachedFlags() const { return account_info_.load(std::memory_order_acquire)->GetCachedFlags(); };
   uint32_t GetCountry() const {
-    return static_cast<uint32_t>(account_info_.GetCountry());
+    return static_cast<uint32_t>(account_info_.load(std::memory_order_acquire)->GetCountry());
   };
   uint32_t GetSubscriptionTier() const {
-    return account_info_.GetSubscriptionTier();
+    return account_info_.load(std::memory_order_acquire)->GetSubscriptionTier();
   }
   uint32_t GetLanguage() const {
-    return static_cast<uint32_t>(account_info_.GetLanguage());
+    return static_cast<uint32_t>(account_info_.load(std::memory_order_acquire)->GetLanguage());
   };
 
   bool IsParentalControlled() const {
-    return account_info_.IsParentalControlled();
+    return account_info_.load(std::memory_order_acquire)->IsParentalControlled();
   };
-  bool IsLiveEnabled() const { return account_info_.IsLiveEnabled(); }
+  bool IsLiveEnabled() const { return account_info_.load(std::memory_order_acquire)->IsLiveEnabled(); }
 
   void ClearProfileIcon(XTileType icon_type) {
     profile_images_.erase(icon_type);
   }
 
-  std::span<const uint8_t> GetProfileIcon(XTileType icon_type) {
-    // First check if the requested type exists
-    if (profile_images_.find(icon_type) != profile_images_.cend()) {
-      return {profile_images_[icon_type].data(),
-              profile_images_[icon_type].size()};
+  std::vector<uint8_t> GetProfileIcon(XTileType icon_type) const {
+    std::unique_lock lock(profile_images_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) {
+      return {};
     }
-
-    // If personal/local tile requested but not found, fall back to regular tile
+    auto found = profile_images_.find(icon_type);
+    if (found != profile_images_.end()) {
+      return found->second;
+    }
     if (icon_type == XTileType::kPersonalGamerTile ||
         icon_type == XTileType::kLocalGamerTile) {
       icon_type = XTileType::kGamerTile;
-    } else if (icon_type == XTileType::kPersonalGamerTileSmall ||
+    }
+    if (icon_type == XTileType::kPersonalGamerTileSmall ||
                icon_type == XTileType::kLocalGamerTileSmall) {
       icon_type = XTileType::kGamerTileSmall;
     }
-
-    // Try again with the fallback type
-    if (!profile_images_.contains(icon_type)) {
-      return {};
-    }
-
-    return {profile_images_[icon_type].data(),
-            profile_images_[icon_type].size()};
+    found = profile_images_.find(icon_type);
+    return found == profile_images_.end() ? std::vector<uint8_t>{}
+                                          : found->second;
   }
 
   void GetPasscode(uint16_t* passcode) const {
-    std::memcpy(passcode, account_info_.passcode,
-                sizeof(account_info_.passcode));
+    const auto account = account_info_.load(std::memory_order_acquire);
+    std::memcpy(passcode, account->passcode, sizeof(account->passcode));
   };
 
-  // Public accessor for dashboard GPD (for getting title paths)
-  const GpdInfoProfile& dashboard_gpd() const { return dashboard_gpd_; }
-
-  // Public accessor for getting title icon from title GPD
-  std::vector<uint8_t> GetTitleIcon(uint32_t title_id) const {
-    const GpdInfo* gpd = GetGpd(title_id);
-    if (!gpd) {
-      return {};
-    }
-    auto icon_data = gpd->GetImage(kXdbfIdTitle);
-    return std::vector<uint8_t>(icon_data.begin(), icon_data.end());
-  }
+  // Owned immutable projections; no GPD const-reference escapes a guard.
+  std::shared_ptr<const GpdInfoProfile> dashboard_gpd() const;
+  std::shared_ptr<const ProfileGpdReadModels> CaptureGpds() const;
+  std::vector<uint8_t> GetTitleIcon(uint32_t title_id) const;
 
   // Public accessor for getting achievement stats from title GPD
   struct TitleAchievementStats {
@@ -198,27 +190,7 @@ class UserProfile {
     uint32_t gamerscore_earned = 0;
   };
 
-  TitleAchievementStats GetTitleAchievementStats(uint32_t title_id) const {
-    TitleAchievementStats stats;
-
-    // Get the GPD for this title
-    auto it = games_gpd_.find(title_id);
-    if (it == games_gpd_.end()) {
-      return stats;
-    }
-
-    const GpdInfoTitle& title_gpd = it->second;
-    if (!title_gpd.IsValid()) {
-      return stats;
-    }
-
-    stats.achievements_total = title_gpd.GetAchievementCount();
-    stats.achievements_unlocked = title_gpd.GetUnlockedAchievementCount();
-    stats.gamerscore_total = title_gpd.GetTotalGamerscore();
-    stats.gamerscore_earned = title_gpd.GetGamerscore();
-
-    return stats;
-  }
+  TitleAchievementStats GetTitleAchievementStats(uint32_t title_id) const;
 
   friend class UserTracker;
   friend class GpdAchievementBackend;
@@ -226,25 +198,19 @@ class UserProfile {
 
  private:
   uint64_t xuid_;
-  X_XAMACCOUNTINFO account_info_;
+  std::atomic<std::shared_ptr<const X_XAMACCOUNTINFO>> account_info_;
 
-  GpdInfoProfile dashboard_gpd_;
-  std::map<uint32_t, GpdInfoTitle> games_gpd_;
+  std::shared_ptr<ProfileGpdModelAuthority> gpd_model_;
   std::vector<Property> properties_;  // Includes contexts!
   std::mutex prop_mutex;              // 5841089C
 
+  mutable std::mutex profile_images_mutex_;
   std::map<XTileType, std::vector<uint8_t>> profile_images_;
 
-  GpdInfo* GetGpd(const uint32_t title_id);
-  const GpdInfo* GetGpd(const uint32_t title_id) const;
-
-  void LoadProfileGpds();
+  std::shared_ptr<const GpdInfo> GetGpd(uint32_t title_id) const;
   void LoadProfileIcon(XTileType tile_type);
   void WriteProfileIcon(XTileType tile_type,
                         std::span<const uint8_t> icon_data);
-  std::vector<uint8_t> LoadGpd(const uint32_t title_id);
-  bool WriteGpd(const uint32_t title_id);
-  bool RemoveGpd(const uint32_t title_id);
 };
 
 }  // namespace xam

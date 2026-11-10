@@ -13,11 +13,20 @@
 #include <array>
 #include <concepts>
 #include <cstdint>
+#include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <optional>
+#include <span>
 #include <string_view>
+#include <system_error>
+#include <variant>
 
 #include "xenia/base/byte_order.h"
+#include "xenia/kernel/console_settings_store.h"
+#include "xenia/kernel/native_notification_preference_coordinator.h"
+#include "xenia/xbox.h"
 
 namespace xe {
 namespace kernel {
@@ -251,6 +260,13 @@ enum X_RETAIL_FLAGS : uint32_t {
   KinectInitialized = 0x20000000,
   KinectDisabled = 0x80000000,
 
+  // Supplied17559 native notification consumers (inverted disable bits).
+  // Context5's broader symbolic meaning has not been established.
+  NotificationsDisabled = 0x00000010,
+  NotificationSoundDisabled = 0x00000020,
+  Context5NotificationsDisabled = 0x00000200,
+  IptvNotificationsDisabled = 0x00004000,
+
   // Other
   DashboardInitialized = 0x00000040,
   BackgroundDownloadOn = 0x00010000,
@@ -410,7 +426,19 @@ std::array<uint8_t, 6> ConsoleMacAddress(std::string_view identity);
 
 class XConfig {
  public:
-  XConfig() = default;
+  static constexpr uint16_t kMaxSettingBytes = 0x40;
+  // Pure shape of fields whose current write translator actually exists.
+  // Unlike GetSettingSize, this performs no value/store/identity IO.
+  static uint16_t WritableSettingSize(X_CONFIG_CATEGORY, uint16_t);
+  // Host-owned adapter for the existing legacy live-cvar/per-title writes.
+  // No guest selects this callback or its target. The production default uses
+  // SaveGameConfigSetting; a supplied adapter must report actual save errors.
+  using LegacySettingValue = std::variant<bool, int32_t, uint32_t>;
+  using LegacyPersistence =
+      std::function<std::error_code(const char*, LegacySettingValue)>;
+  explicit XConfig(std::shared_ptr<ConsoleSettingsStore> console_store = {},
+                   std::error_code console_store_error = {},
+                   LegacyPersistence legacy_persistence = {});
   ~XConfig() = default;
 
   // The profile signed in to the lowest slot when first asked, 0 when none is.
@@ -437,16 +465,50 @@ class XConfig {
   }
 
   // Writes a setting's raw (guest big-endian) bytes from |buffer|. Settings
-  // backed by a cvar update the running title's per-game override; the rest
-  // are ignored.
+  // backed by a cvar retain legacy behavior. Use WriteSettingChecked for real
+  // error reporting; console-owned RetailFlags never writes per-title config.
   void WriteSetting(const X_CONFIG_CATEGORY category, const uint16_t setting_id,
                     const void* buffer);
+
+  // Status-bearing access for native exports and host fallback. RetailFlags
+  // is a raw console-owned DWORD, not reconstructed from per-title cvars.
+  std::error_code ReadRetailFlags(uint32_t& output) const;
+  X_STATUS ReadSettingChecked(X_CONFIG_CATEGORY, uint16_t,
+                              std::span<uint8_t> output);
+  X_STATUS WriteSettingChecked(X_CONFIG_CATEGORY, uint16_t,
+                               std::span<const uint8_t> input);
+  X_STATUS ModifySettingUlong(X_CONFIG_CATEGORY, uint16_t, uint32_t and_mask,
+                              uint32_t or_bits);
+  struct UlongModification {
+    X_STATUS status;
+    // Present only for the real console-owned RetailFlags transaction,
+    // including a truthful unavailable-store error. Never synthesized success.
+    std::optional<ConsoleSettingsUpdate> console;
+  };
+  UlongModification ModifySettingUlongObserved(X_CONFIG_CATEGORY, uint16_t,
+                                               uint32_t and_mask,
+                                               uint32_t or_bits);
+  // Notification fallback consumers use these joined operations, retaining a
+  // coordinator permit through the actual shared-authority IO. After native
+  // handover they cannot read durable flags as if they were the native cache.
+  X_STATUS ReadFallbackNotificationOptions(
+      NativeNotificationPreferenceCoordinator&,
+      NativeNotificationPreferenceCoordinator::Options&);
+  UlongModification WriteFallbackNotificationOptions(
+      NativeNotificationPreferenceCoordinator&,
+      const NativeNotificationPreferenceCoordinator::Options&);
 
   uint16_t GetSettingSize(const X_CONFIG_CATEGORY category,
                           const uint16_t setting_id);
 
  private:
+  template <typename T>
+  void StoreLegacySetting(T& live, const char* name, T value);
   void ResolveOwner();
+  LegacyPersistence legacy_persistence_;
+  std::shared_ptr<ConsoleSettingsStore> console_store_;
+  std::error_code console_store_error_;
+  uint32_t retail_seed_ = X_RETAIL_FLAGS::DashboardInitialized;
 
   std::once_flag owner_once_;
   uint64_t owner_xuid_ = 0;

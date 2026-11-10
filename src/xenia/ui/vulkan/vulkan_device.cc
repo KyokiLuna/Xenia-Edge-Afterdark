@@ -818,6 +818,7 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
     XE_UI_VULKAN_FEATURE(occlusionQueryPrecise)
     XE_UI_VULKAN_FEATURE(vertexPipelineStoresAndAtomics)
     XE_UI_VULKAN_FEATURE(fragmentStoresAndAtomics)
+    XE_UI_VULKAN_FEATURE(shaderStorageImageExtendedFormats)
     XE_UI_VULKAN_FEATURE(shaderClipDistance)
     XE_UI_VULKAN_FEATURE(shaderCullDistance)
     XE_UI_VULKAN_FEATURE(shaderInt16)
@@ -1208,9 +1209,70 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
 }
 
 VulkanDevice::~VulkanDevice() {
+  bool destroyed = false;
   if (device_) {
+    // Owner has stopped device users and destroyed all Vulkan children first.
+    // Host access to the device and its queues is externally synchronized.
+    std::vector<std::unique_lock<std::recursive_mutex>> queue_locks;
+    for (const auto& family : queue_families_) {
+      for (const auto& queue : family.queues) {
+        if (queue) {
+          queue_locks.emplace_back(queue->mutex);
+        }
+      }
+    }
     vulkan_instance_->functions().vkDestroyDevice(device_, nullptr);
+    device_ = VK_NULL_HANDLE;
+    destroyed = true;
   }
+  // GraphicsSystem destroys its provider/device before KernelState and Memory.
+  // These are guest leases, so releasing them needs no live Vulkan device.
+  std::vector<std::shared_ptr<void>> released;
+  std::vector<std::function<void()>> after_destroyed;
+  {
+    std::lock_guard lock(guest_memory_leases_mutex_);
+    released.swap(guest_memory_leases_);
+    after_destroyed.swap(after_device_destroyed_);
+  }
+  if (destroyed) {
+    for (auto& callback : after_destroyed) {
+      // Internal proof publication only. No guest notification, GPU object
+      // destruction or Kernel callback is permitted here.
+      callback();
+    }
+  }
+  // Proof is visible before guest lease destructors can observe retirement.
+}
+
+void VulkanDevice::QuarantineGuestMemoryLeases(
+    std::vector<std::shared_ptr<void>> leases,
+    std::function<void()> after_device_destroyed) {
+  std::lock_guard lock(guest_memory_leases_mutex_);
+  for (auto& lease : leases) {
+    guest_memory_leases_.push_back(std::move(lease));
+  }
+  if (after_device_destroyed) {
+    after_device_destroyed_.push_back(std::move(after_device_destroyed));
+  }
+}
+
+VkResult VulkanDevice::WaitIdleForResourceRetirement() {
+  if (!device_) {
+    return VK_ERROR_INITIALIZATION_FAILED;
+  }
+  std::vector<std::unique_lock<std::recursive_mutex>> queue_locks;
+  for (const auto& family : queue_families_) {
+    for (const auto& queue : family.queues) {
+      if (queue) {
+        queue_locks.emplace_back(queue->mutex);
+      }
+    }
+  }
+  const VkResult result = functions().vkDeviceWaitIdle(device_);
+  if (result == VK_ERROR_DEVICE_LOST && SetLost()) {
+    LogFaultInfo();
+  }
+  return result;
 }
 
 VulkanDevice::VulkanDevice(const VulkanInstance* const vulkan_instance,

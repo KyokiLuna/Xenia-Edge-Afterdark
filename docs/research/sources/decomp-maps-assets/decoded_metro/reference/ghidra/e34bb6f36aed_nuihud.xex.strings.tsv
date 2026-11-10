@@ -1,0 +1,128 @@
+va	data_type	text
+0x901005e0	string	NHUDEXTO
+0x901005f4	string	NHUDENTO
+0x90100600	string	NHUDENT
+0x901006c8	unicode	strings.xus
+0x90100710	unicode	XuiCanvas
+0x90100750	unicode	NuiControllerRequiredButton
+0x90100788	unicode	media
+0x901007f8	unicode	HUDScene
+0x9010080c	unicode	XuiNavButton
+0x90100828	unicode	NuiCommunityNavButton
+0x90100854	unicode	icon_friend.png
+0x90100874	unicode	icon_party.png
+0x90100894	unicode	icon_mail.png
+0x901008b0	unicode	sharedres://ico_32x_controller_wA.png
+0x901008fc	unicode	MainScene.xur
+0x90100918	unicode	MainScene
+0x9010096c	unicode	btnMute
+0x9010097c	unicode	btnSettings
+0x90100994	unicode	btnSignIn
+0x901009a8	unicode	btnHub
+0x901009b8	unicode	btnAchievements
+0x901009d8	unicode	btnFriends
+0x901009f0	unicode	GamerElements/GamerscoreIcon
+0x90100a2c	unicode	GamerElements/Gamerscore
+0x90100a60	unicode	GamerElements/Gamertag
+0x90100a90	unicode	HoverB
+0x90100aa0	string	NuiHud
+0x90100ab0	string	ShowAchievements
+0x90100ac4	string	ShowTroubleShooter
+0x90100ad8	string	ShowSwitchUser
+0x90100ae8	string	GoToHub
+0x90100af8	unicode	Waiting
+0x90100b08	unicode	SignedOut
+0x90100b1c	unicode	SignedInOffline
+0x90100b3c	unicode	Connected
+0x90100b50	unicode	SignedInLocal
+0x90100b6c	string	NuiHudEtx
+0x90100b78	string	Event6
+0x90100b80	string	EnterNuiHudOmni
+0x90100b90	string	ExitNuiHudOmni
+0x90100ba0	string	Event13
+0x90100ba8	string	ActionNuiHudOmni
+0x90100bbc	unicode	KioskScene.xur
+0x90100bdc	unicode	KioskScene
+0x90100bfc	unicode	btnKiosk
+0x90100c10	unicode	btnDemo
+0x90100c80	unicode	XuiElement
+0x90100c98	unicode	klcc
+0x90100ca4	unicode	diners
+0x90100cbc	unicode	discover
+0x90100cd0	unicode	amex
+0x90100cdc	unicode	mastercard
+0x90100cf4	unicode	visa
+0x90100d00	unicode	japanesekatakana
+0x90100d24	unicode	japanesehiragana
+0x90100d48	unicode	schfull
+0x90100d58	unicode	latinextended
+0x90100d74	unicode	russionfull
+0x90100d8c	unicode	tchfull
+0x90100d9c	unicode	koreanfull
+0x90100db4	unicode	japanesefull
+0x90100dd0	unicode	latinalphabet
+0x90100dec	unicode	latinnumeric
+0x90100e08	unicode	latinipaddress
+0x90100e28	unicode	latinphone
+0x90100e40	unicode	latingamertag
+0x90100e5c	unicode	latinemail
+0x90100e74	unicode	latinfull
+0x90100e88	unicode	phone
+0x90100e94	unicode	contactemail
+0x90100eb0	unicode	postalcode
+0x90100ec8	unicode	state
+0x90100ed4	unicode	city
+0x90100ee0	unicode	district
+0x90100ef4	unicode	street2
+0x90100f04	unicode	street1
+0x90100f14	unicode	none
+0x90100f20	string	deviceselector.xex
+0x90100fec	string	http://
+0x90100ff4	unicode	sharedres://LiveProfile.xus
+0x9010102c	unicode	sharedres://LiveAll.xus
+0x90101868	string	xam.xex
+0x90101888	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\nuihud\src\dll\obj\xbox\nuihud.pdb
+0x90109150	unicode	AsyncTaskManager0
+0x90109431	string	abcdefghijklmnopqrstuvwxyz
+0x90109451	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9010a01e	string	\rmainscene.xur
+0x9010c000	string	o. Mira hacia el sensor.
+0x9010c01d	string	Configurador de Kinect
+0x9010c04c	string	Inicio de Xbox
+0x9010c201	string	Accueil Xbox
+0x9010c22a	string	Se connecter au Xbox Live
+0x9010c249	string	Rejoindre le Xbox Live
+0x9010c260	string	Guide Kinect
+0x9010c279	string	Guida Kinect
+0x9010c312	string	Torna alla demo
+0x9010c326	string	Torna a Kiosk
+0x9010c344	string	Guida Kinect
+0x9010c355	string	Identificazione in corso. Girati verso il sensore.
+0x9010c38c	string	Sintonizzatore Kinect
+0x9010c3a6	string	Accedi
+0x9010c3b1	string	Pagina iniziale di Xbox
+0x9010c3cd	string	Obiettivi
+0x9010c3e7	string	Connessione a Xbox Live
+0x9010c3ff	string	Amici
+0x9010c405	string	Partecipa a Xbox Live
+0x9010c41b	string	Guida Kinect
+0x9010c7f4	string	Przewodnik Kinect
+0x9010c886	string	pny w trybie demonstracyjnym.
+0x9010c8ae	string	t do demo
+0x9010c8c2	string	t do kiosku
+0x9010c8de	string	Przewodnik Kinect
+0x9010c8f4	string	Identyfikowanie. Patrz na sensor.
+0x9010c91a	string	Kalibrator Kinect
+0x9010c950	string	wny konsoli Xbox
+0x9010c99b	string	 Xbox Live
+0x9010c9b4	string	cz do Xbox Live
+0x9010c9c4	string	Przewodnik Kinect
+0x9010c9e2	string	Guia do Kinect
+0x9010ca61	string	vel no modo demo.
+0x9010ca96	string	Retornar ao Quiosque
+0x9010cabb	string	Guia do Kinect
+0x9010cace	string	Identificando. Olhe o sensor.
+0x9010caf0	string	Sintonizador Kinect
+0x9010cb08	string	Entrar
+0x9010cb17	string	cio do Xbox
+0x9010cb27	string	Conquistas

@@ -1,0 +1,33 @@
+Unresolved items and coverage limits
+====================================
+
+Native static analysis cannot prove runtime behavior or recover all indirect calls.
+No managed XNA/runtime assemblies found in this dashboard. No files from another dashboard were substituted.
+Opaque avatar/media/font payloads are retained as binary originals; format conversion is not claimed.
+VMX128 instructions unsupported by Capstone limit the bounded IPC helper search.
+XimeDicCh.xex: decoded non-PE payload retained intact; internal data/firmware format not identified
+Xna_TitleLauncher.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_aac.xexp: No same-dashboard base matching filename, source version and load address
+packages/su20076000_00000000/$flash_bootanim.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_createprofile.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_dash.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_deviceselector.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_gamerprofile.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_hud.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_mfgbootlauncher.xex: independent raw decoder error: java.lang.ArrayIndexOutOfBoundsException: Index 28672 out of bounds for length 28672
+packages/su20076000_00000000/$flash_minimediaplayer.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_nomni.xexp: No same-dashboard base matching filename, source version and load address
+packages/su20076000_00000000/$flash_nomnifwk.xexp: No same-dashboard base matching filename, source version and load address
+packages/su20076000_00000000/$flash_nomnifwm.xexp: No same-dashboard base matching filename, source version and load address
+packages/su20076000_00000000/$flash_oddupd1.xex: decoded non-PE payload retained intact; internal data/firmware format not identified
+packages/su20076000_00000000/$flash_oddupd2.xex: decoded non-PE payload retained intact; internal data/firmware format not identified
+packages/su20076000_00000000/$flash_oddupd3.xex: decoded non-PE payload retained intact; internal data/firmware format not identified
+packages/su20076000_00000000/$flash_signin.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_systemupdate.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_systemupdate2pre.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_updater.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_vk.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_xam.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_ximecore.xex: raw XEXLoaderWV decoder output differs; analysis uses verified decoded-image import
+packages/su20076000_00000000/$flash_ximedic.xexp: No same-dashboard base matching filename, source version and load address
+packages/su20076000_00000000/$install_extender.xex: independent raw decoder error: java.lang.ArrayIndexOutOfBoundsException

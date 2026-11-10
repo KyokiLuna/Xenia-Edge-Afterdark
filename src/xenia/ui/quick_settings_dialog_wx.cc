@@ -619,9 +619,9 @@ void QuickSettingsDialog::ResetToDefaults() {
     originals[name] = opt.current_value;
   }
   for (auto& [name, var] : *cvar::ConfigVars) {
-    // Don't clear which profile is logged into which slot — those are not
-    // user-facing "settings", just persisted login state.
-    if (name.find("logged_profile_slot_") != std::string::npos) {
+    // Reset user preferences, not hidden runtime ownership, identity or
+    // persisted login state. Hiding a control must not make Reset erase it.
+    if (!ui::IsUserEditableCvar(*var)) {
       continue;
     }
     static_cast<cvar::IConfigVar*>(var)->ResetConfigValueToDefault();

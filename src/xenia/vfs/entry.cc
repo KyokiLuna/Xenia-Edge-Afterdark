@@ -115,7 +115,7 @@ bool Entry::Delete(Entry* entry) {
   if (is_read_only()) {
     return false;
   }
-  if (entry->has_open_files()) {
+  if (!entry->allows_namespace_mutation() || entry->has_open_files()) {
     return false;
   }
   if (entry->parent() != this) {
@@ -143,8 +143,9 @@ void Entry::Touch() {
   // TODO(benvanik): update timestamps.
 }
 
-X_STATUS Entry::Rename(const std::filesystem::path file_path,
-                       bool replace_existing) {
+X_STATUS Entry::Rename(
+    const std::filesystem::path file_path, bool replace_existing,
+    std::shared_ptr<const filesystem::HostStorageFileLease> permitted) {
   auto global_lock = global_critical_region_.Acquire();
   // Store the string to ensure string_views from split_path remain valid
   const std::string path_str = xe::path_to_utf8(file_path);
@@ -159,12 +160,17 @@ X_STATUS Entry::Rename(const std::filesystem::path file_path,
   const std::string guest_path = xe::utf8::join_guest_paths(path_parts);
   return Rename(
       device_->ResolvePath(xe::utf8::find_base_guest_path(guest_path)),
-      path_parts.back(), replace_existing);
+      path_parts.back(), replace_existing, std::move(permitted));
 }
 
-X_STATUS Entry::Rename(Entry* new_parent, std::string_view name,
-                       bool replace_existing) {
+X_STATUS Entry::Rename(
+    Entry* new_parent, std::string_view name, bool replace_existing,
+    std::shared_ptr<const filesystem::HostStorageFileLease> permitted) {
   auto global_lock = global_critical_region_.Acquire();
+  if (!allows_namespace_mutation() || is_read_only() ||
+      (new_parent && new_parent->is_read_only())) {
+    return X_STATUS_ACCESS_DENIED;
+  }
   if (!parent_) {
     return X_STATUS_OBJECT_NAME_INVALID;
   }
@@ -174,21 +180,56 @@ X_STATUS Entry::Rename(Entry* new_parent, std::string_view name,
   if (new_parent->device() != device_) {
     return X_STATUS_NOT_SAME_DEVICE;
   }
+  if (name.empty() || name == "." || name == ".." ||
+      name.find_first_of("\\/") != std::string_view::npos) {
+    return X_STATUS_OBJECT_NAME_INVALID;
+  }
+  for (Entry* ancestor = new_parent; ancestor; ancestor = ancestor->parent_) {
+    if (ancestor == this) {
+      return X_STATUS_INVALID_PARAMETER;
+    }
+  }
+  // The caller may have borrowed a target Entry's name; replacing that target
+  // must not invalidate the requested spelling before we commit the tree.
+  std::string new_name(name);
 
   // Renaming to its own name fails too, even a change of case only.
-  Entry* existing = new_parent->GetChild(name);
+  Entry* existing = new_parent->GetChild(new_name);
   if (existing) {
     if (!replace_existing ||
         (existing->attributes() & kFileAttributeDirectory)) {
       return X_STATUS_OBJECT_NAME_COLLISION;
     }
-    if (existing == this || existing->has_open_files()) {
+    if (existing == this || !existing->allows_namespace_mutation() ||
+        existing->has_open_files()) {
       return X_STATUS_ACCESS_DENIED;
     }
   }
 
-  if (!RenameEntryInternal(new_parent, name)) {
-    return X_STATUS_ACCESS_DENIED;
+  struct RebasedEntry {
+    Entry* entry;
+    std::string path, absolute_path;
+  };
+  std::vector<RebasedEntry> paths;
+  auto prepare = [&](auto&& self, Entry* entry, std::string path) -> void {
+    paths.push_back(
+        {entry, path, xe::utf8::join_guest_paths(device_->mount_path(), path)});
+    for (const auto& child : entry->children_) {
+      self(self, child.get(), xe::utf8::join_guest_paths(path, child->name_));
+    }
+  };
+  prepare(prepare, this,
+          xe::utf8::join_guest_paths(new_parent->path(), new_name));
+  // Perform allocations before native mutation; installing prepared strings
+  // and transferring existing ownership then cannot leave a half-rebased tree.
+  if (new_parent != parent_) {
+    new_parent->children_.reserve(new_parent->children_.size() + 1);
+  }
+
+  const auto result =
+      RenameEntryInternal(new_parent, new_name, std::move(permitted));
+  if (XFAILED(result)) {
+    return result;
   }
 
   if (existing) {
@@ -203,9 +244,11 @@ X_STATUS Entry::Rename(Entry* new_parent, std::string_view name,
     parent_->children_.erase(it);
     parent_ = new_parent;
   }
-  path_ = xe::utf8::join_guest_paths(new_parent->path(), name);
-  absolute_path_ = xe::utf8::join_guest_paths(device_->mount_path(), path_);
-  name_ = name;
+  for (auto& rebased : paths) {
+    rebased.entry->path_.swap(rebased.path);
+    rebased.entry->absolute_path_.swap(rebased.absolute_path);
+  }
+  name_.swap(new_name);
   return X_STATUS_SUCCESS;
 }
 

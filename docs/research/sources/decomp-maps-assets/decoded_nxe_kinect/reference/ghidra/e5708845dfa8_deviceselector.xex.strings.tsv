@@ -1,0 +1,26 @@
+va	data_type	text
+0x916d051c	unicode	ico_64x_MU_black.png
+0x916d0548	unicode	ico_64x_HD_black.png
+0x916d0574	unicode	DeviceList
+0x916d05b4	unicode	media
+0x916d05c0	unicode	XuiProgressBar1
+0x916d05e8	unicode	txt_NumberOf
+0x916d0604	unicode	strings.xus
+0x916d0628	unicode	XuiCanvas
+0x916d06d4	unicode	XuiList
+0x916d06e4	unicode	HUDScene
+0x916d06f8	unicode	DeviceListId
+0x916d0714	unicode	btnBack
+0x916d0724	unicode	DeviceSelector.xur
+0x916d074c	unicode	DeviceSelectorScene
+0x916d077c	unicode	DeviceFull.xur
+0x916d079c	unicode	DeviceFull
+0x916d07bc	unicode	btn_SelectAnother
+0x916d07e0	unicode	btn_ManageFiles
+0x916d0800	unicode	txt_Directions
+0x916d0844	string	d:\xenonfre\flashrtm\core\private\xam\apps\deviceselector\src\obj\xbox\deviceselector.pdb
+0x916d604a	string	deviceselector.dll
+0x916d605d	string	DS_CreateScene
+0x916d606c	string	DS_Init
+0x916d6074	string	DS_UnInit
+0x916d866f	unicode	Nein, nicht beenden

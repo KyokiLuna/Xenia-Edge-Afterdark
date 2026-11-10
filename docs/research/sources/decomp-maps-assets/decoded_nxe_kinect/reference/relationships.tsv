@@ -1,0 +1,103 @@
+module	origin	member	raw	decoded	header	base_module	ghidra_program
+$flash_aac.xexp	$flash_aac.xexp		_sources/$flash_aac.xexp	$flash_aac.xexp	$flash_aac.xexp.source.header		
+$flash_bootanim.xex	$flash_bootanim.xex		_sources/$flash_bootanim.xex	$flash_bootanim.xex	$flash_bootanim.xex.source.header		bdac8a810e8d__flash_bootanim.xex
+$flash_bootanim.xexp	$flash_bootanim.xexp		_sources/$flash_bootanim.xexp	$flash_bootanim.xexp	$flash_bootanim.xexp.source.header	bootanim.xex	
+$flash_createprofile.xex	$flash_createprofile.xex		_sources/$flash_createprofile.xex	$flash_createprofile.xex	$flash_createprofile.xex.source.header		606759f54f86__flash_createprofile.xex
+$flash_createprofile.xexp	$flash_createprofile.xexp		_sources/$flash_createprofile.xexp	$flash_createprofile.xexp	$flash_createprofile.xexp.source.header	createprofile.xex	
+$flash_dash.xex	$flash_dash.xex		_sources/$flash_dash.xex	$flash_dash.xex	$flash_dash.xex.source.header		c62144f12a27__flash_dash.xex
+$flash_deviceselector.xex	$flash_deviceselector.xex		_sources/$flash_deviceselector.xex	$flash_deviceselector.xex	$flash_deviceselector.xex.source.header		2e8c3745a996__flash_deviceselector.xex
+$flash_deviceselector.xexp	$flash_deviceselector.xexp		_sources/$flash_deviceselector.xexp	$flash_deviceselector.xexp	$flash_deviceselector.xexp.source.header	deviceselector.xex	
+$flash_gamerprofile.xex	$flash_gamerprofile.xex		_sources/$flash_gamerprofile.xex	$flash_gamerprofile.xex	$flash_gamerprofile.xex.source.header		3d18f82536bf__flash_gamerprofile.xex
+$flash_gamerprofile.xexp	$flash_gamerprofile.xexp		_sources/$flash_gamerprofile.xexp	$flash_gamerprofile.xexp	$flash_gamerprofile.xexp.source.header	gamerprofile.xex	
+$flash_hud.xex	$flash_hud.xex		_sources/$flash_hud.xex	$flash_hud.xex	$flash_hud.xex.source.header		baa1200ad159__flash_hud.xex
+$flash_hud.xexp	$flash_hud.xexp		_sources/$flash_hud.xexp	$flash_hud.xexp	$flash_hud.xexp.source.header	hud.xex	
+$flash_huduiskin.xex	$flash_huduiskin.xex		_sources/$flash_huduiskin.xex	$flash_huduiskin.xex	$flash_huduiskin.xex.source.header		
+$flash_mfgbootlauncher.xex	$flash_mfgbootlauncher.xex		_sources/$flash_mfgbootlauncher.xex	$flash_mfgbootlauncher.xex	$flash_mfgbootlauncher.xex.source.header		01190a5d374c__flash_mfgbootlauncher.xex
+$flash_mfgbootlauncher.xexp	$flash_mfgbootlauncher.xexp		_sources/$flash_mfgbootlauncher.xexp	$flash_mfgbootlauncher.xexp	$flash_mfgbootlauncher.xexp.source.header	mfgbootlauncher.xex	
+$flash_minimediaplayer.xex	$flash_minimediaplayer.xex		_sources/$flash_minimediaplayer.xex	$flash_minimediaplayer.xex	$flash_minimediaplayer.xex.source.header		c4809e1cc1e4__flash_minimediaplayer.xex
+$flash_minimediaplayer.xexp	$flash_minimediaplayer.xexp		_sources/$flash_minimediaplayer.xexp	$flash_minimediaplayer.xexp	$flash_minimediaplayer.xexp.source.header	minimediaplayer.xex	
+$flash_nomni.xexp	$flash_nomni.xexp		_sources/$flash_nomni.xexp	$flash_nomni.xexp	$flash_nomni.xexp.source.header		
+$flash_nomnifwm.xexp	$flash_nomnifwm.xexp		_sources/$flash_nomnifwm.xexp	$flash_nomnifwm.xexp	$flash_nomnifwm.xexp.source.header		
+$flash_signin.xex	$flash_signin.xex		_sources/$flash_signin.xex	$flash_signin.xex	$flash_signin.xex.source.header		48a0859f31d8__flash_signin.xex
+$flash_signin.xexp	$flash_signin.xexp		_sources/$flash_signin.xexp	$flash_signin.xexp	$flash_signin.xexp.source.header	signin.xex	
+$flash_systemupdate.xex	$flash_systemupdate.xex		_sources/$flash_systemupdate.xex	$flash_systemupdate.xex	$flash_systemupdate.xex.source.header		f042240ca76b__flash_systemupdate.xex
+$flash_systemupdate2pre.xex	$flash_systemupdate2pre.xex		_sources/$flash_systemupdate2pre.xex	$flash_systemupdate2pre.xex	$flash_systemupdate2pre.xex.source.header		262df8ea0332__flash_systemupdate2pre.xex
+$flash_updater.xex	$flash_updater.xex		_sources/$flash_updater.xex	$flash_updater.xex	$flash_updater.xex.source.header		54443f41f7d8__flash_updater.xex
+$flash_updater.xexp	$flash_updater.xexp		_sources/$flash_updater.xexp	$flash_updater.xexp	$flash_updater.xexp.source.header	updater.xex	
+$flash_vk.xex	$flash_vk.xex		_sources/$flash_vk.xex	$flash_vk.xex	$flash_vk.xex.source.header		56897db9c708__flash_vk.xex
+$flash_vk.xexp	$flash_vk.xexp		_sources/$flash_vk.xexp	$flash_vk.xexp	$flash_vk.xexp.source.header	vk.xex	
+$flash_xam.xex	$flash_xam.xex		_sources/$flash_xam.xex	$flash_xam.xex	$flash_xam.xex.source.header		54bd17895905__flash_xam.xex
+$flash_xam.xexp	$flash_xam.xexp		_sources/$flash_xam.xexp	$flash_xam.xexp	$flash_xam.xexp.source.header	xam.xex	
+$flash_ximecore.xex	$flash_ximecore.xex		_sources/$flash_ximecore.xex	$flash_ximecore.xex	$flash_ximecore.xex.source.header		713c274a5600__flash_ximecore.xex
+$flash_ximedic.xexp	$flash_ximedic.xexp		_sources/$flash_ximedic.xexp	$flash_ximedic.xexp	$flash_ximedic.xexp.source.header		
+$install_extender.xex	$install_extender.xex		_sources/$install_extender.xex	$install_extender.xex	$install_extender.xex.source.header		bd66d4514dca__install_extender.xex
+AvatarEditor.xex	AvatarEditor.xex		_sources/AvatarEditor.xex	AvatarEditor.xex	AvatarEditor.xex.source.header		f335e4f4548c_AvatarEditor.xex
+AvatarMiniCreator.xex	AvatarMiniCreator.xex		_sources/AvatarMiniCreator.xex	AvatarMiniCreator.xex	AvatarMiniCreator.xex.source.header		e38ce775b8fa_AvatarMiniCreator.xex
+BiometricSetup.xex	BiometricSetup.xex		_sources/BiometricSetup.xex	BiometricSetup.xex	BiometricSetup.xex.source.header		f7b7215b7d10_BiometricSetup.xex
+Dash.AttractionScreen.xex	Dash.AttractionScreen.xex		_sources/Dash.AttractionScreen.xex	Dash.AttractionScreen.xex	Dash.AttractionScreen.xex.source.header		c09e5b9599cb_Dash.AttractionScreen.xex
+Dash.FieldCalibration.lex	Dash.FieldCalibration.lex		_sources/Dash.FieldCalibration.lex	Dash.FieldCalibration.lex	Dash.FieldCalibration.lex.source.header		380621ee69a4_Dash.FieldCalibration.lex
+Dash.MP.Offline.lex	Dash.MP.Offline.lex		_sources/Dash.MP.Offline.lex	Dash.MP.Offline.lex	Dash.MP.Offline.lex.source.header		0f3888fd29de_Dash.MP.Offline.lex
+Dash.NuiTroubleshooter.lex	Dash.NuiTroubleshooter.lex		_sources/Dash.NuiTroubleshooter.lex	Dash.NuiTroubleshooter.lex	Dash.NuiTroubleshooter.lex.source.header		5d9b1148e191_Dash.NuiTroubleshooter.lex
+Guide.AvatarMiniCreator.xex	Guide.AvatarMiniCreator.xex		_sources/Guide.AvatarMiniCreator.xex	Guide.AvatarMiniCreator.xex	Guide.AvatarMiniCreator.xex.source.header		63ea145e704e_Guide.AvatarMiniCreator.xex
+Guide.NuiTroubleshooter.xex	Guide.NuiTroubleshooter.xex		_sources/Guide.NuiTroubleshooter.xex	Guide.NuiTroubleshooter.xex	Guide.NuiTroubleshooter.xex.source.header		b39584c2236e_Guide.NuiTroubleshooter.xex
+LivePack.xex	LivePack.xex		_sources/LivePack.xex	LivePack.xex	LivePack.xex.source.header		870c8064b829_LivePack.xex
+Party.xex	Party.xex		_sources/Party.xex	Party.xex	Party.xex.source.header		abe28672d49d_Party.xex
+XIMEDICEX.XEX	XIMEDICEX.XEX		_sources/XIMEDICEX.XEX	XIMEDICEX.XEX	XIMEDICEX.XEX.source.header		
+XMsgr.xex	XMsgr.xex		_sources/XMsgr.xex	XMsgr.xex	XMsgr.xex.source.header		74d5af21f244_XMsgr.xex
+Xam.Community.xex	Xam.Community.xex		_sources/Xam.Community.xex	Xam.Community.xex	Xam.Community.xex.source.header		cf6f0be17cfa_Xam.Community.xex
+Xam.LiveMessenger.xex	Xam.LiveMessenger.xex		_sources/Xam.LiveMessenger.xex	Xam.LiveMessenger.xex	Xam.LiveMessenger.xex.source.header		9ca6332c61c0_Xam.LiveMessenger.xex
+Xam.WordRegister.xex	Xam.WordRegister.xex		_sources/Xam.WordRegister.xex	Xam.WordRegister.xex	Xam.WordRegister.xex.source.header		87dcc5973341_Xam.WordRegister.xex
+XimeDicCh.xex	XimeDicCh.xex		_sources/XimeDicCh.xex	XimeDicCh.xex	XimeDicCh.xex.source.header		
+Xna_TitleLauncher.xex	Xna_TitleLauncher.xex		_sources/Xna_TitleLauncher.xex	Xna_TitleLauncher.xex	Xna_TitleLauncher.xex.source.header		4f30fcbba42d_Xna_TitleLauncher.xex
+bootanim.xex	bootanim.xex		_sources/bootanim.xex	bootanim.xex	bootanim.xex.source.header		60ac8cd81fa6_bootanim.xex
+createprofile.xex	createprofile.xex		_sources/createprofile.xex	createprofile.xex	createprofile.xex.source.header		8b968b0f57d1_createprofile.xex
+dash.ExtraAVCodecs.xex	dash.ExtraAVCodecs.xex		_sources/dash.ExtraAVCodecs.xex	dash.ExtraAVCodecs.xex	dash.ExtraAVCodecs.xex.source.header		eca91f842037_dash.ExtraAVCodecs.xex
+dash.NuiFirstUse.xex	dash.NuiFirstUse.xex		_sources/dash.NuiFirstUse.xex	dash.NuiFirstUse.xex	dash.NuiFirstUse.xex.source.header		e9ae762b3fec_dash.NuiFirstUse.xex
+dash.firstuse.xex	dash.firstuse.xex		_sources/dash.firstuse.xex	dash.firstuse.xex	dash.firstuse.xex.source.header		223b625ba437_dash.firstuse.xex
+dash.natalpregame.xex	dash.natalpregame.xex		_sources/dash.natalpregame.xex	dash.natalpregame.xex	dash.natalpregame.xex.source.header		d8ec5696180d_dash.natalpregame.xex
+dash.nuihub.xex	dash.nuihub.xex		_sources/dash.nuihub.xex	dash.nuihub.xex	dash.nuihub.xex.source.header		d3174f29c762_dash.nuihub.xex
+dash.xex	dash.xex		_sources/dash.xex	dash.xex	dash.xex.source.header		79d0dd5ac21c_dash.xex
+dashnui.xex	dashnui.xex		_sources/dashnui.xex	dashnui.xex	dashnui.xex.source.header		acf2bd2330c0_dashnui.xex
+deviceselector.xex	deviceselector.xex		_sources/deviceselector.xex	deviceselector.xex	deviceselector.xex.source.header		e5708845dfa8_deviceselector.xex
+feedback.xex	feedback.xex		_sources/feedback.xex	feedback.xex	feedback.xex.source.header		d8b2e787d5ad_feedback.xex
+friends.xex	friends.xex		_sources/friends.xex	friends.xex	friends.xex.source.header		dc128d6f060e_friends.xex
+gamerprofile.xex	gamerprofile.xex		_sources/gamerprofile.xex	gamerprofile.xex	gamerprofile.xex.source.header		d8849922dc48_gamerprofile.xex
+hostloader.dll	hostloader.dll		_sources/hostloader.dll	hostloader.dll	hostloader.dll.source.header		120b7f9906ca_hostloader.dll
+hud.xex	hud.xex		_sources/hud.xex	hud.xex	hud.xex.source.header		d280ec7cc7c7_hud.xex
+huduiskin.xex	huduiskin.xex		_sources/huduiskin.xex	huduiskin.xex	huduiskin.xex.source.header		
+marketplace.xex	marketplace.xex		_sources/marketplace.xex	marketplace.xex	marketplace.xex.source.header		fdacfc41f3d4_marketplace.xex
+mfgbootlauncher.xex	mfgbootlauncher.xex		_sources/mfgbootlauncher.xex	mfgbootlauncher.xex	mfgbootlauncher.xex.source.header		fa27ef0699b0_mfgbootlauncher.xex
+minimediaplayer.xex	minimediaplayer.xex		_sources/minimediaplayer.xex	minimediaplayer.xex	minimediaplayer.xex.source.header		bf9037085495_minimediaplayer.xex
+natalsu.xex	natalsu.xex		_sources/natalsu.xex	natalsu.xex	natalsu.xex.source.header		7bf4f5b3cad6_natalsu.xex
+nuihud.xex	nuihud.xex		_sources/nuihud.xex	nuihud.xex	nuihud.xex.source.header		3fa1a78a6211_nuihud.xex
+quickchat.xex	quickchat.xex		_sources/quickchat.xex	quickchat.xex	quickchat.xex.source.header		79f5281146fd_quickchat.xex
+runtime/v3.0/netcfusermode.dll	runtime/v3.0/netcfusermode.dll		_sources/runtime/v3.0/netcfusermode.dll	runtime/v3.0/netcfusermode.dll	runtime/v3.0/netcfusermode.dll.source.header		774d91bfbf22_netcfusermode.dll
+runtime/v3.0/runtimehost.xex	runtime/v3.0/runtimehost.xex		_sources/runtime/v3.0/runtimehost.xex	runtime/v3.0/runtimehost.xex	runtime/v3.0/runtimehost.xex.source.header		fa170df2b293_runtimehost.xex
+signin.xex	signin.xex		_sources/signin.xex	signin.xex	signin.xex.source.header		47cca1f27eca_signin.xex
+packages/su20076000_00000000/$flash_aac.xexp	su20076000_00000000	$flash_aac.xexp	_sources/packages/su20076000_00000000/$flash_aac.xexp	packages/su20076000_00000000/$flash_aac.xexp	packages/su20076000_00000000/$flash_aac.xexp.source.header		
+packages/su20076000_00000000/$flash_bootanim.xex	su20076000_00000000	$flash_bootanim.xex	_sources/packages/su20076000_00000000/$flash_bootanim.xex	packages/su20076000_00000000/$flash_bootanim.xex	packages/su20076000_00000000/$flash_bootanim.xex.source.header		bdac8a810e8d__flash_bootanim.xex
+packages/su20076000_00000000/$flash_createprofile.xex	su20076000_00000000	$flash_createprofile.xex	_sources/packages/su20076000_00000000/$flash_createprofile.xex	packages/su20076000_00000000/$flash_createprofile.xex	packages/su20076000_00000000/$flash_createprofile.xex.source.header		606759f54f86__flash_createprofile.xex
+packages/su20076000_00000000/$flash_dash.xex	su20076000_00000000	$flash_dash.xex	_sources/packages/su20076000_00000000/$flash_dash.xex	packages/su20076000_00000000/$flash_dash.xex	packages/su20076000_00000000/$flash_dash.xex.source.header		c62144f12a27__flash_dash.xex
+packages/su20076000_00000000/$flash_deviceselector.xex	su20076000_00000000	$flash_deviceselector.xex	_sources/packages/su20076000_00000000/$flash_deviceselector.xex	packages/su20076000_00000000/$flash_deviceselector.xex	packages/su20076000_00000000/$flash_deviceselector.xex.source.header		2e8c3745a996__flash_deviceselector.xex
+packages/su20076000_00000000/$flash_gamerprofile.xex	su20076000_00000000	$flash_gamerprofile.xex	_sources/packages/su20076000_00000000/$flash_gamerprofile.xex	packages/su20076000_00000000/$flash_gamerprofile.xex	packages/su20076000_00000000/$flash_gamerprofile.xex.source.header		3d18f82536bf__flash_gamerprofile.xex
+packages/su20076000_00000000/$flash_hud.xex	su20076000_00000000	$flash_hud.xex	_sources/packages/su20076000_00000000/$flash_hud.xex	packages/su20076000_00000000/$flash_hud.xex	packages/su20076000_00000000/$flash_hud.xex.source.header		baa1200ad159__flash_hud.xex
+packages/su20076000_00000000/$flash_huduiskin.xex	su20076000_00000000	$flash_huduiskin.xex	_sources/packages/su20076000_00000000/$flash_huduiskin.xex	packages/su20076000_00000000/$flash_huduiskin.xex	packages/su20076000_00000000/$flash_huduiskin.xex.source.header		
+packages/su20076000_00000000/$flash_mfgbootlauncher.xex	su20076000_00000000	$flash_mfgbootlauncher.xex	_sources/packages/su20076000_00000000/$flash_mfgbootlauncher.xex	packages/su20076000_00000000/$flash_mfgbootlauncher.xex	packages/su20076000_00000000/$flash_mfgbootlauncher.xex.source.header		01190a5d374c__flash_mfgbootlauncher.xex
+packages/su20076000_00000000/$flash_minimediaplayer.xex	su20076000_00000000	$flash_minimediaplayer.xex	_sources/packages/su20076000_00000000/$flash_minimediaplayer.xex	packages/su20076000_00000000/$flash_minimediaplayer.xex	packages/su20076000_00000000/$flash_minimediaplayer.xex.source.header		c4809e1cc1e4__flash_minimediaplayer.xex
+packages/su20076000_00000000/$flash_nomni.xexp	su20076000_00000000	$flash_nomni.xexp	_sources/packages/su20076000_00000000/$flash_nomni.xexp	packages/su20076000_00000000/$flash_nomni.xexp	packages/su20076000_00000000/$flash_nomni.xexp.source.header		
+packages/su20076000_00000000/$flash_nomnifwm.xexp	su20076000_00000000	$flash_nomnifwm.xexp	_sources/packages/su20076000_00000000/$flash_nomnifwm.xexp	packages/su20076000_00000000/$flash_nomnifwm.xexp	packages/su20076000_00000000/$flash_nomnifwm.xexp.source.header		
+packages/su20076000_00000000/$flash_signin.xex	su20076000_00000000	$flash_signin.xex	_sources/packages/su20076000_00000000/$flash_signin.xex	packages/su20076000_00000000/$flash_signin.xex	packages/su20076000_00000000/$flash_signin.xex.source.header		48a0859f31d8__flash_signin.xex
+packages/su20076000_00000000/$flash_systemupdate.xex	su20076000_00000000	$flash_systemupdate.xex	_sources/packages/su20076000_00000000/$flash_systemupdate.xex	packages/su20076000_00000000/$flash_systemupdate.xex	packages/su20076000_00000000/$flash_systemupdate.xex.source.header		f042240ca76b__flash_systemupdate.xex
+packages/su20076000_00000000/$flash_systemupdate2pre.xex	su20076000_00000000	$flash_systemupdate2pre.xex	_sources/packages/su20076000_00000000/$flash_systemupdate2pre.xex	packages/su20076000_00000000/$flash_systemupdate2pre.xex	packages/su20076000_00000000/$flash_systemupdate2pre.xex.source.header		262df8ea0332__flash_systemupdate2pre.xex
+packages/su20076000_00000000/$flash_updater.xex	su20076000_00000000	$flash_updater.xex	_sources/packages/su20076000_00000000/$flash_updater.xex	packages/su20076000_00000000/$flash_updater.xex	packages/su20076000_00000000/$flash_updater.xex.source.header		54443f41f7d8__flash_updater.xex
+packages/su20076000_00000000/$flash_vk.xex	su20076000_00000000	$flash_vk.xex	_sources/packages/su20076000_00000000/$flash_vk.xex	packages/su20076000_00000000/$flash_vk.xex	packages/su20076000_00000000/$flash_vk.xex.source.header		56897db9c708__flash_vk.xex
+packages/su20076000_00000000/$flash_xam.xex	su20076000_00000000	$flash_xam.xex	_sources/packages/su20076000_00000000/$flash_xam.xex	packages/su20076000_00000000/$flash_xam.xex	packages/su20076000_00000000/$flash_xam.xex.source.header		54bd17895905__flash_xam.xex
+packages/su20076000_00000000/$flash_ximecore.xex	su20076000_00000000	$flash_ximecore.xex	_sources/packages/su20076000_00000000/$flash_ximecore.xex	packages/su20076000_00000000/$flash_ximecore.xex	packages/su20076000_00000000/$flash_ximecore.xex.source.header		713c274a5600__flash_ximecore.xex
+packages/su20076000_00000000/$flash_ximedic.xexp	su20076000_00000000	$flash_ximedic.xexp	_sources/packages/su20076000_00000000/$flash_ximedic.xexp	packages/su20076000_00000000/$flash_ximedic.xexp	packages/su20076000_00000000/$flash_ximedic.xexp.source.header		
+packages/su20076000_00000000/$install_extender.xex	su20076000_00000000	$install_extender.xex	_sources/packages/su20076000_00000000/$install_extender.xex	packages/su20076000_00000000/$install_extender.xex	packages/su20076000_00000000/$install_extender.xex.source.header		bd66d4514dca__install_extender.xex
+titlelauncher.xex	titlelauncher.xex		_sources/titlelauncher.xex	titlelauncher.xex	titlelauncher.xex.source.header		c5e5aa1d1cb8_titlelauncher.xex
+updater.xex	updater.xex		_sources/updater.xex	updater.xex	updater.xex.source.header		970ce641951c_updater.xex
+vk.xex	vk.xex		_sources/vk.xex	vk.xex	vk.xex.source.header		c13a78561f33_vk.xex
+voicemail.xex	voicemail.xex		_sources/voicemail.xex	voicemail.xex	voicemail.xex.source.header		13fc6adbbdd9_voicemail.xex
+xam.xex	xam.xex		_sources/xam.xex	xam.xex	xam.xex.source.header		f95146b44fbf_xam.xex
+ximedic.xex	ximedic.xex		_sources/ximedic.xex	ximedic.xex	ximedic.xex.source.header		

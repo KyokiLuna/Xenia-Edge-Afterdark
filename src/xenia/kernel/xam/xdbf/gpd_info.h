@@ -12,8 +12,8 @@
 
 #include <span>
 #include <string>
+#include <system_error>
 #include <vector>
-
 #include "xenia/base/byte_order.h"
 #include "xenia/kernel/util/xfiletime.h"
 #include "xenia/kernel/xam/user_data.h"
@@ -163,14 +163,22 @@ class GpdInfo : public XdbfFile {
   void AddImage(uint32_t id, std::span<const uint8_t> image_data);
 
   X_XDBF_GPD_SETTING_HEADER* GetSetting(uint32_t id);
-  std::span<const uint8_t> GetSettingData(uint32_t id);
+  const X_XDBF_GPD_SETTING_HEADER* GetSetting(uint32_t id) const;
+  std::span<const uint8_t> GetSettingData(uint32_t id) const;
 
   void UpsertSetting(const UserSetting* setting_data);
+  // Checked model-only upsert preserving existing unknown header/tail bytes.
+  // Caller still needs its actual model/publication authority for persistence.
+  std::error_code UpsertSettingPreserving(const UserSetting& setting_data);
 
   std::u16string GetString(uint32_t id) const;
   void AddString(uint32_t id, std::u16string string_data);
 
   std::vector<uint8_t> Serialize() const;
+  // Validate every bound used by the legacy serializer before it can copy.
+  // No output/default model on failure; the caller validates resulting wire.
+  std::error_code SerializeChecked(std::vector<uint8_t>& output,
+                                    uint64_t maximum) const;
 
  protected:
   static bool IsSyncEntry(const Entry* const entry);

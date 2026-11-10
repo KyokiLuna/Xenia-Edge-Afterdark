@@ -8,14 +8,12 @@
  */
 
 #include "xenia/ui/game_list_panel_wx.h"
-
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstring>
 #include <ctime>
 #include <unordered_map>
-
 #include <wx/button.h>
 #include <wx/choice.h>
 #include <wx/dcclient.h>
@@ -29,7 +27,6 @@
 #include <wx/sizer.h>
 #include <wx/splitter.h>
 #include <wx/stattext.h>
-
 #include "xenia/app/emulator_window.h"
 #include "xenia/app/game_compat_db.h"
 #include "xenia/base/chrono.h"
@@ -113,13 +110,20 @@ GameListPanel::GameListPanel(wxWindow* parent, EmulatorWindow* emulator_window)
 
   search_ = new wxSearchCtrl(list_side_, wxID_ANY);
   search_->ShowCancelButton(true);
-  search_->SetDescriptiveText(_("Search games..."));
+  search_->SetDescriptiveText(_("Search titles..."));
   {
     wxFont f = search_->GetFont();
     f.Scale(1.4f);
     search_->SetFont(f);
   }
 
+  category_choice_ = new wxChoice(list_side_, wxID_ANY);
+  category_choice_->Append(_("All"));
+  category_choice_->Append(_("Games"));
+  category_choice_->Append(_("Apps"));
+  category_choice_->SetSelection(0);
+  category_choice_->Bind(wxEVT_CHOICE,
+                         [this](wxCommandEvent &) { Repopulate(); });
   sort_choice_ = new wxChoice(list_side_, wxID_ANY);
   sort_choice_->Append(_("Last Played"));
   sort_choice_->Append(_("Title"));
@@ -201,6 +205,8 @@ GameListPanel::GameListPanel(wxWindow* parent, EmulatorWindow* emulator_window)
 
   auto* search_row = new wxBoxSizer(wxHORIZONTAL);
   search_row->Add(search_, wxSizerFlags(1).Expand());
+  search_row->Add(category_choice_,
+                  wxSizerFlags().CenterVertical().Border(wxLEFT, 4));
   search_row->Add(sort_choice_,
                   wxSizerFlags().CenterVertical().Border(wxLEFT, 4));
   search_row->Add(sort_dir_button_,
@@ -267,20 +273,38 @@ void GameListPanel::Reload() {
     return;
   }
 
-  const auto& games = library->entries();
-  entries_.reserve(games.size());
-  for (const auto& g : games) {
-    Entry e;
-    e.title_id = g.title_id;
-    e.version = g.version;
-    e.title_name = g.name;
-    e.last_run_time = g.last_played;
-    e.path = g.paths.empty() ? std::filesystem::path{} : g.default_path().path;
-    e.discs.reserve(g.paths.size());
-    for (const auto& p : g.paths) {
-      e.discs.push_back(Disc{p.path});
+  const auto titles = emulator_window_->emulator()->LibraryTitles();
+  if (titles) {
+    entries_.reserve(titles->size());
+    for (const auto index : PreferredCatalogVariants(*titles)) {
+      const auto &title = (*titles)[index];
+      Entry e;
+      e.title_id = title.title_id;
+      e.version = title.version;
+      e.variant_id = title.variant_id;
+      e.title_name = title.name;
+      e.path = title.path;
+      e.icon_path = title.icon_path;
+      e.presentation = title.presentation;
+      if (const auto *stored = library->Find(e.key())) {
+        e.last_run_time = stored->last_played;
+      }
+      const auto family = CatalogFamilyKey(title);
+      for (const auto &variant : *titles) {
+        if (CatalogFamilyKey(variant) != family) {
+          continue;
+        }
+        std::string label = VersionToString(variant.version) + " - " +
+                            xe::path_to_utf8(variant.path.filename());
+        if (variant.presentation.entitlement == vfs::TitleEntitlement::kTrial) {
+          label += " (" + _("Trial").utf8_string() + ")";
+        }
+        e.discs.push_back({variant.path,
+                           {variant.title_id, variant.version},
+                           std::move(label)});
+      }
+      entries_.push_back(std::move(e));
     }
-    entries_.push_back(std::move(e));
   }
 
   // Per-profile timestamps are cheap; icons are PNG decodes and dominate the
@@ -293,27 +317,15 @@ void GameListPanel::Reload() {
 
 void GameListPanel::UpdateSearchPlaceholder() {
   if (entries_.empty()) {
-    search_->SetDescriptiveText(_("Search games..."));
+    search_->SetDescriptiveText(_("Search titles..."));
     return;
   }
   search_->SetDescriptiveText(
-      wxString::Format(_("Search %zu games..."), entries_.size()));
+      wxString::Format(_("Search %zu titles..."), entries_.size()));
 }
 
 void GameListPanel::LoadTimestampsFromProfiles() {
   if (!emulator_window_ || !emulator_window_->emulator()) {
-    return;
-  }
-  auto* kernel_state = emulator_window_->emulator()->kernel_state();
-  if (!kernel_state) {
-    return;
-  }
-  auto* xam_state = kernel_state->xam_state();
-  if (!xam_state) {
-    return;
-  }
-  auto* profile_manager = xam_state->profile_manager();
-  if (!profile_manager) {
     return;
   }
 
@@ -323,14 +335,12 @@ void GameListPanel::LoadTimestampsFromProfiles() {
   }
 
   for (uint8_t user_index = 0; user_index < 4; ++user_index) {
-    auto* profile = profile_manager->GetProfile(user_index);
-    if (!profile) {
+    std::error_code profile_error;
+    const auto models = emulator_window_->emulator()->CaptureProfileGpds(user_index, profile_error);
+    if (!models || profile_error) {
       continue;
     }
-    const auto& dashboard = profile->dashboard_gpd();
-    if (!dashboard.IsValid()) {
-      continue;
-    }
+    const auto& dashboard = models->dashboard;
     auto title_infos = dashboard.GetTitlesInfo();
     for (auto& entry : entries_) {
       // The GPD records one time per title, so it cannot say which release
@@ -352,12 +362,14 @@ void GameListPanel::LoadTimestampsFromProfiles() {
         }
         break;
       }
-      auto stats = profile->GetTitleAchievementStats(entry.title_id);
-      if (stats.achievements_total > entry.achievements_total) {
-        entry.achievements_total = stats.achievements_total;
-        entry.achievements_unlocked = stats.achievements_unlocked;
-        entry.gamerscore_total = stats.gamerscore_total;
-        entry.gamerscore_earned = stats.gamerscore_earned;
+      const auto game = models->titles.find(entry.title_id);
+      if (game != models->titles.end() &&
+          game->second.GetAchievementCount() > entry.achievements_total) {
+        entry.achievements_total = game->second.GetAchievementCount();
+        entry.achievements_unlocked =
+            game->second.GetUnlockedAchievementCount();
+        entry.gamerscore_total = game->second.GetTotalGamerscore();
+        entry.gamerscore_earned = game->second.GetGamerscore();
       }
     }
   }
@@ -404,8 +416,7 @@ wxBitmap GameListPanel::MakeCard(const Entry& entry) const {
   }
   // Scale 1: the image list addresses device pixels directly.
   wxBitmapBundle art = ui::DecodePngIcon(
-      xe::filesystem::ReadAllBytes(library->IconPath(entry.key())),
-      icon_size_px_, 1.0);
+      xe::filesystem::ReadAllBytes(entry.icon_path), icon_size_px_, 1.0);
 
   wxBitmap card(icon_size_px_, icon_size_px_, 32);
   wxMemoryDC dc(card);
@@ -494,12 +505,10 @@ void GameListPanel::MarkPlayed(const LibraryKey& key) {
   }
 }
 
-void GameListPanel::RefreshEntry(const LibraryKey& key) {
-  // Cards don't show the content type, only the pane does.
-  const Entry* entry = SelectedEntry();
-  if (entry && entry->key() == key) {
-    RefreshInfoPane();
-  }
+void GameListPanel::RefreshEntry(const LibraryKey &) {
+  // Metadata/default-path changes can alter category, art or family preference.
+  // Rebuild from the same immutable snapshot consumed by native content.
+  Reload();
 }
 
 void GameListPanel::RefreshInfoPane() {
@@ -516,6 +525,7 @@ void GameListPanel::RefreshInfoPane() {
   }
   ShowInfoPane(true);
   selected_key_ = entry->key();
+  selected_variant_id_ = entry->variant_id;
   GameInfoPanel::TitleStats stats;
   stats.last_played = entry->last_run_time;
   stats.achievements_unlocked = entry->achievements_unlocked;
@@ -616,17 +626,16 @@ void GameListPanel::OnItemContextMenu(int index) {
   if (!entry.path.empty()) {
     if (entry.discs.size() > 1) {
       auto* launch_submenu = new wxMenu;
-      size_t disc_num = 1;
-      for (const auto& disc : entry.discs) {
-        auto* item = launch_submenu->Append(
-            wxID_ANY, wxString::Format(_("Disc %zu"), disc_num));
+      for (const auto &disc : entry.discs) {
+        auto *item = launch_submenu->Append(
+            wxID_ANY, wxString::FromUTF8(disc.label),
+            wxString::FromUTF8(xe::path_to_utf8(disc.path)));
         menu.Bind(
             wxEVT_MENU,
-            [this, key = entry.key(), path = disc.path](wxCommandEvent&) {
+            [this, key = disc.key, path = disc.path](wxCommandEvent &) {
               LaunchOrPrompt(key, path);
             },
             item->GetId());
-        ++disc_num;
       }
       menu.AppendSubMenu(launch_submenu, _("Launch"));
     } else {
@@ -641,7 +650,7 @@ void GameListPanel::OnItemContextMenu(int index) {
     menu.AppendSeparator();
   }
 
-  auto* remove = menu.Append(wxID_ANY, _("Remove from list"));
+  auto *remove = menu.Append(wxID_ANY, _("Remove this release from list"));
   menu.Bind(
       wxEVT_MENU,
       [this, key = entry.key(),
@@ -764,6 +773,15 @@ void GameListPanel::Repopulate() {
 
   for (size_t i = 0; i < entries_.size(); ++i) {
     const auto& e = entries_[i];
+    const int category = category_choice_->GetSelection();
+    const bool app =
+        e.presentation.kind == vfs::TitleSemanticKind::kApplication ||
+        e.presentation.kind == vfs::TitleSemanticKind::kSystemApplication;
+    if ((category == 1 &&
+         e.presentation.kind != vfs::TitleSemanticKind::kGame) ||
+        (category == 2 && !app)) {
+      continue;
+    }
     if (!filter_lower_.empty()) {
       std::string title_lower = ToLower(e.title_name);
       std::string path_lower = ToLower(xe::path_to_utf8(e.path));
@@ -786,13 +804,18 @@ void GameListPanel::Repopulate() {
     item.label = e.title_name.empty() ? _("File Corrupted")
                                       : wxString::FromUTF8(e.title_name);
     if (e.discs.size() > 1) {
-      item.sublabel = wxString::Format(_("(%zu discs)"), e.discs.size());
+      item.sublabel = wxString::Format(_("(%zu variants)"), e.discs.size());
     }
     // The card shows a shortened title and a colored dot; spell both out.
     const wxString version = wxString::FromUTF8(VersionToString(e.version));
     item.tooltip = item.label + "\n" +
                    wxString::Format(_("Version: %s"), version) + "\n" +
                    CompatStateName(GetEntryCompatState(e));
+    if (e.presentation.entitlement == vfs::TitleEntitlement::kTrial) {
+      item.tooltip += "\n" + _("Trial");
+    } else if (e.presentation.entitlement == vfs::TitleEntitlement::kFull) {
+      item.tooltip += "\n" + _("Full game");
+    }
     if (!e.path.empty()) {
       item.tooltip += "\n" + wxString::FromUTF8(xe::path_to_utf8(e.path));
     }
@@ -805,7 +828,8 @@ void GameListPanel::Repopulate() {
   // not the user picking a game, so it is done without notifying.
   if (selected_key_.title_id) {
     for (size_t r = 0; r < visible_indices_.size(); ++r) {
-      if (entries_[visible_indices_[r]].key() == selected_key_) {
+      if (entries_[visible_indices_[r]].key() == selected_key_ &&
+          entries_[visible_indices_[r]].variant_id == selected_variant_id_) {
         grid_->SetSelection(static_cast<int>(r), /*notify=*/false);
         grid_->EnsureVisible(static_cast<int>(r));
         break;

@@ -1,0 +1,18 @@
+{
+  "module": "updater.xex",
+  "program": "970ce641951c_updater.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "32e672c81c1d8a5b9f100730e37e2881720a2e7ffc1848c10f35ecf7178a1682",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 107,
+  "calls": 123,
+  "strings": 109,
+  "string_xrefs": 22,
+  "independent_sha256": "32e672c81c1d8a5b9f100730e37e2881720a2e7ffc1848c10f35ecf7178a1682",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

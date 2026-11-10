@@ -43,6 +43,43 @@ UserSetting::UserSetting(const X_XDBF_GPD_SETTING_HEADER* profile_setting,
           static_cast<UserSettingId>(profile_setting->setting_id.get())),
       setting_source_(X_USER_PROFILE_SETTING_SOURCE::TITLE) {}
 
+X_RESULT UserSetting::ReadFromGpd(const GpdInfo& gpd, uint32_t setting_id,
+                                  std::optional<UserSetting>& output) {
+  output.reset();
+  if (!gpd.IsValid()) {
+    return X_ERROR_FILE_CORRUPT;
+  }
+  const auto expected = get_type(setting_id);
+  if (expected > X_USER_DATA_TYPE::DATETIME) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+  const auto* entry = gpd.GetEntry(static_cast<uint16_t>(GpdSection::kSetting),
+                                   setting_id);
+  if (!entry) {
+    return X_ERROR_SUCCESS;
+  }
+  if (entry->data.size() < sizeof(X_XDBF_GPD_SETTING_HEADER)) {
+    return X_ERROR_FILE_CORRUPT;
+  }
+  X_XDBF_GPD_SETTING_HEADER stored;
+  std::memcpy(&stored, entry->data.data(), sizeof(stored));
+  if (stored.setting_id != setting_id || stored.setting_type != expected) {
+    return X_ERROR_FILE_CORRUPT;
+  }
+  std::span<const uint8_t> extended;
+  if (stored.RequiresBuffer()) {
+    const size_t length = stored.base_data.binary.size;
+    const size_t available = entry->data.size() - sizeof(stored);
+    if (length > available || length > get_max_size(setting_id) ||
+        (expected == X_USER_DATA_TYPE::WSTRING && (length & 1))) {
+      return X_ERROR_FILE_CORRUPT;
+    }
+    extended = std::span(entry->data).subspan(sizeof(stored), length);
+  }
+  output.emplace(&stored, extended);
+  return X_ERROR_SUCCESS;
+}
+
 std::optional<UserSetting> UserSetting::GetDefaultSetting(uint32_t setting_id) {
   for (const auto& setting : default_setting_values) {
     if (setting.get_setting_id() == setting_id) {
@@ -105,10 +142,13 @@ void UserSetting::WriteToGuest(X_USER_PROFILE_SETTING* setting_ptr,
   const uint32_t size =
       std::min(static_cast<uint32_t>(extended_data.size()), max_size);
 
-  if (size) {
-    setting_ptr->data.data.binary.size = size;
-    setting_ptr->data.data.binary.ptr = extended_data_address;
+  // A persisted union can contain an obsolete guest pointer and a declared
+  // length larger than the actual payload. Publish only bytes we own, including
+  // an explicit empty value. Native avatar code checks cbData before copying.
+  setting_ptr->data.data.binary.size = size;
+  setting_ptr->data.data.binary.ptr = size ? extended_data_address : 0;
 
+  if (size) {
     memcpy(kernel_memory()->TranslateVirtual(extended_data_address),
            extended_data.data(), size);
   }

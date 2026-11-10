@@ -1,0 +1,18 @@
+{
+  "module": "Dash.Kiosk.lex",
+  "program": "a798bb9567c7_Dash.Kiosk.lex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "c1f28dd2052bf861e88e93dffae6e54da19d9fbeda05a430f3c87180ca2a39cd",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9b610400",
+  "functions": 748,
+  "calls": 2017,
+  "strings": 1234,
+  "string_xrefs": 861,
+  "independent_sha256": "c1f28dd2052bf861e88e93dffae6e54da19d9fbeda05a430f3c87180ca2a39cd",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

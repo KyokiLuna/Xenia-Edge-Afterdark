@@ -1,0 +1,20 @@
+{
+  "module": "hostloader.dll",
+  "program": "120b7f9906ca_hostloader.dll",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "266d1a7f599584f7e5e3a97b48faba25ee2872240028a0ec0aef7e2a19a36e8d",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x8a000400",
+  "functions": 3228,
+  "calls": 7293,
+  "strings": 940,
+  "string_xrefs": 647,
+  "independent_sha256": "266d1a7f599584f7e5e3a97b48faba25ee2872240028a0ec0aef7e2a19a36e8d",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0,
+  "decompiled_functions": 3198,
+  "decompile_failures": 0
+}

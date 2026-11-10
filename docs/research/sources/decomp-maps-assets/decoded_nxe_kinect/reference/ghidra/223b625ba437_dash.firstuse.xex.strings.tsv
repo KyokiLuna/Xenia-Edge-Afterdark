@@ -1,0 +1,212 @@
+va	data_type	text
+0x9b76059c	string	dash.firstuse.xex
+0x9b7605b8	string	Unknown exception
+0x9b7605d4	string	bad allocation
+0x9b7606ac	unicode	runtime error 
+0x9b7606d0	unicode	TLOSS error\n
+0x9b7606ec	unicode	SING error\n
+0x9b760704	unicode	DOMAIN error\n
+0x9b760720	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9b760910	unicode	R6032\n- not enough space for locale information\n
+0x9b760978	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9b760a3c	unicode	R6030\n- CRT not initialized\n
+0x9b760a78	unicode	R6028\n- unable to initialize heap\n
+0x9b760ac0	unicode	R6027\n- not enough space for lowio initialization\n
+0x9b760b28	unicode	R6026\n- not enough space for stdio initialization\n
+0x9b760b90	unicode	R6025\n- pure virtual function call\n
+0x9b760bd8	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9b760c40	unicode	R6019\n- unable to open console device\n
+0x9b760c90	unicode	R6018\n- unexpected heap error\n
+0x9b760cd0	unicode	R6017\n- unexpected multithread lock error\n
+0x9b760d28	unicode	R6016\n- not enough space for thread data\n
+0x9b760d80	unicode	R6010\n- abort() has been called\n
+0x9b760dc8	unicode	R6009\n- not enough space for environment\n
+0x9b760e20	unicode	R6008\n- not enough space for arguments\n
+0x9b760e70	unicode	R6002\n- floating point support not loaded\n
+0x9b760f78	string	 Complete Object Locator'
+0x9b760f94	string	 Class Hierarchy Descriptor'
+0x9b760fb4	string	 Base Class Array'
+0x9b760fc8	string	 Base Class Descriptor at (
+0x9b760fe4	string	 Type Descriptor'
+0x9b760ff8	string	`local static thread guard'
+0x9b761014	string	`managed vector copy constructor iterator'
+0x9b761040	string	`vector vbase copy constructor iterator'
+0x9b76106c	string	`vector copy constructor iterator'
+0x9b761090	string	`dynamic atexit destructor for '
+0x9b7610b4	string	`dynamic initializer for '
+0x9b7610d0	string	`eh vector vbase copy constructor iterator'
+0x9b7610fc	string	`eh vector copy constructor iterator'
+0x9b761124	string	`managed vector destructor iterator'
+0x9b76114c	string	`managed vector constructor iterator'
+0x9b761174	string	`placement delete[] closure'
+0x9b761194	string	`placement delete closure'
+0x9b7611b0	string	`omni callsig'
+0x9b7611c0	string	 delete[]
+0x9b7611cc	string	 new[]
+0x9b7611d4	string	`local vftable constructor closure'
+0x9b7611f8	string	`local vftable'
+0x9b761208	string	`RTTI
+0x9b761214	string	`udt returning'
+0x9b761224	string	`copy constructor closure'
+0x9b761240	string	`eh vector vbase constructor iterator'
+0x9b761268	string	`eh vector destructor iterator'
+0x9b761288	string	`eh vector constructor iterator'
+0x9b7612ac	string	`virtual displacement map'
+0x9b7612c8	string	`vector vbase constructor iterator'
+0x9b7612ec	string	`vector destructor iterator'
+0x9b76130c	string	`vector constructor iterator'
+0x9b76132c	string	`scalar deleting destructor'
+0x9b76134c	string	`default constructor closure'
+0x9b76136c	string	`vector deleting destructor'
+0x9b76138c	string	`vbase destructor'
+0x9b7613a0	string	`string'
+0x9b7613ac	string	`local static guard'
+0x9b7613c4	string	`typeof'
+0x9b7613d0	string	`vcall'
+0x9b7613d8	string	`vbtable'
+0x9b7613e4	string	`vftable'
+0x9b76146c	string	operator
+0x9b761494	string	 delete
+0x9b7614a4	string	__unaligned
+0x9b7614b0	string	__restrict
+0x9b7614bc	string	__ptr64
+0x9b7614c4	string	__eabi
+0x9b7614cc	string	__clrcall
+0x9b7614d8	string	__fastcall
+0x9b7614e4	string	__thiscall
+0x9b7614f0	string	__stdcall
+0x9b7614fc	string	__pascal
+0x9b761508	string	__cdecl
+0x9b761510	string	__based(
+0x9b7616ec	unicode	HH:mm:ss
+0x9b761700	unicode	dddd, MMMM dd, yyyy
+0x9b761728	unicode	MM/dd/yy
+0x9b76174c	unicode	December
+0x9b761760	unicode	November
+0x9b761774	unicode	October
+0x9b761784	unicode	September
+0x9b761798	unicode	August
+0x9b7617a8	unicode	July
+0x9b7617b4	unicode	June
+0x9b7617c0	unicode	April
+0x9b7617cc	unicode	March
+0x9b7617d8	unicode	February
+0x9b7617ec	unicode	January
+0x9b76185c	unicode	Saturday
+0x9b761870	unicode	Friday
+0x9b761880	unicode	Thursday
+0x9b761894	unicode	Wednesday
+0x9b7618a8	unicode	Tuesday
+0x9b7618b8	unicode	Monday
+0x9b7618c8	unicode	Sunday
+0x9b761910	string	HH:mm:ss
+0x9b76191c	string	dddd, MMMM dd, yyyy
+0x9b761930	string	MM/dd/yy
+0x9b761944	string	December
+0x9b761950	string	November
+0x9b76195c	string	October
+0x9b761964	string	September
+0x9b761970	string	August
+0x9b761988	string	April
+0x9b761990	string	March
+0x9b761998	string	February
+0x9b7619a4	string	January
+0x9b7619dc	string	Saturday
+0x9b7619e8	string	Friday
+0x9b7619f0	string	Thursday
+0x9b7619fc	string	Wednesday
+0x9b761a08	string	Tuesday
+0x9b761a10	string	Monday
+0x9b761a18	string	Sunday
+0x9b762248	unicode	Congrats
+0x9b76225c	unicode	Legacy_ControllerGuide
+0x9b76228c	unicode	Legacy_DashIntro
+0x9b7622b0	unicode	Legacy_WelcomeController
+0x9b7622e4	unicode	VUI_VoiceTutorial
+0x9b762308	unicode	VUI_WelcomeVoice
+0x9b76232c	unicode	NUI_KinectTuner
+0x9b76234c	unicode	NUI_GestureTutorial
+0x9b762374	unicode	NUI_KinectTutorial
+0x9b76239c	unicode	NUI_WelcomeKinect
+0x9b7623f4	string	legacy
+0x9b7623fc	unicode	dashfirstuse.xzp
+0x9b762420	unicode	BackgroundSound.xur
+0x9b762448	unicode	%s.xur
+0x9b762458	unicode	XuiPerspectiveScene
+0x9b762480	unicode	Welcome.xur
+0x9b762498	unicode	DashFirstUseScene
+0x9b7624bc	unicode	XuiVisual
+0x9b7624d0	unicode	strings.xus
+0x9b7624ec	unicode	NormalStart
+0x9b762504	unicode	NormalEnd
+0x9b762520	unicode	Freeze
+0x9b762530	unicode	Snap
+0x9b762540	unicode	XuiLabel
+0x9b762554	unicode	AvatarAnimationList
+0x9b76257c	unicode	Idle
+0x9b762598	unicode	%s%s
+0x9b7625a4	unicode	.MsLiveAvatarAsset
+0x9b7625d4	unicode	.bin
+0x9b7625e0	unicode	XuiAvatar
+0x9b7625f4	unicode	AvatarAnimationControl
+0x9b762624	unicode	XuiGroup
+0x9b762758	string	e+000
+0x9b762760	unicode	(null)
+0x9b762a84	string	1#QNAN
+0x9b762a8c	string	1#INF
+0x9b762a94	string	1#IND
+0x9b762a9c	string	1#SNAN
+0x9b762abc	string	e:\bt\248805\core\private\xam\dash\apps\dashfirstuse\app\obj\xbox\dash.firstuse.pdb
+0x9b776058	string	.?AVbad_alloc@std@@
+0x9b776074	string	.?AVexception@std@@
+0x9b7766c9	string	abcdefghijklmnopqrstuvwxyz
+0x9b7766e9	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9b778036	string	dash.firstuse.xex
+0x9b778048	string	CreateDashAppInstance
+0x9b779000	string	undSound.xus
+0x9b779015	string	fr-fr\Congrats.xus
+0x9b77902f	string	 fr-fr\Legacy_ControllerGuide.xus
+0x9b779059	string	fr-fr\Legacy_DashIntro.xus
+0x9b77907b	string	"fr-fr\Legacy_WelcomeController.xus
+0x9b7790a7	string	fr-fr\NUI_GestureTutorial.xus
+0x9b7790cd	string	fr-fr\NUI_KinectTuner.xus
+0x9b7790ef	string	fr-fr\NUI_KinectTutorial.xus
+0x9b779114	string	fr-fr\NUI_WelcomeKinect.xus
+0x9b779138	string	fr-fr\strings.xus
+0x9b779152	string	fr-fr\VUI_VoiceTutorial.xus
+0x9b779176	string	fr-fr\VUI_WelcomeVoice.xus
+0x9b779199	string	fr-fr\Welcome.xus
+0x9b7791b3	string	it-it\BackgroundSound.xus
+0x9b7791d5	string	it-it\Congrats.xus
+0x9b7791ee	string	\ it-it\Legacy_ControllerGuide.xus
+0x9b779219	string	it-it\Legacy_DashIntro.xus
+0x9b77a000	string	Xbox Dashboard
+0x9b77a00f	string	controller
+0x9b77a01a	string	assets\Controller1_DFU.png
+0x9b77a04c	string	captionGroup0
+0x9b77a260	string	 Change your settings
+0x9b77a27b	string	TwoThirdsPane
+0x9b77a289	string	kinectHeaderImg
+0x9b77a299	string	assets\kinect_twoThirdsPane.png
+0x9b77a2b9	string	XuiScene
+0x9b77a2c2	string	Continue
+0x9b77a2d0	string	NormalEnd
+0x9b77a2da	string	XuiButton
+0x9b77a2e4	string	stripeBG
+0x9b77a2ed	string	sharedres://A-Button.png
+0x9b77a306	string	bodyText
+0x9b77a30f	string	Label_Body_V
+0x9b77a31c	string	The Xbox Guide is how you get to almost everything on your Xbox 360.\r\n\r\nReady for a tour? Let's go.
+0x9b77a387	string	Label_Body_1line
+0x9b77a398	string	The Xbox Guide
+0x9b77a3a7	string	Bullet2
+0x9b77a3af	string	label1
+0x9b77a3b6	string	The Guide Button
+0x9b77a3c7	string	Bullet1
+0x9b77a3cf	string	AvatarinChair
+0x9b77a3dd	string	assets\Dash_01.png
+0x9b77a3f0	string	default
+0x9b77a3f8	string	NormalStart
+0x9b77a440	string	TransFrom
+0x9b77a44a	string	XuiPerspectiveScene
+0x9b77a45e	string	XuiCanvas

@@ -1,0 +1,57 @@
+va	data_type	text
+0x980004e4	string	natal\pmc\pmc.bin
+0x980004f8	string	pmc.bin
+0x98000500	string	NATALDEVICEPACKAGE
+0x98000514	string	natal\fwversions.txt
+0x9800052c	string	fwversions.txt
+0x9800053c	string	NuiCam.bin
+0x98000548	string	NuiCam2.bin
+0x98000554	string	natal\altair\2bl.bin
+0x9800056c	string	2bl.bin
+0x98000574	string	natal\detroit\detroit.bin
+0x98000590	string	detroit.bin
+0x980005a4	string	natal\cambridge\
+0x980006a0	string	KinectAspenNazcaPmcPLoadManifestAndUpdateApp: App1 invalid after being updated\n
+0x980006f0	string	KinectAspenNazcaPmcPLoadManifestAndUpdateApp: App0 invalid after being updated\n
+0x98000740	string	KinectAspenNazcaPmcPLoadManifestAndUpdateApp: KinectAspenNazcaPmcGetVersions failed - %08X.\n
+0x980007a0	string	KinectAspenNazcaPmcPLoadManifestAndUpdateApp: KinectAspenWaitForConnection failed - %08X.\n
+0x98000800	string	KinectAspenNazcaPmcPLoadManifestAndUpdateApp: KinectAspenNazcaPmcUpdateApp failed - %08X.\n
+0x98000860	string	KinectAspenNazcaPmcPLoadManifestAndUpdateApp: KinectAspenGetBootCount failed - %08X.\n
+0x980008b8	string	KinectAspenNazcaPmcPLoadManifestAndUpdateApp: KinectAspenNazcaPmcSendManifest failed - %08X.\n
+0x98000918	string	KinectAspenNazcaPmcUpdate: KinectAspenNazcaPmcGetVersions failed - %08X.\n
+0x980009f4	string	audios.bin
+0x98000a08	string	detroit=
+0x98000a14	string	altair=
+0x98000a1c	string	cambridge=
+0x98000a28	string	NATALDEVICEPACKAGE:\
+0x98000a40	string	XamNatalDevicesDevkit:\
+0x98000a58	string	RnR_DATA
+0x98000a64	string	SW_DATA
+0x98000a6c	string	UPDATE_IN_PROGRESS
+0x98000a80	string	PRODUCTION_FILE
+0x98000a90	string	SAFETY_PARAMS
+0x98000aa0	string	APC_PARAMS
+0x98000aac	string	TEC_PARAMS
+0x98000ab8	string	ID_PARAMS
+0x98000ac4	string	REG_PARAMS
+0x98000ad0	string	GAIN_CONTROL
+0x98000ae0	string	PRIME_PROCESSOR
+0x98000af0	string	DEBUG_PARAMS
+0x98000b00	string	MAINTENANCE
+0x98000b0c	string	VGA_REFERENCE
+0x98000b1c	string	QVGA_REFERENCE
+0x98000b2c	string	ALGORITHM_PARAMS
+0x98000b40	string	DEPTH_CMOS
+0x98000b4c	string	IMAGE_CMOS
+0x98000b58	string	DEFAULT_PARAMS
+0x98000b68	string	DESCRIPTORS
+0x98000b74	string	FIXED_PARAMS
+0x98000b84	string	APPLICATION
+0x98000b90	string	MONITOR
+0x98000b98	string	CODE_DOWNLOADER
+0x98000ba8	string	BOOT_MANAGER
+0x98000bb8	string	BOOT_SECTOR
+0x98000bc4	string	SCRATCH_FILE
+0x98000bd4	string	FILE_TABLE
+0x98000c38	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\devices\natal\updatedll\obj\xbox\natalsu.pdb
+0x98008030	string	installsu.dll

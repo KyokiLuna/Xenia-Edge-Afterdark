@@ -1,0 +1,18 @@
+{
+  "module": "feedback.xex",
+  "program": "d8b2e787d5ad_feedback.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "d70b13396e3fad20a02562ca6981c82fcbd3911aab65189bebecf1779eb5e634",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 383,
+  "calls": 951,
+  "strings": 145,
+  "string_xrefs": 273,
+  "independent_sha256": "3285c21d7b7e662edaaa13e9a917275e7298c875004e825fdc31c2db7cf2ec7a",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

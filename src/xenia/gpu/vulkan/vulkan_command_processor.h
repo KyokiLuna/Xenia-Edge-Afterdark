@@ -20,6 +20,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -37,6 +38,7 @@
 #include "xenia/gpu/spirv_shader_translator.h"
 #include "xenia/gpu/vulkan/deferred_command_buffer.h"
 #include "xenia/gpu/vulkan/vulkan_graphics_system.h"
+#include "xenia/gpu/vulkan/vulkan_native_resource_epoch.h"
 #include "xenia/gpu/vulkan/vulkan_pipeline_cache.h"
 #include "xenia/gpu/vulkan/vulkan_primitive_processor.h"
 #include "xenia/gpu/vulkan/vulkan_query_pool.h"
@@ -168,6 +170,13 @@ class VulkanCommandProcessor final : public CommandProcessor {
   void RestoreEdramSnapshot(const void* snapshot) override;
 
   void PollCompletedSubmission() override;
+  bool SupportsGpuCompletion() const override { return true; }
+  GpuCompletion CaptureGpuCompletion(
+      GpuCompletionResources resources = {},
+      GpuCompletion::Observer observer = {}) override;
+  void PollGpuCompletions() override;
+
+  GuestRenderBankAllocationResult AllocateNativeGuestRenderBank() override;
 
   ui::vulkan::VulkanDevice* GetVulkanDevice() const {
     return static_cast<const ui::vulkan::VulkanProvider*>(
@@ -200,6 +209,9 @@ class VulkanCommandProcessor final : public CommandProcessor {
                         const VkSparseMemoryBind* binds,
                         VkPipelineStageFlags wait_stage_mask);
 
+  NativeSystemFrameCapacity GetNativeSystemFrameCapacity()
+      const noexcept override;
+  bool EnableNativeSystemTitleInput(uint64_t backend_epoch) override;
   uint64_t GetCurrentFrame() const { return frame_current_; }
   uint64_t GetCompletedFrame() const { return frame_completed_; }
 
@@ -333,7 +345,9 @@ class VulkanCommandProcessor final : public CommandProcessor {
   // buffer and fence, as the faulting thread can't use the GPU thread's. With
   // zero-copy, only waits for the resolve to have written it.
   bool FaultCopyResolveToGuestRam(
-      const std::vector<std::pair<uint32_t, uint32_t>>& ranges);
+      const std::vector<std::pair<uint32_t, uint32_t>>& ranges,
+      bool strict_visibility = false,
+      VulkanSharedMemory* explicit_native_source = nullptr);
   void DestroyResolveFaultCopy();
   bool EnsureResolveFaultReadback(uint32_t size);
   // The last submission handed to the GPU, for other threads.
@@ -394,6 +408,18 @@ class VulkanCommandProcessor final : public CommandProcessor {
   void IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbuffer_width,
                  uint32_t frontbuffer_height) override;
 
+  void QueueNativeFrameAtSafeBoundary(
+      std::shared_ptr<const NativeFrameExecutionRequest> request,
+      std::function<void(NativeFrameExecutionResult)> completed) override;
+  NativeFrameReadbackResult ReadCompletedNativeFrame(
+      std::shared_ptr<const NativeFrameExecutionRequest> request) override;
+  NativeFramePresentationStatus GetNativeFramePresentationStatus(
+      std::shared_ptr<const NativeFrameExecutionRequest> request) override;
+
+  void CaptureNativeSystemTitleInput(
+      const NativeSystemTitleInput::Identity& identity,
+      const NativeSystemTitleInput::Layout& layout) noexcept override;
+
   void OnPrimaryBufferEnd() override;
 
   Shader* LoadShader(xenos::ShaderType shader_type,
@@ -409,6 +435,167 @@ class VulkanCommandProcessor final : public CommandProcessor {
   bool DumpEdramSnapshotToFile(const std::filesystem::path& path) override;
 
  private:
+  // Only the actual swap drain may enter this transaction. A packet plan or
+  // successful legacy bool draw is never execution authority.
+  NativeFrameExecutionResult ExecutePreparedNativeFrame(
+      std::shared_ptr<const NativeFrameExecutionRequest> request);
+  bool HasNativeFrameGpuStopRetention() const;
+  // All callers serialize the shared pool/fence/staging allocation with
+  // resolve_read_mutex_. A nonempty host span forces staging, including when
+  // the Title buffer aliases guest RAM. Only the ordinary wrapper mirrors RAM.
+  bool CopyResolveOutput(
+      const std::vector<std::pair<uint32_t, uint32_t>>& ranges,
+      bool strict_visibility, VulkanSharedMemory& source,
+      std::span<uint8_t> host_destination = {});
+  void RetainFailedNativeFrameGpuWork(
+      std::shared_ptr<const NativeFrameExecutionRequest> request,
+      uint64_t first_native_submission, uint64_t latest_native_submission,
+      bool all_work_submitted) noexcept;
+  void PumpQueuedNativeFramesAtSafePoint() override;
+  void DrainNativeFrameAtSafePoint();
+  void RefreshNativeFrameCapacity() noexcept;
+  bool HasNativeQueryIsolation() const;
+  enum class NativeQueryParkStatus { kBusy, kReady, kFailed };
+  NativeQueryParkStatus ParkTitleQueries(const NativeFrameExecutionRequest&);
+  bool RestoreTitleQueries(bool after_gpu_stopped = false);
+  bool HasGuestResourceScope() const {
+    return frame_open_ ||
+           (native_guest_render_bank_selected_ &&
+            native_resource_epoch_active_.valid() && HasNativeQueryIsolation());
+  }
+  void CancelPendingNativeFrame() noexcept;
+  void StopNativeGpuBeforeDestruction();
+  static void CompleteNativeFrameCallback(
+      std::function<void(NativeFrameExecutionResult)> completed,
+      NativeFrameExecutionResult result) noexcept;
+  std::shared_ptr<const NativeFrameExecutionRequest> native_frame_pending_;
+  std::function<void(NativeFrameExecutionResult)>
+      native_frame_pending_completed_;
+  // Assigned before entering the executor and replaced only after a real
+  // Complete fence and successful restoration, or released after GPU stop.
+  std::shared_ptr<const NativeFrameExecutionRequest> native_frame_retained_;
+  GpuCompletion native_frame_retained_completion_;
+  memory::PhysicalRange native_frame_retained_written_range_{};
+  // Exact completed GPU output, captured from the helper staging allocation.
+  // Guest RAM may change asynchronously after its required visibility mirror.
+  std::vector<uint8_t> native_frame_retained_snapshot_output_;
+  bool native_frame_retained_submitted_ = false;
+  bool native_frame_retained_restored_ = false;
+  bool native_frame_boundary_active_ = false;
+  bool native_frame_waiting_capacity_ = false;
+  static constexpr uint32_t kNativeFrameCapabilitySupported = 0x100;
+  static constexpr uint32_t kNativeImmutableSnapshotSupported = 0x200;
+  std::atomic<uint32_t> native_frame_capacity_word_{0};
+  void SetNativeFrameCapacityState(
+      NativeSystemFrameCapacity::State state) noexcept {
+    native_frame_capacity_word_.store(
+        (native_frame_capacity_word_.load(std::memory_order_relaxed) &
+         (kNativeFrameCapabilitySupported |
+          kNativeImmutableSnapshotSupported)) |
+            uint32_t(state),
+        std::memory_order_release);
+  }
+  void SignalNativeFrameFailure() noexcept;
+  bool native_frame_fatal_notified_ = false;
+  bool native_frame_fatal_ = false;
+  bool native_gpu_work_ever_attempted_ = false;
+  bool native_shutdown_retention_installed_ = false;
+  bool native_shutdown_in_progress_ = false;
+  // Read by fault-copy threads as well as the CP worker.
+  std::atomic<bool> native_submissions_sealed_{false};
+  // A direct copy submit/wait failure may leave its shared pool/fence pending.
+  // Prevent all reuse until teardown without blocking final CP submission.
+  std::atomic<bool> resolve_fault_copy_failed_{false};
+  uint64_t native_frame_last_submission_ = 0;
+
+  static constexpr uint32_t kMaxFramesInFlight = 3;
+
+  struct NativePresentationImage {
+    NativeFrameSubmissionIdentity identity;
+    uint64_t backend_epoch = 0, version = 0;
+    uint32_t width = 0, height = 0;
+    std::shared_ptr<const ui::NativeUiPlaneAuthority> authority;
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+    VkDescriptorSet copy_set = VK_NULL_HANDLE;
+    uint64_t last_reference_submission = 0;
+    uint64_t native_write_submission = 0;
+    uint64_t composite_submission = 0;
+    GpuCompletion native_completion, composite_completion;
+    bool copy_recorded = false, published = false, failed = false;
+    bool presenter_published = false, publication_withdrawn = false;
+  };
+  bool EnsureNativePresentationPipelines();
+  NativePresentationImage* BeginNativePresentationImage(
+      const std::shared_ptr<const NativeFrameExecutionRequest>& request,
+      std::shared_ptr<const ui::NativeUiPlaneAuthority> authority);
+  bool RecordNativePresentationCopy(NativePresentationImage& image,
+                                    const NativeFrameExecutionRequest& request,
+                                    memory::PhysicalRange written);
+  void CommitNativePresentationImage(NativePresentationImage* image,
+                                     const NativeFrameExecutionResult& result);
+  void PublishCompletedNativePresentationImages();
+  void FailNativePresentation(uint64_t image_version,
+                              const char* reason) noexcept;
+  void ReclaimNativePresentationImages();
+  void DestroyNativePresentationImage(NativePresentationImage& image);
+  void DestroyNativePresentationResources();
+  std::deque<std::shared_ptr<NativePresentationImage>>
+      native_presentation_images_;
+  NativePresentationImage* native_presentation_current_ = nullptr;
+  uint64_t native_presentation_next_version_ = 1;
+  uint64_t native_presentation_published_version_ = 0;
+  VkDescriptorSetLayout native_presentation_descriptor_layout_ = VK_NULL_HANDLE;
+  VkPipelineLayout native_presentation_pipeline_layout_ = VK_NULL_HANDLE;
+  VkPipeline native_presentation_copy_pipeline_ = VK_NULL_HANDLE;
+
+  struct NativeDrawOutcome {
+    enum class Status {
+      kFailed,
+      kRejected,
+      kNoRasterWork,
+      kNoVertices,
+      kPipelineUnavailable,
+      kPlaceholderPipeline,
+      kTextureUnavailable,
+      kRenderTargetPreparationFailed,
+      kDrawRecorded,
+      kIndexedDrawRecorded,
+      kResolveRecorded,
+    };
+    Status status = Status::kFailed;
+    uint32_t draw_commands = 0;
+    uint32_t indexed_draw_commands = 0;
+    uint32_t host_vertex_count = 0;
+    VulkanRenderTargetCache::NativeResolveOutcome resolve;
+    bool recorded() const {
+      return status == Status::kDrawRecorded ||
+             status == Status::kIndexedDrawRecorded ||
+             status == Status::kResolveRecorded;
+    }
+  };
+  NativeDrawOutcome IssueNativeDraw(
+      xenos::PrimitiveType prim_type, uint32_t index_count,
+      IndexBufferInfo* index_buffer_info, bool major_mode_explicit,
+      const VulkanRenderTargetCache::NativeResolveExpectation* resolve =
+          nullptr);
+  bool IssueDrawInternal(
+      xenos::PrimitiveType prim_type, uint32_t index_count,
+      IndexBufferInfo* index_buffer_info, bool major_mode_explicit,
+      NativeDrawOutcome* native_outcome,
+      const VulkanRenderTargetCache::NativeResolveExpectation* resolve);
+  bool IssueCopyInternal(
+      const VulkanRenderTargetCache::NativeResolveExpectation* expectation,
+      VulkanRenderTargetCache::NativeResolveOutcome* native_outcome);
+  // Select only at an already closed submission in an existing title frame.
+  // Refusal to leave an open/failed native submission is not a rollback; the
+  // future transaction must stop/quarantine that work before host destruction.
+  bool SelectNativeGuestRenderBankAtClosedSubmission(
+      bool select_native, bool after_gpu_stopped = false);
+  void InvalidateGuestRenderBankBindings();
+
   struct CommandBuffer {
     VkCommandPool pool;
     VkCommandBuffer buffer;
@@ -693,6 +880,7 @@ class VulkanCommandProcessor final : public CommandProcessor {
   VkDeviceSize zpd_counter_descriptor_range_ = 0;
 
   ui::vulkan::VulkanGPUCompletionTimeline completion_timeline_;
+  GpuCompletionQueue gpu_completions_;
   bool submission_open_ = false;
   // In case vkQueueSubmit fails after something like a successful
   // vkQueueBindSparse, to wait correctly on the next attempt.
@@ -701,7 +889,6 @@ class VulkanCommandProcessor final : public CommandProcessor {
   std::deque<std::pair<uint64_t, VkSemaphore>>
       submissions_in_flight_semaphores_;
 
-  static constexpr uint32_t kMaxFramesInFlight = 3;
   bool frame_open_ = false;
   // Comparable against the Metal backend's render encoder count: on a TBDR GPU
   // each one is a tile store plus an attachment reload.
@@ -813,10 +1000,132 @@ class VulkanCommandProcessor final : public CommandProcessor {
       texture_transient_descriptor_sets_free_;
 
   std::unique_ptr<VulkanSharedMemory> shared_memory_;
+  // Fixed object identity for foreign-thread Title faults across bank swaps.
+  VulkanSharedMemory* title_shared_memory_ = nullptr;
 
   std::unique_ptr<VulkanPrimitiveProcessor> primitive_processor_;
 
   std::unique_ptr<VulkanRenderTargetCache> render_target_cache_;
+
+  // Separate native allocation namespace. A serial below is not a title frame,
+  // source identity, GPU submission, or execution permission. Only an actual
+  // CP completion in the captured backend epoch advances its retirement.
+  struct NativeTransientResources {
+    explicit NativeTransientResources(ui::vulkan::VulkanDevice& device);
+    void Reclaim(uint64_t completed_epoch);
+
+    std::unique_ptr<ui::vulkan::VulkanUploadBufferPool> uniform_buffer_pool;
+    ui::vulkan::LinkedTypeDescriptorSetAllocator uniform_descriptors;
+    ui::vulkan::LinkedTypeDescriptorSetAllocator storage_descriptors;
+    ui::vulkan::LinkedTypeDescriptorSetAllocator storage_image_descriptors;
+    ui::vulkan::LinkedTypeDescriptorSetAllocator texture_descriptors;
+    std::deque<UsedSingleTransientDescriptor> singles_used;
+    std::array<std::vector<VkDescriptorSet>,
+               size_t(SingleTransientDescriptorLayout::kCount)>
+        singles_free;
+    std::deque<std::pair<uint64_t, VkDescriptorSet>> constants_used;
+    std::vector<VkDescriptorSet> constants_free;
+    std::deque<UsedTextureTransientDescriptorSet> textures_used;
+    std::unordered_map<TextureDescriptorSetLayoutKey,
+                       std::vector<VkDescriptorSet>,
+                       TextureDescriptorSetLayoutKey::Hasher>
+        textures_free;
+  };
+  enum class NativeResourceEpochBeginStatus { kRejected, kBusy, kReady };
+  struct NativeResourceEpochBeginResult {
+    NativeResourceEpochBeginStatus status =
+        NativeResourceEpochBeginStatus::kRejected;
+    VulkanNativeResourceEpoch epoch;
+  };
+  enum class NativeResourceEpochClose {
+    kCanceledBeforeGpu,
+    kSubmitted,
+    kUncertain
+  };
+  struct GuestRenderBank;
+  GuestRenderBankAllocationResult AllocateNativeGuestRenderBankForInput(
+      bool immutable_snapshot);
+  struct NativeResourceEpochRetirement {
+    enum class State { kUnused, kReserved, kSubmitted, kCanceled, kPoisoned };
+    VulkanNativeResourceEpoch epoch;
+    GuestRenderBank* bank = nullptr;
+    NativeFrameSubmissionIdentity source;
+    uint64_t last_submission = 0;
+    State state = State::kUnused;
+  };
+  // Reserve only from the admitted executor, after the title prefix is closed.
+  // A busy result consumes no source and records no native GPU commands.
+  NativeResourceEpochBeginResult BeginNativeResourceEpoch(
+      const NativeFrameExecutionRequest& request);
+  bool CloseNativeResourceEpoch(VulkanNativeResourceEpoch epoch,
+                                NativeResourceEpochClose outcome,
+                                uint64_t first_submission,
+                                uint64_t last_submission) noexcept;
+  void ReclaimNativeResourceEpochs();
+  uint64_t GetCurrentTransientResourceEpoch() const;
+  ui::vulkan::VulkanUploadBufferPool& CurrentUniformBufferPool();
+  // Fixed storage: submission/failure finalization never allocates a record.
+  static constexpr size_t kMaxNativeResourceEpochsInFlight = 3;
+  std::array<NativeResourceEpochRetirement, kMaxNativeResourceEpochsInFlight>
+      native_resource_epochs_{};
+  size_t native_resource_epoch_head_ = 0;
+  size_t native_resource_epoch_count_ = 0;
+  uint64_t native_resource_epoch_serial_ = 0;
+  uint64_t native_resource_epoch_completed_ = 0;
+  VulkanNativeResourceEpoch native_resource_epoch_active_;
+  bool native_resource_epochs_poisoned_ = false;
+
+  // Never active in the allocation gate. Vulkan owners stay with the backend,
+  // and are destroyed before the common descriptor / pipeline layouts.
+  struct GuestRenderBank {
+    explicit GuestRenderBank(ui::vulkan::VulkanDevice& device)
+        : device(device) {}
+    ~GuestRenderBank();
+
+    ui::vulkan::VulkanDevice& device;
+    // Never published to GraphicsSystem's MMIO view or selected by the CP in
+    // this allocation gate. Constructor reset values are not a native draw
+    // baseline. All bank consumers keep this private object's fixed address.
+    bool immutable_snapshot = false;
+    // Present only for production snapshot banks. Diagnostic bank keeps its
+    // historical live-owner SharedMemory references and routing unchanged.
+    std::unique_ptr<VulkanSharedMemory> shared_memory;
+    std::unique_ptr<RegisterFile> register_file;
+    uint64_t initial_register_hash = 0;
+    std::unique_ptr<VulkanRenderTargetCache> render_target_cache;
+    std::unique_ptr<VulkanPipelineCache> pipeline_cache;
+    std::unique_ptr<VulkanPrimitiveProcessor> primitive_processor;
+    std::unique_ptr<VulkanTextureCache> texture_cache;
+    std::unique_ptr<NativeTransientResources> transient_resources;
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+    VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
+    VkDescriptorSet host_descriptor_set = VK_NULL_HANDLE;
+    // Valid placeholder only; no query or VIZ execution is admitted.
+    VkBuffer zpd_counter_sink_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory zpd_counter_sink_memory = VK_NULL_HANDLE;
+    // CP-derived values are banked, while validity/bound bits are invalidated
+    // on both transitions. Never replay these as guest register writes.
+    SpirvShaderTranslator::SystemConstants system_constants{};
+    draw_util::GetViewportInfoArgs viewport_info_args{};
+    draw_util::ViewportInfo viewport_info{};
+    uint32_t stencil_compare_mask_front = UINT8_MAX;
+    uint32_t stencil_compare_mask_back = UINT8_MAX;
+    uint32_t stencil_write_mask_front = UINT8_MAX;
+    uint32_t stencil_write_mask_back = UINT8_MAX;
+    uint32_t stencil_reference_front = 0;
+    uint32_t stencil_reference_back = 0;
+    uint64_t last_frame = UINT64_MAX;
+  };
+  std::unique_ptr<GuestRenderBank> native_guest_render_bank_;
+  std::unique_ptr<GuestRenderBank> native_alternate_guest_render_bank_;
+  bool native_guest_render_bank_selected_ = false;
+  struct NativeSavedTitleState {
+    RegisterFile* register_file = nullptr;
+    VulkanSharedMemory* shared_memory = nullptr;
+    Shader* vertex_shader = nullptr;
+    Shader* pixel_shader = nullptr;
+    uint32_t vertex_shader_ucode_address = 0;
+  } native_saved_title_state_;
 
   std::unique_ptr<VulkanQueryPool> host_query_pool_;
 
@@ -829,6 +1138,26 @@ class VulkanCommandProcessor final : public CommandProcessor {
     bool fsi;
   };
   std::vector<PendingVIZCopy> viz_pending_copies_;
+  struct ParkedTitleQueryContext {
+    NativeTitleQueryLogicalState logical;
+    NativeFrameSubmissionIdentity source;
+    uint64_t serial = 0, backend_epoch = 0, prefix_submission = 0;
+    bool isolated = false;
+    RegisterFile* title_register_file = nullptr;
+    std::unique_ptr<VulkanQueryPool> pool;
+    std::deque<PendingQueryResolve> resolves;
+    std::vector<PendingVIZCopy> viz_copies;
+    VkBuffer predicate_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory predicate_memory = VK_NULL_HANDLE;
+    bool predicate_failed = false;
+    bool fsi_path = false, counter_dirty = true;
+    VkBuffer counter_descriptor_buffer = VK_NULL_HANDLE;
+    VkDeviceSize counter_descriptor_range = 0;
+  };
+  // GPU-owning parked context lives with the CP, never with a stack token or
+  // GpuCompletionResources. Failure retains it through actual backend stop.
+  std::unique_ptr<ParkedTitleQueryContext> native_parked_title_queries_;
+  uint64_t native_query_scope_serial_ = 0;
 
   std::unique_ptr<VulkanPipelineCache> pipeline_cache_;
 

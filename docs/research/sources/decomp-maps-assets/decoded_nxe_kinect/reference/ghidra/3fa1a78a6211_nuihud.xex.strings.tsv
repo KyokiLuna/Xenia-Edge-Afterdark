@@ -1,0 +1,114 @@
+va	data_type	text
+0x901005f0	string	NHUDEXTO
+0x90100604	string	NHUDENTO
+0x90100610	string	NHUDENT
+0x901006d8	unicode	strings.xus
+0x901006f8	unicode	XuiCanvas
+0x90100738	unicode	NuiControllerRequiredButton
+0x90100770	unicode	media
+0x90100808	unicode	HUDScene
+0x9010081c	unicode	XuiNavButton
+0x90100838	unicode	NuiCommunityNavButton
+0x90100864	unicode	icon_friend.png
+0x90100884	unicode	icon_party.png
+0x901008a4	unicode	icon_mail.png
+0x901008c0	unicode	sharedres://ico_32x_controller_wA.png
+0x9010090c	unicode	MainScene.xur
+0x90100928	unicode	MainScene
+0x9010097c	unicode	btnMute
+0x9010098c	unicode	btnSettings
+0x901009a4	unicode	btnSignIn
+0x901009b8	unicode	btnHub
+0x901009c8	unicode	btnAchievements
+0x901009e8	unicode	btnFriends
+0x90100a00	unicode	GamerElements/GamerscoreIcon
+0x90100a3c	unicode	GamerElements/Gamerscore
+0x90100a70	unicode	GamerElements/Gamertag
+0x90100aa0	unicode	HoverB
+0x90100ab0	string	NuiHud
+0x90100ac0	string	ShowAchievements
+0x90100ad4	string	ShowTroubleShooter
+0x90100ae8	string	ShowSwitchUser
+0x90100af8	string	GoToHub
+0x90100b08	unicode	Waiting
+0x90100b18	unicode	SignedOut
+0x90100b2c	unicode	SignedInOffline
+0x90100b4c	unicode	Connected
+0x90100b60	unicode	SignedInLocal
+0x90100b7c	string	EnterNuiHudOmni
+0x90100b8c	string	Event6
+0x90100b94	string	NuiHudEtx
+0x90100ba0	string	ExitNuiHudOmni
+0x90100bb0	string	Event13
+0x90100bb8	string	ActionNuiHudOmni
+0x90100c04	unicode	XuiElement
+0x90100c1c	unicode	klcc
+0x90100c28	unicode	diners
+0x90100c40	unicode	discover
+0x90100c54	unicode	amex
+0x90100c60	unicode	mastercard
+0x90100c78	unicode	visa
+0x90100c84	unicode	japanesekatakana
+0x90100ca8	unicode	japanesehiragana
+0x90100ccc	unicode	schfull
+0x90100cdc	unicode	latinextended
+0x90100cf8	unicode	russionfull
+0x90100d10	unicode	tchfull
+0x90100d20	unicode	koreanfull
+0x90100d38	unicode	japanesefull
+0x90100d54	unicode	latinalphabet
+0x90100d70	unicode	latinnumeric
+0x90100d8c	unicode	latinipaddress
+0x90100dac	unicode	latinphone
+0x90100dc4	unicode	latingamertag
+0x90100de0	unicode	latinemail
+0x90100df8	unicode	latinfull
+0x90100e0c	unicode	phone
+0x90100e18	unicode	contactemail
+0x90100e34	unicode	postalcode
+0x90100e4c	unicode	state
+0x90100e58	unicode	city
+0x90100e64	unicode	district
+0x90100e78	unicode	street2
+0x90100e88	unicode	street1
+0x90100e98	unicode	none
+0x90100ea4	string	deviceselector.xex
+0x90100fb4	unicode	sharedres://LiveProfile.xus
+0x90100fec	unicode	sharedres://LiveAll.xus
+0x9010101c	string	HH:mm:ss
+0x90101028	string	dddd, MMMM dd, yyyy
+0x9010103c	string	MM/dd/yy
+0x90101050	string	December
+0x9010105c	string	November
+0x90101068	string	October
+0x90101070	string	September
+0x9010107c	string	August
+0x90101094	string	April
+0x9010109c	string	March
+0x901010a4	string	February
+0x901010b0	string	January
+0x901010e8	string	Saturday
+0x901010f4	string	Friday
+0x901010fc	string	Thursday
+0x90101108	string	Wednesday
+0x90101114	string	Tuesday
+0x9010111c	string	Monday
+0x90101124	string	Sunday
+0x90101950	string	SunMonTueWedThuFriSat
+0x90101968	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x90101990	string	xam.xex
+0x901019b0	string	e:\bt\248805\core\private\xam\apps\nuihud\src\dll\obj\xbox\nuihud.pdb
+0x90108150	unicode	AsyncTaskManager0
+0x9010901e	string	\rmainscene.xur
+0x9010b000	string	or Kinect
+0x9010b00e	string	Entrar
+0x9010b019	string	Hub do Kinect
+0x9010b02b	string	Conquistas
+0x9010b046	string	Conectar-se ao Xbox LIVE
+0x9010b200	string	terownika Kinect
+0x9010b215	string	Identyfikowanie. Patrz na czujnik.
+0x9010b23c	string	Kalibrator Kinect
+0x9010b263	string	Interfejs sensora Kinect
+0x9010b2b6	string	 Xbox LIVE
+0x9010b2d9	string	ugi Xbox LIVE
+0x9010b2e7	string	Instrukcja sensora Kinect

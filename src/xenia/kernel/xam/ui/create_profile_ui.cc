@@ -58,6 +58,7 @@ void CreateProfileUI::OnDraw(ImGuiIO& io) {
     auto profile_manager =
         emulator_->kernel_state()->xam_state()->profile_manager();
 
+    ImGui::BeginDisabled(created_profile_xuid_ != 0);
     ImGui::Text("Gamertag:");
     // Set focus to InputText on first frame
     if (!focus_set_) {
@@ -69,18 +70,61 @@ void CreateProfileUI::OnDraw(ImGuiIO& io) {
 
     std::string gt(gamertag_);
     bool valid = profile_manager->IsGamertagValid(gt);
-
-    ImGui::BeginDisabled(!valid);
-    if (ImGui::Button("Create") || (enter_pressed && valid)) {
-      bool autologin = (profile_manager->GetAccountCount() == 0);
-      profile_manager->CreateProfile(gt, autologin);
-      ImGui::CloseCurrentPopup();
-      Close();
+    const char* avatars[] = {"1 - Male", "2 - Female", "3 - Male", "4 - Female",
+                              "5 - Female", "6 - Male", "7 - Male", "8 - Female",
+                              "9 - Male", "10 - Male", "11 - Female", "12 - Female"};
+    ImGui::Combo("Stock avatar", &avatar_preset_, avatars, 12);
+    const char* pictures[] = {"1", "2", "3", "4", "5", "6", "7",
+                               "8", "9", "10", "11", "12", "13"};
+    ImGui::Combo("Gamer picture", &stock_picture_, pictures, 13);
+    ImGui::EndDisabled();
+    if (created_profile_xuid_ && !created_profile_discovered_) {
+      ImGui::TextWrapped("The profile was saved but could not be loaded. "
+                         "Retry loading it, or close and try again later.");
+    } else if (created_profile_xuid_ && created_profile_wanted_signin_ &&
+               !created_profile_signed_in_) {
+      ImGui::TextWrapped("The profile was saved. Restart Xenia to sign in.");
+    } else if (creation_failed_) {
+      ImGui::TextWrapped("Could not create the profile. Check installed system "
+                         "files and available storage, then try again.");
+    }
+    const bool pending_load = created_profile_xuid_ && !created_profile_discovered_;
+    ImGui::BeginDisabled(!created_profile_xuid_ && !valid);
+    if (ImGui::Button(created_profile_xuid_ ? (pending_load ? "Retry loading" : "Done")
+                                         : "Create") ||
+        (!created_profile_xuid_ && enter_pressed && valid)) {
+      bool done = false;
+      if (!created_profile_xuid_) {
+        created_profile_wanted_signin_ = (profile_manager->GetAccountCount() == 0);
+        const auto result = profile_manager->CreateProfileDetailed(
+            gt, created_profile_wanted_signin_, false,
+            uint32_t(avatar_preset_), uint32_t(stock_picture_));
+        creation_failed_ = !result.published;
+        if (result.published) {
+          created_profile_xuid_ = result.xuid;
+          created_profile_discovered_ = result.discovered;
+          created_profile_signed_in_ = result.signed_in;
+        }
+      } else if (pending_load) {
+        created_profile_discovered_ = profile_manager->LoadAccount(created_profile_xuid_);
+        if (created_profile_discovered_) {
+          // Observe an actual existing sign-in only. Do not mutate an active
+          // native identity or invent a successful deferred autologin here.
+          created_profile_signed_in_ = bool(profile_manager->CaptureProfile(created_profile_xuid_));
+        }
+      } else {
+        done = true;
+      }
+      if (created_profile_xuid_ && created_profile_discovered_ &&
+          (done || !created_profile_wanted_signin_ || created_profile_signed_in_)) {
+        ImGui::CloseCurrentPopup();
+        Close();
+      }
     }
     ImGui::EndDisabled();
 
     ImGui::SameLine();
-    if (ImGui::Button("Cancel")) {
+    if (ImGui::Button(created_profile_xuid_ ? "Close" : "Cancel")) {
       ImGui::CloseCurrentPopup();
       Close();
     }

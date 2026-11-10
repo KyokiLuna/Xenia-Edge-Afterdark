@@ -100,7 +100,8 @@ struct X_XAMACCOUNTINFO {
   }
 
   std::string GetGamertagString() const {
-    return xe::to_utf8(xe::string_util::read_u16string_and_swap(gamertag));
+    return xe::to_utf8(xe::string_util::read_u16string_and_swap(
+        gamertag, xe::countof(gamertag)));
   }
 
   void ToggleLiveFlag(bool is_live) {

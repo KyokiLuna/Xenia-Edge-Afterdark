@@ -1,0 +1,18 @@
+{
+  "module": "vk.xex",
+  "program": "c13a78561f33_vk.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "18758100d0dea26ea4e38c31dc8211f94b43c216c188950452dff554c730ea99",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x917d0400",
+  "functions": 504,
+  "calls": 1566,
+  "strings": 137,
+  "string_xrefs": 108,
+  "independent_sha256": "18758100d0dea26ea4e38c31dc8211f94b43c216c188950452dff554c730ea99",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

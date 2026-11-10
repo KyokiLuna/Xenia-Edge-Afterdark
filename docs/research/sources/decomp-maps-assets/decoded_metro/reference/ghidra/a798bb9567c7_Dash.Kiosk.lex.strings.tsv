@@ -1,0 +1,1235 @@
+va	data_type	text
+0x9b61062c	string	Search\Enable Apps
+0x9b610640	string	Search\Enable Games
+0x9b610654	string	Search\Enable Music
+0x9b610668	string	Search\Enable Web Video
+0x9b610680	string	Search\Enable TV
+0x9b610694	string	Search\Enable Movies
+0x9b6106ac	string	Search\Override Manifest Values With XTweak Settings
+0x9b6106e4	string	Kiosk\Active Phi Low
+0x9b6106fc	string	Kiosk\Active Phi High
+0x9b610714	string	Xui\Fixed Frame Interval
+0x9b610730	string	Health\Reminder Interval Time
+0x9b610750	string	SystemGesture\AA. Shoulder Dampening
+0x9b610778	string	SystemGesture\Z. Hand Dampeneing
+0x9b61079c	string	SystemGesture\Y. Theta High Lean
+0x9b6107c0	string	SystemGesture\X. Energy History Length
+0x9b6107e8	string	SystemGesture\W. Energy Reset Threshold
+0x9b610810	string	SystemGesture\V. Energy Valid Threshold
+0x9b610838	string	SystemGesture\U. Time to Cooldown
+0x9b61085c	string	SystemGesture\T. Time to Activate
+0x9b610880	string	SystemGesture\S. Left Arm Straightness
+0x9b6108a8	string	SystemGesture\R. Phi Low Right
+0x9b6108c8	string	SystemGesture\Q. Phi High Right
+0x9b6108e8	string	SystemGesture\P. Theta Low Right
+0x9b61090c	string	SystemGesture\O. Theta High Right
+0x9b610930	string	SystemGesture\N. Check Right
+0x9b610950	string	SystemGesture\M. Left Arm Straightness Seated
+0x9b610980	string	SystemGesture\L. Phi Low Left Seated
+0x9b6109a8	string	SystemGesture\K. Phi High Left Seated
+0x9b6109d0	string	SystemGesture\J. Theta Low Left Seated
+0x9b6109f8	string	SystemGesture\I. Theta High Left Seated
+0x9b610a20	string	SystemGesture\H. Left Arm Straightness
+0x9b610a48	string	SystemGesture\G. Phi Low Left
+0x9b610a68	string	SystemGesture\F. Phi High Left
+0x9b610a88	string	SystemGesture\E. Theta Low Left
+0x9b610aa8	string	SystemGesture\D. Theta High Left
+0x9b610acc	string	SystemGesture\C. Check Left
+0x9b610ae8	string	SystemGesture\B. Space Inertia
+0x9b610b08	string	SystemGesture\A. Facing Camera Requirement
+0x9b610b34	string	CursorSmoothing\ST Standing - Do Hand Tethering
+0x9b610b64	string	CursorSmoothing\ST Standing - Do Shoudler Pinning
+0x9b610b98	string	CursorSmoothing\ST Standing - Do Hand Refinement
+0x9b610bcc	string	CursorSmoothing\Spock - Do Hand Tethering
+0x9b610bf8	string	CursorSmoothing\Spock - Do Shoudler Pinning
+0x9b610c24	string	CursorSmoothing\Spock - Do Hand Refinement
+0x9b610c50	string	CursorSmoothing\ST Seated - Do Hand Tethering
+0x9b610c80	string	CursorSmoothing\ST Seated - Do Shoulder Pinning
+0x9b610cb0	string	CursorSmoothing\ST Seated - Do Hand Refinement
+0x9b610ce0	string	Handles\Arm\Detach Extent Distance
+0x9b610d04	string	Handles\Arm\Attach Extent Distance
+0x9b610d28	string	Handles\Arm\Preattach Extent Distance
+0x9b610d50	string	Handles\Arm\Reattach Time
+0x9b610d6c	string	Handles\Arm\Cooldown Time
+0x9b610d88	string	Handles\Grip\Outer Approach Threshold
+0x9b610db0	string	Handles\Grip\Breakaway Approach Threshold
+0x9b610ddc	string	Handles\Grip\Slow Detach Approach Threshold
+0x9b610e08	string	Handles\Grip\Slow Attach Approach Threshold
+0x9b610e34	string	Handles\Grip\Fast Committed Detach Time
+0x9b610e5c	string	Handles\Grip\Slow Committed Detach Time
+0x9b610e84	string	Handles\Grip\Fast Attach Time
+0x9b610ea4	string	Handles\Grip\Slow Attach Time
+0x9b610ec4	string	Handles\Global\Player Engagement Delay
+0x9b610eec	string	Handles\Global\Phiz Y Angle Tilt
+0x9b610f10	string	Handles\Global\Phiz X Angle Offset
+0x9b610f34	string	Handles\Global\Phiz Height
+0x9b610f50	string	Handles\Global\Phiz Width
+0x9b610f6c	string	Handles\Global\Seated Phiz Y Angle Tilt
+0x9b610f94	string	Handles\Global\Seated Phiz X Angle Offset
+0x9b610fc0	string	Handles\Global\Seated Phiz Height
+0x9b610fe4	string	Handles\Global\Seated Phiz Width
+0x9b611008	string	Xui\RUNE\Approach Scale Offset
+0x9b611028	string	Xui\RUNE\Gear Tooth Progress Selection
+0x9b611050	string	Xui\RUNE\Scroll Rate Gear Slot
+0x9b611070	string	Xui\RUNE\Gear Slots Count
+0x9b61108c	string	Xui\RUNE\Dead Zone Gear Slot
+0x9b6110ac	string	Xui\RUNE\Height Gear Slot
+0x9b6110c8	string	Xui\RUNE\Length Gear Slot
+0x9b6110e4	string	Xui\RUNE\Dead Zone Gear Rail
+0x9b611104	string	Xui\RUNE\Length Gear Scroll Zone
+0x9b611128	string	Xui\RUNE\Dead Zone Scroll Rail
+0x9b611148	string	Xui\RUNE\Length Scroll Rail
+0x9b611164	string	Xui\RUNE\TCS Scroll Rail
+0x9b611180	string	Xui\RUNE\Dead Zone Disengage Rail
+0x9b6111a4	string	Xui\RUNE\Length Disengage Rail
+0x9b6111c4	string	Xui\RUNE\TCS Disengage Rail
+0x9b6111e0	string	Xui\RUNE\Dead Zone Select Rail
+0x9b611200	string	Xui\RUNE\Length Select Rail
+0x9b61121c	string	Xui\RUNE\TCS Select Rail
+0x9b611238	string	Xui\RUNE\Lock Cursor On Rail
+0x9b611258	string	Xui\RUNE\Hide Static Runes When Engaged
+0x9b611280	string	Xui\RUNE\Fast Disengage On Selection
+0x9b6112a8	string	Xui\RUNE\Z Tilt Verticle Rail
+0x9b6112c8	string	Xui\RUNE\Detach Fast Delay
+0x9b6112e4	string	Xui\RUNE\Detach Delay
+0x9b6112fc	string	Xui\RUNE\Approach Range Count
+0x9b61131c	string	Xui\RUNE\Focus Range Count
+0x9b611338	string	Xui\RUNE\Hover Engage Distance
+0x9b611358	string	Xui\SCOUR\Scroll Increment
+0x9b611374	string	Xui\SCOUR\Chapter Snap Margin
+0x9b611394	string	Xui\SCOUR\Scrub Snap Interval
+0x9b6113b4	string	Xui\SCOUR\Zoom Range
+0x9b6113cc	string	Xui\SCOUR\Stop Attach Magnetism Threshold
+0x9b6113f8	string	Xui\SCOUR\Pause Attach Magnetism Threshold
+0x9b611424	string	Xui\SCOUR\Scrub Attach Magnetism Threshold
+0x9b611450	string	Xui\SCOUR\Progress Margin
+0x9b61146c	string	Xui\SCOUR\Movement Scale Factor
+0x9b61148c	string	Xui\SCOUR\Tooth Commit Progress
+0x9b6114ac	string	Xui\SCOUR\Tooth Engage Progress
+0x9b6114cc	string	Xui\SCOUR\Vertical Rail Dead Zone
+0x9b6114f0	string	Xui\SCOUR\Vertical Rail Length
+0x9b611510	string	Xui\SCOUR\Horizontal Rail Length
+0x9b611534	string	Xui\SCOUR\Scale Max Y
+0x9b61154c	string	Xui\NUISCENEFEEDBACK\Feedback position change speed
+0x9b611580	string	Xui\NUISCENEFEEDBACK\Feedback opacity change speed
+0x9b6115b4	string	Xui\NUISCENEFEEDBACK\Enable analog feedback opacity
+0x9b6115e8	string	Xui\NUISCENEITEM\Selected progress value for press
+0x9b61161c	string	Xui\NUISCENEITEM\Progress value for select
+0x9b611648	string	Xui\NUISCENEITEM\Selected bounce speed
+0x9b611670	string	Xui\NUISCENEITEM\Unselected bounce speed
+0x9b61169c	string	Xui\NUISCENEITEM\Bump Distance Size Multiplier
+0x9b6116cc	string	Xui\NUISCENEITEM\Maximum Select Bump Distance
+0x9b6116fc	string	Xui\NUISCENE\Handle Size
+0x9b611718	string	Xui\NUISCENE\Slot Rail Length
+0x9b611738	string	Xui\NUISCENE\Scene Rail Deadzone
+0x9b61175c	string	Xui\NUISCENE\Major Direction Arm Angle per Control
+0x9b611790	string	Xui\DPadControl\Horizontal Repeat Delay (ms)
+0x9b6117c0	string	Xui\DPadControl\Vertical Repeat Delay (ms)
+0x9b6117ec	string	Xui\DPadControl\Attach Magnetism Threshold
+0x9b611818	string	Xui\DPadControl\Vertical Rail Dead Zone
+0x9b611840	string	Xui\DPadControl\Vertical Rail Length
+0x9b611868	string	Xui\DPadControl\Horizontal Rail Dead Zone
+0x9b611894	string	Xui\DPadControl\Horizontal Rail Length
+0x9b6118bc	string	Xui\DPadControl\Progress For Rail Completion
+0x9b6118ec	string	Xui\LISTBASE\Scroll Zone fast engagement
+0x9b611918	string	Xui\LISTBASE\Scroll Zone medium engagement
+0x9b611944	string	Xui\LISTBASE\Scroll Zone at the Bottom
+0x9b61196c	string	Xui\LISTBASE\Scroll Zone at the Top
+0x9b611990	string	Xui\LISTBASE\Handle Size
+0x9b6119ac	string	Xui\LISTBASE\Slot Rail Length
+0x9b6119cc	string	Xui\LISTBASE\List Rail Deadzone
+0x9b6119ec	string	Xui\LISTBASE\Vertical Arm Angle per Item
+0x9b611a18	string	Xui\LIST\Fast Items Cutoff
+0x9b611a34	string	Xui\LIST\Medium Items Cutoff
+0x9b611a54	string	Xui\LIST\Fast Scroll Delay
+0x9b611a70	string	Xui\LIST\Medium Scroll Delay
+0x9b611a90	string	Xui\LIST\Slow Scroll Delay
+0x9b611aac	string	Xui\LIST\Wait after first scroll
+0x9b611ad0	string	Xui\VScrollControl\Repeat Delay (Regular)
+0x9b611afc	string	Xui\VScrollControl\Repeat Delay (Initial)
+0x9b611b28	string	Xui\VScrollControl\End Position Stickiness
+0x9b611b54	string	Xui\VScrollControl\End Position Magnetism
+0x9b611b80	string	Xui\VScrollControl\Begin Position Stickiness
+0x9b611bb0	string	Xui\VScrollControl\Begin Position Magnetism
+0x9b611bdc	string	Xui\VScrollControl\Attach Magnetism Threshold
+0x9b611c0c	string	Xui\VScrollControl\Rail Deadzone
+0x9b611c30	string	Xui\VScrollControl\Rail Length
+0x9b611c50	string	Xui\Pip\VUI Countdown
+0x9b611c68	string	Xui\Pip\Wave Countdown
+0x9b611c80	string	Xui\Pip\Idle Countdown
+0x9b611c98	string	Xui\Pip\Initial Repeat Countdown
+0x9b611cbc	string	Xui\Pip\Initial Boot Countdown
+0x9b611cdc	string	Xui\Tip\Force Show Tuner Tip
+0x9b611cfc	string	Xui\Tip\Force Show Kinect Feedback Tip
+0x9b611d24	string	Xui\Tip\Force Show Welcome Back Tip
+0x9b611d48	string	Xui\Tip\Force Show Identify Tip
+0x9b611d68	string	Xui\Tip\Force Show VUI Tip
+0x9b611d84	string	Xui\Tip\Force Show Wave Tip
+0x9b611da0	string	Xui\Tip\Show Tuner Tip
+0x9b611db8	string	Xui\Tip\Show Kinect Feedback Tip
+0x9b611ddc	string	Xui\Tip\Show VUI Tip
+0x9b611df4	string	Xui\Tip\Show Wave Tip
+0x9b611e0c	string	Xui\Swipe\Maximum Vertical Movement
+0x9b611e30	string	Xui\Swipe\Post WaveSuppress Time
+0x9b611e54	string	Xui\Swipe\Suppress Time
+0x9b611e6c	string	Xui\Swipe\Cooldown Gate Offset
+0x9b611e8c	string	Xui\Swipe\Backhand Swipe Time (s)
+0x9b611eb0	string	Xui\Swipe\Forehand Swipe Time (s)
+0x9b611ed4	string	Xui\Swipe\Backhand Fling Gate Offset
+0x9b611efc	string	Xui\Swipe\Forehand Fling Gate Offset
+0x9b611f24	string	Xui\Swipe\Offscreen Swipe Region Bottom Angle
+0x9b611f54	string	Xui\Swipe\Offscreen Swipe Region Top Angle
+0x9b611f80	string	Xui\Swipe\Peek Time (s)
+0x9b611f98	string	Xui\Swipe\Initial Peek Delay (s)
+0x9b611fbc	string	Xui\Wave\Noise Filter: Continuity Level
+0x9b611fe4	string	Xui\Wave\Noise Filter: Enable
+0x9b612004	string	Xui\Wave\Autoengage
+0x9b612018	string	Xui\Wave\Progress Rewind Rate
+0x9b612038	string	Xui\Wave\Progress Interpolation Rate Min
+0x9b612064	string	Xui\Wave\Progress Interpolation Rate
+0x9b61208c	string	Xui\Wave\Velocity Threshold (Fast)
+0x9b6120b0	string	Xui\Wave\Minimum Frames in Peak
+0x9b6120d0	string	Xui\Wave\Is Enabled?
+0x9b6120e8	string	Xui\Wave\Minimum Delay Between Waves
+0x9b612110	string	Xui\Wave\Period Deviation Threshold
+0x9b612134	string	Xui\Wave\Wave Period Maximum
+0x9b612154	string	Xui\Wave\Wave Period Minimum
+0x9b612174	string	Xui\Wave\Peak Count
+0x9b612188	string	Xui\Wave\Velocity Threshold
+0x9b6121a4	string	Xui\PlayZone\CloseAllowedQuickDelay
+0x9b6121c8	string	Xui\PlayZone\HorzAngleAllowed
+0x9b6121e8	string	Xui\PlayZone\HorzAnglePreferred
+0x9b612208	string	Xui\PlayZone\DepthAllowedMax
+0x9b612228	string	Xui\PlayZone\DepthAllowedMin
+0x9b612248	string	Xui\PlayZone\DepthPreferredMax
+0x9b612268	string	Xui\PlayZone\DepthPreferredMin
+0x9b612288	string	Xui\MiniPIP\Show
+0x9b61229c	string	Xui\Horizon\Intro Anim Speed
+0x9b6122bc	string	Xui\Horizon\Intro Anim Magnitude
+0x9b6122e0	string	Xui\Horizon\Std. Def. Scale
+0x9b6122fc	string	Xui\Horizon\Trainwreck padding
+0x9b61231c	string	Xui\Horizon\Swipe progress magnitude
+0x9b612344	string	Xui\Horizon\Swipe progress speed - Out
+0x9b61236c	string	Xui\Horizon\Swipe progress speed - In
+0x9b612394	string	Xui\Horizon\Panel ease factor
+0x9b6123b4	string	Xui\Horizon\Panel acceleration
+0x9b6123d4	string	Xui\Horizon\Peek speed
+0x9b6123ec	string	Xui\SlotList\FocusDownscaleFactor
+0x9b612410	string	Xui\SlotList\FocusShrinkRate
+0x9b612430	string	Xui\SlotList\FocusGrowRate
+0x9b61244c	string	Xui\SlotList\FixedFrameInterval
+0x9b61246c	string	Xui\SlotList\AdjustMaxDistance
+0x9b61248c	string	Xui\SlotList\AdjustMaxSpeed
+0x9b6124a8	string	Xui\SlotList\AdjustMinSpeed
+0x9b6124c4	string	Xui\SlotList\PreviewDecelerationZoneScale
+0x9b6124f0	string	Xui\SlotList\PreviewDeceleration
+0x9b612514	string	Xui\SlotList\PreviewMaxVelocity
+0x9b612534	string	Xui\SlotList\PreviewMinVelocity
+0x9b612554	string	Xui\SlotList\PreviewAccelerationDistance
+0x9b612580	string	Xui\SlotList\PreviewMaxAcceleration
+0x9b6125a4	string	Xui\SlotList\PreviewMinAcceleration
+0x9b6125c8	string	Xui\SlotList\PreviewDelay
+0x9b6125e4	string	Xui\SlotList\MovementDecelerationZoneScale
+0x9b612610	string	Xui\SlotList\MovementDeceleration
+0x9b612634	string	Xui\SlotList\MovementMaxVelocity
+0x9b612658	string	Xui\SlotList\MovementMinVelocity
+0x9b61267c	string	Xui\SlotList\MovementAccelerationDistance
+0x9b6126a8	string	Xui\SlotList\MovementMaxAcceleration
+0x9b6126d0	string	Xui\SlotList\MovementMinAcceleration
+0x9b6126f8	string	Xui\NuiCursor\Nav - Offscreen Cursor Clamp
+0x9b612724	string	Xui\NuiCursor\Nav - Hand Dominance Frame Count To Switch
+0x9b612760	string	Xui\NuiCursor\Nav - Hand Dominance Dist Delta (m)
+0x9b612794	string	Xui\NuiCursor\Nav - Vertical Move Threshold (px)
+0x9b6127c8	string	Xui\NuiCursor\Nav - Horizontal Move Threshold (px)
+0x9b6127fc	string	Xui\NuiCursor\Select - Enable Hover Press
+0x9b612828	string	Xui\NuiCursor\Select - Cursor Hover Delay (s)
+0x9b612858	string	Xui\NuiCursor\Select - Post-Press Recovery--No Delay(s)
+0x9b612890	string	Xui\NuiCursor\Select - Post-Press Recovery (s)
+0x9b6128c0	string	Xui\NotchControl\Notch Stickiness Threshold
+0x9b6128ec	string	Xui\NotchControl\Notch Magnetism Threshold
+0x9b612918	string	Xui\NotchControl\Deadzone Angle
+0x9b612938	string	Xui\NotchControl\Angle Total
+0x9b612958	string	Xui\TwistControl\Repeat Delay (Regular)
+0x9b612980	string	Xui\TwistControl\Repeat Delay (Initial)
+0x9b6129a8	string	Xui\TwistControl\Repeat
+0x9b6129c0	string	Xui\TwistControl\End Position Stickiness
+0x9b6129ec	string	Xui\TwistControl\End Position Magnetism
+0x9b612a14	string	Xui\TwistControl\Begin Position Stickiness
+0x9b612a40	string	Xui\TwistControl\Begin Position Magnetism
+0x9b612a6c	string	Xui\TwistControl\Attach Magnetism Threshold
+0x9b612a98	string	Xui\TwistControl\Rail Deadzone
+0x9b612ab8	string	Xui\TwistControl\Rail Length
+0x9b612ad8	string	Xui\Speech\Use Wav File Input for Search
+0x9b612b04	string	Xui\Speech\Use Wav File Input
+0x9b612b24	string	Xui\Speech\Explicit Confirmation Timeout
+0x9b612b50	string	Xui\Speech\Reconfirmation Timeout
+0x9b612b74	string	Xui\Speech\Active Listening Timeout
+0x9b612b98	string	Xui\NavControl\Other Position Stickiness
+0x9b612bc4	string	Xui\NavControl\Other Position Magnetism
+0x9b612bec	string	Xui\NavControl\Center Position Stickiness
+0x9b612c18	string	Xui\NavControl\Center Position Magnetism
+0x9b612c44	string	Xui\NavControl\Rail Length Fast Scroll
+0x9b612c6c	string	Xui\NavControl\Rail Length Medium Scroll
+0x9b612c98	string	Xui\NavControl\Rail Length Slow Scroll
+0x9b612cc0	string	Xui\NavControl\Rail Length Select
+0x9b612ce4	string	Xui\NavControl\Scroll Fast Delay
+0x9b612d08	string	Xui\NavControl\Scroll Medium Delay
+0x9b612d2c	string	Xui\NavControl\Scroll Slow Delay
+0x9b612d50	string	Xui\NavControl\Scroll Threshold
+0x9b612d70	string	Xui\NavControl\Zone Count
+0x9b612d8c	string	Xui\NavControl\Attach Magnetism Threshold
+0x9b612db8	string	Xui\NavControl\Select Rail Deadzone
+0x9b612ddc	string	Xui\NavControl\Select Rail Length
+0x9b612e00	string	Xui\NavControl\Dead Zone
+0x9b612e1c	string	Xui\NavControl\Nav Rail Length
+0x9b612e3c	string	Xui\Cursor\Approach Distance
+0x9b612e5c	string	Xui\Cursor\Magnetism Outer
+0x9b612e78	string	Xui\Cursor\Magnetism Snap
+0x9b612e94	string	Xui\Cursor\Smoothing Amount
+0x9b612eb0	string	Dash\Speech\Dynamic Voice Supported
+0x9b612ed4	string	Dash\Homepage\App Arguments
+0x9b612ef0	string	Dash\Homepage\App Name
+0x9b612f08	string	Dash\AppMgr\No slot clipping
+0x9b612f28	string	Dash\AppMgr\App Load Delay
+0x9b612f44	string	Dash\AppMgr\Trace Level
+0x9b612f5c	string	[no description]
+0x9b612f70	string	units
+0x9b612f78	string	pixels
+0x9b612f88	string	milliseconds
+0x9b612f98	string	seconds
+0x9b612fa0	string	meters
+0x9b612fa8	string	degrees
+0x9b612fb0	string	count
+0x9b612fb8	string	percent
+0x9b612fc0	string	scale
+0x9b612fcc	string	Trace level Dash App Manager.
+0x9b612fec	string	Time used to delay loading of Pam apps.
+0x9b613014	string	Turn off all clipping for Hub slots.
+0x9b61303c	string	Pam app name to load for homepage.
+0x9b613060	string	Arguments to send to homepage app.
+0x9b613088	string	Override if dynamic voice content is supported. 0 = Use Default; 1 = Dynamic voice supported; 2 = Dynamic voice not supported.
+0x9b613108	string	Cursor responsiveness amount. Lower is smoother. Higher means less lag.
+0x9b613150	string	Distance from the grip where the cursor will be always drawn over the grip.
+0x9b6131a0	string	Distance from the grip where the curor starts getting magnetized to the grip.
+0x9b6131f0	string	Distance from the grip where the hand starts appearing.
+0x9b613228	string	Navigation rail length
+0x9b613240	string	Rail dead zone
+0x9b613250	string	Select rail length 
+0x9b613264	string	Select rail deadzone 
+0x9b61327c	string	Attach magnetism threshold
+0x9b613298	string	Active Listening (VuiBar) Timeout
+0x9b6132bc	string	Reconfirmation Timeout
+0x9b6132d4	string	Explicit Confirmation Timeout
+0x9b6132f4	string	Use wav file input for speech engine INSTEAD of mic
+0x9b613328	string	Use wav file input for search using TestSimulateOnlineRecognition
+0x9b61336c	string	Rail length
+0x9b613378	string	Leftmost position magnetism
+0x9b613394	string	Leftmost position stickiness
+0x9b6133b4	string	Rightmost position magnetism
+0x9b6133d4	string	Rightmost position stickiness
+0x9b6133f8	string	Whether to repeat or detach immediately upon hitting rightmost position
+0x9b613440	string	Initial repeat delay time
+0x9b61345c	string	Subsequent repeat delay time
+0x9b61347c	string	Individual notch attach magnetism threshold
+0x9b6134a8	string	Individual notch detach stickiness threshold
+0x9b6134d8	string	The recovery delay used by buttons that have no select time.
+0x9b613518	string	The min pixels-per-second that the velocity will increase when navigating to a new slot.
+0x9b613578	string	The max pixels-per-second that the velocity will increase when navigating to a new slot.
+0x9b6135d8	string	The pixel distance at which the maximum acceleration is being used.
+0x9b613620	string	The min pixels-per-second that the slots will move when navigating to a new one.
+0x9b613678	string	The max pixels-per-second that the slots will move when navigating to a new one.
+0x9b6136d0	string	The pixels-per-second that the velocity will decrease approaching a newly selected slot.
+0x9b613730	string	The scaling adjustment for the zone in which deceleration starts to occur.
+0x9b61377c	string	The number of seconds it takes for preview mode to kick in.
+0x9b6137b8	string	(Preview Mode) The min pixels-per-second that the velocity will increase when navigating to a new slot.
+0x9b613820	string	(Preview Mode) The max pixels-per-second that the velocity will increase when navigating to a new slot.
+0x9b613888	string	(Preview Mode) The pixel distance at which the maximum acceleration is being used.
+0x9b6138e0	string	(Preview Mode) The min pixels-per-second that the slots will move when navigating to a new one.
+0x9b613940	string	(Preview Mode) The max pixels-per-second that the slots will move when navigating to a new one.
+0x9b6139a0	string	(Preview Mode) The pixels-per-second that the velocity will decrease approaching a newly selected slot.
+0x9b613a08	string	(Preview Mode) The scaling adjustment for the zone in which deceleration starts to occur.
+0x9b613a68	string	The min pixels-per-second that a slot will adjust relative to its neighbors, if slots change size or get inserted/removed.
+0x9b613ae8	string	The max pixels-per-second that a slot will adjust relative to its neighbors, if slots change size or get inserted/removed.
+0x9b613b68	string	The pixel distance that slots will adjust at the maximum speed.
+0x9b613ba8	string	A fixed frame interval for update (0=default).
+0x9b613bd8	string	The growth rate, in percentage per second, for a newly-focused slot.
+0x9b613c20	string	The shrink rate, in percentage per second, for a newly-unfocused slot.
+0x9b613c68	string	The scale, in percentage, for an unfocused slot.
+0x9b613ca0	string	A multiplier applied to the ease function of the peek timeline.
+0x9b613ce0	string	How many pixels per frame the panels change their velocity.
+0x9b613d20	string	How much of the distance between current and target position is moved each frame. (Gated by acceleration).
+0x9b613d8c	string	How fast the swipe progress interpolates forward.
+0x9b613dc0	string	How fast the swipe progress interpolates back.
+0x9b613df0	string	How far the swipe progress moves the content.
+0x9b613e20	string	How close the peeked content gets to the center content before pushing it.
+0x9b613e6c	string	How much to shrink pages in std def.
+0x9b613e98	string	How much padding is originally between each item as they fly in.
+0x9b613edc	string	How fast to animate panels flying in.
+0x9b613f04	string	Controls whether to show or hide PIP controls (globally).
+0x9b613f40	string	The minimum depth that is the 'sweet spot' for the active user.
+0x9b613f80	string	The maximum depth that is the 'sweet spot' for the active user.
+0x9b613fc0	string	The minimum depth that is the 'allowed interaction area' for the active user.
+0x9b614010	string	The maximum depth that is the 'allowed interaction area' for the active user.
+0x9b614060	string	The horizontal angle from the center of the camera which represents the 'sweet spot' for the active user.
+0x9b6140d0	string	The horizontal angle from the center of the camera which represents the 'allowed interaction area' for the active user.
+0x9b614148	string	The delay to close the PlayZone visuals when the user ignores the FOV PIP.
+0x9b614198	string	How fast you must move your hand for a wave peak to count in (m/s).
+0x9b6141e0	string	How many times your hand must go back and forth before a wave is triggered
+0x9b614230	string	Smallest time possible between wave peaks for a wave to trigger
+0x9b614270	string	Longest time possible between wave peaks for a wave to trigger
+0x9b6142b0	string	The period between peaks cannot differ too much from peak to peak, or no wave will trigger. This controls the tolerance for that deviation. (higher values = more waves)
+0x9b614360	string	The delay that occurs immediately following a Wave before ANOTHER Wave can be triggered
+0x9b6143b8	string	Enable/Disable the wave to engage/disengage feature
+0x9b6143ec	string	The minimum num of frames for a fast peak to count
+0x9b614420	string	How fast you must move your hand for a fast peak to count in (m/s)
+0x9b614464	string	How quickly the wave progress indicator will smoothly fill up
+0x9b6144a8	string	The Minimum speed that the wave progress indicator will smoothly fill up
+0x9b6144f8	string	How quickly the wave progress indicator will smoothly rewind to 0
+0x9b614540	string	Automatically engage the closest user without needing a wave.  Typically used for XStudio cursor playback
+0x9b6145ac	string	Enables a filter that checks for sporatic motion
+0x9b6145e0	string	The min. avg. frame continuity (~dot product of sequential frames of direction) [pure noise ~ 0; curve ~ 0.5; perfect line ~ 1]
+0x9b614660	string	The delay before a peek triggers
+0x9b614684	string	Time it takes for a peek to complete
+0x9b6146ac	string	Swipeable region in an angle above and off the screen
+0x9b6146e4	string	Swipeable region in an angle below and off the screen
+0x9b61471c	string	Fling gate positioning for a forehand swipe motion from center
+0x9b61475c	string	Fling gate positioning for a backhand swipe motion from center
+0x9b61479c	string	The time a user has to complete a forehand swipe
+0x9b6147d0	string	The time a user has to complete a backhand swipe
+0x9b614804	string	Start Cooldown gate positioning for a swipe motion from edge
+0x9b614848	string	Time to suppress activation zone when opposite zone is activated
+0x9b61488c	string	Time to suppress activation zones just after a wave
+0x9b6148c0	string	Maximum number of vertical pixels to allow in a swipe movement 
+0x9b614900	string	Toggles whether or not to show the wave tip
+0x9b61492c	string	Toggles whether or not to show the VUI tip
+0x9b614958	string	Toggles whether or not to show the Kinect Feedback tip
+0x9b614990	string	Toggles whether or not to show the Tuner tip
+0x9b6149c0	string	Forces showing the wave tip
+0x9b6149dc	string	Forces showing the VUI tip
+0x9b6149f8	string	Forces showing the identify tip
+0x9b614a18	string	Forces showing the welcome back tip
+0x9b614a3c	string	Forces showing the Kinect Feedback tip
+0x9b614a64	string	Forces showing the Tuner tip
+0x9b614a84	string	The time to wait after first boot before showing PIP
+0x9b614ac0	string	The time to wait during the repeats after first boot for PIP prompts
+0x9b614b08	string	The time to wait for subsequent Pip prompts
+0x9b614b34	string	The time to display the wave prompt
+0x9b614b58	string	The time to display the VUI prompt
+0x9b614b80	string	The delay that occurs after scrolling ONE item, before normal scrolling occurs
+0x9b614bd0	string	The delay during normal scrolling that occurs between changes
+0x9b614c10	string	The delay during medium scrolling that occurs between changes
+0x9b614c50	string	The delay during fast scrolling that occurs between changes
+0x9b614c90	string	The vertical angle per item in the list. e.g. If this is 10, and there are 5 items, then vertical rail angle=50 (5*10)
+0x9b614d08	string	The rail length for each item
+0x9b614d28	string	Scroll Zone for the top of the list.  All of the items are compressed between top and bottom.
+0x9b614d88	string	Scroll Zone for the bottom of the list.  All of the items are compressed between top and bottom.
+0x9b614df0	string	Start of the medium scroll area (percentage of the scroll area)
+0x9b614e30	string	Start of the fast scroll area (percentage of the scroll area)
+0x9b614e70	string	Value [0,1] which determines how far along the rail one must travel before that rail is complete (i.e. activates)
+0x9b614ee4	string	Horizontal Rail Length
+0x9b614efc	string	Horizontal Rail Dead Zone
+0x9b614f18	string	Vertical Rail Length
+0x9b614f30	string	Vertical Rail Dead Zone
+0x9b614f48	string	Attach Magnetism Threshold
+0x9b614f64	string	Delay time between Vertical VK activations
+0x9b614f90	string	The angle per control in the major direction (vertical or horizontal) on the scene. e.g. If this is 10, and there are 5 controls, then the rail angle=50 (5*10)
+0x9b615030	string	The rail angle (rail size) for each item
+0x9b615060	string	The maximum distance for the visual to travel before control is selected
+0x9b6150b0	string	Defines relationship between control size and bump distance. If set to 100%, the control will travel its width or height (depending on direction) before it is selected
+0x9b615158	string	How fast control visual bounces back if control is not selected
+0x9b615198	string	How fast control visual bounces back if control is selected
+0x9b6151d8	string	Determines how far along the slot does the control need to be moved before it is selected
+0x9b615238	string	When control is bouncing back after selection, do actual control press when it gets this far back (not selected is 0, fully advanced is 100%)
+0x9b6152c8	string	Analog feedback along the rail enable/disable.
+0x9b6152f8	string	Analog feedback along the rail opacity is 0 when scene is not attached and full when attached. This defines the speed of change between the two values.
+0x9b615390	string	Defines how smoothly analog feedback along the rail moves.
+0x9b6153d0	string	Maximum vertical scale to be applied to the seekbar while in the zoomed state
+0x9b615420	string	Tooth progress at which committing animation will begin
+0x9b615458	string	Tooth progress at which position will be committed
+0x9b61548c	string	Coefficient to apply to left/right movement
+0x9b6154b8	string	Fraction of rail persistent progress range to reserve as margin
+0x9b6154f8	string	Attach Magnetism Threshold for scrub handle
+0x9b615524	string	Attach Magnetism Threshold for pause handle
+0x9b615550	string	Attach Magnetism Threshold for stop handle
+0x9b615580	string	Width (in seconds) of the visible seekbar range while in the zoomed state
+0x9b6155d0	string	Interval (in seconds) to which scrubbing operations are snapped
+0x9b615610	string	Margin (in seconds) before or after a chapter position for which scrubbing operations will snap to the chapter
+0x9b615680	string	Amount (in milliseconds) by which the zoomed seekbar will scroll during a frame update
+0x9b6156d8	string	Distance the cursor is from the handle that will be considered hover
+0x9b615720	string	Count of Runes to animate focus on from closest rune
+0x9b615758	string	Count of Runes to animate apporach on from closest rune
+0x9b615790	string	Delay (in milliseconds) before detach (disengage) after we no longer consider the user being engaged
+0x9b6157f8	string	Delay (in milliseconds) before detach (disengage) after the user explicitly diengaged the handle using a rail
+0x9b615868	string	Z tilt value for vertical rail vector
+0x9b615890	string	Fast Disengage on rune selection
+0x9b6158b4	string	Hide Static Runes When Engaged
+0x9b6158d4	string	Disable free movement cursor
+0x9b6158f4	string	Tolerance Cone Slope for Select Rail
+0x9b61591c	string	Length for Select Rail
+0x9b615934	string	Dead Zone for Select Rail
+0x9b615950	string	Tolerance Cone Slope for Disengage Rail
+0x9b615978	string	Length for Disengage Rail
+0x9b615994	string	Dead Zone for Disengage Rail
+0x9b6159b4	string	Tolerance Cone Slope for Scroll Rails
+0x9b6159dc	string	Length for Scroll Rail
+0x9b6159f4	string	Dead Zone for Scroll Rail
+0x9b615a10	string	Length Gear Scroll Zone
+0x9b615a28	string	Dead Zone for Gear Rail
+0x9b615a40	string	Length for Gear Slot
+0x9b615a58	string	Height for Gear Slot Approach
+0x9b615a78	string	Dead Zone for Gear Slot
+0x9b615a90	string	Count of Gear Slots
+0x9b615aa4	string	Rate of scrolling when using Nui
+0x9b615ac8	string	Progress on Gear Tooth at which Rune Selection Happens
+0x9b615b00	string	Approach distance offset for rune scale
+0x9b615b28	string	How far to move the arm to reach the horizontal edge of the screen
+0x9b615b70	string	How far to move the arm to reach the vertical edge of the screen
+0x9b615bb8	string	Horizontal offset in X to neutral position (a.k.a. duckfootedness)
+0x9b615c00	string	Vertical offset in Y to neutral position (a.k.a. vertical tilt)
+0x9b615c40	string	Delay between player engagement and availability of handles for interaction
+0x9b615c8c	string	Required time in slow attach zone to trigger a handle attach
+0x9b615ccc	string	Required time in fast attach zone to trigger a handle attach
+0x9b615d0c	string	Required time in slow detach zone to trigger a handle detach
+0x9b615d4c	string	Required time in fast detach zone to trigger a handle detach
+0x9b615d8c	string	Distance from grip in which slow attach time takes effect
+0x9b615dc8	string	Distance from grip in which slow detach time takes effect
+0x9b615e04	string	Distance from grip required to force a detach
+0x9b615e34	string	Distance from gripo required to consider an attach
+0x9b615e68	string	Time where user is in the attach zone but never reattached
+0x9b615ea8	string	The delay in which the arm must be detached before it can reattach
+0x9b615ef0	string	The extent of the arm before it can even be considered for attach
+0x9b615f34	string	The required extent of the arm before attach is possible
+0x9b615f70	string	The required extent of the arm before detach is possible
+0x9b615fb0	string	Do hand refinement to attempt to achieve a smoother cursor with ST Seated
+0x9b616000	string	Do shoulder pinning to attempt to achieve a smoother cursor with ST Seated
+0x9b616050	string	Do hand thethering to attempt to achieve a smoother cursor with ST Seated
+0x9b6160a0	string	Do hand refinement to attempt to achieve a smoother cursor with Spock
+0x9b6160e8	string	Do shoulder pinning to attempt to achieve a smoother cursor with Spock
+0x9b616130	string	Do hand tethering to attempt to achieve a smoother cursor with Spock
+0x9b616178	string	Do hand refinement to attempt to achieve a smoother cursor with ST Standing
+0x9b6161c8	string	Do shoulder pinning to attempt to achieve a smoother cursor with ST Standing
+0x9b616218	string	Do hand thethering to attempt to achieve a smoother cursor with ST Standing
+0x9b616264	string	The maximum tolerable difference defor facing the camera
+0x9b6162a0	string	The inertia of the body space basis
+0x9b6162c8	string	If true the position of the left hand is taken into account when determining when we are in the system gesture pose
+0x9b616340	string	The high range in Theta on the left arm for the system gesture pose while standing
+0x9b616398	string	The low range in Theta on the left arm for the system gesture pose while standing
+0x9b6163f0	string	The high range in Phi on the left arm for the system gesture pose while standing
+0x9b616448	string	The low range in Phi on the left arm for the system gesture pose while standing
+0x9b616498	string	The maximum angle the left arm is allowed to have and be considered straight enough to allow the gesture while standing
+0x9b616510	string	The high range in Theta on the left arm for the system gesture pose while seated
+0x9b616568	string	The low range in Theta on the left arm for the system gesture pose while seated
+0x9b6165b8	string	The high range in Phi on the left arm for the system gesture pose while seated
+0x9b616608	string	The low range in Phi on the left arm for the system gesture pose while seated
+0x9b616658	string	The maximum angle the left arm is allowed to have and be considered straight enough to allow the gesture while seated
+0x9b6166d0	string	If true the position of the right hand is taken into account when determining when we are in the system gesture pose
+0x9b616748	string	The high range in Theta on the right arm for the system gesture pose
+0x9b616790	string	The low range in Theta on the right arm for the system gesture pose
+0x9b6167d8	string	The high range in Phi on the right arm for the system gesture pose
+0x9b616820	string	The low range in Phi on the right arm for the system gesture pose
+0x9b616868	string	The maximum angle the right arm is allowed to have and be considered straight enough to allow the gesture
+0x9b6168d8	string	The time it takes to activate the System Gesture in Milliseconds
+0x9b616920	string	The time it takes to be able to activate again after fireing in Milliseconds
+0x9b616978	string	The high value the player is allowed to lean their spine and still system gesture
+0x9b6169d0	string	The rate at which to dampen the hands. 0.0 is low-inertia/low-lag and 1.0 is high-inertia/high-lag
+0x9b616a38	string	The rate at which to dampen the shoulders. 0.0 is low-inertia/low-lag and 1.0 is high-inertia/high-lag
+0x9b616aa0	string	Interval (in milliseconds) between Kinect Health reminder popups
+0x9b616ae4	string	XUI fixed frame interval (0=default)
+0x9b616b10	string	The high value for a rotation around the UP axis below which an arm is considered to be actively pointing
+0x9b616b80	string	The low value for a rotation around the UP axis above which an arm is considered to be actively pointing
+0x9b616bf0	string	Toggles whether to use the settings here instead of the values in the manifest. This must be set to TRUE if you want to use the XTweak settings below.
+0x9b616c88	string	Toggles whether to treat movies as an enabled media type in the search app. This value is only used if 'Override Manifest Values With XTweak Settings' is set.
+0x9b616d28	string	Toggles whether to treat tv as an enabled media type in the search app. This value is only used if 'Override Manifest Values With XTweak Settings' is set.
+0x9b616dc8	string	Toggles whether to treat web video as an enabled media type in the search app. This value is only used if 'Override Manifest Values With XTweak Settings' is set.
+0x9b616e70	string	Toggles whether to treat music as an enabled media type in the search app. This value is only used if 'Override Manifest Values With XTweak Settings' is set.
+0x9b616f10	string	Toggles whether to treat games as an enabled media type in the search app. This value is only used if 'Override Manifest Values With XTweak Settings' is set.
+0x9b616fb0	string	Toggles whether to treat apps as an enabled media type in the search app. This value is only used if 'Override Manifest Values With XTweak Settings' is set.
+0x9b617050	string	e:\bt\1c10e6\core\private\flash\xam\dash\apps\kiosk\app\main.cpp
+0x9b617094	unicode	section://%X,%S
+0x9b617194	unicode	_NuiTipsScene_
+0x9b6172ac	string	Id=%s;
+0x9b6172b4	string	Type=%s;
+0x9b6172c8	string	FLOAT
+0x9b6172e4	string	Delta=
+0x9b6172ec	string	Value=
+0x9b6172fc	string	Delta
+0x9b617304	string	Value
+0x9b61730c	string	AutoEngage
+0x9b617318	string	ResetEngagedUser
+0x9b61732c	string	GetRadialGestureState
+0x9b617344	string	NumTrackedSkeletons
+0x9b617358	string	RightArmActive
+0x9b617368	string	LeftArmActive
+0x9b617378	string	RightArmAngle
+0x9b617388	string	LeftArmAngle
+0x9b617398	string	TrackingID
+0x9b6173a4	string	Xbox.Kiosk
+0x9b6173b0	string	InvokeInstallCommand
+0x9b6173c8	string	GetInstallContext
+0x9b6173dc	string	Progress
+0x9b6173e8	string	CancelCommand
+0x9b6173f8	string	ProceedCommand
+0x9b617408	string	CurrentProcess
+0x9b61741c	string	That command is not allowed.
+0x9b61743c	string	GetDemoData
+0x9b617448	string	BuildResourceLocator
+0x9b617460	string	CreateResourceLoaderObject
+0x9b61747c	string	e:\bt\1c10e6\core\private\flash\corelibs\luaXbox\inc\LuaPub.h
+0x9b617518	string	Unknown exception
+0x9b617534	string	bad allocation
+0x9b6175e8	unicode	runtime error 
+0x9b61760c	unicode	TLOSS error\n
+0x9b617628	unicode	SING error\n
+0x9b617640	unicode	DOMAIN error\n
+0x9b617660	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9b617850	unicode	R6032\n- not enough space for locale information\n
+0x9b6178b8	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9b61797c	unicode	R6030\n- CRT not initialized\n
+0x9b6179b8	unicode	R6028\n- unable to initialize heap\n
+0x9b617a00	unicode	R6027\n- not enough space for lowio initialization\n
+0x9b617a68	unicode	R6026\n- not enough space for stdio initialization\n
+0x9b617ad0	unicode	R6025\n- pure virtual function call\n
+0x9b617b18	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9b617b80	unicode	R6019\n- unable to open console device\n
+0x9b617bd0	unicode	R6018\n- unexpected heap error\n
+0x9b617c10	unicode	R6017\n- unexpected multithread lock error\n
+0x9b617c68	unicode	R6016\n- not enough space for thread data\n
+0x9b617cc0	unicode	R6010\n- abort() has been called\n
+0x9b617d08	unicode	R6009\n- not enough space for environment\n
+0x9b617d60	unicode	R6008\n- not enough space for arguments\n
+0x9b617db0	unicode	R6002\n- floating point support not loaded\n
+0x9b617eb8	unicode	(null)
+0x9b617fa8	string	e+000
+0x9b617fb0	unicode	HH:mm:ss
+0x9b617fc4	unicode	dddd, MMMM dd, yyyy
+0x9b617fec	unicode	MM/dd/yy
+0x9b618010	unicode	December
+0x9b618024	unicode	November
+0x9b618038	unicode	October
+0x9b618048	unicode	September
+0x9b61805c	unicode	August
+0x9b61806c	unicode	July
+0x9b618078	unicode	June
+0x9b618084	unicode	April
+0x9b618090	unicode	March
+0x9b61809c	unicode	February
+0x9b6180b0	unicode	January
+0x9b618120	unicode	Saturday
+0x9b618134	unicode	Friday
+0x9b618144	unicode	Thursday
+0x9b618158	unicode	Wednesday
+0x9b61816c	unicode	Tuesday
+0x9b61817c	unicode	Monday
+0x9b61818c	unicode	Sunday
+0x9b6181d4	string	HH:mm:ss
+0x9b6181e0	string	dddd, MMMM dd, yyyy
+0x9b6181f4	string	MM/dd/yy
+0x9b618208	string	December
+0x9b618214	string	November
+0x9b618220	string	October
+0x9b618228	string	September
+0x9b618234	string	August
+0x9b61824c	string	April
+0x9b618254	string	March
+0x9b61825c	string	February
+0x9b618268	string	January
+0x9b6182a0	string	Saturday
+0x9b6182ac	string	Friday
+0x9b6182b4	string	Thursday
+0x9b6182c0	string	Wednesday
+0x9b6182cc	string	Tuesday
+0x9b6182d4	string	Monday
+0x9b6182dc	string	Sunday
+0x9b618b44	string	1#QNAN
+0x9b618b4c	string	1#INF
+0x9b618b54	string	1#IND
+0x9b618b5c	string	1#SNAN
+0x9b618b64	string	 Complete Object Locator'
+0x9b618b80	string	 Class Hierarchy Descriptor'
+0x9b618ba0	string	 Base Class Array'
+0x9b618bb4	string	 Base Class Descriptor at (
+0x9b618bd0	string	 Type Descriptor'
+0x9b618be4	string	`local static thread guard'
+0x9b618c00	string	`managed vector copy constructor iterator'
+0x9b618c2c	string	`vector vbase copy constructor iterator'
+0x9b618c58	string	`vector copy constructor iterator'
+0x9b618c7c	string	`dynamic atexit destructor for '
+0x9b618ca0	string	`dynamic initializer for '
+0x9b618cbc	string	`eh vector vbase copy constructor iterator'
+0x9b618ce8	string	`eh vector copy constructor iterator'
+0x9b618d10	string	`managed vector destructor iterator'
+0x9b618d38	string	`managed vector constructor iterator'
+0x9b618d60	string	`placement delete[] closure'
+0x9b618d80	string	`placement delete closure'
+0x9b618d9c	string	`omni callsig'
+0x9b618dac	string	 delete[]
+0x9b618db8	string	 new[]
+0x9b618dc0	string	`local vftable constructor closure'
+0x9b618de4	string	`local vftable'
+0x9b618df4	string	`RTTI
+0x9b618e00	string	`udt returning'
+0x9b618e10	string	`copy constructor closure'
+0x9b618e2c	string	`eh vector vbase constructor iterator'
+0x9b618e54	string	`eh vector destructor iterator'
+0x9b618e74	string	`eh vector constructor iterator'
+0x9b618e98	string	`virtual displacement map'
+0x9b618eb4	string	`vector vbase constructor iterator'
+0x9b618ed8	string	`vector destructor iterator'
+0x9b618ef8	string	`vector constructor iterator'
+0x9b618f18	string	`scalar deleting destructor'
+0x9b618f38	string	`default constructor closure'
+0x9b618f58	string	`vector deleting destructor'
+0x9b618f78	string	`vbase destructor'
+0x9b618f8c	string	`string'
+0x9b618f98	string	`local static guard'
+0x9b618fb0	string	`typeof'
+0x9b618fbc	string	`vcall'
+0x9b618fc4	string	`vbtable'
+0x9b618fd0	string	`vftable'
+0x9b619058	string	operator
+0x9b619080	string	 delete
+0x9b619090	string	__unaligned
+0x9b61909c	string	__restrict
+0x9b6190a8	string	__ptr64
+0x9b6190b0	string	__eabi
+0x9b6190b8	string	__clrcall
+0x9b6190c4	string	__fastcall
+0x9b6190d0	string	__thiscall
+0x9b6190dc	string	__stdcall
+0x9b6190e8	string	__pascal
+0x9b6190f4	string	__cdecl
+0x9b6190fc	string	__based(
+0x9b61942c	string	KioskOverride
+0x9b619470	string	Xbox.Kiosk.ResourceLoader
+0x9b6194b4	unicode	memory://%X,%X
+0x9b6194d4	string	LoadResource
+0x9b6194e4	string	__index
+0x9b61952c	string	Xbox.Object.LuaSchedWaitWorkerThread
+0x9b6195a0	string	$Lua: Lua 5.1.4 Copyright (C) 1994-2008 Lua.org, PUC-Rio $\n$Authors: R. Ierusalimschy, L. H. de Figueiredo & W. Celes $\n$URL: www.lua.org $\n
+0x9b619630	string	no value
+0x9b619684	string	%s:%d: 
+0x9b619690	string	bad argument #%d to '%s' (%s)
+0x9b6196b0	string	calling '%s' on bad self (%s)
+0x9b6196d0	string	method
+0x9b6196dc	string	bad argument #%d (%s)
+0x9b6196f4	string	%s expected, got %s
+0x9b619708	string	name conflict for module '%s'
+0x9b619728	string	_LOADED
+0x9b619890	string	[string "
+0x9b6198e4	string	not enough memory
+0x9b6198f8	string	error in error handling
+0x9b619918	string	stack overflow
+0x9b619928	string	C stack overflow
+0x9b619a54	string	=(tail call)
+0x9b619a6c	string	upvalue
+0x9b619a74	string	global
+0x9b619a7c	string	field
+0x9b619a84	string	local
+0x9b619a8c	string	%s:%d: %s
+0x9b619a98	string	attempt to %s a %s value
+0x9b619ab4	string	attempt to %s %s '%s' (a %s value)
+0x9b619ad8	string	concatenate
+0x9b619ae4	string	perform arithmetic on
+0x9b619afc	string	attempt to compare %s with %s
+0x9b619b1c	string	attempt to compare two %s values
+0x9b619b40	string	__call
+0x9b619b48	string	__concat
+0x9b619b64	string	__len
+0x9b619b6c	string	__unm
+0x9b619b74	string	__pow
+0x9b619b7c	string	__mod
+0x9b619b84	string	__div
+0x9b619b8c	string	__mul
+0x9b619b94	string	__sub
+0x9b619b9c	string	__add
+0x9b619bac	string	__mode
+0x9b619bbc	string	__newindex
+0x9b619bc8	string	upval
+0x9b619bd0	string	proto
+0x9b619bd8	string	thread
+0x9b619be0	string	function
+0x9b619bec	string	table
+0x9b619bf4	string	string
+0x9b619bfc	string	number
+0x9b619c04	string	userdata
+0x9b619c10	string	boolean
+0x9b619d6c	string	%.14g
+0x9b619d74	string	loop in gettable
+0x9b619d88	string	index
+0x9b619d90	string	loop in settable
+0x9b619da4	string	string length overflow
+0x9b619dbc	string	get length of
+0x9b619dcc	string	'for' step must be a number
+0x9b619de8	string	'for' initial value must be a number
+0x9b619e10	string	'for' limit must be a number
+0x9b619e98	string	table overflow
+0x9b619ea8	string	table index is NaN
+0x9b619ebc	string	table index is nil
+0x9b61a034	string	memory allocation error: block too big
+0x9b61a114	string	<eof>
+0x9b61a11c	string	<string>
+0x9b61a128	string	<name>
+0x9b61a130	string	<number>
+0x9b61a144	string	while
+0x9b61a14c	string	until
+0x9b61a164	string	return
+0x9b61a16c	string	repeat
+0x9b61a188	string	false
+0x9b61a194	string	elseif
+0x9b61a1a8	string	break
+0x9b61a280	string	VARARG
+0x9b61a288	string	CLOSURE
+0x9b61a290	string	CLOSE
+0x9b61a298	string	SETLIST
+0x9b61a2a0	string	TFORLOOP
+0x9b61a2ac	string	FORPREP
+0x9b61a2b4	string	FORLOOP
+0x9b61a2bc	string	RETURN
+0x9b61a2c4	string	TAILCALL
+0x9b61a2d8	string	TESTSET
+0x9b61a2f8	string	CONCAT
+0x9b61a32c	string	NEWTABLE
+0x9b61a338	string	SETTABLE
+0x9b61a344	string	SETUPVAL
+0x9b61a350	string	SETGLOBAL
+0x9b61a35c	string	GETTABLE
+0x9b61a368	string	GETGLOBAL
+0x9b61a374	string	GETUPVAL
+0x9b61a380	string	LOADNIL
+0x9b61a388	string	LOADBOOL
+0x9b61a394	string	LOADK
+0x9b61a521	string	evkit:
+0x9b61a528	string	\Device\Harddisk0\Partition1\DEVKIT
+0x9b61a54c	string	\??\DEVKIT:
+0x9b61a594	string	LPCSTR
+0x9b61a5d8	string	LPCWSTR
+0x9b61a688	string	DOUBLE
+0x9b61a730	string	DWORD
+0x9b61a76c	string	QWORD
+0x9b61a774	string	%I64u
+0x9b61a780	string	Value=%s;
+0x9b61a790	string	Value=%S;
+0x9b61aa38	string	_nextafter
+0x9b61aa90	string	floor
+0x9b61ab18	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\apps\kiosk\app\obj\xbox\Dash.Kiosk.pdb
+0x9b6428b8	string	.?AVbad_alloc@std@@
+0x9b6428d4	string	.?AVexception@std@@
+0x9b643219	string	abcdefghijklmnopqrstuvwxyz
+0x9b643239	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9b64504a	string	Dash.Kiosk.xex
+0x9b645059	string	PamInitializeDll
+0x9b64506a	string	PamInitializeState
+0x9b64507d	string	PamTerminateDll
+0x9b646051	string	_StringIdsKinect
+0x9b646067	string	_callToActionKinect
+0x9b646080	string	phraseListA
+0x9b646090	string	\nGetString
+0x9b6460a0	string	phraseListB
+0x9b6460ba	string	_StringIdsController
+0x9b6460d4	string	_callToActionController
+0x9b6460f1	string	_callToAction
+0x9b646206	string	System
+0x9b646212	string	NuiIsDeviceReady
+0x9b646228	string	_callToAction
+0x9b64623b	string	_callToActionKinect
+0x9b646254	string	_callToActionController
+0x9b646270	string	\ncurPhrase
+0x9b646289	string	phraseListA
+0x9b647000	string	ideWaveToEngage
+0x9b647265	string	PlayerManager
+0x9b647282	string	file://kioskcontent:\
+0x9b64729c	string	\n_manifest
+0x9b6472ac	string	attractvideos
+0x9b6472bf	string	_currentVideo
+0x9b64731c	string	PlayerManager
+0x9b64739f	string	\rPlayTimeline
+0x9b6473b2	string	_attractorGroup
+0x9b6473c7	string	ShowAttractorPeek
+0x9b6473de	string	_attractorPeekElapsedFrames
+0x9b647408	string	StateChange
+0x9b647419	string	_states
+0x9b647426	string	AttractPeek
+0x9b647495	string	\rPlayTimeline
+0x9b6474a8	string	_attractorGroup
+0x9b6474bd	string	HideAttractorPeek
+0x9b6474d4	string	StateChange
+0x9b6474e5	string	_states
+0x9b6474f2	string	Attract
+0x9b647575	string	\rPlayTimeline
+0x9b647588	string	_attractorGroup
+0x9b64759d	string	ShowWaveToEngage
+0x9b6475b3	string	_miniSkeletonPipGroup
+0x9b6475d8	string	StateChange
+0x9b6475e9	string	_states
+0x9b6475f5	string	\rWaveToEngage
+0x9b64767e	string	\rPlayTimeline
+0x9b647691	string	_attractorGroup
+0x9b6476a6	string	HideWaveToEngage
+0x9b6476bc	string	_miniSkeletonPipGroup
+0x9b6476e1	string	StateChange
+0x9b6476f2	string	_states
+0x9b6476ff	string	Attract
+0x9b64774c	string	StopAttractorLoopVideo
+0x9b647767	string	\rReturnToDash
+0x9b6477ba	string	StopAttractorLoopVideo
+0x9b6477d5	string	\rReturnToDash
+0x9b647854	string	_rootScene
+0x9b647864	string	AnimatedGroup
+0x9b647877	string	SetShow
+0x9b647884	string	_states
+0x9b647891	string	Attract
+0x9b64789e	string	_currentState
+0x9b6478b1	string	_stateTransitionElapsedFrames
+0x9b647a59	string	module
+0x9b647a64	string	\rInstallScene
+0x9b647a77	string	package
+0x9b647a84	string	seeall
+0x9b647a90	string	require
+0x9b647aaa	string	\rXbox.XuiBase
+0x9b647acd	string	_scene
+0x9b647ad9	string	_installContext
+0x9b647aee	string	_processUpdateLoop
+0x9b647b05	string	\r_progressBar
+0x9b647b18	string	_waitCursor
+0x9b647b29	string	_proceedButton
+0x9b647b3d	string	_cancelButton
+0x9b647b50	string	_soloProceedButton
+0x9b647b68	string	_processTexts
+0x9b647b7b	string	_error
+0x9b647b87	string	_errorCode
+0x9b647b96	string	\nE_PENDING
+0x9b647bc2	string	INSTALLCOMMAND_NONE
+0x9b647bdb	string	INSTALLCOMMAND_GOTOHOMEPAGE
+0x9b647c05	string	INSTALLPROCESS_IDLE
+0x9b647c1e	string	INSTALLPROCESS_FORMAT
+0x9b647c39	string	INSTALLPROCESS_COPY
+0x9b647c5b	string	INSTALLPROCESS_INSERTMEDIA
+0x9b647c84	string	INSTALLPROCESS_VERIFYINSTALL
+0x9b647caf	string	INSTALLPROCESS_REMOVEMEDIA
+0x9b647cd8	string	PROGRESSBARSCALE
+0x9b647cf6	string	\r_CreateScene
+0x9b647d09	string	_CreateHomepage
+0x9b647d1e	string	Create
+0x9b647d29	string	\nOnKeyDown
+0x9b647d39	string	_OnProceedButtonPressed
+0x9b647d56	string	_OnCancelButtonPressed
+0x9b647d72	string	InstallContextUpdateLoop
+0x9b647d90	string	ShowCurrentProcess
+0x9b647da7	string	\rEnableButton
+0x9b647dba	string	UpdateFromInstallContext
+0x9b647e19	string	\tXuiScene
+0x9b647e28	string	Create
+0x9b647e34	string	ui#InstallScene.xur
+0x9b647e88	string	\tHomepage
+0x9b647e97	string	Create
+0x9b64808b	string	_scene
+0x9b648096	string	\r_CreateScene
+0x9b6480a8	string	\r_progressBar
+0x9b6480bb	string	ProgressBar
+0x9b6480cc	string	_waitCursor
+0x9b6480dd	string	WaitCursor
+0x9b6480ed	string	WaitCursorControl
+0x9b64810f	string	TextDisplay
+0x9b648120	string	_proceedButton
+0x9b648134	string	ButtonA
+0x9b648141	string	_cancelButton
+0x9b648161	string	_soloProceedButton
+0x9b648178	string	\tButtonOk
+0x9b648187	string	_error
+0x9b648193	string	Error
+0x9b64819e	string	_errorCode
+0x9b6481ad	string	\nErrorCode
+0x9b6481bd	string	_processTexts
+0x9b6481d0	string	INSTALLPROCESS_FORMAT
+0x9b6481eb	string	Format
+0x9b6481f7	string	INSTALLPROCESS_COPY
+0x9b64821a	string	INSTALLPROCESS_INSERTMEDIA
+0x9b64823a	string	InsertMedia
+0x9b64824b	string	INSTALLPROCESS_VERIFYINSTALL
+0x9b64826d	string	VerifyInstall
+0x9b648280	string	INSTALLPROCESS_REMOVEMEDIA
+0x9b6482a0	string	RemoveMedia
+0x9b6482b1	string	AutoSubscribe
+0x9b6482c4	string	Start
+0x9b6482cf	string	InstallContextUpdateLoop
+0x9b6482ec	string	\tSetRange
+0x9b648304	string	PROGRESSBARSCALE
+0x9b64831a	string	SetShow
+0x9b648326	string	\nSubscribe
+0x9b648336	string	Press
+0x9b648341	string	_OnProceedButtonPressed
+0x9b64835d	string	\nSetEnable
+0x9b64836d	string	_OnCancelButtonPressed
+0x9b648441	string	_scene
+0x9b64844c	string	\tGetFocus
+0x9b64845b	string	VK_PAD_DPAD_LEFT
+0x9b648471	string	VK_PAD_LTHUMB_LEFT
+0x9b648489	string	_cancelButton
+0x9b64849b	string	\tSetFocus
+0x9b6484aa	string	_proceedButton
+0x9b6484be	string	VK_PAD_DPAD_RIGHT
+0x9b6484d5	string	VK_PAD_LTHUMB_RIGHT
+0x9b6484ee	string	IsShown
+0x9b648554	string	InvokeInstallCommand
+0x9b64856e	string	_installContext
+0x9b648583	string	ProceedCommand
+0x9b6485f0	string	InvokeInstallCommand
+0x9b64860a	string	_installContext
+0x9b64861f	string	CancelCommand
+0x9b648696	string	_processUpdateLoop
+0x9b6486ae	string	_installContext
+0x9b6486d8	string	GetInstallContext
+0x9b6486ef	string	UpdateFromInstallContext
+0x9b648785	string	ipairs
+0x9b648791	string	_processTexts
+0x9b6487a4	string	SetShow
+0x9b6487b1	string	_installContext
+0x9b6487c6	string	CurrentProcess
+0x9b648892	string	IsShown
+0x9b64889f	string	SetShow
+0x9b6488ab	string	\nSetEnable
+0x9b6488bb	string	_proceedButton
+0x9b6488cf	string	_soloProceedButton
+0x9b6488e7	string	_scene
+0x9b6488f2	string	\tSetFocus
+0x9b648b73	string	_installContext
+0x9b648b87	string	\tProgress
+0x9b648b9e	string	\r_progressBar
+0x9b648bb0	string	\tSetValue
+0x9b648bbf	string	PROGRESSBARSCALE
+0x9b648bd5	string	SetShow
+0x9b648be9	string	\nE_PENDING
+0x9b648bf9	string	_waitCursor
+0x9b648c14	string	string
+0x9b648c20	string	format
+0x9b648c2b	string	\nhr = 0x%x
+0x9b648c3b	string	_error
+0x9b648c47	string	_errorCode
+0x9b648c57	string	SetText
+0x9b648c64	string	ShowCurrentProcess
+0x9b648c7c	string	ProceedCommand
+0x9b648c90	string	INSTALLCOMMAND_NONE
+0x9b648ca9	string	CurrentProcess
+0x9b648cbd	string	INSTALLPROCESS_IDLE
+0x9b648cd6	string	CancelCommand
+0x9b648ce8	string	\rEnableButton
+0x9b648cfb	string	_proceedButton
+0x9b648d0f	string	_cancelButton
+0x9b648d22	string	_soloProceedButton
+0x9b648d3a	string	_scene
+0x9b648d45	string	\tSetFocus
+0x9b648d54	string	INSTALLCOMMAND_GOTOHOMEPAGE
+0x9b648d75	string	_processUpdateLoop
+0x9b648d8d	string	_CreateHomepage
+0x9b648da2	string	NavigateForward
+0x9b648dcc	string	InvokeInstallCommand
+0x9b648e46	string	module
+0x9b648e5d	string	package
+0x9b648e6a	string	seeall
+0x9b648e75	string	\rPlayTimeline
+0x9b648ef2	string	\rPlayTimeline
+0x9b649001	string	require
+0x9b64901c	string	string
+0x9b649027	string	\tManifest
+0x9b649036	string	__index
+0x9b649043	string	DefaultManifestDirectory
+0x9b649061	string	en-en
+0x9b64906c	string	LanguageLookupTable
+0x9b649106	string	createManifestPath
+0x9b64911d	string	\tload_xml
+0x9b64912c	string	read_xml_helper
+0x9b6492ab	string	\tAppUtils
+0x9b6492ba	string	GetKioskId
+0x9b6492ca	string	attractvideos
+0x9b6492dd	string	appearance
+0x9b6492ed	string	brandimage
+0x9b6492fd	string	defaultBackground.png
+0x9b649318	string	string
+0x9b649324	string	format
+0x9b64934b	string	\tManifest
+0x9b649359	string	\tload_xml
+0x9b649368	string	createManifestPath
+0x9b649380	string	LanguageLookupTable
+0x9b649399	string	Config
+0x9b6493a4	string	\rUserSettings
+0x9b6493b7	string	GetLanguage
+0x9b6493d9	string	DefaultManifestDirectory
+0x9b6493f6	string	\rsetmetatable
+0x9b649409	string	__index
+0x9b649456	string	file://kioskcontent:\
+0x9b649471	string	\Manifest.xml
+0x9b64952c	string	pcall
+0x9b649541	string	XuiBase
+0x9b64954d	string	\tReadFile
+0x9b649565	string	FromXmlString
+0x9b649577	string	\tManifest
+0x9b649586	string	read_xml_helper
+0x9b6496bb	string	_attributes
+0x9b6496cd	string	ipairs
+0x9b6496d9	string	_name
+0x9b6496e4	string	_value
+0x9b6496ef	string	\tManifest
+0x9b6496fe	string	read_xml_helper
+0x9b649713	string	table
+0x9b64971e	string	insert
+0x9b64972a	string	attractvideos
+0x9b649748	string	pairs
+0x9b649810	string	module
+0x9b64981c	string	PlayerManager
+0x9b64982f	string	package
+0x9b64983c	string	seeall
+0x9b649848	string	require
+0x9b649865	string	_videoControl
+0x9b649878	string	_resourceLoader
+0x9b64988d	string	_videoFile
+0x9b64989d	string	_onVideoEnd
+0x9b6498ad	string	\t_loading
+0x9b6498c6	string	LoadAndPlay
+0x9b6498eb	string	CancelLoading
+0x9b64994e	string	_videoControl
+0x9b649961	string	_onVideoEnd
+0x9b649972	string	_resourceLoader
+0x9b64999c	string	CreateResourceLoaderObject
+0x9b6499bb	string	\nSubscribe
+0x9b6499ca	string	\tVideoEnd
+0x9b649a71	string	_videoControl
+0x9b649aa2	string	_resourceLoader
+0x9b649ab6	string	\rLoadResource
+0x9b649ac9	string	_videoFile
+0x9b649ae0	string	_onVideoEnd
+0x9b649afa	string	\t_loading
+0x9b649b61	string	CancelLoading
+0x9b649b74	string	_videoFile
+0x9b649b83	string	\ttostring
+0x9b649b91	string	\t_loading
+0x9b649ba0	string	_videoControl
+0x9b649bb3	string	Start
+0x9b649bbe	string	LoadAndPlay
+0x9b649c0f	string	CancelLoading
+0x9b649c22	string	_videoControl
+0x9b649c8a	string	\t_loading
+0x9b649c99	string	Cancel
+0x9b649cbc	string	<pam><deps></deps></pam>
+0x9b649e3b	string	Homepage.xur
+0x9b649e50	string	InstallScene.xur
+0x9b649e69	string	Legend_Menu.png
+0x9b649e81	string	hand.png
+0x9b649e92	string	blurgaussian25.uxfx
+0x9b649eae	string	Strings.xus
+0x9b649ec2	string	de-de\Homepage.xus
+0x9b649edd	string	de-de\InstallScene.xus
+0x9b649efc	string	de-de\Strings.xus
+0x9b649f16	string	es-es\Homepage.xus
+0x9b649f31	string	es-es\InstallScene.xus
+0x9b649f50	string	es-es\Strings.xus
+0x9b649f6a	string	fr-fr\Homepage.xus
+0x9b649f85	string	fr-fr\InstallScene.xus
+0x9b649fa4	string	fr-fr\Strings.xus
+0x9b649fbe	string	it-it\Homepage.xus
+0x9b649fd9	string	it-it\InstallScene.xus
+0x9b649ff8	string	it-it\Strings.xus
+0x9b64a012	string	ko-kr\Homepage.xus
+0x9b64a02d	string	ko-kr\InstallScene.xus
+0x9b64a04c	string	ko-kr\Strings.xus
+0x9b64a066	string	ja-jp\Homepage.xus
+0x9b64a081	string	ja-jp\InstallScene.xus
+0x9b64a0a0	string	ja-jp\Strings.xus
+0x9b64a0ba	string	pl-pl\Homepage.xus
+0x9b64a0d5	string	pl-pl\InstallScene.xus
+0x9b64a0f4	string	pl-pl\Strings.xus
+0x9b64a10e	string	pt-br\Homepage.xus
+0x9b64a129	string	pt-br\InstallScene.xus
+0x9b64a148	string	pt-br\Strings.xus
+0x9b64a162	string	ru-ru\Homepage.xus
+0x9b64a17d	string	ru-ru\InstallScene.xus
+0x9b64a19c	string	ru-ru\Strings.xus
+0x9b64a1b6	string	zh-tw\Homepage.xus
+0x9b64a1d1	string	zh-tw\InstallScene.xus
+0x9b64a1f0	string	zh-tw\Strings.xus
+0x9b64a20a	string	sv-se\Homepage.xus
+0x9b64a225	string	sv-se\InstallScene.xus
+0x9b64a244	string	sv-se\Strings.xus
+0x9b64a25e	string	nl-nl\Homepage.xus
+0x9b64a279	string	nl-nl\InstallScene.xus
+0x9b64a298	string	nl-nl\Strings.xus
+0x9b64a2b2	string	tr-tr\Homepage.xus
+0x9b64a2cd	string	tr-tr\InstallScene.xus
+0x9b64a2ec	string	tr-tr\Strings.xus
+0x9b64a306	string	nb-no\Homepage.xus
+0x9b64a321	string	nb-no\InstallScene.xus
+0x9b64a340	string	nb-no\Strings.xus
+0x9b64a35a	string	zh-chs\Homepage.xus
+0x9b64a376	string	zh-chs\InstallScene.xus
+0x9b64a396	string	zh-chs\Strings.xusXUIB
+0x9b64a3ec	string	@CUST
+0x9b64a447	string	XuiPerspectiveScene
+0x9b64a45b	string	MiniSkeletonPIPGrp
+0x9b64a46e	string	MiniSkeletonPIP
+0x9b64a47e	string	Dash.MiniDepthPIP
+0x9b64a490	string	ControlPackMiniPIPControl
+0x9b64a4b1	string	XuiFigure
+0x9b64a4d0	string	Default
+0x9b64a4dd	string	EndShow
+0x9b64a4ea	string	EndHide
+0x9b64a4f2	string	XuiGroup
+0x9b64a4fb	string	HomeScreenGroup
+0x9b64a50b	string	TileLayoutSceneHost
+0x9b64a51f	string	AttractorGroup
+0x9b64a52e	string	WaveToEngageUIGroup
+0x9b64a542	string	ControlPackNuiTipsScene
+0x9b64a55a	string	WaveText
+0x9b64a563	string	Wave for Kinect
+0x9b64a573	string	XuiText
+0x9b64a57b	string	WaveIndicatorGrp
+0x9b64a58c	string	WaveProgressBar
+0x9b64a59c	string	wave_Progress
+0x9b64a5aa	string	ControlPack.WaveIndicator.ProgressBar
+0x9b64a5d0	string	XuiProgressBar
+0x9b64a5df	string	ShowAll
+0x9b64a5e7	string	EndShowAll
+0x9b64a5f2	string	HideAll
+0x9b64a5fa	string	EndHideAll
+0x9b64a605	string	ShowIcon
+0x9b64a60e	string	EndShowIcon
+0x9b64a61a	string	HideIcon
+0x9b64a623	string	EndHideIcon
+0x9b64a62f	string	Activate
+0x9b64a638	string	EndActivate
+0x9b64a644	string	XuiScene
+0x9b64a64d	string	FullScreenVideoGroup
+0x9b64a662	string	VideoPlaybackBG
+0x9b64a672	string	VideoControl
+0x9b64a67f	string	XuiVideo
+0x9b64a688	string	AttractAvatar
+0x9b64a696	string	XuiAvatar
+0x9b64a6a0	string	ShowAttractorPeek
+0x9b64a6b2	string	EndShowAttractorPeek
+0x9b64a6c7	string	HideAttractorPeek
+0x9b64a6d9	string	EndHideAttractorPeek
+0x9b64a6ee	string	ShowWaveToEngage
+0x9b64a6ff	string	EndShowWaveToEngage
+0x9b64a713	string	HideWaveToEngage
+0x9b64a724	string	EndHideWaveToEngage
+0x9b64a738	string	EngageSuccess
+0x9b64a746	string	EndEngageSuccess
+0x9b64a757	string	DisengageNoSkels
+0x9b64a768	string	EndDisengageNoSkels
+0x9b64a77c	string	DisengageWSkels
+0x9b64a78c	string	EndDisengageWSkels
+0x9b64a79f	string	SelectTile
+0x9b64a7aa	string	EndSelectTile
+0x9b64a7b8	string	EngageSuccessFromPeek
+0x9b64a7ce	string	EndEngageSuccessFromPeek
+0x9b64a7e7	string	ShowSelectedVideo
+0x9b64a7f9	string	EndShowSelectedVideo
+0x9b64a80e	string	WaveToEngageFromSelectedVideo
+0x9b64a82c	string	EndWaveToEngageFromSelectedVideo
+0x9b64a84d	string	ShowTilesFromSelectedVideo
+0x9b64a868	string	EndShowTilesFromSelectedVideo
+0x9b64a886	string	RatingDisplayGroup
+0x9b64a899	string	RatingDisplay
+0x9b64a8c3	string	RatingBG
+0x9b64a8cc	string	RatingIcon
+0x9b64a8d7	string	XuiImage
+0x9b64a8e0	string	RatingNotesText
+0x9b64a90b	string	XuiGridPanel

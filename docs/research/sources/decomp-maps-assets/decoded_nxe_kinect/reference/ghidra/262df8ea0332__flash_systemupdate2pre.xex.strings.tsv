@@ -1,0 +1,712 @@
+va	data_type	text
+0x98200744	string	\Device\
+0x98200768	string	Xbox360
+0x98200770	string	PartitionFile
+0x98200780	string	\Device\Mass%d
+0x98200790	string	\Device\Mu%d
+0x982007c0	string	%s\%s\Data%4.4lu
+0x982007d4	string	HH:mm:ss
+0x982007e0	string	dddd, MMMM dd, yyyy
+0x982007f4	string	MM/dd/yy
+0x98200808	string	December
+0x98200814	string	November
+0x98200820	string	October
+0x98200828	string	September
+0x98200834	string	August
+0x9820084c	string	April
+0x98200854	string	March
+0x9820085c	string	February
+0x98200868	string	January
+0x982008a0	string	Saturday
+0x982008ac	string	Friday
+0x982008b4	string	Thursday
+0x982008c0	string	Wednesday
+0x982008cc	string	Tuesday
+0x982008d4	string	Monday
+0x982008dc	string	Sunday
+0x98201108	string	SunMonTueWedThuFriSat
+0x98201120	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x98201160	string	\Device\Package_%08X`%08X`%08X`%08X`%08X
+0x9820150c	string	\??\%s:
+0x98201514	string	\??\%s
+0x9820151c	string	XBOX360XTT
+0x98201dac	string	\Device\Mass2
+0x98201dbc	string	\Device\Mass1
+0x98201dcc	string	\Device\Mass0
+0x98202540	string	\Device\Harddisk0\Partition1\$SystemUpdate
+0x9820256c	string	\System??
+0x98202578	string	\System??\SOURCE:
+0x9820258c	string	\??\SOURCE:
+0x98202598	string	xboxupd.bin
+0x982025a4	string	sysupdate.xex
+0x982025b4	string	crl.bin
+0x982025bc	string	dae.bin
+0x982025d4	string	TARGET:\
+0x982025e0	string	SOURCE:\$flash_
+0x982025f0	string	SOURCE:\%s
+0x98202610	string	voicemail.xex
+0x98202620	string	marketplace.xex
+0x98202630	string	quickchat.xex
+0x98202640	string	friends.xex
+0x9820264c	string	feedback.xex
+0x98202668	string	xenonjklatin.xtt
+0x9820267c	string	xenonclatin.xtt
+0x9820268c	string	updatedata.bin
+0x9820269c	string	systemupdate.xex
+0x982026b0	string	systemupdate2pre.xex
+0x982026c8	string	ximedic.xex
+0x982026f0	string	ximecore.xex
+0x98202708	string	updater.xex
+0x98202714	string	signin.xex
+0x98202720	string	minimediaplayer.xex
+0x98202734	string	mfgbootlauncher.xex
+0x98202748	string	huduiskin.xex
+0x98202760	string	gamerprofile.xex
+0x98202774	string	deviceselector.xex
+0x98202794	string	createprofile.xex
+0x982027a8	string	sysupdate.xex
+0x982027c0	string	bootanim.xex
+0x982027d0	string	xam.xex
+0x98202afc	string	%s%s%s%s
+0x98202b0c	string	\Device\BuiltInMu
+0x98202b20	string	\Device\Mass
+0x98202b40	string	\Device\FileSystemExt
+0x98202b64	string	\Device\Harddisk
+0x98202b78	string	\Device\CdRom
+0x98202b88	string	\System??\TARGET:\updatedata.bin
+0x98202be4	unicode	strings.xus
+0x98202c30	unicode	XuiCanvas
+0x98202d1c	unicode	XuiControl
+0x98202d34	string	\??\font:
+0x98202d40	unicode	Background.xur
+0x98202d60	unicode	MEDIA
+0x98202d6c	unicode	skin.xur
+0x98202dcc	unicode	ConvectionUI
+0x98202de8	unicode	file://font:/XenonJKLatin.xttp2
+0x98202e28	unicode	file://font:/XenonJKLatin.xttp1
+0x98202e68	unicode	file://font:/XenonJKLatin.xtt
+0x98202ea4	unicode	file://font:/XenonCLatin.xttp2
+0x98202ee4	unicode	file://font:/XenonCLatin.xttp1
+0x98202f24	unicode	file://font:/XenonCLatin.xtt
+0x98202f9c	unicode	ja-jp
+0x98202fa8	unicode	de-de
+0x98202fb4	unicode	fr-fr
+0x98202fc0	unicode	es-es
+0x98202fcc	unicode	it-it
+0x98202fd8	unicode	ko-kr
+0x98202fe4	unicode	zh-tw
+0x98202ff0	unicode	pt-br
+0x98202ffc	unicode	zh-chs
+0x9820300c	unicode	pl-pl
+0x98203018	unicode	ru-ru
+0x98203028	unicode	%s: %04X - %04X - %04X - %04X - %04X - %04X
+0x98203080	string	\SystemRoot
+0x9820308c	unicode	XuiScene
+0x982030a0	string	\Device\BuiltInMuSfc\ExtendedSystem.Partition
+0x982030d0	string	\Device\Mu1\ExtendedSystem.Partition
+0x982030f8	string	\Device\Mu0\ExtendedSystem.Partition
+0x98203120	string	\Device\UpdateStorage%d\$SystemUpdate\su%08x_%08x
+0x98203154	string	\Device\Mass
+0x98203164	string	\Device\FileSystemExtPartition
+0x98203184	string	\Device\FileSystemExtPartitionSU
+0x982031b0	string	\SystemExtPartition\
+0x982031c8	string	\SystemAuxPartition\
+0x982031e0	unicode	versionText
+0x982031f8	unicode	labHeader
+0x9820320c	unicode	statusText
+0x98203224	unicode	MessageScene.xur
+0x98203248	unicode	MessageScene
+0x9820326c	unicode	UpdateInProgressScene.xur
+0x982032a0	unicode	UpdateInProgressScene
+0x982032d4	unicode	file://media:/%s.xzp#%s
+0x98203304	unicode	section://%X,%s#%s
+0x98203510	string	ERR[D3D]: Unanticipated CPU_INTERRUPT.  Sign of a corrupt command buffer?\n
+0x98203580	string	D3D: GPU initialization (HSIO training) has failed so no graphics will render.\n
+0x98203678	string	PIX!OK
+0x98203680	string	PIX!NO
+0x982036ac	string	unnamed.pix2
+0x982036c0	string	\nThe PIX capture is now saved to xe:\pix\crashdump.pix2.  Please power cycle your\ndevkit and use the 'Open Crash Dump' option from the PIX File menu to load the file\nfor postmortem debugging.\n\n
+0x98203784	string	PIX!Gpu
+0x9820378c	string	crashdump.pix2
+0x982037a0	string	e:\xbperfview.cap
+0x98203c70	string	VGT_DEBUG
+0x98203c7c	string	PA_SU_DEBUG
+0x98203c88	string	PA_SC_DEBUG
+0x98203c94	string	RBBM DEBUG
+0x98203ca0	string	CP DEBUG
+0x98203cac	string	PTR_BUFF_STATUS 0xAc24
+0x98203cc4	string	PIX_TB_STATUS 0x9c24
+0x98203cdc	string	VTX_TB_STATUS 0x8C24
+0x98203cf4	string	RB_DEBUG_0
+0x98203d00	string	TPC_CNTL_STATUS
+0x98203d10	string	TP3_CNTL_STATUS
+0x98203d20	string	TP2_CNTL_STATUS
+0x98203d30	string	TP1_CNTL_STATUS
+0x98203d40	string	TP0_CNTL_STATUS
+0x98203d50	string	TC_CNTL_STATUS
+0x98203d60	string	PA_SU_CNTL_STATUS
+0x98203d74	string	PA_SC_CNTL_STATUS
+0x98203d88	string	PA_CL_CNTL_STATUS
+0x98203d9c	string	VC_CNTL_STATUS
+0x98203dac	string	VGT_CNTL_STATUS
+0x98203dbc	string	CP_MEQ_STAT
+0x98203dc8	string	CP_MEQ_AVAIL
+0x98203dd8	string	CP_CSQ_IB2_STAT
+0x98203de8	string	CP_CSQ_IB1_STAT
+0x98203df8	string	CP_CSQ_RB_STAT
+0x98203e08	string	CP_CSQ_AVAIL
+0x98203e18	string	CP_DEBUG
+0x98203e24	string	CP_STAT
+0x98203e2c	string	CP_IB2_BUFSZ
+0x98203e3c	string	CP_IB2_BASE
+0x98203e48	string	CP_IB1_BUFSZ
+0x98203e58	string	CP_IB1_BASE
+0x98203e7c	string	CP_RB_BASE
+0x98203e88	string	RBBM_STATUS
+0x98203ec8	string	CPU Synchronization
+0x98203ee0	string	The GPU appears to be hung!  Specifically: 
+0x98203f10	string	%s 0x%02x: 
+0x98203f1c	string	%08x 
+0x98203f28	string	   %25s: 0x%08x\n
+0x98203f40	string	The GPU state doesn't match any known hangs.  Please send a repro\nscenario to xboxds@xbox.com so that we can supply a workaround.\n\n
+0x98203fc8	string	If your hang didn't occur for the above reason, please send a repro\nscenario to xboxds@xbox.com so that we can supply a workaround.\n\n
+0x98204050	string	  o The hang may have occurred because a partial primitive was\n    rendered.  A partial primitive occurs when the vertex count\n    on a draw call doesn't properly match the primitive type (e.g.,\n    by calling DrawVertices using D3DPT_TRILIST with a vertex\n    count of 4).\n\n
+0x98204164	string	\nD3D version is %i.%i %s, frame is %i.\n\n
+0x98204190	string	retail
+0x98204198	string	Breaking into the debugger.  The GPU is hung and can't be recovered\nwithout doing a cold boot.\n
+0x982041f8	string	ERR[D3D]: Try reproducing the hang with the debug or instrumented\n          versions of D3D (D3D9D.LIB or D3D9I.LIB) to capture a\n          crash-dump PIX file that can be sent to Xbox developer\n          support.\n\n
+0x982042d0	string	+++++++++++++++++++++++++++++++++++++++++++++++++++++++\n
+0x98204544	string	InvViewport
+0x98204560	string	LocalToTexTransform
+0x98204574	string	UVTrans
+0x9820458c	string	WorldViewProj
+0x982045a1	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98204744	string	InvViewport
+0x98204760	string	ShadowOffset
+0x98204780	string	WorldViewProj
+0x98204795	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9820499c	string	AmbientLight
+0x982049bc	string	BaseColor
+0x982049c6	string	LightColor
+0x982049d1	string	LightDir
+0x982049da	string	SkeletonTransforms
+0x98204a00	string	WorldViewProj
+0x98204a27	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98204f38	string	ColorFactor
+0x98204f54	string	SolidColor
+0x98204f66	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98205038	string	ColorFactor
+0x98205054	string	TextureSampler
+0x9820507b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98205154	string	ColorFactor
+0x98205177	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98205248	string	ColorFactor
+0x98205264	string	TextureSampler0
+0x9820528b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x982053d0	string	ColorFactor
+0x982053ec	string	TextureSampler0
+0x9820540c	string	TextureSampler1
+0x98205423	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98205580	string	ColorFactor
+0x9820559c	string	TextureSampler
+0x982055c3	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98205750	string	Color1
+0x98205768	string	Color2
+0x9820576f	string	Color3
+0x9820577d	string	ColorFactor
+0x98205789	string	StopPositions
+0x98205797	string	StopPositionsInvDist
+0x982057b3	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x982059f4	string	ColorFactor
+0x98205a10	string	TextureSampler
+0x98205a37	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98205be0	string	Color1
+0x98205bf8	string	Color2
+0x98205bff	string	Color3
+0x98205c0d	string	ColorFactor
+0x98205c19	string	StopPositions
+0x98205c27	string	StopPositionsInvDist
+0x98205c43	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98205ecc	string	ColorFactor
+0x98205ee8	string	TextureSampler
+0x98205f0f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x982061e0	string	Color1
+0x982061f8	string	Color2
+0x982061ff	string	Color3
+0x9820620d	string	ColorFactor
+0x98206219	string	StopPositions
+0x98206227	string	StopPositionsInvDist
+0x98206243	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x982065b8	string	ColorConvertMatrix
+0x982065dc	string	ColorFactor
+0x982065f8	string	SolidColor
+0x9820660a	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9820672c	string	ColorConvertMatrix
+0x98206750	string	ColorFactor
+0x9820676c	string	TextureSampler
+0x98206793	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98206930	string	ColorConvertMatrix
+0x98206954	string	ColorFactor
+0x98206977	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98206b14	string	ColorConvertMatrix
+0x98206b38	string	ColorFactor
+0x98206b54	string	TextureSampler0
+0x98206b7b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98206d9c	string	ColorConvertMatrix
+0x98206dc0	string	ColorFactor
+0x98206ddc	string	TextureSampler0
+0x98206dfc	string	TextureSampler1
+0x98206e13	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98206ffc	string	ColorConvertMatrix
+0x98207020	string	ColorFactor
+0x9820703c	string	TextureSampler
+0x98207063	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x982072bc	string	Color1
+0x982072d4	string	Color2
+0x982072db	string	Color3
+0x982072e9	string	ColorConvertMatrix
+0x9820730c	string	ColorFactor
+0x98207318	string	StopPositions
+0x98207326	string	StopPositionsInvDist
+0x98207342	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x982075d8	string	ColorConvertMatrix
+0x982075fc	string	ColorFactor
+0x98207618	string	TextureSampler
+0x9820763f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x982078ac	string	Color1
+0x982078c4	string	Color2
+0x982078cb	string	Color3
+0x982078d9	string	ColorConvertMatrix
+0x982078fc	string	ColorFactor
+0x98207908	string	StopPositions
+0x98207916	string	StopPositionsInvDist
+0x98207932	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98207c08	string	ColorConvertMatrix
+0x98207c2c	string	ColorFactor
+0x98207c48	string	TextureSampler
+0x98207c6f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9820800c	string	Color1
+0x98208024	string	Color2
+0x9820802b	string	Color3
+0x98208039	string	ColorConvertMatrix
+0x9820805c	string	ColorFactor
+0x98208068	string	StopPositions
+0x98208076	string	StopPositionsInvDist
+0x98208092	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98208400	string	ColorFactor
+0x9820841c	string	TextureSampler
+0x98208443	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98208588	string	ColorFactor
+0x982085a4	string	ShadowColor
+0x982085b0	string	TextureSampler
+0x982085d7	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x982087d8	string	ColorConvertMatrix
+0x982087fc	string	ColorFactor
+0x98208818	string	TextureSampler
+0x9820883f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98208a04	string	ColorConvertMatrix
+0x98208a28	string	ColorFactor
+0x98208a44	string	ShadowColor
+0x98208a50	string	TextureSampler
+0x98208a77	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x982091a4	string	Depth Buffers
+0x982091b4	string	Render Targets
+0x982091c4	string	Textures
+0x982091d0	string	Pixel Shaders
+0x98209300	string	1.2.3
+0x98209cbc	string	incorrect header check
+0x98209cd4	string	unknown compression method
+0x98209cf0	string	invalid window size
+0x98209d04	string	unknown header flags set
+0x98209d20	string	header crc mismatch
+0x98209d34	string	invalid block type
+0x98209d48	string	invalid stored block lengths
+0x98209d68	string	too many length or distance symbols
+0x98209db4	string	invalid code lengths set
+0x98209dd0	string	invalid bit length repeat
+0x98209dec	string	invalid literal/lengths set
+0x98209e08	string	invalid distances set
+0x98209e20	string	invalid literal/length code
+0x98209e3c	string	invalid distance code
+0x98209e54	string	invalid distance too far back
+0x98209e74	string	incorrect data check
+0x98209e8c	string	incorrect length check
+0x9820c8e0	string	incompatible version
+0x9820c8f8	string	buffer error
+0x9820c908	string	insufficient memory
+0x9820c91c	string	data error
+0x9820c928	string	stream error
+0x9820c938	string	file error
+0x9820c944	string	stream end
+0x9820c950	string	need dictionary
+0x9820ca88	unicode	EndPressCheckDisable
+0x9820cab4	unicode	PressCheckDisable
+0x9820cad8	unicode	EndNormalPressCheck
+0x9820cb00	unicode	NormalPressCheck
+0x9820cb24	unicode	EndPressCheck
+0x9820cb40	unicode	PressCheck
+0x9820cb58	unicode	EndScrollMoreKillHover
+0x9820cb88	unicode	ScrollMoreKillHover
+0x9820cbb0	unicode	EndNormalSelCheckKillHover
+0x9820cbe8	unicode	NormalSelCheckKillHover
+0x9820cc18	unicode	EndNormalSelKillHover
+0x9820cc44	unicode	NormalSelKillHover
+0x9820cc6c	unicode	EndFocusCheckKillHover
+0x9820cc9c	unicode	FocusCheckKillHover
+0x9820ccc4	unicode	EndNormalCheckKillHover
+0x9820ccf4	unicode	NormalCheckKillHover
+0x9820cd20	unicode	EndFocusKillHover
+0x9820cd44	unicode	FocusKillHover
+0x9820cd64	unicode	EndNormalKillHover
+0x9820cd8c	unicode	NormalKillHover
+0x9820cdac	unicode	EndKillFocus
+0x9820cdc8	unicode	EndPressDisable
+0x9820cde8	unicode	PressDisable
+0x9820ce04	unicode	EndInitFocusCheckDisable
+0x9820ce38	unicode	InitFocusCheckDisable
+0x9820ce64	unicode	EndInitFocusCheck
+0x9820ce88	unicode	InitFocusCheck
+0x9820cea8	unicode	EndInitFocusDisable
+0x9820ced0	unicode	InitFocusDisable
+0x9820cef4	unicode	EndInitFocus
+0x9820cf10	unicode	InitFocus
+0x9820cf24	unicode	EndScrollMoreDisable
+0x9820cf50	unicode	ScrollMoreDisable
+0x9820cf74	unicode	EndScrolling
+0x9820cf90	unicode	Scrolling
+0x9820cfa4	unicode	EndScrollMore
+0x9820cfc0	unicode	ScrollMore
+0x9820cfd8	unicode	EndNormalSelCheckDisable
+0x9820d00c	unicode	NormalSelCheckDisable
+0x9820d038	unicode	EndNormalSelDisable
+0x9820d060	unicode	NormalSelDisable
+0x9820d084	unicode	EndNormalSelCheck
+0x9820d0a8	unicode	NormalSelCheck
+0x9820d0c8	unicode	EndNormalSel
+0x9820d0e4	unicode	NormalSel
+0x9820d0f8	unicode	EndFocusCheckDisable
+0x9820d124	unicode	FocusCheckDisable
+0x9820d148	unicode	EndNormalCheckDisable
+0x9820d174	unicode	NormalCheckDisable
+0x9820d19c	unicode	EndFocusCheck
+0x9820d1b8	unicode	FocusCheck
+0x9820d1d0	unicode	EndNormalCheck
+0x9820d1f0	unicode	NormalCheck
+0x9820d208	unicode	EndNormalPress
+0x9820d228	unicode	NormalPress
+0x9820d240	unicode	EndPress
+0x9820d254	unicode	Press
+0x9820d260	unicode	EndFocusDisable
+0x9820d280	unicode	FocusDisable
+0x9820d29c	unicode	EndNormalDisable
+0x9820d2c0	unicode	NormalDisable
+0x9820d2dc	unicode	KillFocus
+0x9820d2f0	unicode	EndFocus
+0x9820d304	unicode	Focus
+0x9820d310	unicode	EndNormal
+0x9820d324	unicode	Normal
+0x9820d560	unicode	ClassOverride
+0x9820d588	unicode	Pivot
+0x9820d594	unicode	Width
+0x9820d5a0	unicode	Height
+0x9820d5d4	unicode	XuiTransition
+0x9820d5f8	unicode	XuiElement
+0x9820d618	unicode	XuiText
+0x9820d628	unicode	XuiLabel
+0x9820d63c	unicode	MaxFlowLines
+0x9820d674	unicode	XuiFigure
+0x9820d688	unicode	XuiVisual
+0x9820d69c	unicode	XuiButton
+0x9820d6b0	unicode	XuiNavButton
+0x9820d6cc	unicode	XuiBackButton
+0x9820d6e8	unicode	XuiCheckbox
+0x9820d700	unicode	PressKey
+0x9820d714	unicode	XuiRadioButton
+0x9820d734	unicode	XuiRadioGroup
+0x9820d750	unicode	XuiTextPresenter
+0x9820d774	unicode	XuiGroup
+0x9820d788	unicode	XuiSound
+0x9820d79c	unicode	XuiListItem
+0x9820d7b4	unicode	XuiScrollEnd
+0x9820d7d0	unicode	XuiScrollBar
+0x9820d7ec	unicode	XuiList
+0x9820d7fc	unicode	XuiCommonList
+0x9820d818	unicode	XuiProgressBar
+0x9820d838	unicode	XuiSlider
+0x9820d850	unicode	XuiEdit
+0x9820d860	unicode	XuiCaret
+0x9820d874	unicode	XuiMessageBox
+0x9820d890	unicode	XuiImagePresenter
+0x9820d8b4	unicode	XuiImage
+0x9820d8c8	unicode	XuiTabScene
+0x9820d8e0	unicode	XuiPerspectiveScene
+0x9820d908	unicode	XuiNineGrid
+0x9820d920	unicode	XuiGridPanel
+0x9820d93c	unicode	XuiTextureSurface
+0x9820d960	unicode	XuiShader
+0x9820d974	unicode	XuiVariable
+0x9820d9a8	unicode	false
+0x9820d9b4	unicode	true
+0x9820d9d8	unicode	0x%08x
+0x9820d9e8	unicode	%f,%f,%f
+0x9820d9fc	unicode	%f,%f,%f,%f
+0x9820da44	unicode	StrokeColor
+0x9820da5c	unicode	StrokeWidth
+0x9820da74	unicode	StopColor
+0x9820da88	unicode	StopPos
+0x9820da98	unicode	NumStops
+0x9820daac	unicode	Radial
+0x9820dad8	unicode	TransformVersion
+0x9820dafc	unicode	BrushFlags
+0x9820db14	unicode	WrapY
+0x9820db20	unicode	WrapX
+0x9820db2c	unicode	Rotation
+0x9820db40	unicode	Scale
+0x9820db4c	unicode	Translation
+0x9820db64	unicode	Gradient
+0x9820db78	unicode	TextureFileName
+0x9820db98	unicode	FillColor
+0x9820dbac	unicode	FillType
+0x9820dbc0	unicode	Fill
+0x9820dbcc	unicode	Points
+0x9820dbdc	unicode	Closed
+0x9820dbec	unicode	Stroke
+0x9820dc10	unicode	Direction
+0x9820dc24	unicode	MinThumbSize
+0x9820dc40	unicode	LoadType
+0x9820dc54	unicode	DataAssociation
+0x9820dc74	unicode	SizeMode
+0x9820dc88	unicode	ProjectionCenterV
+0x9820dcac	unicode	ProjectionCenterU
+0x9820dcd0	unicode	ProjectionScale
+0x9820dcf0	unicode	TextScale
+0x9820dd04	unicode	LineSpacingAdjust
+0x9820dd28	unicode	TextStyle
+0x9820dd3c	unicode	Font
+0x9820dd48	unicode	PointSize
+0x9820dd5c	unicode	DropShadowColor
+0x9820dd7c	unicode	TextColor
+0x9820dd90	unicode	Text
+0x9820dd9c	unicode	RecurseTransitions
+0x9820ddc4	unicode	IgnorePresses
+0x9820dde0	unicode	InterruptTransitions
+0x9820de0c	unicode	TransBackTo
+0x9820de24	unicode	TransBackFrom
+0x9820de40	unicode	TransTo
+0x9820de50	unicode	TransFrom
+0x9820de64	unicode	DefaultFocus
+0x9820de80	unicode	FocusAnimEndFrame
+0x9820dea4	unicode	FocusAnimStartFrame
+0x9820decc	unicode	FocusAnimObject
+0x9820deec	unicode	PressAnimEndFrame
+0x9820df10	unicode	PressAnimStartFrame
+0x9820df38	unicode	PressAnimObject
+0x9820df58	unicode	DestTransIndex
+0x9820df78	unicode	SrcTransIndex
+0x9820df94	unicode	StayVisible
+0x9820dfac	unicode	PressPath
+0x9820dfc0	unicode	Volume
+0x9820dfd0	unicode	Finish
+0x9820dfe0	unicode	Loop
+0x9820dfec	unicode	State
+0x9820dff8	unicode	SmoothScrollAcceleration
+0x9820e02c	unicode	SmoothScrollMaxSpeed
+0x9820e058	unicode	SmoothScrollBaseSpeed
+0x9820e084	unicode	SmoothScroll
+0x9820e0a0	unicode	InterItemSpacing
+0x9820e0c4	unicode	KeepSizeUnfocused
+0x9820e0e8	unicode	SelectedSize
+0x9820e104	unicode	Checkable
+0x9820e118	unicode	Layout
+0x9820e128	unicode	WrapBump
+0x9820e13c	unicode	Wrap
+0x9820e148	unicode	ItemsNavPath
+0x9820e164	unicode	ItemsImage
+0x9820e17c	unicode	ItemsText
+0x9820e190	unicode	Value
+0x9820e19c	unicode	RangeMax
+0x9820e1b0	unicode	RangeMin
+0x9820e1c4	unicode	AccelTime
+0x9820e1d8	unicode	AccelInc
+0x9820e1ec	unicode	Vertical
+0x9820e200	unicode	Step
+0x9820e20c	unicode	Multiline
+0x9820e220	unicode	ReadOnly
+0x9820e234	unicode	PasswordChar
+0x9820e250	unicode	AllowedChars
+0x9820e26c	unicode	TextLimit
+0x9820e280	unicode	TextureSurfaceElement
+0x9820e2ac	unicode	ImagePath
+0x9820e2c0	unicode	DefaultTab
+0x9820e2d8	unicode	NoAutoHide
+0x9820e2f0	unicode	VerticalTabs
+0x9820e30c	unicode	UserInterrupt
+0x9820e328	unicode	TabCount
+0x9820e33c	unicode	NoCenter
+0x9820e350	unicode	BottomOffset
+0x9820e36c	unicode	RightOffset
+0x9820e384	unicode	TopOffset
+0x9820e398	unicode	LeftOffset
+0x9820e3b0	unicode	Param3
+0x9820e3c0	unicode	Param2
+0x9820e3d0	unicode	Param1
+0x9820e3e0	unicode	Param0
+0x9820e3f0	unicode	CellSpacing
+0x9820e408	unicode	Rows
+0x9820e414	unicode	Columns
+0x9820e424	unicode	Buffered
+0x9820e438	unicode	PreRender
+0x9820e44c	unicode	DepthStencil
+0x9820e468	unicode	Offscreen
+0x9820e47c	unicode	EffectParams5
+0x9820e498	unicode	EffectParams4
+0x9820e4b4	unicode	EffectParams3
+0x9820e4d0	unicode	EffectParams2
+0x9820e4ec	unicode	EffectParams1
+0x9820e508	unicode	ForceComposite
+0x9820e528	unicode	CompositeEdge
+0x9820e544	unicode	ShaderFile
+0x9820e55c	unicode	IntegerVariable
+0x9820e57c	unicode	FloatVariable
+0x9820e598	unicode	VectorVariable
+0x9820e5b8	unicode	QuickInput
+0x9820e5d0	unicode	HoverSelectTimer
+0x9820e5f4	unicode	AutoId
+0x9820e604	unicode	UseNuiAsMouse
+0x9820e620	unicode	SizeToText
+0x9820e638	unicode	HasContextMenu
+0x9820e658	unicode	NavTabBackward
+0x9820e678	unicode	NavTabForward
+0x9820e694	unicode	NavDown
+0x9820e6a4	unicode	NavUp
+0x9820e6b0	unicode	NavRight
+0x9820e6c4	unicode	NavLeft
+0x9820e6d4	unicode	UnfocusedInput
+0x9820e6f4	unicode	Enabled
+0x9820e704	unicode	Visual
+0x9820e714	unicode	ColorFactor
+0x9820e72c	unicode	RowSpan
+0x9820e73c	unicode	ColumnSpan
+0x9820e75c	unicode	Column
+0x9820e76c	unicode	LayoutFloat
+0x9820e784	unicode	LayoutLineBreak
+0x9820e7a4	unicode	Hittable
+0x9820e7b8	unicode	GripTarget
+0x9820e7d0	unicode	DisableFocusRecursion
+0x9820e7fc	unicode	EnableEffects
+0x9820e818	unicode	ClipChildren
+0x9820e834	unicode	ColorWriteFlags
+0x9820e854	unicode	DesignTime
+0x9820e86c	unicode	DisableTimelineRecursion
+0x9820e8a0	unicode	BlendMode
+0x9820e8b4	unicode	Show
+0x9820e8c0	unicode	Anchor
+0x9820e8d0	unicode	Opacity
+0x9820e8e0	unicode	Position
+0x9820e990	unicode	%s://%s
+0x9820e9a0	unicode	section
+0x9820e9b0	unicode	memory
+0x9820e9d0	unicode	FocusHover
+0x9820e9e8	unicode	NormalHover
+0x9820ea00	unicode	EndNormalHover
+0x9820ea20	unicode	EndFocusHover
+0x9820ea40	unicode	[element][default]|MessageText|XuiEdit;[element][default]|Button0|XuiButton;[element]|Button1|XuiButton;[element]|Button2|XuiButton;[element]|Button3|XuiButton;[element]|Button4|XuiButton;
+0x9820ebc4	unicode	NormalCheckHover
+0x9820ebe8	unicode	EndNormalCheckHover
+0x9820ec10	unicode	FocusCheckHover
+0x9820ec30	unicode	EndFocusCheckHover
+0x9820ec58	unicode	ScrollMoreHover
+0x9820ec78	unicode	EndScrollMoreHover
+0x9820eca0	unicode	SliderThumb
+0x9820ecb8	unicode	ScrollDown
+0x9820ecd0	unicode	ScrollUp
+0x9820ece4	unicode	ScrollRight
+0x9820ecfc	unicode	ScrollLeft
+0x9820ed14	unicode	Caret
+0x9820ed28	unicode	Button
+0x9820ed38	unicode	Tab%u
+0x9820ed44	unicode	%uTo%u
+0x9820ed54	unicode	%uTo1
+0x9820ed60	unicode	1To%u
+0x9820ed6c	unicode	%uTo%uEnd
+0x9820ed80	unicode	2To1End
+0x9820ed98	unicode	ScrollBarThumb
+0x9820edb8	unicode	ScrollBarBody
+0x9820edd4	unicode	ProgressBody
+0x9820edf0	unicode	ListItemGroup
+0x9820ee0c	unicode	%f,%f,%f,%f,%f,%f,%d,
+0x9820ee40	unicode	EndTransTo
+0x9820ee58	unicode	EndTransFrom
+0x9820ee74	unicode	EndTransBackTo
+0x9820ee94	unicode	EndTransBackFrom
+0x9820eeb8	unicode	ScrollMax
+0x9820eecc	unicode	ScrollMin
+0x9820eee0	unicode	SliderBody
+0x9820ef50	unicode	%.6g, %.6g, %.6g, %.6g
+0x9820ef80	unicode	%.6g, %.6g, %.6g
+0x9820efa4	unicode	0x%02x%02x%02x%02x
+0x9820efcc	unicode	%.6g
+0x9820efd8	unicode	NormalSelHover
+0x9820eff8	unicode	EndNormalSelHover
+0x9820f01c	unicode	NormalSelCheckHover
+0x9820f044	unicode	EndNormalSelCheckHover
+0x9820f078	unicode	(unnamed)
+0x9820f08c	unicode	ListWatermark
+0x9820f18c	unicode	file
+0x9820f1fc	string	\Device\Flash
+0x9820f20c	string	\System??\TARGET:
+0x9820f220	string	\??\TARGET:
+0x9820f550	string	_nextafter
+0x9820f5a8	string	floor
+0x9820f69c	string	e:\bt\248805\core\private\xam\update\pass2pre\console\flash\obj\xbox\systemupdate2prefc.pdb
+0x982371a8	string	}*Kx}\tCx9
+0x982371b8	string	}*Kx}\tCx9
+0x982371c8	string	}*Kx}\tCx9
+0x982a10b0	string	\Device\CdRom0
+0x982a801f	string	background.xur
+0x982a8036	string	MessageScene.xur
+0x982a804f	string	UpdateInProgressScene.xur
+0x982aa000	string	re Konsole kann nicht aktualisiert werden. Bitte besuchen Sie www.xbox.com/support.
+0x982aa054	string	Systemaktualisierung fehlgeschlagen
+0x982aa27b	string	a, visita www.xbox.com/support.
+0x982aa326	string	a, visita www.xbox.com/support.
+0x982aa353	string	n del sistema detenida
+0x982aa36d	string	digo de estado
+0x982aa37c	string	No se puede actualizar la consola. Visita www.xbox.com/support.
+0x982aa3d5	string	n del sistema
+0x982aa415	string	n en curso
+0x982aa4e3	string	me persiste, rendez-vous sur www.xbox.com/support.
+0x982aa5c4	string	me persiste, rendez-vous sur www.xbox.com/support.
+0x982aa678	string	me persiste, rendez-vous sur www.xbox.com/support.
+0x982aa6f1	string	 jour la console. Rendez-vous sur le site www.xbox.com/support.
+0x982aa786	string	 jour en cours
+0x982aa7c9	string	Impossibile leggere l'aggiornamento dalla periferica di memorizzazione. Inseriscila di nuovo per continuare l'aggiornamento.\r\n\r\nSe il problema persiste, visita il sito www.xbox.com/support.
+0x982aa913	string	 l'aggiornamento.\r\n\r\nSe il problema persiste, visita il sito  www.xbox.com/support.
+0x982aa967	string	Impossibile leggere l'aggiornamento dal disco. Inserisci nuovamente il disco per continuare l'aggiornamento.\r\n\r\nSe il problema persiste, visita il sito www.xbox.com/support.
+0x982aaa15	string	Aggiornamento del sistema interrotto
+0x982aaa3a	string	Codice di stato
+0x982aaa4a	string	Impossibile aggiornare la console. Visita il sito www.xbox.com/support.
+0x982aaa92	string	Aggiornamento del sistema non riuscito
+0x982aaab9	string	Applicazione dell'aggiornamento
+0x982aaae5	string	Aggiornamento in corso
+0x982aaf8e	string	o.\r\n\r\nSe o problema persistir, visite www.xbox.com/support.
+0x982ab066	string	o.\r\n\r\nSe o problema persistir, visite www.xbox.com/support.
+0x982ab109	string	o.\r\n\r\nSe o problema persistir, visite www.xbox.com/support.
+0x982ab160	string	o do sistema
+0x982ab170	string	digo de Status
+0x982ab18e	string	vel atualizar o console. Visite www.xbox.com/support.
+0x982ab1d9	string	o do Sistema
+0x982ab1e6	string	Atualizando
+0x982ab20a	string	o em Andamento
+0x982ab3dc	string	 do witryny: www.xbox.com/support.
+0x982ab4e0	string	 do witryny: www.xbox.com/support.
+0x982ab5a4	string	: www.xbox.com/support.
+0x982ab5d4	string	 systemu
+0x982ab5dd	string	Kod statusu
+0x982ab614	string	 do witryny: www.xbox.com/support.
+0x982ab65f	string	Instalowanie aktualizacji
+0x982ab685	string	Trwa aktualizacja
+0x982ab7fe	string	 www.xbox.com/support.
+0x982ab98b	string	 www.xbox.com/support.
+0x982aba9e	string	 www.xbox.com/support.
+0x982abb75	string	 www.xbox.com/support.  

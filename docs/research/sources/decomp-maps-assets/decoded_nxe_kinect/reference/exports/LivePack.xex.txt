@@ -1,0 +1,41 @@
+LivePack.xex exports
+====================
+
+{"confidence": "CONFIRMED", "function_va": "0x9F66E4F0", "module": "LivePack.xex", "ordinal": "0x00000064", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66F498", "module": "LivePack.xex", "ordinal": "0x00000065", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66E528", "module": "LivePack.xex", "ordinal": "0x00000066", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66F4C8", "module": "LivePack.xex", "ordinal": "0x00000067", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66E538", "module": "LivePack.xex", "ordinal": "0x00000068", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66E558", "module": "LivePack.xex", "ordinal": "0x00000069", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66EC60", "module": "LivePack.xex", "ordinal": "0x0000006A", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66E568", "module": "LivePack.xex", "ordinal": "0x0000006B", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66F3D0", "module": "LivePack.xex", "ordinal": "0x0000006C", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F721F50", "module": "LivePack.xex", "ordinal": "0x0000006D", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66D498", "module": "LivePack.xex", "ordinal": "0x0000012D", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66D2C0", "module": "LivePack.xex", "ordinal": "0x0000012E", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66D000", "module": "LivePack.xex", "ordinal": "0x0000012F", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66D010", "module": "LivePack.xex", "ordinal": "0x000001F4", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68A8E8", "module": "LivePack.xex", "ordinal": "0x00000258", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68A828", "module": "LivePack.xex", "ordinal": "0x00000259", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68A6D8", "module": "LivePack.xex", "ordinal": "0x0000025A", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68A890", "module": "LivePack.xex", "ordinal": "0x0000025B", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68A718", "module": "LivePack.xex", "ordinal": "0x0000025C", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68A7C0", "module": "LivePack.xex", "ordinal": "0x0000025D", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68A958", "module": "LivePack.xex", "ordinal": "0x0000025E", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F846E70", "module": "LivePack.xex", "ordinal": "0x00000320", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F846E70", "module": "LivePack.xex", "ordinal": "0x00000321", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F66D080", "module": "LivePack.xex", "ordinal": "0x00000322", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F846E70", "module": "LivePack.xex", "ordinal": "0x00000384", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F846E70", "module": "LivePack.xex", "ordinal": "0x00000385", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F846E70", "module": "LivePack.xex", "ordinal": "0x00000386", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68C630", "module": "LivePack.xex", "ordinal": "0x000003E8", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68B800", "module": "LivePack.xex", "ordinal": "0x000003E9", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68B810", "module": "LivePack.xex", "ordinal": "0x000003EA", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68B820", "module": "LivePack.xex", "ordinal": "0x000003EB", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68B830", "module": "LivePack.xex", "ordinal": "0x000003EC", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68B980", "module": "LivePack.xex", "ordinal": "0x000003ED", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68C870", "module": "LivePack.xex", "ordinal": "0x000003EE", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F690E00", "module": "LivePack.xex", "ordinal": "0x000003EF", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F68B990", "module": "LivePack.xex", "ordinal": "0x000003F0", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F772918", "module": "LivePack.xex", "ordinal": "0x00000460", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x9F6728A8", "module": "LivePack.xex", "ordinal": "0x0000046A", "resolved_name": ""}

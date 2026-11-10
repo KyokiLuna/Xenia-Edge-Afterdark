@@ -178,6 +178,25 @@ class PosixFileHandle : public FileHandle {
     close(handle_);
     handle_ = -1;
   }
+  intptr_t native_handle() const override { return handle_; }
+  std::error_code LastError() const override {
+    return {errno, std::generic_category()};
+  }
+  std::optional<FileHandleInfo> QueryInfo(
+      std::error_code& error) const override {
+    struct stat value;
+    if (fstat(handle_, &value)) {
+      error = LastError();
+      return std::nullopt;
+    }
+    error.clear();
+    return FileHandleInfo{uint64_t(value.st_size), uint64_t(value.st_nlink),
+                          S_ISDIR(value.st_mode),  S_ISREG(value.st_mode),
+                          uint64_t(value.st_dev),  uint64_t(value.st_ino)};
+  }
+  std::error_code FlushResult() override {
+    return fsync(handle_) == 0 ? std::error_code{} : LastError();
+  }
   bool Read(size_t file_offset, void* buffer, size_t buffer_length,
             size_t* out_bytes_read) override {
     ssize_t out = pread(handle_, buffer, buffer_length, file_offset);
@@ -218,6 +237,12 @@ class PosixFileHandle : public FileHandle {
   int handle_ = -1;
   bool append_only_ = false;
 };
+
+std::unique_ptr<FileHandle> FileHandle::AdoptNative(intptr_t handle,
+                                                    bool append_only) {
+  return std::make_unique<PosixFileHandle>(std::filesystem::path(), int(handle),
+                                           append_only);
+}
 
 std::unique_ptr<FileHandle> FileHandle::OpenExisting(
     const std::filesystem::path& path, uint32_t desired_access) {

@@ -19,13 +19,15 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <queue>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "xenia/base/math.h"
 #include "xenia/base/ring_buffer.h"
+#include "xenia/gpu/command_processor_callback_queue.h"
+#include "xenia/gpu/gpu_completion.h"
+#include "xenia/gpu/native_system_title_input_provider.h"
 #include "xenia/gpu/register_file.h"
 #include "xenia/gpu/trace_writer.h"
 #include "xenia/gpu/xenos.h"
@@ -86,6 +88,27 @@ constexpr size_t kFastZPDCacheMaxEntries = 1024;
 
 class GraphicsSystem;
 class Shader;
+class NativeFrameExecutionRequest;
+struct NativeFrameExecutionResult;
+struct NativeFrameReadbackResult;
+
+// Host-only observation of an exact native presentation image and the actual
+// submission that sampled it. This record grants no GPU or guest authority.
+struct NativeFramePresentationStatus {
+  enum class Status { kUnsupported, kPending, kComplete, kFailed };
+  Status status = Status::kUnsupported;
+  NativeFrameSubmissionIdentity identity;
+  uint64_t backend_epoch = 0;
+  // Consumer paint timeline identity; never compare its submission indices
+  // or epoch to the producer command processor's completion domain.
+  uint64_t presentation_backend_epoch = 0;
+  uint64_t image_version = 0;
+  uint64_t native_write_submission = 0;
+  uint64_t composite_submission = 0;
+  bool image_ready = false;
+  bool presenter_accepted = false;
+  GpuCompletion composite_completion;
+};
 
 struct SwapState {
   // Lock must be held when changing data in this structure.
@@ -112,6 +135,88 @@ enum class GammaRampType {
   kUnknown = 0,
   kTable,
   kPWL,
+};
+
+// Host-only diagnostic result. Ready means that independent backend resources
+// were allocated, not that a native context was activated or commands executed.
+struct GuestRenderBankAllocationResult {
+  enum class Status {
+    kUnsupported,
+    kWrongThread,
+    kNotReady,
+    kAllocationFailed,
+    kIncompatible,
+    kInvariantViolation,
+    kReady,
+  };
+  enum class Stage {
+    kNone,
+    kPrecondition,
+    kRenderTargetCache,
+    kCompatibility,
+    kPipelineCache,
+    kDescriptors,
+    kValidation,
+    kRegisterFile,
+    kPrimitiveProcessor,
+    kTextureCache,
+  };
+
+  Status status = Status::kUnsupported;
+  Stage stage = Stage::kNone;
+  bool already_allocated = false;
+  bool independent_resources = false;
+  bool title_unchanged = false;
+  bool title_command_state_unchanged = false;
+  bool private_register_readback = false;
+  bool private_registers_unchanged = false;
+  bool independent_primitive_processor = false;
+  bool independent_texture_cache = false;
+  bool pixel_shader_interlock = false;
+  uint32_t draw_scale_x = 0;
+  uint32_t draw_scale_y = 0;
+  uint32_t shared_memory_binding_count = 0;
+  uint32_t descriptor_set_count = 0;
+  uint64_t edram_bytes = 0;
+  // Opaque host identities for an allocation-only first/repeated comparison.
+  // These are not guest addresses or execution/ownership tokens.
+  uint64_t title_register_file_identity = 0;
+  uint64_t native_bank_identity = 0;
+  uint64_t native_register_file_identity = 0;
+  uint64_t native_primitive_processor_identity = 0;
+  uint64_t native_texture_cache_identity = 0;
+};
+
+// Backend transport metadata only: no Source/Task/guest execution authority.
+struct NativeSystemFrameCapacity {
+  enum class State {
+    kUnsupported,
+    kAccepting,
+    kQueued,
+    kExecuting,
+    kBackpressured,
+    kStopping,
+    kFailed
+  };
+  State state = State::kUnsupported;
+  uint64_t backend_epoch = 0;
+  bool supported = false;
+  bool immutable_input_snapshot_supported = false;
+  GpuBackendStopProof backend_stop_proof;
+  // CPU admission prerequisite only, including normal temporary queue busy.
+  // It grants no Source, native execution, or GPU queue authority.
+  bool supports_immutable_input_admission() const {
+    return supported && immutable_input_snapshot_supported && backend_epoch &&
+           backend_stop_proof.backend_epoch() == backend_epoch &&
+           !backend_stop_proof.stopped() &&
+           (state == State::kAccepting || state == State::kQueued ||
+            state == State::kExecuting || state == State::kBackpressured);
+  }
+  bool can_queue() const {
+    return supported && backend_epoch &&
+           backend_stop_proof.backend_epoch() == backend_epoch &&
+           !backend_stop_proof.stopped() && state == State::kAccepting;
+  }
 };
 
 class CommandProcessor {
@@ -155,6 +260,48 @@ class CommandProcessor {
   std::string GetTitleStateSuffix() const;
 
   void CallInThread(std::function<void()> fn);
+  bool supports_gpu_completion() const { return SupportsGpuCompletion(); }
+  virtual NativeSystemFrameCapacity GetNativeSystemFrameCapacity()
+      const noexcept;
+  bool supports_native_system_frames() const noexcept {
+    const auto capacity = GetNativeSystemFrameCapacity();
+    return capacity.supported && capacity.backend_epoch &&
+           capacity.backend_stop_proof.backend_epoch() ==
+               capacity.backend_epoch &&
+           !capacity.backend_stop_proof.stopped() &&
+           (capacity.state == NativeSystemFrameCapacity::State::kAccepting ||
+            capacity.state == NativeSystemFrameCapacity::State::kQueued ||
+            capacity.state == NativeSystemFrameCapacity::State::kExecuting ||
+            capacity.state == NativeSystemFrameCapacity::State::kBackpressured);
+  }
+  // Queue capture on the actual CP thread. The completion observer may run
+  // inline during capture; captured receives the owned token afterward. Host
+  // callbacks only, no guest execution or backend destruction from observers.
+  void CaptureGpuCompletionAsync(GpuCompletionResources resources,
+                                 GpuCompletion::Observer captured,
+                                 GpuCompletion::Observer completed = {});
+
+  // Typed native source handoff. The queued request retains its backing and
+  // authority; cancellation or unsupported backends never imply a GPU submit.
+  // Callbacks are host-only, without guest execution. Accepted controls run
+  // on the CP worker; an already-sealed ingress rejects on the calling thread.
+  void ExecuteNativeFrameAsync(
+      std::shared_ptr<const NativeFrameExecutionRequest> request,
+      std::function<void(NativeFrameExecutionResult)> completed);
+  void ReadCompletedNativeFrameAsync(
+      std::shared_ptr<const NativeFrameExecutionRequest> request,
+      std::function<void(NativeFrameReadbackResult)> completed);
+  // Observe on the CP worker. Retains the request while queued, but does not
+  // retry submission, grant execution or require the consumed admission.
+  void CaptureNativeFramePresentationAsync(
+      std::shared_ptr<const NativeFrameExecutionRequest> request,
+      std::function<void(NativeFramePresentationStatus)> completed);
+
+  // Internal diagnostic, called only on the actual command processor thread.
+  // Allocation only: no activation, PM4 execution, GPU submission or
+  // composition. Does not expose backend handles to the guest. Other backends
+  // are unsupported.
+  virtual GuestRenderBankAllocationResult AllocateNativeGuestRenderBank();
 
   // Dumps the EDRAM contents to a raw file.
   virtual bool DumpEdramSnapshotToFile(const std::filesystem::path& path) {
@@ -187,6 +334,41 @@ class CommandProcessor {
   // for instance).
   virtual void IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbuffer_width,
                          uint32_t frontbuffer_height) {}
+
+  // Production enables this only after actual immutable-input backend
+  // admission. An inert provider changes neither ordinary VdSwap nor its
+  // four-word packet.
+  virtual bool EnableNativeSystemTitleInput(uint64_t backend_epoch) {
+    return false;
+  }
+  void CloseNativeSystemTitleInput() { native_title_input_.Close(); }
+  bool NativeSystemTitleInputEnabled() const {
+    return native_title_input_.enabled();
+  }
+  uint64_t StageNativeSystemTitleSwap(
+      const NativeSystemTitleInput::Swap& swap) {
+    return native_title_input_.Stage(swap);
+  }
+  std::shared_ptr<const NativeSystemTitleInput> GetNativeSystemTitleInput(
+      uint64_t foreground_generation) const {
+    return native_title_input_.Latest(foreground_generation);
+  }
+  NativeSystemTitleInputProvider::Availability ObserveNativeSystemTitleInput(
+      uint64_t epoch, uint64_t foreground, uint32_t title,
+      uint64_t load_generation) const {
+    return native_title_input_.ObserveAvailability(epoch, foreground, title,
+                                                   load_generation);
+  }
+  // Called only at the matching XE_SWAP command position. Invalid/missing
+  // tickets do not suppress the ordinary title swap.
+  void ConsumeNativeSystemTitleSwap(uint64_t ticket, uint32_t physical,
+                                    uint32_t width, uint32_t height) {
+    const auto capture =
+        native_title_input_.Take(ticket, physical, width, height);
+    if (capture) {
+      CaptureNativeSystemTitleInput(capture->identity, capture->layout);
+    }
+  }
 
   // Throttle presentation based on framerate_limit cvar.
   // Called after IssueSwap to limit host frame rate without affecting guest
@@ -299,6 +481,11 @@ class CommandProcessor {
   void WorkerThreadMain();
   virtual bool SetupContext() = 0;
   virtual void ShutdownContext() = 0;
+  virtual void CaptureNativeSystemTitleInput(
+      const NativeSystemTitleInput::Identity&,
+      const NativeSystemTitleInput::Layout&) {}
+  NativeSystemTitleInputProvider native_title_input_;
+
   // Built once the context is set up, and kept until it shuts down.
   virtual std::string MakeTitleStateSuffix() const { return {}; }
   // rarely needed, most register writes have no special logic here
@@ -368,6 +555,43 @@ class CommandProcessor {
 
   virtual void PollCompletedSubmission() {}
 
+  // CP thread only. Call after recording the managed work, not when the CPU
+  // publishes/decodes a descriptor. Unsupported backends must be rejected
+  // before recording system composition. Observers are host retirement work;
+  // they must not run guest code or destroy/reenter the backend.
+  // Default deny. A backend must establish a complete checked native boundary
+  // and source-specific completion before overriding this entry point.
+  virtual NativeFrameExecutionResult ExecuteNativeFrame(
+      std::shared_ptr<const NativeFrameExecutionRequest> request);
+  virtual NativeFrameReadbackResult ReadCompletedNativeFrame(
+      std::shared_ptr<const NativeFrameExecutionRequest> request);
+  virtual NativeFramePresentationStatus GetNativeFramePresentationStatus(
+      std::shared_ptr<const NativeFrameExecutionRequest> request);
+
+  // CP thread only. Backends may retain the admitted request until a boundary
+  // where title command state can be suspended safely. The callback is host
+  // retirement work and must not execute guest code.
+  virtual void QueueNativeFrameAtSafeBoundary(
+      std::shared_ptr<const NativeFrameExecutionRequest> request,
+      std::function<void(NativeFrameExecutionResult)> completed);
+
+  // Terminal CP-thread state after a native failure that cannot resume title
+  // decoding safely. Unlike a normal shutdown request, this also suppresses
+  // packet completion effects and ring-pointer acknowledgements.
+  bool IsGuestCommandProcessingHalted() const {
+    return guest_command_processing_halted_;
+  }
+  void HaltGuestCommandProcessing() {
+    guest_command_processing_halted_ = true;
+    worker_running_ = false;
+  }
+
+  virtual bool SupportsGpuCompletion() const { return false; }
+  virtual GpuCompletion CaptureGpuCompletion(
+      GpuCompletionResources resources = {},
+      GpuCompletion::Observer observer = {});
+  virtual void PollGpuCompletions() {}
+
   // Used by strict ZPD to distinguish normal in flight latency from a
   // genuinely stuck report.
   virtual uint64_t GetCompletedSubmission() const { return 0; }
@@ -403,6 +627,12 @@ class CommandProcessor {
   // Waits for export output and performs all held-back signals.
   void AwaitHeldSignalsAndMemexport();
 
+  // Only explicit worker/idle/fully completed primary/WAIT boundaries call
+  // this. It drains typed native admission, never arbitrary CallInThread work.
+  void PumpNativeFramesAtSafePoint();
+  // Internal typed operations only; rejected callbacks run outside locks.
+  void EnqueueNativeFrameControl(std::function<void(bool)> control);
+  virtual void PumpQueuedNativeFramesAtSafePoint() {}
   virtual void OnPrimaryBufferEnd() {}
 
   // TODO(boma): Add tracking for VIZ & EXT queries.
@@ -512,6 +742,8 @@ class CommandProcessor {
   // Closes the current segment at a submission or render pass boundary.
   // The report and VIZ ID stay open and a new segment will open at the next
   // opportunity.
+  enum class QuerySegmentCloseStatus { kInactive, kClosed, kFailed };
+  QuerySegmentCloseStatus CloseQuerySegmentChecked();
   void CloseQuerySegment();
   void EndZPDFrame() {
     CloseQuerySegment();
@@ -635,6 +867,38 @@ class CommandProcessor {
       query = {};
     }
   }
+
+  // Exchange ownership of post-physical-close logical state, never restore a
+  // pre-close query index/active bit. No allocation or guest write in exchange.
+  struct NativeTitleQueryLogicalState {
+    ZPDMode mode = ZPDMode::kFast;
+    ReportHandle next_report = 1;
+    ZPDReport current = {};
+    ActiveQuerySegment segment = {};
+    bool opening = false;
+    std::deque<ZPDReport> reports = {};
+    uint32_t awaited = 0;
+    XenosZPDReport samples = {};
+    XenosZPDReport speculative = {};
+    std::unordered_map<uint32_t, XenosZPDReport> cached_deltas = {};
+    bool force_fake = false;
+    uint32_t fake_samples = 0;
+    uint64_t retire_start = 0;
+    uint32_t scale_x = 1;
+    uint32_t scale_y = 1;
+    ZPDStats stats = {};
+    std::array<VIZQuery, 64> viz = {};
+    VIZQueryHandle predicate = {};
+    uint32_t viz_pending = 0;
+    bool viz_enabled = false;
+    ZPDMode cached_mode = ZPDMode::kFake;
+  };
+  void ExchangeTitleQueryLogicalState(NativeTitleQueryLogicalState&) noexcept;
+  bool QueryTransportSuspended() const { return query_transport_suspended_; }
+  void SuspendQueryTransport(bool suspended) {
+    query_transport_suspended_ = suspended;
+  }
+  bool query_transport_suspended_ = false;
 
 #include "pm4_command_processor_declare.h"
 
@@ -763,9 +1027,17 @@ class CommandProcessor {
   uint32_t trace_swap_count_ = 0;
 
   std::atomic<bool> worker_running_;
+  // Written and read only by the CP worker (or its synchronous trace decoder).
+  bool guest_command_processing_halted_ = false;
   kernel::object_ref<kernel::XHostThread> worker_thread_;
 
-  std::queue<std::function<void()>> pending_fns_;
+  CommandProcessorCallbackQueue pending_fns_;
+  // Typed Source admissions can be drained while a PM4 WAIT owns reader_ and
+  // predicate locals. General callbacks retain their existing outer-loop rule.
+  std::mutex native_frame_admission_mutex_;
+  std::atomic<bool> native_frame_admissions_open_{false};
+  CommandProcessorCallbackQueue native_frame_admissions_;
+  bool native_frame_pump_active_ = false;
 
   // MicroEngine binary from PM4_ME_INIT
   std::vector<uint32_t> me_bin_;

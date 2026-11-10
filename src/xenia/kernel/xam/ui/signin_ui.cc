@@ -166,6 +166,8 @@ void SigninUI::OnDraw(ImGuiIO& io) {
 
     if (ImGui::Button("Create Profile")) {
       creating_profile_ = true;
+      creation_failed_ = false;
+      valid_gamertag_ = false;
       ImGui::OpenPopup("Create Profile");
       first_draw = true;
     }
@@ -180,25 +182,70 @@ void SigninUI::OnDraw(ImGuiIO& io) {
           ImGui::SetKeyboardFocusHere();
         }
 
+        ImGui::BeginDisabled(created_profile_xuid_ != 0);
         ImGui::TextUnformatted("Gamertag:");
         if (ImGui::InputText("##Gamertag", gamertag_, sizeof(gamertag_))) {
           valid_gamertag_ =
               profile_manager_->IsGamertagValid(std::string(gamertag_));
         }
 
-        ImGui::BeginDisabled(!valid_gamertag_);
-        if (ImGui::Button("Create")) {
-          profile_manager_->CreateProfile(std::string(gamertag_), false);
-          std::ranges::fill(gamertag_, '\0');
-          ImGui::CloseCurrentPopup();
-          creating_profile_ = false;
-          ReloadProfiles(false);
+        const char* avatars[] = {"1 - Male", "2 - Female", "3 - Male", "4 - Female",
+                                  "5 - Female", "6 - Male", "7 - Male", "8 - Female",
+                                  "9 - Male", "10 - Male", "11 - Female", "12 - Female"};
+        ImGui::Combo("Stock avatar", &avatar_preset_, avatars, 12);
+        const char* pictures[] = {"1", "2", "3", "4", "5", "6", "7",
+                                   "8", "9", "10", "11", "12", "13"};
+        ImGui::Combo("Gamer picture", &stock_picture_, pictures, 13);
+        ImGui::EndDisabled();
+        if (created_profile_xuid_) {
+          ImGui::TextWrapped("The profile was saved but could not be loaded. "
+                             "Retry loading it, or cancel and try again later.");
+        } else if (creation_failed_) {
+          ImGui::TextWrapped("Could not create the profile. Check installed system "
+                             "files and available storage, then try again.");
+        }
+        ImGui::BeginDisabled(!valid_gamertag_ && !created_profile_xuid_);
+        if (ImGui::Button(created_profile_xuid_ ? "Retry loading" : "Create")) {
+          bool discovered = false;
+          if (created_profile_xuid_) {
+            discovered = profile_manager_->LoadAccount(created_profile_xuid_);
+            creation_failed_ = !discovered;
+          } else {
+            const auto result = profile_manager_->CreateProfileDetailed(
+                std::string(gamertag_), false, false,
+                uint32_t(avatar_preset_), uint32_t(stock_picture_));
+            creation_failed_ = !result.published;
+            if (result.published) {
+              created_profile_xuid_ = result.xuid;
+              discovered = result.discovered;
+            }
+          }
+          if (discovered) {
+            const uint64_t created_xuid = created_profile_xuid_;
+            created_profile_xuid_ = 0;
+            creation_failed_ = false;
+            std::ranges::fill(gamertag_, '\0');
+            valid_gamertag_ = false;
+            ImGui::CloseCurrentPopup();
+            creating_profile_ = false;
+            ReloadProfiles(false);
+            // Only an actually discovered profile is selectable. Preserve the
+            // saved XUID across failed load retries, rather than create again.
+            for (uint32_t i = 0; i != users_needed_; ++i) {
+              if (chosen_slots_[i] < XUserMaxUserCount && !chosen_xuids_[i]) {
+                chosen_xuids_[i] = created_xuid;
+                break;
+              }
+            }
+          }
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
 
         if (ImGui::Button("Cancel")) {
-          std::ranges::fill(gamertag_, '\0');
+          // Retain the saved profile's name/XUID for a same-dialog load retry.
+          // Cancel never deletes that already durable package.
+          if (!created_profile_xuid_) { std::ranges::fill(gamertag_, '\0'); }
           ImGui::CloseCurrentPopup();
           creating_profile_ = false;
         }
@@ -209,6 +256,9 @@ void SigninUI::OnDraw(ImGuiIO& io) {
       }
     }
 
+    if (signin_failed_) {
+      ImGui::TextWrapped("Sign-in could not complete. Check storage and try again.");
+    }
     if (ImGui::Button("OK")) {
       std::map<uint8_t, uint64_t> profile_map;
       for (uint32_t i = 0; i < users_needed_; i++) {
@@ -219,9 +269,15 @@ void SigninUI::OnDraw(ImGuiIO& io) {
         }
       }
       profile_manager_->LoginMultiple(profile_map);
-
-      ImGui::CloseCurrentPopup();
-      Close();
+      signin_failed_ = false;
+      for (const auto& [slot, xuid] : profile_map) {
+        const auto actual = profile_manager_->CaptureProfile(slot);
+        if (!actual || actual->xuid() != xuid) { signin_failed_ = true; }
+      }
+      if (!signin_failed_) {
+        ImGui::CloseCurrentPopup();
+        Close();
+      }
     }
     ImGui::SameLine();
 

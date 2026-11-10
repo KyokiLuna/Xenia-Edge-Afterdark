@@ -12,6 +12,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_set>
 
@@ -20,6 +21,7 @@
 #include <wx/wx.h>
 
 #include "xenia/base/platform.h"
+#include "xenia/ui/physical_key_tracker.h"
 #include "xenia/ui/window.h"
 #if XE_PLATFORM_LINUX
 #include "xenia/ui/surface_gnulinux.h"
@@ -38,6 +40,16 @@ class WxWindow : public Window {
   WxWindow(WindowedAppContext& app_context, const std::string_view title,
            uint32_t desired_logical_width, uint32_t desired_logical_height);
   ~WxWindow() override;
+  bool SupportsNativeTextCommits() const override {
+#if XE_PLATFORM_LINUX
+    return native_text_commit_signal_ && native_text_preedit_signal_ &&
+           native_text_physical_recovery_available_;
+#else
+    return false;  // No complete-commit provenance in the current wx frontend.
+#endif
+  }
+
+  PhysicalKeyState QueryPhysicalKeyState(VirtualKey key) const override;
 
   wxFrame* frame() const { return frame_; }
   wxWindow* render_panel() const { return render_panel_; }
@@ -103,6 +115,19 @@ class WxWindow : public Window {
   void OnPanelKeyDown(wxKeyEvent& event);
   void OnPanelKeyUp(wxKeyEvent& event);
   void OnPanelChar(wxKeyEvent& event);
+  uint32_t NativeTextPhysicalKey(const wxKeyEvent& event) const;
+#if XE_PLATFORM_LINUX
+  void OnNativeTextCommit(const char* text);
+  void* native_text_context_ = nullptr;
+  unsigned long native_text_commit_signal_ = 0;
+  unsigned long native_text_preedit_signal_ = 0;
+  bool native_text_composing_ = false;
+  bool native_text_physical_recovery_available_ = false;
+#endif
+  bool ReadNativePhysicalKeys(PhysicalKeyTracker::Bitmap& keys) const;
+  PhysicalKeyTracker native_text_keys_;
+  PhysicalKeyTracker::Bitmap native_text_focus_keys_{};
+  bool native_text_focus_keys_valid_ = false;
   void OnPanelDoubleClick(wxMouseEvent& event);
   void OnPanelMouseDown(wxMouseEvent& event);
   void OnPanelMouseUp(wxMouseEvent& event);
@@ -150,6 +175,7 @@ class WxWindow : public Window {
 #endif
 
 #if XE_PLATFORM_LINUX
+  std::mutex pending_paint_mutex_;
   unsigned int pending_paint_source_ = 0;
   GtkSurfaceFactory gtk_surface_factory_;
 #endif

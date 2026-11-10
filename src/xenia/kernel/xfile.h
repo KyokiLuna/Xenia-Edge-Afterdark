@@ -172,8 +172,13 @@ class XFile : public XObject {
   void ResetWaitState() { async_event_->Reset(); }
   // Runs |fn| on an I/O worker without waiting, after every request posted
   // before it. |thread| issued the request. |fn| is told whether it was
-  // cancelled instead.
-  void PostIo(XThread* thread, std::function<void(bool cancelled)> fn);
+  // cancelled instead. Optional on_drop settles only unstarted work discarded
+  // by shutdown, outside queue locks. Default queued shutdown stays silent
+  // destruction: legacy fn may hold an expired raw guest IOSB. After-stop
+  // admission executes default fn(false) inline as before. CancelPostedIo
+  // still invokes fn(true), including for callers supplying on_drop.
+  void PostIo(XThread* thread, std::function<void(bool cancelled)> fn,
+              std::function<void()> on_drop = {});
   // Cancels the requests |thread| posted that have yet to start.
   void CancelPostedIo(XThread* thread);
   // True while a request |thread| posted has yet to complete.
@@ -190,6 +195,21 @@ class XFile : public XObject {
                  uint32_t apc_context, bool notify_completion = true);
 
   X_STATUS SetLength(size_t length);
+  X_STATUS Flush();
+  // Async HostPath queue barrier. Failure rejects WITHOUT completion. After
+  // SUCCESS, completion runs exactly once (possibly inline): genuine backend
+  // Flush for writable handles, ordered drain-only for readonly, CANCELLED on
+  // normal cancellation or shutdown drop. Never waits or signals guest file
+  // completion/APC state. Caller prevents new submissions and later FlushTree
+  // supplies all regular-file barriers. Completion owns its state and is safe
+  // during shutdown without borrowed guest buffers; it must not throw.
+  // Call outside GCRC; completion may run inline before admission returns.
+  X_STATUS FlushQueued(std::function<void(X_STATUS)> completion);
+  std::optional<vfs::File::DeviceControlLayout> DescribeDeviceControl(
+      uint32_t code) const;
+  X_STATUS DeviceControl(uint32_t code, uint32_t input_address,
+                         uint32_t input_length, uint32_t output_address,
+                         uint32_t output_length, uint32_t* transferred);
   // Sets the FILETIMEs that aren't 0.
   X_STATUS SetTimes(uint64_t create_timestamp, uint64_t access_timestamp,
                     uint64_t write_timestamp);
@@ -225,7 +245,11 @@ class XFile : public XObject {
   void RunSynchronousIo(const std::function<void()>& fn);
 
   // Runs the requests PostIo queued until none are left.
-  void RunPostedIo();
+  void RunPostedIo(bool admission_shutdown = false);
+  // Unstarted runner only. Queued shutdown drops legacy closures silently;
+  // admission shutdown preserves their inline serial execution. Both settle
+  // explicit owned drop handlers as cancelled, outside queue locks.
+  void DropPostedIo(GuestScheduler::HostCallDropReason);
 
   // Books this read on the medium and returns when it would be delivered, or
   // 0 for a read this does not model.
@@ -259,7 +283,12 @@ class XFile : public XObject {
   // Requests PostIo queued, with the thread that issued each. One worker at a
   // time runs them in order.
   std::mutex posted_lock_;
-  std::deque<std::pair<XThread*, std::function<void(bool)>>> posted_;
+  struct PostedIo {
+    XThread* thread;
+    std::function<void(bool)> complete;
+    std::function<void()> on_drop;
+  };
+  std::deque<PostedIo> posted_;
   bool posted_running_ = false;
   // The thread that issued the request running now.
   XThread* posted_running_thread_ = nullptr;

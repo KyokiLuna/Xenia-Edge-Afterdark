@@ -238,6 +238,27 @@ void TextureCache::LogTextureLoad(const TextureKey& key, uint32_t load_shader,
 }
 
 void TextureCache::ClearCache() { DestroyAllTextures(); }
+bool TextureCache::InvalidateAllDataFromExternalSource() {
+  if (!shared_memory().has_external_read_source()) {
+    return false;
+  }
+  auto global_lock = global_critical_region::Acquire();
+  // First unlink every old watch, including base/mips loaded normally. A
+  // presentation-only resident texture may have no watch; invalidate it too.
+  shared_memory().MemoryInvalidationCallback(0, SharedMemory::kBufferSize,
+                                             true);
+  for (auto& entry : textures_) {
+    auto& texture = *entry.second;
+    if (texture.GetGuestBaseSize()) {
+      texture.WatchCallback(global_lock, false);
+    }
+    if (texture.GetGuestMipsSize()) {
+      texture.WatchCallback(global_lock, true);
+    }
+  }
+  texture_became_outdated_.store(true, std::memory_order_release);
+  return true;
+}
 
 void TextureCache::CompletedSubmissionUpdated(
     uint64_t completed_submission_index) {

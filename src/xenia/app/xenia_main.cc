@@ -20,6 +20,7 @@
 #include "xenia/base/cvar.h"
 #include "xenia/base/debugging.h"
 #include "xenia/base/logging.h"
+#include "xenia/base/host_storage.h"
 #include "xenia/base/platform.h"
 #include "xenia/base/profiling.h"
 #include "xenia/base/threading.h"
@@ -67,6 +68,8 @@ DECLARE_string(apu);
 DECLARE_string(gpu);
 
 #define HID_OPTIONS "[sdl, nop]"
+DECLARE_path(host_storage_protected_root);
+
 DEFINE_string(hid, "sdl", "Input system. Use: " HID_OPTIONS, "HID");
 
 DEFINE_path(
@@ -213,6 +216,9 @@ class EmulatorApp final : public xe::ui::WindowedApp {
   ~EmulatorApp();
 
   std::string_view GetTitle() const override { return "xenia_edge"; }
+  std::string_view GetDesktopId() const override {
+    return "xenia-edge-afterdark";
+  }
 
   bool OnInitialize() override;
 
@@ -552,6 +558,26 @@ bool EmulatorApp::OnInitialize() {
   storage_root = std::filesystem::absolute(storage_root);
   XELOGI("Storage root: {}", xe::strip_pii(xe::path_to_utf8(storage_root)));
 
+  // Explicit CLI policy is transient, so config cannot replace it. Bind the
+  // real filesystem before SetupConfig's first possible config rewrite.
+  std::shared_ptr<filesystem::HostStorageRoot> protected_storage;
+  if (!cvars::host_storage_protected_root.empty()) {
+    std::error_code error;
+    protected_storage = filesystem::HostStorageRoot::Open(
+        cvars::host_storage_protected_root, true, error,
+        filesystem::kHostStorageReserve);
+    if (!protected_storage || error) {
+      XELOGE("Protected filesystem initialization failed: {}", error.message());
+      return false;
+    }
+    const auto space = protected_storage->Observe();
+    if (!space.available || space.available_bytes < space.reserve_bytes ||
+        space.available_bytes - space.reserve_bytes < (64ull << 10)) {
+      XELOGE("Protected filesystem reserve prevents startup metadata writes");
+      return false;
+    }
+  }
+
   config::SetupConfig(storage_root);
 
   // Must follow SetupConfig so cvars::ui_locale from the TOML is visible.
@@ -605,6 +631,10 @@ bool EmulatorApp::OnInitialize() {
   // Create the emulator but don't initialize so we can setup the window.
   emulator_ =
       std::make_unique<Emulator>("", storage_root, content_root, cache_root);
+  if (protected_storage &&
+      !emulator_->BindProtectedStorageRoot(std::move(protected_storage))) {
+    return false;
+  }
 
 #if XE_PLATFORM_WIN32 && XE_ARCH_AMD64 == 1
   if (cvars::enable_rdrand_ntdll_patch) {

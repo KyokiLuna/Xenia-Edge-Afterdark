@@ -11,6 +11,7 @@
 #define XENIA_APU_XAUDIO2_XAUDIO2_AUDIO_DRIVER_H_
 
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -25,6 +26,7 @@ struct IXAudio2SourceVoice;
 
 namespace xe {
 namespace apu {
+class AudioDuckerPolicy;
 namespace xaudio2 {
 
 class XAudio2AudioDriver : public AudioDriver {
@@ -32,7 +34,8 @@ class XAudio2AudioDriver : public AudioDriver {
   XAudio2AudioDriver(xe::threading::Semaphore* semaphore,
                      uint32_t frequency = kFrameFrequencyDefault,
                      uint32_t channels = kFrameChannelsDefault,
-                     bool need_format_conversion = true);
+                     bool need_format_conversion = true,
+                     std::shared_ptr<AudioDuckerPolicy> policy = {});
   ~XAudio2AudioDriver() override;
 
   bool Initialize() override;
@@ -99,6 +102,7 @@ class XAudio2AudioDriver : public AudioDriver {
     } api_2_8;
   } objects_ = {};
   xe::threading::Semaphore* semaphore_ = nullptr;
+  const std::shared_ptr<AudioDuckerPolicy> policy_;
 
   class VoiceCallback;
   VoiceCallback* voice_callback_ = nullptr;

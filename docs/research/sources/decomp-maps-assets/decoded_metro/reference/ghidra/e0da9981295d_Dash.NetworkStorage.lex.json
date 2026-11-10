@@ -1,0 +1,18 @@
+{
+  "module": "Dash.NetworkStorage.lex",
+  "program": "e0da9981295d_Dash.NetworkStorage.lex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "9c3d617e2328f46107f9211dcc2109165308cb70b2fae18246f75fb9a780f0f0",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9ac00400",
+  "functions": 348,
+  "calls": 872,
+  "strings": 280,
+  "string_xrefs": 182,
+  "independent_sha256": "9c3d617e2328f46107f9211dcc2109165308cb70b2fae18246f75fb9a780f0f0",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

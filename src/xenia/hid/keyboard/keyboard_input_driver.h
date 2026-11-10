@@ -16,11 +16,15 @@
 
 #include "xenia/base/mutex.h"
 #include "xenia/hid/input_driver.h"
+#include "xenia/hid/native_text_input_queue.h"
 #include "xenia/ui/virtual_key.h"
 
 namespace xe {
 namespace hid {
 namespace keyboard {
+namespace test {
+class NativeKeystrokeRoutingTestAccess;
+}
 
 class KeyboardInputDriver final : public InputDriver {
  public:
@@ -39,8 +43,19 @@ class KeyboardInputDriver final : public InputDriver {
   std::vector<InputDeviceInfo> EnumerateDevices() override;
   void DiscardKeystrokes() override;
   void ResetKeystrokes() override;
+  void SetNativeControllerKeystrokeGeneration(uint64_t generation) override;
+  bool HasNativeTextInput() const override { return native_text_available_; }
+  void SetNativeTextGeneration(uint64_t generation) override;
+  bool SetNativeTextOwner(uint64_t generation, uint64_t revision, uint32_t user,
+                          bool enabled) override;
+  NativeTextState GetNativeTextState(uint64_t generation) const override;
+  void SetNativeTextHostModal(uint64_t generation, bool blocked) override;
+  void ResetNativeText(uint64_t generation) override;
+  X_RESULT GetNativeTextKeystroke(uint64_t generation, uint32_t user_index,
+                                  X_INPUT_KEYSTROKE* output) override;
 
  protected:
+  friend class test::NativeKeystrokeRoutingTestAccess;
   class KeyboardWindowInputListener final : public ui::WindowInputListener,
                                             public ui::WindowListener {
    public:
@@ -50,6 +65,8 @@ class KeyboardInputDriver final : public InputDriver {
     void OnKeyDown(ui::KeyEvent& e) override;
     void OnKeyUp(ui::KeyEvent& e) override;
     void OnKeyChar(ui::KeyEvent& e) override;
+    void OnTextInput(ui::TextInputEvent& e) override;
+    void OnGotFocus(ui::UISetupEvent& e) override;
     void OnLostFocus(ui::UISetupEvent& e) override;
 
    private:
@@ -81,6 +98,8 @@ class KeyboardInputDriver final : public InputDriver {
 
   void OnKey(ui::KeyEvent& e, bool is_down);
   void OnChar(ui::KeyEvent& e);
+  void OnText(ui::TextInputEvent& e);
+  void QuarantinePressedKeys();
   void ClearPressedKeys();
 
   xe::global_critical_region global_critical_region_;
@@ -91,6 +110,11 @@ class KeyboardInputDriver final : public InputDriver {
   std::unordered_map<ui::VirtualKey, bool> keys_down_;
   // Keys whose press the title received and whose release it hasn't.
   std::unordered_set<ui::VirtualKey> delivered_;
+  NativeTextInputQueue native_text_;
+  bool native_text_available_ = false;
+  uint64_t native_text_generation_ = 0;
+  std::unordered_set<ui::VirtualKey> quarantined_;
+  uint64_t native_controller_keystroke_generation_ = 0;
 
   KeyboardWindowInputListener window_input_listener_;
 

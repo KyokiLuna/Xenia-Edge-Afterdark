@@ -7,8 +7,11 @@
  ******************************************************************************
  */
 
+#include <array>
 #include "xenia/base/logging.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_managed_format_frontdoor.h"
+#include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/app_manager.h"
 #include "xenia/kernel/xam/xam.h"
@@ -21,6 +24,28 @@
 namespace xe {
 namespace kernel {
 namespace xam {
+
+dword_result_t XamRegisterSysApp_entry(dword_t hmodule, dword_t app,
+                                       dword_t callback,
+                                       dword_t resource_slot) {
+  // Only loaded guest code can own a callback here. This host validation is
+  // stricter than the console's unchecked pointer store, and prevents a bad
+  // registration from jumping into unmapped memory later.
+  auto module = kernel_state()->GetUserModuleForAddress(callback);
+  if (!callback || !module || module->hmodule_ptr() != hmodule) {
+    return X_ERROR_FUNCTION_FAILED;
+  }
+  return kernel_state()->app_manager()->RegisterGuestApp(
+      kernel_state(), module, app, callback, resource_slot);
+}
+DECLARE_XAM_EXPORT2(XamRegisterSysApp, kNone, kImplemented, kSketchy);
+
+dword_result_t XamUnregisterSysApp_entry(dword_t hmodule, dword_t app,
+                                         dword_t resource_slot) {
+  return kernel_state()->app_manager()->guest_apps().Unregister(hmodule, app,
+                                                                resource_slot);
+}
+DECLARE_XAM_EXPORT2(XamUnregisterSysApp, kNone, kImplemented, kSketchy);
 
 dword_result_t XMsgInProcessCall_entry(dword_t app, dword_t message,
                                        dword_t arg1, dword_t arg2) {
@@ -72,6 +97,13 @@ dword_result_t XMsgStartIORequestEx_entry(
     dword_t app, dword_t message, pointer_t<XAM_OVERLAPPED> overlapped_ptr,
     dword_t buffer_ptr, dword_t buffer_length,
     pointer_t<X_TASK_ARGS> xam_task_args_ptr) {
+  if (const auto managed = NativeManagedFormatFrontdoor::TryStart(
+          kernel_state(),
+          std::array<uint64_t, 6>{app, message, overlapped_ptr.guest_address(),
+                                  buffer_ptr, buffer_length,
+                                  xam_task_args_ptr.guest_address()})) {
+    return uint32_t(managed->return_value);
+  }
   return xeXMsgStartIORequestEx(app, message, overlapped_ptr, buffer_ptr,
                                 buffer_length, xam_task_args_ptr);
 }
@@ -87,6 +119,11 @@ DECLARE_XAM_EXPORT1(XMsgStartIORequest, kNone, kImplemented);
 
 dword_result_t XMsgCancelIORequest_entry(
     pointer_t<XAM_OVERLAPPED> overlapped_ptr, dword_t wait) {
+  if (const auto managed = NativeManagedFormatFrontdoor::TryCancel(
+          kernel_state(),
+          std::array<uint64_t, 2>{overlapped_ptr.guest_address(), wait})) {
+    return uint32_t(managed->return_value);
+  }
   X_HANDLE event_handle = XOverlappedGetEvent(overlapped_ptr);
   if (event_handle && wait) {
     auto ev =

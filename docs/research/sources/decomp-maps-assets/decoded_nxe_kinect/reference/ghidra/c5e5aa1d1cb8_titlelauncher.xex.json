@@ -1,0 +1,20 @@
+{
+  "module": "titlelauncher.xex",
+  "program": "c5e5aa1d1cb8_titlelauncher.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "f3b81f99e068272495f475c1f09984b5eca101644a5daa3bf85e895beaf7838e",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x82000400",
+  "functions": 2460,
+  "calls": 7886,
+  "strings": 748,
+  "string_xrefs": 738,
+  "independent_sha256": "f3b81f99e068272495f475c1f09984b5eca101644a5daa3bf85e895beaf7838e",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0,
+  "decompiled_functions": 2436,
+  "decompile_failures": 0
+}

@@ -464,6 +464,8 @@ target_include_directories(imgui PUBLIC imgui PRIVATE stb)
 # ==============================================================================
 add_library(mbedtls STATIC
   mbedtls/library/aes.c
+  mbedtls/library/asn1parse.c
+  mbedtls/library/asn1write.c
   mbedtls/library/bignum.c
   mbedtls/library/bignum_core.c
   mbedtls/library/constant_time.c
@@ -471,7 +473,10 @@ add_library(mbedtls STATIC
   mbedtls/library/dhm.c
   mbedtls/library/md.c
   mbedtls/library/md5.c
+  mbedtls/library/oid.c
   mbedtls/library/platform_util.c
+  mbedtls/library/rsa.c
+  mbedtls/library/rsa_alt_helpers.c
   mbedtls/library/sha1.c
   mbedtls/library/sha256.c
   mbedtls/library/sha512.c
@@ -1077,6 +1082,8 @@ add_library(libavformat STATIC
   FFmpeg/libavformat/url.c
   FFmpeg/libavformat/utils.c
   FFmpeg/libavformat/riffdec.c
+  FFmpeg/libavformat/wavdec.c
+  FFmpeg/libavformat/pcm.c
   FFmpeg/libavformat/asfdec_f.c
   FFmpeg/libavformat/asf.c
   FFmpeg/libavformat/asfcrypt.c

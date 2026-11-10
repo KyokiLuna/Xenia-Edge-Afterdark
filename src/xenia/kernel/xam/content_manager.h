@@ -11,24 +11,34 @@
 #define XENIA_KERNEL_XAM_CONTENT_MANAGER_H_
 
 #include <memory>
+#include <atomic>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
 #include "xenia/base/memory.h"
 #include "xenia/base/mutex.h"
 #include "xenia/base/string_key.h"
 #include "xenia/base/string_util.h"
+#include "xenia/kernel/xam/content_source.h"
+#include "xenia/title_catalog.h"
 #include "xenia/vfs/entry.h"
 #include "xenia/xbox.h"
+#include <map>
+#include <mutex>
+#include "xenia/base/profile_intent_owner.h"
+#include "xenia/base/managed_volume_authority.h"
+
+#include "xenia/base/content_package_tree.h"
 
 namespace xe {
 namespace kernel {
 class KernelState;
 }  // namespace kernel
 namespace vfs {
+class XContentReadBacking;
+class Device;
 class XContentContainerDevice;
 }  // namespace vfs
 }  // namespace xe
@@ -77,8 +87,7 @@ struct XCONTENT_DATA {
 
   std::string file_name() const {
     std::string value;
-    value.assign(file_name_raw,
-                 std::min(strlen(file_name_raw), countof(file_name_raw)));
+    value.assign(file_name_raw, strnlen(file_name_raw, countof(file_name_raw)));
     return value;
   }
 
@@ -211,7 +220,8 @@ class ContentPackage {
   ContentPackage(KernelState* kernel_state, const std::string_view root_name,
                  const XCONTENT_AGGREGATE_DATA& data,
                  const std::filesystem::path& package_path,
-                 const std::string_view root_path = "", bool read_only = false);
+                 const std::string_view root_path = "", bool read_only = false,
+                 std::shared_ptr<filesystem::HostStorageRoot> storage = {});
   // A package stored on another device, such as the disc.
   ContentPackage(KernelState* kernel_state, const std::string_view root_name,
                  const XCONTENT_AGGREGATE_DATA& data,
@@ -238,24 +248,87 @@ class ContentPackage {
                  const XCONTENT_AGGREGATE_DATA& data,
                  const std::string_view root_path);
 
-  void MountHostPath(const std::filesystem::path& package_path, bool read_only);
+  friend class ContentManager;
+  ContentPackage(KernelState*, std::string_view, const XCONTENT_AGGREGATE_DATA&,
+      const std::filesystem::path&, std::string_view,
+      std::unique_ptr<vfs::XContentReadBacking>);
+  void MountHostPath(const std::filesystem::path& package_path, bool read_only,
+                     std::shared_ptr<filesystem::HostStorageRoot> storage = {});
   void MountContainer(std::unique_ptr<vfs::XContentContainerDevice> device,
                       const std::string_view name);
 
+  // Outlives storage release/unmount and owns only cached admission metadata.
+  // Its state is independent of the manager wrapper (no raw-owner callback).
+  std::shared_ptr<void> package_admission_;
+  std::unique_ptr<vfs::XContentReadBacking> validation_backing_;
   KernelState* kernel_state_;
   std::string root_name_;
   std::string device_path_;
   std::filesystem::path package_path_;
   XCONTENT_AGGREGATE_DATA content_data_;
   uint32_t license_;
-  bool mounted_ = false;
+  bool mounted_ = false, link_owned_ = false;
+  std::string root_path_, published_link_target_;
+  std::weak_ptr<vfs::Device> registered_device_;
+  void PublishMount(std::unique_ptr<vfs::Device>);
+  std::optional<ContentSourceState> source_;
 };
 
 class ContentManager {
  public:
-  ContentManager(KernelState* kernel_state,
-                 const std::filesystem::path& root_path);
+  bool RegisterManagedSource(ContentSource);
+  bool RegisterRequiredManagedSource(ContentSource);
+  bool managed_sources_ready() const;
+  std::shared_ptr<const filesystem::ProfileIntentOwner> ProfileIntents(
+      const std::string& source_id) const;
+  std::shared_ptr<const filesystem::ManagedVolumeAuthority> Volume(
+      const std::string& source_id) const;
+  // Owned synchronous backend operation. No guest Task, overlap, scheduler or
+  // native FE raw formatter is manufactured here. Dropped handles remain
+  // recoverable from this manager's pending map until explicit completion.
+  class ManagedFormat final {
+   public:
+    ~ManagedFormat();
+    ManagedFormat(const ManagedFormat&) = delete;
+    ManagedFormat& operator=(const ManagedFormat&) = delete;
+    filesystem::ManagedDeviceFormatReceipt Execute();
+    std::error_code Resume();
+    void Cancel();
+   private:
+    friend class ContentManager;
+    struct Impl;
+    struct Owners;
+    ManagedFormat(std::shared_ptr<Impl>, std::shared_ptr<Owners>);
+    std::shared_ptr<Impl> impl_;
+    std::shared_ptr<Owners> owners_;
+  };
+  // Requires the runtime's actual ProfileManager to reserve an idle namespace.
+  // A storage-only manager has no guest/profile runtime by construction.
+  std::unique_ptr<ManagedFormat> BeginIdleManagedFormat(
+      const std::string& source_id, std::error_code&);
+  // Exact expected registry generation, retained through final admission.
+  std::unique_ptr<ManagedFormat> BeginIdleManagedFormat(
+      std::shared_ptr<const ManagedFormatSourceProof>, std::error_code&);
+  std::unique_ptr<ManagedFormat> CapturePendingManagedFormat(
+      const std::string& source_id, std::error_code&);
+  // Explicit restart recovery of an already registered producer configuration;
+  // does not create roots, recover silently or publish an unfinished owner.
+  std::unique_ptr<ManagedFormat> InspectManagedFormatRecovery(
+      const std::string& source_id, std::error_code&);
+  struct ReadOnlyCatalogTag {};
+  // Exact-ID physical discovery only. No managed marker, private owner or
+  // native physical-volume publication is created by this mode.
+  ContentManager(ReadOnlyCatalogTag, const std::filesystem::path& root_path);
+  // Storage authority and optional guest execution context are independent.
+  // A null/invalid storage context fails required managed-source admission.
+  ContentManager(
+      std::shared_ptr<const filesystem::ManagedStorageContext> storage_context,
+      const std::filesystem::path& root_path,
+      KernelState* guest_runtime = nullptr);
   ~ContentManager();
+
+  ContentSourceRegistry& sources() { return sources_; }
+  const ContentSourceRegistry& sources() const { return sources_; }
 
   std::vector<XCONTENT_AGGREGATE_DATA> ListContent(
       const uint32_t device_id, const uint64_t xuid, const uint32_t title_id,
@@ -264,7 +337,7 @@ class ContentManager {
   // The users with content stored on the hard drive, the titles with content
   // stored on the device for a user and the content types a title has there,
   // for listing content across titles.
-  std::vector<uint64_t> ListContentXuids() const;
+  std::vector<uint64_t> ListContentXuids(uint32_t device_id = 1) const;
   std::vector<uint32_t> ListContentTitleIds(const uint32_t device_id,
                                             const uint64_t xuid) const;
   std::vector<XContentType> ListContentTypes(const uint32_t device_id,
@@ -276,6 +349,15 @@ class ContentManager {
   // The game library path of the release a ListLibraryContent record names.
   std::optional<std::filesystem::path> LibraryContentPath(
       const XCONTENT_AGGREGATE_DATA& data) const;
+  // Matches exact physical variants already resolved by the UI snapshot.
+  // Neither config state nor source package bytes are modified here.
+  std::optional<TitleCatalogVariant>
+  LibraryContentVariant(uint64_t xuid, const XCONTENT_AGGREGATE_DATA &data);
+  bool LibraryContainsPhysicalContent(uint64_t xuid,
+                                      const XCONTENT_AGGREGATE_DATA &data);
+  X_RESULT ResolveGuestContentPath(uint64_t xuid,
+                                    const XCONTENT_AGGREGATE_DATA& data,
+                                    bool for_write, std::string& path);
 
   std::vector<XCONTENT_AGGREGATE_DATA> ListContentODD(
       const uint32_t device_id, const uint64_t xuid, const uint32_t title_id,
@@ -289,6 +371,7 @@ class ContentManager {
   X_RESULT CheckPackageName(const uint64_t xuid,
                             const XCONTENT_AGGREGATE_DATA& data);
   bool ContentExists(const uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data);
+  X_RESULT FlushContent(std::string_view root_name);
   X_RESULT WriteContentHeaderFile(const uint64_t xuid,
                                   XCONTENT_AGGREGATE_DATA data);
   X_RESULT ReadContentHeaderFile(const std::filesystem::path& package_path,
@@ -298,6 +381,11 @@ class ContentManager {
   // Makes the package without mounting it.
   X_RESULT CreatePackage(const uint64_t xuid,
                          const XCONTENT_AGGREGATE_DATA& data);
+  // Complete initial tree and Header share the same durable creation owner.
+  // No member is exposed through an empty public package before completion.
+  X_RESULT CreateInitialPackage(
+      uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data,
+      std::span<const filesystem::ContentPackageInitialMember> members);
   X_RESULT CreateContent(const std::string_view root_name, const uint64_t xuid,
                          const XCONTENT_AGGREGATE_DATA& data);
   // Empties the package but for its thumbnail.
@@ -338,20 +426,106 @@ class ContentManager {
   uint64_t GetContentFreeSpace() const;
 
  private:
-  std::filesystem::path ResolvePackageRoot(
-      const uint64_t xuid, const uint32_t title_id,
-      const XContentType content_type) const;
+  std::unique_ptr<ManagedFormat> BeginIdleManagedFormatExpected(
+      const std::string&, std::shared_ptr<const ManagedFormatSourceProof>,
+      std::error_code&);
+  struct PackageMutationTarget {
+    // Retain the exact volume, projection and source generation, not a new
+    // writable source chosen after resolving an existing package elsewhere.
+    ContentSourceState source;
+    std::filesystem::path relative;
+  };
+  X_RESULT MutateContentPackage(uint64_t, const XCONTENT_AGGREGATE_DATA&, bool truncate);
+  X_RESULT ResolvePackageMutation(uint64_t xuid,
+                                   const XCONTENT_AGGREGATE_DATA&,
+                                   PackageMutationTarget&, bool retain_source = false);
+  // Cached exact physical-path claims close the mount-publication race with
+  // package retirement. Only resolved retained source paths enter this map;
+  // no filesystem observation/provider callback occurs under GCRC.
+  friend class ContentPackageSelectionTestAccess;
+  struct PackageAdmission;
+  struct PackageSelection {
+    // Release the cached claim LAST, after all retained storage/FDs are gone.
+    std::shared_ptr<PackageAdmission> claim;
+    std::filesystem::path path;
+    bool library = false, read_only = false;
+    std::optional<ContentSourceState> source;
+    std::shared_ptr<filesystem::HostStorageRoot> directory;
+    std::unique_ptr<filesystem::FileHandle> file;
+    std::optional<filesystem::FileHandleInfo> file_info;
+  };
+  std::unique_ptr<PackageSelection> CapturePackageSelection(
+      uint64_t, const XCONTENT_AGGREGATE_DATA&, X_RESULT&);
+  X_RESULT SelectPackageAt(PackageSelection&, std::filesystem::path, bool library,
+      bool read_only, std::optional<ContentSourceState>);
+  bool ValidatePackageSelection(const PackageSelection&) const;
+  std::unique_ptr<ContentPackage> MountPackageSelection(
+      std::string_view, const XCONTENT_AGGREGATE_DATA&, PackageSelection&, uint32_t);
+  struct PendingPackageAdmission { size_t readers = 0; bool mutation = false; };
+  struct PackageAdmissionState {
+    std::mutex mutex;
+    std::map<std::filesystem::path, PendingPackageAdmission> pending;
+    bool closed = false;
+  };
+  std::shared_ptr<PackageAdmissionState> package_admissions_ =
+      std::make_shared<PackageAdmissionState>();
+  std::shared_ptr<PackageAdmission> ClaimPackagePath(
+      const std::filesystem::path&, bool mutation);
+  struct RootAdmission;
+  std::unique_ptr<RootAdmission> ClaimRootName(std::string_view);
+  std::unordered_set<string_key_insensitive> pending_package_roots_;
+  struct ContentFlush;
+  // Entries with abandoned guest waiters remain bounded event/status records
+  // until manager teardown. Completed entries retain no filesystem owner.
+  std::mutex content_flush_mutex_;
+  std::map<uint64_t, std::shared_ptr<ContentFlush>> content_flushes_;
+  uint64_t next_content_flush_ = 1;
+  X_RESULT PublishContentHeader(uint64_t, XCONTENT_AGGREGATE_DATA, bool create,
+                               PackageSelection* created_selection = nullptr,
+                               std::span<const filesystem::ContentPackageInitialMember>
+                                   initial_members = {});
+  // Resolve an auxiliary file through the same live source as its package.
+  // Both paths are checked, including symlinks in Headers or thumbnail names.
+  std::optional<std::filesystem::path> ResolveSourcePath(
+      const std::filesystem::path& package_path,
+      const std::filesystem::path& target_path, bool for_write,
+      std::string_view source_id = {}) const;
+  bool ReadPhysicalContentData(const std::filesystem::path& package_path,
+                               uint64_t xuid, uint32_t title_id,
+                               XContentType content_type,
+                               XCONTENT_AGGREGATE_DATA& data,
+                               std::string_view source_id) const;
+  X_RESULT ReadContentHeaderFileFromSource(
+      const std::filesystem::path& package_path, uint64_t xuid,
+      uint32_t title_id, XContentType content_type,
+      XCONTENT_AGGREGATE_DATA& data, std::string_view source_id) const;
+  struct PackageSourcePath {
+    std::string source_id;
+    std::filesystem::path path;
+  };
+  std::vector<PackageSourcePath> ReadPackageRoots(
+      uint32_t device_id, uint64_t xuid, uint32_t title_id,
+      XContentType content_type) const;
   // X_ERROR_INVALID_NAME for a file name the file system refuses and
   // X_ERROR_PATH_NOT_FOUND for one that names no package.
   X_RESULT ResolvePackagePath(const uint64_t xuid,
                               const XCONTENT_AGGREGATE_DATA& data,
-                              std::filesystem::path& path);
+                              std::filesystem::path& path,
+                              std::string* source_id = nullptr,
+                              ContentSourceState* retained = nullptr);
+  X_RESULT ResolveWritePath(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data,
+                            std::filesystem::path& path,
+                            std::string* source_id = nullptr,
+                            ContentSourceState* retained = nullptr);
   // Where a package is read from, which is the game library's release for a
   // record of ListLibraryContent.
   X_RESULT ResolveReadPath(const uint64_t xuid,
                            const XCONTENT_AGGREGATE_DATA& data,
-                           std::filesystem::path& path,
-                           bool* library = nullptr);
+                           std::filesystem::path& path, bool* library = nullptr,
+                           bool* read_only = nullptr,
+                           std::string* source_id = nullptr,
+                           ContentSourceState* retained = nullptr,
+                           PackageSelection* selecting = nullptr);
   std::string ResolveDiscPackageRoot(const uint64_t xuid, uint32_t title_id,
                                      const XContentType content_type) const;
   vfs::Entry* ResolveDiscPackage(const XCONTENT_AGGREGATE_DATA& data) const;
@@ -366,12 +540,19 @@ class ContentManager {
 
   std::unordered_set<uint32_t> FindPublisherTitleIds(
       const uint64_t xuid,
-      uint32_t base_title_id = kCurrentlyRunningTitleId) const;
+      uint32_t base_title_id = kCurrentlyRunningTitleId,
+      uint32_t device_id = 1) const;
 
-  bool UpdateSpaData(vfs::Entry* spa_file_update);
+  bool UpdateSpaData(std::string_view guest_path);
 
-  KernelState* kernel_state_;
+  bool ResolveTitleId(uint32_t& title_id) const;
+  KernelState* kernel_state_ = nullptr;
+  std::shared_ptr<const filesystem::ManagedStorageContext> storage_context_;
   std::filesystem::path root_path_;
+  // Shared storage authority, independent of the ContentManager/Kernel wrapper.
+  // Pending owned operations retain uncertainty but never borrow guest runtime.
+  std::shared_ptr<ManagedFormat::Owners> managed_owners_;
+  ContentSourceRegistry sources_;
 
   // TODO(benvanik): remove use of global lock, it's bad here!
   xe::global_critical_region global_critical_region_;

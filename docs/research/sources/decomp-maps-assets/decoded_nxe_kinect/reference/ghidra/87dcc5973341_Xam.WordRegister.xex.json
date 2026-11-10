@@ -1,0 +1,18 @@
+{
+  "module": "Xam.WordRegister.xex",
+  "program": "87dcc5973341_Xam.WordRegister.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "32c785a386eeb1354cd6608c1331d76e3d7fe3012f37897b1ccec96dae1ce075",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 212,
+  "calls": 473,
+  "strings": 100,
+  "string_xrefs": 75,
+  "independent_sha256": "0a6d4921ab5a4d0f5a3d2a63c6cfdf22a5394086ae42969047566b512f72975a",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

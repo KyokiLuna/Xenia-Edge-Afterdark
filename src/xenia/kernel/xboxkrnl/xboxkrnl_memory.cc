@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -19,8 +20,10 @@
 #include "xenia/cpu/processor.h"
 #include "xenia/cpu/xex_module.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_system_allocation_authority.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
+#include "xenia/kernel/xthread.h"
 #include "xenia/xbox.h"
 
 DEFINE_bool(
@@ -472,7 +475,8 @@ uint32_t xeMmAllocatePhysicalMemoryEx(uint32_t flags, uint32_t region_size,
                                       uint32_t protect_bits,
                                       uint32_t min_addr_range,
                                       uint32_t max_addr_range,
-                                      uint32_t alignment) {
+                                      uint32_t alignment,
+                                      uint32_t return_address) {
   // Type will usually be 0 (user request?), where 1 and 2 are sometimes made
   // by D3D/etc.
 
@@ -527,10 +531,41 @@ uint32_t xeMmAllocatePhysicalMemoryEx(uint32_t flags, uint32_t region_size,
   uint32_t heap_size = heap->heap_size();
   heap_min_addr = heap_base + std::min(heap_min_addr, heap_size - 1);
   heap_max_addr = heap_base + std::min(heap_max_addr, heap_size - 1);
-  uint32_t base_address;
-  if (!heap->AllocRange(heap_min_addr, heap_max_addr, adjusted_size,
-                        adjusted_alignment, allocation_type, protect, top_down,
-                        &base_address)) {
+  std::optional<memory::PhysicalAllocationOwner> allocation_owner;
+  if (XThread::IsInThread()) {
+    const auto admission =
+        XThread::GetCurrentThread()->native_frame_allocation_decision();
+    if (admission.session && !admission.owner) {
+      XELOGE("MmAllocatePhysicalMemoryEx: native producer admission is closed");
+      return 0;
+    }
+    allocation_owner = admission.owner;
+  }
+  // The exact diagnostic thread path above is unchanged. New service-world
+  // attribution is caller-code/domain based and retains rundown across Alloc.
+  NativeSystemPhysicalAllocationDecision native_decision;
+  if (!allocation_owner) {
+    native_decision =
+        kernel_state()->DecideNativeSystemPhysicalAllocation(return_address);
+    if (native_decision.kind ==
+        NativeSystemPhysicalAllocationDecision::Kind::kDenied) {
+      return 0;
+    }
+    if (native_decision.kind ==
+        NativeSystemPhysicalAllocationDecision::Kind::kOwned) {
+      allocation_owner = native_decision.owner;
+    }
+  }
+  uint32_t base_address = 0;
+  const bool allocated =
+      allocation_owner
+          ? heap->AllocRangeOwned(heap_min_addr, heap_max_addr, adjusted_size,
+                                  adjusted_alignment, allocation_type, protect,
+                                  top_down, *allocation_owner, &base_address)
+          : heap->AllocRange(heap_min_addr, heap_max_addr, adjusted_size,
+                             adjusted_alignment, allocation_type, protect,
+                             top_down, &base_address);
+  if (!allocated) {
     // Failed - assume no memory available.
     XELOGW("MmAllocatePhysicalMemoryEx: Allocation failed: {:08X} Size: {:08X}",
            base_address, adjusted_size);
@@ -544,18 +579,20 @@ uint32_t xeMmAllocatePhysicalMemoryEx(uint32_t flags, uint32_t region_size,
 
 dword_result_t MmAllocatePhysicalMemoryEx_entry(
     dword_t flags, dword_t region_size, dword_t protect_bits,
-    dword_t min_addr_range, dword_t max_addr_range, dword_t alignment) {
+    dword_t min_addr_range, dword_t max_addr_range, dword_t alignment,
+    const ppc_context_t& ctx) {
   return xeMmAllocatePhysicalMemoryEx(flags, region_size, protect_bits,
-                                      min_addr_range, max_addr_range,
-                                      alignment);
+                                      min_addr_range, max_addr_range, alignment,
+                                      uint32_t(ctx->lr));
 }
 DECLARE_XBOXKRNL_EXPORT1(MmAllocatePhysicalMemoryEx, kMemory, kImplemented);
 
 dword_result_t MmAllocatePhysicalMemory_entry(dword_t flags,
                                               dword_t region_size,
-                                              dword_t protect_bits) {
+                                              dword_t protect_bits,
+                                              const ppc_context_t& ctx) {
   return xeMmAllocatePhysicalMemoryEx(flags, region_size, protect_bits, 0,
-                                      0xFFFFFFFFu, 0);
+                                      0xFFFFFFFFu, 0, uint32_t(ctx->lr));
 }
 DECLARE_XBOXKRNL_EXPORT1(MmAllocatePhysicalMemory, kMemory, kImplemented);
 

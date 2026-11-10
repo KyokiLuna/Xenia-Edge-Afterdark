@@ -1,0 +1,18 @@
+{
+  "module": "marketplace.xex",
+  "program": "fdacfc41f3d4_marketplace.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "9c7f368dbcb02b1c5ed6618de089ce8da73240670b38688e48dd9b53e76f37ce",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 1935,
+  "calls": 7106,
+  "strings": 576,
+  "string_xrefs": 1302,
+  "independent_sha256": "3a2060ca6fda665ba27c2681983527656dbf5a1afc5632c70c51b576be9eb6c3",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

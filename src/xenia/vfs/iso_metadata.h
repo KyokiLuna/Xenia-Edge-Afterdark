@@ -20,8 +20,9 @@ namespace xe {
 namespace vfs {
 
 std::optional<XexMetadata> ExtractIsoMetadata(
-    const std::filesystem::path& path);
-std::optional<XexMetadata> ExtractIsoMetadata(const uint8_t* data, size_t size);
+    const std::filesystem::path& path, bool read_title_resources = false);
+std::optional<XexMetadata> ExtractIsoMetadata(
+    const uint8_t* data, size_t size, bool read_title_resources = false);
 
 }  // namespace vfs
 }  // namespace xe

@@ -13,10 +13,13 @@
 #include <cmath>
 #include <cstring>
 #include <iterator>
+#include <optional>
 #include <span>
+#include <utility>
 
 #include "xenia/base/logging.h"
 #include "xenia/base/memory.h"
+#include "xenia/base/mutex.h"
 #include "xenia/base/system.h"
 #include "xenia/base/xxhash.h"
 #include "xenia/config.h"
@@ -25,11 +28,10 @@
 #include "xenia/kernel/xam/profile_manager.h"
 #include "xenia/kernel/xam/xam_state.h"
 #include "xenia/net/xnet_secure.h"
+#include "xenia/vfs/host_storage_errors.h"
 
-// XConfig settings are kept as cvars so they flow through Xenia's existing
-// (per-game) config system. This class is only a guest-facing facade: reads
-// translate cvars/constants into the guest XConfig byte format, and guest
-// writes are persisted as per-game overrides.
+// RetailFlags uses the console-owned store. Other legacy XConfig translations
+// retain their existing cvars/per-title behavior until separately migrated.
 DEFINE_int32(user_language, 1,
              "User language ID.\n"
              "  1=en  2=ja  3=de  4=fr  5=es  6=it  7=ko  8=zh\n"
@@ -88,7 +90,22 @@ namespace kernel {
 
 namespace {
 
-constexpr uint16_t kMaxSettingSize = 0x40;
+constexpr uint16_t kMaxSettingSize = XConfig::kMaxSettingBytes;
+
+X_STATUS ConsoleCommitStatus(const ConsoleSettingsUpdate& result) {
+  if (result.error) {
+    XELOGE("Console XConfig commit failed: error={}, published={}, durable={}",
+           result.error.value(), result.published, result.durable);
+  }
+  return vfs::HostStorageError(result.error);
+}
+
+// These are the fields whose existing WriteSetting translator actually
+// handles. Keep Set and legacy DWORD RMW on the same explicit boundary; a
+// readable constant/no-op field is not an implemented write.
+bool IsLegacyWritableSetting(X_CONFIG_CATEGORY category, uint16_t setting) {
+  return XConfig::WritableSettingSize(category, setting) != 0;
+}
 
 // A Microsoft block from while the 360 was made. XLink Kai only forwards
 // frames from console vendors.
@@ -149,13 +166,14 @@ uint16_t BuildSetting(X_CONFIG_CATEGORY category, uint16_t setting,
         case XCONFIG_USER_AUDIO_FLAGS:
           xe::store_and_swap<uint32_t>(out, cvars::audio_flag);
           return 4;
-        case XCONFIG_USER_RETAIL_FLAGS:
-          xe::store_and_swap<uint32_t>(
-              out, X_RETAIL_FLAGS::DashboardInitialized |
-                       (cvars::allow_nui_initialization
-                            ? X_RETAIL_FLAGS::KinectInitialized
-                            : 0));
-          return 4;
+        case XCONFIG_USER_RETAIL_FLAGS: {
+          uint32_t value = 0;
+          if (!config.ReadRetailFlags(value)) {
+            xe::store_and_swap<uint32_t>(out, value);
+          }
+          return 4;  // The checked entry reports a store error, never
+                     // success/0.
+        }
         case XCONFIG_USER_COUNTRY:
           out[0] = static_cast<uint8_t>(cvars::user_country);
           return 1;
@@ -269,16 +287,28 @@ uint16_t BuildSetting(X_CONFIG_CATEGORY category, uint16_t setting,
   return 0;
 }
 
-// Updates a cvar's live value and persists it to the running title's per-game
-// override.
-template <typename T>
-void StoreConsoleSetting(T& live, const char* name, T value) {
-  live = value;
-  config::SaveGameConfigSetting(kernel_state()->emulator(), "Console", name,
-                                value);
-}
-
 }  // namespace
+
+// Preserve the existing live-value-before-save behavior for these legacy
+// fields. A save failure is returned by the checked Set/RMW path; this is not
+// an atomic console transaction or a claim that the old cvar value rolled back.
+template <typename T>
+void XConfig::StoreLegacySetting(T& live, const char* name, T value) {
+  live = value;
+  if (legacy_persistence_) {
+    if (const auto error =
+            legacy_persistence_(name, LegacySettingValue{value})) {
+      throw std::system_error(error);
+    }
+    return;
+  }
+  auto* kernel = kernel_state();
+  if (!kernel) {
+    throw std::system_error(
+        std::make_error_code(std::errc::operation_not_supported));
+  }
+  config::SaveGameConfigSetting(kernel->emulator(), "Console", name, value);
+}
 
 std::array<uint8_t, 6> ConsoleMacAddress(std::string_view identity) {
   const uint64_t hash = XXH3_64bits(identity.data(), identity.size());
@@ -327,6 +357,227 @@ const std::array<uint8_t, 6>& XConfig::mac_address() {
   return mac_address_;
 }
 
+XConfig::XConfig(std::shared_ptr<ConsoleSettingsStore> store,
+                 std::error_code store_error,
+                 LegacyPersistence legacy_persistence)
+    : legacy_persistence_(std::move(legacy_persistence)),
+      console_store_(std::move(store)),
+      console_store_error_(store_error) {
+  // First absent-record migration only: explicit CLI > GLOBAL config > default.
+  // The active title's override and host achievement presentation cvars never
+  // supply console preference bits. A persisted record wins on every restart.
+  if (cvar::ConfigVars) {
+    const auto found = cvar::ConfigVars->find("allow_nui_initialization");
+    if (found != cvar::ConfigVars->end()) {
+      const auto* legacy =
+          dynamic_cast<const cvar::ConfigVar<bool>*>(found->second);
+      if (legacy && legacy->ResolveForGameConfig(std::nullopt)) {
+        retail_seed_ |= X_RETAIL_FLAGS::KinectInitialized;
+      }
+    }
+  }
+}
+std::error_code XConfig::ReadRetailFlags(uint32_t& output) const {
+  if (!console_store_) {
+    return console_store_error_
+               ? console_store_error_
+               : std::make_error_code(std::errc::operation_not_supported);
+  }
+  return console_store_->ReadU32(
+      {XCONFIG_USER_CATEGORY, XCONFIG_USER_RETAIL_FLAGS}, retail_seed_, output);
+}
+X_STATUS XConfig::ReadSettingChecked(X_CONFIG_CATEGORY category,
+                                     uint16_t setting,
+                                     std::span<uint8_t> output) {
+  const auto size = GetSettingSize(category, setting);
+  // BuildSetting uses zero only for unsupported fields. A successful empty
+  // read would leave the native caller's value uninitialized and suppress its
+  // error/default path (including the console voice level at 7/A).
+  if (!size) {
+    return X_STATUS_NOT_SUPPORTED;
+  }
+  if (output.size() < size) {
+    return X_STATUS_BUFFER_TOO_SMALL;
+  }
+  if (category == XCONFIG_USER_CATEGORY &&
+      setting == XCONFIG_USER_RETAIL_FLAGS) {
+    uint32_t value;
+    const auto error = ReadRetailFlags(value);
+    if (error) {
+      return vfs::HostStorageError(error);
+    }
+    xe::store_and_swap<uint32_t>(output.data(), value);
+    return X_STATUS_SUCCESS;
+  }
+  ReadSetting(category, setting, output.data());
+  return X_STATUS_SUCCESS;  // Other fields retain their existing translation.
+}
+X_STATUS XConfig::WriteSettingChecked(X_CONFIG_CATEGORY category,
+                                      uint16_t setting,
+                                      std::span<const uint8_t> input) {
+  const auto size = GetSettingSize(category, setting);
+  if (!size) {
+    return X_STATUS_NOT_SUPPORTED;
+  }
+  if (input.size() != size) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  if (category == XCONFIG_USER_CATEGORY &&
+      setting == XCONFIG_USER_RETAIL_FLAGS) {
+    if (!console_store_) {
+      return vfs::HostStorageError(
+          console_store_error_
+              ? console_store_error_
+              : std::make_error_code(std::errc::operation_not_supported));
+    }
+    const auto result = console_store_->WriteU32(
+        {category, setting}, xe::load_and_swap<uint32_t>(input.data()));
+    return ConsoleCommitStatus(result);
+  }
+  // Preserve existing actually writable translations; an ignored field is not
+  // a successful write. Broad Console/XConfig migration is a separate cohort.
+  if (!IsLegacyWritableSetting(category, setting)) {
+    return X_STATUS_NOT_SUPPORTED;
+  }
+  try {
+    WriteSetting(category, setting, input.data());
+  } catch (const std::system_error& error) {
+    return vfs::HostStorageError(error.code());
+  } catch (...) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
+  return X_STATUS_SUCCESS;
+}
+X_STATUS XConfig::ModifySettingUlong(X_CONFIG_CATEGORY category,
+                                     uint16_t setting, uint32_t and_mask,
+                                     uint32_t or_bits) {
+  if (category == XCONFIG_USER_CATEGORY &&
+      setting == XCONFIG_USER_RETAIL_FLAGS) {
+    return ModifySettingUlongObserved(category, setting, and_mask, or_bits)
+        .status;
+  }
+  // Preserve the previously implemented DWORD translations. These remain
+  // legacy live-cvar/per-title writes, not the new atomic console store.
+  if (!IsLegacyWritableSetting(category, setting)) {
+    return X_STATUS_NOT_SUPPORTED;
+  }
+  if (GetSettingSize(category, setting) != sizeof(uint32_t)) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  std::array<uint8_t, sizeof(uint32_t)> bytes{};
+  auto status = ReadSettingChecked(category, setting, bytes);
+  if (XFAILED(status)) {
+    return status;
+  }
+  const uint32_t value = xe::load_and_swap<uint32_t>(bytes.data());
+  xe::store_and_swap<uint32_t>(bytes.data(), (value & and_mask) | or_bits);
+  return WriteSettingChecked(category, setting, bytes);
+}
+
+uint16_t XConfig::WritableSettingSize(X_CONFIG_CATEGORY category,
+                                      uint16_t setting) {
+  if (category == XCONFIG_SECURED_CATEGORY &&
+      setting == XCONFIG_SECURED_AV_REGION) {
+    return 4;
+  }
+  if (category != XCONFIG_USER_CATEGORY) {
+    return 0;
+  }
+  switch (setting) {
+    case XCONFIG_USER_COUNTRY:
+      return 1;
+    case XCONFIG_USER_LANGUAGE:
+    case XCONFIG_USER_VIDEO_FLAGS:
+    case XCONFIG_USER_AUDIO_FLAGS:
+    case XCONFIG_USER_RETAIL_FLAGS:
+    case XCONFIG_USER_MUSIC_VOLUME:
+      return 4;
+    default:
+      return 0;
+  }
+}
+XConfig::UlongModification XConfig::ModifySettingUlongObserved(
+    X_CONFIG_CATEGORY category, uint16_t setting, uint32_t and_mask,
+    uint32_t or_bits) {
+  if (global_critical_region::is_held_by_current_thread()) {
+    const auto error = std::make_error_code(std::errc::operation_not_permitted);
+    return {
+        X_STATUS_INVALID_DEVICE_REQUEST,
+        category == XCONFIG_USER_CATEGORY &&
+                setting == XCONFIG_USER_RETAIL_FLAGS
+            ? std::optional<ConsoleSettingsUpdate>(ConsoleSettingsUpdate{error})
+            : std::nullopt};
+  }
+  if (category != XCONFIG_USER_CATEGORY ||
+      setting != XCONFIG_USER_RETAIL_FLAGS) {
+    return {ModifySettingUlong(category, setting, and_mask, or_bits), {}};
+  }
+  if (!console_store_) {
+    const auto error =
+        console_store_error_
+            ? console_store_error_
+            : std::make_error_code(std::errc::operation_not_supported);
+    return {vfs::HostStorageError(error), ConsoleSettingsUpdate{error}};
+  }
+  // ModifyU32 has returned and released its transaction lock before the
+  // immutable rich result reaches the actual ExRMW caller/observer.
+  const auto result = console_store_->ModifyU32(
+      {category, setting}, retail_seed_, and_mask, or_bits);
+  return {ConsoleCommitStatus(result), result};
+}
+X_STATUS XConfig::ReadFallbackNotificationOptions(
+    NativeNotificationPreferenceCoordinator& coordinator,
+    NativeNotificationPreferenceCoordinator::Options& output) {
+  if (!console_store_) {
+    return vfs::HostStorageError(
+        console_store_error_
+            ? console_store_error_
+            : std::make_error_code(std::errc::operation_not_supported));
+  }
+  if (!coordinator.OwnsConsoleAuthority(console_store_)) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  const auto permit = coordinator.TryAcquireFallback();
+  if (!permit) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  uint32_t flags;
+  const auto error = ReadRetailFlags(flags);
+  if (error) {
+    return vfs::HostStorageError(error);
+  }
+  output =
+      NativeNotificationPreferenceCoordinator::OptionsFromRetailFlags(flags);
+  return X_STATUS_SUCCESS;
+}
+XConfig::UlongModification XConfig::WriteFallbackNotificationOptions(
+    NativeNotificationPreferenceCoordinator& coordinator,
+    const NativeNotificationPreferenceCoordinator::Options& options) {
+  if (!console_store_) {
+    return ModifySettingUlongObserved(
+        XCONFIG_USER_CATEGORY, XCONFIG_USER_RETAIL_FLAGS,
+        ~NativeNotificationPreferenceCoordinator::kOptionMask,
+        NativeNotificationPreferenceCoordinator::DisabledOptionBits(options));
+  }
+  if (!coordinator.OwnsConsoleAuthority(console_store_)) {
+    return {X_STATUS_INVALID_PARAMETER, {}};
+  }
+  if (global_critical_region::is_held_by_current_thread()) {
+    return {X_STATUS_INVALID_DEVICE_REQUEST, {}};
+  }
+  const auto permit = coordinator.TryAcquireFallback();
+  if (!permit) {
+    return {X_STATUS_INVALID_DEVICE_REQUEST, {}};
+  }
+  return ModifySettingUlongObserved(
+      XCONFIG_USER_CATEGORY, XCONFIG_USER_RETAIL_FLAGS,
+      ~NativeNotificationPreferenceCoordinator::kOptionMask,
+      NativeNotificationPreferenceCoordinator::DisabledOptionBits(options));
+}
+
 void XConfig::ReadSetting(const X_CONFIG_CATEGORY category,
                           const uint16_t setting_id, void* buffer) {
   uint8_t scratch[kMaxSettingSize] = {};
@@ -371,10 +622,10 @@ void XConfig::WriteSetting(const X_CONFIG_CATEGORY category,
             default:
               return;
           }
-          StoreConsoleSetting<int32_t>(cvars::video_standard, "video_standard",
-                                       standard);
-          StoreConsoleSetting<bool>(cvars::use_50Hz_mode, "use_50Hz_mode",
-                                    pal_50);
+          StoreLegacySetting<int32_t>(cvars::video_standard, "video_standard",
+                                      standard);
+          StoreLegacySetting<bool>(cvars::use_50Hz_mode, "use_50Hz_mode",
+                                   pal_50);
           return;
         }
       }
@@ -382,33 +633,35 @@ void XConfig::WriteSetting(const X_CONFIG_CATEGORY category,
     case XCONFIG_USER_CATEGORY:
       switch (setting_id) {
         case XCONFIG_USER_LANGUAGE:
-          StoreConsoleSetting<int32_t>(
+          StoreLegacySetting<int32_t>(
               cvars::user_language, "user_language",
               static_cast<int32_t>(xe::load_and_swap<uint32_t>(buffer)));
           return;
         case XCONFIG_USER_VIDEO_FLAGS:
-          StoreConsoleSetting<bool>(cvars::widescreen, "widescreen",
-                                    (xe::load_and_swap<uint32_t>(buffer) &
-                                     X_VIDEO_FLAGS::Widescreen) != 0);
+          StoreLegacySetting<bool>(cvars::widescreen, "widescreen",
+                                   (xe::load_and_swap<uint32_t>(buffer) &
+                                    X_VIDEO_FLAGS::Widescreen) != 0);
           return;
         case XCONFIG_USER_AUDIO_FLAGS:
-          StoreConsoleSetting<uint32_t>(cvars::audio_flag, "audio_flag",
-                                        xe::load_and_swap<uint32_t>(buffer));
+          StoreLegacySetting<uint32_t>(cvars::audio_flag, "audio_flag",
+                                       xe::load_and_swap<uint32_t>(buffer));
           return;
         case XCONFIG_USER_COUNTRY:
-          StoreConsoleSetting<int32_t>(
+          StoreLegacySetting<int32_t>(
               cvars::user_country, "user_country",
               static_cast<int32_t>(*reinterpret_cast<const uint8_t*>(buffer)));
           return;
-        case XCONFIG_USER_RETAIL_FLAGS:
-          StoreConsoleSetting<bool>(cvars::allow_nui_initialization,
-                                    "allow_nui_initialization",
-                                    (xe::load_and_swap<uint32_t>(buffer) &
-                                     X_RETAIL_FLAGS::KinectInitialized) != 0);
+        case XCONFIG_USER_RETAIL_FLAGS: {
+          const auto status = WriteSettingChecked(
+              category, setting_id, {static_cast<const uint8_t*>(buffer), 4});
+          if (XFAILED(status)) {
+            XELOGE("Console RetailFlags write failed: {:08X}", status);
+          }
           return;
+        }
         case XCONFIG_USER_MUSIC_VOLUME: {
           const float volume = xe::load_and_swap<float>(buffer);
-          StoreConsoleSetting<int32_t>(
+          StoreLegacySetting<int32_t>(
               cvars::xmp_default_volume, "xmp_default_volume",
               std::clamp(static_cast<int32_t>(std::lround(volume * 100.0f)), 0,
                          100));

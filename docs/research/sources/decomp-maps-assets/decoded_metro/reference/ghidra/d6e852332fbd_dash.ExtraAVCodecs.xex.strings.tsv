@@ -1,0 +1,1339 @@
+va	data_type	text
+0x9f7e0c00	string	bottom field has corruption in this frame
+0x9f7e0c2c	string	top field has corruption in this frame
+0x9f7e0ea0	string	*** %d output buffers not freed\n
+0x9f7e0ec8	string	e:\bt\1c10e6\core\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\gpupump.cpp[87] XenonAllocCompBuffers:
+0x9f7e0f58	string	e:\bt\1c10e6\core\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\gpupump.cpp[78] XenonAllocCompBuffers:
+0x9f7e0fe8	string	e:\bt\1c10e6\core\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\gpupump.cpp[69] XenonAllocCompBuffers:
+0x9f7e1078	string	e:\bt\1c10e6\core\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\gpupump.cpp[53] XenonAllocCompBuffers:
+0x9f7e1108	string	e:\bt\1c10e6\core\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\gpupump.cpp[38] XenonAllocCompBuffers:
+0x9f7e1678	string	   : DeltaScale   
+0x9f7e168c	string	VUI: time_offset_length
+0x9f7e16a4	string	VUI: dpb_output_delay_length_minus1
+0x9f7e16c8	string	VUI: cpb_removal_delay_length_minus1
+0x9f7e16f0	string	VUI: initial_cpb_removal_delay_length_minus1
+0x9f7e1720	string	VUI: bit_rate_value_minus1
+0x9f7e173c	string	VUI: cpb_size_value_minus1
+0x9f7e1758	string	VUI: cbr_flag
+0x9f7e1768	string	VUI: cpb_size_scale
+0x9f7e177c	string	VUI: bit_rate_scale
+0x9f7e1790	string	VUI: cpb_cnt_minus1
+0x9f7e17a4	string	PPS: second_chroma_qp_index_offset
+0x9f7e17c8	string	PPS: pic_scaling_list_present_flag
+0x9f7e17ec	string	PPS: pic_scaling_matrix_present_flag
+0x9f7e1814	string	PPS: transform_8x8_mode_flag
+0x9f7e1834	string	PPS: redundant_pic_cnt_present_flag
+0x9f7e1858	string	PPS: constrained_intra_pred_flag
+0x9f7e187c	string	PPS: deblocking_filter_control_present_flag
+0x9f7e18a8	string	PPS: chroma_qp_index_offset
+0x9f7e18c4	string	PPS: pic_init_qs_minus26
+0x9f7e18e0	string	PPS: pic_init_qp_minus26
+0x9f7e18fc	string	PPS: weighted_bipred_idc
+0x9f7e1918	string	PPS: weighted prediction flag
+0x9f7e1938	string	PPS: num_ref_idx_l1_active_minus1
+0x9f7e195c	string	PPS: num_ref_idx_l0_active_minus1
+0x9f7e1980	string	PPS: slice_group_change_rate_minus1
+0x9f7e19a4	string	PPS: slice_group_change_direction_flag
+0x9f7e19cc	string	slice_group_id[i]
+0x9f7e19e0	string	PPS: num_slice_group_map_units_minus1
+0x9f7e1a08	string	PPS: top_left [i]
+0x9f7e1a1c	string	PPS: bottom_right [i]
+0x9f7e1a34	string	PPS: run_length_minus1 [i]
+0x9f7e1a50	string	PPS: slice_group_map_type
+0x9f7e1a6c	string	PPS: num_slice_groups_minus1
+0x9f7e1a8c	string	PPS: pic_order_present_flag
+0x9f7e1aa8	string	PPS: entropy_coding_mode_flag
+0x9f7e1ac8	string	PPS: seq_parameter_set_id
+0x9f7e1ae4	string	PPS: pic_parameter_set_id
+0x9f7e1b00	string	VUI: max_dec_frame_buffering
+0x9f7e1b20	string	VUI: num_reorder_frames
+0x9f7e1b38	string	VUI: log2_max_mv_length_vertical
+0x9f7e1b5c	string	VUI: log2_max_mv_length_horizontal
+0x9f7e1b80	string	VUI: max_bits_per_mb_denom
+0x9f7e1b9c	string	VUI: max_bytes_per_pic_denom
+0x9f7e1bbc	string	VUI: motion_vectors_over_pic_boundaries_flag
+0x9f7e1bec	string	VUI: bitstream_restriction_flag
+0x9f7e1c0c	string	VUI: pic_struct_present_flag   
+0x9f7e1c2c	string	VUI: low_delay_hrd_flag
+0x9f7e1c44	string	VUI: vcl_hrd_parameters_present_flag
+0x9f7e1c6c	string	VUI: nal_hrd_parameters_present_flag
+0x9f7e1c94	string	VUI: fixed_frame_rate_flag
+0x9f7e1cb0	string	VUI: time_scale
+0x9f7e1cc0	string	VUI: num_units_in_tick
+0x9f7e1cd8	string	VUI: timing_info_present_flag
+0x9f7e1cf8	string	VUI: chroma_sample_loc_type_bottom_field
+0x9f7e1d24	string	VUI: chroma_sample_loc_type_top_field
+0x9f7e1d4c	string	VUI: chroma_loc_info_present_flag
+0x9f7e1d70	string	VUI: matrix_coefficients
+0x9f7e1d8c	string	VUI: transfer_characteristics
+0x9f7e1dac	string	VUI: colour_primaries
+0x9f7e1dc4	string	VUI: color_description_present_flag
+0x9f7e1de8	string	VUI: video_full_range_flag
+0x9f7e1e04	string	VUI: video_format
+0x9f7e1e18	string	VUI: video_signal_type_present_flag
+0x9f7e1e3c	string	VUI: overscan_appropriate_flag
+0x9f7e1e5c	string	VUI: overscan_info_present_flag
+0x9f7e1e7c	string	VUI: sar_height
+0x9f7e1e8c	string	VUI: sar_width
+0x9f7e1e9c	string	VUI: aspect_ratio_idc
+0x9f7e1eb4	string	VUI: aspect_ratio_info_present_flag
+0x9f7e1ed8	string	SPS: vui_parameters_present_flag
+0x9f7e1efc	string	SPS: frame_cropping_rect_bottom_offset
+0x9f7e1f24	string	SPS: frame_cropping_rect_top_offset
+0x9f7e1f48	string	SPS: frame_cropping_rect_right_offset
+0x9f7e1f70	string	SPS: frame_cropping_rect_left_offset
+0x9f7e1f98	string	SPS: frame_cropping_flag
+0x9f7e1fb4	string	SPS: direct_8x8_inference_flag
+0x9f7e1fd4	string	SPS: mb_adaptive_frame_field_flag
+0x9f7e1ff8	string	SPS: frame_mbs_only_flag
+0x9f7e2014	string	SPS: pic_height_in_map_units_minus1
+0x9f7e2038	string	SPS: pic_width_in_mbs_minus1
+0x9f7e2058	string	SPS: gaps_in_frame_num_value_allowed_flag
+0x9f7e2084	string	SPS: num_ref_frames
+0x9f7e2098	string	SPS: offset_for_ref_frame[i]
+0x9f7e20b8	string	SPS: num_ref_frames_in_pic_order_cnt_cycle
+0x9f7e20e4	string	SPS: offset_for_top_to_bottom_field
+0x9f7e2108	string	SPS: offset_for_non_ref_pic
+0x9f7e2124	string	SPS: delta_pic_order_always_zero_flag
+0x9f7e214c	string	SPS: log2_max_pic_order_cnt_lsb_minus4
+0x9f7e2174	string	SPS: pic_order_cnt_type
+0x9f7e218c	string	SPS: log2_max_frame_num_minus4
+0x9f7e21ac	string	SPS: seq_scaling_list_present_flag
+0x9f7e21d0	string	SPS: seq_scaling_matrix_present_flag
+0x9f7e21f8	string	SPS: lossless_qpprime_y_zero_flag
+0x9f7e221c	string	SPS: bit_depth_chroma_minus8
+0x9f7e223c	string	SPS: bit_depth_luma_minus8
+0x9f7e2258	string	SPS: residue_transform_flag
+0x9f7e2274	string	SPS: chroma_format_idc
+0x9f7e228c	string	SPS: seq_parameter_set_id
+0x9f7e22a8	string	SPS: level_idc
+0x9f7e22b8	string	SPS: reserved_zero_4bits
+0x9f7e22d4	string	SPS: constrained_set3_flag
+0x9f7e22f0	string	SPS: constrained_set2_flag
+0x9f7e230c	string	SPS: constrained_set1_flag
+0x9f7e2328	string	SPS: constrained_set0_flag
+0x9f7e2344	string	SPS: profile_idc
+0x9f7e2410	string	\tTotal YUVBuffer allocated:%d bytes\n
+0x9f7e2448	string	\t%s entry:%d:%d bytes\n
+0x9f7e2460	string	YUVBufferPool:\n
+0x9f7e24c0	string	\tTotal image allocation:%d\n
+0x9f7e24dc	string	\tEach image: Y: %d, U: %d, V:%d\n
+0x9f7e2500	string	ImageArray, %d images.\n
+0x9f7e2603	string	de:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DummyPS.updb
+0x9f7e270b	string	de:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MemCopy.updb
+0x9f7e27cc	string	dstBuffer
+0x9f7e29bb	string	ce:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MemSet.updb
+0x9f7e2a7c	string	dstBuffer
+0x9f7e2a98	string	srcValue
+0x9f7e2ab4	string	stride
+0x9f7e2d03	string	je:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_ReshuffleLuma.updb
+0x9f7e2e0c	string	errConcealmentInfo
+0x9f7e2e1f	string	exportAddress
+0x9f7e2e2d	string	inputRef
+0x9f7e2e48	string	tileData
+0x9f7e3773	string	pe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_ReshuffleLuma_mbaff.updb
+0x9f7e38a8	string	errConcealmentInfo
+0x9f7e38bb	string	exportAddress
+0x9f7e38c9	string	exportAddress_YUVBuffer
+0x9f7e38e1	string	fConst4_LfDimMB_YUVBuffer
+0x9f7e38fb	string	inputRef
+0x9f7e3914	string	tileData
+0x9f7e44d3	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_ReshuffleChroma.updb
+0x9f7e45f0	string	errConcealmentInfo
+0x9f7e4603	string	exportAddress
+0x9f7e4611	string	inputRef
+0x9f7e462c	string	offsetUV
+0x9f7e4635	string	tileData
+0x9f7e4c1b	string	re:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_ReshuffleChroma_mbaff.updb
+0x9f7e4d68	string	errConcealmentInfo
+0x9f7e4d7b	string	exportAddress
+0x9f7e4d89	string	exportAddress_YUVBuffer
+0x9f7e4da1	string	fConst4_LfDimMB_YUVBuffer
+0x9f7e4dbb	string	inputRef
+0x9f7e4dd4	string	offsetUV
+0x9f7e4ddd	string	tileData
+0x9f7e6990	string	 !"#$%&'()*+,-./0123456789:;<=>?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+0x9f7f0129	string	afffffff
+0x9f7f2768	string	\nThis program is protected under international and U.S. copyright laws as\nan unpublished work.  Do not copy.\n\nCopyright 2003-2006 Dolby Laboratories. All rights reserved.\n\nUSE OF THIS SOFTWARE IS SUBJECT TO A LEGAL AGREEMENT BETWEEN YOU AND DOLBY\nLABORATORIES. DO NOT USE THIS SOFTWARE UNLESS YOU AGREE TO THE TERMS AND \nCONDITIONS IN THE AGREEMENT.  BY USING THIS SOFTWARE, YOU ACKNOWLEDGE THAT \nYOU HAVE READ THE AGREEMENT AND THAT YOU AGREE TO BE BOUND BY ITS TERMS. \n\n
+0x9f7f33b4	string	SH: pic_parameter_set_id
+0x9f7f33d0	string	SH: slice_type
+0x9f7f33e0	string	SH: first_mb_in_slice
+0x9f7f33f8	string	SH: reordering_of_pic_nums_idc_l1
+0x9f7f341c	string	SH: abs_diff_pic_num_minus1_l1
+0x9f7f343c	string	SH: long_term_pic_idx_l1
+0x9f7f3458	string	SH: ref_pic_list_reordering_flag_l1
+0x9f7f347c	string	SH: reordering_of_pic_nums_idc_l0
+0x9f7f34a0	string	SH: abs_diff_pic_num_minus1_l0
+0x9f7f34c0	string	SH: long_term_pic_idx_l0
+0x9f7f34dc	string	SH: ref_pic_list_reordering_flag_l0
+0x9f7f3500	string	SH: luma_weight_flag_l1
+0x9f7f3518	string	SH: luma_weight_l1
+0x9f7f352c	string	SH: luma_offset_l1
+0x9f7f3540	string	SH: chroma_weight_flag_l1
+0x9f7f355c	string	SH: chroma_weight_l1
+0x9f7f3574	string	SH: chroma_offset_l1
+0x9f7f358c	string	SH: luma_weight_flag_l0
+0x9f7f35a4	string	SH: luma_weight_l0
+0x9f7f35b8	string	SH: luma_offset_l0
+0x9f7f35cc	string	SH: chroma_weight_flag_l0
+0x9f7f35e8	string	SH: chroma_weight_l0
+0x9f7f3600	string	SH: chroma_offset_l0
+0x9f7f3618	string	SH: chroma_log2_weight_denom
+0x9f7f3638	string	SH: luma_log2_weight_denom
+0x9f7f3654	string	SH: memory_management_control_operation
+0x9f7f367c	string	SH: difference_of_pic_nums_minus1
+0x9f7f36a0	string	SH: long_term_pic_num
+0x9f7f36b8	string	SH: long_term_frame_idx
+0x9f7f36d0	string	SH: max_long_term_pic_idx_plus1
+0x9f7f36f0	string	SH: adaptive_ref_pic_buffering_flag
+0x9f7f3714	string	SH: long_term_reference_flag
+0x9f7f3734	string	SH: no_output_of_prior_pics_flag
+0x9f7f3758	string	SH: slice_group_change_cycle
+0x9f7f3778	string	SH: slice_beta_offset_div2
+0x9f7f3794	string	SH: slice_alpha_c0_offset_div2
+0x9f7f37b4	string	SH: disable_deblocking_filter_idc
+0x9f7f37d8	string	SH: slice_qs_delta
+0x9f7f37ec	string	SH: sp_for_switch_flag
+0x9f7f3804	string	SH: slice_qp_delta
+0x9f7f3818	string	SH: cabac_init_idc
+0x9f7f382c	string	SH: num_ref_idx_l1_active_minus1
+0x9f7f3850	string	SH: num_ref_idx_l0_active_minus1
+0x9f7f3874	string	SH: num_ref_idx_override_flag
+0x9f7f3894	string	SH: direct_spatial_mv_pred_flag
+0x9f7f38b4	string	SH: redundant_pic_cnt
+0x9f7f38cc	string	SH: delta_pic_order_cnt[1]
+0x9f7f38e8	string	SH: delta_pic_order_cnt[0]
+0x9f7f3904	string	SH: delta_pic_order_cnt_bottom
+0x9f7f3924	string	SH: pic_order_cnt_lsb
+0x9f7f393c	string	SH: idr_pic_id
+0x9f7f394c	string	SH: bottom_field_flag
+0x9f7f3964	string	SH: field_pic_flag
+0x9f7f3978	string	SH: frame_num
+0x9f7f39a8	string	SEI: interpret_user_data_unregistered_info
+0x9f7f39d4	string	SEI: interpret_user_data_registered_itu_t_t35_info
+0x9f7f3a08	string	SEI: pan_scan_rect_repetition_period
+0x9f7f3a30	string	SEI: pan_scan_rect_left_offset
+0x9f7f3a50	string	SEI: pan_scan_rect_right_offset
+0x9f7f3a70	string	SEI: pan_scan_rect_top_offset
+0x9f7f3a90	string	SEI: pan_scan_rect_bottom_offset
+0x9f7f3ab4	string	SEI: pan_scan_cnt_minus1
+0x9f7f3ad0	string	SEI: pan_scan_rect_cancel_flag
+0x9f7f3af0	string	SEI: pan_scan_rect_id
+0x9f7f3b08	string	SEI: changing_slice_group_idc
+0x9f7f3b28	string	SEI: broken_link_flag
+0x9f7f3b40	string	SEI: exact_match_flag
+0x9f7f3b58	string	SEI: recovery_frame_cnt
+0x9f7f3b70	string	SEI: original_frame_num
+0x9f7f3b88	string	SEI: original_idr_flag
+0x9f7f3ba0	string	SEI: clock_time_stamp_flag
+0x9f7f3bbc	string	SEI: ct_type
+0x9f7f3bcc	string	SEI: nuit_field_based_flag
+0x9f7f3be8	string	SEI: counting_type
+0x9f7f3bfc	string	SEI: full_timestamp_flag
+0x9f7f3c18	string	SEI: discontinuity_flag
+0x9f7f3c30	string	SEI: cnt_dropped_flag
+0x9f7f3c48	string	SEI: nframes
+0x9f7f3c58	string	SEI: seconds_value
+0x9f7f3c6c	string	SEI: minutes_value
+0x9f7f3c80	string	SEI: hours_value
+0x9f7f3c94	string	SEI: seconds_flag
+0x9f7f3ca8	string	SEI: minutes_flag
+0x9f7f3cbc	string	SEI: hours_flag
+0x9f7f3ccc	string	SEI: time_offset
+0x9f7f3ce0	string	SEI: pic_struct
+0x9f7f3cf0	string	SEI: dpb_output_delay
+0x9f7f3d08	string	SEI: cpb_removal_delay
+0x9f7f3d20	string	SEI: payloadType
+0x9f7f3d34	string	SEI: payloadSize
+0x9f7f3f23	string	ye:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_LoopfilterMbaffHStrengthsGpu.updb
+0x9f7f404c	string	f4Array_BStrenABChrSh
+0x9f7f4074	string	fConst4_BStrenBParams
+0x9f7f409c	string	fConst4_BStrenDimMB
+0x9f7f40b0	string	fConst4_BStrenQPParams
+0x9f7f40c7	string	linTex_BStrenMV
+0x9f7f40e8	string	linTex_BStrenRefIdx0
+0x9f7f40fd	string	vbExp_BStrenDestH
+0x9f7f5f33	string	ye:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_LoopfilterMbaffVStrengthsGpu.updb
+0x9f7f605c	string	f4Array_BStrenABChrSh
+0x9f7f6084	string	fConst4_BStrenBParams
+0x9f7f60ac	string	fConst4_BStrenDimMB
+0x9f7f60c0	string	fConst4_BStrenQPParams
+0x9f7f60d7	string	linTex_BStrenMV
+0x9f7f60f8	string	linTex_BStrenRefIdx0
+0x9f7f610d	string	vbExp_BStrenDestV
+0x9f7f8363	string	re:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaVWaveMbaff.updb
+0x9f7f84c0	string	exportTemp
+0x9f7f84dc	string	f4Array_LfABChrSh
+0x9f7f8500	string	f4Array_LfClipTable
+0x9f7f8524	string	fConst4_LfDimMB
+0x9f7f8534	string	fConst4_LfWaveData0
+0x9f7f8548	string	fConst4_LfWaveData1
+0x9f7f855c	string	linTex_LfInTexScratch
+0x9f7f8584	string	linTex_LfTileDataY
+0x9f7f8597	string	linTex_LfTileMap
+0x9f7f85a8	string	regSliceQP
+0x9f7f990b	string	re:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaHWaveMbaff.updb
+0x9f7f9a54	string	exportTemp
+0x9f7f9a70	string	f4Array_LfABChrSh
+0x9f7f9a94	string	f4Array_LfClipTable
+0x9f7f9ab8	string	fConst4_LfDimMB
+0x9f7f9ac8	string	fConst4_LfWaveData0
+0x9f7f9adc	string	fConst4_LfWaveData1
+0x9f7f9af0	string	linTex_LfInTexScratch
+0x9f7f9b18	string	linTex_LfInTexScratch4
+0x9f7f9b2f	string	regSliceQP
+0x9f7fc7c3	string	we:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaHWaveMbaffFrame.updb
+0x9f7fc910	string	exportTemp
+0x9f7fc92c	string	f4Array_LfABChrSh
+0x9f7fc950	string	f4Array_LfClipTable
+0x9f7fc974	string	fConst4_LfDimMB
+0x9f7fc984	string	fConst4_LfWaveData0
+0x9f7fc998	string	fConst4_LfWaveData1
+0x9f7fc9ac	string	linTex_LfInTexScratch
+0x9f7fc9d4	string	linTex_LfInTexScratch4
+0x9f7fc9eb	string	regSliceQP
+0x9f7ff153	string	we:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaHWaveMbaffField.updb
+0x9f7ff2a0	string	exportTemp
+0x9f7ff2bc	string	f4Array_LfABChrSh
+0x9f7ff2e0	string	f4Array_LfClipTable
+0x9f7ff304	string	fConst4_LfDimMB
+0x9f7ff314	string	fConst4_LfWaveData0
+0x9f7ff328	string	fConst4_LfWaveData1
+0x9f7ff33c	string	linTex_LfInTexScratch
+0x9f7ff364	string	linTex_LfInTexScratch4
+0x9f7ff37b	string	regSliceQP
+0x9f80160b	string	qe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaShufMbaff.updb
+0x9f801704	string	exportTemp
+0x9f801720	string	fConst4_LfDimMB
+0x9f801730	string	fConst4_LfDimMB_YUVBuffer
+0x9f80174a	string	linTex_LfInTexScratch4
+0x9f801774	string	vbExp_LfDestination
+0x9f80228b	string	qe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaTLMbaff.updb
+0x9f802410	string	exportTemp
+0x9f80242c	string	f4Array_LfChromaABChrSh
+0x9f802454	string	f4Array_LfChromaClipTable
+0x9f802480	string	fConst4_LfChromaDimMB
+0x9f802496	string	fConst4_LfChromaFieldLimits
+0x9f8024b2	string	fConst4_LfChromaQPParams
+0x9f8024cb	string	fConst4_LfChromaScratchOff
+0x9f8024e6	string	inputScratch
+0x9f802504	string	linTex_LfChromaBsh
+0x9f802517	string	linTex_LfChromaBsv
+0x9f80252a	string	regSliceQP
+0x9f802548	string	tex2D_LfChromaInput
+0x9f8041bb	string	qe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaBLMbaff.updb
+0x9f80432c	string	exportTemp
+0x9f804348	string	f4Array_LfChromaABChrSh
+0x9f804370	string	f4Array_LfChromaClipTable
+0x9f80439c	string	fConst4_LfChromaDimMB
+0x9f8043b2	string	fConst4_LfChromaFieldLimits
+0x9f8043ce	string	fConst4_LfChromaQPParams
+0x9f8043e7	string	fConst4_LfChromaScratchOff
+0x9f804402	string	linTex_LfChromaBsh
+0x9f804428	string	linTex_LfChromaBsv
+0x9f80443b	string	regSliceQP
+0x9f804458	string	tex2D_LfChromaInput
+0x9f807443	string	te:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaShufTMbaff.updb
+0x9f80753c	string	ScratchOff
+0x9f807558	string	exportTemp
+0x9f807563	string	fConst4_LfDimMB
+0x9f807573	string	fConst4_LfDimMB_YUVBuffer
+0x9f80758d	string	vbExp_LfDestination
+0x9f807993	string	te:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaShufBMbaff.updb
+0x9f807aa0	string	QPParams
+0x9f807abc	string	ScratchOff
+0x9f807ac7	string	exportTemp
+0x9f807ad2	string	fConst4_LfDimMB
+0x9f807ae2	string	fConst4_LfDimMB_YUVBuffer
+0x9f807afc	string	vbExp_LfDestination
+0x9f807eeb	string	qe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaTRMbaff.updb
+0x9f80805c	string	exportTemp
+0x9f808078	string	f4Array_LfChromaABChrSh
+0x9f8080a0	string	f4Array_LfChromaClipTable
+0x9f8080cc	string	fConst4_LfChromaDimMB
+0x9f8080e2	string	fConst4_LfChromaFieldLimits
+0x9f8080fe	string	fConst4_LfChromaQPParams
+0x9f808117	string	fConst4_LfChromaScratchOff
+0x9f808132	string	linTex_LfChromaBsh
+0x9f808158	string	linTex_LfChromaBsv
+0x9f80816b	string	regSliceQP
+0x9f808188	string	tex2D_LfChromaInput
+0x9f80af6b	string	ve:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaTRMbaffField.updb
+0x9f80b0e0	string	exportTemp
+0x9f80b0fc	string	f4Array_LfChromaABChrSh
+0x9f80b124	string	f4Array_LfChromaClipTable
+0x9f80b150	string	fConst4_LfChromaDimMB
+0x9f80b166	string	fConst4_LfChromaFieldLimits
+0x9f80b182	string	fConst4_LfChromaQPParams
+0x9f80b19b	string	fConst4_LfChromaScratchOff
+0x9f80b1b6	string	linTex_LfChromaBsh
+0x9f80b1dc	string	linTex_LfChromaBsv
+0x9f80b1ef	string	regSliceQP
+0x9f80b20c	string	tex2D_LfChromaInput
+0x9f80cfc3	string	ve:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaTRMbaffFrame.updb
+0x9f80d138	string	exportTemp
+0x9f80d154	string	f4Array_LfChromaABChrSh
+0x9f80d17c	string	f4Array_LfChromaClipTable
+0x9f80d1a8	string	fConst4_LfChromaDimMB
+0x9f80d1be	string	fConst4_LfChromaFieldLimits
+0x9f80d1da	string	fConst4_LfChromaQPParams
+0x9f80d1f3	string	fConst4_LfChromaScratchOff
+0x9f80d20e	string	linTex_LfChromaBsh
+0x9f80d234	string	linTex_LfChromaBsv
+0x9f80d247	string	regSliceQP
+0x9f80d264	string	tex2D_LfChromaInput
+0x9f80eb5b	string	we:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaVWaveMbaff1pass.updb
+0x9f80ec6c	string	exportTemp
+0x9f80ec88	string	f4Array_LfABChrSh
+0x9f80ecac	string	f4Array_LfClipTable
+0x9f80ecd0	string	fConst4_LfDimMB
+0x9f80ece0	string	regSliceQP
+0x9f80ecfc	string	tex2D_LfInput
+0x9f80fc6b	string	we:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaHWaveMbaff1pass.updb
+0x9f80fd7c	string	exportTemp
+0x9f80fd98	string	f4Array_LfABChrSh
+0x9f80fdbc	string	f4Array_LfClipTable
+0x9f80fde0	string	fConst4_LfDimMB
+0x9f80fdf0	string	linTex_LfInTexScratch
+0x9f80fe18	string	regSliceQP
+0x9f811683	string	ve:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaShufMbaff1pass.updb
+0x9f811780	string	exportTemp
+0x9f81179c	string	fConst4_LfDimMB
+0x9f8117ac	string	fConst4_LfDimMB_YUVBuffer
+0x9f8117c6	string	linTex_LfInTexScratch
+0x9f8117ec	string	vbExp_LfDestination
+0x9f811c14	string	H264_PostProc
+0x9f811c24	string	H264_MBaffeblockLumaAfterWave
+0x9f811c44	string	H264_MBaffDeblockLumaGroup%u
+0x9f811c68	string	H264_MBaffDeblockChroma
+0x9f811c80	string	H264_MBaffDeblockLumaGroup0
+0x9f811c9c	string	H264_MBaffDeblockLumaNoWaves
+0x9f811cbc	string	H264_MBaffBStrength
+0x9f811cfb	string	ge:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_BStrengthV.updb
+0x9f811e10	string	f4Array_BStrenABChrSh
+0x9f811e38	string	f4Array_BStrenClipTable
+0x9f811e60	string	fConst4_BStrenBParams
+0x9f811e88	string	fConst4_BStrenDimMB
+0x9f811e9c	string	linTex_BStrenMV
+0x9f811ebc	string	linTex_BStrenRefIdx0
+0x9f811ed1	string	vbExp_BStrenDestV
+0x9f81383b	string	ge:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_BStrengthH.updb
+0x9f813950	string	f4Array_BStrenABChrSh
+0x9f813978	string	f4Array_BStrenClipTable
+0x9f8139a0	string	fConst4_BStrenBParams
+0x9f8139c8	string	fConst4_BStrenDimMB
+0x9f8139dc	string	linTex_BStrenMV
+0x9f8139fc	string	linTex_BStrenRefIdx0
+0x9f813a11	string	vbExp_BStrenDestH
+0x9f8153a3	string	me:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaVWave.updb
+0x9f8154ac	string	exportTemp
+0x9f8154c8	string	fConst4_LfDimMB
+0x9f8154d8	string	fConst4_LfWaveData0
+0x9f8154ec	string	fConst4_LfWaveData1
+0x9f815500	string	linTex_LfTileDataY
+0x9f815524	string	linTex_LfTileMap
+0x9f816123	string	me:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaHWave.updb
+0x9f816204	string	exportTemp
+0x9f816220	string	fConst4_LfDimMB
+0x9f816230	string	fConst4_LfWaveData0
+0x9f816244	string	fConst4_LfWaveData1
+0x9f817073	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockLumaShuf.updb
+0x9f817128	string	fConst4_LfDimMB
+0x9f817148	string	vbExp_LfDestination
+0x9f817a73	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaTL.updb
+0x9f817bdc	string	ALPHABETACRSH_TABLE
+0x9f817c00	string	CLIP_TABLE
+0x9f817c1c	string	QPParams
+0x9f817c38	string	ScratchOff
+0x9f817c43	string	exportTemp
+0x9f817c4e	string	fConst4_LfDimMB
+0x9f817c5e	string	fConst4_LfFieldLimits
+0x9f817c74	string	linTex_LfBsh
+0x9f817c94	string	linTex_LfBsv
+0x9f817ca1	string	regSliceQP
+0x9f817cbc	string	tex2D_LfInput
+0x9f81896b	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaTR.updb
+0x9f818ad4	string	ALPHABETACRSH_TABLE
+0x9f818af8	string	CLIP_TABLE
+0x9f818b14	string	QPParams
+0x9f818b30	string	ScratchOff
+0x9f818b3b	string	exportTemp
+0x9f818b46	string	fConst4_LfDimMB
+0x9f818b56	string	fConst4_LfFieldLimits
+0x9f818b6c	string	linTex_LfBsh
+0x9f818b8c	string	linTex_LfBsv
+0x9f818b99	string	regSliceQP
+0x9f818bb4	string	tex2D_LfInput
+0x9f819803	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaBL.updb
+0x9f81996c	string	ALPHABETACRSH_TABLE
+0x9f819990	string	CLIP_TABLE
+0x9f8199ac	string	QPParams
+0x9f8199c8	string	ScratchOff
+0x9f8199d3	string	exportTemp
+0x9f8199de	string	fConst4_LfDimMB
+0x9f8199ee	string	fConst4_LfFieldLimits
+0x9f819a04	string	linTex_LfBsh
+0x9f819a24	string	linTex_LfBsv
+0x9f819a31	string	regSliceQP
+0x9f819a4c	string	tex2D_LfInput
+0x9f81a66b	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaBR.updb
+0x9f81a7d4	string	ALPHABETACRSH_TABLE
+0x9f81a7f8	string	CLIP_TABLE
+0x9f81a814	string	QPParams
+0x9f81a830	string	ScratchOff
+0x9f81a83b	string	exportTemp
+0x9f81a846	string	fConst4_LfDimMB
+0x9f81a856	string	fConst4_LfFieldLimits
+0x9f81a86c	string	linTex_LfBsh
+0x9f81a88c	string	linTex_LfBsv
+0x9f81a899	string	regSliceQP
+0x9f81a8b4	string	tex2D_LfInput
+0x9f81b423	string	oe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaShufT.updb
+0x9f81b4dc	string	fConst4_LfDimMB
+0x9f81b4fc	string	vbExp_LfDestination
+0x9f81b7b3	string	oe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DeblockChromaShufB.updb
+0x9f81b86c	string	fConst4_LfDimMB
+0x9f81b88c	string	vbExp_LfDestination
+0x9f81c090	string	H264_RunDeblockLumaAfterWave
+0x9f81c0b0	string	H264_RunDeblockLumaGroup%u
+0x9f81c0d0	string	H264_RunDeblockChroma
+0x9f81c0e8	string	H264_RunDeblockLumaGroup0
+0x9f81c104	string	H264_RunBStrength
+0x9f824b88	string	Slice has corruption during MC
+0x9f824c38	string	H264_DeBlock_start
+0x9f824c4c	string	H264_Decode1
+0x9f82aaa3	string	je:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IntraPredY4x4.updb
+0x9f82abbc	string	BlkParams4x4
+0x9f82abf4	string	NeighborTable
+0x9f82ac14	string	exportTileDataY
+0x9f82ac24	string	inputMBStream
+0x9f82ac32	string	inputTileDataY
+0x9f82ac41	string	inputTileMap
+0x9f82c9bb	string	je:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IntraPredY8x8.updb
+0x9f82cae8	string	BlkParams4x4
+0x9f82cb20	string	NeighborTable
+0x9f82cb40	string	exportTileDataY
+0x9f82cb50	string	fieldLimits
+0x9f82cb5c	string	inputMBStream
+0x9f82cb6a	string	inputTileDataY
+0x9f82cb79	string	inputTileMap
+0x9f82e65b	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IntraPredY16x16.updb
+0x9f82e788	string	BlkParams4x4
+0x9f82e7c0	string	NeighborTable
+0x9f82e7e0	string	exportTileDataY
+0x9f82e7f0	string	fieldLimits
+0x9f82e7fc	string	inputMBStream
+0x9f82e80a	string	inputTileDataY
+0x9f82e819	string	inputTileMap
+0x9f82fa5b	string	ge:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IntraPredC.updb
+0x9f82fbac	string	BlkParams4x4
+0x9f82fbec	string	NeighborTable
+0x9f82fc0f	string	exportTileDataUV
+0x9f82fc20	string	fieldLimitsUV
+0x9f82fc2e	string	inputMBStreamUV
+0x9f82fc3e	string	inputTileDataUV
+0x9f82fc4e	string	inputTileMapUV
+0x9f830823	string	pe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IntraPredY4x4_mbaff.updb
+0x9f830940	string	BlkParams4x4
+0x9f830978	string	NeighborTable
+0x9f830998	string	exportTileDataY
+0x9f8309b8	string	inputMBStream
+0x9f8309c6	string	inputTileDataY
+0x9f8309d5	string	inputTileMap
+0x9f832cbb	string	pe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IntraPredY8x8_mbaff.updb
+0x9f832dd8	string	BlkParams4x4
+0x9f832e10	string	NeighborTable
+0x9f832e30	string	exportTileDataY
+0x9f832e50	string	inputMBStream
+0x9f832e5e	string	inputTileDataY
+0x9f832e6d	string	inputTileMap
+0x9f834afb	string	re:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IntraPredY16x16_mbaff.updb
+0x9f834c1c	string	BlkParams4x4
+0x9f834c54	string	NeighborTable
+0x9f834c74	string	exportTileDataY
+0x9f834c94	string	inputMBStream
+0x9f834ca2	string	inputTileDataY
+0x9f834cb1	string	inputTileMap
+0x9f835e83	string	me:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IntraPredC_mbaff.updb
+0x9f835fc8	string	BlkParams4x4
+0x9f836000	string	NeighborTable
+0x9f836034	string	constrained_intra
+0x9f836046	string	exportTileDataUV
+0x9f836057	string	inputMBStreamUV
+0x9f836067	string	inputTileDataUV
+0x9f836077	string	inputTileMapUV
+0x9f837023	string	de:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DummyPS.updb
+0x9f8372dc	string	H264_DecodeYUV_mbaff_group%u
+0x9f8372fc	string	H264_DecodeYUV_dynamic_group%u
+0x9f83731c	string	H264_nonmbaff_Intra_gpu_prep
+0x9f83733c	string	H264_mbaff_Intra_gpu_prep
+0x9f837383	string	je:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_FilmGrainCopy.updb
+0x9f837478	string	exportDest
+0x9f837483	string	fieldDup
+0x9f83748c	string	inputValue
+0x9f837cbb	string	de:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaP.updb
+0x9f837e30	string	ApplyWeights
+0x9f837e5b	string	RefIdx
+0x9f837e74	string	Residuals
+0x9f837e7e	string	SBtable
+0x9f837e98	string	SliceWeights
+0x9f837eb8	string	SrcImage
+0x9f837ec1	string	exportAddress
+0x9f837ecf	string	fieldLimits
+0x9f837edb	string	imageRefTable
+0x9f837efc	string	inputTileMap
+0x9f839c93	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB0.updb
+0x9f839e5c	string	ApplyWeights
+0x9f839e87	string	ListSize
+0x9f839e90	string	RefIdx
+0x9f839ea8	string	Residuals
+0x9f839eb2	string	SBtable
+0x9f839ecc	string	SliceWeights
+0x9f839eec	string	SliceWeights2
+0x9f839efa	string	SrcImage
+0x9f839f03	string	exportAddress
+0x9f839f11	string	fieldLimits
+0x9f839f1d	string	imageRefTable
+0x9f839f3c	string	inputTileDataPB1
+0x9f839f4d	string	inputTileMap
+0x9f839f5a	string	inputTileMapPB1
+0x9f83c15b	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB1.updb
+0x9f83c2a2	string	SBtable
+0x9f83c2bc	string	SrcImage
+0x9f83c2d8	string	exportAddress
+0x9f83c2e6	string	fieldLimits
+0x9f83c2f2	string	imageRefTable
+0x9f83c310	string	inputTileMapPB1
+0x9f83dda3	string	je:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaP_mbaff.updb
+0x9f83df20	string	ApplyWeights
+0x9f83df4b	string	RefIdx
+0x9f83df64	string	Residuals
+0x9f83df6e	string	SBtable
+0x9f83df88	string	SliceWeights
+0x9f83dfa8	string	SrcImage
+0x9f83dfb1	string	exportAddress
+0x9f83dfbf	string	fieldLimits
+0x9f83dfcb	string	imageRefTable
+0x9f83dfec	string	inputTileMap
+0x9f83ff03	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB0_mbaff.updb
+0x9f8400e4	string	ApplyWeights
+0x9f840104	string	BiPredIdc
+0x9f840119	string	ListSize
+0x9f840122	string	RefIdx
+0x9f84013c	string	Residuals
+0x9f840146	string	SBtable
+0x9f840160	string	SliceWeights
+0x9f840180	string	SliceWeights2
+0x9f84018e	string	SrcImage
+0x9f840197	string	exportAddress
+0x9f8401a5	string	fieldLimits
+0x9f8401b1	string	imageRefTable
+0x9f8401d0	string	inputTileDataPB1
+0x9f8401e1	string	inputTileMap
+0x9f8401ee	string	inputTileMapPB1
+0x9f842613	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB1_mbaff.updb
+0x9f84275e	string	SBtable
+0x9f842778	string	SrcImage
+0x9f842794	string	exportAddress
+0x9f8427a2	string	fieldLimits
+0x9f8427ae	string	imageRefTable
+0x9f8427cc	string	inputTileMapPB1
+0x9f8442fb	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCChromaP.updb
+0x9f84449c	string	ApplyWeights
+0x9f8444c7	string	MvAdjust
+0x9f8444e0	string	RefIdx
+0x9f8444f8	string	Residuals
+0x9f844502	string	SBtable
+0x9f84451c	string	SliceWeights
+0x9f84453c	string	SrcImage
+0x9f844548	string	exportAddress
+0x9f844556	string	fieldLimits
+0x9f844562	string	imageRefTable
+0x9f844570	string	inputTileMapUV
+0x9f844f6b	string	he:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCChromaPB0.updb
+0x9f84515c	string	ApplyWeights
+0x9f845187	string	ListSize
+0x9f845190	string	MvAdjust
+0x9f8451ac	string	RefIdx
+0x9f8451c4	string	Residuals
+0x9f8451ce	string	SBtable
+0x9f8451e8	string	SliceWeights
+0x9f845208	string	SliceWeights2
+0x9f845216	string	SrcImage
+0x9f845222	string	exportAddress
+0x9f845230	string	fieldLimits
+0x9f84523c	string	imageRefTable
+0x9f84524a	string	inputTileDataPB1
+0x9f84525b	string	inputTileMapPB1
+0x9f84526b	string	inputTileMapUV
+0x9f845e9b	string	he:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCChromaPB1.updb
+0x9f84600a	string	MvAdjust
+0x9f846024	string	SBtable
+0x9f84603c	string	SrcImage
+0x9f84605b	string	exportAddress
+0x9f846069	string	fieldLimits
+0x9f846075	string	imageRefTable
+0x9f846094	string	inputTileMapPB1
+0x9f846873	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCChromaP_mbaff.updb
+0x9f846a18	string	ApplyWeights
+0x9f846a43	string	RefIdx
+0x9f846a5c	string	Residuals
+0x9f846a66	string	SBtable
+0x9f846a80	string	SliceWeights
+0x9f846aa0	string	SrcImage
+0x9f846aac	string	exportAddress
+0x9f846aba	string	fieldLimits
+0x9f846ac6	string	imageRefTable
+0x9f846ad4	string	inputTileMapUV
+0x9f846ae3	string	rgrgiFldChromaVecAdjust
+0x9f84769b	string	ne:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCChromaPB0_mbaff.updb
+0x9f8478a8	string	ApplyWeights
+0x9f8478c8	string	BiPredIdc
+0x9f8478dd	string	ListSize
+0x9f8478e6	string	RefIdx
+0x9f847900	string	Residuals
+0x9f84790a	string	SBtable
+0x9f847924	string	SliceWeights
+0x9f847944	string	SliceWeights2
+0x9f847952	string	SrcImage
+0x9f84795e	string	exportAddress
+0x9f84796c	string	fieldLimits
+0x9f847978	string	imageRefTable
+0x9f847986	string	inputTileDataPB1
+0x9f847997	string	inputTileMapPB1
+0x9f8479a7	string	inputTileMapUV
+0x9f8479b6	string	rgrgiFldChromaVecAdjust
+0x9f8488a3	string	ne:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCChromaPB1_mbaff.updb
+0x9f848a1a	string	SBtable
+0x9f848a34	string	SrcImage
+0x9f848a53	string	exportAddress
+0x9f848a61	string	fieldLimits
+0x9f848a6d	string	imageRefTable
+0x9f848a8c	string	inputTileMapPB1
+0x9f848a9c	string	rgrgiFldChromaVecAdjust
+0x9f8493db	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPv1.updb
+0x9f849554	string	ApplyWeights
+0x9f84957f	string	RefIdx
+0x9f849598	string	Residuals
+0x9f8495a2	string	SBtable
+0x9f8495bc	string	SliceWeights
+0x9f8495dc	string	SrcImage
+0x9f8495e5	string	exportAddress
+0x9f8495f3	string	fieldLimits
+0x9f8495ff	string	imageRefTable
+0x9f849620	string	inputTileMap
+0x9f849df3	string	he:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB0v1.updb
+0x9f849fbc	string	ApplyWeights
+0x9f849fe7	string	ListSize
+0x9f849ff0	string	RefIdx
+0x9f84a008	string	Residuals
+0x9f84a012	string	SBtable
+0x9f84a02c	string	SliceWeights
+0x9f84a04c	string	SliceWeights2
+0x9f84a05a	string	SrcImage
+0x9f84a063	string	exportAddress
+0x9f84a071	string	fieldLimits
+0x9f84a07d	string	imageRefTable
+0x9f84a09c	string	inputTileDataPB1
+0x9f84a0ad	string	inputTileMap
+0x9f84a0ba	string	inputTileMapPB1
+0x9f84abe3	string	he:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB1v1.updb
+0x9f84ad2a	string	SBtable
+0x9f84ad44	string	SrcImage
+0x9f84ad60	string	exportAddress
+0x9f84ad6e	string	fieldLimits
+0x9f84ad7a	string	imageRefTable
+0x9f84ad98	string	inputTileMapPB1
+0x9f84b283	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaP_mbaffv1.updb
+0x9f84b400	string	ApplyWeights
+0x9f84b42b	string	RefIdx
+0x9f84b444	string	Residuals
+0x9f84b44e	string	SBtable
+0x9f84b468	string	SliceWeights
+0x9f84b488	string	SrcImage
+0x9f84b491	string	exportAddress
+0x9f84b49f	string	fieldLimits
+0x9f84b4ab	string	imageRefTable
+0x9f84b4cc	string	inputTileMap
+0x9f84bdeb	string	ne:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB0_mbaffv1.updb
+0x9f84bfd0	string	ApplyWeights
+0x9f84bff0	string	BiPredIdc
+0x9f84c005	string	ListSize
+0x9f84c00e	string	RefIdx
+0x9f84c028	string	Residuals
+0x9f84c032	string	SBtable
+0x9f84c04c	string	SliceWeights
+0x9f84c06c	string	SliceWeights2
+0x9f84c07a	string	SrcImage
+0x9f84c083	string	exportAddress
+0x9f84c091	string	fieldLimits
+0x9f84c09d	string	imageRefTable
+0x9f84c0bc	string	inputTileDataPB1
+0x9f84c0cd	string	inputTileMap
+0x9f84c0da	string	inputTileMapPB1
+0x9f84ce4b	string	ne:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB1_mbaffv1.updb
+0x9f84cf9a	string	SBtable
+0x9f84cfb4	string	SrcImage
+0x9f84cfd0	string	exportAddress
+0x9f84cfde	string	fieldLimits
+0x9f84cfea	string	imageRefTable
+0x9f84d008	string	inputTileMapPB1
+0x9f84d603	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPv2.updb
+0x9f84d77c	string	ApplyWeights
+0x9f84d7a7	string	RefIdx
+0x9f84d7c0	string	Residuals
+0x9f84d7ca	string	SBtable
+0x9f84d7e4	string	SliceWeights
+0x9f84d804	string	SrcImage
+0x9f84d80d	string	exportAddress
+0x9f84d81b	string	fieldLimits
+0x9f84d827	string	imageRefTable
+0x9f84d848	string	inputTileMap
+0x9f84eee3	string	he:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB0v2.updb
+0x9f84f0ac	string	ApplyWeights
+0x9f84f0d7	string	ListSize
+0x9f84f0e0	string	RefIdx
+0x9f84f0f8	string	Residuals
+0x9f84f102	string	SBtable
+0x9f84f11c	string	SliceWeights
+0x9f84f13c	string	SliceWeights2
+0x9f84f14a	string	SrcImage
+0x9f84f153	string	exportAddress
+0x9f84f161	string	fieldLimits
+0x9f84f16d	string	imageRefTable
+0x9f84f18c	string	inputTileDataPB1
+0x9f84f19d	string	inputTileMap
+0x9f84f1aa	string	inputTileMapPB1
+0x9f850c9b	string	he:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB1v2.updb
+0x9f850de2	string	SBtable
+0x9f850dfc	string	SrcImage
+0x9f850e18	string	exportAddress
+0x9f850e26	string	fieldLimits
+0x9f850e32	string	imageRefTable
+0x9f850e50	string	inputTileMapPB1
+0x9f85221b	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaP_mbaffv2.updb
+0x9f852398	string	ApplyWeights
+0x9f8523c3	string	RefIdx
+0x9f8523dc	string	Residuals
+0x9f8523e6	string	SBtable
+0x9f852400	string	SliceWeights
+0x9f852420	string	SrcImage
+0x9f852429	string	exportAddress
+0x9f852437	string	fieldLimits
+0x9f852443	string	imageRefTable
+0x9f852464	string	inputTileMap
+0x9f853c5b	string	ne:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB0_mbaffv2.updb
+0x9f853e40	string	ApplyWeights
+0x9f853e60	string	BiPredIdc
+0x9f853e75	string	ListSize
+0x9f853e7e	string	RefIdx
+0x9f853e98	string	Residuals
+0x9f853ea2	string	SBtable
+0x9f853ebc	string	SliceWeights
+0x9f853edc	string	SliceWeights2
+0x9f853eea	string	SrcImage
+0x9f853ef3	string	exportAddress
+0x9f853f01	string	fieldLimits
+0x9f853f0d	string	imageRefTable
+0x9f853f2c	string	inputTileDataPB1
+0x9f853f3d	string	inputTileMap
+0x9f853f4a	string	inputTileMapPB1
+0x9f855c6b	string	ne:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_MCLumaPB1_mbaffv2.updb
+0x9f855dba	string	SBtable
+0x9f855dd4	string	SrcImage
+0x9f855df0	string	exportAddress
+0x9f855dfe	string	fieldLimits
+0x9f855e0a	string	imageRefTable
+0x9f855e28	string	inputTileMapPB1
+0x9f8573c8	string	H264_Pslice_RunMCLuma
+0x9f8573e0	string	H264_Pslice_RunMCChroma
+0x9f8573f8	string	H264_PBslice_RunMCLuma
+0x9f857410	string	H264_PBslice_RunMCChroma
+0x9f85742c	string	H264_Pslice_field_RunMCLuma
+0x9f857448	string	H264_Pslice_field_RunMCChroma
+0x9f857468	string	H264_PBslice_field_RunMCLuma
+0x9f857488	string	H264_PBslice_field_RunMCChroma
+0x9f8574a8	string	H264_Pslice_mbaff_RunMCLuma
+0x9f8574c4	string	H264_Pslice_mbaff_RunMCChroma
+0x9f8574e4	string	H264_PBslice_mbaff_RunMCLuma
+0x9f857504	string	H264_PBslice_mbaff_RunMCChroma
+0x9f85f3e8	string	DecodeSurfaceIndex = %d DeblockSurfaceIndex = %d ForwardSurfaceIndex = %d BackwardSurfaceIndex =%d\n
+0x9f85f44c	string	DeblockOn = %d DeringOn = %d%s%s\n
+0x9f85f470	string	VOPType = %s%s%s%s\n
+0x9f85f49c	string	C:\dxvadump1.yuv
+0x9f85f4c4	string	c:\dxvaEmulator.log
+0x9f85f50c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DummyPS.updb
+0x9f860b1c	string	#1@2$%&'3APB4567CQ`RDEFGSabTUVWcpqdefgrstuvw
+0x9f8638c3	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_ITrans4x4.updb
+0x9f863974	string	exportAddress
+0x9f863994	string	inputScratch
+0x9f863dab	string	fe:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_ITrans8x8.updb
+0x9f863e88	string	exportAddress
+0x9f863e96	string	inputScratch
+0x9f865353	string	ie:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_ITransChroma.updb
+0x9f865408	string	exportAddress
+0x9f865428	string	inputScratch
+0x9f8658cb	string	de:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DummyPS.updb
+0x9f8659d3	string	me:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DequantDC_Chroma.updb
+0x9f865af0	string	QP_SCALE_CR
+0x9f865b0c	string	QpChromaOffset
+0x9f865b2c	string	Shift2Mul
+0x9f865b48	string	exportAddress
+0x9f865b56	string	inputRaw
+0x9f865b70	string	normAdjust
+0x9f865b8c	string	weightDCChroma
+0x9f865f03	string	ke:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DequantDC_Luma.updb
+0x9f865ff4	string	Shift2Mul
+0x9f866010	string	exportAddress
+0x9f866030	string	inputRaw
+0x9f86604c	string	normAdjust
+0x9f866068	string	weightDCLuma
+0x9f86659b	string	ne:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_Dequant4x4_Chroma.updb
+0x9f8666cc	string	QP_SCALE_CR
+0x9f8666e8	string	QpChromaOffset
+0x9f866708	string	Shift2Mul
+0x9f866724	string	exportAddress
+0x9f866732	string	inputACCoef
+0x9f866750	string	inputDCCoef
+0x9f86675c	string	normAdjust
+0x9f866778	string	weightChroma
+0x9f866dab	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_Dequant4x4_Luma.updb
+0x9f866eb0	string	Shift2Mul
+0x9f866ecc	string	exportAddress
+0x9f866eec	string	inputACCoef
+0x9f866f08	string	inputDCCoef
+0x9f866f14	string	normAdjust
+0x9f866f30	string	weightLuma
+0x9f86738b	string	le:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_Dequant8x8_Luma.updb
+0x9f8674a8	string	Shift2Mul
+0x9f8674c4	string	exportAddress
+0x9f8674d2	string	inputACCoef
+0x9f8674f0	string	normAdjust
+0x9f86750c	string	weightLuma
+0x9f867b1b	string	ee:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IPCMLuma.updb
+0x9f867c1c	string	Blk4x4XYScan
+0x9f867c50	string	exportAddress
+0x9f867c5e	string	idxBuffer
+0x9f867c78	string	srcBuffer
+0x9f867c82	string	tileMap
+0x9f868113	string	ge:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IPCMChroma.updb
+0x9f868228	string	Blk4x4XYScan
+0x9f868264	string	exportAddress
+0x9f868272	string	idxBuffer
+0x9f86828c	string	srcBuffer
+0x9f868296	string	tileMap
+0x9f868dcb	string	de:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_DummyPS.updb
+0x9f868ed3	string	ke:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IPCMLuma_Mbaff.updb
+0x9f868fd8	string	Blk4x4XYScan
+0x9f86900c	string	exportAddress
+0x9f86901a	string	idxBuffer
+0x9f869034	string	srcBuffer
+0x9f86903e	string	tileMap
+0x9f8695cb	string	me:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\h264-71\core\opt\xenon\obj\xbox\Shader_IPCMChroma_Mbaff.updb
+0x9f8696e8	string	Blk4x4XYScan
+0x9f869724	string	exportAddress
+0x9f869732	string	idxBuffer
+0x9f86974c	string	srcBuffer
+0x9f869756	string	tileMap
+0x9f86b420	string	e:\bt\1c10e6\core\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\imagearray.cpp[91] ImageArray::Initialize:
+0x9f86b4b0	string	e:\bt\1c10e6\core\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\imagearray.cpp[86] ImageArray::Initialize:
+0x9f86b540	string	e:\bt\1c10e6\core\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\imagearray.cpp[81] ImageArray::Initialize:
+0x9f86b65c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_ResidualsIntra.updb
+0x9f86b78c	string	inResiduals
+0x9f86b7a8	string	outBuffer
+0x9f86ba4c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_ResidualsYProg.updb
+0x9f86bb50	string	inResiduals
+0x9f86bb6c	string	outBuffer
+0x9f86bdb4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_ResidualsUVProg.updb
+0x9f86beb8	string	inResiduals
+0x9f86bed4	string	outBuffer
+0x9f86c11c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_ResidualsYIntFrm.updb
+0x9f86c250	string	inResiduals
+0x9f86c26c	string	outBuffer
+0x9f86c714	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_ResidualsUVIntFrm.updb
+0x9f86c81c	string	inResiduals
+0x9f86c838	string	outBuffer
+0x9f86cb64	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DetileY.updb
+0x9f86cc9c	string	cInterlaced
+0x9f86ccc5	string	inTiles
+0x9f86cce0	string	outImage
+0x9f86d1c4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DetileUV.updb
+0x9f86d300	string	cInterlaced
+0x9f86d329	string	inTiles
+0x9f86d344	string	outImage
+0x9f86d684	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DetileYIntFrm.updb
+0x9f86d7cd	string	inTiles
+0x9f86d7e8	string	outImage
+0x9f86dc94	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DetileUVIntFrm.updb
+0x9f86dddd	string	inTiles
+0x9f86ddf8	string	outImage
+0x9f86e134	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_RangeRedV9.updb
+0x9f86e220	string	outImage
+0x9f86e494	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_RangeRedWMVA.updb
+0x9f86e584	string	outImage
+0x9f86e8cc	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_RepeatPadFirstPix08.updb
+0x9f86e9c0	string	outImage
+0x9f86eb64	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_RepeatPadFirstPix.updb
+0x9f86ec58	string	outImage
+0x9f86ee14	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_RepeatPadLastPix.updb
+0x9f86ef08	string	outImage
+0x9f86f0c4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_RepeatPadLastPix08.updb
+0x9f86f1b8	string	outImage
+0x9f86f35c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_RepeatPadLastPix04.updb
+0x9f86f450	string	outImage
+0x9f86f5f4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_RepeatPadMultiple.updb
+0x9f86f6e8	string	outImage
+0x9f86f8d4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_RepeatPadMultiple08.updb
+0x9f86f9c8	string	outImage
+0x9f86fb84	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_IntComp.updb
+0x9f86fc6c	string	outImage
+0x9f86ff6c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_IntCompUV.updb
+0x9f870058	string	outImage
+0x9f870394	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_Copy16.updb
+0x9f87047c	string	outImage
+0x9f87065c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_Copy08.updb
+0x9f870744	string	outImage
+0x9f8708f4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DeblockRow0.updb
+0x9f870a1c	string	cPQuant
+0x9f870a39	string	inTiles
+0x9f870a54	string	outTiles
+0x9f870fd4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DeblockRow4.updb
+0x9f871138	string	cPQuant
+0x9f871150	string	cPhase
+0x9f871157	string	cShiftTable
+0x9f871179	string	inFlags
+0x9f871194	string	inTiles
+0x9f87119c	string	outTiles
+0x9f8717ac	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DeblockCol0.updb
+0x9f8718d4	string	cPQuant
+0x9f8718f1	string	inTiles
+0x9f87190c	string	outTiles
+0x9f871ed4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DeblockCol4.updb
+0x9f872038	string	cPQuant
+0x9f872050	string	cPhase
+0x9f872057	string	cShiftTable
+0x9f872079	string	inFlags
+0x9f872094	string	inTiles
+0x9f87209c	string	outTiles
+0x9f87276c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DeblockRow0IntFrm.updb
+0x9f8728c4	string	cPQuant
+0x9f8728dc	string	cShiftTable
+0x9f8728fd	string	inFlags
+0x9f872918	string	inTiles
+0x9f872920	string	outTiles
+0x9f872f24	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DeblockRow4IntFrm.updb
+0x9f87307c	string	cPQuant
+0x9f873094	string	cShiftTable
+0x9f8730b5	string	inFlags
+0x9f8730d0	string	inTiles
+0x9f8730d8	string	outTiles
+0x9f8736c4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_DeblockColIntFrm.updb
+0x9f8737c8	string	cPQuant
+0x9f8737f8	string	inTiles
+0x9f873810	string	outTiles
+0x9f874334	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYIntraProg.updb
+0x9f87443c	string	inResiduals
+0x9f874458	string	outTiles
+0x9f874644	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYPLinProg.updb
+0x9f8747b0	string	cRndCtrl
+0x9f8747d1	string	inImage
+0x9f8747ec	string	inResiduals
+0x9f8747f8	string	outTiles
+0x9f874f24	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYPCubProg.updb
+0x9f875074	string	cBicubic
+0x9f8750c0	string	cRounding
+0x9f8750e1	string	inImage
+0x9f8750fc	string	inResiduals
+0x9f875108	string	outTiles
+0x9f875d0c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB0LinProg.updb
+0x9f875e90	string	cRndCtrl
+0x9f875eb1	string	inImage
+0x9f875ecc	string	inResiduals
+0x9f875ed8	string	inTiles
+0x9f875ee0	string	outTiles
+0x9f87675c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB0CubProg.updb
+0x9f8768c4	string	cBicubic
+0x9f876910	string	cRounding
+0x9f876931	string	inImage
+0x9f87694c	string	inResiduals
+0x9f876958	string	inTiles
+0x9f876960	string	outTiles
+0x9f8776bc	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB1LinProg.updb
+0x9f87782c	string	cRndCtrl
+0x9f87784d	string	inImage
+0x9f877868	string	inResiduals
+0x9f877874	string	outTiles
+0x9f877ff4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB1CubProg.updb
+0x9f878148	string	cBicubic
+0x9f878194	string	cRounding
+0x9f8781b5	string	inImage
+0x9f8781d0	string	inResiduals
+0x9f8781dc	string	outTiles
+0x9f878e34	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVIntraProg.updb
+0x9f878f3c	string	inResiduals
+0x9f878f58	string	outTiles
+0x9f879144	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVPLinProg.updb
+0x9f8792b4	string	cRndCtrl
+0x9f8792d5	string	inImage
+0x9f8792f0	string	inResiduals
+0x9f8792fc	string	outTiles
+0x9f879a2c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVB0LinProg.updb
+0x9f879bb0	string	cRndCtrl
+0x9f879bd1	string	inImage
+0x9f879bec	string	inResiduals
+0x9f879bf8	string	inTiles
+0x9f879c00	string	outTiles
+0x9f87a47c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVB1LinProg.updb
+0x9f87a5ec	string	cRndCtrl
+0x9f87a60d	string	inImage
+0x9f87a628	string	inResiduals
+0x9f87a634	string	outTiles
+0x9f87adb4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYIntraIntFld.updb
+0x9f87aebc	string	inResiduals
+0x9f87aed8	string	outTiles
+0x9f87b0c4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYPLinIntFld.updb
+0x9f87b234	string	cRndCtrl
+0x9f87b255	string	inImage
+0x9f87b270	string	inResiduals
+0x9f87b27c	string	outTiles
+0x9f87ba0c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYPCubIntFld.updb
+0x9f87bb60	string	cBicubic
+0x9f87bbac	string	cRounding
+0x9f87bbcd	string	inImage
+0x9f87bbe8	string	inResiduals
+0x9f87bbf4	string	outTiles
+0x9f87c854	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB0LinIntFld.updb
+0x9f87c9d8	string	cRndCtrl
+0x9f87c9f9	string	inImage
+0x9f87ca14	string	inResiduals
+0x9f87ca20	string	inTiles
+0x9f87ca28	string	outTiles
+0x9f87d2ec	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB0CubIntFld.updb
+0x9f87d454	string	cBicubic
+0x9f87d4a0	string	cRounding
+0x9f87d4c1	string	inImage
+0x9f87d4dc	string	inResiduals
+0x9f87d4e8	string	inTiles
+0x9f87d4f0	string	outTiles
+0x9f87e294	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB1LinIntFld.updb
+0x9f87e404	string	cRndCtrl
+0x9f87e425	string	inImage
+0x9f87e440	string	inResiduals
+0x9f87e44c	string	outTiles
+0x9f87ec24	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB1CubIntFld.updb
+0x9f87ed78	string	cBicubic
+0x9f87edc4	string	cRounding
+0x9f87ede5	string	inImage
+0x9f87ee00	string	inResiduals
+0x9f87ee0c	string	outTiles
+0x9f87fac4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVIntraIntFld.updb
+0x9f87fbcc	string	inResiduals
+0x9f87fbe8	string	outTiles
+0x9f87fdd4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVPLinIntFld.updb
+0x9f87ff44	string	cRndCtrl
+0x9f87ff65	string	inImage
+0x9f87ff80	string	inResiduals
+0x9f87ff8c	string	outTiles
+0x9f880734	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVB0LinIntFld.updb
+0x9f8808b8	string	cRndCtrl
+0x9f8808d9	string	inImage
+0x9f8808f4	string	inResiduals
+0x9f880900	string	inTiles
+0x9f880908	string	outTiles
+0x9f8811dc	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVB1LinIntFld.updb
+0x9f88134c	string	cRndCtrl
+0x9f88136d	string	inImage
+0x9f881388	string	inResiduals
+0x9f881394	string	outTiles
+0x9f881b74	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYIntraIntFrm.updb
+0x9f881c7c	string	inResiduals
+0x9f881c98	string	outTiles
+0x9f881f14	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYPLinIntFrm.updb
+0x9f882084	string	cRndCtrl
+0x9f8820a5	string	inImage
+0x9f8820c0	string	inResiduals
+0x9f8820cc	string	outTiles
+0x9f8829b4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYPCubIntFrm.updb
+0x9f882b08	string	cBicubic
+0x9f882b54	string	cRounding
+0x9f882b75	string	inImage
+0x9f882b90	string	inResiduals
+0x9f882b9c	string	outTiles
+0x9f88398c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB0LinIntFrm.updb
+0x9f883b10	string	cRndCtrl
+0x9f883b31	string	inImage
+0x9f883b4c	string	inResiduals
+0x9f883b58	string	inTiles
+0x9f883b60	string	outTiles
+0x9f8845a4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB0CubIntFrm.updb
+0x9f88470c	string	cBicubic
+0x9f884758	string	cRounding
+0x9f884779	string	inImage
+0x9f884794	string	inResiduals
+0x9f8847a0	string	inTiles
+0x9f8847a8	string	outTiles
+0x9f8856e4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB1LinIntFrm.updb
+0x9f885854	string	cRndCtrl
+0x9f885875	string	inImage
+0x9f885890	string	inResiduals
+0x9f88589c	string	outTiles
+0x9f88625c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompYB1CubIntFrm.updb
+0x9f8863b0	string	cBicubic
+0x9f8863fc	string	cRounding
+0x9f88641d	string	inImage
+0x9f886438	string	inResiduals
+0x9f886444	string	outTiles
+0x9f887314	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVIntraIntFrm.updb
+0x9f887435	string	inResiduals
+0x9f887454	string	outTiles
+0x9f887734	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVPLinIntFrm.updb
+0x9f8878a4	string	cRndCtrl
+0x9f8878c5	string	inImage
+0x9f8878e0	string	inResiduals
+0x9f8878ec	string	outTiles
+0x9f88816c	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVB0LinIntFrm.updb
+0x9f8882f0	string	cRndCtrl
+0x9f888311	string	inImage
+0x9f88832c	string	inResiduals
+0x9f888338	string	inTiles
+0x9f888340	string	outTiles
+0x9f888cf4	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_MocompUVB1LinIntFrm.updb
+0x9f888e64	string	cRndCtrl
+0x9f888e85	string	inImage
+0x9f888ea0	string	inResiduals
+0x9f888eac	string	outTiles
+0x9f889874	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_Intra.updb
+0x9f88996c	string	cOffset128
+0x9f8899a0	string	inResiduals
+0x9f8899bc	string	outTiles
+0x9f889bec	string	e:\bt\1c10e6\core.obj.fre\private\xdk\del\codecs\wmv\codecdsp-cayenne\video\wmv\decoder_c9e\dxva_pk\xenon\x\obj\xbox\Shader_IntraIntFrm.updb
+0x9f889ce8	string	cOffset128
+0x9f889d1c	string	inResiduals
+0x9f889d38	string	outTiles
+0x9f88e2a0	string	Unknown exception
+0x9f88e2bc	string	bad allocation
+0x9f88e57c	unicode	runtime error 
+0x9f88e5a0	unicode	TLOSS error\n
+0x9f88e5bc	unicode	SING error\n
+0x9f88e5d4	unicode	DOMAIN error\n
+0x9f88e5f0	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9f88e7e0	unicode	R6032\n- not enough space for locale information\n
+0x9f88e848	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9f88e90c	unicode	R6030\n- CRT not initialized\n
+0x9f88e948	unicode	R6028\n- unable to initialize heap\n
+0x9f88e990	unicode	R6027\n- not enough space for lowio initialization\n
+0x9f88e9f8	unicode	R6026\n- not enough space for stdio initialization\n
+0x9f88ea60	unicode	R6025\n- pure virtual function call\n
+0x9f88eaa8	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9f88eb10	unicode	R6019\n- unable to open console device\n
+0x9f88eb60	unicode	R6018\n- unexpected heap error\n
+0x9f88eba0	unicode	R6017\n- unexpected multithread lock error\n
+0x9f88ebf8	unicode	R6016\n- not enough space for thread data\n
+0x9f88ec50	unicode	R6010\n- abort() has been called\n
+0x9f88ec98	unicode	R6009\n- not enough space for environment\n
+0x9f88ecf0	unicode	R6008\n- not enough space for arguments\n
+0x9f88ed40	unicode	R6002\n- floating point support not loaded\n
+0x9f88efc8	unicode	HH:mm:ss
+0x9f88efdc	unicode	dddd, MMMM dd, yyyy
+0x9f88f004	unicode	MM/dd/yy
+0x9f88f028	unicode	December
+0x9f88f03c	unicode	November
+0x9f88f050	unicode	October
+0x9f88f060	unicode	September
+0x9f88f074	unicode	August
+0x9f88f084	unicode	July
+0x9f88f090	unicode	June
+0x9f88f09c	unicode	April
+0x9f88f0a8	unicode	March
+0x9f88f0b4	unicode	February
+0x9f88f0c8	unicode	January
+0x9f88f138	unicode	Saturday
+0x9f88f14c	unicode	Friday
+0x9f88f15c	unicode	Thursday
+0x9f88f170	unicode	Wednesday
+0x9f88f184	unicode	Tuesday
+0x9f88f194	unicode	Monday
+0x9f88f1a4	unicode	Sunday
+0x9f88f1ec	string	HH:mm:ss
+0x9f88f1f8	string	dddd, MMMM dd, yyyy
+0x9f88f20c	string	MM/dd/yy
+0x9f88f220	string	December
+0x9f88f22c	string	November
+0x9f88f238	string	October
+0x9f88f240	string	September
+0x9f88f24c	string	August
+0x9f88f264	string	April
+0x9f88f26c	string	March
+0x9f88f274	string	February
+0x9f88f280	string	January
+0x9f88f2b8	string	Saturday
+0x9f88f2c4	string	Friday
+0x9f88f2cc	string	Thursday
+0x9f88f2d8	string	Wednesday
+0x9f88f2e4	string	Tuesday
+0x9f88f2ec	string	Monday
+0x9f88f2f4	string	Sunday
+0x9f88f457	string	\_nextafter
+0x9f88f4b0	string	floor
+0x9f88fd54	string	 Complete Object Locator'
+0x9f88fd70	string	 Class Hierarchy Descriptor'
+0x9f88fd90	string	 Base Class Array'
+0x9f88fda4	string	 Base Class Descriptor at (
+0x9f88fdc0	string	 Type Descriptor'
+0x9f88fdd4	string	`local static thread guard'
+0x9f88fdf0	string	`managed vector copy constructor iterator'
+0x9f88fe1c	string	`vector vbase copy constructor iterator'
+0x9f88fe48	string	`vector copy constructor iterator'
+0x9f88fe6c	string	`dynamic atexit destructor for '
+0x9f88fe90	string	`dynamic initializer for '
+0x9f88feac	string	`eh vector vbase copy constructor iterator'
+0x9f88fed8	string	`eh vector copy constructor iterator'
+0x9f88ff00	string	`managed vector destructor iterator'
+0x9f88ff28	string	`managed vector constructor iterator'
+0x9f88ff50	string	`placement delete[] closure'
+0x9f88ff70	string	`placement delete closure'
+0x9f88ff8c	string	`omni callsig'
+0x9f88ff9c	string	 delete[]
+0x9f88ffa8	string	 new[]
+0x9f88ffb0	string	`local vftable constructor closure'
+0x9f88ffd4	string	`local vftable'
+0x9f88ffe4	string	`RTTI
+0x9f88fff0	string	`udt returning'
+0x9f890000	string	`copy constructor closure'
+0x9f89001c	string	`eh vector vbase constructor iterator'
+0x9f890044	string	`eh vector destructor iterator'
+0x9f890064	string	`eh vector constructor iterator'
+0x9f890088	string	`virtual displacement map'
+0x9f8900a4	string	`vector vbase constructor iterator'
+0x9f8900c8	string	`vector destructor iterator'
+0x9f8900e8	string	`vector constructor iterator'
+0x9f890108	string	`scalar deleting destructor'
+0x9f890128	string	`default constructor closure'
+0x9f890148	string	`vector deleting destructor'
+0x9f890168	string	`vbase destructor'
+0x9f89017c	string	`string'
+0x9f890188	string	`local static guard'
+0x9f8901a0	string	`typeof'
+0x9f8901ac	string	`vcall'
+0x9f8901b4	string	`vbtable'
+0x9f8901c0	string	`vftable'
+0x9f890248	string	operator
+0x9f890270	string	 delete
+0x9f890280	string	__unaligned
+0x9f89028c	string	__restrict
+0x9f890298	string	__ptr64
+0x9f8902a0	string	__eabi
+0x9f8902a8	string	__clrcall
+0x9f8902b4	string	__fastcall
+0x9f8902c0	string	__thiscall
+0x9f8902cc	string	__stdcall
+0x9f8902d8	string	__pascal
+0x9f8902e4	string	__cdecl
+0x9f8902ec	string	__based(
+0x9f8904d8	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\dash\dlls\extracodecs\obj\xbox\dash.ExtraAVCodecs.pdb
+0x9fb1de38	string	.?AVbad_alloc@std@@
+0x9fb1de54	string	.?AVexception@std@@
+0x9fb1e749	string	abcdefghijklmnopqrstuvwxyz
+0x9fb1e769	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9fb35036	string	dash.ExtraAVCodecs.xex
+0x9fb3504d	string	ExtraAVCodecsInitialize

@@ -1,0 +1,4 @@
+Dash.AttractionScreen.xex exports
+=================================
+
+{"confidence": "CONFIRMED", "function_va": "0x9BF66000", "module": "Dash.AttractionScreen.xex", "ordinal": "0x00000001", "resolved_name": ""}

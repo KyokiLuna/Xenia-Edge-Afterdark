@@ -10,6 +10,7 @@
 #ifndef XENIA_BASE_FILESYSTEM_H_
 #define XENIA_BASE_FILESYSTEM_H_
 
+#include <cstdint>
 #include <filesystem>
 #include <iterator>
 #include <memory>
@@ -18,6 +19,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "xenia/base/platform.h"
@@ -102,6 +104,24 @@ struct FileAccess {
   static constexpr uint32_t kFileWriteAttributes = 0x00000100;
 };
 
+class HostStorageFileLease;
+struct FileIoResult {
+  std::error_code error;
+  size_t bytes = 0;
+};
+// Publishing EOF and making it durable are separate results: a failed fsync
+// cannot restore bytes already discarded by a successful length change.
+struct FileLengthFlushResult {
+  std::error_code error;
+  std::optional<uint64_t> published_length;
+  bool durable = false;
+};
+struct FileHandleInfo {
+  uint64_t size = 0, links = 1;
+  bool directory = false, regular = true;
+  uint64_t filesystem_id = 0, file_id = 0;
+};
+
 class FileHandle {
  public:
   // Opens the file, failing if it doesn't exist.
@@ -110,6 +130,65 @@ class FileHandle {
       const std::filesystem::path& path, uint32_t desired_access);
 
   virtual ~FileHandle() = default;
+  // Adopts an already-open native descriptor/HANDLE. The caller transfers
+  // ownership and is responsible for confinement before this point.
+  static std::unique_ptr<FileHandle> AdoptNative(intptr_t, bool append_only);
+  virtual intptr_t native_handle() const { return -1; }
+  virtual std::shared_ptr<const HostStorageFileLease> storage_lease() const {
+    return {};
+  }
+  virtual std::optional<FileHandleInfo> QueryInfo(
+      std::error_code& error) const {
+    error = std::make_error_code(std::errc::operation_not_supported);
+    return std::nullopt;
+  }
+  virtual std::error_code LastError() const {
+    return std::make_error_code(std::errc::io_error);
+  }
+  virtual FileIoResult ReadResult(size_t offset, std::span<uint8_t> bytes) {
+    size_t transferred = 0;
+    const bool ok = Read(offset, bytes.data(), bytes.size(), &transferred);
+    return {ok ? std::error_code{} : LastError(), transferred};
+  }
+  virtual FileIoResult WriteResult(size_t offset,
+                                   std::span<const uint8_t> bytes) {
+    size_t transferred = 0;
+    const bool ok = Write(offset, bytes.data(), bytes.size(), &transferred);
+    return {ok ? std::error_code{} : LastError(), transferred};
+  }
+  // A regular-file service requiring a complete request opts into this
+  // checked loop. Actual partial/error counts are preserved; zero/invalid
+  // progress is failure, never a fabricated complete write. Owned policy
+  // handles override it to hold their SAME admission for the entire request.
+  virtual FileIoResult WriteAllResult(size_t offset,
+                                      std::span<const uint8_t> bytes) {
+    if (bytes.size() > SIZE_MAX - offset) {
+      return {std::make_error_code(std::errc::value_too_large), 0};
+    }
+    size_t done = 0;
+    while (done != bytes.size()) {
+      const auto remaining = bytes.size() - done;
+      const auto part = bytes.subspan(done, remaining > 1024 * 1024 ? 1024 * 1024 : remaining);
+      const auto result = WriteResult(offset + done, part);
+      if (result.bytes > part.size()) {
+        return {std::make_error_code(std::errc::io_error), done};
+      }
+      done += result.bytes;
+      if (result.error) { return {result.error, done}; }
+      if (!result.bytes) { return {std::make_error_code(std::errc::io_error), done}; }
+    }
+    return {{}, done};
+  }
+  virtual std::error_code FlushResult() {
+    return std::make_error_code(std::errc::operation_not_supported);
+  }
+  // Caller owns serialization/admission. The policy handle overrides this to
+  // keep length publication and fsync under one real storage mutation guard.
+  // published_length records the known EOF before the durability result.
+  virtual FileLengthFlushResult FlushLengthResult(size_t length);
+  virtual std::error_code ResizeResult(size_t length) {
+    return SetLength(length) ? std::error_code{} : LastError();
+  }
 
   const std::filesystem::path& path() const { return path_; }
 

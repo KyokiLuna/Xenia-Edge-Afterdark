@@ -1,0 +1,6 @@
+Strings and references
+======================
+
+749581 printable ASCII/UTF-16BE strings in strings.tsv.
+Ghidra-defined strings and references are in ghidra/<module-id>.strings.tsv.
+Absence from a string scan is not proof of absence.

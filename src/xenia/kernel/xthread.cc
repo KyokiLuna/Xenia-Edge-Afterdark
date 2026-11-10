@@ -8,6 +8,7 @@
  */
 
 #include "xenia/kernel/xthread.h"
+#include "xenia/kernel/native_system_allocation_authority.h"
 
 #if XE_PLATFORM_LINUX || XE_PLATFORM_ANDROID || XE_PLATFORM_MAC
 #include <pthread.h>
@@ -27,6 +28,7 @@
 #include "xenia/kernel/guest_scheduler.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/user_module.h"
+#include "xenia/kernel/util/thread_tls.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
 
 DEFINE_bool(ignore_thread_priorities, false,
@@ -88,6 +90,7 @@ XThread::XThread(KernelState* kernel_state, uint32_t stack_size,
 }
 
 XThread::~XThread() {
+  RevokeNativeFrameOwnerSession();
   // Unregister first to prevent lookups while deleting.
   kernel_state_->UnregisterThread(this);
 
@@ -158,12 +161,135 @@ uint32_t XThread::GetCurrentThreadId() {
   return thread->guest_object<X_KTHREAD>()->thread_id;
 }
 
+NativeFrameOwnerSession::ThreadIdentity XThread::native_frame_thread_identity()
+    const {
+  return {kernel_state(), this, thread_id_, native_frame_process_type_};
+}
+
+bool XThread::SetNativeFrameOwnerSession(
+    std::shared_ptr<NativeFrameOwnerSession> session) {
+  if (!IsInThread(this) || !session ||
+      !session->MatchesThread(native_frame_thread_identity())) {
+    return false;
+  }
+  std::lock_guard lock(native_frame_owner_mutex_);
+  if (native_frame_owner_revoked_ || native_frame_owner_) {
+    return false;
+  }
+  native_frame_owner_ = std::move(session);
+  return true;
+}
+
+std::shared_ptr<NativeFrameOwnerSession> XThread::native_frame_owner_session()
+    const {
+  std::shared_ptr<NativeSystemInvocationState> invocation;
+  {
+    std::lock_guard lock(native_frame_owner_mutex_);
+    if (native_frame_owner_) {
+      return native_frame_owner_;
+    }
+    invocation = native_system_invocation_;
+  }
+  return NativeSystemInvocationSession(invocation);
+}
+
+XThread::NativeFrameAllocationDecision
+XThread::native_frame_allocation_decision() const {
+  std::shared_ptr<NativeFrameOwnerSession> session;
+  {
+    std::lock_guard lock(native_frame_owner_mutex_);
+    session = native_frame_owner_;
+  }
+  std::optional<memory::PhysicalAllocationOwner> owner;
+  if (session && IsInThread(const_cast<XThread*>(this))) {
+    owner = session->AllocationOwner(native_frame_thread_identity());
+  }
+  return {std::move(session), owner};
+}
+
+bool XThread::AttachNativeSystemInvocation(
+    std::shared_ptr<NativeSystemInvocationState> invocation) {
+  if (!IsInThread(this) || !invocation) {
+    return false;
+  }
+  std::lock_guard lock(native_frame_owner_mutex_);
+  if (native_frame_owner_revoked_ || native_frame_owner_ ||
+      native_system_invocation_) {
+    return false;
+  }
+  native_system_invocation_ = std::move(invocation);
+  return true;
+}
+void XThread::DetachNativeSystemInvocation(
+    const NativeSystemInvocationState* invocation) {
+  std::shared_ptr<NativeSystemInvocationState> released;
+  {
+    std::lock_guard lock(native_frame_owner_mutex_);
+    if (native_system_invocation_.get() == invocation) {
+      released.swap(native_system_invocation_);
+    }
+  }
+}
+std::shared_ptr<NativeSystemInvocationState> XThread::native_system_invocation()
+    const {
+  std::lock_guard lock(native_frame_owner_mutex_);
+  return native_system_invocation_;
+}
+bool XThread::HasNativeSystemInvocation(
+    const NativeSystemInvocationState* invocation) const {
+  std::lock_guard lock(native_frame_owner_mutex_);
+  return invocation && native_system_invocation_.get() == invocation &&
+         !native_frame_owner_revoked_;
+}
+bool XThread::HasNativeSystemBootstrap(
+    const NativeSystemAllocationAuthority* authority) const {
+  return NativeSystemInvocationIsBootstrap(native_system_invocation(),
+                                           authority, this);
+}
+void XThread::RevokeNativeSystemInvocation() {
+  auto invocation = native_system_invocation();
+  RevokeNativeSystemInvocationState(
+      invocation);  // closure precedes slot detach
+}
+
+void XThread::RevokeNativeFrameOwnerSession() {
+  RevokeNativeSystemInvocation();
+  std::shared_ptr<NativeFrameOwnerSession> session;
+  {
+    std::lock_guard lock(native_frame_owner_mutex_);
+    native_frame_owner_revoked_ = true;
+    session = native_frame_owner_;
+  }
+  if (session) {
+    session->Revoke();
+  }
+}
+
 void XThread::OnHostThreadExitCleanup() {
+  RevokeNativeFrameOwnerSession();
+  if (const uint64_t generation =
+          title_execution_generation_.load(std::memory_order_acquire)) {
+    emulator()->NotifyTitleExecutionStopped(generation, kernel_state());
+  }
   running_ = false;
   current_thread_ = nullptr;
   current_xthread_tls_ = nullptr;
   xe::Profiler::ThreadExit();
   ReleaseHandle();
+}
+
+void XThread::set_title_execution_identity(uint64_t generation,
+                                           uint32_t hmodule) {
+  const bool valid =
+      guest_thread_ && main_thread_ && generation && hmodule &&
+      guest_object<X_KTHREAD>()->suspend_count &&
+      !title_execution_generation_.load(std::memory_order_acquire);
+  assert_true(valid);
+  if (!valid) {
+    return;
+  }
+  title_execution_hmodule_ = hmodule;
+  title_execution_generation_.store(generation, std::memory_order_release);
 }
 
 uint32_t XThread::GetLastError() {
@@ -253,6 +379,7 @@ void XThread::InitializeGuestObject() {
   uint32_t kpcrb = pcr_address_ + offsetof(X_KPCR, prcb_data);
 
   auto process_type = process->process_type;
+  native_frame_process_type_ = process_type;
   guest_thread->process_type_dup = process_type;
   guest_thread->process_type = process_type;
   guest_thread->apc_lists[0].Initialize(memory());
@@ -563,6 +690,11 @@ X_STATUS XThread::Create() {
 X_STATUS XThread::Exit(int exit_code) {
   // This may only be called on the thread itself.
   assert_true(XThread::GetCurrentThread() == this);
+  RevokeNativeFrameOwnerSession();
+  if (const uint64_t generation =
+          title_execution_generation_.load(std::memory_order_acquire)) {
+    emulator()->NotifyTitleExecutionStopped(generation, kernel_state());
+  }
   // TODO(chrispy): not sure if this order is correct, should it come after
   // apcs?
   auto kthread = guest_object<X_KTHREAD>();
@@ -654,7 +786,14 @@ void XThread::RestoreInterruptedUserCr() {
 }
 
 X_STATUS XThread::Terminate(int exit_code) {
+  // A parked fiber may be reclaimed without C++ stack unwinding.
+  RevokeNativeFrameOwnerSession();
   // TODO(benvanik): inform the profiler that this thread is exiting.
+
+  if (const uint64_t generation =
+          title_execution_generation_.load(std::memory_order_acquire)) {
+    emulator()->NotifyTitleExecutionStopped(generation, kernel_state());
+  }
 
   // Set exit code.
   X_KTHREAD* thread = guest_object<X_KTHREAD>();
@@ -705,6 +844,7 @@ X_STATUS XThread::Terminate(int exit_code) {
 }
 
 void XThread::ReclaimExited() {
+  RevokeNativeFrameOwnerSession();
   // Scheduler reclaim and external Terminate both reach here for the same
   // thread, and releasing twice would free it one reference early.
   if (self_reference_dropped_.exchange(true, std::memory_order_acq_rel)) {
@@ -763,6 +903,11 @@ void XThread::Execute() {
   //
   // On Windows, setjmp/longjmp is used because MSVC's longjmp performs SEH
   // stack unwinding which already calls destructors.
+  if (const uint64_t generation =
+          title_execution_generation_.load(std::memory_order_acquire)) {
+    emulator()->NotifyTitleExecutionStarted(
+        generation, title_execution_hmodule_, thread_id_, kernel_state());
+  }
   uint32_t next_address;
 #if !XE_PLATFORM_WIN32
   try {
@@ -1141,23 +1286,15 @@ void XThread::SetActiveCpu(uint8_t cpu_index) {
 }
 
 bool XThread::GetTLSValue(uint32_t slot, uint32_t* value_out) {
-  if (slot * 4 > tls_total_size_) {
-    return false;
-  }
-
-  auto mem = memory()->TranslateVirtual(tls_dynamic_address_ + slot * 4);
-  *value_out = xe::load_and_swap<uint32_t>(mem);
-  return true;
+  return internal::ReadThreadTlsSlot(
+      *memory(), {tls_static_address_, tls_dynamic_address_, tls_total_size_},
+      slot, value_out);
 }
 
 bool XThread::SetTLSValue(uint32_t slot, uint32_t value) {
-  if (slot * 4 >= tls_total_size_) {
-    return false;
-  }
-
-  auto mem = memory()->TranslateVirtual(tls_dynamic_address_ + slot * 4);
-  xe::store_and_swap<uint32_t>(mem, value);
-  return true;
+  return internal::WriteThreadTlsSlot(
+      *memory(), {tls_static_address_, tls_dynamic_address_, tls_total_size_},
+      slot, value);
 }
 
 uint32_t XThread::suspend_count() {

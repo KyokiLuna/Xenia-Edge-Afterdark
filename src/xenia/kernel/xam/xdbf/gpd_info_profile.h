@@ -13,10 +13,8 @@
 #include "xenia/kernel/title_id_utils.h"
 #include "xenia/kernel/xam/xdbf/gpd_info.h"
 #include "xenia/kernel/xam/xdbf/spa_info.h"
-
 #include <string>
 #include <vector>
-
 #include "xenia/xbox.h"
 
 namespace xe {
@@ -43,6 +41,7 @@ class GpdInfoProfile : public GpdInfo {
 
   const std::vector<const X_XDBF_GPD_TITLE_PLAYED*> GetTitlesInfo() const;
   X_XDBF_GPD_TITLE_PLAYED* GetTitleInfo(const uint32_t title_id);
+  const X_XDBF_GPD_TITLE_PLAYED* GetTitleInfo(uint32_t title_id) const;
 
   std::u16string GetTitleName(const uint32_t title_id) const;
 

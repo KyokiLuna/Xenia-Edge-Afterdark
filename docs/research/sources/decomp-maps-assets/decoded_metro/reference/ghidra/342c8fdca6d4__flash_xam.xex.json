@@ -1,0 +1,18 @@
+{
+  "module": "packages/su20076000_00000000/$flash_xam.xex",
+  "program": "342c8fdca6d4__flash_xam.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "f9e44cd6f4b04875ddc5a3b8fd519785ba2b0488b1c4622f818b740ba4064313",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x815f0400",
+  "functions": 13941,
+  "calls": 34316,
+  "strings": 3728,
+  "string_xrefs": 2507,
+  "independent_sha256": "e7c5cd02662809859ff6d6232469a77b525c5c115174a0a4898487d032c895e3",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

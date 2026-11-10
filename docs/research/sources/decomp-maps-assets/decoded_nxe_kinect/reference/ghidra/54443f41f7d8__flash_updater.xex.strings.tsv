@@ -1,0 +1,34 @@
+va	data_type	text
+0x901005ac	string	deviceselector.xex
+0x901005c0	unicode	NuiTitleUpdateConfirmationScene.xur
+0x90100608	unicode	TitleUpdateConfirmationScene
+0x90100680	unicode	scnContentMetaInfo/labContentSize
+0x901006c8	unicode	scnContentMetaInfo/labContentTitle
+0x90100710	unicode	labSaveLocation
+0x90100730	unicode	labSaveLocationTag
+0x90100758	unicode	labOverview
+0x90100770	unicode	btnBack
+0x90100780	unicode	btnCancel
+0x90100794	unicode	btnChooseStorage
+0x901007b8	unicode	btnDownload
+0x901007d0	unicode	ctlLoading
+0x901007e8	unicode	strings.xus
+0x90100830	unicode	XuiCanvas
+0x90100870	unicode	updater
+0x901008d4	unicode	XuiElement
+0x901008ec	unicode	HUDScene
+0x90100900	unicode	2902_UpdateProgress.xur
+0x90100930	unicode	UpdateProgressScene
+0x9010096c	unicode	LegendB
+0x9010097c	unicode	labTimeRemaining
+0x901009a0	unicode	btnB
+0x901009ac	unicode	prgProgress
+0x901009c8	unicode	%s\n\n%s:\n%04X - %04X - %04X - %04X - %04X - %04X
+0x90100a58	string	_nextafter
+0x90100ab0	string	floor
+0x90100b40	unicode	CLiveDeviceSelector
+0x90100b68	string	deviceselector.xex
+0x90100ba4	string	xam.xex
+0x90100bc4	string	e:\bt\248805\core\private\xam\apps\updater\src\obj\xbox\updater.pdb
+0x9010c000	string	em persists, go to www.xbox.com/support.
+0x9010c029	string	Update Failed

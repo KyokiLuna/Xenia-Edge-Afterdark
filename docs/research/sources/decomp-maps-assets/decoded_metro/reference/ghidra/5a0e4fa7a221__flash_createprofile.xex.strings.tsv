@@ -1,0 +1,148 @@
+va	data_type	text
+0x9010061c	unicode	AddXboxLive.xur
+0x9010069c	string	Guide.AccountRecovery.xex
+0x901006b8	string	livesignup.xex
+0x901006c8	string	Title.NewLiveSignup.xex
+0x901006e0	string	Mode=AccountRecovery;UserIndex=%d;DefaultEmail=%s;
+0x90100714	string	Mode=AccountRecovery;UserIndex=%d;
+0x90100738	unicode	statusText
+0x90100750	unicode	waitCursorControl
+0x90100774	unicode	backButton
+0x901007ac	unicode	DoneToEditProfile
+0x901007d0	unicode	GetLiveToEditProfile
+0x901007fc	unicode	EditProfileToGetLive
+0x90100828	unicode	EditProfileToDone
+0x9010084c	unicode	doneMetaPanel
+0x90100868	unicode	gamerTileImage
+0x90100888	unicode	gamerTagText
+0x901008a4	unicode	Back_Functionality
+0x901008cc	unicode	doneButton
+0x901008e4	unicode	editProfileButton
+0x90100908	unicode	getLiveButton
+0x90100924	unicode	memory://%X,%X
+0x90100944	unicode	RecoveryIntroScene
+0x9010096c	unicode	GamerTagScene
+0x90100988	unicode	AddXBoxLiveScene
+0x901009ac	unicode	CongratulationsScene
+0x901009d8	unicode	HUDScene
+0x901009ec	unicode	Congratulations.xur
+0x90100a14	unicode	CreateGamerProfile.xur
+0x90100a44	string	gamerprofile.xex
+0x90100a58	string	Guide.AvatarMiniCreator.xex
+0x90100a80	unicode	XuiCanvas
+0x90100c4c	unicode	CreateProfile_Custom.xus
+0x90100c98	unicode	nextButton
+0x90100cb0	unicode	Player%u
+0x90100cc4	unicode	OpenType
+0x90100cd8	unicode	RecoveryIntro.xur
+0x90100d0c	string	UserlessDownloadEnabled
+0x90100d2c	string	PasswordResetUrl
+0x90100d40	string	pam:Dash.MP.Purchase.lex:LaunchIE;userless;source=AccountRecovery.IntroScene;scenario=PasswordReset;url=
+0x90100dac	unicode	metaText
+0x90100dc0	unicode	passwordResetButton
+0x90100de8	unicode	continueButton
+0x90100e60	unicode	sharedres://ico_32x_ConsoleTypeWinPC.png
+0x90100eb8	unicode	sharedres://ico_32x_ConsoleTypeXenon.png
+0x90100f10	unicode	sharedres://ico_32x_ConsoleTypeXbox.png
+0x90100f60	unicode	sharedres://secretAchievement.png
+0x90100fa8	unicode	sharedres://unearnedAchievement.png
+0x90100ff0	unicode	sharedres://ico_32x_Zone_Underground.png
+0x90101048	unicode	sharedres://ico_32x_Zone_Family.png
+0x90101090	unicode	sharedres://ico_32x_Zone_Pro.png
+0x901010d8	unicode	sharedres://ico_32x_Zone_RR.png
+0x9010119c	unicode	XuiElement
+0x901011b4	unicode	sharedres://LiveProfile.xus
+0x901011ec	unicode	sharedres://LiveAll.xus
+0x9010121c	unicode	klcc
+0x90101228	unicode	diners
+0x90101240	unicode	discover
+0x90101254	unicode	amex
+0x90101260	unicode	mastercard
+0x90101278	unicode	visa
+0x90101284	unicode	japanesekatakana
+0x901012a8	unicode	japanesehiragana
+0x901012cc	unicode	schfull
+0x901012dc	unicode	latinextended
+0x901012f8	unicode	russionfull
+0x90101310	unicode	tchfull
+0x90101320	unicode	koreanfull
+0x90101338	unicode	japanesefull
+0x90101354	unicode	latinalphabet
+0x90101370	unicode	latinnumeric
+0x9010138c	unicode	latinipaddress
+0x901013ac	unicode	latinphone
+0x901013c4	unicode	latingamertag
+0x901013e0	unicode	latinemail
+0x901013f8	unicode	latinfull
+0x9010140c	unicode	phone
+0x90101418	unicode	contactemail
+0x90101434	unicode	postalcode
+0x9010144c	unicode	state
+0x90101458	unicode	city
+0x90101464	unicode	district
+0x90101478	unicode	street2
+0x90101488	unicode	street1
+0x90101498	unicode	none
+0x901014a4	string	vk.xex
+0x901014dc	unicode	TV-MA
+0x901014e8	unicode	TV-14
+0x901014f4	unicode	TV-PG
+0x90101500	unicode	TV-G
+0x9010150c	unicode	TV-Y7-FV
+0x90101520	unicode	TV-Y7
+0x9010152c	unicode	TV-Y
+0x90101544	unicode	NC-17
+0x90101554	unicode	PG-13
+0x90101574	unicode	EXPLICIT
+0x90101588	unicode	USTV
+0x90101594	unicode	MPAA
+0x9010193c	string	http://
+0x90102168	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\accountcreation\createprofile\src\obj\xbox\CreateProfile.pdb
+0x9010d064	unicode	AsyncTaskManager0
+0x9010e5c9	string	abcdefghijklmnopqrstuvwxyz
+0x9010e5e9	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9010f01f	string	AddXboxLive.xur
+0x9010f037	string	Congratulations.xur
+0x9010f053	string	CreateGamerProfile.xur
+0x90111005	string	FadeIn
+0x9011100c	string	Select
+0x90111018	string	graphic_metapane
+0x90111029	string	RightPanelShader
+0x9011103a	string	XuiLabel
+0x90111043	string	artPanel
+0x9011104c	string	XuiFigure
+0x9011141e	string	gbar. Mit Xbox Live werden Sie Teil der besten Spiel- und Unterhaltungs-\r\ngemeinschaft der Welt.
+0x901114fa	string	nnen Sie Ihren Gamertag erstellen, sowie Spielerbereich und Motto bestimmen.
+0x901115c8	string	 Exklusive Inhalte herunterladen
+0x901115ed	string	Fertig
+0x901115f8	string	Profil anpassen
+0x9011160c	string	Xbox Live beitreten
+0x90111624	string	Sie haben jetzt Ihr eigenes Offline-Profil.\r\n\r\nTreten Sie Xbox Live kostenlos bei!
+0x9011167a	string	\tProfil speichern
+0x9011168f	string	\nSpiele\r\n\r\n                
+0x901116af	string	Erfolge\r\n\r\n\r\n                
+0x901116f8	string	Weiter
+0x9011173b	string	Dadurch werden alle abgemeldet. Fortfahren?
+0x90111767	string	Sitzung beenden
+0x90111793	string	ssen Sie Ihre aktuelle Sitzung verlassen. Wenn Sie gerade ein Spiel spielen, verlieren Sie den nicht gespeicherten Fortschritt.
+0x90111813	string	Sitzung beenden
+0x9011184a	string	ssen Sie Ihre aktuelle Sitzung verlassen. Wenn Sie gerade ein Spiel spielen, verlieren Sie den nicht gespeicherten Fortschritt. Wirklich verlassen?
+0x901118de	string	Sitzung verlassen
+0x90111960	string	gbar. Mit Xbox Live werden Sie Teil der besten Spiel- und Unterhaltungs-\r\ngemeinschaft der Welt.
+0x90111a4d	string	nlichen Gamertag erstellen, eine Biographie anlegen und Ihren Spielerbereich bestimmen.
+0x90111b22	string	 Exklusive Inhalte herunterladen
+0x90111c68	string	end nach Updates suchen und diese anwenden?
+0x90111c94	string	Profil wird erstellt
+0x90111cff	string	Profil
+0x90111d06	string	Nicht erstellen
+0x90111d16	string	Profilname eingeben
+0x90111d8a	string	ter noch einmal.
+0x90111d9c	string	Aktualisierungen werden heruntergeladen. Bitte warten.
+0x90111df7	string	glich. Versuchen Sie es erneut.
+0x90111e2a	string	glich
+0x90111eb4	string	hren.\r\n\r\nWeitere Informationen erhalten Sie unter www.xbox.com/support.
+0x90111f10	string	glich
+0x90111f16	string	Weiter
+0x90111f1d	string	Kein Profil erstellen
+0x90111fa8	string	hlen Sie "Weiter".
+0x90111fca	string	Platz freimachen

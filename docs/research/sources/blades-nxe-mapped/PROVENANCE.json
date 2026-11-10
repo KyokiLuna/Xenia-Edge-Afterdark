@@ -1,0 +1,995 @@
+{
+  "schema": "user-supplied-dashboard-reference-snapshot-v1",
+  "created_utc": "2026-11-07T00:05:18.261877+00:00",
+  "source_root": "/home/kyoki/Documents/xbox dash/decoded_dump blades+nxe HIGHLY IMPORTANT",
+  "selection": [
+    "reference",
+    "_tool",
+    "_avatar_disasm",
+    "README.txt",
+    "VALIDATION_REPORT.txt"
+  ],
+  "source_files": 157,
+  "source_logical_bytes": 11303421,
+  "files": [
+    {
+      "path": "reference/00_INDEX.txt",
+      "bytes": 53708,
+      "sha256": "c6aceb47f68022544740e7bea328143ef578c4ad9dda8f0e167e935fbda2ca72",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/01_EXPORT_TABLES_INDEX.txt",
+      "bytes": 2161,
+      "sha256": "108560d726068496800f995ce55a6914992ae6374fdc9fa507b79ff95fec8e9b",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/02_AVATAR_COMMAND_TABLE.txt",
+      "bytes": 6678,
+      "sha256": "1d6165960b06e77528441f81e66914760e7b51989b4a589502ccc2a1be1de596",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/03_IMPORT_TABLES_INDEX.txt",
+      "bytes": 5172,
+      "sha256": "4192f63e2fe374b67a5ee23e0187511949d6ac3c34f7d25915a2d2f44c4e4715",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/04_CALL_GRAPH_INDEX.txt",
+      "bytes": 3214,
+      "sha256": "a6f70c051e2d13a5bdcbb923e3e6bbadbb63b8d7cdd930a7cf7a8113607d5c7d",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/05_STRINGS_INDEX.txt",
+      "bytes": 5202,
+      "sha256": "450aab2794caa920f33af285d4a36a425cf30d4dc03d4621e841e758193c9b45",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/06_IPC_SERVICE_MAP.txt",
+      "bytes": 214440,
+      "sha256": "4d3f24da7041f9dbb92d5f21cec1f97af12abf8875a8d720efdf388984210df5",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/07_TITLE_IDS.txt",
+      "bytes": 2712,
+      "sha256": "01b460fa92463ad3763ef5c92c9a8b856b8bceff102ddb87f6953ff3ad544fae",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/08_STRUCTURES.txt",
+      "bytes": 15658,
+      "sha256": "ccb64edd78adbb72da2134b92636f13cbe57c63f6e5ebb06306e1b184d23fa18",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/09_RELATIONSHIPS.txt",
+      "bytes": 15017,
+      "sha256": "2993eb21c64dbe7ffe1ae430ccac23eeadd650eb2cee9ab024c769bfad6c6bd5",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/10_UNRESOLVED.txt",
+      "bytes": 25224,
+      "sha256": "3afddceb64814ad0ad28f85f466bbc5440fffed0423355326d324c4ef06a1f3a",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/_ipc_candidates.tsv",
+      "bytes": 52758,
+      "sha256": "4e13af6a773b954ff59eb928db9011aa147d84d2722cc4cb5d22bcb7688808c2",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/AvatarEditor.xex.calls.txt",
+      "bytes": 119836,
+      "sha256": "69127ee71f2cfa906825f2a6868304b4050f79f26882f1f44acb3a14b39c3525",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/AvatarMiniCreator.xex.calls.txt",
+      "bytes": 5207,
+      "sha256": "d5b1d667726bb221fcafd3f5cf6ac1652fec7eb9e00f0567316541c1c4268df7",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/createprofile.xex.calls.txt",
+      "bytes": 7521,
+      "sha256": "d9d4b210318bf89e15c0d6e07f5af481ee90fc55603e1eae0582772543546962",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/dash.xex.calls.txt",
+      "bytes": 120429,
+      "sha256": "8a498150307f64497ec1e893e6b8213de149102d101f574c0a9f9f159210431e",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/deviceselector.xex.calls.txt",
+      "bytes": 6964,
+      "sha256": "90c1dbe11c7a196e021e294213f1f82211e26120cf8dd2e866b9678b6bb0a97a",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/flash_createprofile.xexp.calls.txt",
+      "bytes": 794,
+      "sha256": "14bbf616a40f8f776c2b273d93cc5f6daef200719b9d3ed3a2684070a0f827af",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/flash_dash.xex.calls.txt",
+      "bytes": 256428,
+      "sha256": "6129a6bdb3bc86c58081c3b58e6ea883107d44d5300cc588894d20f0029ea794",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/flash_deviceselector.xexp.calls.txt",
+      "bytes": 749,
+      "sha256": "9f02562780e0e95526fba3b293408b1c90393a56da08179024c3d32af1dda8f0",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/flash_gamerprofile.xexp.calls.txt",
+      "bytes": 693,
+      "sha256": "d6b927063141041ff7f98ae8e37f94e95f51b66c79629c2c513ecdc51650f09e",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/flash_signin.xexp.calls.txt",
+      "bytes": 43351,
+      "sha256": "aaa74e414f7e19da3e5792693b7d53e57c301e9e4f6dec8aa11447d2d995a941",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/flash_xam.xexp.calls.txt",
+      "bytes": 317584,
+      "sha256": "987031bfb9ce35d951f3134de2027830c64d38e7ced7ae70eeb63101b0422cce",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/gamerprofile.xex.calls.txt",
+      "bytes": 5083,
+      "sha256": "61278a2e0aebac81636fab89de42d5b2b35b7464042f8887cb3fa21aedb5f108",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/signin.xex.calls.txt",
+      "bytes": 5925,
+      "sha256": "25e6878f84c6225debf81c2265a5d25f0199360303b1637d3a97134f60bbd84c",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls/xam.xex.calls.txt",
+      "bytes": 214110,
+      "sha256": "443bae53d931d0ccd30c07bd5d73ab98e10bc6b348a49a5fd78e40de3617f1e6",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/calls.tsv",
+      "bytes": 1107413,
+      "sha256": "b8d50548d8497d60d3221250fb3ed20a4583f709bf7639d5a9849685f13bd480",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/LivePack.xex.exports.txt",
+      "bytes": 1549,
+      "sha256": "b7bb98d1be5613e3ab64bac2b7a331d3973e678dd24fa821ce40d3155e8ab3fe",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/bootanim.xex.exports.txt",
+      "bytes": 267,
+      "sha256": "04d3c5a11d61b29cf04013f3eb0951c3563edcabe2ae214b6a92a3e5a9ed3db2",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/createprofile.xex.exports.txt",
+      "bytes": 251,
+      "sha256": "7de9579b58080b29e4d0090cc803c494edba074befab07c18d18fa896aed56e1",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/dash.xex.exports.txt",
+      "bytes": 221,
+      "sha256": "50d955f428f50f3a644fb223d9a86ddc9a9c349c2f6931b069d2f6bdd2f882fe",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/deviceselector.xex.exports.txt",
+      "bytes": 273,
+      "sha256": "744c145e788cd214881d428dca6974b3517a74dd61666cf2b9b504e40edb9480",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/flash_dash.xex.exports.txt",
+      "bytes": 17135,
+      "sha256": "628cf7d87c39a8141621b1a560a80fc5562f402beff24c95bf5f580b03f886d2",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/flash_vk.xexp.exports.txt",
+      "bytes": 290,
+      "sha256": "0d0f40ba54a41832e15328b36e26890ca8c502fddbc56c319ffd5d99ed889c5d",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/flash_xam.xexp.exports.txt",
+      "bytes": 46331,
+      "sha256": "0e1e3233968bc1a1bc04c22c8b473b99ea1e6355a892556a03d3080a420211c0",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/hostloader.dll.exports.txt",
+      "bytes": 227,
+      "sha256": "76c3e95d84c1a749d630659793c06706533cdc6e0168489d8a61a2c461523e34",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/install_extender.xex.exports.txt",
+      "bytes": 234,
+      "sha256": "20401fc8c0f6e3b3385b663aab1dff795e6242f47668da766a4b5c76ae78318e",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/runtime__v3.0__BackCompatShim.xex.exports.txt",
+      "bytes": 286,
+      "sha256": "b76511e3cc168d91e6fee2e9afb74fe85973a1aef7304a831d614e7866ec11f7",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/runtime__v3.0__netcfusermode.dll.exports.txt",
+      "bytes": 13055,
+      "sha256": "68de7b1a6ddda71a9b41d7ed224a2810a248a0d58e190e7dc4052a643bae907e",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/runtime__v3.0__runtimehost.xex.exports.txt",
+      "bytes": 262,
+      "sha256": "ab4707b625d93143e46d22e7360f1e351e5802bbdaace07139bbf62ac666188d",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/runtime__v3.1__BackCompatShim.xex.exports.txt",
+      "bytes": 286,
+      "sha256": "ae5f45ba40255e22930e41de782f13504b980ecff2e8ecdf6e5c0abf5063e889",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/runtime__v3.1__netcfusermode.dll.exports.txt",
+      "bytes": 13055,
+      "sha256": "1d51b9ef584661d536374c44932ad19d6daa1699e61e52b1f3101de5d6ac2d21",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/runtime__v3.1__runtimehost.xex.exports.txt",
+      "bytes": 262,
+      "sha256": "188e509943c8f427ed5c507b913f90f131d33f2b9d45f65df6f7807f347f06e3",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/vk.xex.exports.txt",
+      "bytes": 282,
+      "sha256": "46a4760f6ccc94cec3ee99ec59d4ad8206073491e84c46de8be450c0e9fa4431",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports/xam.xex.exports.txt",
+      "bytes": 28644,
+      "sha256": "32aa9dbf7d0e39f11912fbe0839523932def69601a7279cbdb5bf824e4a93044",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/exports.tsv",
+      "bytes": 181826,
+      "sha256": "30d195b5b336a5016f5c8843a7679c3dca5aa4a0afd03bccdc2d65f7844dfef5",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/AvatarEditor.xex.imports.txt",
+      "bytes": 44674,
+      "sha256": "26464e48a90dbf52130ea9251d9473fe8905ae3a93c6465a5ac366576d1ba39d",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/AvatarMiniCreator.xex.imports.txt",
+      "bytes": 14433,
+      "sha256": "c679b556f6116285aadd8ed3a9b13058aee19d9f48a1c89b80009a7233f3f154",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/Feedback.xex.imports.txt",
+      "bytes": 17740,
+      "sha256": "0b8eff34239e79f31db605a7405c26a1b0965317ea6c90feccbd84a8af53fcab",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/Friends.xex.imports.txt",
+      "bytes": 42821,
+      "sha256": "5198fb8d26c73c026f70c7973867a5ba1a0504f3ff18efead4103f6f3a3554b2",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/LivePack.xex.imports.txt",
+      "bytes": 93965,
+      "sha256": "88ec3c6dc11c490079a0f1864ca8f1fbbfbf53f6bf1cb85cd33273b3f38e6c07",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/Marketplace.xex.imports.txt",
+      "bytes": 41576,
+      "sha256": "b2233710d407bd3a34a0318f56f403e9f2e44a0db2b75750714ebf883116ddb2",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/Party.xex.imports.txt",
+      "bytes": 13437,
+      "sha256": "558e83b1626468b05dcad94188526891b5e8d45226866e352e905916309abdc3",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/Quickchat.xex.imports.txt",
+      "bytes": 27033,
+      "sha256": "6427464a2ee9db5d764075267720afb3d676d2ef5c3741a750bf963c54587fa8",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/Voicemail.xex.imports.txt",
+      "bytes": 19566,
+      "sha256": "ba88e63870802d72fca8064a69da75f90436059493d449550db8a08fbec63985",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/WORDREGISTER.XEX.imports.txt",
+      "bytes": 10820,
+      "sha256": "8fc6a90dcb6a2584b63485133e9589b344e26035f06c8b4b65de6a45d3e25595",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/XMsgr.xex.imports.txt",
+      "bytes": 26070,
+      "sha256": "d5e984b448c735f3b057ab771ca4dcb37f810f49956b4b5a7580e03a4658eecd",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/bootanim.xex.imports.txt",
+      "bytes": 16619,
+      "sha256": "3d2388e2813383491b3d91a90148fcb552d7a73ede00b4f822361e2f82afc660",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/createprofile.xex.imports.txt",
+      "bytes": 17487,
+      "sha256": "4168d8d8cc1813c03e9ca785e2dc71a7a14acb804461ebef85a5686b99116cca",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/dash.xex.imports.txt",
+      "bytes": 65912,
+      "sha256": "1dc0d4002c6d26d5e92078f659e298dff171b9a107164706eeacb89849dfc77c",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/deviceselector.xex.imports.txt",
+      "bytes": 10512,
+      "sha256": "68fe44ba56a8e1de9e8ec61f1fba455e7c9e346f0da7a9484b7f85aa34610307",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/flash_dash.xex.imports.txt",
+      "bytes": 104873,
+      "sha256": "5b6be34f71ae0654ee126587e7a00019fb791b8538afd134caf7a9a9770dc9d3",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/flash_systemupdate.xex.imports.txt",
+      "bytes": 25050,
+      "sha256": "b44f14c36ba21b6b98c81d5d45b6c5daa20d2db65a20e7aebaf2a60c520b2a2c",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/flash_xam.xexp.imports.txt",
+      "bytes": 136,
+      "sha256": "067f9565e77e825a7a87eff4ef5efde2ff5664e8d9a48711bfbca7f0c32bc2aa",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/flash_ximecore.xex.imports.txt",
+      "bytes": 8537,
+      "sha256": "19724774be494dad22d52e428a406c2bc189c295ef1ec74cdaa325137d07f2dd",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/gamerprofile.xex.imports.txt",
+      "bytes": 23627,
+      "sha256": "519027b7b3d8564b2af0b77c93dd70f3135f8b7305a3d112782ee532a3aa02e9",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/hostloader.dll.imports.txt",
+      "bytes": 28648,
+      "sha256": "961482cc36a953b01173a289ac5553ad00ae8d1393eda4ccf040440b1b02b40a",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/hud.xex.imports.txt",
+      "bytes": 25393,
+      "sha256": "ec5e8e6bc7e67e92cfde79b2838003260add7d48b2a1b7785cf48e83bdae6941",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/install_extender.xex.imports.txt",
+      "bytes": 42733,
+      "sha256": "274596cb28608554fbf95a2febcb850a32bc1d85a94b7df6f10507d98ecc058d",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/mfgbootlauncher.xex.imports.txt",
+      "bytes": 11040,
+      "sha256": "add01b6a3896699fa286668e2666336ee0d0f88f4394cacb19a8cf2524ed844c",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/minimediaplayer.xex.imports.txt",
+      "bytes": 13097,
+      "sha256": "cab3cbc8e024117c02d1ad0daa463670ed1ac873b580eeed33d55756b588c42f",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/runtime__v3.0__BackCompatShim.xex.imports.txt",
+      "bytes": 21916,
+      "sha256": "5017912da4b80659777bfe572bca7b21055b34e698c0c029e484319d58180cb9",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/runtime__v3.0__runtimehost.xex.imports.txt",
+      "bytes": 45731,
+      "sha256": "886524cd2ba4dcad3f56217bc20bb3c688358cf20f862077e8dc9c8bce82c3a7",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/runtime__v3.1__BackCompatShim.xex.imports.txt",
+      "bytes": 22433,
+      "sha256": "2b23cca8b7ffbf7e26e3d9f7ebbca01ac7cd1ecda2f51e1a9b486c5dc46e5c4b",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/runtime__v3.1__runtimehost.xex.imports.txt",
+      "bytes": 47451,
+      "sha256": "81492b8909ade9adb9be997a4d54e06e6e4f8bd67a816d032b35568a06342468",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/signin.xex.imports.txt",
+      "bytes": 16632,
+      "sha256": "94632fe6a6f80db3c34b055ba3f994845b4de833303711a6dac7dbafbdcc28c8",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/titlelauncher.xex.imports.txt",
+      "bytes": 31610,
+      "sha256": "694b045cd2a63c056c32c6d4bb3b740d099c1d71e16b62384e05caff713b9516",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/updater.xex.imports.txt",
+      "bytes": 9023,
+      "sha256": "b43586597f7c4e29a8715544d90ef03075e2f2d4fd8cb326d55bb22180932617",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/vk.xex.imports.txt",
+      "bytes": 16267,
+      "sha256": "9ab30bafab636bec2180cf58ca57fcad3a71aed683d063cdbf2eceb436c6b0a3",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports/xam.xex.imports.txt",
+      "bytes": 57094,
+      "sha256": "ec00b1c687463a437a422508296610b952a43e321b17cec29eb16d3adb2894e8",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/imports.tsv",
+      "bytes": 488252,
+      "sha256": "0d276faf54a9e44c54024d69ea77e501728ad3370c7c2681a2f33d34e69c7027",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/ipc.tsv",
+      "bytes": 94046,
+      "sha256": "3313cbfac5aab7a883a6e928fde34fc2901ce0a0585d41e3326b2dcd1f01bf43",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/modules.tsv",
+      "bytes": 20075,
+      "sha256": "878336ddae2aff2e4b7c3d9cdf93168b98ee6cf00c95437e62dadecb3b2445a0",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/AvatarEditor.xex.strings.txt",
+      "bytes": 303768,
+      "sha256": "d0d3839aa1c95cb7fc55720969699c4756c372a3eb40a3aa84cd04462478a8f7",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/AvatarMiniCreator.xex.strings.txt",
+      "bytes": 19631,
+      "sha256": "47209809fddd325ab6fb9f8c930dc6791cb8744b9263f3bb07b68d1ebb8a5965",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/Feedback.xex.strings.txt",
+      "bytes": 37540,
+      "sha256": "c092b2944a587e4f159d8138449caa537b34523912897b9a4d3efc47b5684694",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/Friends.xex.strings.txt",
+      "bytes": 95600,
+      "sha256": "47a991516a6769669894c0b7a48c208fff6cdf54f6ca8fdd648873144c6ea6b6",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/LivePack.xex.strings.txt",
+      "bytes": 94024,
+      "sha256": "6b3fbe9a77823d1e1586dac72428aac97949370ef8b82bbe3e95928d2e384ccf",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/Marketplace.xex.strings.txt",
+      "bytes": 145208,
+      "sha256": "ade7e929dae09ff73af2c0692df11f0dcf38efe4396302a1a99b113c478a1255",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/Party.xex.strings.txt",
+      "bytes": 1137,
+      "sha256": "3aba9de7cf2ffb9a7e82e34c98e3af346097e291a543f7bf2d64f3ce5d99a63d",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/Quickchat.xex.strings.txt",
+      "bytes": 26813,
+      "sha256": "5ace639d53c63520a52330ec0e7d109245deb79dc535f5df2ccd2262f22eb2ff",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/Voicemail.xex.strings.txt",
+      "bytes": 12134,
+      "sha256": "4a61a17b20f5a217a7ec55753ebee82623440686f1c2e62c8a01c65003b6f789",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/WORDREGISTER.XEX.strings.txt",
+      "bytes": 926,
+      "sha256": "2ac5e627ecc3cf4d8fa91bffec1baa4b106f5992bb49f9f0c2d18a5d80c5cc30",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/XIMEDIC.XEX.strings.txt",
+      "bytes": 16197,
+      "sha256": "a66ba3d7ae0c1b2b41f0459c9a1f3a38ee7f9dda89d98d7b2a3feb8130455f20",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/XIMEDICCH.XEX.strings.txt",
+      "bytes": 40970,
+      "sha256": "cefa6cc193fa9979b5b7fe2d643a86ba9c4ef470a999b50ee9508b9a04ad326d",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/XIMEDICEX.XEX.strings.txt",
+      "bytes": 5565,
+      "sha256": "bad9f425b0cff6d7d7b824d6874c957c807f690f9f425635d789c167ea8e140a",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/XMsgr.xex.strings.txt",
+      "bytes": 6670,
+      "sha256": "818070a7039d198e60a3a33ac25216f69cbf4c15b2a66c37a45cae9a1753b305",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/bootanim.xex.strings.txt",
+      "bytes": 9153,
+      "sha256": "a0a6cce359056de59502f3dcab47780fe4d6e13d69e0dcf1d7e362734efa6ee0",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/createprofile.xex.strings.txt",
+      "bytes": 21271,
+      "sha256": "4262933cf660a198db329cd3c28180f635b0c875fb3354386d2655218a3dba9a",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/dash.xex.strings.txt",
+      "bytes": 569728,
+      "sha256": "e5d88d1144db6c1f4fa5fb8837c209f5718afcf2d4383bac685588dcee0e267b",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/deviceselector.xex.strings.txt",
+      "bytes": 4302,
+      "sha256": "16419935b5f9e237482ef06a17f1c38c16c27d1155d8459c26379244bd4a0f7c",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_bootanim.xexp.strings.txt",
+      "bytes": 4643,
+      "sha256": "626b158ce170ea60110c475881e4bee7ef680e64e1975a0a360c477089534645",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_createprofile.xexp.strings.txt",
+      "bytes": 6855,
+      "sha256": "cc467c5f2406160404ad5452edf439c224d6773e0693465079d65b7cf247415a",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_dash.xex.strings.txt",
+      "bytes": 942425,
+      "sha256": "80e8df2fb857f3a354d792f3f2d4e2c50209f73070f0f5e4593f147a117087f0",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_deviceselector.xexp.strings.txt",
+      "bytes": 9317,
+      "sha256": "7ecffdb0ca145f4734f77782da88f0c11d83e0518bce3d81098f8f41b9ca9995",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_gamerprofile.xexp.strings.txt",
+      "bytes": 56444,
+      "sha256": "c83b3bce994ba20270329cd2c44456b79dffcb96ed6605a9d3f962f650c5ab6e",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_hud.xexp.strings.txt",
+      "bytes": 5305,
+      "sha256": "5b31f0c947906bcce8bba3c6aa0395ff2a2990144028c5880a0a985dca0c93dd",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_huduiskin.xex.strings.txt",
+      "bytes": 93755,
+      "sha256": "7719b7a1bc618c7a37b2bb867740e826ba77eaa54077ca208522cee9f9662729",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_mfgbootlauncher.xexp.strings.txt",
+      "bytes": 6025,
+      "sha256": "2788cbbd575df3d996d192c9bb6813c0e4134f7e0b93a0b606ddd776e0c5408b",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_minimediaplayer.xexp.strings.txt",
+      "bytes": 11636,
+      "sha256": "d35642dbabe43115dd47e8d697427e98aa6f0d80fa06371024d391055c962b55",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_signin.xexp.strings.txt",
+      "bytes": 51903,
+      "sha256": "2e8f5391ee215ddd51d71919683cc0c0258733e17f40e8535dc93f951b15c4ba",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_systemupdate.xex.strings.txt",
+      "bytes": 24574,
+      "sha256": "93aee4e8fece545711034b170892a809a964cbb306e963cac82a2df574ada586",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_updater.xexp.strings.txt",
+      "bytes": 9984,
+      "sha256": "a43fa4e941660d71f67ada0a62290ffd83c70e492a43a77147611997e9e79fb5",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_vk.xexp.strings.txt",
+      "bytes": 6806,
+      "sha256": "804b6af1177d774eaffba20bcac88ceb42492ac42e1ffb8de84863ac60c14784",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_xam.xexp.strings.txt",
+      "bytes": 59881,
+      "sha256": "6af70bd3a469de6157bb84e1970dd4a8aca15a794e22fab35a6bea8f9af64052",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/flash_ximecore.xex.strings.txt",
+      "bytes": 4701,
+      "sha256": "82384499ee9be24bcda51f63ad4ff6574e49ef14e1cba1a02964948c2d23dcba",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/gamerprofile.xex.strings.txt",
+      "bytes": 38183,
+      "sha256": "0ebda0f3361df731696957c7dbde1baf464ec2d4c1d5ae03e79b69088dd12ef8",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/hostloader.dll.strings.txt",
+      "bytes": 68316,
+      "sha256": "496867a8d93ced5d93d67971079633fa78ae7c633cc99ad0aedbd4f97e270994",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/hud.xex.strings.txt",
+      "bytes": 35275,
+      "sha256": "785901b358dd18911682e9879d752a20d29cd89066a688b5d806c54dac0554e3",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/huduiskin.xex.strings.txt",
+      "bytes": 2637,
+      "sha256": "5112679a8d250b63eee532eb392eb508dd546e900820994397ba0c77573063bf",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/install_extender.xex.strings.txt",
+      "bytes": 9749,
+      "sha256": "a8f071b07acc629f3eb2d0c2d4e16c4c573d4266e570d07a09598cf82f19a874",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/mfgbootlauncher.xex.strings.txt",
+      "bytes": 6021,
+      "sha256": "789bc5b1d0d41f42e4c9de6cdab887db230370a59420a7bcf72e5d708bd5605c",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/minimediaplayer.xex.strings.txt",
+      "bytes": 10104,
+      "sha256": "6d3992321759f08707a481827ab19aea238a9f850db17cac66b7979d3c096209",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/runtime__v3.0__BackCompatShim.xex.strings.txt",
+      "bytes": 20127,
+      "sha256": "e8bb7aa31a0868223b1ca760f3b323e657c85fb629dcc32cd09b8390bdd03f77",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/runtime__v3.0__netcfusermode.dll.strings.txt",
+      "bytes": 13042,
+      "sha256": "29ef46e56e64073783d1ed7fd026608c39b400e9ad5b72f1d298f930a8e9039c",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/runtime__v3.0__runtimehost.xex.strings.txt",
+      "bytes": 84828,
+      "sha256": "ba8e6265df7e0dc34970bd97a4b4dd094012b1e92f1f9052879f74ab2439f6e3",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/runtime__v3.1__BackCompatShim.xex.strings.txt",
+      "bytes": 23904,
+      "sha256": "6994fbb34282a1946c6a10feae7bc153a6b24e08c0226790be6c76ae464473cd",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/runtime__v3.1__netcfusermode.dll.strings.txt",
+      "bytes": 12940,
+      "sha256": "c1b30a11369d6becf94469ed7e8d20ba2155f3f6291627bfb74fc64bf0d2fb72",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/runtime__v3.1__runtimehost.xex.strings.txt",
+      "bytes": 93199,
+      "sha256": "49328c28635e71bc906d975f4ccec66de381fb31e99a447d2313e1c204ef8a0a",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/signin.xex.strings.txt",
+      "bytes": 35359,
+      "sha256": "3c982f8c058f2bd3308ff1a0b213744e7a203c031a4c56b90e68e471ecd95ca1",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/titlelauncher.xex.strings.txt",
+      "bytes": 21275,
+      "sha256": "f7aad258ca8875a7033f50dd1044aea247d1856dc4d6a9921b860062ac79cd4a",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/updater.xex.strings.txt",
+      "bytes": 4547,
+      "sha256": "03e003946c3bea3d7df34ef429c615898a21970198b8d955a772b8c70074de8e",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/vk.xex.strings.txt",
+      "bytes": 6814,
+      "sha256": "cabf6570af93315ecf496c3873ba747cea996ddda6361870649b0b92ea25e1db",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings/xam.xex.strings.txt",
+      "bytes": 69385,
+      "sha256": "1acff27ffd6ef4d6ad0a694f94ca35273eb52f5bf2cd1103803864b11f7f4a6a",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/strings.tsv",
+      "bytes": 3257414,
+      "sha256": "7e244e82b25fa4a4a033ed0013073ae29cecc8ba7506836e660d1cf86737ed76",
+      "source_mode": 420
+    },
+    {
+      "path": "reference/title_ids.tsv",
+      "bytes": 1639,
+      "sha256": "cdf7d538a11595205437a7204a7eb7178c301a5dd98ef13fef9e0d098352389f",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build.sh",
+      "bytes": 355,
+      "sha256": "3bc7071d87aa9412fc3b6036abdd7f6a35d8c833bed7400cb86161706fa373d0",
+      "source_mode": 493
+    },
+    {
+      "path": "_tool/build_01_modules.py",
+      "bytes": 12519,
+      "sha256": "6f0585fdc4809df0d851540987f42517dc51d0b1dfc2ec660587573abc96ce79",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build_02_exports.py",
+      "bytes": 4794,
+      "sha256": "cd7d5200d95a302e00544e413fd61b38378e9cdb733868e426b6670cbcb6723e",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build_03_imports.py",
+      "bytes": 5458,
+      "sha256": "b58a10ee50c7fc8b2a516b2336ee37ae9492d3e3952b5fb34f051ef012db1600",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build_04_calls.py",
+      "bytes": 22077,
+      "sha256": "85c6cfcb4fa99ff6c246968a196506782e1cb53fffdff9f6ce829b290f2033bc",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build_05_strings.py",
+      "bytes": 9632,
+      "sha256": "0c041fb76506cb10532f2d4389f4a629154b04f24d5396ec695f596fde2ff487",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build_06_ipc.py",
+      "bytes": 28003,
+      "sha256": "dc98bb8a5ffd53ca963d7e164fe3d8cae118af33e87f94267f8161683d99e5f6",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build_07_titleids.py",
+      "bytes": 7934,
+      "sha256": "31364c7fc178c0ac2c88ef064009db9dd1e92edccf2c7467f794d2494a32a793",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build_09_relationships.py",
+      "bytes": 4424,
+      "sha256": "434e6bf41cacf6a6ca1b26ad4820a8b963f4f174c7d5a2216597f3b39ca29f2c",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build_11_validate.py",
+      "bytes": 24019,
+      "sha256": "80b44d1d5bcb69592391dd6ec873eac6d06e713c9e81fda3611b64c31a83e192",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/build_index_v1_DEPRECATED.py",
+      "bytes": 12765,
+      "sha256": "9adac4fe884a3a5a1fbfbabd061eff37a28e911f60952316f8834376ff51fb86",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/corpus_common.py",
+      "bytes": 13473,
+      "sha256": "bae5f72e623480a115013d76b9853c9fcc36df6c022517befd8a61023eb59de0",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/disasm_support.py",
+      "bytes": 13547,
+      "sha256": "dccf3b25fb8d19b4e0242e7626893abd6edf6950b064d4d3b082f770158a1cda",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/sha1_mini.h",
+      "bytes": 4059,
+      "sha256": "6058c0872405d96735188249ee88453e3810dc5355f3d347e7c840dd806eb0ee",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/stub.c",
+      "bytes": 185,
+      "sha256": "809244392bcd09fc7d0152fdb3b0894cb8b4c105c5e169c03fcad295f6cccb75",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/xex_header.py",
+      "bytes": 2692,
+      "sha256": "f2a04391df784ce6cf3ba4f36c6fac4621cd3164a7f412a32c47bc7540ed42da",
+      "source_mode": 420
+    },
+    {
+      "path": "_tool/xextool.c",
+      "bytes": 25851,
+      "sha256": "f1c9f7f3f308b80d046a750f6b8049b1c9c04e4b1b39ba232245ede565a125ba",
+      "source_mode": 420
+    },
+    {
+      "path": "_avatar_disasm/avatar_disasm_full.txt",
+      "bytes": 26716,
+      "sha256": "3273fdf4c093856e39ab05642979a7c9e1cd3902069255942ded231cccfccedb",
+      "source_mode": 420
+    },
+    {
+      "path": "_avatar_disasm/disasm_avatar.py",
+      "bytes": 2607,
+      "sha256": "28807efb8adbe742e6f105da713563272dc6818e783a87687940551e89b00287",
+      "source_mode": 420
+    },
+    {
+      "path": "README.txt",
+      "bytes": 25067,
+      "sha256": "96cec488b09a98bfcce42a09806ac6037c3ae46451571672c6b82e6bb186896c",
+      "source_mode": 420
+    },
+    {
+      "path": "VALIDATION_REPORT.txt",
+      "bytes": 2499,
+      "sha256": "757f90254ce9d4cd65efbcd4b90afd5e9bf403d66c16ea418269ed415a6f78fe",
+      "source_mode": 420
+    }
+  ],
+  "excluded_generated_files": [
+    {
+      "path": "_tool/__pycache__/build_04_calls.cpython-314.pyc",
+      "bytes": 27735,
+      "sha256": "e9ca5f0da9b372bb601eed04421b7387600859a5369c63a88b7b23195ca0e81e",
+      "reason": "generated Python bytecode; original preserved"
+    },
+    {
+      "path": "_tool/__pycache__/build_05_strings.cpython-314.pyc",
+      "bytes": 14441,
+      "sha256": "f5ca5debede3b8f1908f7f7bdb1d143769436eb28cdd44f5d8f6051e013a6c66",
+      "reason": "generated Python bytecode; original preserved"
+    },
+    {
+      "path": "_tool/__pycache__/build_06_ipc.cpython-314.pyc",
+      "bytes": 30774,
+      "sha256": "1ec7666a362c5c39cceef3defd4787f043e9533be624a3fb31847cbdb995f53a",
+      "reason": "generated Python bytecode; original preserved"
+    },
+    {
+      "path": "_tool/__pycache__/corpus_common.cpython-314.pyc",
+      "bytes": 15999,
+      "sha256": "ef09fa6d62ac65452a71857a7aafcf044b5201e047f2a0918d7e526a76afab1b",
+      "reason": "generated Python bytecode; original preserved"
+    },
+    {
+      "path": "_tool/__pycache__/disasm_support.cpython-314.pyc",
+      "bytes": 15550,
+      "sha256": "cd258760549136a7994b307b323ee1ddd3c9f99f3104043e035639ab651a0808",
+      "reason": "generated Python bytecode; original preserved"
+    }
+  ],
+  "source_originals_modified": false,
+  "source_tools_executed": false,
+  "binary_modules_copied": false,
+  "index_before_sha256": "7bd7e2c2309832363d570eeaf848cfd00d9db5d816c3d8e4a5c9cc67c636bea5",
+  "confidence": "Original per-record CONFIRMED/DERIVED/INFERRED/UNKNOWN/UNRESOLVED/SUSPECT_METADATA values preserved; mapped base/9199 corpus is not authoritative for17559."
+}

@@ -8,10 +8,22 @@
 */
 
 #include <algorithm>
+#include <array>
+#include <cerrno>
+#include <cstdlib>
 #include <tuple>
 
+#include "third_party/mbedtls/include/mbedtls/platform_util.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/platform.h"
+#if XE_PLATFORM_WIN32
+#include "xenia/base/platform_win.h"
+#elif XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+#include <sys/random.h>
+#else
+#error XeCryptRandom requires a secure host entropy provider for this platform.
+#endif
+#include "xenia/cpu/processor.h"
 #include "xenia/cpu/xex_module.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/util/shim_utils.h"
@@ -21,20 +33,16 @@
 #include "xenia/kernel/xboxkrnl/xecrypt_aes.h"
 #include "xenia/kernel/xboxkrnl/xecrypt_des.h"
 #include "xenia/kernel/xboxkrnl/xecrypt_md5.h"
+#include "xenia/kernel/xboxkrnl/xecrypt_rc4.h"
 #include "xenia/kernel/xboxkrnl/xecrypt_rsa.h"
 #include "xenia/kernel/xboxkrnl/xecrypt_sha.h"
+#include "xenia/kernel/xboxkrnl/xecrypt_signed_hash.h"
+#include "xenia/kernel/xboxkrnl/xecrypt_signed_hash_guest.h"
 #include "xenia/vfs/virtual_file_system.h"
 
 namespace xe {
 namespace kernel {
 namespace xboxkrnl {
-
-struct XECRYPT_RC4_STATE {
-  uint8_t S[256];  // 0x0
-  uint8_t i;       // 0x100
-  uint8_t j;       // 0x101
-};
-static_assert_size(XECRYPT_RC4_STATE, 0x102);
 
 // TODO: Size of this struct hasn't been confirmed yet.
 struct XECRYPT_RSA {
@@ -319,41 +327,13 @@ static_assert_size(XE_CONSOLE_SIGNATURE, 0x228);
 
 void XeCryptRc4Key_entry(pointer_t<XECRYPT_RC4_STATE> rc4_ctx, lpvoid_t key,
                          dword_t key_size) {
-  // Setup RC4 state
-  rc4_ctx->i = rc4_ctx->j = 0;
-  for (uint32_t x = 0; x < 0x100; x++) {
-    rc4_ctx->S[x] = (uint8_t)x;
-  }
-
-  // A key of no bytes has nothing to schedule and would divide by zero.
-  if (!key_size) {
-    return;
-  }
-  uint32_t idx = 0;
-  for (uint32_t x = 0; x < 0x100; x++) {
-    idx = (idx + rc4_ctx->S[x] + key[x % key_size]) % 0x100;
-    uint8_t temp = rc4_ctx->S[idx];
-    rc4_ctx->S[idx] = rc4_ctx->S[x];
-    rc4_ctx->S[x] = temp;
-  }
+  XeCryptRc4Key(*rc4_ctx, {key.as<const uint8_t*>(), key_size});
 }
 DECLARE_XBOXKRNL_EXPORT1(XeCryptRc4Key, kNone, kImplemented);
 
 void XeCryptRc4Ecb_entry(pointer_t<XECRYPT_RC4_STATE> rc4_ctx, lpvoid_t data,
                          dword_t size) {
-  // Crypt data
-  for (uint32_t idx = 0; idx < size; idx++) {
-    rc4_ctx->i = (rc4_ctx->i + 1) % 0x100;
-    rc4_ctx->j = (rc4_ctx->j + rc4_ctx->S[rc4_ctx->i]) % 0x100;
-    uint8_t temp = rc4_ctx->S[rc4_ctx->i];
-    rc4_ctx->S[rc4_ctx->i] = rc4_ctx->S[rc4_ctx->j];
-    rc4_ctx->S[rc4_ctx->j] = temp;
-
-    uint8_t a = data[idx];
-    uint8_t b =
-        rc4_ctx->S[(rc4_ctx->S[rc4_ctx->i] + rc4_ctx->S[rc4_ctx->j]) % 0x100];
-    data[idx] = (uint8_t)(a ^ b);
-  }
+  XeCryptRc4Ecb(*rc4_ctx, {data.as<uint8_t*>(), size});
 }
 DECLARE_XBOXKRNL_EXPORT1(XeCryptRc4Ecb, kNone, kImplemented);
 
@@ -503,14 +483,18 @@ dword_result_t XeCryptBnQwNeRsaPubCrypt_entry(pointer_t<uint64_t> qw_a,
 }
 DECLARE_XBOXKRNL_EXPORT1(XeCryptBnQwNeRsaPubCrypt, kNone, kImplemented);
 
-dword_result_t XeCryptBnQwBeSigVerify_entry(pointer_t<XECRYPT_SIG> sig,
-                                            lpvoid_t hash, lpstring_t salt,
-                                            pointer_t<XECRYPT_RSA> rsa) {
-  // hash from XeCryptRotSumSha
-  // known salts are "XBOX360SVC", "XBOX360XTT", "TDBXBOX36O"
-  return true;
+dword_result_t XeCryptBnQwBeSigVerify_entry(dword_t signature, dword_t hash,
+                                            dword_t salt, dword_t rsa,
+                                            const ppc_context_t& context) {
+  auto* kernel = context->kernel_state;
+  if (!kernel) {
+    return 0;
+  }
+  return XeCryptBeSigVerifyGuest(*kernel->memory(), signature, hash, salt, rsa)
+             ? 1
+             : 0;
 }
-DECLARE_XBOXKRNL_EXPORT1(XeCryptBnQwBeSigVerify, kNone, kStub);
+DECLARE_XBOXKRNL_EXPORT1(XeCryptBnQwBeSigVerify, kNone, kImplemented);
 
 dword_result_t XeCryptBnDwLePkcs1Verify_entry(lpvoid_t hash, lpvoid_t sig,
                                               dword_t size) {
@@ -519,10 +503,56 @@ dword_result_t XeCryptBnDwLePkcs1Verify_entry(lpvoid_t hash, lpvoid_t sig,
 }
 DECLARE_XBOXKRNL_EXPORT1(XeCryptBnDwLePkcs1Verify, kNone, kStub);
 
-void XeCryptRandom_entry(lpvoid_t buf, dword_t buf_size) {
-  std::memset(buf, 0xFD, buf_size);
+namespace {
+[[noreturn]] void FailXeCryptRandom() noexcept {
+  // This guest API is void. Returning after a source error would present
+  // partial or stale bytes as randomness; neither a predictable fallback nor
+  // a fabricated guest status is valid. Do not unwind live guest providers.
+  try {
+    XELOGE("XeCryptRandom: secure host entropy failed; terminating process");
+    xe::FlushLog();
+  } catch (...) {
+  }
+  std::quick_exit(EXIT_FAILURE);
 }
-DECLARE_XBOXKRNL_EXPORT1(XeCryptRandom, kNone, kStub);
+}  // namespace
+
+void XeCryptRandom_entry(lpvoid_t buf, dword_t buf_size) {
+  uint32_t remaining = buf_size;
+  if (!remaining) {
+    return;  // A null or inaccessible pointer is not accessed for zero bytes.
+  }
+  auto* output = buf.as<uint8_t*>();
+  std::array<uint8_t, 256> entropy;
+  while (remaining) {
+    // getentropy has a 256-byte limit and fills the complete chunk on success.
+    // The same bounded size fits Windows ULONG without narrowing a large size.
+    const uint32_t count = std::min(remaining, uint32_t(256));
+#if XE_PLATFORM_WIN32
+    if (!BCRYPT_SUCCESS(BCryptGenRandom(nullptr, entropy.data(), count,
+                                        BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
+      FailXeCryptRandom();
+    }
+#elif XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+    int result;
+    do {
+      result = ::getentropy(entropy.data(), count);
+    } while (result == -1 && errno == EINTR);
+    if (result != 0) {
+      FailXeCryptRandom();
+    }
+#endif
+    // Guest pages can be host-readonly for CPU write watches. A system call
+    // writing directly there may return EFAULT without the normal user fault
+    // handler. Preserve existing guest-write semantics with an ordinary copy
+    // only after the entire host chunk has been generated successfully.
+    std::memcpy(output, entropy.data(), count);
+    output += count;
+    remaining -= count;
+  }
+  mbedtls_platform_zeroize(entropy.data(), entropy.size());
+}
+DECLARE_XBOXKRNL_EXPORT1(XeCryptRandom, kNone, kImplemented);
 
 void XeCryptDesKey_entry(pointer_t<XECRYPT_DES_STATE> state_ptr, lpvoid_t key) {
   XeCryptDesKey(state_ptr, key.as<uint8_t*>());
@@ -625,6 +655,47 @@ void XeCryptHmacSha_entry(lpvoid_t key, dword_t key_size_in, lpvoid_t inp_1,
                  out_size);
 }
 DECLARE_XBOXKRNL_EXPORT1(XeCryptHmacSha, kNone, kImplemented);
+
+bool XeKeysVerifyXttFontSignature(std::span<const uint8_t> signature,
+                                  std::span<const uint8_t> signed_bytes) {
+  constexpr std::array<uint8_t, 10> salt{'X', 'B', 'O', 'X', '3',
+                                         '6', '0', 'X', 'T', 'T'};
+  std::array<uint8_t, 20> hash;
+  return XeCryptComputeRotSumSha(signed_bytes, {}, hash) &&
+         XeCryptVerifyBeSignature(signature, hash, salt, key39);
+}
+
+bool XeKeysVerifyRSASignature(uint32_t index, std::span<const uint8_t> hash,
+                              std::span<const uint8_t> signature) {
+  // Independently verified against the real 17559 system.manifest, whose
+  // native validator calls this export with index 0. Do not infer mappings
+  // from XeKeysGetKey's distinct key-index namespace.
+  return index == 0 && XeCryptVerifyRsaSha1Pkcs1(key39, hash, signature);
+}
+
+dword_result_t XeKeysVerifyRSASignature_entry(dword_t index,
+                                              dword_t hash_address,
+                                              dword_t signature_address,
+                                              const ppc_context_t& context) {
+  // Keep addresses as DWORDs until their complete readable ranges have been
+  // checked. Invalid guest arguments must not fault during pointer translation.
+  if (index != 0 || !hash_address || !signature_address || !context.value() ||
+      !context->processor) {
+    return 0;
+  }
+  auto* memory = context->processor->memory();
+  if (!memory ||
+      memory->QueryRangeAccess(hash_address, 20) ==
+          xe::memory::PageAccess::kNoAccess ||
+      memory->QueryRangeAccess(signature_address, 256) ==
+          xe::memory::PageAccess::kNoAccess) {
+    return 0;
+  }
+  return XeKeysVerifyRSASignature(
+      index, {memory->TranslateVirtual<const uint8_t*>(hash_address), 20},
+      {memory->TranslateVirtual<const uint8_t*>(signature_address), 256});
+}
+DECLARE_XBOXKRNL_EXPORT1(XeKeysVerifyRSASignature, kNone, kImplemented);
 
 dword_result_t XeKeysGetKeyProperties_entry(dword_t key) {
   if (X_Key_Properties.contains(key)) {
@@ -767,12 +838,41 @@ dword_result_t XeKeysAesCbc_entry(dword_t key_num, lpvoid_t inp_ptr,
 }
 DECLARE_XBOXKRNL_EXPORT1(XeKeysAesCbc, kNone, kImplemented);
 
-void XeCryptRotSumSha_entry(lpvoid_t inp_1, dword_t inp_1_size, lpvoid_t inp_2,
-                            dword_t inp_2_size, lpvoid_t out,
-                            dword_t out_size) {
-  // out used by XeCryptBnQwBeSigVerify
+namespace {
+[[noreturn]] void FailXeCryptSignedHash(X_STATUS status) noexcept {
+  // No recovered general guest exception path exists for this void API.
+  // Never return stale/partial hash bytes or fabricate a guest NTSTATUS.
+  try {
+    XELOGE(
+        "XeCryptRotSumSha: meaningful digest unavailable, status={:08X}; "
+        "terminating",
+        status);
+    xe::FlushLog();
+  } catch (...) {
+  }
+  std::quick_exit(EXIT_FAILURE);
 }
-DECLARE_XBOXKRNL_EXPORT1(XeCryptRotSumSha, kNone, kStub);
+}  // namespace
+void XeCryptRotSumSha_entry(dword_t first, dword_t first_size, dword_t second,
+                            dword_t second_size, dword_t output,
+                            dword_t out_size, const ppc_context_t& context) {
+  // With no input and no requested output there are no observable memory
+  // effects. Every nonempty operation needs the actual caller's provider.
+  if (!first_size && !second_size && !out_size) {
+    return;
+  }
+  auto* kernel = context->kernel_state;
+  if (!kernel) {
+    FailXeCryptSignedHash(X_STATUS_INVALID_PARAMETER);
+  }
+  const auto status =
+      XeCryptRotSumShaGuest(*kernel->memory(), first, first_size, second,
+                            second_size, output, out_size);
+  if (XFAILED(status)) {
+    FailXeCryptSignedHash(status);
+  }
+}
+DECLARE_XBOXKRNL_EXPORT1(XeCryptRotSumSha, kNone, kImplemented);
 
 dword_result_t XeKeysAesCbcUsingKey_entry(lpvoid_t obscured_key,
                                           lpvoid_t inp_ptr, dword_t inp_size,

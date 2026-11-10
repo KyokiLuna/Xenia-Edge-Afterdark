@@ -136,6 +136,15 @@ void av_log_callback(void* avcl, int level, const char* fmt, va_list va) {
 }
 
 X_STATUS XmaDecoder::Setup(kernel::KernelState* kernel_state) {
+  std::lock_guard lock(lifecycle_mutex_);
+  if (!shutting_down_ || worker_thread_ || context_data_first_ptr_) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  // Shutdown may signal an unparked worker. Consume old control signals only
+  // after its join, before a new Setup can admit any acknowledgement producer.
+  pause_fence_.TryWait();
+  resume_fence_.TryWait();
+  dedicated_thread_ = cvars::use_dedicated_xma_thread;
   // Setup ffmpeg logging callback
   av_log_set_callback(av_log_callback);
 
@@ -180,16 +189,20 @@ X_STATUS XmaDecoder::Setup(kernel::KernelState* kernel_state) {
   register_file_[XmaRegister::NextContextIndex] = 1;
   context_bitmap_.Resize(kContextCount);
 
-  worker_running_ = true;
   work_event_ = xe::threading::Event::CreateAutoResetEvent(false);
-  assert_not_null(work_event_);
+  if (!work_event_) {
+    return X_STATUS_NO_MEMORY;
+  }
+  if (!dedicated_thread_) {
+    shutting_down_ = false;
+    return X_STATUS_SUCCESS;
+  }
+  worker_running_ = true;
   worker_thread_ =
       kernel::object_ref<kernel::XHostThread>(new kernel::XHostThread(
           kernel_state, 128 * 1024, 0,
           [this]() {
-            if (cvars::use_dedicated_xma_thread) {
-              WorkerThreadMain();
-            }
+            WorkerThreadMain();
             return 0;
           },
           kernel_state
@@ -197,22 +210,29 @@ X_STATUS XmaDecoder::Setup(kernel::KernelState* kernel_state) {
                                      // actually. never calls any guest code
   worker_thread_->set_name("XMA Decoder");
   worker_thread_->set_can_debugger_suspend(true);
-  worker_thread_->Create();
-
+  const X_STATUS result = worker_thread_->Create();
+  if (XFAILED(result)) {
+    worker_running_ = false;
+    worker_thread_.reset();
+    return result;
+  }
+  shutting_down_ = false;
   return X_STATUS_SUCCESS;
 }
 
 void XmaDecoder::WorkerThreadMain() {
   while (worker_running_) {
+    if (paused_) {
+      pause_fence_.Signal();
+      resume_fence_.Wait();
+      // A fresh Pause may already follow Resume. Recheck before decoding or
+      // parking on the idle work event, rather than losing its acknowledgement.
+      continue;
+    }
     // Okay, let's loop through XMA contexts to find ones we need to decode!
     bool did_work = false;
     for (uint32_t n = 0; n < kContextCount; n++) {
       did_work = contexts_[n]->Work() || did_work;
-    }
-
-    if (paused_) {
-      pause_fence_.Signal();
-      resume_fence_.Wait();
     }
 
     if (did_work) {
@@ -223,14 +243,15 @@ void XmaDecoder::WorkerThreadMain() {
 }
 
 void XmaDecoder::Shutdown() {
+  std::lock_guard lock(lifecycle_mutex_);
+  shutting_down_ = true;
   worker_running_ = false;
-
+  paused_ = false;
+  // Release either actual worker park without re-entering Resume while the
+  // lifecycle mutex is held. Inline mode has no worker to acknowledge or join.
+  resume_fence_.Signal();
   if (work_event_) {
     work_event_->Set();
-  }
-
-  if (paused_) {
-    Resume();
   }
 
   if (worker_thread_) {
@@ -267,6 +288,8 @@ uint32_t XmaDecoder::AllocateContext() {
   XmaContext& context = *contexts_[index];
   assert_false(context.is_allocated());
   context.set_is_allocated(true);
+  std::memset(memory()->TranslateVirtual(context.guest_ptr()), 0,
+              sizeof(XMA_CONTEXT_DATA));
   return context.guest_ptr();
 }
 
@@ -346,7 +369,7 @@ void XmaDecoder::WriteRegister(uint32_t addr, uint32_t value) {
       const uint32_t context_id = base_context_id + std::countr_zero(value);
       auto& context = *contexts_[context_id];
       context.Enable();
-      if (!cvars::use_dedicated_xma_thread) {
+      if (!dedicated_thread_) {
         context.Work();
       }
       value &= value - 1;
@@ -399,21 +422,26 @@ void XmaDecoder::WriteRegister(uint32_t addr, uint32_t value) {
 }
 
 void XmaDecoder::Pause() {
-  if (paused_) {
+  std::lock_guard lock(lifecycle_mutex_);
+  if (shutting_down_ || paused_) {
     return;
   }
   paused_ = true;
-
-  pause_fence_.Wait();
+  if (dedicated_thread_) {
+    work_event_->Set();
+    pause_fence_.Wait();
+  }
 }
 
 void XmaDecoder::Resume() {
-  if (!paused_) {
+  std::lock_guard lock(lifecycle_mutex_);
+  if (shutting_down_ || !paused_) {
     return;
   }
   paused_ = false;
-
-  resume_fence_.Signal();
+  if (dedicated_thread_) {
+    resume_fence_.Signal();
+  }
 }
 
 }  // namespace apu

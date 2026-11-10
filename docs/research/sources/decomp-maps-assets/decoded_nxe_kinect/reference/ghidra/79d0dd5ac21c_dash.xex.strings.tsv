@@ -1,0 +1,3143 @@
+va	data_type	text
+0x92000b20	unicode	DashMainScene
+0x92000b3c	unicode	dashSkin
+0x92000b50	unicode	DashMainScene
+0x92000b70	unicode	section://%X,%s#%s
+0x92000bc8	unicode	XuiCanvas
+0x92000bec	unicode	sharedres://
+0x92000c08	unicode	dashcommon.xzp
+0x92000c28	unicode	common://
+0x92000c3c	string	\??\dashmedia:
+0x92000c4c	string	\??\media:
+0x92000c78	unicode	section://%X,dashskn%d#BladeSkin.xur
+0x92000cc4	string	DASHUSER:\DashStyle
+0x92000cd8	string	DASHUSER:\ThematicSkin
+0x92000cf0	string	DASHUSER
+0x92000cfc	unicode	dashmain.xur
+0x92000d18	unicode	dashmain.xzp
+0x92000d34	unicode	XuiScene
+0x92000d48	unicode	XuiTransition
+0x92000d88	string	\SystemRoot
+0x92000d94	unicode	dashuiskin.xzp
+0x92000db4	unicode	skin.xur
+0x92000dc8	unicode	DashMainScene
+0x92000e04	unicode	DashSystemScene
+0x92000e2c	unicode	Wallpaper
+0x92000e40	unicode	dashSignOut
+0x92000e58	unicode	TrayButton
+0x92000e70	unicode	Tab%u
+0x92000e84	unicode	MetaPanelScene
+0x92000ea4	unicode	DashScene
+0x92000eb8	unicode	PanelScenePaths
+0x92000ed8	unicode	PanelStrings
+0x92000ef4	unicode	PanelSettings
+0x92000f10	unicode	CWaitForLogonScene
+0x92000f40	unicode	EndBootGames
+0x92000f5c	unicode	BootGames
+0x92000f70	unicode	EndBootLive
+0x92000f88	unicode	BootLive
+0x92000f9c	unicode	EndReturnMedia
+0x92000fbc	unicode	ReturnMedia
+0x92000fd4	unicode	EndReturnGames
+0x92000ff4	unicode	ReturnGames
+0x9200100c	unicode	EndBootMediaCmd
+0x9200102c	unicode	BootMediaCmd
+0x92001048	unicode	EndBootGamesCmd
+0x92001068	unicode	BootGamesCmd
+0x92001084	unicode	EndBootSystem
+0x920010a0	unicode	BootSystem
+0x920010b8	unicode	EndBootOOBE
+0x920010d0	unicode	BootOOBE
+0x920010e4	unicode	BootSystemCmd
+0x92001100	unicode	EndBootSystemCmd
+0x92001124	unicode	BootLiveCmd
+0x9200113c	unicode	EndBootLiveCmd
+0x9200115c	unicode	%uOpenEnd
+0x92001170	unicode	%uOpen
+0x92001180	unicode	%uCloseEnd
+0x92001198	unicode	%uClose
+0x920011a8	unicode	%uOpenFullEnd
+0x920011c4	unicode	%uOpenFull
+0x920011dc	unicode	%uCloseFullEnd
+0x920011fc	unicode	%uCloseFull
+0x92001214	unicode	%uBlinkEnd
+0x9200122c	unicode	%uBlink
+0x9200123c	unicode	navSystemSetUp
+0x9200125c	unicode	navMemory
+0x92001270	unicode	navWindowMediaConnect
+0x9200129c	unicode	navNetwork
+0x920012b4	unicode	navPControls
+0x920012d0	unicode	navSettings
+0x920012e8	unicode	consolesettings.xzp
+0x92001310	unicode	Memory.xzp
+0x92001328	unicode	Network.xzp
+0x92001580	unicode	XuiTabScene
+0x92001598	unicode	XuiButton
+0x920015ac	unicode	XuiControl
+0x920015c4	unicode	XuiNavButton
+0x920015f0	string	theme
+0x920015f8	unicode	file://%S:\WallPaper%d
+0x92001628	unicode	content_panel
+0x92001644	unicode	content_panel_2
+0x92001664	unicode	Visual
+0x92001674	unicode	content_panel_blink
+0x92001a04	unicode	 PAL-60. Per farlo, vai alla voce Sistema, seleziona Impostazioni console e Display.
+0x92001bf4	unicode	n de consola, Pantalla.
+0x92001d42	unicode	tres de la console, puis Affichage.
+0x92001e9a	unicode	hlen Sie in "System" "Konsoleneinstellungen" und dann "Anzeige".
+0x92001fd0	unicode	Aceptar
+0x92001fe0	unicode	This game does not support PAL-50. Please change your display setting to PAL-60. To change your setting, in System, select Console Settings, Display.
+0x9200210c	string	[XAPI RETURN VALUE] %d\n
+0x92002124	string	\SaveMeta.xbx
+0x92002137	string	\r\TitleMeta.xbx
+0x9200214c	string	\TitleImage.xbx
+0x92002160	string	\SaveImage.xbx
+0x92002174	string	\ContentMeta.xbx
+0x92002198	unicode	TitleName
+0x920021c8	unicode	[Default]
+0x920021e4	unicode	NoCopy=1\r\n
+0x92002204	string	runtime error 
+0x92002218	string	TLOSS error\n
+0x92002228	string	SING error\n
+0x92002234	string	DOMAIN error\n
+0x92002248	string	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x92002340	string	R6032\n- not enough space for locale information\n
+0x92002378	string	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x920023dc	string	R6030\n- CRT not initialized\n
+0x920023fc	string	R6028\n- unable to initialize heap\n
+0x92002420	string	R6027\n- not enough space for lowio initialization\n
+0x92002454	string	R6026\n- not enough space for stdio initialization\n
+0x92002488	string	R6025\n- pure virtual function call\n
+0x920024ac	string	R6024\n- not enough space for _onexit/atexit table\n
+0x920024e0	string	R6019\n- unable to open console device\n
+0x92002508	string	R6018\n- unexpected heap error\n
+0x92002528	string	R6017\n- unexpected multithread lock error\n
+0x92002554	string	R6016\n- not enough space for thread data\n
+0x92002580	string	\nThis application has requested the Runtime to terminate it in an unusual way.\nPlease contact the application's support team for more information.\n
+0x92002614	string	R6009\n- not enough space for environment\n
+0x92002640	string	R6008\n- not enough space for arguments\n
+0x92002668	string	R6002\n- floating point not loaded\n
+0x920026a8	string	HH:mm:ss
+0x920026b4	string	dddd, MMMM dd, yyyy
+0x920026c8	string	MM/dd/yy
+0x920026dc	string	December
+0x920026e8	string	November
+0x920026f4	string	October
+0x920026fc	string	September
+0x92002708	string	August
+0x92002720	string	April
+0x92002728	string	March
+0x92002730	string	February
+0x9200273c	string	January
+0x92002774	string	Saturday
+0x92002780	string	Friday
+0x92002788	string	Thursday
+0x92002794	string	Wednesday
+0x920027a0	string	Tuesday
+0x920027a8	string	Monday
+0x920027b0	string	Sunday
+0x92002fec	string	1#QNAN
+0x92002ff4	string	1#INF
+0x92002ffc	string	1#IND
+0x92003004	string	1#SNAN
+0x9200300c	string	SunMonTueWedThuFriSat
+0x92003024	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x920031f0	string	ERR[D3D]: Unanticipated CPU_INTERRUPT.  Sign of a corrupt command buffer?\n
+0x920032a0	string	D3D: GPU initialization (HSIO training) has failed so no graphics will render.\n
+0x92003398	string	PIX!OK
+0x920033a0	string	PIX!NO
+0x920033cc	string	unnamed.pix2
+0x920033e0	string	\nThe PIX capture is now saved to xe:\pix\crashdump.pix2.  Please power cycle your\ndevkit and use the 'Open Crash Dump' option from the PIX File menu to load the file\nfor postmortem debugging.\n\n
+0x920034ac	string	crashdump.pix2
+0x920034c0	string	e:\xbperfview.cap
+0x92003ab8	string	PA_SU_DEBUG_DATA
+0x92003acc	string	PA_SC_DEBUG_DATA
+0x92003ae0	string	RBBM DEBUG
+0x92003aec	string	CP DEBUG
+0x92003af8	string	PTR_BUFF_STATUS 0xAc24
+0x92003b10	string	PIX_TB_STATUS 0x9c24
+0x92003b28	string	VTX_TB_STATUS 0x8C24
+0x92003b40	string	RB_DEBUG_0
+0x92003b4c	string	TPC_CNTL_STATUS
+0x92003b5c	string	TP3_CNTL_STATUS
+0x92003b6c	string	TP2_CNTL_STATUS
+0x92003b7c	string	TP1_CNTL_STATUS
+0x92003b8c	string	TP0_CNTL_STATUS
+0x92003b9c	string	TC_CNTL_STATUS
+0x92003bac	string	PA_SU_CNTL_STATUS
+0x92003bc0	string	PA_SC_CNTL_STATUS
+0x92003bd4	string	PA_CL_CNTL_STATUS
+0x92003be8	string	VC_CNTL_STATUS
+0x92003bf8	string	VGT_CNTL_STATUS
+0x92003c08	string	CP_MEQ_STAT
+0x92003c14	string	CP_MEQ_AVAIL
+0x92003c24	string	CP_CSQ_IB2_STAT
+0x92003c34	string	CP_CSQ_IB1_STAT
+0x92003c44	string	CP_CSQ_RB_STAT
+0x92003c54	string	CP_CSQ_AVAIL
+0x92003c64	string	CP_DEBUG
+0x92003c70	string	CP_STAT
+0x92003c78	string	CP_IB2_BUFSZ
+0x92003c88	string	CP_IB2_BASE
+0x92003c94	string	CP_IB1_BUFSZ
+0x92003ca4	string	CP_IB1_BASE
+0x92003cc8	string	CP_RB_BASE
+0x92003cd4	string	RBBM_STATUS
+0x92003d14	string	CPU Synchronization
+0x92003d2c	string	The GPU appears to be hung!  Specifically: 
+0x92003d58	string	%s 0x%02x: 
+0x92003d64	string	%08x 
+0x92003d70	string	   %25s: 0x%08x\n
+0x92003d88	string	The GPU state doesn't match any known hangs.  Please send a repro\nscenario to xboxds@xbox.com so that we can fix the hardware or\nsupply a work-around.\n\n
+0x92003e24	string	\nD3D version is %i, frame is %i.\n\n
+0x92003e48	string	Breaking into the debugger.  The GPU is hung and can't be recovered\nwithout doing a cold boot.\n
+0x92003ea8	string	ERR[D3D]: Try reproducing the hang with the debug or instrumented\n          versions of D3D (D3D9D.LIB or D3D9I.LIB) to capture a\n          crash-dump PIX file that can be sent to Xbox developer\n          support.\n\n
+0x92003f80	string	+++++++++++++++++++++++++++++++++++++++++++++++++++++++\n
+0x92004138	unicode	XuiSoundXAudio
+0x92004158	unicode	XuiSound
+0x92004180	unicode	File
+0x92004190	unicode	EndPressDisable
+0x920041b0	unicode	PressDisable
+0x920041cc	unicode	EndInitFocusCheckDisable
+0x92004200	unicode	InitFocusCheckDisable
+0x9200422c	unicode	EndInitFocusCheck
+0x92004250	unicode	InitFocusCheck
+0x92004270	unicode	EndInitFocusDisable
+0x92004298	unicode	InitFocusDisable
+0x920042bc	unicode	EndInitFocus
+0x920042d8	unicode	InitFocus
+0x920042ec	unicode	EndScrollMoreDisable
+0x92004318	unicode	ScrollMoreDisable
+0x9200433c	unicode	EndScrolling
+0x92004358	unicode	Scrolling
+0x9200436c	unicode	EndScrollMore
+0x92004388	unicode	ScrollMore
+0x920043a0	unicode	EndNormalSelCheckDisable
+0x920043d4	unicode	NormalSelCheckDisable
+0x92004400	unicode	EndNormalSelDisable
+0x92004428	unicode	NormalSelDisable
+0x9200444c	unicode	EndNormalSelCheck
+0x92004470	unicode	NormalSelCheck
+0x92004490	unicode	EndNormalSel
+0x920044ac	unicode	NormalSel
+0x920044c0	unicode	EndFocusCheckDisable
+0x920044ec	unicode	FocusCheckDisable
+0x92004510	unicode	EndNormalCheckDisable
+0x9200453c	unicode	NormalCheckDisable
+0x92004564	unicode	EndFocusCheck
+0x92004580	unicode	FocusCheck
+0x92004598	unicode	EndNormalCheck
+0x920045b8	unicode	NormalCheck
+0x920045d0	unicode	EndNormalPress
+0x920045f0	unicode	NormalPress
+0x92004608	unicode	EndPress
+0x9200461c	unicode	Press
+0x92004628	unicode	EndFocusDisable
+0x92004648	unicode	FocusDisable
+0x92004664	unicode	EndNormalDisable
+0x92004688	unicode	NormalDisable
+0x920046a4	unicode	KillFocus
+0x920046b8	unicode	EndFocus
+0x920046cc	unicode	Focus
+0x920046d8	unicode	EndNormal
+0x920046ec	unicode	Normal
+0x92004870	unicode	ClassOverride
+0x92004898	unicode	Pivot
+0x920048a4	unicode	Width
+0x920048b0	unicode	Height
+0x920048ec	unicode	XuiElement
+0x92004904	unicode	XuiText
+0x92004914	unicode	XuiLabel
+0x92004944	unicode	XuiFigure
+0x92004958	unicode	XuiVisual
+0x9200496c	unicode	PressKey
+0x92004980	unicode	XuiBackButton
+0x9200499c	unicode	XuiCheckbox
+0x920049b4	unicode	XuiRadioButton
+0x920049d4	unicode	XuiRadioGroup
+0x920049f0	unicode	XuiTextPresenter
+0x92004a14	unicode	XuiGroup
+0x92004a28	unicode	XuiListItem
+0x92004a40	unicode	XuiScrollEnd
+0x92004a5c	unicode	XuiList
+0x92004a6c	unicode	XuiCommonList
+0x92004a88	unicode	XuiProgressBar
+0x92004aa8	unicode	XuiSlider
+0x92004ac0	unicode	XuiEdit
+0x92004ad0	unicode	XuiCaret
+0x92004ae4	unicode	XuiMessageBox
+0x92004b00	unicode	XuiImagePresenter
+0x92004b24	unicode	XuiImage
+0x92004b38	unicode	XuiNineGrid
+0x92004b6c	unicode	BrushFlags
+0x92004b84	unicode	DataAssociation
+0x92004ba4	unicode	SizeMode
+0x92004bb8	unicode	false
+0x92004bc4	unicode	true
+0x92004be8	unicode	0x%08x
+0x92004bf8	unicode	%f,%f,%f
+0x92004c0c	unicode	%f,%f,%f,%f
+0x92004c54	unicode	StrokeColor
+0x92004c6c	unicode	StrokeWidth
+0x92004c84	unicode	StopColor
+0x92004c98	unicode	StopPos
+0x92004ca8	unicode	NumStops
+0x92004cbc	unicode	Radial
+0x92004ce8	unicode	WrapY
+0x92004cf4	unicode	WrapX
+0x92004d00	unicode	Rotation
+0x92004d14	unicode	Scale
+0x92004d20	unicode	Translation
+0x92004d38	unicode	Gradient
+0x92004d4c	unicode	TextureFileName
+0x92004d6c	unicode	FillColor
+0x92004d80	unicode	FillType
+0x92004d94	unicode	Fill
+0x92004da0	unicode	Points
+0x92004db0	unicode	Closed
+0x92004dc0	unicode	Stroke
+0x92004dd4	unicode	Direction
+0x92004de8	unicode	LineSpacingAdjust
+0x92004e0c	unicode	TextStyle
+0x92004e20	unicode	Font
+0x92004e2c	unicode	PointSize
+0x92004e40	unicode	DropShadowColor
+0x92004e60	unicode	TextColor
+0x92004e74	unicode	Text
+0x92004e80	unicode	IgnorePresses
+0x92004e9c	unicode	InterruptTransitions
+0x92004ec8	unicode	TransBackTo
+0x92004ee0	unicode	TransBackFrom
+0x92004efc	unicode	TransTo
+0x92004f0c	unicode	TransFrom
+0x92004f20	unicode	DefaultFocus
+0x92004f3c	unicode	DestTransIndex
+0x92004f5c	unicode	SrcTransIndex
+0x92004f78	unicode	StayVisible
+0x92004f90	unicode	PressPath
+0x92004fa4	unicode	Volume
+0x92004fb4	unicode	Finish
+0x92004fc4	unicode	Loop
+0x92004fd0	unicode	State
+0x92004fdc	unicode	Checkable
+0x92004ff0	unicode	Layout
+0x92005000	unicode	Wrap
+0x9200500c	unicode	ItemsImage
+0x92005024	unicode	ItemsText
+0x92005038	unicode	Value
+0x92005044	unicode	RangeMax
+0x92005058	unicode	RangeMin
+0x9200506c	unicode	AccelTime
+0x92005080	unicode	AccelInc
+0x92005094	unicode	Vertical
+0x920050a8	unicode	Step
+0x920050b4	unicode	SmoothScroll
+0x920050d0	unicode	Multiline
+0x920050e4	unicode	ReadOnly
+0x920050f8	unicode	PasswordChar
+0x92005114	unicode	AllowedChars
+0x92005130	unicode	TextLimit
+0x92005144	unicode	ImagePath
+0x92005158	unicode	DefaultTab
+0x92005170	unicode	NoAutoHide
+0x92005188	unicode	VerticalTabs
+0x920051a4	unicode	UserInterrupt
+0x920051c0	unicode	TabCount
+0x920051d4	unicode	NoCenter
+0x920051e8	unicode	BottomOffset
+0x92005204	unicode	RightOffset
+0x9200521c	unicode	TopOffset
+0x92005230	unicode	LeftOffset
+0x92005248	unicode	ColorWriteFlags
+0x92005268	unicode	DesignTime
+0x92005280	unicode	DisableTimelineRecursion
+0x920052b4	unicode	BlendMode
+0x920052c8	unicode	Show
+0x920052d4	unicode	Anchor
+0x920052e4	unicode	Opacity
+0x920052f4	unicode	Position
+0x92005308	unicode	NavDown
+0x92005318	unicode	NavUp
+0x92005324	unicode	NavRight
+0x92005338	unicode	NavLeft
+0x92005348	unicode	UnfocusedInput
+0x92005368	unicode	Enabled
+0x920053d8	unicode	0x%02x%02x%02x%02x
+0x9200544c	unicode	(unnamed)
+0x92005460	unicode	ProgressBody
+0x9200547c	unicode	SliderThumb
+0x92005494	unicode	ScrollDown
+0x920054ac	unicode	ScrollUp
+0x920054c0	unicode	ScrollRight
+0x920054d8	unicode	ScrollLeft
+0x920054f0	unicode	Caret
+0x92005504	unicode	Button
+0x9200551c	unicode	%uTo%u
+0x9200552c	unicode	%uTo1
+0x92005538	unicode	1To%u
+0x92005544	unicode	%uTo%uEnd
+0x92005558	unicode	2To1End
+0x92005570	unicode	ScrollMax
+0x92005584	unicode	ScrollMin
+0x92005598	unicode	SliderBody
+0x920055e4	unicode	EndTransTo
+0x920055fc	unicode	EndTransFrom
+0x92005618	unicode	EndTransBackTo
+0x92005638	unicode	EndTransBackFrom
+0x920056c8	unicode	%s://%s
+0x920056d8	unicode	section
+0x920056e8	unicode	memory
+0x92005758	unicode	file
+0x92005898	string	InvViewport
+0x920058b4	string	LocalToTexTransform
+0x920058c8	string	Params
+0x920058e0	string	UVTrans
+0x920058e8	string	WorldViewProj
+0x920058fd	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92005af4	string	InvViewport
+0x92005b10	string	Params
+0x92005b28	string	ShadowOffset
+0x92005b48	string	WorldViewProj
+0x92005b5d	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92005ce8	string	ColorFactor
+0x92005d04	string	SolidColor
+0x92005d16	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92005de8	string	ColorFactor
+0x92005e04	string	TextureSampler
+0x92005e2b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92005f4c	string	ColorFactor
+0x92005f68	string	TextureSampler
+0x92005f8f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x920060e8	string	ColorConvertMatrix
+0x9200610c	string	ColorFactor
+0x92006128	string	SolidColor
+0x9200613a	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9200625c	string	ColorConvertMatrix
+0x92006280	string	ColorFactor
+0x9200629c	string	TextureSampler
+0x920062c3	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x920064a8	string	ColorConvertMatrix
+0x920064cc	string	ColorFactor
+0x920064e8	string	TextureSampler
+0x9200650f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x920066d0	string	ColorFactor
+0x920066ec	string	TextureSampler
+0x92006713	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92006858	string	ColorFactor
+0x92006874	string	ShadowColor
+0x92006880	string	TextureSampler
+0x920068a7	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92006aa8	string	ColorConvertMatrix
+0x92006acc	string	ColorFactor
+0x92006ae8	string	TextureSampler
+0x92006b0f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92006c94	string	ColorConvertMatrix
+0x92006cb8	string	ColorFactor
+0x92006cd4	string	ShadowColor
+0x92006ce0	string	TextureSampler
+0x92006d07	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9200706c	string	XBOX360XTT
+0x92007098	string	1.1.3
+0x920071b4	string	need dictionary
+0x920071c4	string	unknown compression method
+0x920071e0	string	invalid window size
+0x920071f4	string	incorrect header check
+0x9200720c	string	incorrect data check
+0x92007c60	string	incompatible version
+0x92007c78	string	buffer error
+0x92007c88	string	insufficient memory
+0x92007c9c	string	data error
+0x92007ca8	string	stream error
+0x92007cb8	string	file error
+0x92007cc4	string	stream end
+0x92007d34	string	invalid bit length repeat
+0x92007d50	string	too many length or distance symbols
+0x92007d74	string	invalid stored block lengths
+0x92007d94	string	invalid block type
+0x92007dbb	string	\invalid literal/length code
+0x92007dd8	string	invalid distance code
+0x92007fdf	string	\rincomplete dynamic bit lengths tree
+0x92008004	string	oversubscribed dynamic bit lengths tree
+0x9200802c	string	incomplete literal/length tree
+0x9200804c	string	oversubscribed literal/length tree
+0x92008070	string	empty distance tree with lengths
+0x92008094	string	incomplete distance tree
+0x920080b0	string	oversubscribed distance tree
+0x920080d4	unicode	AccountManage.xzp
+0x920080f8	unicode	15XX_PassportSignIn.xur
+0x92008128	unicode	dashCommon.xzp
+0x92008148	unicode	dashStrings.xus
+0x92008168	unicode	memory://%X,%X
+0x920081b8	unicode	ico_96x_xbox1.png
+0x920081dc	unicode	ico_96x_BadDisk.png
+0x92008224	unicode	ico_96x_MusicDisk.png
+0x92008250	unicode	%dTo%dEnd
+0x92008264	unicode	%dTo%d
+0x92008274	unicode	Default
+0x92008284	unicode	%dEndPress
+0x9200829c	unicode	%dPress
+0x920082b4	unicode	metaPanelScene
+0x920082d4	unicode	1050_WmcSetupInfo.xur
+0x92008300	unicode	WmcSetupInfoScene
+0x9200832c	unicode	1051_WmcAffiliation.xur
+0x9200835c	unicode	WmcAffiliationScene
+0x9200838b	string	,Windows Media Connect
+0x92008400	unicode	btnX
+0x9200840c	unicode	btnTroubleshooter
+0x92008430	unicode	labelAsyncWorkText
+0x92008458	unicode	labelAsyncWorkAnimation
+0x92008488	unicode	labelNoServersFound
+0x920084b0	unicode	labelBodyText
+0x920084cc	unicode	labelSelectionText
+0x920084f4	unicode	labelAffiliatedWmcServerName
+0x92008530	unicode	listServers
+0x92008548	string	Starting device description download (%u) for device (%s)\n
+0x92008628	unicode	1052_WmcTroubleShooter.xur
+0x92008660	unicode	WmcTroubleShootingScene
+0x920086b0	unicode	btnLanTroubleShooter
+0x920086dc	unicode	navAffiliate
+0x920086f8	unicode	labelSearchingForServerText
+0x92008730	unicode	labelSearchingForServerAnimation
+0x92008774	unicode	labelServerNotFoundText
+0x920087a4	unicode	labelHeader
+0x920087dc	unicode	GenericWaitingScene.xur
+0x92008824	unicode	742_SelectNetworkDevice.xur
+0x9200885c	unicode	NetworkDeviceSelectScene
+0x920088a0	unicode	btnMediaCenter
+0x920088c0	unicode	btnWindowsMedia
+0x920088e0	unicode	742_metaByDevice.xur
+0x9200890c	unicode	NetworkDeviceMetaPanelScene
+0x92008954	unicode	labelDeviceType
+0x92008974	unicode	labelDeviceConnection
+0x920089a0	unicode	labelDeviceName
+0x920089c0	unicode	labelHelpText
+0x920089dc	unicode	744_ManageAffiliation.xur
+0x92008a10	unicode	NetworkDeviceManagementScene
+0x92008a5c	unicode	MetaScene
+0x92008a70	unicode	btnRemoveAffiliation
+0x92008a9c	unicode	labHeader
+0x92008ab0	unicode	DashBladeTab
+0x92008ad0	unicode	CBladeMOTD
+0x92008b10	unicode	OOBEScene
+0x92008b2c	unicode	botdBillboard
+0x92008b48	unicode	scnNoProfiles
+0x92008b68	unicode	scOOBE
+0x92008b78	unicode	scBlade
+0x92008b88	unicode	dashCSettingsStrings.xus
+0x92008bbc	unicode	dashSystemReset
+0x92008be0	unicode	dashPControlSettings_PasscodeHint
+0x92008c24	unicode	dashPControlSettings_Xbox
+0x92008c58	unicode	dashPControlSettings_LiveC
+0x92008c90	unicode	dashPControlSettings_LiveA
+0x92008cc8	unicode	dashPControlSettings_Movie
+0x92008d00	unicode	dashPControlSettings_Game
+0x92008d34	unicode	dashPControlSettingsMenu
+0x92008d68	unicode	dashCountrySettings
+0x92008d90	unicode	dashClockSettings
+0x92008db4	unicode	dashLanguageSettings
+0x92008de0	unicode	dashCHints
+0x92008df8	unicode	dashCScreenSize
+0x92008e18	unicode	dashCRatingView
+0x92008e38	unicode	dashCCountry
+0x92008e54	unicode	dashCLanguage
+0x92008e70	unicode	dashCTimezone
+0x92008e8c	unicode	dashCDate
+0x92008ea0	unicode	dashCTime
+0x92008eb4	unicode	dashCTextSpin
+0x92008ed0	unicode	dashCValueSpin
+0x92008f3c	unicode	dashPControlSettings_Passcode
+0x92008f7c	unicode	dashPasscodeEdit
+0x92008fa0	unicode	dashPasscodeNEdit
+0x92008fd0	unicode	dashSettingsRoot
+0x92008ff4	unicode	dashCCInputScene
+0x92009018	unicode	dashVideoSettings
+0x9200903c	unicode	dashVideoSettings_HD
+0x92009068	unicode	dashVideoSettings_Format
+0x9200909c	unicode	dashVideoSettings_60
+0x920090c8	unicode	dashAudioSettings
+0x920090ec	unicode	dashAudioSettings_A
+0x92009114	unicode	dashAudioSettings_D
+0x92009160	unicode	dashClockSettings_Menu
+0x92009190	unicode	dashClockSettings_TZone
+0x920091c0	unicode	dashClockSettings_DSaving
+0x920091f4	unicode	dashClockSettings_1224
+0x92009224	unicode	dashPControlSelect
+0x9200924c	unicode	dashAutoOff
+0x92009264	unicode	dashRemoteCList
+0x92009284	unicode	dashRemoteC
+0x9200929c	unicode	dashScreensaver
+0x92009528	unicode	btnPolicy
+0x9200953c	unicode	btnRemote
+0x92009550	unicode	btnScreensaver
+0x92009570	unicode	btnAutoOff
+0x92009588	unicode	btnCountry
+0x920095a0	unicode	btnClock
+0x920095b4	unicode	btnLanguage
+0x920095cc	unicode	btnAudio
+0x920095e0	unicode	btnDisplay
+0x920095f8	unicode	metaPane_DisplayWidescreen.xur
+0x92009638	unicode	metaPane_DisplayNormal.xur
+0x9200970c	unicode	labCurrentSettings
+0x92009734	unicode	labAVPackInfo
+0x92009750	unicode	listOptions
+0x9200976c	unicode	btnWide
+0x9200977c	unicode	btnNormal
+0x920097a0	unicode	scnCurrentFormat
+0x920097c4	unicode	labCurrentSetting
+0x920097e8	unicode	btnScreenFormat
+0x92009808	unicode	btnHD
+0x9200984c	unicode	btnOption4
+0x92009864	unicode	btnOption3
+0x9200987c	unicode	btnOption2
+0x92009894	unicode	btnOption1
+0x920098ac	unicode	scDate
+0x920098bc	unicode	scTime
+0x920098cc	unicode	lstTimezone
+0x92009904	unicode	dashPControlSettings_Passcode
+0x92009944	unicode	dashPasscodeEdit
+0x92009968	unicode	dashPasscodeNEdit
+0x920099a0	unicode	ConsoleSettings.xzp
+0x920099c8	unicode	dashSysCslSetCountry.xur
+0x92009a7c	unicode	%s%s
+0x92009a88	unicode	cntLoadingAnimation
+0x92009ab0	unicode	btnLive
+0x92009ac0	unicode	btnConsole
+0x92009ad8	unicode	2620_LiveParentalControlsHome.xur
+0x92009b1c	unicode	imgIcon1
+0x92009b30	unicode	imgIcon
+0x92009b40	unicode	legend_b
+0x92009b54	unicode	btnDone
+0x92009b64	unicode	btnReset
+0x92009b78	unicode	btnPass
+0x92009b88	unicode	btnXbox
+0x92009b98	unicode	btnLiveC
+0x92009bac	unicode	btnLiveA
+0x92009bc0	unicode	btnMovie
+0x92009bd4	unicode	btnGame
+0x92009be4	unicode	imgCurrentSetting1
+0x92009c0c	unicode	imgCurrentSetting
+0x92009c30	unicode	lstRating
+0x92009c44	unicode	btnNo
+0x92009c50	unicode	btnYes
+0x92009c60	unicode	btnHintA
+0x92009c88	unicode	btnPasscode
+0x92009ca0	unicode	lstHintQ
+0x92009cbc	unicode	ConvectionUI
+0x92009cd8	unicode	file://media:/XenonJKLatin.xttp2
+0x92009d20	unicode	file://media:/XenonJKLatin.xttp1
+0x92009d64	unicode	file://media:/XenonJKLatin.xtt
+0x92009da8	unicode	file://media:/XenonCLatin.xttp2
+0x92009de8	unicode	file://media:/XenonCLatin.xttp1
+0x92009e28	unicode	file://media:/XenonCLatin.xtt
+0x92009e64	unicode	lstLanguages
+0x92009e94	string	2.0.1888.0
+0x92009ea0	unicode	edInfo
+0x92009eb0	unicode	listChannels
+0x92009ecc	unicode	btnOn
+0x92009ed8	unicode	btnOff
+0x92009ef0	unicode	lstCountries
+0x92009f0c	unicode	btnAnalog
+0x92009f20	unicode	btnDigital
+0x92009f44	unicode	lstAMPM
+0x92009f54	unicode	lstMin
+0x92009f64	unicode	lstHour
+0x92009fb0	unicode	lstYear
+0x92009fc0	unicode	lstMonth
+0x92009fd4	unicode	lstDay
+0x9200a314	unicode	IDLW
+0x9200ad00	unicode	OFLC_AU_A.png
+0x9200ad1c	unicode	OFLC_AU_G8P.png
+0x9200ad3c	unicode	OFLC_AU_M15P.png
+0x9200ad60	unicode	OFLC_AU_MA15P.png
+0x9200ad84	unicode	USK_A.png
+0x9200adb0	unicode	USK_12P.png
+0x9200adc8	unicode	USK_16P.png
+0x9200ade0	unicode	USK_NY.png
+0x9200adf8	unicode	CERO_C.png
+0x9200ae10	unicode	CERO_12P.png
+0x9200ae2c	unicode	CERO_15P.png
+0x9200ae48	unicode	CERO_18P.png
+0x9200ae7c	unicode	BBFC_PG.png
+0x9200ae94	unicode	BBFC_12.png
+0x9200aedc	unicode	PEGI_4P.png
+0x9200aef4	unicode	PEGI_6P.png
+0x9200af0c	unicode	PEGI_11P.png
+0x9200af28	unicode	PEGI_15P.png
+0x9200af44	unicode	PEGI_3P.png
+0x9200af5c	unicode	PEGI_7P.png
+0x9200af74	unicode	PEGI_12P.png
+0x9200af90	unicode	PEGI_16P.png
+0x9200afac	unicode	PEGI_18P.png
+0x9200afc8	unicode	ESRB_EC.png
+0x9200afe0	unicode	ESRB_E.png
+0x9200aff8	unicode	ESRB_E10.png
+0x9200b014	unicode	ESRB_T.png
+0x9200b044	unicode	AllowAllGames.png
+0x9200b06c	unicode	common://
+0x9200b594	unicode	%0*d
+0x9200b614	unicode	ja-jp
+0x9200b620	unicode	de-de
+0x9200b62c	unicode	fr-fr
+0x9200b638	unicode	es-es
+0x9200b644	unicode	it-it
+0x9200b650	unicode	ko-kr
+0x9200b65c	unicode	zh-tw
+0x9200b668	unicode	pt-br
+0x9200b6d8	unicode	900_metaByDevice.xur
+0x9200b704	unicode	PicturesMetadataScene
+0x9200b744	unicode	imageMediaSourceIcon
+0x9200b770	unicode	labelSecondaryText
+0x9200b798	unicode	labelText
+0x9200b7ac	unicode	common://ico_96x_USB.png
+0x9200b7e0	unicode	common://ico_96x_PC.png
+0x9200b810	unicode	ico_96x_Camera.png
+0x9200b838	unicode	ico_96x_OpticalMedia.png
+0x9200b86c	unicode	900_PicturesMain.xur
+0x9200b898	unicode	PhotoAreaMainScene
+0x9200b960	unicode	pictures.xzp
+0x9200b97c	unicode	strings.xus
+0x9200b994	unicode	dashcomm.xzp
+0x9200b9b0	unicode	btnOption6
+0x9200b9c8	unicode	btnOption5
+0x9200b9e0	unicode	GridList
+0x9200b9f4	string	ThematicSkin
+0x9200ba04	string	Wallpaper1
+0x9200ba10	string	PhotoAreaWallpaperRoot
+0x9200ba28	unicode	ico_64x_NoThumbnail.png
+0x9200ba58	unicode	ico_64x_UnrecognizedFormat.png
+0x9200ba98	unicode	ico_64x_Reading.png
+0x9200bac0	unicode	ico_64x_PictureAlbum.png
+0x9200baf4	unicode	ico_96x_folder.png
+0x9200bb1c	unicode	905_IndividualDeviceMain.xur
+0x9200bb58	unicode	DeviceMainScene
+0x9200bbb8	unicode	labelMessage
+0x9200bbd4	unicode	labelWaitingAnimation
+0x9200bc00	unicode	labelHighlightedOfTotal
+0x9200bc4c	unicode	figureHorizontalLine2
+0x9200bc78	unicode	navX
+0x9200bc84	unicode	figureHorizontalLine1
+0x9200bcb0	unicode	figureVerticalLine2
+0x9200bcd8	unicode	navB
+0x9200bce4	unicode	figureVerticalLine1
+0x9200bd0c	unicode	Header_Text
+0x9200bd40	unicode	%s : %s
+0x9200bd50	unicode	ImageRenderControl
+0x9200bd78	unicode	TransportControlsScene
+0x9200bda8	unicode	ico_32x_Loop_Off.png
+0x9200bdd4	unicode	ico_32x_Loop.png
+0x9200bdf8	unicode	ico_32x_Shuffle_Off.png
+0x9200be28	unicode	ico_32x_Shuffle.png
+0x9200be50	unicode	common://btn_32x_Pause.png
+0x9200be88	unicode	common://btn_32x_Play.png
+0x9200bebc	unicode	slideshowControls.xur
+0x9200bee8	unicode	FullScreenPhotoScene
+0x9200bf5c	unicode	btn_RemoteSkip
+0x9200bf7c	unicode	btn_RemoteReplay
+0x9200bfa0	unicode	btn_RemoteStop
+0x9200bfc0	unicode	btn_RemotePause
+0x9200bfe0	unicode	btn_RemotePlay
+0x9200c000	unicode	btnRShoulder
+0x9200c01c	unicode	btnLShoulder
+0x9200c038	unicode	lab_helpText
+0x9200c054	unicode	btn_Loop
+0x9200c068	unicode	btn_Shuffle
+0x9200c080	unicode	btn_RotateRight
+0x9200c0a0	unicode	btn_RotateLeft
+0x9200c0c0	unicode	btn_NextTrack
+0x9200c0dc	unicode	btn_PrevTrack
+0x9200c0f8	unicode	btn_Stop
+0x9200c10c	unicode	btn_Play
+0x9200c120	unicode	ImageError
+0x9200c144	unicode	Scene_Main
+0x9200c15c	unicode	GotoMusicPlayerScene
+0x9200c188	unicode	GotoMusicPlayerDashScene
+0x9200c1bc	unicode	NowPlayingRipOrEditButton
+0x9200c1f0	unicode	NowPlayingPlayPauseButton
+0x9200c224	unicode	NowPlayingPlaybackModeButton
+0x9200c260	unicode	music.xzp
+0x9200c274	unicode	Visualizer.xur
+0x9200c294	unicode	VisualizerScene
+0x9200c2b4	unicode	VisualizerButton
+0x9200c2d8	unicode	bt_shuffle.png
+0x9200c2f8	unicode	bt_normal.png
+0x9200c314	unicode	1028_NowPlaying.xur
+0x9200c33c	unicode	NowPlayingScene
+0x9200c3d0	unicode	btnVisNext
+0x9200c3e8	unicode	btnVisPrevious
+0x9200c408	unicode	btnPlaybackMode
+0x9200c428	unicode	btnStop
+0x9200c438	unicode	btnPlayPause
+0x9200c454	unicode	btnNext
+0x9200c464	unicode	btnPrevious
+0x9200c480	unicode	sceneTransportControlsContainer
+0x9200c4c0	unicode	btnRipOrEdit
+0x9200c4dc	unicode	btnB
+0x9200c4e8	unicode	navY
+0x9200c4f4	unicode	listSongs
+0x9200c508	unicode	labelArtistName
+0x9200c528	unicode	labelAlbumName
+0x9200c548	unicode	labelSongTitle
+0x9200c568	unicode	labelSongCount
+0x9200c588	unicode	sceneControlsContainer
+0x9200c5b8	unicode	btnVisualizer
+0x9200c5d4	unicode	1004_DeviceNotBrowseable.xur
+0x9200c610	unicode	DeviceNotBrowseableScene
+0x9200c654	unicode	btnPlayAll
+0x9200c66c	unicode	btnQueueAll
+0x9200c684	unicode	1000_MetaByDevice.xur
+0x9200c6b0	unicode	MediaSourceMetadataScene
+0x9200c6f8	unicode	labelConnectingAnimation
+0x9200c72c	unicode	common://ico_96x_MusicDisk.png
+0x9200c76c	unicode	ico_96x_HD.png
+0x9200c78c	unicode	1000_MusicMain.xur
+0x9200c7b4	unicode	MusicAreaMainScene
+0x9200c8a4	unicode	ico_96x_song.png
+0x9200c8c8	unicode	navMusicPlayer
+0x9200c8e8	unicode	navOption6
+0x9200c900	unicode	navOption5
+0x9200c918	unicode	navOption4
+0x9200c930	unicode	navOption3
+0x9200c948	unicode	navOption2
+0x9200c960	unicode	navOption1
+0x9200c978	unicode	1003_SongList.xur
+0x9200c99c	unicode	SongListScene
+0x9200c9d4	unicode	1003_MediaContainerList.xur
+0x9200ca0c	unicode	MediaContainerListScene
+0x9200ca58	unicode	1005_MediaContainerOptions.xur
+0x9200ca98	unicode	MediaContainerOptionsScene
+0x9200cbe4	unicode	btnY
+0x9200cbf0	unicode	sceneSongListContainer
+0x9200cc20	unicode	1006_IndividualArtistMain.xur
+0x9200cc5c	unicode	ArtistOptionsScene
+0x9200ccc4	unicode	sceneAlbumListContainer
+0x9200ccf4	unicode	Meta_Songs.xur
+0x9200cd14	unicode	SongMetadataScene
+0x9200cd48	unicode	labelSongName
+0x9200cd64	unicode	labelGenre
+0x9200cd7c	unicode	1016_IndividualSongMain.xur
+0x9200cdb4	unicode	SongOptionsScene
+0x9200ce48	unicode	sceneSongMetadataContainer
+0x9200ce80	unicode	1003_IndividualDevice.xur
+0x9200ceb4	unicode	MusicLibraryScene
+0x9200cf1c	unicode	btnPlaylists
+0x9200cf38	unicode	btnGenres
+0x9200cf4c	unicode	btnArtists
+0x9200cf64	unicode	btnAlbums
+0x9200cf78	unicode	btnSongs
+0x9200cf90	unicode	sceneLibraryViewControlsContainer
+0x9200cfd4	unicode	btnA
+0x9200cfe0	unicode	EditNowPlayingQueueList
+0x9200d010	unicode	1030_EditPlaylist.xur
+0x9200d03c	unicode	EditNowPlayingQueueScene
+0x9200d088	unicode	bt_dlt.png
+0x9200d0a0	unicode	bt_dn.png
+0x9200d0b4	unicode	bt_up.png
+0x9200d0d0	unicode	listMoveDownBtns
+0x9200d0f4	unicode	listMoveUpBtns
+0x9200d114	unicode	listDeleteBtns
+0x9200d134	unicode	sceneSynchronisedListContainer
+0x9200d174	unicode	RipCDProgressList
+0x9200d198	unicode	ico_prgbar_80.png
+0x9200d1bc	unicode	ico_prgbar_60.png
+0x9200d1e0	unicode	ico_prgbar_40.png
+0x9200d204	unicode	ico_prgbar_20.png
+0x9200d228	unicode	ico_prgbar_0.png
+0x9200d24c	unicode	ico_prgbar_100.png
+0x9200d278	unicode	common://ico_32x_OperationBlocked.png
+0x9200d2c4	unicode	Ico_prgbar_0.png
+0x9200d2e8	unicode	1021_RipProgress.xur
+0x9200d314	unicode	RipCDProgressScene
+0x9200d378	unicode	labelOperation
+0x9200d398	unicode	labelCDName
+0x9200d3b0	unicode	labelSelectedTrack
+0x9200d3d8	unicode	graphic_Loading
+0x9200d3f8	unicode	1020_ripCDlist.xur
+0x9200d420	unicode	RipCDSelectScene
+0x9200d454	unicode	navA
+0x9200d460	unicode	btnCopyMusic
+0x9200d47c	unicode	EditBoxButton
+0x9200d498	unicode	1026_EditSongInfo.xur
+0x9200d4c4	unicode	1025_EditAlbumInfo.xur
+0x9200d4f4	unicode	EditTagInfoScene
+0x9200d530	unicode	navEditTitle
+0x9200d54c	unicode	navEditGenre
+0x9200d568	unicode	navEditArtist
+0x9200d584	unicode	labelEditPrompt
+0x9200d5a4	unicode	labelArtist
+0x9200d5bc	unicode	labelAlbum
+0x9200d5e4	unicode	labelItemName
+0x9200d608	unicode	NowPlayingList
+0x9200d648	unicode	ico_32x_NotPlayable.png
+0x9200d678	unicode	FileViewList
+0x9200d694	unicode	1048_IndividualDeviceMain.xur
+0x9200d6d0	unicode	FileViewScene
+0x9200d768	unicode	ico_32x_SongFile.png
+0x9200d794	unicode	ico_32x_Playlist.png
+0x9200d7c0	unicode	ico_32x_Folder.png
+0x9200d7fc	unicode	sceneControlContainer
+0x9200d828	unicode	labelNoResultsText
+0x9200d850	unicode	labelItemCount
+0x9200d870	unicode	listItems
+0x9200d8b4	unicode	yak1.jpg
+0x9200d8c8	unicode	modules.ox
+0x9200d8e0	unicode	neon.xzp
+0x9200d918	unicode	labelLoadingText
+0x9200d93c	unicode	labelLoadingAnimation
+0x9200d9a8	unicode	VideoScene
+0x9200dbd0	unicode	VideoList
+0x9200dbe4	string	default.wmv
+0x9200dbf0	string	VideoAreaRoot
+0x9200dc00	unicode	VideosMain.xur
+0x9200dc20	unicode	VideosMainScene
+0x9200dc58	unicode	videos.xzp
+0x9200dc78	unicode	labDescription
+0x9200dc98	unicode	labPublisher
+0x9200dcb4	unicode	labVideoTitle
+0x9200dcd0	unicode	imgThumbnail
+0x9200dcec	unicode	scnTD0
+0x9200dcfc	unicode	scnMetaData
+0x9200dd14	unicode	labSceneTitle
+0x9200dd30	unicode	txtNumOfNum
+0x9200dd48	unicode	listVideos
+0x9200dd60	unicode	ctlLoading
+0x9200dd78	unicode	labMessage
+0x9200dd98	unicode	dashMarketPlace.xzp
+0x9200ddc0	unicode	CContentListList
+0x9200dde4	unicode	CContentListScene
+0x9200de08	unicode	CDemosAndTrailersScene
+0x9200de38	unicode	CDownloadHistoryList
+0x9200de64	unicode	CDownloadHistoryScene
+0x9200de90	unicode	CGameCatalogTabScene
+0x9200debc	unicode	CGameCatalogMyGamesList
+0x9200deec	unicode	CGameCatalogMyGamesScene
+0x9200df20	unicode	CGameCatalogAllGamesScene
+0x9200df54	unicode	CGameListList
+0x9200df70	unicode	CGameListScene
+0x9200df90	unicode	CHotListList
+0x9200dfac	unicode	CHotListScene
+0x9200dfc8	unicode	CMembershipsTabScene
+0x9200dff4	unicode	CAllMembershipsList
+0x9200e01c	unicode	CAllMembershipsScene
+0x9200e048	unicode	CMyMembershipsList
+0x9200e070	unicode	CMyMembershipsScene
+0x9200e098	unicode	CStoreFrontScene
+0x9200e0bc	unicode	CXeArcadeSubGenreList
+0x9200e0e8	unicode	CXeArcadeSubGenreListScene
+0x9200e150	unicode	1413_ContentListScene.xur
+0x9200e1a4	unicode	lstContent
+0x9200e1bc	unicode	labCurrentBalance
+0x9200e1e0	unicode	labCurrentBalanceTitle
+0x9200e210	unicode	labMembership
+0x9200e22c	unicode	labMembershipTitle
+0x9200e254	unicode	labItemCount
+0x9200e270	unicode	labEmpty
+0x9200e284	unicode	sharedres://ico_32x_No.png
+0x9200e2bc	unicode	icoCheck.png
+0x9200e2e8	unicode	lstDemosAndTrailers
+0x9200e354	unicode	lstDownloadHistory
+0x9200e3a8	unicode	1446_XeArcadeSubGenreListScene.xur
+0x9200e3f0	unicode	Tab2
+0x9200e3fc	unicode	Tab1
+0x9200e408	unicode	labB
+0x9200e414	unicode	lstMyGames
+0x9200e42c	unicode	lstAllGames
+0x9200e460	unicode	1412_GameListScene.xur
+0x9200e490	unicode	lstGames
+0x9200e540	unicode	lstHot
+0x9200e5e4	unicode	lstAllMemberships
+0x9200e608	unicode	lstMyMemberships
+0x9200e640	unicode	btnUsePrepaidCard
+0x9200e664	unicode	btnDownloadStatusAndHistory
+0x9200e69c	unicode	btnThemes
+0x9200e6b0	unicode	btnDemosAndTrailers
+0x9200e6d8	unicode	btnLiveMemberships
+0x9200e700	unicode	scnButtonNavGroup
+0x9200e724	unicode	btnHotList
+0x9200e73c	unicode	btnGameDownloads
+0x9200e7a8	unicode	lstSubGenres
+0x9200ead4	unicode	CStateList
+0x9200eaec	unicode	CPostalDataList
+0x9200eb0c	unicode	CAddressButton
+0x9200eb2c	unicode	1500_AccountManagementHome.xur
+0x9200eb6c	unicode	CAMHomeScene
+0x9200eb88	unicode	CAMMyMembershipsScene
+0x9200ebb4	unicode	CStateListScene
+0x9200ebd4	unicode	CPostalDataListScene
+0x9200ec00	unicode	CContactAddressScene
+0x9200ec2c	unicode	CPassportSignInButton
+0x9200ec58	unicode	CPassportSignInScene
+0x9200ec84	unicode	CPassportPasswordButton
+0x9200ecb4	unicode	CPassportPasswordScene
+0x9200ece4	unicode	2700_PrivacySettings.xur
+0x9200ed18	unicode	CPrivacyMainScene
+0x9200ed3c	unicode	CPrivTwoOptionsScene
+0x9200edac	unicode	CPrivThreeOptionsScene
+0x9200ee24	unicode	CMarketingTwoOptionsScene
+0x9200ee58	unicode	CPolicyMainScene
+0x9200ee7c	unicode	CPolicyDisplayScene
+0x9200eea4	unicode	CPCMainScene
+0x9200eec0	unicode	CPCPrivFriendsScene
+0x9200eee8	unicode	CGameplaySettingsScene
+0x9200ef18	unicode	CPCContentSettingsScene
+0x9200ef48	unicode	CMoreInfoScene
+0x9200ef68	unicode	CAboutMSPointsListScene
+0x9200efac	unicode	btnDisabled
+0x9200efc4	unicode	btnEnabled
+0x9200efdc	unicode	btnFriends
+0x9200f00f	string	0/xedl/ProfileInfo/%d/CodeOfConduct.txt
+0x9200f038	string	/xedl/ProfileInfo/%d/PrivacyStatement.txt
+0x9200f064	string	/xedl/ProfileInfo/%d/TermsOfUse.txt
+0x9200f088	unicode	klcc
+0x9200f094	unicode	diners
+0x9200f0ac	unicode	discover
+0x9200f0c0	unicode	amex
+0x9200f0cc	unicode	mastercard
+0x9200f0e4	unicode	visa
+0x9200f0f0	unicode	tchfull
+0x9200f100	unicode	koreanfull
+0x9200f118	unicode	japanesefull
+0x9200f134	unicode	latinalphabet
+0x9200f150	unicode	latinnumeric
+0x9200f16c	unicode	latinipaddress
+0x9200f18c	unicode	latinphone
+0x9200f1a4	unicode	latingamertag
+0x9200f1c0	unicode	latinemail
+0x9200f1d8	unicode	latinfull
+0x9200f1ec	unicode	phone
+0x9200f1f8	unicode	contactemail
+0x9200f214	unicode	postalcode
+0x9200f22c	unicode	state
+0x9200f238	unicode	city
+0x9200f244	unicode	district
+0x9200f258	unicode	street2
+0x9200f268	unicode	street1
+0x9200f278	unicode	none
+0x9200f2c4	unicode	1502_ContactInformation.xur
+0x9200f2fc	unicode	btnPolicyInformation
+0x9200f328	unicode	btnAboutMSPoints
+0x9200f34c	unicode	btnLivePasscode
+0x9200f36c	unicode	btnLivePassportPassword
+0x9200f39c	unicode	btnContactInformation
+0x9200f3c8	unicode	btnMyMemberships
+0x9200f404	unicode	scnMyMemberships
+0x9200f44c	unicode	labPanelText
+0x9200f468	unicode	btnSignIn
+0x9200f47c	unicode	btnPassword
+0x9200f494	unicode	btnEmail
+0x9200f4d8	unicode	btnChangeNow
+0x9200f4f4	unicode	btnConfirmPassword
+0x9200f51c	unicode	btnNewPassword
+0x9200f53c	unicode	btnCurrentPassword
+0x9200f584	unicode	btnPartnerMarketing
+0x9200f5ac	unicode	btnXboxMarketing
+0x9200f5d0	unicode	btnBlockUserContent
+0x9200f5f8	unicode	btnBlockProfileCust
+0x9200f620	unicode	btnBlockProfileInfo
+0x9200f648	unicode	btnBlockPresence
+0x9200f66c	unicode	btnBlockComm
+0x9200f688	unicode	labContent
+0x9200f6a0	unicode	MetaContent
+0x9200f720	unicode	27XX_MarketingTwoOptionList.xur
+0x9200f774	unicode	btnCodeOfConduct
+0x9200f798	unicode	btnPrivacyStatement
+0x9200f7c0	unicode	btnTermsOfUse
+0x9200f800	unicode	2802_PolicyText.xur
+0x9200f828	unicode	btnDeclineTOU
+0x9200f844	unicode	btnAcceptTOU
+0x9200f860	unicode	scnButtonGrp
+0x9200f87c	unicode	edtAcceptTOUBody
+0x9200f8d0	unicode	btnContent
+0x9200f8e8	unicode	btnPrivacyAndFriends
+0x9200f914	unicode	btnGameplay
+0x9200f92c	unicode	labPurchasedContent
+0x9200f954	unicode	labCustomContent
+0x9200f978	unicode	labOnlinePresence
+0x9200f99c	unicode	labProfileViewing
+0x9200f9c0	unicode	labProfileSharing
+0x9200f9e4	unicode	labCommunications
+0x9200fa08	unicode	labNewOnlineFriends
+0x9200fa30	unicode	labLiveXbox1
+0x9200fa4c	unicode	labLMPGames
+0x9200fa7c	unicode	btnOnlinePresence
+0x9200faa0	unicode	btnProfileViewing
+0x9200fac4	unicode	btnProfileSharing
+0x9200fae8	unicode	btnCommunications
+0x9200fb0c	unicode	btnNewFriendsRequests
+0x9200fb38	unicode	labCurrentSettingText
+0x9200fb7c	unicode	btnLiveOnXbox1
+0x9200fb9c	unicode	btnLiveMultiplayerGames
+0x9200fbe4	unicode	btnViewUserContent
+0x9200fc0c	unicode	btnPurchaseContent
+0x9200fc40	unicode	2629_MoreInfo.xur
+0x9200fc64	unicode	labBody
+0x9200fc84	unicode	btnTopic4
+0x9200fc98	unicode	btnTopic3
+0x9200fcac	unicode	btnTopic2
+0x9200fcc0	unicode	btnTopic1
+0x9200fdec	unicode	Xenon Console
+0x9200fe08	unicode	2702_ThreeOptionList.xur
+0x9200fe3c	unicode	2710_TwoOptionList.xur
+0x9200fe6c	unicode	15XX_StateListScene.xur
+0x9200fe9c	unicode	15XX_PostalDataListScene.xur
+0x9200fed8	unicode	Arcade.xzp
+0x9200ffec	unicode	2500_metaMyArcade.xur
+0x92010018	unicode	Arcade::CMyArcadeMetaScene
+0x92010050	unicode	2500_metaDownload.xur
+0x9201007c	unicode	Arcade::CDownloadMetaScene
+0x920100b4	unicode	2500_metaRecentGame.xur
+0x920100e4	unicode	Arcade::CRecentGameMetaScene
+0x92010120	unicode	2500_LiveArcadeHome.xur
+0x92010150	unicode	Arcade::CHomepageScene
+0x920101a0	unicode	Arcade.xzp
+0x920101b8	unicode	lblTitle
+0x920101cc	unicode	lblText
+0x920101dc	unicode	ctrlLoading
+0x920101f4	unicode	MISSING STRING RESOURCE
+0x9201026c	unicode	XuiBOTDScene
+0x92010288	unicode	btnRecent
+0x9201029c	unicode	btnMore
+0x920102ac	unicode	btnTop
+0x920102bc	unicode	botdArcadeAd
+0x920102d8	unicode	Arcade::CFriendImageCtrl
+0x92010330	unicode	Arcade::CMultiTextNavButton
+0x920103f0	unicode	Arcade::CTitleScene
+0x92010418	unicode	Arcade::CTitleScene::CLeaderboardScene
+0x92010468	unicode	Arcade::CTitleScene::CAchievementScene
+0x920104b8	unicode	Arcade::CTitleScene::CGameScene
+0x920105a0	unicode	Trial
+0x920105ac	unicode	TrialEnd
+0x920105c0	unicode	Purchased
+0x920105d4	unicode	PurchasedEnd
+0x920105f0	unicode	lblScoreName
+0x9201060c	unicode	lblScore
+0x92010620	unicode	lblCred
+0x92010630	unicode	grpPurchased
+0x9201064c	unicode	imgTitle
+0x92010660	unicode	imgVideoEnabled
+0x920106b8	unicode	PurchasedLongToShort
+0x920106e4	unicode	PurchasedLongToShortEnd
+0x92010714	unicode	PurchasedLong
+0x92010730	unicode	PurchasedLongEnd
+0x92010754	unicode	grpAchievements%d
+0x92010778	unicode	imgAchievement%d
+0x9201079c	unicode	lblAchievements
+0x920107f4	unicode	0to1
+0x92010800	unicode	0to1End
+0x92010810	unicode	1to0
+0x9201081c	unicode	1to0End
+0x9201082c	unicode	ShowEnd
+0x9201083c	unicode	lblFriendNumber
+0x9201085c	unicode	lblName
+0x9201086c	unicode	imgFriend
+0x92010880	unicode	grpLeaderN
+0x92010898	unicode	HideLeaderboard
+0x920108b8	unicode	HideLeaderboardEnd
+0x920108e0	unicode	ShowLeaderboard
+0x92010900	unicode	ShowLeaderboardEnd
+0x92010928	unicode	scnGame
+0x92010938	unicode	scnAchievements
+0x92010958	unicode	scnTitleLeaderboard
+0x92010980	unicode	Arcade::CTitleLaunchScene
+0x920109b4	unicode	2504_TitleOptionsScene.xur
+0x92010a50	unicode	labTitle
+0x92010a64	unicode	scnTitle
+0x92010a78	unicode	lblRatingText
+0x92010a94	unicode	imgGameRating
+0x92010ab0	unicode	btnRemove
+0x92010ac4	unicode	btnSecondaryAction
+0x92010aec	unicode	btnPrimaryAction
+0x92010b10	unicode	Arcade::CTitleListCtrl
+0x92010b44	unicode	GameImg.png
+0x92010b5c	unicode	2502_TitleSelectorScene.xur
+0x92010b94	unicode	Arcade::CTitleSelectorScene
+0x92010c40	unicode	listTitles
+0x92010c58	unicode	lblTotals
+0x92010c8c	string	CLoaderTask
+0x92010cb8	string	ArcadeInfo.xml
+0x92010cc8	unicode	ArcadeInfo
+0x92010ce0	unicode	TitleInfo
+0x92010cf4	unicode	AchievementInfo
+0x92010d1c	string	%s\%s
+0x92010d4c	unicode	Locale
+0x92010d5c	unicode	Arcade.xzp
+0x92010d74	string	CPlayerAchievementLoader
+0x92010d90	string	CTitlePlayerInfoLoader
+0x92010e28	unicode	TitleInfo
+0x92010e58	unicode	brazil
+0x92010e68	unicode	kmrb
+0x92010e84	unicode	oflc-au
+0x92010e9c	unicode	cero
+0x92010ea8	unicode	pegibbfc
+0x92010ebc	unicode	pegi-pt
+0x92010ecc	unicode	pegi-fi
+0x92010edc	unicode	pegi
+0x92010ee8	unicode	esrb
+0x92010f04	unicode	Decimals
+0x92010f18	unicode	Column
+0x92010f28	unicode	View
+0x92010f3c	unicode	ascending
+0x92010f50	unicode	desc
+0x92010f5c	unicode	descending
+0x92010f74	unicode	Sort
+0x92010f80	unicode	string
+0x92010f90	unicode	double
+0x92010fa0	unicode	float
+0x92010fac	unicode	integer
+0x92010fc4	unicode	rating
+0x92010fd4	unicode	rank
+0x92010fe0	unicode	Type
+0x92010fec	unicode	Leaderboard
+0x92011004	unicode	System
+0x9201101c	unicode	Parental-Control
+0x92011040	unicode	Description
+0x92011058	unicode	ContentNotDownloadable
+0x92011088	unicode	CameraEnabled
+0x920110a4	unicode	ScoreName
+0x920110b8	unicode	MaxCred
+0x920110c8	unicode	Path
+0x920110d4	unicode	Name
+0x920110e0	string	Content%ld:
+0x920110ec	string	Content%ld
+0x92011120	unicode	AchievementInfo
+0x9201114c	unicode	TitleInfo
+0x92011160	unicode	File error: '%hs'
+0x92011184	unicode	Out of memory
+0x920111a0	unicode	Unable to open file '%ls' for reading as a text file
+0x92011218	unicode	Unable to open file '%ls' for reading
+0x9201126c	unicode	Unable to open file '%ls'
+0x920112a4	unicode	Initialization
+0x920112fc	unicode	%I64d
+0x92011308	unicode	%.*f
+0x920113ec	unicode	Expected %hs
+0x92011408	unicode	End tag '%.*ls' does not match the start tag '%ls'
+0x92011470	unicode	Unsupported construct encountered: %hs
+0x920114c0	unicode	Unexpected end of Input
+0x92011524	string	Processing Instruction
+0x92011598	string	Hexadecimal digit [0-9A-Fa-f]
+0x920115cc	string	Character reference out of range
+0x920115f0	unicode	&#%d / &#x%x refers to an illegal character
+0x92011650	string	Char or '-'
+0x92011674	unicode	<!--
+0x92011688	string	Name, beginning with a Letter, ':' or '_'
+0x920116bc	string	Entity reference terminator (';')
+0x920116e0	string	Entity reference of Character reference
+0x92011708	string	CharData or Reference expected
+0x92011734	string	Reference or [^<&]
+0x9201178c	string	Attribute 'version' expected
+0x920117ac	string	DOcument version value expected
+0x920117cc	unicode	version
+0x920117dc	string	Attribute 'encoding' expected
+0x920117fc	string	Valid Document encoding name expected
+0x92011824	unicode	encoding
+0x92011838	string	Attribute 'standalone' expected
+0x92011858	string	'yes' or 'no' expected as standalone attribute value
+0x920118a0	unicode	standalone
+0x920118cc	string	Whitespace, 'encoding', 'standalone' or '?>'
+0x920118fc	string	Whitespace or '?>'
+0x92011910	string	Whitespace
+0x9201191c	string	'<?xml'
+0x92011924	string	Whitespace, 'standalone' or '?>'
+0x92011948	unicode	<?xml
+0x92011964	string	Processing Instructions
+0x9201197c	string	CDATA Section
+0x9201198c	string	Comment or CDATA Section
+0x920119b4	string	'/>', '>' or Name
+0x920119c8	string	'/>', '>' or Whitespace
+0x92011a2c	unicode	Games.xzp
+0x92011a40	unicode	CGameShowcaseListList
+0x92011a6c	unicode	CGameShowcaseScene
+0x92011a94	unicode	CAchievementsGridTitleList
+0x92011acc	unicode	CAchievementsGridList
+0x92011af8	unicode	CAchievementsGridScene
+0x92011b28	unicode	CDemosTrailersListList
+0x92011b58	unicode	404_DemosTrailers.xur
+0x92011b84	unicode	CDemosTrailersScene
+0x92011bac	unicode	CDemoOptionsScene
+0x92011bd0	unicode	CGameDetailsScene
+0x92011c2c	unicode	401_GameDetails.xur
+0x92011c54	unicode	gameList
+0x92011c70	unicode	common://ico_64x_games.png
+0x92011cb0	unicode	TitleList
+0x92011cc4	unicode	AchievementList
+0x92011ce4	unicode	labGameTitle
+0x92011d00	unicode	labAchievementName
+0x92011d28	unicode	labAcquiredDate
+0x92011d48	unicode	labPoints
+0x92011d5c	unicode	graphic_staticPanel
+0x92011d84	unicode	GamerScore
+0x92011db4	unicode	406_TrailerOptions.xur
+0x92011de4	unicode	405_DemoOptions.xur
+0x92011e0c	unicode	imgGame
+0x92011e1c	unicode	lstDemosTrailers
+0x92011e40	unicode	memory://%x,%x
+0x92011e60	string	DTOroot
+0x92011e68	string	default.xex
+0x92011e74	string	default.wmv
+0x92011e88	unicode	btnLaunch
+0x92011e9c	unicode	btnDelete
+0x92011eb0	unicode	sharedres://unearnedAchievement.png
+0x92011f20	unicode	labGamerPointsNum
+0x92011f44	unicode	labAchievementsNum
+0x92011f6c	unicode	imgAchievements4
+0x92011f90	unicode	imgAchievements3
+0x92011fb4	unicode	imgAchievements2
+0x92011fd8	unicode	imgAchievements1
+0x92011ffc	unicode	imgGameIcon
+0x92012014	unicode	btnBrowseDownloads
+0x9201203c	unicode	btnManageGameFiles
+0x92012064	unicode	btnViewAchievements
+0x9201208c	unicode	memory.xzp
+0x92012224	unicode	Network.xzp#
+0x92012240	unicode	CConnStatus
+0x92012258	unicode	C4LineBtn
+0x9201226c	unicode	C2002_NetworkConfigAction
+0x920122a0	unicode	C2004_MasterTab
+0x920122c0	unicode	C2004_NetworkDetails
+0x920122ec	unicode	C2005_AdditionalSettings
+0x92012320	unicode	C2012_TestInformation
+0x9201234c	unicode	C2010_TestingNetwork
+0x92012378	unicode	CTestProfileItem
+0x9201239c	unicode	C2011_TestingLAN
+0x920123c0	unicode	C2013_WindowsConnectNow
+0x920123f0	unicode	C2016_EditIPSettings
+0x9201241c	unicode	C2018_IPSettings
+0x92012440	unicode	C2033_DNSConfig
+0x92012460	unicode	C2034_DNSSettings
+0x92012484	unicode	C2036_PPPoESettings
+0x920124ac	unicode	C2038_ConsoleInformation
+0x920124e0	unicode	CNetworkListItem
+0x92012508	unicode	C2020_AvailableWirelessNetworks
+0x92012548	unicode	C2022_WirelessSecuritySettings
+0x92012588	unicode	C2024_EnterSettings
+0x920125b0	unicode	C2026_ChannelList
+0x920125d4	unicode	C2028_WirelessModes
+0x920125fc	unicode	C2015_WirelessInformation
+0x92012784	unicode	ConnStatus_2011.xur
+0x920127ac	unicode	ConnStatus_2010.xur
+0x920127d4	unicode	ConnStatus.xur
+0x9201280c	unicode	img_Signal%u
+0x92012830	unicode	txt_SSID
+0x92012844	unicode	txt_Link
+0x92012858	unicode	txt_Act
+0x92012868	unicode	img_Link_Disconnected
+0x92012894	unicode	img_Link_Connected
+0x920128bc	unicode	img_inAct
+0x920128d0	unicode	img_Act
+0x920128e0	unicode	scene_main
+0x92012960	unicode	4LineBtn.xur
+0x92012990	unicode	2004_NetworkDetails.xur
+0x92012a68	unicode	%s (%s %d)
+0x92012a80	unicode	btn_Wireless
+0x92012a9c	unicode	btn_DNS
+0x92012aac	unicode	btn_IP
+0x92012abc	unicode	2005_AdditionalSettings.xur
+0x92012b0c	unicode	btn_Console
+0x92012b24	unicode	btn_PPPoE
+0x92012b38	unicode	TestEnd
+0x92012b48	unicode	TestFail
+0x92012b5c	unicode	TestPass
+0x92012b70	unicode	TestStart
+0x92012b84	unicode	PreTest
+0x92012b94	unicode	2010_TestingNetwork.xur
+0x920130c0	unicode	%s\n%s %s\n
+0x920130ec	unicode	txtPassFail
+0x92013104	unicode	txtPassPass
+0x9201313c	unicode	labDeviceType
+0x92013158	unicode	labNatType
+0x92013170	unicode	btn_Test7
+0x92013184	unicode	btn_Test6
+0x92013198	unicode	btn_Test5
+0x920131ac	unicode	btn_Test4
+0x920131c0	unicode	btn_Test3
+0x920131d4	unicode	btn_Test2
+0x920131e8	unicode	btn_Test1
+0x920131fc	unicode	btn_Test0
+0x92013210	unicode	btn_Review
+0x92013228	unicode	legend_y
+0x9201323c	unicode	legend_x
+0x92013250	unicode	legend_a
+0x92013264	unicode	scnTestItem%u
+0x92013280	unicode	%s \n %s
+0x92013290	unicode	dashSysCslSetCountry.xur
+0x920132c4	unicode	consolesettings.xzp#
+0x920132f0	unicode	2011_TestingLAN.xur
+0x92013658	unicode	Status.xur
+0x92013670	unicode	StatusScene
+0x92013698	unicode	2002_NetworkConfigAction.xur
+0x92013704	unicode	2012_TestInformation.xur
+0x92013768	string	de-de
+0x920137f8	unicode	cntlLoader
+0x92013810	unicode	edit_TF
+0x92013820	unicode	txt_Header
+0x92013848	unicode	2013_WindowsConnectNow.xur
+0x92013880	string	wirelessProfile
+0x92013d3c	string	optionalProfile
+0x92013d4c	string	primaryProfile
+0x92013d5c	string	config
+0x92013d64	string	timeToLive
+0x92013d70	string	eapMethod
+0x92013d7c	string	ieee802Dot1xEnabled
+0x92013d90	string	keyProvidedAutomatically
+0x92013dac	string	keyIndex
+0x92013db8	string	networkKey
+0x92013dc4	string	encryption
+0x92013dd0	string	authentication
+0x92013de0	string	configAuthor
+0x92013df0	string	configAuthorId
+0x92013e00	string	configHash
+0x92013e0c	string	configId
+0x92013e18	string	deviceMode
+0x92013e24	string	channel5Dot0
+0x92013e34	string	channel2Dot4
+0x92013e44	string	connectionType
+0x92013e5c	string	PEAP-EAP-TLS
+0x92013e6c	string	PEAP-EAP-MSCHAPv2
+0x92013e80	string	EAP-TLS
+0x92013ea0	string	WPA2PSK
+0x92013eb0	string	WPAPSK
+0x92013ebc	string	WPA-NONE
+0x92013ec8	string	shared
+0x92013ed8	string	station
+0x92013ee0	string	repeater
+0x92013eec	string	bridge
+0x92013ef4	string	infrastructure
+0x92013f20	string	false
+0x92013f58	unicode	2018_IPSettings.xur
+0x92013f80	unicode	2016_EditIPSettings.xur
+0x920140e8	unicode	2034_DNSSettings.xur
+0x92014114	unicode	2033_DNSConfig.xur
+0x9201424c	unicode	2036_PPPoESettings.xur
+0x9201435c	unicode	2038_ConsoleInformation.xur
+0x920143c8	unicode	label_EthernetMAC_Value
+0x920143f8	unicode	ico_64x_Adhoc.png
+0x9201441c	unicode	ico_64x_Infrastructure.png
+0x92014458	unicode	2020_AvailableWirelessNetworks.xur
+0x92014640	unicode	list_items
+0x92014658	unicode	2022_WirelessSecuritySettings.xur
+0x920147ec	unicode	2024_EnterSettings.xur
+0x9201487c	unicode	2026_ChannelList.xur
+0x920148dc	unicode	2028_WirelessModes.xur
+0x92014964	unicode	2015_WirelessInformation.xur
+0x92014a3c	unicode	%2.2X%2.2X%2.2X%2.2X%2.2X%2.2X
+0x92014a7c	unicode	%d.%d.%d.%d
+0x92014ac9	string	icrosoft Corporation Xbox Live MTU Test
+0x92014af4	string	Microsoft Corporation Xbox Live ICMP Test
+0x92014b24	unicode	txt_MetaBody
+0x92014bb4	unicode	btn_Done
+0x92014c00	unicode	txt_CurrentSettings
+0x92014c28	unicode	txt_MetaHead
+0x92014ca4	unicode	ButtonVisual
+0x92014cc0	unicode	Flags
+0x92014ccc	unicode	OfferId
+0x92014cdc	unicode	TitleId
+0x92014cec	unicode	Link
+0x92014cf8	unicode	XuiBOTDContainer
+0x92014d1c	unicode	DefaultBanner
+0x92014d38	unicode	Area
+0x92014d5c	unicode	btn_AdBanner
+0x92014d80	unicode	0x%X
+0x92014d8c	unicode	0x%I64X
+0x92014d9c	unicode	defaultbanner6.xur
+0x92014dc4	unicode	defaultbanner5.xur
+0x92014dec	unicode	defaultbanner4.xur
+0x92014e14	unicode	defaultbanner3.xur
+0x92014e3c	unicode	defaultbanner2.xur
+0x92014e64	unicode	defaultbanner1.xur
+0x92014e8c	unicode	defaultbanner0.xur
+0x92014ec4	unicode	botd.xzp
+0x92014ed8	unicode	//title.%X/t:%X/BOTD%s
+0x92014f0c	unicode	ico_64x_AllDevices.png
+0x92014f3c	unicode	ico_64x_MU.png
+0x92014f5c	unicode	ico_64x_HD.png
+0x92014f7c	unicode	ico_64x_warning.png
+0x92014fa4	unicode	DeviceSelectorList
+0x92014fcc	unicode	DeviceSelector.xur
+0x92014ff4	unicode	DeviceSelectorScene
+0x9201501c	unicode	DeviceDetailsScene
+0x92015044	unicode	CategoriesList
+0x92015064	unicode	CategoriesScene
+0x92015084	unicode	EnumeratingContentScene
+0x920150b4	unicode	ItemsList
+0x920150c8	unicode	ItemsScene
+0x920150e0	unicode	ItemDetailsScene
+0x92015104	unicode	OperationProgressScene
+0x92015134	unicode	FormatHDScene
+0x92015150	unicode	DeleteMusicScene
+0x92015174	string	\??\fusion:
+0x92015180	string	\Device\Harddisk0\Partition1\Compatibility\Xbox1
+0x920151c8	unicode	DeviceDetails.xur
+0x920151ec	unicode	Categories.xur
+0x9201520c	string	\Device\Harddisk0\Partition0
+0x9201522c	unicode	txt_EmptyList
+0x92015248	unicode	labTotal
+0x9201525c	unicode	labDots
+0x9201526c	unicode	txt_Directions
+0x9201528c	unicode	list_devices
+0x920152c0	unicode	OperationProgress.xur
+0x920152ec	unicode	FormatHD.xur
+0x92015308	unicode	labFreeSpace
+0x92015324	unicode	labSize
+0x92015334	unicode	labMetaHead
+0x9201535c	unicode	EnumeratingContent.xur
+0x9201538c	unicode	ItemsIconsProfiles.xur
+0x920153bc	unicode	DeleteMusic.xur
+0x920153dc	unicode	listCategories
+0x92015404	unicode	ItemsGrid.xur
+0x92015420	unicode	ItemDetails.xur
+0x92015448	unicode	ItemsIcons.xur
+0x92015470	unicode	txt_SelectProfile
+0x92015494	string	fusion:\TDATA\*
+0x920154ac	unicode	txt_OwnerInfo
+0x920154c8	unicode	txt_Size
+0x920154dc	unicode	txt_SizeHead
+0x920154f8	unicode	txt_Owner
+0x9201550c	unicode	txt_OwnerHead
+0x92015528	unicode	txt_Device
+0x92015540	unicode	txt_DeviceHead
+0x92015560	unicode	txt_MetaSubHead
+0x920155a0	unicode	xuiProgressBar
+0x920155d0	unicode	buttonEnterSerial
+0x9201560c	string	fusion:\UDATA\
+0x9201561c	string	\SaveMeta.xbx
+0x92015630	string	SaveImage.xbx
+0x92015640	string	TitleImage.xbx
+0x92015650	unicode	TitleName
+0x92015664	string	TitleMeta.xbx
+0x92015674	string	\TitleMeta.xbx
+0x92015684	string	fusion:\UDATA\*
+0x92015698	unicode	SignupBootstrap.xzp
+0x920156c0	unicode	SignupBootstrap_Custom.xus
+0x920156f8	unicode	DownloadLiveSignupScene
+0x92015728	string	/xedl/LiveSignup/livesignup.manifest
+0x92015750	string	/xedl/LiveSignup/livesignup.xex
+0x9201578c	unicode	DownloadLiveSignup.xur
+0x920157bc	unicode	backButton
+0x920157d4	unicode	statusText
+0x920157ec	unicode	waitCursorControl
+0x92015810	string	Version
+0x92015820	unicode	CLiveMessageBox
+0x9201585c	unicode	pudding
+0x9201586c	unicode	kitten
+0x92015888	unicode	CLiveKeyboard
+0x920158d0	unicode	lstStates
+0x920158f8	unicode	lstPostalCodeData
+0x920159c8	unicode	%ls%ls
+0x920159e4	unicode	btnField6
+0x920159f8	unicode	btnField5
+0x92015a0c	unicode	btnField4
+0x92015a20	unicode	btnField3
+0x92015a34	unicode	btnField2
+0x92015a48	unicode	btnField1
+0x92015a70	unicode	IDS_ADDR_POSTALCODE_LOOKUP_LIST_TITLE
+0x92015b50	unicode	/dd/yy
+0x92015b78	string	Xbox Downloader/2.0.1888.0
+0x92015b94	string	Content-Type
+0x92015ba8	unicode	sharedres://secretAchievement.png
+0x92015bf0	unicode	sharedres://unearnedAchievement.png
+0x92015c38	unicode	sharedres://ico_32x_Zone_Underground.png
+0x92015c90	unicode	sharedres://ico_32x_Zone_Family.png
+0x92015cd8	unicode	sharedres://ico_32x_Zone_Pro.png
+0x92015d20	unicode	sharedres://ico_32x_Zone_RR.png
+0x92015d9c	unicode	64_%08x%08x%08x.png
+0x92015dc4	string	deviceselector.xex
+0x92015e70	unicode	sharedres://LiveAddressStrings.xus
+0x92015eb8	unicode	sharedres://LiveProfile.xus
+0x92015ef0	unicode	sharedres://LiveAll.xus
+0x92015f20	unicode	GamerCard_Custom.xus
+0x92015f4c	unicode	avoided.png
+0x92015f64	unicode	recent.png
+0x92015f7c	unicode	preferred.png
+0x92015f98	unicode	friend.png
+0x92016010	unicode	YouGamercardWorker
+0x92016038	unicode	MeGamercardWorker
+0x92016068	unicode	Macro
+0x92016074	unicode	GamerCard.xur
+0x92016090	unicode	XuiGamerCard
+0x920160ac	unicode	BaseScene
+0x920160c0	unicode	ExtendedScene
+0x920160dc	unicode	GamerCardScene
+0x920160fc	unicode	ReputationScene
+0x92016124	unicode	ShowExtendedPanel
+0x92016148	unicode	Format
+0x920161b8	unicode	extendedScene
+0x920161d4	unicode	onlineBaseScene
+0x920161f4	unicode	offlineBaseScene
+0x9201625c	unicode	Silver
+0x9201626c	unicode	Bronze
+0x9201627c	unicode	Mark
+0x92016288	unicode	zoneText
+0x9201629c	unicode	onlineStatusText
+0x920162c0	unicode	achievementsText
+0x920162e4	unicode	credText
+0x920162f8	unicode	titlesPlayedText
+0x9201631c	unicode	reputationScene
+0x9201633c	unicode	relationshipImage
+0x92016360	unicode	membershipTierScene
+0x92016388	unicode	gamerTileImage
+0x920163a8	unicode	gamerTagText
+0x920163ec	unicode	bottomText
+0x92016404	unicode	achievement4Image
+0x92016428	unicode	achievement3Image
+0x9201644c	unicode	achievement2Image
+0x92016470	unicode	achievement1Image
+0x92016494	unicode	titleText
+0x920164a8	unicode	topText
+0x920164d8	unicode	Offline
+0x920164e8	unicode	Online
+0x92016578	string	CAL: NYI %s\n
+0x92016588	string	CCalJpegDecoder::Reset
+0x920166bf	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92016840	string	USampler
+0x9201685c	string	VSampler
+0x92016865	string	YSampler
+0x92016875	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92016980	string	CCalTextureRenderer::RegisterNotification
+0x92016b44	string	CCalImagePlayer::GetMediaInfo
+0x92016b67	string	oCCalImagePlayer::Stop
+0x92016b80	string	CCalImagePlayer::Rewind
+0x92016b98	string	CCalImagePlayer::Seek
+0x92016c60	string	CCalSyncMemoryQueue::Seek
+0x92016c7c	string	CCalSyncMemoryQueue::Rewind
+0x92016c98	string	CCalSyncMemoryQueue::Flush
+0x92016cb4	string	CCalSyncMemoryQueue::Commit
+0x92016cd0	string	CCalSyncMemoryQueue::GetStreamBuffer
+0x92016cf8	string	CCalSyncMemoryQueue::GetStreamBufferPointer
+0x92016d24	string	CCalSyncMemoryQueue::GetStreamBufferSize
+0x92016d50	string	CCalSyncMemoryQueue::GetStreamBufferOffset
+0x92016e60	string	\Device\CdRom0
+0x92016fd7	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92017114	string	AlphaValue
+0x92017130	string	FilterMatrix
+0x92017150	string	TextureSampler
+0x92017177	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92024ff4	string	Application transferred too many scanlines
+0x92025020	string	Invalid SOS parameters for sequential JPEG
+0x9202504c	string	Corrupt JPEG data: found marker 0x%02x instead of RST%d
+0x92025084	string	Premature end of JPEG file
+0x920250a0	string	Warning: unknown JFIF revision number %d.%02d
+0x920250d0	string	Corrupt JPEG data: bad Huffman code
+0x920250f4	string	Corrupt JPEG data: premature end of data segment
+0x92025128	string	Corrupt JPEG data: %u extraneous bytes before marker 0x%02x
+0x92025168	string	Inconsistent progression sequence for component %d coefficient %d
+0x920251ac	string	Unknown Adobe color transform code %d
+0x920251d4	string	Obtained XMS handle %u
+0x920251ec	string	Freed XMS handle %u
+0x92025200	string	Unrecognized component IDs %d %d %d, assuming YCbCr
+0x92025234	string	JFIF extension marker: RGB thumbnail image, length %u
+0x9202526c	string	JFIF extension marker: palette thumbnail image, length %u
+0x920252a8	string	JFIF extension marker: JPEG-compressed thumbnail image, length %u
+0x920252ec	string	Opened temporary file %s
+0x92025308	string	Closed temporary file %s
+0x92025324	string	  Ss=%d, Se=%d, Ah=%d, Al=%d
+0x92025344	string	    Component %d: dc=%d ac=%d
+0x92025364	string	Start Of Scan: %d components
+0x92025384	string	Start of Image
+0x92025394	string	    Component %d: %dhx%dv q=%d
+0x920253b4	string	Start Of Frame 0x%02x: width=%u, height=%u, components=%d
+0x920253f0	string	Smoothing not supported with nonstandard sampling ratios
+0x9202542c	string	RST%d
+0x92025434	string	At marker 0x%02x, recovery action %d
+0x9202545c	string	Selected %d colors for quantization
+0x92025480	string	Quantizing to %d colors
+0x92025498	string	Quantizing to %d = %d*%d*%d colors
+0x920254bc	string	        %4u %4u %4u %4u %4u %4u %4u %4u
+0x920254e4	string	Unexpected marker 0x%02x
+0x92025500	string	Miscellaneous marker 0x%02x, length %u
+0x92025528	string	    with %d x %d thumbnail image
+0x9202554c	string	JFIF extension marker: type 0x%02x, length %u
+0x9202557c	string	Warning: thumbnail image size does not match data length %u
+0x920255b8	string	JFIF APP0 marker: version %d.%02d, density %dx%d  %d
+0x920255f0	string	        %3d %3d %3d %3d %3d %3d %3d %3d
+0x92025618	string	End Of Image
+0x92025628	string	Obtained EMS handle %u
+0x92025640	string	Freed EMS handle %u
+0x92025654	string	Define Restart Interval %u
+0x92025670	string	Define Quantization Table %d  precision %d
+0x9202569c	string	Define Huffman Table 0x%02x
+0x920256b8	string	Define Arithmetic Table 0x%02x: 0x%02x
+0x920256e0	string	Unknown APP14 marker (not Adobe), length %u
+0x9202570c	string	Unknown APP0 marker (not JFIF), length %u
+0x92025738	string	Adobe APP14 marker: version %d, flags 0x%04x 0x%04x, transform %d
+0x9202577c	string	Caution: quantization tables are too coarse for baseline JPEG
+0x920257bc	string	6b  27-Mar-1998
+0x920257cc	string	Copyright (C) 1998, Thomas G. Lane
+0x920257f0	string	Write to XMS failed
+0x92025804	string	Read from XMS failed
+0x9202581c	string	Image too wide for this implementation
+0x92025844	string	Virtual array controller messed up
+0x92025868	string	Unsupported marker type 0x%02x
+0x92025888	string	Application transferred too few scanlines
+0x920258b4	string	Write failed on temporary file --- out of disk space?
+0x920258ec	string	Seek failed on temporary file
+0x9202590c	string	Read failed on temporary file
+0x9202592c	string	Failed to create temporary file %s
+0x92025950	string	Invalid JPEG file structure: SOS before SOF
+0x9202597c	string	Invalid JPEG file structure: two SOI markers
+0x920259ac	string	Unsupported JPEG process: SOF type 0x%02x
+0x920259d8	string	Invalid JPEG file structure: missing SOS marker
+0x92025a08	string	Invalid JPEG file structure: two SOF markers
+0x92025a38	string	Cannot quantize to more than %d colors
+0x92025a60	string	Cannot quantize to fewer than %d colors
+0x92025a88	string	Cannot quantize more than %d color components
+0x92025ab8	string	Insufficient memory (case %d)
+0x92025ad8	string	Not a JPEG file: starts with 0x%02x 0x%02x
+0x92025b04	string	Quantization table 0x%02x was not defined
+0x92025b30	string	JPEG datastream contains no image
+0x92025b54	string	Huffman table 0x%02x was not defined
+0x92025b7c	string	Backing store not supported
+0x92025b98	string	Requested feature was omitted at compile time
+0x92025bc8	string	Not implemented yet
+0x92025bdc	string	Invalid color quantization mode change
+0x92025c04	string	Scan script does not transmit all data
+0x92025c2c	string	Cannot transcode due to multiple use of quantization table %d
+0x92025c6c	string	Premature end of input file
+0x92025c88	string	Empty input file
+0x92025c9c	string	Maximum supported image dimension is %u pixels
+0x92025ccc	string	Missing Huffman code table entry
+0x92025cf0	string	Huffman code size table overflow
+0x92025d14	string	Fractional sampling not implemented yet
+0x92025d3c	string	Output file write error --- out of disk space?
+0x92025d6c	string	Input file read error
+0x92025d84	string	Didn't expect more than one scan
+0x92025da8	string	Write to EMS failed
+0x92025dbc	string	Read from EMS failed
+0x92025dd4	string	Empty JPEG image (DNL not supported)
+0x92025dfc	string	Bogus DQT index %d
+0x92025e10	string	Bogus DHT index %d
+0x92025e24	string	Bogus DAC value 0x%x
+0x92025e3c	string	Bogus DAC index %d
+0x92025e50	string	Unsupported color conversion request
+0x92025e78	string	Too many color components: %d, max %d
+0x92025ea0	string	CCIR601 sampling not implemented yet
+0x92025ec8	string	Suspension not allowed here
+0x92025ee4	string	Buffer passed to JPEG library is too small
+0x92025f10	string	Bogus virtual array access
+0x92025f30	string	JPEG parameter struct mismatch: library thinks size is %u, caller expects %u
+0x92025f80	string	Improper call to JPEG library in state %d
+0x92025fac	string	Invalid scan script at entry %d
+0x92025fcc	string	Bogus sampling factors
+0x92025fe4	string	Invalid progressive parameters at scan script entry %d
+0x9202601c	string	Invalid progressive parameters Ss=%d Se=%d Ah=%d Al=%d
+0x92026054	string	Unsupported JPEG data precision %d
+0x92026078	string	Invalid memory pool code %d
+0x92026094	string	Sampling factors too large for interleaved scan
+0x920260c4	string	Wrong JPEG library version: library is %d, caller expects %d
+0x92026104	string	Bogus marker length
+0x92026118	string	Bogus JPEG colorspace
+0x92026130	string	Bogus input colorspace
+0x92026148	string	Bogus Huffman table definition
+0x92026168	string	IDCT output block size %d not supported
+0x92026190	string	DCT coefficient out of range
+0x920261b0	string	Invalid component ID %d in SOS
+0x920261d0	string	Bogus buffer control mode
+0x920261ec	string	MAX_ALLOC_CHUNK is wrong, please fix
+0x92026214	string	ALIGN_TYPE is wrong, please fix
+0x92026234	string	Sorry, there are legal restrictions on arithmetic coding
+0x92026270	string	Bogus message code %d
+0x9202647c	string	ICC_PROFILE
+0x920267b8	string	Downloader jumptoNetworkSettings(): Failed to create this scene. %08X
+0x92026800	string	Downloader jumptoNetworkSettings():  Failed to build the resource path for network settings.
+0x92026860	unicode	WaitingScene
+0x9202687c	unicode	ErrorScene
+0x92026894	unicode	PcSoftwareScene
+0x920268b4	unicode	WelcomeScene
+0x920268d0	unicode	NoNetworkScene
+0x920268f0	unicode	SlowNetworkScene
+0x92026914	unicode	ReconfigureWirelessScene
+0x92026948	unicode	Wireless80211bScene
+0x92026970	unicode	LimitedNetworkScene
+0x92026998	unicode	NetworkSettingsScene
+0x920269c4	unicode	MediaCenterScene
+0x920269e8	unicode	ContactErrorScene
+0x92026a0c	unicode	OldVersionScene
+0x92026a2c	unicode	downloader.xzp
+0x92026a4c	unicode	2407_WaitingScreen.xur
+0x92026a7c	string	CWaitingScene::Show()\n
+0x92026a94	unicode	PCSoftwareError.xur
+0x92026abc	string	CErrorScene::Show()\n
+0x92026ad4	unicode	2405_PCSoftwarePack.xur
+0x92026b04	string	CPcSoftwareScene::Show()\n
+0x92026b20	unicode	HomeNetworkConnectivityRequired.xur
+0x92026b68	string	CNoNetworkScene::Show()\n
+0x92026b84	unicode	2400_WindowsMediaCenter.xur
+0x92026bbc	string	CMediaCenterScene::Show()\n
+0x92026bd8	unicode	2413_UnableToConnect.xur
+0x92026c0c	string	CContactErrorScene::Show()\n
+0x92026c28	unicode	2410_AttemptingOldSoftware.xur
+0x92026c68	string	COldVersionScene::Show()\n
+0x92026c84	string	CWaitingScene:: substate set to %d\n
+0x92026cb8	unicode	btnConnect
+0x92026cd8	unicode	labKey
+0x92026cf0	unicode	2406_WelcomeSetupKey.xur
+0x92026d24	string	CWelcomeScene::Show()\n
+0x92026d3c	string	CNetworkSettingsScene::Init()\n
+0x92026d6c	unicode	btnNetworkSettings
+0x92026d94	string	CReconfigureWirelessScene::Init()\n
+0x92026dc8	unicode	2403_SlowWiredConnection.xur
+0x92026e04	string	CSlowNetworkScene::Show()\n
+0x92026e20	unicode	ReconfigureWireless.xur
+0x92026e50	string	CReconfigureWireless::Show()\n
+0x92026e70	unicode	2404_802bgWirelessNetwork.xur
+0x92026eac	string	CWireless80211bScene::Show()\n
+0x92026ecc	unicode	btnConnection
+0x92026ef0	unicode	LimitedNetworkConnectivity.xur
+0x92026f30	string	CLimitedNetworkScene::Show()\n
+0x92026f50	string	Network Settings = %08X\n
+0x92026f74	unicode	AcquiringNetworkSettings.xur
+0x92026fb0	string	CNetworkSettingsScene::Show()\n
+0x92026fd0	string	CMediaCenterScene::Init()\n
+0x92026fec	string	CMediaCenterScene Network Settings = %08X\n
+0x92027020	unicode	btnRetry
+0x92027034	unicode	btnSetupNewConnection
+0x92027068	unicode	btnDoNotUseOlder
+0x9202708c	unicode	btnConnectUsingOlder
+0x920270c4	string	handleState: UI transitioning from page %d to %d\n
+0x92027100	unicode	labWaitingText
+0x92027120	string	Found %d number of possible content\n
+0x92027148	string	MCXFile
+0x92027150	string	XedownloaderThread:GetImageVersion::Unable to get XEX_HEADER_EXECUTION_ID from the header\n
+0x920271b0	string	XedownloaderThread:GetImageVersion::too little bytes in buffer, %d\n
+0x920271f8	string	XedownloaderThread:GetCacheFileSizeAndVer returning Success = %s , FileSize = %d , Version = 0x%08X \n
+0x92027260	string	FALSE
+0x92027270	string	XedownloaderThread:GetCacheFileSizeAndVer::Could not read from cache file 0x%08X\n
+0x920272c8	string	XedownloaderThread:GetCacheFileSizeAndVer::Could not allcate %d byte memory\n
+0x92027318	string	XedownloaderThread:GetCacheFileSizeAndVer::Could not open cache file ,err code = 0x%08X \n
+0x92027388	string	XedownloaderThread:ReadCacheFile::Could not read complete file, expected =%d, read = %d \n 
+0x920273e8	string	XedownloaderThread:ReadCacheFile::Could not read from cache file 0x%08X\n
+0x92027438	string	XedownloaderThread:ReadCacheFile::Could not open cache file ,err code =0x%08X \n
+0x92027488	string	XedownloaderThread:WriteCacheFile:: WriteFile failed,unable to write all the bytes. expected = %d, actual = %d\n
+0x920274f8	string	XedownloaderThread:WriteCacheFile:: WriteFile failed, error code = 0x%08X\n
+0x92027548	string	XedownloaderThread:WriteCacheFile:: Not enough space to cache file , new cachefile length = %d,  free space = %d \n
+0x920275c0	string	XedownloaderThread:WriteCacheFile:: Could not open cache file ,err code = 0x%08X \n
+0x92027618	string	Error setting SO_INSECURE: %d\n
+0x92027638	string	Error setting SO_BROADCAST: %d\n
+0x92027658	string	Error binding send socket: %d\n
+0x92027678	string	Closed Dl thread tried to set status\n
+0x920276a0	string	Dl status set to %d \n
+0x920276b8	string	XeDownloaderThread::stop : Downloader thread unproperly stopped\n
+0x920276fc	string	XeDownloaderThread::stop : Downloader thread properly stopped\n
+0x9202773c	string	XeDownloaderThread::stop : Raised stopJobEvent\n
+0x92027770	string	LoadImageFromCache , read from cache = %s\n
+0x920277a0	string	NEW REMOTE IMAGE : Cache image ver = 0x%08X, size = %d , Remote image ver = 0x%08X, size = %d\n
+0x92027800	string	XedownloaderThread:WriteImageToCache %s succeed\n
+0x92027834	string	DID NOT
+0x92027840	string	XedownloaderThread:WriteImageToCache:: Unable to Write cache to file, deleting MCX content\n
+0x920278a0	unicode	10000000-0000-0000-0200-%02X%02X%02X%02X%02X%02X
+0x92027908	unicode	00000000-0000-0000-0200-%02X%02X%02X%02X%02X%02X
+0x9202796c	string	Xesledd.xex
+0x92027978	string	Launching Image \n
+0x9202798c	string	DownloaderThread: ERROR with send on tcpAcceptSocket %d\n
+0x920279c8	string	DownloaderThread: THREAD STOPPED\n
+0x920279ec	string	DownloaderThread: Sending IMGSTOP message\n
+0x92027a18	string	DownloaderThread: Image RECIEVED\n
+0x92027a3c	string	DownloaderThread: recieved %d of %d bytes of the image\n
+0x92027a74	string	DownloaderThread: IMGSTART message sent\n
+0x92027aa0	string	DownloaderThread: Unable to send IMGSTART message\n
+0x92027ad4	string	DownloaderThread: ERROR with send on tcpAcceptSocket %08X\n
+0x92027b10	string	DownloaderThread: IMGDISCACK packet recieved, image length = %d\n
+0x92027b54	string	DownloaderThread: ERROR making tcpSocket nonblocking %d\n
+0x92027b90	string	DownloaderThread: accept on tcpSocket TIMED OUT\n
+0x92027bc4	string	DownloaderThread: ERROR with accept on tcpSocket %d\n
+0x92027bfc	string	DownloaderThread: Listening to a new tcpSocket\n
+0x92027c2c	string	DownloaderThread: tcpSocket bound to port %d\n
+0x92027c5c	string	DownloaderThread: tcpSocket created\n
+0x92027c84	string	Error setting SO_INSECURE: %08X\n
+0x92027ca8	string	XeDownloaderThread::start : New downloader thread created\n
+0x92027ce4	string	XeDownloaderThread::start :unable to create new thread
+0x92027d1c	string	XeDownloaderThread::start, unable to closehThread err=%d\n
+0x92027d58	unicode	:<>=?&% \r\n
+0x92027d70	unicode	0123456789ABCDEF
+0x92027d94	string	239.255.255.250
+0x92027da8	unicode	uuid:10000000-0000-0000-0200-%02X%02X%02X%02X%02X%02X
+0x92027e14	unicode	%s%s%s%s%s\r\n
+0x92027e30	unicode	NOTIFY * HTTP/1.1\r\nHOST:239.255.255.250:1900\r\n
+0x92027e90	unicode	NT:urn:schemas-microsoft-com:nhed:presence:1\r\n
+0x92027ef0	unicode	NTS: ssdp:byebye\r\n
+0x92027f18	unicode	LOCATION:*\r\n
+0x92027f38	unicode	USN:uuid:%s::urn:schemas-microsoft-com:nhed:%s:1\r\n
+0x92027fa0	unicode	presence
+0x92027fb4	unicode	NTS:ssdp:alive\r\n
+0x92027fd8	unicode	%s%s%s%s%s%s%s%s\r\n
+0x92028000	unicode	CACHE-CONTROL:max-age=4\r\n
+0x92028038	unicode	SERVER:dashboard/1.0 UpnP/1.0 xbox/2.0\r\n
+0x92028090	unicode	AL:<urn:schemas-microsoft-com:nhed:attributes?type=%s&firmwarever=%d.%d&udn=uuid:%s&modelname=%s&DvcFN=%s&vendorid=%u&productid=%u&hwrev=%u&swrev=%d&language=%s&manufacturer=%s&imageheaderver=%u&affcode=%u><urn:schemas-microsoft-com:nhed:download-target?address=%S&port=%u>\r\n
+0x920282b8	unicode	AL:<urn:schemas-microsoft-com:nhed:attributes?type=X02&firmwarever=%d.%d&udn=uuid:%s>\r\n
+0x92028368	string	%d/%02d/%02d-%02d:%02d:%02d.%06d 
+0x92028390	string	return code = %08X          dwLinkStatus = %08X         IpStatus =%08X  Omni = %s\r\n
+0x920283f4	unicode	liveStrings.xus
+0x92028414	unicode	live.xzp
+0x92028428	unicode	DashLiveConnected
+0x9202844c	unicode	DashLiveSignedIn
+0x92028470	unicode	DashLiveSignedOut
+0x92028494	unicode	DashLiveScene
+0x920284dc	unicode	CommunityBarButtonMessages
+0x92028514	unicode	CommunityBarButtonFriends
+0x92028548	unicode	CommunityBarButtonRecentPlayers
+0x920285a8	unicode	liveConnectedUI.xur
+0x920285d0	unicode	liveSignedInNLUI.xur
+0x920285fc	unicode	liveSignedInUI.xur
+0x92028624	unicode	liveSignedOutUI.xur
+0x9202865c	unicode	scContainer
+0x9202867c	unicode	btnMarketPlace
+0x9202869c	unicode	btnMessages
+0x920286b4	unicode	ctlGamerCard
+0x920286d8	unicode	liveCommunity.xur
+0x920286fc	unicode	botdMarketplace
+0x9202871c	unicode	scCommunity
+0x92028734	unicode	dashmarketplace.xzp
+0x92028764	unicode	btnUseExistingTag
+0x92028788	unicode	btnJoinXbox
+0x920287a0	unicode	labFoundProfiles
+0x920287c4	unicode	labSignInText
+0x920287e0	unicode	fakeGamerCard
+0x92028874	unicode	CommunityBar.xur
+0x92028898	unicode	CommunityBarScene
+0x920288cc	unicode	btnRecentPlayers
+0x920288f0	unicode	txtCommunityHeading
+0x92028918	unicode	SongList
+0x92028964	unicode	MediaContainerList
+0x92028b68	unicode	CGamesBladeSignedOut
+0x92028b94	unicode	CGamesBladeSignedIn
+0x92028bbc	unicode	CGamesBladeScene
+0x92028be0	unicode	gamesblade.xzp
+0x92028c0c	unicode	CGamesBladeNavButton
+0x92028c64	unicode	gamesSignedIn.xur
+0x92028c88	unicode	gamesSignedOut.xur
+0x92028cc4	unicode	games.xzp
+0x92028cd8	unicode	arcade.xzp
+0x92028cf0	unicode	navArcade
+0x92028d04	unicode	navTrailers
+0x92028d1c	unicode	navDemos
+0x92028d30	unicode	navAchievements
+0x92028d50	unicode	navGames
+0x92028d6c	unicode	navCreateProfile
+0x92028d90	unicode	MediaBladeSignedOutScene
+0x92028dc4	unicode	MediaBladeSignedInScene
+0x92028df4	unicode	DashMediaScene
+0x92028e14	unicode	mediablade.xzp
+0x92028e64	unicode	mediaSignedIn.xur
+0x92028e88	unicode	mediaSignedOut.xur
+0x92028ec4	unicode	navMCX
+0x92028ed4	unicode	navVideo
+0x92028ee8	unicode	navPictures
+0x92028f00	unicode	navMusic
+0x92028f1c	unicode	OOBEStrings.xus
+0x92028f3c	unicode	OOBE.xzp
+0x92028f50	unicode	oobeLanguage
+0x9202912c	unicode	oobe.xzp
+0x92029140	unicode	oobeLanguage.xur
+0x92029164	unicode	oobeStorageDevice.xur
+0x92029190	unicode	oobeProfileChoice.xur
+0x920291bc	unicode	oobeGamertile.xur
+0x920291e0	unicode	oobeProfileCreation.xur
+0x92029210	unicode	oobeWelcome.xur
+0x92029230	unicode	ConsoleSettings.xzp
+0x92029258	unicode	dashSysCslSet.xur
+0x92029280	unicode	dashSysCslSetPControlSelect.xur
+0x920292c0	unicode	Player
+0x92029304	unicode	CSetupComplete
+0x92029324	unicode	CProfileCreated
+0x92029344	unicode	oobeProfileCreation
+0x9202936c	unicode	CGamerTile
+0x92029384	unicode	CStorageDevice
+0x920293a4	unicode	CProfileChoice
+0x920293e0	unicode	GamerTileList
+0x9202947c	unicode	btnDontHave
+0x92029498	unicode	imgTile
+0x920294a8	unicode	lblGamertag
+0x920294c0	unicode	scnSampleGamerCard
+0x920294e8	unicode	GamertileGridList
+0x9202951c	unicode	ctlGamercard
+0x92029538	unicode	btnDashboard
+0x92029554	unicode	btnSafety
+0x92029568	unicode	btnOptimize
+0x92029580	unicode	btnPlayGame
+0x920295a0	unicode	sharedres://64_fffe07d10002000100010001.png
+0x920295f8	unicode	btnJoin
+0x92029608	unicode	btnUseExisting
+0x92029628	unicode	btnCreateNew
+0x92029690	string	&apos;
+0x92029698	string	&quot;
+0x920296a8	string	&amp;
+0x920296c0	string	%d.%d
+0x920296d8	string	uuid:%s
+0x920296ed	string	 a0TotalMatches
+0x92029700	string	UpdateID
+0x9202970c	string	NumberReturned
+0x9202971c	string	Result
+0x92029728	string	<ContainerID>%s</ContainerID>\r\n<SearchCriteria>%s</SearchCriteria>\r\n<Filter>%s</Filter>\r\n<StartingIndex>%u</StartingIndex>\r\n<RequestedCount>%u</RequestedCount>\r\n<SortCriteria>%s</SortCriteria>\r\n
+0x920297ec	string	Search
+0x920297f4	string	urn:schemas-upnp-org:service:ContentDirectory:1
+0x92029864	string	%0.8x-%0.4x-%0.4x-%0.2x%0.2x-%0.2x%0.2x%0.2x%0.2x%0.2x%0.2x
+0x920298a0	unicode	DvdInfoPane
+0x920298b8	unicode	DvdPadDisplay
+0x920298d4	unicode	DvdPadPlayback
+0x920298f4	unicode	DvdRcDisplay
+0x92029910	unicode	WmvPadPlayback
+0x92029930	unicode	section://%X,dvd#
+0x92029954	unicode	%c%c
+0x920299d4	unicode	Splash43.xur
+0x920299f0	unicode	Splash169.xur
+0x92029a0c	unicode	1070_remoteControlLayout.xur
+0x92029a48	unicode	1072_displayControls.xur
+0x92029a7c	unicode	WmvPadPlayback.xur
+0x92029aa4	unicode	1073_playbackControls.xur
+0x92029ad8	unicode	1074_infoPane.xur
+0x92029afc	unicode	alert.xur
+0x92029b10	unicode	1071_remoteActionDisplay.xur
+0x92029b4c	unicode	section://%X,dvd#strings.xus
+0x92029b88	unicode	section://%X,dashuisk#skin.xur
+0x92029c10	unicode	txt_Action
+0x9202ba40	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abc
+0x92030e68	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnop
+0x92031e12	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklm
+0x92031eee	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLM
+0x92033446	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxy
+0x9203353a	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK
+0x920344c2	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[
+0x92034f16	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x92035cb4	string	Unknown
+0x92035cd0	string	MPEGV
+0x92035cd8	string	MPEGA
+0x92035cf4	string	Karaoke
+0x92035ec0	string	VideoTexture
+0x92035f04	string	multiply_yuv
+0x92035f11	string	offset_yuv
+0x92035f23	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x920360fc	string	PointSampleTexture
+0x92036144	string	img_info
+0x9203614d	string	multiply_yuv
+0x9203615a	string	offset_yuv
+0x9203616c	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9203637c	string	VideoTexture
+0x9203639c	string	bound_box
+0x920363bf	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x920364d4	string	VideoTexture
+0x920364fb	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x920365c7	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x920366b8	string	m_pD3DDevice->CreateRenderTarget failed\n
+0x920366e4	string	m_pD3DDevice->CreateTexture failed\n
+0x92036708	unicode	txt_RunningTime
+0x92036728	unicode	txt_ChapterContent
+0x92036750	unicode	txt_TitleContent
+0x92036774	unicode	%02d:%02d:%02d
+0x92036794	unicode	%02d
+0x920367a8	unicode	ico_32x_play_black.png
+0x920367d8	unicode	ico_32x_pause_black.png
+0x92036808	unicode	btn_Display
+0x92036820	unicode	btn_Title
+0x92036834	unicode	btn_DVDMenu
+0x9203684c	unicode	btn_Info
+0x92036860	unicode	btn_Next
+0x92036874	unicode	btn_FF
+0x92036884	unicode	btn_RR
+0x92036894	unicode	btn_Last
+0x920368a8	unicode	XuiLabel1
+0x920368bc	unicode	btn_Zoom
+0x920368d0	unicode	btn_Sound
+0x920368e4	unicode	btn_Camera
+0x920368fc	unicode	btn_SubTitles
+0x92036918	unicode	btn_Menu
+0x9203692c	unicode	btn_Playback
+0x92036948	unicode	btn_AB
+0x920369d7	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92036b58	string	USampler
+0x92036b74	string	VSampler
+0x92036b7d	string	YSampler
+0x92036b8d	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x92036de8	unicode	WM/AlbumArtist
+0x92036e08	unicode	WM/AlbumTitle
+0x92036e24	unicode	WM/Genre
+0x92036e38	unicode	WM/Track
+0x92036ed0	string	CCalChannel::SetMediaInfo: Sub-titles
+0x9203a77b	string	dg_ChromaDimensions
+0x9203a7b0	string	g_ImageDimensions
+0x9203a7c2	string	g_ImageSamplerCb
+0x9203a7e4	string	g_ImageSamplerCr
+0x9203a7f5	string	g_ImageSamplerY
+0x9203a805	string	g_LumaDimensions
+0x9203a816	string	g_YUVToRGBMatrix
+0x9203ac1f	string	dg_ChromaDimensions
+0x9203ac54	string	g_ImageDimensions
+0x9203ac66	string	g_ImageSamplerCb
+0x9203ac88	string	g_ImageSamplerCr
+0x9203ac99	string	g_ImageSamplerY
+0x9203aca9	string	g_LumaDimensions
+0x9203acba	string	g_YUVToRGBMatrix
+0x9203b0d3	string	dg_ChromaDimensions
+0x9203b108	string	g_ImageDimensions
+0x9203b11a	string	g_ImageSamplerCb
+0x9203b13c	string	g_ImageSamplerCr
+0x9203b14d	string	g_ImageSamplerY
+0x9203b15d	string	g_LumaDimensions
+0x9203b16e	string	g_YUVToRGBMatrix
+0x9203b653	string	dg_ChromaDimensions
+0x9203b688	string	g_ImageDimensions
+0x9203b69a	string	g_ImageSamplerCb
+0x9203b6bc	string	g_ImageSamplerCr
+0x9203b6cd	string	g_ImageSamplerY
+0x9203b6dd	string	g_LumaDimensions
+0x9203b6ee	string	g_YUVToRGBMatrix
+0x9203bbd3	string	dg_ChromaDimensions
+0x9203bc08	string	g_ImageDimensions
+0x9203bc1a	string	g_ImageSamplerCb
+0x9203bc3c	string	g_ImageSamplerCr
+0x9203bc4d	string	g_ImageSamplerY
+0x9203bc5d	string	g_LumaDimensions
+0x9203bc6e	string	g_YUVToRGBMatrix
+0x9203c0b3	string	dg_ChromaDimensions
+0x9203c0e8	string	g_ImageDimensions
+0x9203c0fa	string	g_ImageSamplerCb
+0x9203c11c	string	g_ImageSamplerCr
+0x9203c12d	string	g_ImageSamplerY
+0x9203c13d	string	g_LumaDimensions
+0x9203c14e	string	g_YUVToRGBMatrix
+0x9203c5b3	string	dg_ChromaDimensions
+0x9203c5e8	string	g_ImageDimensions
+0x9203c5fa	string	g_ImageSamplerCb
+0x9203c61c	string	g_ImageSamplerCr
+0x9203c62d	string	g_ImageSamplerY
+0x9203c63d	string	g_LumaDimensions
+0x9203c64e	string	g_YUVToRGBMatrix
+0x9203cb97	string	dg_ChromaDimensions
+0x9203cbcc	string	g_ImageDimensions
+0x9203cbde	string	g_ImageSamplerCb
+0x9203cc00	string	g_ImageSamplerCr
+0x9203cc11	string	g_ImageSamplerY
+0x9203cc21	string	g_LumaDimensions
+0x9203cc32	string	g_YUVToRGBMatrix
+0x9203d11c	string	g_ImageSampler
+0x9203d13c	string	g_RGBToYUVMatrix
+0x9203d190	string	g_YUVToRGBMatrix
+0x9203d54c	string	g_ImageSampler
+0x9203d56c	string	g_RGBToYUVMatrix
+0x9203d928	string	g_ImageSampler
+0x9203d948	string	g_RGBToYUVMatrix
+0x9203dc18	string	g_ImageSampler
+0x9203dc38	string	g_YUVToRGBMatrix
+0x9203dffc	string	g_ImageSampler
+0x9203e330	string	g_ImageSampler
+0x9203e58c	string	g_ImageSampler
+0x9203e5ac	string	g_YUVToRGBMatrix
+0x9203e848	string	g_ImageSampler
+0x9203ea2c	string	g_ImageSampler
+0x9203eb60	string	g_ImageSampler
+0x9203eb80	string	g_NoiseFilterSampleOffsetsH
+0x9203ee04	string	g_ImageSampler
+0x9203ee24	string	g_NoiseFilterSampleOffsetsH
+0x9203f058	string	g_FieldOffsets0
+0x9203f088	string	g_FieldSampler
+0x9203f0a8	string	g_FieldStatus
+0x9203f0b6	string	g_RGBToYUVMatrix
+0x9203f494	string	g_FieldSampler
+0x9203f4b4	string	g_FieldStatus
+0x9203f4e4	string	g_RGBToYUVMatrix
+0x9203f867	string	xg_FieldOffsets0
+0x9203f898	string	g_FieldSampler
+0x9203f8b8	string	g_FieldStatus
+0x9203fbe4	string	g_FieldSampler
+0x9203fc04	string	g_FieldStatus
+0x9203fee3	string	xg_FieldOffsets0
+0x9203ff14	string	g_FieldSampler
+0x9203ff34	string	g_FieldStatus
+0x92040138	string	g_FieldSampler
+0x92040158	string	g_FieldStatus
+0x920403c0	string	g_FieldOffsets0
+0x920403f0	string	g_FieldOffsets1
+0x92040400	string	g_FieldSampler
+0x92040420	string	g_FieldStatus
+0x9204042e	string	g_FilteredFieldSampler
+0x92040445	string	g_RGBToYUVMatrix
+0x92040498	string	g_Thresholds
+0x92040dd4	string	g_FieldOffsets0
+0x92040e04	string	g_FieldOffsets1
+0x92040e14	string	g_FieldSampler
+0x92040e34	string	g_FieldStatus
+0x92040e42	string	g_FilteredFieldSampler
+0x92040e59	string	g_Thresholds
+0x9204171c	string	g_FieldOffsets0
+0x9204174c	string	g_FieldOffsets1
+0x9204175c	string	g_FieldSampler
+0x9204177c	string	g_FieldStatus
+0x9204178a	string	g_FilteredFieldSampler
+0x920417a1	string	g_Thresholds
+0x92041f58	string	g_ChromaFilterRGBToYUVMatrix
+0x92041fb8	string	g_ChromaFilterSampleOffsets
+0x92041ff4	string	g_ChromaFilterYUVToRGBMatrix
+0x92042011	string	g_ImageSampler
+0x92042030	string	g_RGBToYUVMatrix
+0x920427f0	string	g_ChromaFilterRGBToYUVMatrix
+0x92042850	string	g_ChromaFilterSampleOffsets
+0x9204288c	string	g_ChromaFilterYUVToRGBMatrix
+0x920428a9	string	g_ImageSampler
+0x92043050	string	g_ChromaFilterRGBToYUVMatrix
+0x920430b0	string	g_ChromaFilterSampleOffsets
+0x920430ec	string	g_ChromaFilterYUVToRGBMatrix
+0x92043109	string	g_ImageSampler
+0x920437e0	string	g_ImageDimensions
+0x92043814	string	g_ImageSampler
+0x92043834	string	g_RGBToYUVMatrix
+0x92043888	string	g_SampleOffsets
+0x92043898	string	g_YUVToRGBMatrix
+0x920441a8	string	g_ImageDimensions
+0x920441dc	string	g_ImageSampler
+0x920441fc	string	g_RGBToYUVMatrix
+0x92044250	string	g_SampleOffsets
+0x92044a7c	string	g_ImageDimensions
+0x92044ab0	string	g_ImageSampler
+0x92044ad0	string	g_RGBToYUVMatrix
+0x92044b24	string	g_SampleOffsets
+0x92044f58	string	g_ImageDimensions
+0x92044f8c	string	g_ImageSampler
+0x92044fac	string	g_SampleOffsets
+0x92044fbc	string	g_YUVToRGBMatrix
+0x920458c3	string	|g_ImageDimensions
+0x920458f8	string	g_ImageSampler
+0x92045918	string	g_SampleOffsets
+0x92046113	string	|g_ImageDimensions
+0x92046148	string	g_ImageSampler
+0x92046168	string	g_SampleOffsets
+0x9204655c	string	g_ImageDimensions
+0x92046590	string	g_ImageSampler
+0x920465b0	string	g_SampleOffsets
+0x920465c0	string	g_YUVToRGBMatrix
+0x92046da3	string	|g_ImageDimensions
+0x92046dd8	string	g_ImageSampler
+0x92046df8	string	g_SampleOffsets
+0x920474b3	string	|g_ImageDimensions
+0x920474e8	string	g_ImageSampler
+0x92047508	string	g_SampleOffsets
+0x9204781c	string	g_ImageDimensions
+0x92047850	string	g_ImageSampler
+0x92047870	string	g_RGBToYUVMatrix
+0x920478c4	string	g_SampleOffsets
+0x920478d4	string	g_YUVToRGBMatrix
+0x920481cc	string	g_ImageDimensions
+0x92048200	string	g_ImageSampler
+0x92048220	string	g_RGBToYUVMatrix
+0x92048274	string	g_SampleOffsets
+0x92048aa0	string	g_ImageDimensions
+0x92048ad4	string	g_ImageSampler
+0x92048af4	string	g_RGBToYUVMatrix
+0x92048b48	string	g_SampleOffsets
+0x92048f7c	string	g_ImageDimensions
+0x92048fb0	string	g_ImageSampler
+0x92048fd0	string	g_SampleOffsets
+0x92048fe0	string	g_YUVToRGBMatrix
+0x920498cf	string	|g_ImageDimensions
+0x92049904	string	g_ImageSampler
+0x92049924	string	g_SampleOffsets
+0x9204a11f	string	|g_ImageDimensions
+0x9204a154	string	g_ImageSampler
+0x9204a174	string	g_SampleOffsets
+0x9204a568	string	g_ImageDimensions
+0x9204a59c	string	g_ImageSampler
+0x9204a5bc	string	g_SampleOffsets
+0x9204a5cc	string	g_YUVToRGBMatrix
+0x9204ad97	string	|g_ImageDimensions
+0x9204adcc	string	g_ImageSampler
+0x9204adec	string	g_SampleOffsets
+0x9204b4a7	string	|g_ImageDimensions
+0x9204b4dc	string	g_ImageSampler
+0x9204b4fc	string	g_SampleOffsets
+0x9204b834	string	g_ImageDimensions
+0x9204b868	string	g_ImageSampler
+0x9204b888	string	g_RGBToYUVMatrix
+0x9204b8dc	string	g_RcpImageDimensions
+0x9204b8f1	string	g_SampleOffsets
+0x9204b901	string	g_YUVToRGBMatrix
+0x9204c2a8	string	g_ImageDimensions
+0x9204c2dc	string	g_ImageSampler
+0x9204c2fc	string	g_RGBToYUVMatrix
+0x9204c350	string	g_RcpImageDimensions
+0x9204c365	string	g_SampleOffsets
+0x9204cc20	string	g_ImageDimensions
+0x9204cc54	string	g_ImageSampler
+0x9204cc74	string	g_RGBToYUVMatrix
+0x9204ccc8	string	g_RcpImageDimensions
+0x9204ccdd	string	g_SampleOffsets
+0x9204d1a4	string	g_ImageDimensions
+0x9204d1d8	string	g_ImageSampler
+0x9204d1f8	string	g_RcpImageDimensions
+0x9204d20d	string	g_SampleOffsets
+0x9204d21d	string	g_YUVToRGBMatrix
+0x9204dbbc	string	g_ImageDimensions
+0x9204dbf0	string	g_ImageSampler
+0x9204dc10	string	g_RcpImageDimensions
+0x9204dc25	string	g_SampleOffsets
+0x9204e474	string	g_ImageDimensions
+0x9204e4a8	string	g_ImageSampler
+0x9204e4c8	string	g_RcpImageDimensions
+0x9204e4dd	string	g_SampleOffsets
+0x9204e964	string	g_ImageDimensions
+0x9204e998	string	g_ImageSampler
+0x9204e9b8	string	g_RcpImageDimensions
+0x9204e9cd	string	g_SampleOffsets
+0x9204e9dd	string	g_YUVToRGBMatrix
+0x9204f258	string	g_ImageDimensions
+0x9204f28c	string	g_ImageSampler
+0x9204f2ac	string	g_RcpImageDimensions
+0x9204f2c1	string	g_SampleOffsets
+0x9204f9dc	string	g_ImageDimensions
+0x9204fa10	string	g_ImageSampler
+0x9204fa30	string	g_RcpImageDimensions
+0x9204fa45	string	g_SampleOffsets
+0x9204fd98	string	g_ImageSampler
+0x9204fdb8	string	g_OverlayBounds
+0x9204fde8	string	g_OverlaySampler
+0x9204fdf9	string	g_RGBToYUVMatrix
+0x9204fe4c	string	g_YUVToRGBMatrix
+0x920502b4	string	g_ImageSampler
+0x920502d4	string	g_OverlayBounds
+0x92050304	string	g_OverlaySampler
+0x92050315	string	g_RGBToYUVMatrix
+0x9205077c	string	g_ImageSampler
+0x9205079c	string	g_OverlayBounds
+0x920507cc	string	g_OverlaySampler
+0x920507dd	string	g_RGBToYUVMatrix
+0x92050b94	string	g_ImageSampler
+0x92050bb4	string	g_OverlayBounds
+0x92050be4	string	g_OverlaySampler
+0x92050bf5	string	g_YUVToRGBMatrix
+0x92051058	string	g_ImageSampler
+0x92051078	string	g_OverlayBounds
+0x920510a8	string	g_OverlaySampler
+0x92051488	string	g_ImageSampler
+0x920514a8	string	g_OverlayBounds
+0x920514d8	string	g_OverlaySampler
+0x92051804	string	g_ImageSampler
+0x92051824	string	g_OverlayBounds
+0x92051854	string	g_OverlaySampler
+0x92051865	string	g_YUVToRGBMatrix
+0x92051bac	string	g_ImageSampler
+0x92051bcc	string	g_OverlayBounds
+0x92051bfc	string	g_OverlaySampler
+0x92051e9c	string	g_ImageSampler
+0x92051ebc	string	g_OverlayBounds
+0x92051eec	string	g_OverlaySampler
+0x920520cc	string	g_YUVToRGBMatrix
+0x920520dd	string	g_RGBToYUVMatrix
+0x920520ee	string	g_FieldStatus
+0x920520fc	string	g_SampleOffsets
+0x9205210c	string	g_FieldOffsets0
+0x9205211c	string	g_FieldOffsets1
+0x9205212c	string	g_Thresholds
+0x92052139	string	g_ImageDimensions
+0x9205214b	string	g_RcpImageDimensions
+0x92052160	string	g_LumaDimensions
+0x92052171	string	g_ChromaDimensions
+0x92052184	string	g_OverlayBounds
+0x92052194	string	g_NoiseFilterSampleOffsetsH
+0x920521b0	string	g_NoiseFilterSampleOffsetsV
+0x920521cc	string	g_ChromaFilterSampleOffsets
+0x920521e8	string	g_ChromaFilterYUVToRGBMatrix
+0x92052205	string	g_ChromaFilterRGBToYUVMatrix
+0x92052222	string	g_ImageSampler
+0x92052231	string	g_ImageSamplerY
+0x92052241	string	g_ImageSamplerCb
+0x92052252	string	g_ImageSamplerCr
+0x92052263	string	g_FieldSampler
+0x92052272	string	g_FilteredFieldSampler
+0x92052289	string	g_OverlaySampler
+0x9205229a	string	Convert420Image
+0x920522aa	string	ConvertUpscaled420Image
+0x920522c2	string	ConvertColorSpace
+0x920522d4	string	NoiseFilterImageH
+0x920522e6	string	NoiseFilterImageV
+0x920522f8	string	DeinterlaceImage
+0x92052309	string	ChromaFilterImageV
+0x9205231c	string	ScaleImageH
+0x92052328	string	ScaleImageV
+0x92052334	string	ScaleImageVInterlaced
+0x9205234a	string	CompositeImage
+0x92052359	string	D3DX9.1 Effect Compiler
+0x9205cea4	string	CompositeImage
+0x9205ceb4	string	ScaleImageVInterlaced
+0x9205cecc	string	ScaleImageV
+0x9205ced8	string	ScaleImageH
+0x9205cee4	string	ChromaFilterImageV
+0x9205cef8	string	DeinterlaceImage
+0x9205cf0c	string	NoiseFilterImageV
+0x9205cf20	string	NoiseFilterImageH
+0x9205cf34	string	ConvertUpscaled420Image
+0x9205cf4c	string	Convert420Image
+0x9205cf5c	string	ConvertColorSpace
+0x9205cf70	string	MMFDVDPLAYER
+0x9205cf80	string	PERFMETER
+0x9205d2d0	string	[ALARM:XENV:%d] Start:%d, Interval:%d\n
+0x9205d2f8	string	[ALARM]XENON:SetWaitableTimer failed(%d)\n
+0x9205d324	string	[!ATTN:XTIMER:%d] SetTimer lpTimerFunc is not NULL\n
+0x9205d358	string	Create Message Loop Thread failed.\n
+0x9205d37c	string	CreateThread failed.\n
+0x9205d698	string	-vcodec
+0x9205d6a0	string	-acodec
+0x9205d6a8	string	passthru
+0x9205d6b4	string	WMFDecodeX86
+0x9205d78c	string	CCalMoviePlayer::Rewind
+0x9205d7a4	string	CCalMoviePlayer::Seek
+0x9205d8f0	string	\WinDvdApp
+0x9205d8fc	string	\DEMUX
+0x9205d904	string	\NAVIGATOR
+0x9205d910	string	\AUDIODEC
+0x9205d91c	string	\VIDEODEC
+0x9205d928	string	Software\InterVideo\WinDVD
+0x9205d944	string	__@@0C025CFF_37A9_4908_9323_15FA0E0D5E06_%d
+0x9205d970	string	cdrom0:
+0x9205d978	string	%s/vts_%02lu_0.ifo
+0x9205d98c	string	%s/segment
+0x9205d998	string	%s/mpegav
+0x9205d9a4	string	%s/dvd_rtav
+0x9205d9b0	string	%s/video_ts
+0x9205d9bc	string	%c:/segment
+0x9205d9e4	string	%c:/video_ts
+0x9205da18	string	*UDF Sparing Table
+0x9205da2c	string	*UDF Sparable Partition
+0x9205da54	string	DVD_RTAV
+0x9205da60	string	VR_MOVIE.VRO
+0x9205da70	string	VR_MANGR.IFO
+0x9205da94	string	DVDUNFINALIZE
+0x9205dab4	string	CHECKRPCSCHEME
+0x9205dc40	string	IVI-XenonDVDPlayer
+0x9205dc64	string	FILEDSHOW
+0x9205dc70	string	%s\Sonic
+0x9205dc7c	string	SILENTMODE
+0x9205de7c	string	TIMESTRETCH
+0x9205de88	string	bad allocation
+0x9205decc	string	FileSeek
+0x9205ded8	string	LocalBuffer
+0x9205dee4	string	KeepAlive
+0x9205e154	string	still
+0x9205e15c	string	pause
+0x9205e174	string	invalid
+0x9205e200	string	CGMIts: warning possible comparison error!\n
+0x9205e22c	string	READAHEADMSEC
+0x9205e23c	string	LGCTRL
+0x9205e244	string	LINE21FG
+0x9205e250	string	LINE21BG
+0x9205e25c	string	SPICFG
+0x9205e264	string	SPICBG
+0x9205e26c	string	HWCOLOR
+0x9205e274	string	CCREDBALANCE
+0x9205e284	string	CCBLUEBALANCE
+0x9205e294	string	CCSHARPNESS
+0x9205e2a0	string	CCGAMMA
+0x9205e2a8	string	CCSATURATION
+0x9205e2b8	string	CCHUE
+0x9205e2c0	string	CCCONTRAST
+0x9205e2cc	string	CCBRIGHTNESS
+0x9205e2dc	string	INTERLACEDISPLAYHW
+0x9205e2f0	string	INTERLACEDISPLAYSW
+0x9205e304	string	PROGSCAN
+0x9205e310	string	DMXERRREADNOTIFY
+0x9205e324	string	GPISECMAX
+0x9205e330	string	READ_MAX
+0x9205e913	string	`SPST_INI_LCD
+0x9205e924	string	AST_INI_LCD
+0x9205e930	string	P_CFG_VIDEO
+0x9205e93c	string	PARENTAL_CTY_CODE
+0x9205e950	string	DefaultSubtitleOverride
+0x9205e974	string	ReInitCSS
+0x9205e980	string	%s\video_ts
+0x9205e9b4	string	%s\video_ts\vts_%02d_0.bup
+0x9205e9d0	string	%s\video_ts.bup
+0x9205e9e0	string	%s\video_ts.ifo
+0x9205e9f0	string	%s\video_ts\video_ts.bup
+0x9205ea0c	string	%s\video_ts\video_ts.ifo
+0x9205ea28	string	%s\video_ts\vts_%02d_0.ifo
+0x9205ece8	string	unknown
+0x9205ecf0	string	timeOutAuth
+0x9205ecfc	string	timeOutLoadIFO
+0x9205ed0c	string	timeOutLoadNav
+0x9205ed1c	string	USEACCURATETIMESEARCH
+0x9205ed34	string	STRICTPTL
+0x9205ed40	string	NVSCANADAPT
+0x9205ed64	string	SUBTITLEDISPLAY
+0x9205ed74	string	TCTIMER
+0x9205ed7c	string	SETNORMALSPEEDINPAUSE
+0x9205ed94	string	NVTIMER
+0x9205eda0	string	REVERSEPLAY
+0x9205edac	string	ENABLEUOPSTOP
+0x9205edbc	string	TITLESKIP
+0x9205edc8	string	SPICN
+0x9205edd0	string	Ending sleep after 1.2 sec, navigation queue is stuck\n
+0x9205ee08	string	list<T> too long
+0x9205ee1c	string	%s\ext\%s
+0x9205ee28	string	%s\vcd\%s
+0x9205ee34	string	%s\svcd\%s
+0x9205ee4c	string	lot.svd
+0x9205ee54	string	lot.vcd
+0x9205ee5c	string	lot_x.svd
+0x9205ee68	string	lot_x.vcd
+0x9205ee74	string	psd.svd
+0x9205ee7c	string	psd.vcd
+0x9205ee84	string	psd_x.svd
+0x9205ee90	string	psd_x.vcd
+0x9205ee9c	string	entries.svd
+0x9205eea8	string	entries.vcd
+0x9205eeb4	string	info.svd
+0x9205eec0	string	info.vcd
+0x9205eecc	string	ENABLEBUTTONSELECT
+0x9205eee0	string	FORCEVCDSELECT
+0x9205f0e8	string	%s\EXT\LOT_X.VCD
+0x9205f0fc	string	%s\EXT\PSD_X.VCD
+0x9205f110	string	SUPERVCD
+0x9205f11c	string	HQ-VCD
+0x9205f124	string	VIDEO_CD
+0x9205f140	string	AUDIOCHAN
+0x9205f14c	string	DELAYSPDIF
+0x9205f190	string	AUDIODYNRHI
+0x9205f19c	string	AUDIODYNRLOW
+0x9205f1ac	string	COMPAQSPDIF
+0x9205f1b8	string	QUIETMODE
+0x9205f1c4	string	VOLBOOST
+0x9205f1d0	string	LFEON
+0x9205f1d8	string	PROLOGIC
+0x9205f21c	string	QueuedTicks90K=%ld\n
+0x9205f268	string	MPEGA: sleeping %d msec for first audio\n
+0x9205f294	string	Closing!\n
+0x9205f2d8	string	%lu: skipping frame (iMsecLeft=%d)\n
+0x9205f2fc	string	Failed to release frame!\n
+0x9205f318	string	_@ InterVideo Decode Mutex @_
+0x9205f338	string	DSLINE21
+0x9205f344	string	PTSONIFRAMEONLY
+0x9205f354	string	HDFASTMODE
+0x9205f360	string	NOVIDEODROP
+0x9205f36c	string	VIDEOINFO
+0x9205f3b0	string	DUPLICATECHANNELS
+0x9205f3c4	string	AUDIOMAXRATE
+0x9205f3d4	string	AUDIOMAXBIT
+0x9205f420	string	PCM: sleeping %d msec for first audio\n
+0x9205f698	string	WMASPDIF
+0x9205f6a4	string	a_folddown
+0x9205f6b0	string	a_halfXfrm
+0x9205f6bc	string	vcodec
+0x9205f6c4	string	acodec
+0x9205f7b4	string	Banias Mobile Processor
+0x9205f7cc	string	Intel(R) Xeon(tm) Processor
+0x9205f7e8	string	Intel(R) Pentium(R) 4 Processor
+0x9205f808	string	Mobile Intel(R) Celeron(R) Processor
+0x9205f830	string	Mobile Intel(R) Pentium(R) III Processor-M
+0x9205f85c	string	Future Processor
+0x9205f870	string	Intel(R) Pentium(R) III Xeon Processor
+0x9205f898	string	Intel(R) Pentium(R) III Processor
+0x9205f8bc	string	Intel(R) Celeron(R) Processor
+0x9205f8e0	string	This processor does not support the brand identification feature
+0x9205f924	string	CPUCHECK
+0x9205f954	string	AUTH: Unknown protected disc !\n
+0x9205f974	string	AUTH: CPRM disc !\n
+0x9205f988	string	AUTH: CSS/CPPM disc !\n
+0x9205f9a0	string	MAXREADTRIES
+0x9205f9b0	string	MAXAUTHTRIES
+0x9205fa3c	string	%s\segment\item%04lu.dat
+0x9205fa58	string	%s\segment\item%04lu.mpg
+0x9205fa74	string	%s\mpegav\avseq%02lu.dat
+0x9205fa90	string	%s\mpegav\music%02lu.dat
+0x9205fc74	string	%s\video_ts.vob
+0x9205fd28	string	PRIORITYBOOST
+0x9205ffbc	string	RESETSPEEDINPAUSE
+0x9205ffd0	string	ACTIONINPAUSE
+0x920600a8	string	LIBGPI: packet header error\n
+0x92060194	string	Output.pcm
+0x920601a0	string	Input.ac3
+0x92060390	string	USEDNM
+0x92060398	string	LIBMP2V: display initialization: cannot create display thread\n
+0x920603d8	string	MULTIMONITOR
+0x920603f0	string	CCENABLEMASK
+0x92060400	string	VRRESET
+0x92060408	string	ReconnectRecover
+0x9206041c	string	ReconnectTimer
+0x9206042c	string	CAPTURELATEST
+0x92060450	string	LIBMPEG2: line21 initialization: cannot create thread\n
+0x92060488	string	CGPIvframe::Release() Error!\n
+0x92060544	string	AUDIOSPEAKERPOS
+0x92060554	string	DynamicAudio
+0x92060564	string	VOLUME
+0x9206056c	string	MIXER
+0x92060574	string	SPPOSITION
+0x92060634	string	PHSCOR table index out of range
+0x92060657	string	aac3_dec: muting
+0x92060668	string	ac3_dec: repeating previous block
+0x9206068c	string	ac3_dec: block 0 & 1 exceed 5/8 of a frame
+0x920606b8	string	ac3_dec: end of block 5 exceeds 3/8 of a frame
+0x92068a68	string	AlwaysEvenOdd
+0x92068a78	string	INTERLACESAMPLE
+0x9206901c	string	xdcall: trying to reuse cpl leak terms in block 0
+0x92069050	string	xdcall: trying to reuse SNR offsets in block 0
+0x92069080	string	xdcall: chbwcod too high
+0x9206909c	string	xdcall: trying to reuse bit allocation info in block 0
+0x920690d4	string	xdcall: trying to reuse exponent strategy in block 0
+0x9206910c	string	xdcall: trying to reuse LFE exp strategy in block 0
+0x92069140	string	xdcall: trying to reuse CPL exp strategy in block 0
+0x92069174	string	xdcall: trying to reuse rematrix flags in block 0
+0x920691a8	string	xdcall: can't couple in 1+1 dual mono mode
+0x920691d4	string	xdcall: trying to reuse coupling strategy in block 0
+0x9206920c	string	bsi_d: additional bsi being skipped
+0x9206eee8	string	end of DRMThread\n
+0x9206eefc	string	(event)
+0x9206ef04	string	(refresh)
+0x9206ef10	string	VRND3D: setting APS=%lu, CGMS=%lu %s\n
+0x9206ef38	string	VRND3D: cannot create thread\n
+0x9206ef58	string	Setting APS to %lu\n
+0x9206ef6c	string	Setting CGMS to %lu\n
+0x9206ef8c	string	[XRENDER:%d] SubmitPacket  (%d) Error\n
+0x9206f808	string	expand_delta: delta bit alloc past end of array
+0x9206f950	string	D picture end_of_macroblock bit
+0x92079960	string	From isolation / Deliver me o Xbox - / Through the ethernet\nCopyright (c) Microsoft Corporation. All Rights Reserved.
+0x920799d8	string	Device is Xbox Compatible. Copyright (c) Microsoft Corporation. All Rights Reserved.
+0x92079c2f	string	)Visual C++ CRT: Not enough memory to complete call to strerror.
+0x92079df7	string	e_nextafter
+0x92079e50	string	floor
+0x92079fc8	unicode	(null)
+0x9207a148	string	Illegal byte sequence
+0x9207a160	string	Directory not empty
+0x9207a174	string	Function not implemented
+0x9207a190	string	No locks available
+0x9207a1a4	string	Filename too long
+0x9207a1b8	string	Resource deadlock avoided
+0x9207a1d4	string	Result too large
+0x9207a1e8	string	Domain error
+0x9207a1f8	string	Broken pipe
+0x9207a204	string	Too many links
+0x9207a214	string	Read-only file system
+0x9207a22c	string	Invalid seek
+0x9207a23c	string	No space left on device
+0x9207a254	string	File too large
+0x9207a264	string	Inappropriate I/O control operation
+0x9207a288	string	Too many open files
+0x9207a29c	string	Too many open files in system
+0x9207a2bc	string	Invalid argument
+0x9207a2d0	string	Is a directory
+0x9207a2e0	string	Not a directory
+0x9207a2f0	string	No such device
+0x9207a300	string	Improper link
+0x9207a310	string	File exists
+0x9207a31c	string	Resource device
+0x9207a32c	string	Unknown error
+0x9207a33c	string	Bad address
+0x9207a348	string	Permission denied
+0x9207a35c	string	Not enough space
+0x9207a370	string	Resource temporarily unavailable
+0x9207a394	string	No child processes
+0x9207a3a8	string	Bad file descriptor
+0x9207a3bc	string	Exec format error
+0x9207a3d0	string	Arg list too long
+0x9207a3e4	string	No such device or address
+0x9207a400	string	Input/output error
+0x9207a414	string	Interrupted function call
+0x9207a430	string	No such process
+0x9207a440	string	No such file or directory
+0x9207a45c	string	Operation not permitted
+0x9207a474	string	No error
+0x9207a660	string	exception: 
+0x9207a673	string	pstring too long
+0x9207a6f8	string	invalid string position
+0x9207a748	string	\SaveMeta.xbx
+0x9207a75b	string	\r\TitleMeta.xbx
+0x9207a770	string	\TitleImage.xbx
+0x9207a784	string	\SaveImage.xbx
+0x9207a798	string	\ContentMeta.xbx
+0x9207a7bc	unicode	TitleName
+0x9207a7ec	unicode	[Default]
+0x9207a808	unicode	NoCopy=1\r\n
+0x9207d2e0	unicode	XuiVideo
+0x9207d2f4	unicode	Pause
+0x9207d300	string	read error
+0x9207d30c	string	1.0.5
+0x9207d314	string	0123456789ABCDEF1.0.5
+0x9207d3c8	string	NULL row buffer
+0x9207d46c	string	Missing IHDR before sRGB
+0x9207d8ac	string	%x/1.00.%04u
+0x9207d8bc	string	Xbox Live Client/2.0.1888.0
+0x9207d8d8	string	%u.%u.%u.%u
+0x9207d8e4	string	Content-Type: xon/%x\r\n
+0x9207d908	string	HTTP/1.0
+0x9207d944	string	DefaultEffect NULL string
+0x9207d960	string	DefaultEffect NULL pod
+0x9207d978	string	NewRowSave
+0x9207df50	string	Init_Buffers_Etc
+0x9207df64	string	Neon-Init
+0x9207df70	string	ChangeResolution 2\n
+0x9207df84	string	ChangeResolution 1\n
+0x9207df9c	string	InitSlitScan
+0x9207e01c	string	InitString
+0x9207e028	string	String alloc fail
+0x9207e03c	string	Node alloc fail
+0x9207e050	string	*      **      *
+0x9207e064	string	*     *  *     *
+0x9207e078	string	*    *    *    *
+0x9207e08c	string	*   *      *   *
+0x9207e0a0	string	*  *        *  *
+0x9207e0b4	string	* *          * *
+0x9207e0c8	string	**            **
+0x9207e0dc	string	****************
+0x9207e0f0	string	*********     **
+0x9207e104	string	**********   **
+0x9207e114	string	   *************
+0x9207e128	string	     *****  *****
+0x9207e13c	string	       **    ***
+0x9207e150	string	        ****** 
+0x9207e160	string	         ***
+0x9207e170	string	**     ***
+0x9207e17c	string	  ****** 
+0x9207e188	string	***          ***
+0x9207e19c	string	**           **
+0x9207e1ac	string	***      *****
+0x9207e1bc	string	************
+0x9207e1cc	string	 ************
+0x9207e1dc	string	 ************* *
+0x9207e1f0	string	**        ******
+0x9207e204	string	*          * **
+0x9207e214	string	    **    ***
+0x9207e224	string	      *****
+0x9207e230	string	*  *  *  *  *  **  *   *  *
+0x9207e24c	string	* * * *  *  * * *  *  **  ***
+0x9207e26c	string	**   **  *  **  *  *      *
+0x9207e288	string	*     *  *  *   *   ****  ****
+0x9207e36c	string	InitParticley
+0x9207e67f	string	aGiles_InitAlloc
+0x9207e690	string	OsFree
+0x9207e6d8	string	22222222................................................22222222-
+0x9207e720	string	..2222...................2222....2222.....................2222..*
+0x9207e768	string	......2222............2222............2222............2222......*
+0x9207e7b0	string	..22......22......22......22......22......22......22......22....*
+0x9207e7f8	string	6666666666666666666666666666666666666666666666666666666666666666-
+0x9207e840	string	............................222222..............................-
+0x9207e888	string	0000000000000000000000000000000000000000000000000000000000000000*
+0x9207e8d4	string	InitPob 1
+0x9207e8e0	string	InitPob 0\n
+0x9207e8ec	string	020h*
+0x9207e8f4	string	3h4h5h6h3h5h3h6h*
+0x9207e908	string	8h1h*
+0x9207e910	string	2h3h*
+0x9207e918	string	0h1h*
+0x9207e920	string	1h2h3h4h5h6h7h8h0h*
+0x9207e934	string	3h5h2h6h7h8h0h1h*
+0x9207e948	string	0h1h2h3h1h0h*
+0x9207e958	string	8h0h*
+0x9207e960	string	7h0h*
+0x9207e968	string	6h0h*
+0x9207e970	string	5h0h*
+0x9207e978	string	4h0h*
+0x9207e980	string	3h0h*
+0x9207e988	string	2h0h*
+0x9207e990	string	1h0h*
+0x9207e998	string	0h4h*
+0x9207e9a0	string	0h2h4h6h*
+0x9207e9ac	string	4h2h4h3h5h4h*
+0x9207e9bc	string	5h3h8h4h2h7h1h3h*
+0x9207e9d0	string	0h4h8h*
+0x9207e9d8	string	0h8h*
+0x92080864	string	InitVLM modules fail
+0x9208087c	string	InitVLM cstack fail
+0x92080890	string	InitVLM NULL FX pointer
+0x920808a8	string	InitVLM inits NULL
+0x920808c4	string	InitSequencer fail\n
+0x920808d9	string	***.***...*...*
+0x920808ed	string	*..**..**..**..
+0x92080901	string	.*.*.*.*.*.****
+0x92080914	string	*.*.....****....
+0x92080930	string	psychedelia
+0x9208094c	string	FATAL ERROR NULL IN GRAB REGION\n
+0x92080970	string	PrepRegion CreateTexture
+0x9208098c	string	PrepRegion
+0x920809c0	string	EEP! Null tunnel!
+0x920809d4	string	init_tunnel
+0x92080a14	string	texture p-system init
+0x92082ad4	string	CreatePixelShader whinge.\nShader 
+0x9208eef4	string	GxInitTexObj CreateTexture
+0x9208ef30	string	Neon_GX_InitGXLib
+0x9208ef44	string	Neon_GX_InitGXLib VTX
+0x9208f047	string	(replicate
+0x9208f054	string	runprimitive PRIM_HELIX
+0x9208f06c	string	runprimitive PRIM_RIBBON\n
+0x9208f088	string	runprimitive PRIM_TAURUS\n
+0x9208f0a4	string	runprimitive PRIM_RING\n
+0x9208f0bc	string	runprimitive PRIM_DISK\n
+0x9208f0d4	string	RunPrimitive
+0x9208f0f4	unicode	file://%s:/%s
+0x9208f110	string	%s:\64_*.png
+0x9208f144	string	 Complete Object Locator'
+0x9208f160	string	 Class Hierarchy Descriptor'
+0x9208f180	string	 Base Class Array'
+0x9208f194	string	 Base Class Descriptor at (
+0x9208f1b0	string	 Type Descriptor'
+0x9208f1c4	string	`local static thread guard'
+0x9208f1e0	string	`managed vector copy constructor iterator'
+0x9208f20c	string	`vector vbase copy constructor iterator'
+0x9208f238	string	`vector copy constructor iterator'
+0x9208f25c	string	`dynamic atexit destructor'
+0x9208f278	string	`dynamic initializer'
+0x9208f290	string	`eh vector vbase copy constructor iterator'
+0x9208f2bc	string	`eh vector copy constructor iterator'
+0x9208f2e4	string	`managed vector destructor iterator'
+0x9208f30c	string	`managed vector constructor iterator'
+0x9208f334	string	`placement delete[] closure'
+0x9208f354	string	`placement delete closure'
+0x9208f370	string	`omni callsig'
+0x9208f380	string	 delete[]
+0x9208f38c	string	 new[]
+0x9208f394	string	`local vftable constructor closure'
+0x9208f3b8	string	`local vftable'
+0x9208f3c8	string	`RTTI
+0x9208f3d4	string	`udt returning'
+0x9208f3e4	string	`copy constructor closure'
+0x9208f400	string	`eh vector vbase constructor iterator'
+0x9208f428	string	`eh vector destructor iterator'
+0x9208f448	string	`eh vector constructor iterator'
+0x9208f46c	string	`virtual displacement map'
+0x9208f488	string	`vector vbase constructor iterator'
+0x9208f4ac	string	`vector destructor iterator'
+0x9208f4cc	string	`vector constructor iterator'
+0x9208f4ec	string	`scalar deleting destructor'
+0x9208f50c	string	`default constructor closure'
+0x9208f52c	string	`vector deleting destructor'
+0x9208f54c	string	`vbase destructor'
+0x9208f560	string	`string'
+0x9208f56c	string	`local static guard'
+0x9208f584	string	`typeof'
+0x9208f590	string	`vcall'
+0x9208f598	string	`vbtable'
+0x9208f5a4	string	`vftable'
+0x9208f61c	string	operator
+0x9208f640	string	 delete
+0x9208f650	string	__unaligned
+0x9208f65c	string	__restrict
+0x9208f668	string	__ptr64
+0x9208f670	string	__clrcall
+0x9208f67c	string	__fastcall
+0x9208f688	string	__thiscall
+0x9208f694	string	__stdcall
+0x9208f6a0	string	__pascal
+0x9208f6ac	string	__cdecl
+0x9208f6b4	string	__based(
+0x9208f98c	string	d:\xenonfre\flashrtm\core\private\xam\dash\main\src\obj\xbox\dash.pdb
+0x92238654	string	=`VUakYI9@
+0x92238694	string	=`2Y9@
+0x922386a4	string	=`YV9@
+0x922386b4	string	=`UY9@
+0x92264758	string	9c\rb9 
+0x922ec724	string	=@VU9
+0x92456c1e	string	abcdefghijklmnopqrstuvwxyz
+0x92456c3e	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x92456e29	string	abcdefghijklmnopqrstuvwxyz
+0x92456e49	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9245ec65	string	/msgserver/vetstring2.ashx
+0x9245ec80	string	/xbos/XeContentReferral.ashx
+0x9245ec9d	string	/xbos/XeContentRefreshLicense.ashx
+0x9245ecc0	string	/xpnfront/xpresence.srf
+0x9245ecd8	string	/msgserver/msgserver.ashx
+0x9245ecf2	string	/xpnfront/xmessaging.srf
+0x9245ed0b	string	/xmatch/xmatchhost2.ashx
+0x9245ed24	string	/xmatch/xmatchhostdelete2.ashx
+0x9245ed43	string	/xmatch/xmatchclient2.ashx
+0x9245ed6d	string	/xqry/findfromids.ashx
+0x9245ed84	string	/xqry/remove.ashx
+0x9245ed96	string	/xqry/removeid.ashx
+0x9245edaa	string	/xqry/search.ashx
+0x9245edbc	string	/xqry/select.ashx
+0x9245edce	string	/xqry/update.ashx
+0x9245ede0	string	/xqry/updateid.ashx
+0x9245edf4	string	/xpnfront/xteams.srf
+0x9245ee09	string	/xpnfront/xnotification.srf
+0x9245ee25	string	/xuacs/setusersettings2.ashx
+0x9245ee42	string	/stfd/resolvename.ashx
+0x9245ee59	string	/xsig/CheckRevocation.ashx
+0x9245ee74	string	/xsig/VerifySignature.ashx
+0x9245ee8f	string	/stfd/removefile.ashx
+0x9245eea5	string	/stfd/readfile.ashx
+0x9245eeb9	string	/stfd/enumeratefiles.ashx
+0x9245eed3	string	/stfd/writefile.ashx
+0x9245eee8	string	/msgserver/getstring2.ashx
+0x9245ef03	string	/xbos/AutoupdReferral.ashx
+0x9245ef1e	string	/fbserver/enumrecdreview.ashx
+0x9245ef3c	string	/fbserver/enumsentreview.ashx
+0x9245ef5a	string	/fbserver/getaggreview.ashx
+0x9245ef76	string	/fbserver/submitcomplaint.ashx
+0x9245ef95	string	/fbserver/submitreview.ashx
+0x9245efb1	string	/xuacs/AcceptTou.ashx
+0x9245efc7	string	/xuacs/XeAcknowledgeDowngrade.ashx
+0x9245efea	string	/xuacs/XeAddPaymentInstrument.ashx
+0x9245f00d	string	/xuacs/ChangeGamertag.ashx
+0x9245f028	string	/xuacs/XeChangeSubscriptionPaymentInstrument.ashx
+0x9245f05a	string	/xuacs/XeCreateLiveAccount.ashx
+0x9245f07a	string	/xuacs/XeGetAccountInfo.ashx
+0x9245f097	string	/xuacs/XeGetAccountInfoFromPassport.ashx
+0x9245f0c0	string	/xuacs/XeGetLinkedGamertag.ashx
+0x9245f0e0	string	/xuacs/XeGetPaymentInstruments.ashx
+0x9245f104	string	/xuacs/XeGetPointsBalance.ashx
+0x9245f123	string	/xuacs/GetPostalCode.ashx
+0x9245f13d	string	/xuacs/XeGetUserInfo.ashx
+0x9245f157	string	/xuacs/XeGetUserSubscriptionDetails.ashx
+0x9245f180	string	/xuacs/XeGetUserType.ashx
+0x9245f19a	string	/xuacs/XeLinkXbox1Account.ashx
+0x9245f1b9	string	/xuacs/XeMigrateXbox1User.ashx
+0x9245f1d8	string	/xuacs/XeMigrateXboxComUser.ashx
+0x9245f1f9	string	/xuacs/XeAccountQuery.ashx
+0x9245f214	string	/xuacs/XeRecoverAccount.ashx
+0x9245f231	string	/xuacs/XeRemovePaymentInstrument.ashx
+0x9245f257	string	/xuacs/XeReserveGamertag.ashx
+0x9245f275	string	/xuacs/XeSetAccountInfo.ashx
+0x9245f292	string	/xuacs/SetUserAccountStatus.ashx
+0x9245f2b3	string	/xuacs/XeTroubleshootAccount.ashx
+0x9245f2d5	string	/xuacs/XeUpdateParentalControls.ashx
+0x9245f2fa	string	/xuacs/XeUpdatePaymentInstrument.ashx
+0x9245f320	string	/xuacs/XeVerifyBillingInfo.ashx
+0x9245f340	string	/xbos/XeOfferingVerifyToken.ashx
+0x9245f361	string	/xuacs/XeVerifyParentCreditCard.ashx
+0x9245f386	string	/xbos/XeBannerGetList.ashx
+0x9245f3a1	string	/xbos/XeContentAvailable.ashx
+0x9245f3bf	string	/xbos/XeContentDetails.ashx
+0x9245f3db	string	/xbos/XeContentEnumerate.ashx
+0x9245f3f9	string	/xbos/XeEnumerateGenres.ashx
+0x9245f416	string	/xbos/XeEnumerateTitlesByFilter.ashx
+0x9245f43b	string	/xbos/XeGetTitleDetails.ashx
+0x9245f458	string	/xbos/XeContentUpdateAccessTimes.ashx
+0x9245f47e	string	/xbos/XeOfferPurchase.ashx
+0x9245f499	string	/xbos/XeOfferPurchaseGamertag.ashx
+0x9245f4bc	string	/xbos/XeSubscriptionDetails.ashx
+0x9245f4dd	string	/xbos/XeSubscriptionEnumerate.ashx
+0x9245f500	string	/XArb/Register.ashx
+0x9245f514	string	/XArb/ReportResult.ashx
+0x9245f52c	string	/XArb/TimeExtend.ashx
+0x9245f542	string	/xstats/xstatenumbyrank.ashx
+0x9245f55f	string	/xstats/xstatenumbyrating.ashx
+0x9245f57e	string	/xstats/xstatenumbyuser.ashx
+0x9245f59b	string	/xstats/statpost.ashx
+0x9245f5b1	string	/xstats/xstatread.ashx
+0x9245f5c8	string	/xstats/xstatsreset.ashx
+0x9245f5e1	string	/xuacs/XePassportChangePassword.ashx
+0x9245f606	string	/xuacs/XePassportCreate.ashx
+0x9245f623	string	/xuacs/XePassportGetEncryptedProxyParameters.ashx
+0x9245f655	string	/xuacs/XePassportGetMemberName.ashx
+0x9245f679	string	/xuacs/XePassportGetSecretQuestions.ashx
+0x9245f6a2	string	/xuacs/XePassportGetUserData.ashx
+0x9245f6c4	string	/xuacs/XePassportLogin.ashx
+0x9245f6e0	string	/xstats/cleartitle.ashx
+0x9245f6f8	string	/xstats/xachievementenum.ashx
+0x9245f716	string	/xstats/enumtitles.ashx
+0x9245f72e	string	/xstats/readsettings.ashx
+0x9245f748	string	/xstats/syncachievements.ashx
+0x9245f766	string	/xstats/syncsettings.ashx
+0x9245f780	string	/xstats/synctitles.ashx
+0x9245fd77	string	-/xedl/ProfileInfo/%d/CountryInfo.cib
+0x9245fdb0	string	/xedl/ProfileInfo/%d/CountryInfo.cib
+0x92460724	unicode	AsyncTaskManager0
+0x924717f1	string	afffffff
+0x92472598	string	.?AVlength_error@std@@
+0x924725b8	string	.?AVlogic_error@std@@
+0x924725d8	string	.?AVexception@std@@
+0x924725f4	string	.?AVout_of_range@std@@
+0x924b0030	string	dash.exe
+0x924bc69f	unicode	2400_WindowsMediaCenter.xur
+0x924bc6de	unicode	2403_SlowWiredConnection.xur
+0x924bc71f	unicode	2404_802bgWirelessNetwork.xur
+0x924bc762	unicode	2405_PCSoftwarePack.xur
+0x924bc799	unicode	2406_WelcomeSetupKey.xur
+0x924bc7d2	unicode	2407_WaitingScreen.xur
+0x924bc807	unicode	2410_AttemptingOldSoftware.xur
+0x924bc84c	unicode	2413_UnableToConnect.xur
+0x924bc885	unicode	Strings.xus
+0x924bc8a4	unicode	ico_MediaCenter.png
+0x924bc8d3	unicode	AcquiringNetworkSettings.xur
+0x924bc914	unicode	PcSoftwareError.xur
+0x924bc943	unicode	HomeNetworkConnectivityRequired.xur
+0x924bc992	unicode	LimitedNetworkConnectivity.xur
+0x924bc9d7	unicode	ReconfigureWireless.xur
+0x924bca0e	unicode	ja-jp\2400_WindowsMediaCenter.xus
+0x924bca59	unicode	ja-jp\2403_SlowWiredConnection.xus
+0x924bcaa6	unicode	ja-jp\2404_802bgWirelessNetwork.xus
+0x924bcaf5	unicode	ja-jp\2405_PCSoftwarePack.xus
+0x924bcb38	unicode	ja-jp\2406_WelcomeSetupKey.xus
+0x924bcb7d	unicode	ja-jp\2407_WaitingScreen.xus
+0x924bcbbe	unicode	ja-jp\2410_AttemptingOldSoftware.xus
+0x924bcc0f	unicode	ja-jp\2413_UnableToConnect.xus
+0x924bcc54	unicode	ja-jp\AcquiringNetworkSettings.xus
+0x924bcca1	unicode	ja-jp\HomeNetworkConnectivityRequired.xus
+0x924bccfc	unicode	ja-jp\LimitedNetworkConnectivity.xus
+0x924bcd4d	unicode	ja-jp\PcSoftwareError.xus
+0x924bcd88	unicode	ja-jp\ReconfigureWireless.xus
+0x924bcdcb	unicode	ja-jp\Strings.xus
+0x924bcdf6	unicode	zh-tw\2400_WindowsMediaCenter.xus
+0x924bce41	unicode	zh-tw\2403_SlowWiredConnection.xus
+0x924bce8e	unicode	zh-tw\2404_802bgWirelessNetwork.xus
+0x924bcedd	unicode	zh-tw\2405_PCSoftwarePack.xus
+0x924bcf20	unicode	zh-tw\2406_WelcomeSetupKey.xus
+0x924bcf65	unicode	zh-tw\2407_WaitingScreen.xus
+0x924bcfa6	unicode	zh-tw\2410_AttemptingOldSoftware.xus
+0x924bcff7	unicode	zh-tw\2413_UnableToConnect.xus
+0x924bd03c	unicode	zh-tw\AcquiringNetworkSettings.xus
+0x924bd089	unicode	zh-tw\HomeNetworkConnectivityRequired.xus
+0x924bd0e4	unicode	zh-tw\LimitedNetworkConnectivity.xus
+0x924bd135	unicode	zh-tw\PcSoftwareError.xus
+0x924bd170	unicode	zh-tw\ReconfigureWireless.xus
+0x924bd1b3	unicode	zh-tw\Strings.xus
+0x924bd1de	unicode	de-de\2400_WindowsMediaCenter.xus
+0x924bd229	unicode	de-de\2403_SlowWiredConnection.xus
+0x924bd276	unicode	de-de\2404_802bgWirelessNetwork.xus
+0x924bd2c5	unicode	de-de\2405_PCSoftwarePack.xus
+0x924bd308	unicode	de-de\2406_WelcomeSetupKey.xus
+0x924bd34d	unicode	de-de\2407_WaitingScreen.xus
+0x924bd38e	unicode	de-de\2410_AttemptingOldSoftware.xus
+0x924bd3df	unicode	de-de\2413_UnableToConnect.xus
+0x924bd424	unicode	de-de\AcquiringNetworkSettings.xus
+0x924bd471	unicode	de-de\HomeNetworkConnectivityRequired.xus
+0x924bd4cc	unicode	de-de\LimitedNetworkConnectivity.xus
+0x924bd51d	unicode	de-de\PcSoftwareError.xus
+0x924bd558	unicode	de-de\ReconfigureWireless.xus
+0x924bd59b	unicode	de-de\Strings.xus
+0x924bd5c6	unicode	es-es\2400_WindowsMediaCenter.xus
+0x924bd611	unicode	es-es\2403_SlowWiredConnection.xus
+0x924bd65e	unicode	es-es\2404_802bgWirelessNetwork.xus
+0x924bd6ad	unicode	es-es\2405_PCSoftwarePack.xus
+0x924bd6f0	unicode	es-es\2406_WelcomeSetupKey.xus
+0x924bd735	unicode	es-es\2407_WaitingScreen.xus
+0x924bd776	unicode	es-es\2410_AttemptingOldSoftware.xus
+0x924bd7c7	unicode	es-es\2413_UnableToConnect.xus
+0x924bd80c	unicode	es-es\AcquiringNetworkSettings.xus
+0x924bd859	unicode	es-es\HomeNetworkConnectivityRequired.xus
+0x924bd8b4	unicode	es-es\LimitedNetworkConnectivity.xus
+0x924bd905	unicode	es-es\PcSoftwareError.xus
+0x924bd940	unicode	es-es\ReconfigureWireless.xus
+0x924bd983	unicode	es-es\Strings.xus
+0x924bd9ae	unicode	fr-fr\2400_WindowsMediaCenter.xus
+0x924bd9f9	unicode	fr-fr\2403_SlowWiredConnection.xus
+0x924bda46	unicode	fr-fr\2404_802bgWirelessNetwork.xus
+0x924bda95	unicode	fr-fr\2405_PCSoftwarePack.xus
+0x924bdad8	unicode	fr-fr\2406_WelcomeSetupKey.xus
+0x924bdb1d	unicode	fr-fr\2407_WaitingScreen.xus
+0x924bdb5e	unicode	fr-fr\2410_AttemptingOldSoftware.xus
+0x924bdbaf	unicode	fr-fr\2413_UnableToConnect.xus
+0x924bdbf4	unicode	fr-fr\AcquiringNetworkSettings.xus
+0x924bdc41	unicode	fr-fr\HomeNetworkConnectivityRequired.xus
+0x924bdc9c	unicode	fr-fr\LimitedNetworkConnectivity.xus
+0x924bdced	unicode	fr-fr\PcSoftwareError.xus
+0x924bdd28	unicode	fr-fr\ReconfigureWireless.xus
+0x924bdd6b	unicode	fr-fr\Strings.xus
+0x924bdd96	unicode	it-it\2400_WindowsMediaCenter.xus
+0x924bdde1	unicode	it-it\2403_SlowWiredConnection.xus
+0x924bde2e	unicode	it-it\2404_802bgWirelessNetwork.xus
+0x924bde7d	unicode	it-it\2405_PCSoftwarePack.xus
+0x924bdec0	unicode	it-it\2406_WelcomeSetupKey.xus
+0x924bdf05	unicode	it-it\2407_WaitingScreen.xus
+0x924bdf46	unicode	it-it\2410_AttemptingOldSoftware.xus
+0x924bdf97	unicode	it-it\2413_UnableToConnect.xus
+0x924bdfdc	unicode	it-it\AcquiringNetworkSettings.xus
+0x924be029	unicode	it-it\HomeNetworkConnectivityRequired.xus
+0x924be084	unicode	it-it\LimitedNetworkConnectivity.xus
+0x924be0d5	unicode	it-it\PcSoftwareError.xus
+0x924be110	unicode	it-it\ReconfigureWireless.xus
+0x924be153	unicode	it-it\Strings.xus
+0x924be17e	unicode	ko-kr\2400_WindowsMediaCenter.xus
+0x924be1c9	unicode	ko-kr\2403_SlowWiredConnection.xus
+0x924be216	unicode	ko-kr\2404_802bgWirelessNetwork.xus
+0x924be265	unicode	ko-kr\2405_PCSoftwarePack.xus
+0x924be2a8	unicode	ko-kr\2406_WelcomeSetupKey.xus
+0x924be2ed	unicode	ko-kr\2407_WaitingScreen.xus
+0x924be32e	unicode	ko-kr\2410_AttemptingOldSoftware.xus
+0x924be37f	unicode	ko-kr\2413_UnableToConnect.xus
+0x924be3c4	unicode	ko-kr\AcquiringNetworkSettings.xus
+0x924be411	unicode	ko-kr\HomeNetworkConnectivityRequired.xus
+0x924be46c	unicode	ko-kr\LimitedNetworkConnectivity.xus
+0x924be4bd	unicode	ko-kr\PcSoftwareError.xus
+0x924be4f8	unicode	ko-kr\ReconfigureWireless.xus
+0x924be53b	unicode	ko-kr\Strings.xus
+0x924be566	unicode	pt-br\2400_WindowsMediaCenter.xus
+0x924be5b1	unicode	pt-br\2403_SlowWiredConnection.xus
+0x924be5fe	unicode	pt-br\2404_802bgWirelessNetwork.xus
+0x924be64d	unicode	pt-br\2405_PCSoftwarePack.xus
+0x924be690	unicode	pt-br\2406_WelcomeSetupKey.xus
+0x924be6d5	unicode	pt-br\2407_WaitingScreen.xus
+0x924be716	unicode	pt-br\2410_AttemptingOldSoftware.xus
+0x924be767	unicode	pt-br\2413_UnableToConnect.xus
+0x924be7ac	unicode	pt-br\AcquiringNetworkSettings.xus
+0x924be7f9	unicode	pt-br\HomeNetworkConnectivityRequired.xus
+0x924be854	unicode	pt-br\LimitedNetworkConnectivity.xus
+0x924be8a5	unicode	pt-br\PcSoftwareError.xus
+0x924be8e0	unicode	pt-br\ReconfigureWireless.xus
+0x924be970	string	lDATA
+0x924bfd35	string	lDATA
+0x924c0400	string	lDATA
+0x924c0a19	string	lDATA
+0x924c0ea5	string	lDATA
+0x924c1510	string	\nVECT
+0x924c151c	string	lDATA
+0x924c297a	string	lDATA
+0x924c39cc	string	lDATA
+0x924c404a	string	lDATA
+0x924c6313	unicode	 Windows Media Center PC
+0x924c8329	unicode	\rHerunterladen&"Windows Media Center"-PC wird gesucht
+0x924c8399	unicode	Netzwerkadresse wird abgefragt
+0x924ca197	unicode	Descargando+Buscando ordenador con Windows Media Center
+0x924ca231	unicode	n de red
+0x924cc0fb	unicode	chargement.Recherche d'un ordinateur Windows Media Center
+0x924cdfe9	unicode	Download in corso)Individuazione di Windows Media Center PC
+0x924ce065	unicode	Recupero dell'indirizzo di rete
+0x924d0c01	unicode	Fazendo download&Detectando PC com Windows Media Center
+0x924d0c93	unicode	o de rede
+0x924d0ca9	unicode	Processando
+0x924d0d1f	unicode	oobeLanguage.xur
+0x924d0d48	unicode	oobeProfileChoice.xur
+0x924d0d7b	unicode	oobeStorageDevice.xur
+0x924d0dae	unicode	oobeGamertile.xur
+0x924d0dd9	unicode	oobeWelcome.xur
+0x924d0e00	unicode	oobeProfileCreation.xur
+0x924d0e37	unicode	oobeStrings.xus
+0x924d0e5e	unicode	ja-jp\oobeGamertile.xus
+0x924d0e95	unicode	ja-jp\oobeLanguage.xus
+0x924d0eca	unicode	ja-jp\oobeProfileChoice.xus
+0x924d0f09	unicode	ja-jp\oobeProfileCreation.xus
+0x924d0f4c	unicode	ja-jp\oobeStorageDevice.xus
+0x924d0f8b	unicode	ja-jp\oobeStrings.xus
+0x924d0fbe	unicode	ja-jp\oobeWelcome.xus
+0x924d0ff1	unicode	zh-tw\oobeGamertile.xus
+0x924d1028	unicode	zh-tw\oobeLanguage.xus
+0x924d105d	unicode	zh-tw\oobeProfileChoice.xus
+0x924d109c	unicode	zh-tw\oobeProfileCreation.xus
+0x924d10df	unicode	zh-tw\oobeStorageDevice.xus
+0x924d111e	unicode	zh-tw\oobeStrings.xus
+0x924d1151	unicode	zh-tw\oobeWelcome.xus
+0x924d1184	unicode	de-de\oobeGamertile.xus
+0x924d11bb	unicode	de-de\oobeLanguage.xus
+0x924d11f0	unicode	de-de\oobeProfileChoice.xus
+0x924d122f	unicode	de-de\oobeProfileCreation.xus
+0x924d1272	unicode	de-de\oobeStorageDevice.xus
+0x924d12b1	unicode	de-de\oobeStrings.xus
+0x924d12e4	unicode	de-de\oobeWelcome.xus
+0x924d1317	unicode	es-es\oobeGamertile.xus
+0x924d134e	unicode	es-es\oobeLanguage.xus
+0x924d1383	unicode	es-es\oobeProfileChoice.xus
+0x924d13c2	unicode	es-es\oobeProfileCreation.xus
+0x924d1405	unicode	es-es\oobeStorageDevice.xus
+0x924d1444	unicode	es-es\oobeStrings.xus
+0x924d1477	unicode	es-es\oobeWelcome.xus
+0x924d14aa	unicode	fr-fr\oobeGamertile.xus
+0x924d14e1	unicode	fr-fr\oobeLanguage.xus
+0x924d1516	unicode	fr-fr\oobeProfileChoice.xus
+0x924d1555	unicode	fr-fr\oobeProfileCreation.xus
+0x924d1598	unicode	fr-fr\oobeStorageDevice.xus
+0x924d15d7	unicode	fr-fr\oobeStrings.xus
+0x924d160a	unicode	fr-fr\oobeWelcome.xus
+0x924d163d	unicode	it-it\oobeGamertile.xus
+0x924d1674	unicode	it-it\oobeLanguage.xus
+0x924d16a9	unicode	it-it\oobeProfileChoice.xus
+0x924d16e8	unicode	it-it\oobeProfileCreation.xus
+0x924d172b	unicode	it-it\oobeStorageDevice.xus
+0x924d176a	unicode	it-it\oobeStrings.xus
+0x924d179d	unicode	it-it\oobeWelcome.xus
+0x924d17d0	unicode	ko-kr\oobeGamertile.xus
+0x924d1807	unicode	ko-kr\oobeLanguage.xus
+0x924d183c	unicode	ko-kr\oobeProfileChoice.xus
+0x924d187b	unicode	ko-kr\oobeProfileCreation.xus
+0x924d18be	unicode	ko-kr\oobeStorageDevice.xus
+0x924d18fd	unicode	ko-kr\oobeStrings.xus
+0x924d1930	unicode	ko-kr\oobeWelcome.xus
+0x924d1963	unicode	pt-br\oobeGamertile.xus
+0x924d199a	unicode	pt-br\oobeLanguage.xus
+0x924d19cf	unicode	pt-br\oobeProfileChoice.xus
+0x924d1a0e	unicode	pt-br\oobeProfileCreation.xus
+0x924d1a51	unicode	pt-br\oobeStorageDevice.xus
+0x924d1a90	unicode	pt-br\oobeStrings.xus
+0x924d1b18	string	lDATA
+0x924d201d	string	 CUST
+0x924d2e1e	string	lDATA
+0x924d35fe	string	 CUST

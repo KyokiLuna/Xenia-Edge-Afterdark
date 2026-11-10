@@ -1,0 +1,941 @@
+va	data_type	text
+0x8a0006ac	string	bad allocation
+0x8a000800	unicode	ru-ru
+0x8a00080c	unicode	pl-pl
+0x8a000818	unicode	zh-chs
+0x8a000828	unicode	pt-br
+0x8a000834	unicode	zh-tw
+0x8a000840	unicode	ko-kr
+0x8a00084c	unicode	it-it
+0x8a000858	unicode	es-es
+0x8a000864	unicode	fr-fr
+0x8a000870	unicode	de-de
+0x8a00087c	unicode	ja-jp
+0x8a000958	unicode	section://%X,MEDIA#%s%sHostLoaderStrings.xus
+0x8a0009b4	string	HostLoader.dll
+0x8a0009ec	unicode	runtime\v3.0\
+0x8a000a08	unicode	RuntimeHost_CreateInstance
+0x8a000a40	unicode	RuntimeHost.xex
+0x8a000a60	unicode	runtime\v2.0\
+0x8a000ab4	unicode	NetCFUserMode.dll
+0x8a000b88	unicode	XuiCanvas
+0x8a000b9c	unicode	SplashScreenXuiMainScene
+0x8a000bd0	unicode	SplashScreenAbuseUrl
+0x8a000bfc	unicode	SplashScreenCommunityUrl
+0x8a000c30	unicode	SplashScreenAbuseText
+0x8a000c5c	unicode	SplashScreenIntroText
+0x8a000ca8	string	\SystemRoot
+0x8a000cb4	unicode	XuiAbuseURL
+0x8a000ccc	unicode	XuiCommunityURL
+0x8a000cec	unicode	XnaSplashAbuseText
+0x8a000d14	unicode	XnaSplashIntroText
+0x8a000d80	unicode	XnaCGSplash
+0x8a000d98	unicode	ConvectionUI
+0x8a000ddc	unicode	XenonCLatin.xtt
+0x8a000dfc	unicode	XenonCLatin.xttp1
+0x8a000e20	unicode	XenonCLatin.xttp2
+0x8a000e44	unicode	XenonJKLatin.xtt
+0x8a000e68	unicode	XenonJKLatin.xttp1
+0x8a000e90	unicode	XenonJKLatin.xttp2
+0x8a000f14	unicode	XNA_CGSplash.xur
+0x8a000f38	unicode	XNASkin.xur
+0x8a000f50	unicode	file://font:/
+0x8a000f6c	unicode	section://%X,MEDIA#
+0x8a000fac	unicode	XuiScene
+0x8a000fc0	unicode	TrialModeXuiMainScene
+0x8a000fec	unicode	ExpirationUnlockGameText
+0x8a001020	unicode	ExpirationExitGameText
+0x8a001050	unicode	ExpirationQuestionText
+0x8a001080	unicode	ExpirationIntroText
+0x8a0010a8	unicode	ExpirationBodyText
+0x8a0010dc	string	CommunityGamesTrialExpirationInSeconds
+0x8a001168	unicode	ExpirationSearchingForDownloads
+0x8a0011a8	unicode	Images
+0x8a0011b8	unicode	Text
+0x8a0011c4	unicode	XButtonTrigger
+0x8a0011e4	unicode	BButton
+0x8a0011f4	unicode	BButtonTrigger
+0x8a001214	unicode	XButton
+0x8a001224	unicode	QuestionText
+0x8a001240	unicode	MessageBodyText
+0x8a001260	unicode	TopTitleText
+0x8a00127c	unicode	PressEnd
+0x8a001290	unicode	Press
+0x8a0012ac	unicode	XnaCgTrialScene
+0x8a0012cc	unicode	ExpirationFailedQuery
+0x8a001320	unicode	XNA_TimeTrial.xur
+0x8a001344	unicode	XNA_TimeTrialLoRes.xur
+0x8a0013e0	unicode	InviteTitleViaPresenceString
+0x8a00141c	unicode	InviteTitleInvitedString
+0x8a001450	unicode	InviteWrongFrameworkVersionString
+0x8a001494	unicode	OKButtonTextString
+0x8a0014c0	unicode	InviteNotificationTimeoutString
+0x8a001500	unicode	InviteLookupErrorString
+0x8a001530	unicode	InviteTitleNotAvailable
+0x8a001560	unicode	InviteDownloadOkString
+0x8a001590	unicode	InviteDownloadCancelString
+0x8a0015c8	unicode	InviteDownloadTextString
+0x8a0015fc	string	bad allocation
+0x8a00160c	string	XNAGSVEN525D80FFEC8343888360BD0219F664B7
+0x8a001638	string	bad allocation
+0x8a001670	unicode	uot;
+0x8a00167e	unicode	apos;
+0x8a0019c0	string	runtime error 
+0x8a0019d4	string	TLOSS error\n
+0x8a0019e4	string	SING error\n
+0x8a0019f0	string	DOMAIN error\n
+0x8a001a00	string	R6034\nAn application has made an attempt to load the C runtime library incorrectly.\nPlease contact the application's support team for more information.\n
+0x8a001aa0	string	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x8a001b98	string	R6032\n- not enough space for locale information\n
+0x8a001bd0	string	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x8a001c34	string	R6030\n- CRT not initialized\n
+0x8a001c54	string	R6028\n- unable to initialize heap\n
+0x8a001c78	string	R6027\n- not enough space for lowio initialization\n
+0x8a001cac	string	R6026\n- not enough space for stdio initialization\n
+0x8a001ce0	string	R6025\n- pure virtual function call\n
+0x8a001d04	string	R6024\n- not enough space for _onexit/atexit table\n
+0x8a001d38	string	R6019\n- unable to open console device\n
+0x8a001d60	string	R6018\n- unexpected heap error\n
+0x8a001d80	string	R6017\n- unexpected multithread lock error\n
+0x8a001dac	string	R6016\n- not enough space for thread data\n
+0x8a001dd8	string	\nThis application has requested the Runtime to terminate it in an unusual way.\nPlease contact the application's support team for more information.\n
+0x8a001e6c	string	R6009\n- not enough space for environment\n
+0x8a001e98	string	R6008\n- not enough space for arguments\n
+0x8a001ec0	string	R6002\n- floating point support not loaded\n
+0x8a001f00	string	e+000
+0x8a002274	string	HH:mm:ss
+0x8a002280	string	dddd, MMMM dd, yyyy
+0x8a002294	string	MM/dd/yy
+0x8a0022a8	string	December
+0x8a0022b4	string	November
+0x8a0022c0	string	October
+0x8a0022c8	string	September
+0x8a0022d4	string	August
+0x8a0022ec	string	April
+0x8a0022f4	string	March
+0x8a0022fc	string	February
+0x8a002308	string	January
+0x8a002340	string	Saturday
+0x8a00234c	string	Friday
+0x8a002354	string	Thursday
+0x8a002360	string	Wednesday
+0x8a00236c	string	Tuesday
+0x8a002374	string	Monday
+0x8a00237c	string	Sunday
+0x8a002bd4	string	 Complete Object Locator'
+0x8a002bf0	string	 Class Hierarchy Descriptor'
+0x8a002c10	string	 Base Class Array'
+0x8a002c24	string	 Base Class Descriptor at (
+0x8a002c40	string	 Type Descriptor'
+0x8a002c54	string	`local static thread guard'
+0x8a002c70	string	`managed vector copy constructor iterator'
+0x8a002c9c	string	`vector vbase copy constructor iterator'
+0x8a002cc8	string	`vector copy constructor iterator'
+0x8a002cec	string	`dynamic atexit destructor for '
+0x8a002d10	string	`dynamic initializer for '
+0x8a002d2c	string	`eh vector vbase copy constructor iterator'
+0x8a002d58	string	`eh vector copy constructor iterator'
+0x8a002d80	string	`managed vector destructor iterator'
+0x8a002da8	string	`managed vector constructor iterator'
+0x8a002dd0	string	`placement delete[] closure'
+0x8a002df0	string	`placement delete closure'
+0x8a002e0c	string	`omni callsig'
+0x8a002e1c	string	 delete[]
+0x8a002e28	string	 new[]
+0x8a002e30	string	`local vftable constructor closure'
+0x8a002e54	string	`local vftable'
+0x8a002e64	string	`RTTI
+0x8a002e70	string	`udt returning'
+0x8a002e80	string	`copy constructor closure'
+0x8a002e9c	string	`eh vector vbase constructor iterator'
+0x8a002ec4	string	`eh vector destructor iterator'
+0x8a002ee4	string	`eh vector constructor iterator'
+0x8a002f08	string	`virtual displacement map'
+0x8a002f24	string	`vector vbase constructor iterator'
+0x8a002f48	string	`vector destructor iterator'
+0x8a002f68	string	`vector constructor iterator'
+0x8a002f88	string	`scalar deleting destructor'
+0x8a002fa8	string	`default constructor closure'
+0x8a002fc8	string	`vector deleting destructor'
+0x8a002fe8	string	`vbase destructor'
+0x8a002ffc	string	`string'
+0x8a003008	string	`local static guard'
+0x8a003020	string	`typeof'
+0x8a00302c	string	`vcall'
+0x8a003034	string	`vbtable'
+0x8a003040	string	`vftable'
+0x8a0030c8	string	operator
+0x8a0030f0	string	 delete
+0x8a003100	string	__unaligned
+0x8a00310c	string	__restrict
+0x8a003118	string	__ptr64
+0x8a003120	string	__clrcall
+0x8a00312c	string	__fastcall
+0x8a003138	string	__thiscall
+0x8a003144	string	__stdcall
+0x8a003150	string	__pascal
+0x8a00315c	string	__cdecl
+0x8a003164	string	__based(
+0x8a003348	string	SunMonTueWedThuFriSat
+0x8a003360	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x8a003740	string	VGT_DEBUG
+0x8a00374c	string	PA_SU_DEBUG
+0x8a003758	string	PA_SC_DEBUG
+0x8a003764	string	RBBM DEBUG
+0x8a003770	string	CP DEBUG
+0x8a00377c	string	PTR_BUFF_STATUS 0xAc24
+0x8a003794	string	PIX_TB_STATUS 0x9c24
+0x8a0037ac	string	VTX_TB_STATUS 0x8C24
+0x8a0037c4	string	RB_DEBUG_0
+0x8a0037d0	string	TPC_CNTL_STATUS
+0x8a0037e0	string	TP3_CNTL_STATUS
+0x8a0037f0	string	TP2_CNTL_STATUS
+0x8a003800	string	TP1_CNTL_STATUS
+0x8a003810	string	TP0_CNTL_STATUS
+0x8a003820	string	TC_CNTL_STATUS
+0x8a003830	string	PA_SU_CNTL_STATUS
+0x8a003844	string	PA_SC_CNTL_STATUS
+0x8a003858	string	PA_CL_CNTL_STATUS
+0x8a00386c	string	VC_CNTL_STATUS
+0x8a00387c	string	VGT_CNTL_STATUS
+0x8a00388c	string	CP_MEQ_STAT
+0x8a003898	string	CP_MEQ_AVAIL
+0x8a0038a8	string	CP_CSQ_IB2_STAT
+0x8a0038b8	string	CP_CSQ_IB1_STAT
+0x8a0038c8	string	CP_CSQ_RB_STAT
+0x8a0038d8	string	CP_CSQ_AVAIL
+0x8a0038e8	string	CP_DEBUG
+0x8a0038f4	string	CP_STAT
+0x8a0038fc	string	CP_IB2_BUFSZ
+0x8a00390c	string	CP_IB2_BASE
+0x8a003918	string	CP_IB1_BUFSZ
+0x8a003928	string	CP_IB1_BASE
+0x8a00394c	string	CP_RB_BASE
+0x8a003988	string	%s 0x%02x: 
+0x8a003998	string	%08x 
+0x8a0039a0	string	RB_SIDEBAND_DATA[0]
+0x8a0039b4	string	   %25s: 0x%08x\n
+0x8a0039cc	string	CPU Synchronization
+0x8a0039e4	string	   %25s: 0x%08x (
+0x8a0039f8	string	RBBM_STATUS
+0x8a003a04	string	crashdump.pix2
+0x8a003a18	string	    command buffers with the D3DCREATECB_DEBUG_ALLOCATOR flag set and\n    build using instrumented or debug versions of the D3D library.\n
+0x8a003aa8	string	\n    A likely potential reason for the hang is a bad growable command\n    allocator.  To rule out that possibility, try creating all growable\n
+0x8a003b38	string	        0x%x 0x%x\n
+0x8a003b50	string	    Could the contents have become corrupted?  The list of indirect\n    buffer physical addresses and dword counts are as follows:\n
+0x8a003bd8	string	    It was a growable command buffer with its D3DALLOCATECALLBACK routine\n    at address 0x%x and a callback context of 0x%x.\n
+0x8a003c58	string	\n  o The GPU appears to have hung while executing the command buffer\n    represented by the D3DCommandBuffer structure at address 0x%x.\n
+0x8a003ce8	string	\nThe GPU state doesn't match any recognized hangs.  Please send a repro\nscenario to gameds@microsoft.com so that we can supply a workaround.\n
+0x8a003d78	string	\nIf your hang didn't occur for the above reason, please send a repro\nscenario to gameds@microsoft.com so that we can supply a workaround.\n
+0x8a003e08	string	   1) allocate memory for the base level, and point BaseAddress to it, or\n   2) set BaseAddress equal to MipAddress, until you have allocated memory\n   for the base texture level.\n
+0x8a003ec0	string	   If you are setting a texture's BaseAddress to 0 because you have not yet\n   loaded the base level of the texture, you can work around this in two ways:\n
+0x8a003f60	string	\nNOTE: The hang may have occurred because multiple texture constants had\n   unique MipAddress fields, but shared a common BaseAddress field (usually 0).\n
+0x8a003ffc	string	    a stack trace may point to the culprit.\n
+0x8a004030	string	    non-debug build is being used and a resource is being locked while\n    in a tiling, Z-pass or XPS bracket.  Since this is likely a software hang,\n
+0x8a0040c8	string	\nNOTE: The GPU appears to be running fine so the hang most likely occurred\n    because of a software problem.  Some possible causes are that a\n
+0x8a004158	string	    If you hit this hang more than once we recommend using\n    D3DCREATE_CLIPPER_MODE_1 to implement a safe workaround which\n    comes at a slight clipper performance cost.\n
+0x8a004208	string	\nNOTE: The hang may have occurred because of a known hardware bug\n    in the clipper.  The bug is timing dependent and very rare.\n
+0x8a004290	string	    on a draw call doesn't properly match the primitive type (e.g.,\n    by calling DrawVertices using D3DPT_TRILIST with a vertex\n    count of 4).\n
+0x8a004328	string	\nNOTE: The hang may have occurred because a partial primitive was\n    rendered.  A partial primitive occurs when the vertex count\n
+0x8a0043b0	string	It appears that there is a deadlock on an asynchronous resources block.\nThe D3DASYNCBLOCK involved hasn't been signaled via the\nSignalAsyncResources API.\n\n
+0x8a004450	string	It appears that there is a deadlock on an asynchronous resources block.\nThe D3DASYNCBLOCK involved (0x%016I64x) hasn't been signaled via the\nSignalAsyncResources API.\n\n
+0x8a004500	string	It appears that a callback routine invoked by InsertCallback never\nreturned.  The callback routine is at address 0x%x and was passed\na context value of 0x%x.\n\n
+0x8a0045a0	string	CPU fence 0x%x, GPU fence 0x%x\n\n
+0x8a0045c4	string	Device 0x%x, Snooped 0x%x, NonSnooped 0x%x,\n
+0x8a0045f4	string	D3D version %i.%i %s, kernel %i, frame %i,\n
+0x8a004620	string	retail
+0x8a004628	string	ERR[D3D]: The GPU is hung!\n\n
+0x8a004648	string	Breaking into the debugger.  The GPU is hung and can't be recovered\nwithout doing a cold boot.\n
+0x8a0046a8	string	\nERR[D3D]: Try reproducing the hang with the debug or instrumented\n          versions of D3D (D3D9D.LIB or D3D9I.LIB) to capture a\n          crash-dump PIX file that can be sent to Xbox developer\n          support.\n\n
+0x8a004788	string	+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n
+0x8a005878	string	PIX!NO
+0x8a005912	string	33e:\xbperfview.cap
+0x8a007788	string	PIX!OK
+0x8a007790	string	{EndCapture}
+0x8a0077a0	string	{BeginCapture}
+0x8a0077b0	string	{EndCaptureFileCreation}
+0x8a0077cc	string	{BeginCaptureFileCreation}
+0x8a0077e8	string	{LimitCaptureSize}
+0x8a0077fc	string	{Version}
+0x8a007808	string	{Disconnect}
+0x8a007818	string	{Connect}
+0x8a007840	string	PIX!{CaptureEnded}
+0x8a00785c	string	%s:\%s
+0x8a007864	string	xbmovie
+0x8a00786c	string	%s 0x%08X
+0x8a007878	string	PIX!{CaptureFileCreationEnded}
+0x8a00a39e	unicode	FXuiElement
+0x8a00a3b8	unicode	XuiText
+0x8a00a3c8	unicode	XuiLabel
+0x8a00a3dc	unicode	XuiControl
+0x8a00a410	unicode	XuiFigure
+0x8a00a424	unicode	XuiVisual
+0x8a00a438	unicode	XuiButton
+0x8a00a44c	unicode	PressKey
+0x8a00a460	unicode	XuiNavButton
+0x8a00a47c	unicode	XuiBackButton
+0x8a00a498	unicode	XuiCheckbox
+0x8a00a4b0	unicode	XuiRadioButton
+0x8a00a4d0	unicode	XuiRadioGroup
+0x8a00a4ec	unicode	XuiTextPresenter
+0x8a00a510	unicode	XuiGroup
+0x8a00a524	unicode	XuiSound
+0x8a00a538	unicode	XuiTransition
+0x8a00a554	unicode	XuiListItem
+0x8a00a56c	unicode	XuiScrollEnd
+0x8a00a588	unicode	XuiScrollBar
+0x8a00a5a4	unicode	XuiList
+0x8a00a5b4	unicode	XuiCommonList
+0x8a00a5d0	unicode	XuiComboBox
+0x8a00a5e8	unicode	XuiComboBoxList
+0x8a00a608	unicode	XuiProgressBar
+0x8a00a628	unicode	XuiSlider
+0x8a00a640	unicode	XuiEdit
+0x8a00a650	unicode	XuiCaret
+0x8a00a664	unicode	XuiMessageBox
+0x8a00a680	unicode	XuiImagePresenter
+0x8a00a6a4	unicode	XuiImage
+0x8a00a6b8	unicode	XuiTabScene
+0x8a00a6d0	unicode	XuiNineGrid
+0x8a00a6e8	unicode	XuiEffect
+0x8a00a6fc	unicode	XuiTextureEffect
+0x8a00a720	unicode	XuiGrayscaleEffect
+0x8a00a748	unicode	XuiRecolorEffect
+0x8a00a76c	unicode	XuiBrightPassEffect
+0x8a00a794	unicode	XuiEdgeEffect
+0x8a00a7b0	unicode	XuiHVBlurEffect
+0x8a00a7d0	unicode	XuiHBlurEffect
+0x8a00a7f0	unicode	XuiVBlurEffect
+0x8a00a82c	unicode	MaxVisibleVertItems
+0x8a00a854	unicode	ComboBoxStyle
+0x8a00a870	unicode	BrushFlags
+0x8a00a888	unicode	DataAssociation
+0x8a00a8a8	unicode	SizeMode
+0x8a00a8bc	unicode	GrayAmount
+0x8a00a8d4	unicode	BlurAmount
+0x8a00a8ec	unicode	Brightness
+0x8a00a904	unicode	false
+0x8a00a998	unicode	StrokeColor
+0x8a00a9b0	unicode	StrokeWidth
+0x8a00a9c8	unicode	StopPos
+0x8a00a9d8	unicode	StopColor
+0x8a00a9ec	unicode	NumStops
+0x8a00aa00	unicode	Radial
+0x8a00aa2c	unicode	TransformVersion
+0x8a00aa50	unicode	WrapY
+0x8a00aa68	unicode	Rotation
+0x8a00aa7c	unicode	Scale
+0x8a00aa88	unicode	Translation
+0x8a00aaa0	unicode	Gradient
+0x8a00aab4	unicode	TextureFileName
+0x8a00aad4	unicode	FillColor
+0x8a00aae8	unicode	FillType
+0x8a00aafc	unicode	Points
+0x8a00ab0c	unicode	Closed
+0x8a00ab1c	unicode	Fill
+0x8a00ab28	unicode	Stroke
+0x8a00ab44	unicode	Direction
+0x8a00ab58	unicode	MinThumbSize
+0x8a00ab74	unicode	DstBlendFactor
+0x8a00ab94	unicode	SrcBlendFactor
+0x8a00abb4	unicode	ColorFactor
+0x8a00abcc	unicode	Threshold
+0x8a00abe0	unicode	LineSpacingAdjust
+0x8a00ac04	unicode	TextStyle
+0x8a00ac24	unicode	PointSize
+0x8a00ac38	unicode	DropShadowColor
+0x8a00ac58	unicode	TextColor
+0x8a00ac6c	unicode	IgnorePresses
+0x8a00ac88	unicode	InterruptTransitions
+0x8a00acb4	unicode	TransBackTo
+0x8a00accc	unicode	TransBackFrom
+0x8a00ace8	unicode	TransTo
+0x8a00acf8	unicode	TransFrom
+0x8a00ad0c	unicode	DefaultFocus
+0x8a00ad28	unicode	DestTransIndex
+0x8a00ad48	unicode	SrcTransIndex
+0x8a00ad64	unicode	StayVisible
+0x8a00ad7c	unicode	PressPath
+0x8a00ad90	unicode	Volume
+0x8a00ada0	unicode	Finish
+0x8a00adbc	unicode	State
+0x8a00adc8	unicode	SmoothScrollAcceleration
+0x8a00adfc	unicode	SmoothScrollMaxSpeed
+0x8a00ae28	unicode	SmoothScrollBaseSpeed
+0x8a00ae54	unicode	SmoothScroll
+0x8a00ae70	unicode	InterItemSpacing
+0x8a00ae94	unicode	KeepSizeUnfocused
+0x8a00aeb8	unicode	SelectedSize
+0x8a00aed4	unicode	Checkable
+0x8a00aee8	unicode	Layout
+0x8a00af04	unicode	ItemsNavPath
+0x8a00af20	unicode	ItemsImage
+0x8a00af38	unicode	ItemsText
+0x8a00af4c	unicode	Value
+0x8a00af58	unicode	RangeMax
+0x8a00af6c	unicode	RangeMin
+0x8a00af80	unicode	AccelTime
+0x8a00af94	unicode	AccelInc
+0x8a00afa8	unicode	Vertical
+0x8a00afc8	unicode	Multiline
+0x8a00afdc	unicode	ReadOnly
+0x8a00aff0	unicode	PasswordChar
+0x8a00b00c	unicode	AllowedChars
+0x8a00b028	unicode	TextLimit
+0x8a00b03c	unicode	ImagePath
+0x8a00b050	unicode	DefaultTab
+0x8a00b068	unicode	NoAutoHide
+0x8a00b080	unicode	VerticalTabs
+0x8a00b09c	unicode	UserInterrupt
+0x8a00b0b8	unicode	TabCount
+0x8a00b0cc	unicode	NoCenter
+0x8a00b0e0	unicode	BottomOffset
+0x8a00b0fc	unicode	RightOffset
+0x8a00b114	unicode	TopOffset
+0x8a00b128	unicode	LeftOffset
+0x8a00b148	unicode	DisableFocusRecursion
+0x8a00b174	unicode	EnableEffects
+0x8a00b190	unicode	ClipChildren
+0x8a00b1ac	unicode	ColorWriteFlags
+0x8a00b1cc	unicode	DesignTime
+0x8a00b1e4	unicode	DisableTimelineRecursion
+0x8a00b218	unicode	BlendMode
+0x8a00b238	unicode	Pivot
+0x8a00b244	unicode	Anchor
+0x8a00b254	unicode	Opacity
+0x8a00b264	unicode	Position
+0x8a00b278	unicode	Height
+0x8a00b288	unicode	Width
+0x8a00b294	unicode	NavTabBackward
+0x8a00b2b4	unicode	NavTabForward
+0x8a00b2ec	unicode	NavRight
+0x8a00b310	unicode	UnfocusedInput
+0x8a00b330	unicode	Enabled
+0x8a00b340	unicode	Visual
+0x8a00b350	unicode	ClassOverride
+0x8a00b36c	unicode	EndKillFocus
+0x8a00b388	unicode	EndPressDisable
+0x8a00b3a8	unicode	PressDisable
+0x8a00b3c4	unicode	EndInitFocusCheckDisable
+0x8a00b3f8	unicode	InitFocusCheckDisable
+0x8a00b424	unicode	EndInitFocusCheck
+0x8a00b448	unicode	InitFocusCheck
+0x8a00b468	unicode	EndInitFocusDisable
+0x8a00b490	unicode	InitFocusDisable
+0x8a00b4b4	unicode	EndInitFocus
+0x8a00b4d0	unicode	InitFocus
+0x8a00b4e4	unicode	EndScrollMoreDisable
+0x8a00b510	unicode	ScrollMoreDisable
+0x8a00b534	unicode	EndScrolling
+0x8a00b550	unicode	Scrolling
+0x8a00b564	unicode	EndScrollMore
+0x8a00b580	unicode	ScrollMore
+0x8a00b598	unicode	EndNormalSelCheckDisable
+0x8a00b5cc	unicode	NormalSelCheckDisable
+0x8a00b5f8	unicode	EndNormalSelDisable
+0x8a00b620	unicode	NormalSelDisable
+0x8a00b644	unicode	EndNormalSelCheck
+0x8a00b668	unicode	NormalSelCheck
+0x8a00b688	unicode	EndNormalSel
+0x8a00b6a4	unicode	NormalSel
+0x8a00b6b8	unicode	EndFocusCheckDisable
+0x8a00b6e4	unicode	FocusCheckDisable
+0x8a00b708	unicode	EndNormalCheckDisable
+0x8a00b734	unicode	NormalCheckDisable
+0x8a00b75c	unicode	EndFocusCheck
+0x8a00b778	unicode	FocusCheck
+0x8a00b790	unicode	EndNormalCheck
+0x8a00b7b0	unicode	NormalCheck
+0x8a00b7c8	unicode	EndNormalPress
+0x8a00b7e8	unicode	NormalPress
+0x8a00b800	unicode	EndPress
+0x8a00b814	unicode	EndFocusDisable
+0x8a00b834	unicode	FocusDisable
+0x8a00b850	unicode	EndNormalDisable
+0x8a00b874	unicode	NormalDisable
+0x8a00b890	unicode	KillFocus
+0x8a00b8a4	unicode	EndFocus
+0x8a00b8b8	unicode	Focus
+0x8a00b8c4	unicode	EndNormal
+0x8a00b8d8	unicode	Normal
+0x8a00bab0	unicode	XuiSoundXAudio
+0x8a00bae0	unicode	File
+0x8a00bb28	unicode	[element][default]|MessageText|XuiEdit;[element][default]|Button0|XuiButton;[element]|Button1|XuiButton;[element]|Button2|XuiButton;[element]|Button3|XuiButton;[element]|Button4|XuiButton;
+0x8a00bccc	unicode	SliderThumb
+0x8a00bce4	unicode	ScrollDown
+0x8a00bcfc	unicode	ScrollUp
+0x8a00bd10	unicode	ScrollRight
+0x8a00bd28	unicode	ScrollLeft
+0x8a00bd40	unicode	Caret
+0x8a00bd54	unicode	Button
+0x8a00bd78	unicode	%uTo%u
+0x8a00bd88	unicode	%uTo1
+0x8a00bda0	unicode	%uTo%uEnd
+0x8a00bdb4	unicode	2To1End
+0x8a00bdc4	unicode	ComboBoxList
+0x8a00bde0	unicode	ComboBoxDrop
+0x8a00bdfc	unicode	ComboBoxValue
+0x8a00be24	unicode	ScrollBarThumb
+0x8a00be44	unicode	ScrollBarBody
+0x8a00be60	unicode	ProgressBody
+0x8a00be7c	unicode	ScrollMax
+0x8a00be90	unicode	ScrollMin
+0x8a00bea4	unicode	SliderBody
+0x8a00bef0	unicode	EndTransTo
+0x8a00bf08	unicode	EndTransFrom
+0x8a00bf24	unicode	EndTransBackTo
+0x8a00bf44	unicode	EndTransBackFrom
+0x8a00bf68	unicode	(unnamed)
+0x8a00bf7c	unicode	ListWatermark
+0x8a00bf98	unicode	ListItemGroup
+0x8a00c008	unicode	%s://%s
+0x8a00c018	unicode	section
+0x8a00c028	unicode	memory
+0x8a00c080	unicode	0x%02x%02x%02x%02x
+0x8a00c118	unicode	file
+0x8a00c21c	string	InvViewport
+0x8a00c238	string	LocalToTexTransform
+0x8a00c24c	string	UVTrans
+0x8a00c264	string	WorldViewProj
+0x8a00c460	string	InvViewport
+0x8a00c47c	string	ShadowOffset
+0x8a00c49c	string	WorldViewProj
+0x8a00c61c	string	ColorFactor
+0x8a00c638	string	SolidColor
+0x8a00c70c	string	ColorFactor
+0x8a00c728	string	TextureSampler
+0x8a00c81c	string	ColorFactor
+0x8a00c838	string	TextureSampler
+0x8a00c9d0	string	ColorConvertMatrix
+0x8a00c9f4	string	ColorFactor
+0x8a00ca10	string	SolidColor
+0x8a00cb90	string	ColorConvertMatrix
+0x8a00cbb4	string	ColorFactor
+0x8a00cbd0	string	TextureSampler
+0x8a00cd70	string	ColorConvertMatrix
+0x8a00cd94	string	ColorFactor
+0x8a00cdb0	string	TextureSampler
+0x8a00cf64	string	ColorFactor
+0x8a00cf80	string	TextureSampler
+0x8a00d090	string	ColorFactor
+0x8a00d0ac	string	ShadowColor
+0x8a00d0b8	string	TextureSampler
+0x8a00d2a8	string	ColorConvertMatrix
+0x8a00d2cc	string	ColorFactor
+0x8a00d2e8	string	TextureSampler
+0x8a00d494	string	ColorConvertMatrix
+0x8a00d4b8	string	ColorFactor
+0x8a00d4d4	string	ShadowColor
+0x8a00d4e0	string	TextureSampler
+0x8a00dba0	string	InvViewport
+0x8a00dd84	string	InvViewport
+0x8a00dda0	string	LocalToTexTransform
+0x8a00e010	string	float4(1,min(src.a,1-dest.a),min(src.a,1-dest.a),min(src.a,1-dest.a))
+0x8a00e058	string	float4(1-dest.r, 1-dest.g, 1-dest.b, 1-dest.a)
+0x8a00e090	string	1-dest.a
+0x8a00e09c	string	dest.a
+0x8a00e0a4	string	1-src.a
+0x8a00e0ac	string	src.a
+0x8a00e0b4	string	float4(1-src.r, 1-src.g, 1-src.b, 1-src.a)
+0x8a00e0f8	string	ps_2_0
+0x8a00e100	string	vs_2_0
+0x8a00e114	string	// num coords/texinstr/alu/const : %d / %d / %d / %d\n
+0x8a00e14c	string	    return dest;\n}\n
+0x8a00e160	string	    // Edge Detection\n    src = tex2D(TextureSampler[%d], Input.uvPosition[%d]);\n    dest += (abs(src - tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[%d].xy)) - 0.5f) * 1.2 + 0.5f;\n    dest += (abs(src - tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[%d].zw)) - 0.5f) * 1.2 + 0.5f;\n    dest += (abs(src - tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[%d].xy)) - 0.5f) * 1.2 + 0.5f;\n    dest += (abs(src - tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[%d].zw)) - 0.5f) * 1.2 + 0.5f;\n    dest = saturate(dot(float3(0.2125f, 0.7154f, 0.0721f), dest) * 5);\n    dest.a = src.r;\n\n
+0x8a00e3c8	string	    // Texture Sample\n    dest = tex2D(TextureSampler[0], Input.uvPosition[%d])*Param[%d];\n\n
+0x8a00e428	string	    // Texture Sample\n    src  = tex2D(TextureSampler[%d], Input.uvPosition[%d])*Param[%d];\n    dest = src*(%s) + dest*(%s);\n\n
+0x8a00e4a8	string	    // Texture Sample\n    src  = tex2D(TextureSampler[0], Input.uvPosition[%d])*Param[%d];\n    dest = src*(%s) + dest*(%s);\n\n
+0x8a00e528	string	    // Texture Sample\n    dest = tex2D(TextureSampler[%d], Input.uvPosition[%d])*Param[%d];\n\n
+0x8a00e588	string	    // Texture Sample\n    dest = tex2D(TextureSampler[1], Input.uvPosition[1]);\n    src  = tex2D(TextureSampler[%d], Input.uvPosition[%d])*Param[%d];\n    dest = src*(%s) + dest*(%s);\n\n
+0x8a00e648	string	    // %s Gaussian Blur\n    for (int i=0; i<%d; ++i)\n    {\n        dest += Param[i].w * tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[i].xy);\n    }\n\n
+0x8a00e6e8	string	Horizontal
+0x8a00e6f4	string	Vertical
+0x8a00e700	string	    dest = tex2D(TextureSampler[0], Input.uvPosition[0]);\n\n
+0x8a00e740	string	    {\n        // Bright Pass\n        float Luminance = 0.08f;\n        float fMiddleGray = 0.18f;\n        float fWhiteCutoff = 0.8f;\n        float3 ColorOut = dest.rgb;\n        ColorOut *= fMiddleGray / (Luminance + 0.001f);\n        ColorOut *= (1.0f + (ColorOut / (fWhiteCutoff * fWhiteCutoff)));\n        ColorOut -= 5.0f;\n        ColorOut = max(ColorOut, 0.0f);\n        ColorOut /= (10.0f + ColorOut);\n        dest.rgb = ColorOut;\n\n    }\n
+0x8a00e8f8	string	    {\n        // Grayscale\n        float4 gray = dot((float3)dest, float3(0.3f, 0.59f, 0.11f));\n        float3 invGrayAmount = float3(1-Param[%d].r, 1-Param[%d].g, 1-Param[%d].b);\n        dest.rgb = dest.rgb * invGrayAmount + gray.rgb * Param[%d].rgb;\n    }\n\n
+0x8a00ea00	string	    // Texture Sample\n    dest = tex2D(TextureSampler[1], Input.uvPosition[1]);\n    src  = tex2D(TextureSampler[0], Input.uvPosition[%d])*Param[%d];\n    dest = src*(%s) + dest*(%s);\n\n
+0x8a00eab8	string	    // Recolor\n    dest *= Param[%d];\n\n
+0x8a00eae0	string	    dest = tex2D(TextureSampler[1], Input.uvPosition[1]);\n\n
+0x8a00eb20	string	\n//----------------------------------------------------\n// PixelShader pass %d:\n//\n%s
+0x8a00eb78	string	struct VSOUT\n{\n    float4 Position : POSITION;\n    float2 uvPosition[8] : TEXCOORD;\n};\n\nsampler2D TextureSampler[BB] : register(s0);\nuniform float4 Param[CC] : register(c0);\n\nfloat4 PS\n(\n    VSOUT Input\n) : COLOR\n{\n    float4 src;\n    float4 srcFactor;\n    float4 dest = 0;\n    float4 destFactor;\n\n
+0x8a00ee28	string	XBOX360XTT
+0x8a00ee50	string	1.1.4
+0x8a00ef6c	string	need dictionary
+0x8a00ef7c	string	unknown compression method
+0x8a00ef98	string	invalid window size
+0x8a00efac	string	incorrect header check
+0x8a00efc4	string	incorrect data check
+0x8a00fa54	string	incompatible version
+0x8a00fa6c	string	buffer error
+0x8a00fa7c	string	insufficient memory
+0x8a00fa90	string	data error
+0x8a00fa9c	string	stream error
+0x8a00faac	string	file error
+0x8a00fab8	string	stream end
+0x8a00fb54	string	invalid bit length repeat
+0x8a00fb70	string	too many length or distance symbols
+0x8a00fb94	string	invalid stored block lengths
+0x8a00fbb4	string	invalid block type
+0x8a00fbdc	string	invalid literal/length code
+0x8a00fbf8	string	invalid distance code
+0x8a010f00	string	incomplete dynamic bit lengths tree
+0x8a010f24	string	oversubscribed dynamic bit lengths tree
+0x8a010f4c	string	incomplete literal/length tree
+0x8a010f6c	string	oversubscribed literal/length tree
+0x8a010f90	string	empty distance tree with lengths
+0x8a010fb4	string	incomplete distance tree
+0x8a010fd0	string	oversubscribed distance tree
+0x8a011238	string	_nextafter
+0x8a011290	string	floor
+0x8a012010	string	#?RADIANCE\n#File created by Microsoft (R) D3DX library\nFORMAT=32-bit_rle_rgbe\n#Timestamp: 
+0x8a01206c	string	read error
+0x8a012080	string	%u %u%s
+0x8a012094	string	FORMAT=
+0x8a01209c	string	EXPOSURE=
+0x8a0120a8	string	32-bit_rle_rgbe
+0x8a0120b8	string	32-bit_rle_xyze
+0x8a0120c8	string	#?RADIANCE
+0x8a012bdf	string	\nApplication transferred too many scanlines
+0x8a012c0c	string	Invalid SOS parameters for sequential JPEG
+0x8a012c38	string	Corrupt JPEG data: found marker 0x%02x instead of RST%d
+0x8a012c70	string	Premature end of JPEG file
+0x8a012c8c	string	Warning: unknown JFIF revision number %d.%02d
+0x8a012cbc	string	Corrupt JPEG data: bad Huffman code
+0x8a012ce0	string	Corrupt JPEG data: premature end of data segment
+0x8a012d14	string	Corrupt JPEG data: %u extraneous bytes before marker 0x%02x
+0x8a012d50	string	Inconsistent progression sequence for component %d coefficient %d
+0x8a012d94	string	Unknown Adobe color transform code %d
+0x8a012dbc	string	Obtained XMS handle %u
+0x8a012dd4	string	Freed XMS handle %u
+0x8a012de8	string	Unrecognized component IDs %d %d %d, assuming YCbCr
+0x8a012e1c	string	JFIF extension marker: RGB thumbnail image, length %u
+0x8a012e54	string	JFIF extension marker: palette thumbnail image, length %u
+0x8a012e90	string	JFIF extension marker: JPEG-compressed thumbnail image, length %u
+0x8a012ed4	string	Opened temporary file %s
+0x8a012ef0	string	Closed temporary file %s
+0x8a012f0c	string	  Ss=%d, Se=%d, Ah=%d, Al=%d
+0x8a012f2c	string	    Component %d: dc=%d ac=%d
+0x8a012f4c	string	Start Of Scan: %d components
+0x8a012f6c	string	Start of Image
+0x8a012f7c	string	    Component %d: %dhx%dv q=%d
+0x8a012f9c	string	Start Of Frame 0x%02x: width=%u, height=%u, components=%d
+0x8a012fd8	string	Smoothing not supported with nonstandard sampling ratios
+0x8a013014	string	RST%d
+0x8a01301c	string	At marker 0x%02x, recovery action %d
+0x8a013044	string	Selected %d colors for quantization
+0x8a013068	string	Quantizing to %d colors
+0x8a013080	string	Quantizing to %d = %d*%d*%d colors
+0x8a0130a4	string	        %4u %4u %4u %4u %4u %4u %4u %4u
+0x8a0130cc	string	Unexpected marker 0x%02x
+0x8a0130e8	string	Miscellaneous marker 0x%02x, length %u
+0x8a013110	string	    with %d x %d thumbnail image
+0x8a013134	string	JFIF extension marker: type 0x%02x, length %u
+0x8a013164	string	Warning: thumbnail image size does not match data length %u
+0x8a0131a0	string	JFIF APP0 marker: version %d.%02d, density %dx%d  %d
+0x8a0131d8	string	        %3d %3d %3d %3d %3d %3d %3d %3d
+0x8a013200	string	End Of Image
+0x8a013210	string	Obtained EMS handle %u
+0x8a013228	string	Freed EMS handle %u
+0x8a01323c	string	Define Restart Interval %u
+0x8a013258	string	Define Quantization Table %d  precision %d
+0x8a013284	string	Define Huffman Table 0x%02x
+0x8a0132a0	string	Define Arithmetic Table 0x%02x: 0x%02x
+0x8a0132c8	string	Unknown APP14 marker (not Adobe), length %u
+0x8a0132f4	string	Unknown APP0 marker (not JFIF), length %u
+0x8a013320	string	Adobe APP14 marker: version %d, flags 0x%04x 0x%04x, transform %d
+0x8a013364	string	Caution: quantization tables are too coarse for baseline JPEG
+0x8a0133a4	string	6b  27-Mar-1998
+0x8a0133b4	string	Copyright (C) 1998, Thomas G. Lane
+0x8a0133d8	string	Write to XMS failed
+0x8a0133ec	string	Read from XMS failed
+0x8a013404	string	Image too wide for this implementation
+0x8a01342c	string	Virtual array controller messed up
+0x8a013450	string	Unsupported marker type 0x%02x
+0x8a013470	string	Application transferred too few scanlines
+0x8a01349c	string	Write failed on temporary file --- out of disk space?
+0x8a0134d4	string	Seek failed on temporary file
+0x8a0134f4	string	Read failed on temporary file
+0x8a013514	string	Failed to create temporary file %s
+0x8a013538	string	Invalid JPEG file structure: SOS before SOF
+0x8a013564	string	Invalid JPEG file structure: two SOI markers
+0x8a013594	string	Unsupported JPEG process: SOF type 0x%02x
+0x8a0135c0	string	Invalid JPEG file structure: missing SOS marker
+0x8a0135f0	string	Invalid JPEG file structure: two SOF markers
+0x8a013620	string	Cannot quantize to more than %d colors
+0x8a013648	string	Cannot quantize to fewer than %d colors
+0x8a013670	string	Cannot quantize more than %d color components
+0x8a0136a0	string	Insufficient memory (case %d)
+0x8a0136c0	string	Not a JPEG file: starts with 0x%02x 0x%02x
+0x8a0136ec	string	Quantization table 0x%02x was not defined
+0x8a013718	string	JPEG datastream contains no image
+0x8a01373c	string	Huffman table 0x%02x was not defined
+0x8a013764	string	Backing store not supported
+0x8a013780	string	Requested feature was omitted at compile time
+0x8a0137b0	string	Not implemented yet
+0x8a0137c4	string	Invalid color quantization mode change
+0x8a0137ec	string	Scan script does not transmit all data
+0x8a013814	string	Cannot transcode due to multiple use of quantization table %d
+0x8a013854	string	Premature end of input file
+0x8a013870	string	Empty input file
+0x8a013884	string	Maximum supported image dimension is %u pixels
+0x8a0138b4	string	Missing Huffman code table entry
+0x8a0138d8	string	Huffman code size table overflow
+0x8a0138fc	string	Fractional sampling not implemented yet
+0x8a013924	string	Output file write error --- out of disk space?
+0x8a013954	string	Input file read error
+0x8a01396c	string	Didn't expect more than one scan
+0x8a013990	string	Write to EMS failed
+0x8a0139a4	string	Read from EMS failed
+0x8a0139bc	string	Empty JPEG image (DNL not supported)
+0x8a0139e4	string	Bogus DQT index %d
+0x8a0139f8	string	Bogus DHT index %d
+0x8a013a0c	string	Bogus DAC value 0x%x
+0x8a013a24	string	Bogus DAC index %d
+0x8a013a38	string	Unsupported color conversion request
+0x8a013a60	string	Too many color components: %d, max %d
+0x8a013a88	string	CCIR601 sampling not implemented yet
+0x8a013ab0	string	Suspension not allowed here
+0x8a013acc	string	Buffer passed to JPEG library is too small
+0x8a013af8	string	Bogus virtual array access
+0x8a013b18	string	JPEG parameter struct mismatch: library thinks size is %u, caller expects %u
+0x8a013b68	string	Improper call to JPEG library in state %d
+0x8a013b94	string	Invalid scan script at entry %d
+0x8a013bb4	string	Bogus sampling factors
+0x8a013bcc	string	Invalid progressive parameters at scan script entry %d
+0x8a013c04	string	Invalid progressive parameters Ss=%d Se=%d Ah=%d Al=%d
+0x8a013c3c	string	Unsupported JPEG data precision %d
+0x8a013c60	string	Invalid memory pool code %d
+0x8a013c7c	string	Sampling factors too large for interleaved scan
+0x8a013cac	string	Wrong JPEG library version: library is %d, caller expects %d
+0x8a013cec	string	Bogus marker length
+0x8a013d00	string	Bogus JPEG colorspace
+0x8a013d18	string	Bogus input colorspace
+0x8a013d30	string	Bogus Huffman table definition
+0x8a013d50	string	IDCT output block size %d not supported
+0x8a013d78	string	DCT coefficient out of range
+0x8a013d98	string	Invalid component ID %d in SOS
+0x8a013db8	string	Bogus buffer control mode
+0x8a013dd4	string	MAX_ALLOC_CHUNK is wrong, please fix
+0x8a013dfc	string	ALIGN_TYPE is wrong, please fix
+0x8a013e1c	string	Sorry, there are legal restrictions on arithmetic coding
+0x8a013e58	string	Bogus message code %d
+0x8a014064	string	[XAPI RETURN VALUE] 1\n
+0x8a014088	string	Incompatible libpng version in application and library
+0x8a0140c0	string	Width too large to process image data; rowbytes will overflow.
+0x8a014100	string	image size exceeds user limits in IHDR
+0x8a0141a8	string	zlib version error
+0x8a0141bc	string	zlib memory error
+0x8a0141d0	string	Unknown zlib error
+0x8a0141e4	string	Missing PLTE before IDAT
+0x8a014200	string	Missing IHDR before IDAT
+0x8a01421c	string	PNG file corrupted by ASCII conversion
+0x8a014244	string	Not a PNG file
+0x8a014254	string	Extra compressed data
+0x8a01426c	string	Decompression error
+0x8a014280	string	Not enough image data
+0x8a014298	string	Invalid attempt to read row data
+0x8a0142bc	string	Width too large for libpng to process image data.
+0x8a014320	string	png_do_dither returned rowbytes=0
+0x8a014344	string	NULL row buffer
+0x8a014354	string	Call to NULL read function
+0x8a014370	string	same structure.  Resetting write_data_fn to NULL.
+0x8a0143a8	string	It's an error to set both read_data_fn and write_data_fn in the 
+0x8a015f5c	string	Out of Memory
+0x8a016664	string	invalid chunk type
+0x8a016678	string	Ignoring bad adaptive filter type
+0x8a01669c	string	PNG unsigned integer out of range.\n
+0x8a0166c0	string	CRC error
+0x8a0166cc	string	Unknown filter method in IHDR
+0x8a0166ec	string	Unknown compression method in IHDR
+0x8a016710	string	Unknown interlace method in IHDR
+0x8a016734	string	Invalid color type/bit depth combination in IHDR
+0x8a016768	string	Invalid color type in IHDR
+0x8a016784	string	Invalid bit depth in IHDR
+0x8a0167a0	string	Invalid image size in IHDR
+0x8a0167bc	string	Invalid IHDR chunk
+0x8a0167d0	string	Out of place IHDR
+0x8a0167e4	string	Truncating incorrect tRNS chunk length
+0x8a01680c	string	Invalid palette chunk
+0x8a016824	string	Duplicate PLTE chunk
+0x8a01683c	string	Invalid PLTE after IDAT
+0x8a016854	string	Missing IHDR before PLTE
+0x8a016870	string	Incorrect IEND chunk length
+0x8a01688c	string	No image in file
+0x8a0168a0	string	Ignoring incorrect gAMA value when sRGB is also present
+0x8a0168e8	string	Duplicate gAMA chunk
+0x8a016900	string	Out of place gAMA chunk
+0x8a016918	string	Invalid gAMA after IDAT
+0x8a016930	string	Incorrect gAMA chunk length
+0x8a01694c	string	Missing IHDR before gAMA
+0x8a01696c	string	Unknown sRGB intent
+0x8a016980	string	Duplicate sRGB chunk
+0x8a016998	string	Out of place sRGB chunk
+0x8a0169b0	string	Invalid sRGB after IDAT
+0x8a0169c8	string	Incorrect sRGB chunk length
+0x8a0169e4	string	Missing IHDR before sRGB
+0x8a016a00	string	tRNS chunk not allowed with alpha channel
+0x8a016a2c	string	Incorrect tRNS chunk length
+0x8a016a48	string	Duplicate tRNS chunk
+0x8a016a60	string	Invalid tRNS after IDAT
+0x8a016a78	string	Zero length tRNS chunk
+0x8a016a90	string	Missing PLTE before tRNS
+0x8a016aac	string	Missing IHDR before tRNS
+0x8a016ac8	string	unknown critical chunk
+0x8a016ae0	string	Extra compression data
+0x8a016af8	string	Decompression Error
+0x8a01ce70	string	d:\btvsts\293\private\gamertools\hosting\HostLoader\Xbox 360\Community-Release\HostLoader-Community-Release.pdb
+0x8a0b2820	string	}*Kx}\tCx9
+0x8a0b2830	string	}*Kx}\tCx9
+0x8a13022c	string	.?AVbad_alloc@std@@
+0x8a130248	string	.?AVexception@std@@
+0x8a130bd9	string	abcdefghijklmnopqrstuvwxyz
+0x8a130bf9	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x8a1397c1	string	/xbos/AssetConsume.ashx
+0x8a1397d9	string	/msgserver/vetstring2.ashx
+0x8a1397f4	string	/xstats/xstatestimaterankforratings.ashx
+0x8a13981d	string	/xuacs/XeGetUserInfo.ashx
+0x8a139837	string	/xbos/GetTitleActivationList.ashx
+0x8a139859	string	/xbos/XeContentReferral.ashx
+0x8a139876	string	/xsig/RefreshGameLicense.ashx
+0x8a139894	string	/xbos/XeContentRefreshLicense.ashx
+0x8a1398b7	string	/Lists/CreateDownloadQueue.ashx
+0x8a1398d7	string	/Lists/DeleteDownloadItems.ashx
+0x8a1398f7	string	/Lists/RevokeDownloadQueueAccess.ashx
+0x8a13991d	string	/Lists/GrantDownloadQueueAccess.ashx
+0x8a139942	string	/Lists/InsertDownloadItems.ashx
+0x8a139962	string	/Lists/ModifyDownloadQueue.ashx
+0x8a139982	string	/Lists/ModifyDownloadItems.ashx
+0x8a1399a2	string	/Lists/MoveDownloadItems.ashx
+0x8a1399c0	string	/Lists/QueryDownloadItems.ashx
+0x8a1399df	string	/Lists/QueryDownloadQueues.ashx
+0x8a1399ff	string	/xpnfront/xpresence.srf
+0x8a139a17	string	/Lists/CreateList.ashx
+0x8a139a2e	string	/Lists/DeleteItems.ashx
+0x8a139a46	string	/Lists/RevokeListAccess.ashx
+0x8a139a63	string	/Lists/GrantListAccess.ashx
+0x8a139a7f	string	/Lists/InsertItems.ashx
+0x8a139a97	string	/Lists/ModifyList.ashx
+0x8a139aae	string	/Lists/ModifyItems.ashx
+0x8a139ac6	string	/Lists/MoveItems.ashx
+0x8a139adc	string	/Lists/QueryItems.ashx
+0x8a139af3	string	/Lists/QueryLists.ashx
+0x8a139b0a	string	/xbos/GetRevocationList.ashx
+0x8a139b27	string	/msgserver/logstring.ashx
+0x8a139b41	string	/msgserver/msgserver.ashx
+0x8a139b5b	string	/xpnfront/xmessaging.srf
+0x8a139b74	string	/xbos/FindMediaInstanceUrls.ashx
+0x8a139b95	string	/xmatch/xmatchhost2.ashx
+0x8a139bae	string	/xmatch/xmatchhostdelete2.ashx
+0x8a139bcd	string	/xmatch/xmatchclient2.ashx
+0x8a139be8	string	/xmatch/xmatchsplit.ashx
+0x8a139c01	string	/xbos/PurchaseMediaOffers.ashx
+0x8a139c2f	string	/xqry/findfromids.ashx
+0x8a139c46	string	/xqry/remove.ashx
+0x8a139c58	string	/xqry/removeid.ashx
+0x8a139c6c	string	/xqry/search.ashx
+0x8a139c7e	string	/xqry/select.ashx
+0x8a139c90	string	/xqry/update.ashx
+0x8a139ca2	string	/xqry/updateid.ashx
+0x8a139cb6	string	/xpnfront/xteams.srf
+0x8a139ccb	string	/xpnfront/xnotification.srf
+0x8a139ce7	string	/xuacs/setusersettings2.ashx
+0x8a139d04	string	/stfd/resolvename.ashx
+0x8a139d1b	string	/xsig/AcknowledgeLicensesDelivery.ashx
+0x8a139d42	string	/xsig/AcquireMediaLicenses.ashx
+0x8a139d62	string	/xsig/CreateCertificate.ashx
+0x8a139d7f	string	/xsig/CheckRevocation.ashx
+0x8a139d9a	string	/xsig/VerifySignature.ashx
+0x8a139db5	string	/stfd/removefile.ashx
+0x8a139dcb	string	/stfd/readfile.ashx
+0x8a139ddf	string	/stfd/enumeratefiles.ashx
+0x8a139df9	string	/stfd/writefile.ashx
+0x8a139e0e	string	/msgserver/getstring2.ashx
+0x8a139e29	string	/xbos/AutoupdReferral.ashx
+0x8a139e44	string	/fbserver/enumrecdreview.ashx
+0x8a139e62	string	/fbserver/enumsentreview.ashx
+0x8a139e80	string	/fbserver/getaggreview.ashx
+0x8a139e9c	string	/fbserver/submitcomplaint.ashx
+0x8a139ebb	string	/fbserver/submitreview.ashx
+0x8a139ed7	string	/xuacs/XeABCHGetContactlistGamertags.ashx
+0x8a139f01	string	/xuacs/AcceptTou.ashx
+0x8a139f17	string	/xuacs/XeAcknowledgeDowngrade.ashx
+0x8a139f3a	string	/xuacs/XeAddPaymentInstrument.ashx
+0x8a139f5d	string	/xuacs/ChangeGamertag.ashx
+0x8a139f78	string	/xuacs/XeChangeSubscriptionPaymentInstrument.ashx
+0x8a139faa	string	/xuacs/XeCreateLiveAccount.ashx
+0x8a139fca	string	/xuacs/XeGetANID.ashx
+0x8a139fe0	string	/xuacs/XeGetAccountInfo.ashx
+0x8a139ffd	string	/xuacs/XeGetAccountInfoFromPassport.ashx
+0x8a13a026	string	/xuacs/XeGetLinkedGamertag.ashx
+0x8a13a046	string	/xuacs/XeGetPaymentInstruments.ashx
+0x8a13a06a	string	/xuacs/XeGetPointsBalance.ashx
+0x8a13a089	string	/xuacs/GetPostalCode.ashx
+0x8a13a0a3	string	/xuacs/XeGetUserSubscriptionDetails.ashx
+0x8a13a0cc	string	/xuacs/XeGetUserType.ashx
+0x8a13a0e6	string	/xuacs/XeGraduateUser.ashx
+0x8a13a101	string	/xuacs/XeLinkXbox1Account.ashx
+0x8a13a120	string	/xuacs/XeMigrateXbox1User.ashx
+0x8a13a13f	string	/xuacs/XeMigrateXboxComUser.ashx
+0x8a13a160	string	/xuacs/XeAccountQuery.ashx
+0x8a13a17b	string	/xuacs/XeRecoverAccount.ashx
+0x8a13a198	string	/xuacs/XeRemovePaymentInstrument.ashx
+0x8a13a1be	string	/xuacs/XeReserveGamertag.ashx
+0x8a13a1dc	string	/xuacs/XeSetAccountInfo.ashx
+0x8a13a1f9	string	/xuacs/SetUserAccountStatus.ashx
+0x8a13a21a	string	/xuacs/XeTroubleshootAccount.ashx
+0x8a13a23c	string	/xuacs/XeUpdateParentalControls.ashx
+0x8a13a261	string	/xuacs/XeUpdatePaymentInstrument.ashx
+0x8a13a287	string	/xuacs/XeVerifyBillingInfo.ashx
+0x8a13a2a7	string	/xbos/XeOfferingVerifyToken.ashx
+0x8a13a2c8	string	/xuacs/XeVerifyParentCreditCard.ashx
+0x8a13a2ed	string	/xbos/XeVerifyToken.ashx
+0x8a13a306	string	/xbos/XeBannerGetList.ashx
+0x8a13a321	string	/liveinfo/GetLiveConfig.ashx
+0x8a13a33e	string	/lsp/enumerate.ashx
+0x8a13a352	string	/xbos/AssetEnumerate.ashx
+0x8a13a36c	string	/xbos/InGameContentAvailable.ashx
+0x8a13a38e	string	/xbos/XeContentDetails.ashx
+0x8a13a3aa	string	/xbos/XeContentEnumerate2.ashx
+0x8a13a3c9	string	/xbos/XeContentHistoryEnumerate.ashx
+0x8a13a3ee	string	/xbos/XeEnumerateGenres.ashx
+0x8a13a40b	string	/xbos/XeEnumerateTitlesByFilter.ashx
+0x8a13a430	string	/xbos/XeGetTitleDetails.ashx
+0x8a13a44d	string	/xbos/InGameContentEnumerate.ashx
+0x8a13a46f	string	/xbos/XeOfferPurchase.ashx
+0x8a13a48a	string	/xbos/XeOfferPurchaseGamertag.ashx
+0x8a13a4ad	string	/xbos/XeSubscriptionDetails.ashx
+0x8a13a4ce	string	/xbos/XeSubscriptionEnumerate.ashx
+0x8a13a4f1	string	/xbos/TransferMachineLicenses.ashx
+0x8a13a514	string	/XArb/Register.ashx
+0x8a13a528	string	/XArb/ReportResult.ashx
+0x8a13a540	string	/XArb/TimeExtend.ashx
+0x8a13a556	string	/xstats/xstatenumbyrank.ashx
+0x8a13a573	string	/xstats/xstatenumbyrating.ashx
+0x8a13a592	string	/xstats/xstatenumbyuser.ashx
+0x8a13a5af	string	/xstats/statpost.ashx
+0x8a13a5c5	string	/xstats/xstatread.ashx
+0x8a13a5dc	string	/xstats/xstatsreset.ashx
+0x8a13a5f5	string	/xuacs/XePassportChangePassword.ashx
+0x8a13a61a	string	/xuacs/XeSwitchUserPassport.ashx
+0x8a13a63b	string	/xuacs/XePassportCreate.ashx
+0x8a13a658	string	/xuacs/XePassportGetBuddyGamertag.ashx
+0x8a13a67f	string	/xuacs/XePassportGetEncryptedProxyParameters.ashx
+0x8a13a6b1	string	/xuacs/XePassportGetFriendMemberName.ashx
+0x8a13a6db	string	/xuacs/XePassportGetMemberName.ashx
+0x8a13a6ff	string	/xuacs/XePassportGetPuidFromMemberName.ashx
+0x8a13a72b	string	/xuacs/XePassportGetSecretQuestions.ashx
+0x8a13a754	string	/xuacs/XePassportGetUserData.ashx
+0x8a13a776	string	/xuacs/XePassportLogin.ashx
+0x8a13a792	string	/xstats/xachievementclear.ashx
+0x8a13a7b1	string	/xstats/cleartitle.ashx
+0x8a13a7c9	string	/xstats/xachievementenum.ashx
+0x8a13a7e7	string	/xstats/enumtitles.ashx
+0x8a13a7ff	string	/xstats/readsettings.ashx
+0x8a13a819	string	/xstats/syncachievements.ashx
+0x8a13a837	string	/xstats/syncsettings.ashx
+0x8a13a851	string	/xstats/synctitles.ashx
+0x8a13a869	string	/xstats/usagestore.ashx
+0x8a13a881	string	/xbos/XeWmdrmCreateCertificate.ashx
+0x8a13a8a5	string	/xsig/XmstvCreateCertificate.ashx
+0x8a150036	string	HostLoader.dll
+0x8a150045	string	HostLoader_CreateInstance

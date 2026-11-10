@@ -1,0 +1,6 @@
+Export table for createprofile.xex
+xex_load_address=0x90100000 export_table_va=0x90109B34 count=2
+ordinal(hex) -> function_va(hex)  [resolved_name]
+------------------------------------------------------------
+0x0001 -> 0x90104408
+0x0002 -> 0x90104208

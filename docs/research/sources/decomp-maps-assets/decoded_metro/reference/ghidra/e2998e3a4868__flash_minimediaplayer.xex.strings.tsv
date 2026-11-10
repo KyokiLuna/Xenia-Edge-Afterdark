@@ -1,0 +1,211 @@
+va	data_type	text
+0x9010058c	unicode	media
+0x90100598	unicode	Strings.xus
+0x901005e8	unicode	XuiCanvas
+0x9010067c	unicode	XuiList
+0x9010068c	unicode	HUDScene
+0x901006a0	unicode	sharedres://ico_32x_ZuneLogo.png
+0x901006e4	unicode	ico_32x_CD_black.png
+0x90100710	unicode	ico_32x_GamePlaylist_black.png
+0x90100750	unicode	ico_32x_USB_black.png
+0x9010077c	unicode	ico_32x_PC_black.png
+0x901007a8	unicode	ico_32x_HD_black.png
+0x901007d4	unicode	579_SelectMediaSource.xur
+0x90100808	unicode	MediaSourceSelectScene
+0x90100838	unicode	MediaSourceList
+0x901008cc	unicode	labContent
+0x901008e4	unicode	LegendX
+0x901008f4	unicode	LegendY
+0x901009dc	unicode	btnA
+0x901009e8	unicode	btnY
+0x901009f4	unicode	scnErrorMessage
+0x90100a14	unicode	btnX
+0x90100a20	unicode	scnProgressMessage
+0x90100a48	unicode	labelNoMediaSourcesText
+0x90100a78	unicode	btnB
+0x90100a84	unicode	listSources
+0x90100ac0	unicode	labelNoResultsText
+0x90100ae8	unicode	btnPlayAll
+0x90100b00	unicode	labelHeader
+0x90100b18	unicode	labelItemCount
+0x90100b38	unicode	labelLoadingText
+0x90100b5c	unicode	labelLoadingAnimation
+0x90100b88	unicode	listItems
+0x90100bc4	unicode	570_MusicLibrary.xur
+0x90100bf0	unicode	MusicLibraryScene
+0x90100c28	unicode	btnGenres
+0x90100c3c	unicode	btnAllSongs
+0x90100c54	unicode	btnPlaylists
+0x90100c70	unicode	btnArtists
+0x90100c88	unicode	btnAlbums
+0x90100c9c	unicode	sceneButtonContainer
+0x90100cc8	unicode	576_SelectSong.xur
+0x90100cf0	unicode	MsalSongListScene
+0x90100d40	unicode	572_SelectMediaContainer.xur
+0x90100d7c	unicode	MsalMediaContainerListScene
+0x90100de0	unicode	SelectGameSong.xur
+0x90100e08	unicode	GameSongListScene
+0x90100e4c	unicode	SelectGamePlaylist.xur
+0x90100e7c	unicode	GamePlaylistListScene
+0x90100ec8	unicode	FileViewList
+0x90100ee4	unicode	FileView.xur
+0x90100f00	unicode	FileViewScene
+0x90100f54	unicode	ico_32x_Song_black.png
+0x90100f84	unicode	ico_32x_playlist_black.png
+0x90100fbc	unicode	ico_32x_Folder_black.png
+0x90101048	unicode	LegendA
+0x90101058	unicode	labelAsyncWorkText
+0x90101080	unicode	labelAsyncWorkAnimation
+0x901010b0	unicode	BeginPlayback.xur
+0x901010d4	unicode	BeginPlaybackScene
+0x90101180	unicode	SongList
+0x901011dc	unicode	MediaContainerList
+0x90101394	unicode	%u:%02u
+0x90101508	unicode	Wrap
+0x90101de0	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\minimediaplayer\src\obj\xbox\MiniMediaPlayer.pdb
+0x90112221	string	abcdefghijklmnopqrstuvwxyz
+0x90112241	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9011301f	string	570_MusicLibrary.xur
+0x90114007	string	btnGenres
+0x90114011	string	Songs
+0x90114017	string	Genres
+0x9011401e	string	XuiScene
+0x90114027	string	HUDScene
+0x90114030	string	XuiCanvas
+0x90115200	string	tItems
+0x90115207	string	SongList
+0x90115210	string	List_media_songswhite
+0x90115226	string	btnPlayAll
+0x90115231	string	XuiList
+0x90115239	string	labelItemCount
+0x90115248	string	Label_Body_small_white
+0x90115264	string	legend_A
+0x9011526d	string	Select
+0x90115274	string	XuiButton
+0x90115283	string	legend_Y
+0x90115291	string	legend_B
+0x9011529a	string	XuiBackButton
+0x901152a8	string	labelLoadingText
+0x901152b9	string	XuiLabelCenterJustify
+0x901152cf	string	Please wait
+0x901152db	string	labelLoadingAnimation
+0x901152f1	string	Loading_Small
+0x901152ff	string	btn_Arrow
+0x90115309	string	Play All
+0x90115312	string	labelNoResultsText
+0x90115325	string	No songs found.
+0x90115335	string	HUDScene
+0x9011533e	string	XuiCanvas
+0x901155e9	string	(scnMediaContainers
+0x901155fd	string	GamePlaylistListScene
+0x90115613	string	FadeOut
+0x9011561b	string	FadeIn
+0x90115622	string	Select
+0x9011562e	string	Play Playlist
+0x9011563c	string	XuiFigure
+0x90115646	string	graphic_metapane
+0x90115657	string	RightPanelShader
+0x90115668	string	XuiLabel
+0x90115671	string	labelHeader
+0x9011567d	string	Label_Head
+0x90115688	string	Saved Playlists
+0x90115698	string	listItems
+0x901156a2	string	MediaContainerList
+0x901156b5	string	XuiList
+0x901156bd	string	labelItemCount
+0x901156cc	string	Label_Body_small_white
+0x901156e8	string	legend_A
+0x901156f1	string	XuiButton
+0x90115700	string	legend_Y
+0x90115709	string	Play Saved Playlist
+0x90115722	string	legend_B
+0x9011572b	string	XuiBackButton
+0x90115739	string	labelLoadingText
+0x9011574a	string	XuiLabelCenterJustify
+0x90115760	string	Please wait
+0x9011576c	string	labelLoadingAnimation
+0x90115782	string	Loading_Small
+0x90115790	string	btnPlayAll
+0x9011579b	string	btn_Arrow
+0x901157a5	string	Play All
+0x901157ae	string	labelNoResultsText
+0x901157c1	string	No playlists found.
+0x901157d5	string	HUDScene
+0x901157de	string	XuiCanvas
+0x90115a84	string	'scnFileViewScene
+0x90115a96	string	FileViewScene
+0x90115aa4	string	FadeOut
+0x90115aac	string	FadeIn
+0x90115ab3	string	Select
+0x90115ac4	string	XuiFigure
+0x90115ace	string	btnPlayAll
+0x90115ad9	string	btn_Arrow
+0x90115ae3	string	listItems
+0x90115aed	string	Play All
+0x90115af6	string	XuiButton
+0x90115b00	string	graphic_metapane
+0x90115b11	string	RightPanelShader
+0x90115b22	string	XuiLabel
+0x90115b2b	string	labelHeader
+0x90115b37	string	Label_Head
+0x90115b42	string	FileViewList
+0x90115b4f	string	List_media_fileswhite
+0x90115b65	string	XuiList
+0x90115b6d	string	labelItemCount
+0x90115b7c	string	Label_Body_small_white
+0x90115b98	string	legend_A
+0x90115ba6	string	legend_Y
+0x90115bb4	string	legend_B
+0x90115bbd	string	XuiBackButton
+0x90115bcb	string	labelAsyncWorkText
+0x90115bde	string	XuiLabelCenterJustify
+0x90115bf4	string	Please wait
+0x90115c00	string	labelAsyncWorkAnimation
+0x90115c18	string	Loading_Small
+0x90115c26	string	labelNoResultsText
+0x90115c39	string	No songs found.
+0x90115c49	string	HUDScene
+0x90115c52	string	XuiCanvas
+0x90115eca	string	 DATA
+0x90115edd	string	scnBeginPlayback
+0x90115eee	string	BeginPlaybackScene
+0x90115f01	string	FadeOut
+0x90115f09	string	FadeIn
+0x90115f15	string	legend_B
+0x90115f23	string	XuiBackButton
+0x90115f31	string	labelAsyncWorkText
+0x90115f44	string	XuiLabelCenterJustify
+0x90115f5a	string	Please wait\r\n                
+0x90115f78	string	XuiLabel
+0x90115f81	string	labelAsyncWorkAnimation
+0x90115f99	string	Loading_Small
+0x90115fa7	string	HUDScene
+0x90115fb0	string	XuiCanvas
+0x9011605a	string	Artists
+0x90116062	string	Current Disc
+0x9011606f	string	%d of %d
+0x90116078	string	Game Playlists
+0x90116087	string	Genres
+0x9011608e	string	Hard Drive
+0x90116099	string	USB device detected. Scanning content database.
+0x901160c9	string	Hard Drive
+0x901160d4	string	No albums found.
+0x901160e5	string	No artists found.
+0x901160f7	string	No genres found.
+0x90116108	string	No playlists found.
+0x9011611c	string	No songs found.
+0x90116131	string	Can't play music. Try playing the music in the Xbox Dashboard to troubleshoot the problem.\r\n\r\nStatus code: %02u-%08x
+0x901161a6	string	System Music Player
+0x901161ba	string	Saved Playlists
+0x901161ca	string	Play Album
+0x901161d5	string	Play All Music
+0x901161e4	string	Play Artist
+0x901161f0	string	Play Folder
+0x901161fc	string	Play Genre
+0x90116207	string	Play Saved Playlist
+0x9011621b	string	Play Song
+0x90116225	string	Portable Device
+0x90116235	string	Game Audio
+0x90116240	string	Songs
+0x90116246	string	Can't connect. Make sure you have activated this console on your computer.
+0x90116291	string	Unable to connect to the computer. A firewall may be blocking the connection.

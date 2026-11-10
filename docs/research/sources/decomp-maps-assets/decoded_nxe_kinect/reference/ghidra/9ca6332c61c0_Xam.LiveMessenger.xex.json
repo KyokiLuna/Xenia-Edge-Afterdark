@@ -1,0 +1,18 @@
+{
+  "module": "Xam.LiveMessenger.xex",
+  "program": "9ca6332c61c0_Xam.LiveMessenger.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "2d0cc5733c333d1d8d0977399b57ccf74428739857bed4f23bd18154af7196a5",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x91720400",
+  "functions": 898,
+  "calls": 2972,
+  "strings": 243,
+  "string_xrefs": 339,
+  "independent_sha256": "d695431dc7075d479ffb94c914c6bf6a5066b896e6a61daf875e03278c65f0f4",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

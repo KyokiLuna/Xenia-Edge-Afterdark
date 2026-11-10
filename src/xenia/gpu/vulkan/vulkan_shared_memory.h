@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "xenia/base/cvar.h"
+#include "xenia/gpu/native_frame_input_snapshot.h"
 #include "xenia/gpu/shared_memory.h"
 #include "xenia/gpu/trace_writer.h"
 #include "xenia/memory.h"
@@ -27,14 +28,25 @@ namespace vulkan {
 
 class VulkanCommandProcessor;
 
-class VulkanSharedMemory : public SharedMemory {
+class VulkanSharedMemory : public SharedMemory,
+                           private SharedMemory::ExternalSource {
  public:
+  enum class Backing { kGuestMemory, kNativeSnapshot };
   VulkanSharedMemory(VulkanCommandProcessor& command_processor, Memory& memory,
                      TraceWriter& trace_writer,
-                     VkPipelineStageFlags guest_shader_pipeline_stages);
+                     VkPipelineStageFlags guest_shader_pipeline_stages,
+                     Backing backing = Backing::kGuestMemory);
   ~VulkanSharedMemory() override;
 
   bool Initialize();
+  bool BindNativeSnapshot(
+      std::shared_ptr<const NativeFrameInputSnapshot> snapshot,
+      memory::PhysicalRange output);
+  bool is_native_snapshot_backing() const {
+    return backing_ == Backing::kNativeSnapshot;
+  }
+  bool native_snapshot_valid() const { return native_snapshot_valid_; }
+
   void Shutdown(bool from_destructor = false);
   void ClearCache() override;
 
@@ -78,6 +90,17 @@ class VulkanSharedMemory : public SharedMemory {
                     uint32_t num_ranges) override;
 
  private:
+  bool CoversRead(uint32_t start, uint32_t length) const noexcept override;
+  bool CoversWrite(uint32_t start, uint32_t length) const noexcept override;
+  bool Read(uint32_t start, std::span<uint8_t>) const noexcept override;
+  void GpuWritten(uint32_t start, uint32_t length) noexcept override;
+  bool UploadSealedRanges(const std::pair<uint32_t, uint32_t>* ranges,
+                          uint32_t count);
+  const Backing backing_;
+  std::shared_ptr<const NativeFrameInputSnapshot> native_snapshot_;
+  memory::PhysicalRange native_output_{};
+  memory::PhysicalRange native_output_written_{};
+  bool native_snapshot_valid_ = false;
   void GetUsageMasks(Usage usage, VkPipelineStageFlags& stage_mask,
                      VkAccessFlags& access_mask) const;
 

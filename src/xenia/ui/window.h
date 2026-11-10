@@ -325,6 +325,14 @@ class Window {
   void SetCursorVisibility(CursorVisibility new_cursor_visibility);
 
   bool HasFocus() const { return HasActualState() ? has_focus_ : false; }
+  // Static frontend capability; it grants neither focus nor native ownership.
+  virtual bool SupportsNativeTextCommits() const { return false; }
+  enum class PhysicalKeyState { kUnknown, kReleased, kPressed };
+  // UI-thread-only physical source observation during focus regain. Unknown
+  // must retain held-key quarantine, never be interpreted as a release.
+  virtual PhysicalKeyState QueryPhysicalKeyState(VirtualKey) const {
+    return PhysicalKeyState::kUnknown;
+  }
   // May be applied in a delayed way or dropped at all, HasFocus will not
   // necessarily be true immediately.
   void Focus();
@@ -606,6 +614,8 @@ class Window {
   void OnKeyDown(KeyEvent& e, WindowDestructionReceiver& destruction_receiver);
   void OnKeyUp(KeyEvent& e, WindowDestructionReceiver& destruction_receiver);
   void OnKeyChar(KeyEvent& e, WindowDestructionReceiver& destruction_receiver);
+  void OnTextInput(TextInputEvent& e,
+                   WindowDestructionReceiver& destruction_receiver);
 
   void OnMouseDown(MouseEvent& e,
                    WindowDestructionReceiver& destruction_receiver);

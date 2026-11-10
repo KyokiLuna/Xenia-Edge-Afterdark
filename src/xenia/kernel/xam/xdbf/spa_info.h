@@ -279,7 +279,7 @@ class SpaInfo : public XdbfFile {
     return static_cast<uint32_t>(achievements_.size());
   }
 
-  const AchievementTableEntry* GetAchievement(uint32_t id);
+  const AchievementTableEntry* GetAchievement(uint32_t id) const;
 
   std::vector<const AchievementTableEntry*> GetAchievements() const {
     return achievements_;
@@ -299,8 +299,8 @@ class SpaInfo : public XdbfFile {
 
   const PropertyBag* GetMatchCollection() const { return &matchmaking_; }
 
-  const XdbfContextTableEntry* GetContext(uint32_t id);
-  const XdbfPropertyTableEntry* GetProperty(uint32_t id);
+  const XdbfContextTableEntry* GetContext(uint32_t id) const;
+  const XdbfPropertyTableEntry* GetProperty(uint32_t id) const;
   const std::optional<ViewTable> GetStatsView(uint32_t id);
   const std::optional<PropertyBag> GetPresenceMode(
       uint32_t context_value) const;
@@ -322,7 +322,7 @@ class SpaInfo : public XdbfFile {
   // Base info. There should be comparator between different SpaInfos and entry
   // with newer data should replace old one. Such situation can happen when game
   // adds achievements and so on with DLC.
-  TitleHeaderData title_header_;
+  TitleHeaderData title_header_{};
 
   // SPA is Read-Only so it's reasonable to make it readonly.
   std::vector<const AchievementTableEntry*> achievements_;
@@ -349,7 +349,7 @@ class SpaInfo : public XdbfFile {
   void LoadMatchmaking();
 
   template <typename T>
-  static T GetSpaEntry(std::vector<T>& container, uint32_t id);
+  static T GetSpaEntry(const std::vector<T>& container, uint32_t id);
 };
 
 }  // namespace xam

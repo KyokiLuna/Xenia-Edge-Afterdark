@@ -1,0 +1,18 @@
+{
+  "module": "quickchat.xex",
+  "program": "79f5281146fd_quickchat.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "b913f838276efa04f115bdbc3ca3c0eab1762c030d205375d59bf46abc633272",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 537,
+  "calls": 1551,
+  "strings": 165,
+  "string_xrefs": 251,
+  "independent_sha256": "9663a157ecb42edf2559457e065b8c2b7b523c7debd8e4e51ee3fd423e0b7f2c",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

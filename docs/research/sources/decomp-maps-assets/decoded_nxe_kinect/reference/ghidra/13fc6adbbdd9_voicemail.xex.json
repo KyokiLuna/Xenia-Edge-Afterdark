@@ -1,0 +1,18 @@
+{
+  "module": "voicemail.xex",
+  "program": "13fc6adbbdd9_voicemail.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "cf41b022443d4776144903aa200ce6145109d418dfb8b8245717df8e8c391abb",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 601,
+  "calls": 1400,
+  "strings": 75,
+  "string_xrefs": 121,
+  "independent_sha256": "cf41b022443d4776144903aa200ce6145109d418dfb8b8245717df8e8c391abb",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

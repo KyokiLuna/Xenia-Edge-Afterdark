@@ -12,6 +12,8 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
+#include <utility>
 
 #include "xenia/ui/virtual_key.h"
 
@@ -76,7 +78,7 @@ class KeyEvent : public UIEvent {
   explicit KeyEvent(Window* target, VirtualKey virtual_key, int repeat_count,
                     bool prev_state, bool modifier_shift_pressed,
                     bool modifier_ctrl_pressed, bool modifier_alt_pressed,
-                    bool modifier_super_pressed)
+                    bool modifier_super_pressed, uint64_t text_input_id = 0)
       : UIEvent(target),
         virtual_key_(virtual_key),
         repeat_count_(repeat_count),
@@ -84,7 +86,8 @@ class KeyEvent : public UIEvent {
         modifier_shift_pressed_(modifier_shift_pressed),
         modifier_ctrl_pressed_(modifier_ctrl_pressed),
         modifier_alt_pressed_(modifier_alt_pressed),
-        modifier_super_pressed_(modifier_super_pressed) {}
+        modifier_super_pressed_(modifier_super_pressed),
+        text_input_id_(text_input_id) {}
   ~KeyEvent() override = default;
 
   bool is_handled() const { return handled_; }
@@ -94,6 +97,7 @@ class KeyEvent : public UIEvent {
 
   int repeat_count() const { return repeat_count_; }
   bool prev_state() const { return prev_state_; }
+  uint64_t text_input_id() const { return text_input_id_; }
 
   bool is_shift_pressed() const { return modifier_shift_pressed_; }
   bool is_ctrl_pressed() const { return modifier_ctrl_pressed_; }
@@ -111,6 +115,32 @@ class KeyEvent : public UIEvent {
   bool modifier_ctrl_pressed_ = false;
   bool modifier_alt_pressed_ = false;
   bool modifier_super_pressed_ = false;
+  uint64_t text_input_id_ = 0;
+};
+
+// One complete host commit, distinct from a physical virtual key. The bounded
+// native BMP endpoint rejects composed/multi-scalar input and missing source
+// IDs. Legacy char listeners remain separate and must not be invoked twice.
+class TextInputEvent : public UIEvent {
+ public:
+  TextInputEvent(Window* target, std::u32string text, uint64_t source_key,
+                 bool host_repeat = false, bool composed = false)
+      : UIEvent(target),
+        text_(std::move(text)),
+        source_key_(source_key),
+        host_repeat_(host_repeat),
+        composed_(composed) {}
+  const std::u32string& text() const { return text_; }
+  uint64_t source_key() const { return source_key_; }
+  bool host_repeat() const { return host_repeat_; }
+  bool composed() const { return composed_; }
+  bool is_handled() const { return handled_; }
+  void set_handled(bool value) { handled_ = value; }
+
+ private:
+  std::u32string text_;
+  uint64_t source_key_;
+  bool host_repeat_, composed_, handled_ = false;
 };
 
 class MouseEvent : public UIEvent {

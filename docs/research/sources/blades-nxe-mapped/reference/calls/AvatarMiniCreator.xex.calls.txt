@@ -1,0 +1,120 @@
+Call graph for AvatarMiniCreator.xex
+xex_load_address=0x90100000
+0 exported functions (boundary = next export's VA), 13 BFS-discovered internal functions (boundary = hard cap/return, capped at 250) - see each function's discovery= line for exactly how it was found (entry-point reachability vs. callback-registration provenance are tracked separately and honestly, not collapsed).
+Neither boundary method is verified prologue/epilogue analysis - see per-function confidence tags below.
+======================================================================
+
+sub_0x90102000  [callback_root]  va=0x90102000
+    discovery: callback root (registered via xam.xex!XamRegisterSysApp at 0x90102150 in sub_0x90102128)
+    disassembled 94 insns, INFERRED (boundary-truncated/BFS)
+    internal_callees:
+      0x90102004 -> 0x90104A88  (sub_0x90104A88)
+      0x90102054 -> 0x9010210C
+      0x9010205C -> 0x9010211C
+      0x90102080 -> 0x90104530  (sub_0x90104530)
+      0x901020B0 -> 0x9010211C
+      0x901020CC -> 0x90102120
+      0x901020D4 -> 0x90104958  (sub_0x90104958)
+      0x901020E4 -> 0x90102C28  (sub_0x90102C28)
+      0x901020E8 -> 0x901020F0
+      0x90102104 -> 0x9010211C
+      0x90102114 -> 0x90104530  (sub_0x90104530)
+      0x90102124 -> 0x90104AD8
+      0x90102154 -> 0x90102164
+    imported_callees:
+      0x90102150 -> xam.xex!XamRegisterSysApp
+      0x90102160 -> xam.xex!XamUnregisterSysApp
+
+sub_0x90102128  [bfs_reachable]  va=0x90102128
+    discovery: bfs (reached from 0x90104878 via 0x90104878)
+    disassembled 20 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90104878
+    internal_callees:
+      0x90102154 -> 0x90102164
+    imported_callees:
+      0x90102150 -> xam.xex!XamRegisterSysApp
+      0x90102160 -> xam.xex!XamUnregisterSysApp
+
+sub_0x90102A70  [callback_descendant]  va=0x90102A70
+    discovery: callback descendant (reached from callback root 0x90102000 via 0x90102C28)
+    disassembled 27 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90102C28
+    imported_callees:
+      0x90102A90 -> xboxkrnl.exe!KeQueryPerformanceFrequency
+
+sub_0x90102C28  [callback_descendant]  va=0x90102C28
+    discovery: callback descendant (reached from callback root 0x90102000 via 0x90102000)
+    disassembled 72 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90102000
+    internal_callees:
+      0x90102C2C -> 0x90104A88  (sub_0x90104A88)
+      0x90102C60 -> 0x90102A70  (sub_0x90102A70)
+      0x90102CBC -> 0x90104AD8
+      0x90102CC4 -> 0x90102E68
+      0x90102D00 -> 0x90104998  (sub_0x90104998)
+    imported_callees:
+      0x90102D10 -> xam.xex!XuiFreeStringTable
+
+sub_0x90104530  [callback_descendant]  va=0x90104530
+    discovery: callback descendant (reached from callback root 0x90102000 via 0x90102000)
+    disassembled 16 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90102000
+
+sub_0x90104630  [bfs_reachable]  va=0x90104630
+    discovery: bfs (reached from 0x90104878 via 0x90104800)
+    disassembled 63 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90104800
+
+sub_0x90104730  [bfs_reachable]  va=0x90104730
+    discovery: bfs (reached from 0x90104878 via 0x90104878)
+    disassembled 51 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90104800, 0x90104878
+
+sub_0x90104800  [bfs_reachable]  va=0x90104800
+    discovery: bfs (reached from 0x90104878 via 0x90104878)
+    disassembled 29 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90104878
+    internal_callees:
+      0x90104814 -> 0x90104630  (sub_0x90104630)
+      0x90104824 -> 0x90104864
+      0x90104838 -> 0x90104860
+      0x9010485C -> 0x90104730  (sub_0x90104730)
+
+entry_point  [bfs_root]  va=0x90104878
+    discovery: bfs (entry point)
+    disassembled 55 insns, INFERRED (boundary-truncated/BFS)
+    internal_callees:
+      0x9010487C -> 0x90104A84  (sub_0x90104A84)
+      0x901048AC -> 0x9010494C
+      0x901048CC -> 0x90104800  (sub_0x90104800)
+      0x901048E4 -> 0x90102128  (sub_0x90102128)
+      0x90104908 -> 0x90102128  (sub_0x90102128)
+      0x90104920 -> 0x90104730  (sub_0x90104730)
+      0x90104940 -> 0x90104800  (sub_0x90104800)
+    tail_calls:
+      0x90104950 -> 0x90104AD4
+
+sub_0x90104958  [callback_descendant]  va=0x90104958
+    discovery: callback descendant (reached from callback root 0x90102000 via 0x90102000)
+    disassembled 15 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90102000
+    imported_callees:
+      0x90104970 -> xam.xex!XamAlloc
+
+sub_0x90104998  [callback_descendant]  va=0x90104998
+    discovery: callback descendant (reached from callback root 0x90102000 via 0x90102C28)
+    disassembled 1 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90102C28
+    imported_callees:
+      0x90104998 -> xam.xex!XamFree
+
+sub_0x90104A84  [bfs_reachable]  va=0x90104A84
+    discovery: bfs (reached from 0x90104878 via 0x90104878)
+    disassembled 7 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90104878
+
+sub_0x90104A88  [callback_descendant]  va=0x90104A88
+    discovery: callback descendant (reached from callback root 0x90102000 via 0x90102000)
+    disassembled 6 insns, INFERRED (boundary-truncated/BFS)
+    known_callers: 0x90102000, 0x90102C28
+

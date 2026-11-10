@@ -1,0 +1,8 @@
+Export table for $flash_vk.xexp
+xex_load_address=0x917D0000 export_table_va=0x917E02CC count=4
+ordinal(hex) -> function_va(hex)  [resolved_name]
+------------------------------------------------------------
+0x0001 -> 0x917D86C8
+0x0002 -> 0x917D83E8
+0x0003 -> 0x917D8378
+0x0004 -> 0x917D8390

@@ -12,6 +12,7 @@
 
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -99,6 +100,10 @@ class ConfigVar : public CommandVar<T>, virtual public IConfigVar {
   std::string default_value() const override;
   std::string commandline_value() const override;
   const T& GetTypedConfigValue() const;
+  // Resolve an arbitrary title without applying it to the active process.
+  // Command line > supplied game config > global config > compiled default.
+  // Deliberately ignores game_config_value_, which belongs to the running title.
+  T ResolveForGameConfig(std::optional<T> game_value) const;
   const std::string& category() const override;
   const std::string& display_name() const override;
   bool is_advanced() const override;
@@ -323,6 +328,13 @@ std::string ConfigVar<T>::commandline_value() const {
 template <class T>
 const T& ConfigVar<T>::GetTypedConfigValue() const {
   return config_value_ ? *config_value_ : this->default_value_;
+}
+template <class T>
+T ConfigVar<T>::ResolveForGameConfig(std::optional<T> game_value) const {
+  if (this->commandline_value_) {
+    return *this->commandline_value_;
+  }
+  return game_value ? *game_value : GetTypedConfigValue();
 }
 template <class T>
 void CommandVar<T>::SetCommandLineValue(const T val) {

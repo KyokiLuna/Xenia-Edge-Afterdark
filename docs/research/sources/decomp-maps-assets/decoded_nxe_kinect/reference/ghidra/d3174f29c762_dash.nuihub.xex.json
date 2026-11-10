@@ -1,0 +1,18 @@
+{
+  "module": "dash.nuihub.xex",
+  "program": "d3174f29c762_dash.nuihub.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "ddd3dbafe9125a307b952ae6909022774a5885ec30d839798f7bc386eb30b202",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9ce80400",
+  "functions": 696,
+  "calls": 1702,
+  "strings": 242,
+  "string_xrefs": 258,
+  "independent_sha256": "ec2359fe4a8a70dafd7461bbc883e3c72312da49ee8c8bfb7b58f513cb7928ec",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

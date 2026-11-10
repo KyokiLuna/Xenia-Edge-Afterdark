@@ -1,0 +1,18 @@
+{
+  "module": "LivePack.xex",
+  "program": "870c8064b829_LivePack.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "c78927a519659200288e48e660cc7eb46699e32f3175a27e150ebb14841f3fbd",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9f610400",
+  "functions": 4259,
+  "calls": 10852,
+  "strings": 1075,
+  "string_xrefs": 558,
+  "independent_sha256": "eda76a82861d3fda1fdf558eb9dd09e388138782c32ba5dce86dfafccca4e2d4",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

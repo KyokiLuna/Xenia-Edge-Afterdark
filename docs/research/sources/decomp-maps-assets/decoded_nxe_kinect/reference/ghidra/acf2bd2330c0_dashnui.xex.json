@@ -1,0 +1,18 @@
+{
+  "module": "dashnui.xex",
+  "program": "acf2bd2330c0_dashnui.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "76b5d14e85414f650d872107e18d6526949cc0e9ff6850fa7dac28cf0fad41a5",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9e490400",
+  "functions": 5683,
+  "calls": 13951,
+  "strings": 1761,
+  "string_xrefs": 642,
+  "independent_sha256": "f823dd02e47b2b26b7d49c8ee0609a9a70e7f22ec9058d22d04c212eb29b4de5",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

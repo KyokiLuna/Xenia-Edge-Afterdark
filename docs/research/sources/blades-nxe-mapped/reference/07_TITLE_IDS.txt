@@ -1,0 +1,62 @@
+Title ID index
+================
+Regenerate with: python3 _tool/build_07_titleids.py
+
+Section 1: module identity (CONFIRMED, from each module's own
+xex2_opt_execution_info.title_id). This is the most reliable source -
+structural, not disassembly-based.
+
+0x584D07D1  (kAvatarEditorID)
+    module=AvatarEditor.xex
+0x584E07D2  (kXN_2002)
+    module=hostloader.dll
+    module=titlelauncher.xex
+    module=runtime/v3.0/BackCompatShim.xex
+    module=runtime/v3.0/netcfusermode.dll
+    module=runtime/v3.0/runtimehost.xex
+    module=runtime/v3.1/BackCompatShim.xex
+    module=runtime/v3.1/netcfusermode.dll
+    module=runtime/v3.1/runtimehost.xex
+0xFFFE07D1  (kDashboardID)
+    module=$flash_dash.xex
+    module=dash.xex
+
+Section 1b: SUSPECT_METADATA module identities (title_id disagrees with the module's own base module)
+------------------------------------------------------------
+These come from depatched $flash_*.xexp sidecars whose reconstructed
+execution_info didn't match their base module's (which reports
+title_id=0, as expected for a system component). At least one of
+these decodes as literal ASCII text, not a real title ID - the
+header-patch reconstruction likely didn't fully relocate this
+particular optional header. Do NOT treat these as real title IDs.
+
+0x00020000  (raw bytes: b'\x00\x02\x00\x00')
+    module=$flash_createprofile.xexp
+    module=$flash_hud.xexp
+0x07600000  (raw bytes: b'\x07`\x00\x00')
+    module=$flash_signin.xexp
+    module=$flash_updater.xexp
+0x2DB6D43C  (raw bytes: b'-\xb6\xd4<')
+    module=$flash_xam.xexp
+0x58424F58  (raw bytes: b'XBOX')
+    module=$flash_gamerprofile.xexp
+
+Section 2: known Xenia title ID constants (from xenia-edge/src/xenia/kernel/title_id_utils.h)
+------------------------------------------------------------
+0x584D07D1  kAvatarEditorID <- matches a module's own identity above
+0x584E07D1  kXN_2001
+0x584E07D2  kXN_2002 <- matches a module's own identity above
+0xFFFE07D1  kDashboardID <- matches a module's own identity above
+
+Section 3: in-code comparisons against a KNOWN title ID (INFERRED - PRIORITY_MODULES only)
+------------------------------------------------------------
+Found by scanning exported-function disassembly for lis+ori/addi
+pairs forming a 32-bit constant that exactly matches a title ID
+already known from Section 1 or 2 - this is confirming WHERE a
+known ID is compared against, not discovering new ones blind.
+
+0x584E07D2  (kXN_2002)  module=$flash_dash.xex  va=0x922A38A8
+0x584D07D1  (kAvatarEditorID)  module=$flash_xam.xexp  va=0x818D2904
+0x584E07D2  (kXN_2002)  module=$flash_xam.xexp  va=0x818E6784
+0x584E07D2  (kXN_2002)  module=$flash_xam.xexp  va=0x8192FE7C
+0x584E07D1  (kXN_2001)  module=$flash_xam.xexp  va=0x8192FE8C

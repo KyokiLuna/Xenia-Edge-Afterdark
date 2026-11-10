@@ -1,0 +1,4607 @@
+va	data_type	text
+0x9010004d	string	!This program cannot be run in DOS mode.\r\r\n$
+0x901001f0	string	.rdata
+0x90100290	string	.edata
+0x901002b7	string	@.idata
+0x90100307	string	B.reloc
+0x90100970	string	GetUserIndex
+0x90100980	string	SetRootScene
+0x90100990	string	XDASHLAUNCHDATA
+0x901009a0	string	dash.NuiTroubleshooter.lex
+0x901009bc	string	dash.FieldCalibration.lex
+0x901009d8	string	luaapp
+0x90100a2c	unicode	CXuiEditRThumbScroll
+0x90100a58	unicode	PlayspaceVisualControl
+0x90100a88	string	'Main' must return a scene
+0x90100aa4	string	Missing entry point 'Main'
+0x90100ac0	string	e:\bt\1c10e6\core\private\flash\xam\apps\nuitroubleshooter\src\nuitroubleshooterdll.cpp
+0x90100b20	unicode	LegendY
+0x90100b30	unicode	media
+0x90100b40	string	NuiTroubleshooterDll
+0x90100b58	string	Couldn't load LuaXboxXam.xzp
+0x90100b80	unicode	section://%X,luaxbox
+0x90100bac	unicode	XuiEdit
+0x90100bbc	unicode	XuiControl
+0x90100bd4	string	IsPlayspaceSupportedByTitle
+0x90100bf0	string	TitleUsesSeatedTracking
+0x90100c08	string	BuildResourceLocator
+0x90100c20	string	GoToAudioTroubleshooter
+0x90100c38	string	GoToCameraCalibration
+0x90100c50	string	IsDashInstalling
+0x90100c64	string	ShouldShowBootConfirmation
+0x90100c80	string	LaunchDash
+0x90100c8c	string	FreeUnusedXuiTextures
+0x90100ca4	string	RegisterNuiFrameCallback
+0x90100cc0	string	UnregisterNuiFrameCallback
+0x90100cdc	string	SetLegendY
+0x90100ce8	string	DestroyBackScenes
+0x90100cfc	string	NavigateBackToFirstScene
+0x90100d18	string	RestartApp
+0x90100d24	string	SetXamEngagedTrackingID
+0x90100d3c	string	SetShowIdentityImage
+0x90100d54	string	CheckHardware
+0x90100d64	string	HardwareCheckDll
+0x90100d78	string	GetNatalSerialNumber
+0x90100d90	string	SetCameraElevationAngle
+0x90100da8	string	e:\bt\1c10e6\core\private\flash\xam\apps\nuitroubleshooter\src\playspacetroubleshooterdll.cpp
+0x90100e28	string	PlayspaceTroubleshooterDll
+0x90100e60	string	Xbox.Object.LuaXuiHandleWrapper
+0x90100e80	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\inc\LuaPub.h
+0x90100ec4	string	GetCameraElevationAngle
+0x90100edc	string	StopCameraMovement
+0x90100ef0	string	StartAutoTilt
+0x90100f00	string	AbandonAutoTilt
+0x90100f10	string	StartReverseAutoTilt
+0x90100f28	string	GetAutotiltStatus
+0x90100f3c	string	WritePlayspaceDistanceSettings
+0x90100f5c	string	ReadPlayspaceDistanceSettings
+0x90100f7c	string	ValidatePlaySpace
+0x90100f90	string	CancelValidatePlaySpace
+0x90100fa8	string	StartCheckingHeadClippedStatus
+0x90100fc8	string	StopCheckingHeadClippedStatus
+0x90100fe8	string	IgnorePlaySpaceFailure
+0x90101000	string	CreatePlayspaceControl
+0x90101018	string	DestroyPlayspaceControl
+0x90101084	unicode	HH:mm:ss
+0x90101098	unicode	dddd, MMMM dd, yyyy
+0x901010c0	unicode	MM/dd/yy
+0x901010e4	unicode	December
+0x901010f8	unicode	November
+0x9010110c	unicode	October
+0x9010111c	unicode	September
+0x90101130	unicode	August
+0x90101140	unicode	July
+0x9010114c	unicode	June
+0x90101158	unicode	April
+0x90101164	unicode	March
+0x90101170	unicode	February
+0x90101184	unicode	January
+0x901011f4	unicode	Saturday
+0x90101208	unicode	Friday
+0x90101218	unicode	Thursday
+0x9010122c	unicode	Wednesday
+0x90101240	unicode	Tuesday
+0x90101250	unicode	Monday
+0x90101260	unicode	Sunday
+0x901012a8	string	HH:mm:ss
+0x901012b4	string	dddd, MMMM dd, yyyy
+0x901012c8	string	MM/dd/yy
+0x901012dc	string	December
+0x901012e8	string	November
+0x901012f4	string	October
+0x901012fc	string	September
+0x90101308	string	August
+0x90101320	string	April
+0x90101328	string	March
+0x90101330	string	February
+0x9010133c	string	January
+0x90101374	string	Saturday
+0x90101380	string	Friday
+0x90101388	string	Thursday
+0x90101394	string	Wednesday
+0x901013a0	string	Tuesday
+0x901013a8	string	Monday
+0x901013b0	string	Sunday
+0x90101c28	string	$Lua: Lua 5.1.4 Copyright (C) 1994-2008 Lua.org, PUC-Rio $\n$Authors: R. Ierusalimschy, L. H. de Figueiredo & W. Celes $\n$URL: www.lua.org $\n
+0x90101cb8	string	no calling environment
+0x90101cd0	string	no value
+0x90101d34	string	%s:%d: 
+0x90101d40	string	stack overflow (%s)
+0x90101d54	string	bad argument #%d to '%s' (%s)
+0x90101d74	string	calling '%s' on bad self (%s)
+0x90101d94	string	method
+0x90101da0	string	bad argument #%d (%s)
+0x90101db8	string	%s expected, got %s
+0x90101dcc	string	value expected
+0x90101ddc	string	name conflict for module '%s'
+0x90101dfc	string	_LOADED
+0x90101e04	string	invalid option '%s'
+0x90101f70	string	(null)
+0x90101f84	string	[string "
+0x90101fdc	string	not enough memory
+0x90101ff0	string	error in error handling
+0x90102010	string	attempt to yield across metamethod/C-call boundary
+0x90102044	string	stack overflow
+0x90102054	string	C stack overflow
+0x90102068	string	cannot resume non-suspended coroutine
+0x9010218c	string	(*temporary)
+0x901021b4	string	=(tail call)
+0x901021cc	string	upvalue
+0x901021d4	string	global
+0x901021dc	string	field
+0x901021e4	string	local
+0x901021ec	string	%s:%d: %s
+0x901021f8	string	attempt to %s a %s value
+0x90102214	string	attempt to %s %s '%s' (a %s value)
+0x90102238	string	concatenate
+0x90102244	string	perform arithmetic on
+0x9010225c	string	attempt to compare %s with %s
+0x9010227c	string	attempt to compare two %s values
+0x901022a0	string	__call
+0x901022a8	string	__concat
+0x901022c4	string	__len
+0x901022cc	string	__unm
+0x901022d4	string	__pow
+0x901022dc	string	__mod
+0x901022e4	string	__div
+0x901022ec	string	__mul
+0x901022f4	string	__sub
+0x901022fc	string	__add
+0x9010230c	string	__mode
+0x9010231c	string	__newindex
+0x90102328	string	__index
+0x90102330	string	upval
+0x90102338	string	proto
+0x90102340	string	thread
+0x90102348	string	function
+0x90102354	string	table
+0x9010235c	string	string
+0x90102364	string	number
+0x9010236c	string	userdata
+0x90102378	string	boolean
+0x901024d4	string	%.14g
+0x901024dc	string	loop in gettable
+0x901024f0	string	index
+0x901024f8	string	loop in settable
+0x9010250c	string	string length overflow
+0x90102524	string	get length of
+0x90102534	string	'for' step must be a number
+0x90102550	string	'for' initial value must be a number
+0x90102578	string	'for' limit must be a number
+0x90102600	string	invalid key to 'next'
+0x90102618	string	table overflow
+0x90102628	string	table index is NaN
+0x9010263c	string	table index is nil
+0x901027b4	string	memory allocation error: block too big
+0x90102844	string	'%s' expected
+0x90102854	string	function at line %d has more than %d %s
+0x9010287c	string	main function has more than %d %s
+0x901028a0	string	'%s' expected (to close '%s' at line %d)
+0x901028cc	string	too many local variables
+0x901028e8	string	local variables
+0x901028f8	string	upvalues
+0x90102904	string	chunk has too many syntax levels
+0x90102928	string	constant table overflow
+0x90102940	string	items in a constructor
+0x9010295c	string	<name> or '...' expected
+0x90102980	string	ambiguous syntax (function call x new statement)
+0x901029b4	string	function arguments expected
+0x901029d0	string	unexpected symbol
+0x901029e4	string	cannot use '...' outside a vararg function
+0x90102a10	string	variables in assignment
+0x90102a28	string	syntax error
+0x90102a38	string	no loop to break
+0x90102a58	string	(for step)
+0x90102a64	string	(for limit)
+0x90102a70	string	(for index)
+0x90102a7c	string	(for control)
+0x90102a8c	string	(for state)
+0x90102a98	string	(for generator)
+0x90102aa8	string	'=' or 'in' expected
+0x90102b04	string	%s: %s in precompiled chunk
+0x90102b20	string	unexpected end
+0x90102b30	string	bad integer
+0x90102b3c	string	bad constant
+0x90102b4c	string	bad code
+0x90102b58	string	code too deep
+0x90102b70	string	bad header
+0x90102b80	string	binary string
+0x90102b90	string	<eof>
+0x90102b98	string	<string>
+0x90102ba4	string	<name>
+0x90102bac	string	<number>
+0x90102bcc	string	while
+0x90102bd4	string	until
+0x90102bec	string	return
+0x90102bf4	string	repeat
+0x90102c10	string	false
+0x90102c1c	string	elseif
+0x90102c30	string	break
+0x90102d08	string	lexical element too long
+0x90102d28	string	char(%d)
+0x90102d34	string	%s near '%s'
+0x90102d44	string	chunk has too many lines
+0x90102d60	string	malformed number
+0x90102d7c	string	unfinished long string
+0x90102d94	string	unfinished long comment
+0x90102dac	string	nesting of [[...]] is deprecated
+0x90102dd0	string	unfinished string
+0x90102de4	string	escape sequence too large
+0x90102e00	string	invalid long string delimiter
+0x90102e24	string	VARARG
+0x90102e2c	string	CLOSURE
+0x90102e34	string	CLOSE
+0x90102e3c	string	SETLIST
+0x90102e44	string	TFORLOOP
+0x90102e50	string	FORPREP
+0x90102e58	string	FORLOOP
+0x90102e60	string	RETURN
+0x90102e68	string	TAILCALL
+0x90102e7c	string	TESTSET
+0x90102e9c	string	CONCAT
+0x90102ed0	string	NEWTABLE
+0x90102edc	string	SETTABLE
+0x90102ee8	string	SETUPVAL
+0x90102ef4	string	SETGLOBAL
+0x90102f00	string	GETTABLE
+0x90102f0c	string	GETGLOBAL
+0x90102f18	string	GETUPVAL
+0x90102f24	string	LOADNIL
+0x90102f2c	string	LOADBOOL
+0x90102f38	string	LOADK
+0x901030c0	string	control structure too long
+0x901030dc	string	function or expression too complex
+0x90103100	string	code size overflow
+0x9010311c	string	package
+0x90103124	string	Milliseconds
+0x90103134	string	Second
+0x9010313c	string	Minute
+0x9010314c	string	DayOfWeek
+0x9010315c	string	Month
+0x9010316c	string	PasscodeKey4
+0x9010317c	string	PasscodeKey3
+0x9010318c	string	PasscodeKey2
+0x9010319c	string	PasscodeKey1
+0x901031ac	string	(Can't convert to string)
+0x901031c8	string	tostring
+0x901031d4	string	expected table of options
+0x901031f0	string	hr=0x%x location=%s:%d msg=%s
+0x90103210	string	Failed to parse unicode string
+0x90103230	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luautil.cpp
+0x90103274	string	Expected string
+0x90103284	string	Failed to convert Utf8 string to unicode
+0x901032b0	string	Xbox.UnicodeUd
+0x901032c0	string	'tostring' must return a string to 'print'
+0x901032f8	string	luadprint
+0x90103304	string	print
+0x9010330c	string	***********************************************\n
+0x90103340	string	%s (%u)\n
+0x9010334c	string	%s:%u;
+0x90103354	string	-----------------------------------------------\n
+0x90103388	string	Lua App Name: %s\n
+0x9010339c	string	******************* Lua Error *****************\n
+0x901033d4	string	Package module required
+0x901033ec	string	require
+0x901033f4	string	Pointer type cannot be nil
+0x90103410	string	wrong result type: expected number(double)
+0x9010343c	string	wrong result type: expected number(int)
+0x90103464	string	wrong result type: expected string(utf8)
+0x90103490	string	wrong result type: expected userdata(Unicode)
+0x901034c0	string	wrong result type: expected number(uint)
+0x901034ec	string	invalid option '%c'
+0x90103500	string	too many arguments
+0x90103514	string	Not a valid function
+0x9010352c	string	Invalid user index
+0x90103540	string	expected user index
+0x90103558	string	Invalid milliseconds
+0x90103578	string	Invalid second
+0x90103588	string	Invalid minute
+0x901035a0	string	Invalid hour
+0x901035b8	string	Invalid day
+0x901035d0	string	Invalid day of week
+0x901035f0	string	Invalid month
+0x90103608	string	Invalid year
+0x90103628	string	SystemTimeToFileTime failed
+0x90103644	string	XboxUd.%s
+0x90103660	string	Invalid string constant
+0x90103678	string	This function must be called from a coroutine
+0x901036a8	string	Xbox.AppUrl
+0x901036b4	string	Privilege access is denied
+0x901036d0	string	Site access is denied
+0x901036e8	string	Not enough parameters specified to function
+0x90103714	string	__tostring
+0x90103720	string	CreateWaitObject
+0x90103734	string	IsDead
+0x9010374c	string	Resume
+0x90103754	string	Cancel
+0x9010375c	string	Sleep
+0x90103764	string	Start
+0x90103770	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luasched.cpp
+0x901037b4	string	Xbox.Sched.Deaths
+0x901037c8	string	Xbox.Sched.Cancels
+0x901037dc	string	Xbox.Sched.Finals
+0x901037f4	string	Xbox.Sched.Parents
+0x90103828	string	Thread expected
+0x90103838	string	Cannot link to itself
+0x90103864	string	Xbox.Object.LuaSchedWait
+0x901038a0	string	Xbox.Object.LuaSchedWaitResume
+0x901038e0	string	Xbox.Object.LuaSchedWaitThread
+0x90103900	string	e:\bt\1c10e6\core\private\flash\corelibs\luaXbox\inc\LuaPub.h
+0x90103960	string	Xbox.Object.LuaSchedWaitTime
+0x90103980	string	Cancelled
+0x9010398c	string	Can't resume itself
+0x901039a0	string	interval must be positive
+0x901039bc	string	Coroutine is not suspended
+0x901039d8	string	Xbox.Scheduler
+0x901039e8	string	GetErrorStringFromService
+0x90103a04	string	GetCommonString
+0x90103a14	string	Xbox.System
+0x90103a20	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luacommonstrings.cpp
+0x90103a6c	string	GetErrorStringFromService failed!
+0x90103a90	string	XamGetErrorStringFromWebService API failed.
+0x90103abc	string	GetPasscodeUIResult
+0x90103ad0	string	ShowMessageBox
+0x90103ae0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luamessageboxhud.cpp
+0x90103b2c	string	XamShowMessageBox failed.
+0x90103b68	string	Xbox.Object.LuaWaitHudMessageBox
+0x90103b8c	string	Button text is too long
+0x90103ba4	string	Already showing a HUD message box
+0x90103bc8	string	Parse
+0x90103be8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luaxmlparser.cpp
+0x90103c30	string	Xbox.XmlParser
+0x90103c40	string	Handlers must specify OnCDATAEnd
+0x90103c64	string	OnCDATAEnd
+0x90103c70	string	Handlers must specify OnCDATAData
+0x90103c94	string	OnCDATAData
+0x90103ca0	string	Handlers must specify OnCDATABegin
+0x90103cc4	string	OnCDATABegin
+0x90103cd4	string	Handlers must specify OnAttribute
+0x90103cf8	string	OnAttribute
+0x90103d04	string	Handlers must specify OnElementEnd
+0x90103d28	string	OnElementEnd
+0x90103d38	string	Handlers must specify OnElementContent
+0x90103d60	string	OnElementContent
+0x90103d74	string	Handlers must specify OnElementBegin
+0x90103d9c	string	OnElementBegin
+0x90103dac	string	AutoShutoff
+0x90103db8	string	ScreenSaver
+0x90103dc4	string	GetSystemVersion
+0x90103dd8	string	IsDataCenterMode
+0x90103dec	string	IsConnectedToLive
+0x90103e00	string	NuiIsDeviceReady
+0x90103e14	string	IsSystemAppAvailable
+0x90103e2c	string	IsUIActive
+0x90103e38	string	SetEngagedTrackingID
+0x90103e50	string	IsScreenSaverActive
+0x90103e64	string	ResetInactivity
+0x90103e74	string	SetInactivityTime
+0x90103e88	string	SetInactivityEnabled
+0x90103ea0	string	GetTickDiff
+0x90103eac	string	GetTickCount
+0x90103ebc	string	GetDiffDays
+0x90103ec8	string	GetSystemTime
+0x90103ed8	string	GetLocalTime
+0x90103ee8	string	SystemTimeToFileTime
+0x90103f00	string	FileTimeToSystemTime
+0x90103f18	string	GetLiveHiveValue
+0x90103f2c	string	TryGetInputState
+0x90103f40	string	ShowSignIn
+0x90103f4c	string	LaunchDashApp
+0x90103f5c	string	IsWideScreen
+0x90103fe8	string	DpadUp
+0x90103ff0	string	DpadDown
+0x90103ffc	string	DpadLeft
+0x90104008	string	DpadRight
+0x9010401c	string	LeftThumb
+0x90104028	string	RightThumb
+0x90104034	string	LeftShoulder
+0x90104044	string	RightShoulder
+0x90104054	string	BigButton
+0x90104110	string	LocalSignInOnly
+0x90104120	string	ShowOnlyOnlineEnabled
+0x90104138	string	AllowSignout
+0x90104148	string	DisallowPlayAs
+0x90104158	string	AddUser
+0x90104160	string	EnableGuest
+0x9010416c	string	ConvertOfflineToGuest
+0x90104184	string	DisallowGuest
+0x90104198	string	CompleteSignIn
+0x901041a8	string	ShowOnlyParentallyControlled
+0x901041c8	string	DisallowReload
+0x901041d8	string	AllowMachineAccountOnly
+0x901041f0	string	ShowOnlySilverTier
+0x90104204	string	NoErrorUI
+0x90104210	string	FromDash
+0x9010421c	string	CheckForMissingAvatars
+0x90104234	string	StartLogonOnReload
+0x90104248	string	PasscodeVerified
+0x90104268	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luaxbox.cpp
+0x901042ac	string	Unable to retrieve LiveHive value
+0x901042d0	string	RightThumbY
+0x901042dc	string	RightThumbX
+0x901042e8	string	LeftThumbY
+0x901042f4	string	LeftThumbX
+0x90104300	string	RightTrigger
+0x90104310	string	LeftTrigger
+0x9010431c	string	PacketNumber
+0x9010432c	string	Invalid number of panes
+0x90104344	string	LiveHive key name must be specified
+0x90104368	string	Conversion error
+0x9010437c	string	Xbox.Object.LuaXOverlapped
+0x901043b8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luabignumber.cpp
+0x90104400	string	%I64u
+0x90104408	string	LUASHUTDOWN
+0x90104414	string	LUASTARTUP
+0x90104524	string	\tBeStrict
+0x90104533	string	IsBeingStrict
+0x90104545	string	\rgetmetatable
+0x90104560	string	\rsetmetatable
+0x90104573	string	__declared
+0x90104583	string	__newindex
+0x90104593	string	__index
+0x901045a0	string	_GetGlobal
+0x901045b0	string	_SetGlobal
+0x901045c0	string	_BuildClass
+0x901045d1	string	ImplementClass
+0x901045e5	string	import
+0x901045f1	string	require
+0x901045fd	string	\tSafeCall
+0x9010460c	string	Curry
+0x90104616	string	\tDelegate
+0x90104675	string	debug
+0x90104680	string	getinfo
+0x901047b2	string	__declared
+0x901047d3	string	error
+0x901047dd	string	 assign to undeclared variable '
+0x90104815	string	rawset
+0x901048ad	string	__declared
+0x901048c4	string	error
+0x901048cf	string	variable '
+0x901048df	string	' is not declared
+0x901049f4	string	string
+0x90104b30	string	string
+0x90104b62	string	rawset
+0x90104c66	string	\rgetmetatable
+0x90104c79	string	_GetGlobal
+0x90104c88	string	\tBeStrict
+0x90104ca1	string	__index
+0x90104cb6	string	module
+0x90104cc2	string	package
+0x90104ccf	string	seeall
+0x90104cda	string	\rsetmetatable
+0x90104ced	string	Constructor
+0x90104d07	string	_SetGlobal
+0x90104d53	string	Constructor
+0x90104dbf	string	\rsetmetatable
+0x90104dd2	string	__index
+0x90104ddf	string	Constructor
+0x90104e4c	string	_BuildClass
+0x90104f6f	string	assert
+0x90104f84	string	\tfunction
+0x90104f92	string	\ncoroutine
+0x90104fa2	string	running
+0x90104faf	string	pcall
+0x90104fb9	string	\tSafePack
+0x90104fc8	string	Start
+0x90104fdc	string	\nScheduler
+0x90105000	string	SafeUnpack
+0x9010504f	string	\tSafePack
+0x9010505e	string	SafeUnpack
+0x90105126	string	assert
+0x9010513b	string	\tfunction
+0x90105149	string	\tSafePack
+0x9010519c	string	SafeUnpack
+0x901051ac	string	SafePackAppend
+0x90105248	string	assert
+0x9010525e	string	table
+0x90105268	string	\tuserdata
+0x90105277	string	Curry
+0x9010529c	string	Count
+0x901052a4	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\xlua.cpp
+0x901052e4	string	SafePackAppend
+0x901052f4	string	SafeUnpack
+0x90105300	string	SafePack
+0x9010530c	string	Out of Memory
+0x9010531c	string	common.lua
+0x90105328	string	Xbox.Object.LuaWaitObject
+0x90105358	string	LuaWaitObject
+0x90105388	string	Xbox.Object.LuaWaitObjectWait
+0x901053a8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luawait.cpp
+0x901053ec	string	Reset
+0x90105400	string	CloseFile
+0x9010540c	string	WriteFile
+0x90105418	string	CreateFile
+0x90105424	string	Xbox.Object.LuaFileHandleWrapper
+0x90105448	string	Xbox.Coverage
+0x90105458	string	set_hook
+0x90105468	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luacoverage.cpp
+0x901054c4	string	Failed to Create File
+0x901055b8	string	NoIcon
+0x901055c0	string	ErrorIcon
+0x901055cc	string	WarningIcon
+0x901055d8	string	AlertIcon
+0x901055e4	string	InformationIcon
+0x901055f4	string	WaitAnimation
+0x90105604	string	DeviceStatusAutoDismiss
+0x9010561c	string	PasscodeMode
+0x9010562c	string	LivePasscodeMode
+0x90105640	string	VerifyPasscodeMode
+0x90105654	string	NuiEnabled
+0x90105660	string	ControllerRequiredMode
+0x90105678	string	KinectTunerHwMode
+0x9010568c	string	WaitForAuthenticatedMedia
+0x901056b4	string	ReturnUserIndex
+0x901056c4	string	XMB_YESNO requires focus button to be 0, 1
+0x901056f0	string	XMB_YESNO requires 0, 1 or 2 buttons
+0x90105718	string	XMB_OK requires focus button to be 0
+0x90105740	string	XMB_OK requires 0 or 1 as a button count
+0x9010576c	string	XMB_OK and XMB_YESNO cannot be used simultaneously
+0x901057a0	string	No buttons available in passcode mode
+0x901057c8	string	Invalid number of buttons or focus button specified
+0x901057fc	string	Invalid flags specified
+0x90105818	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luamessageboxcommon.cpp
+0x901058a4	string	%s!%s %u %s 
+0x901058b4	string	xbdm.xex
+0x901058c0	string	luadebug
+0x901058d4	string	notify
+0x901058dc	string	escapestring
+0x901058ec	string	getvalue
+0x901058f8	string	getaddress
+0x90105904	string	getcounters
+0x90105910	string	getbreakpoints
+0x90105920	string	removeallbreakpoints
+0x90105938	string	removebreakpoint
+0x9010594c	string	addbreakpoint
+0x9010595c	string	getstate
+0x90105968	string	stepover
+0x90105974	string	stepinto
+0x90105980	string	continue
+0x90105bc5	string	module
+0x90105bd0	string	\tdebugger
+0x90105bdf	string	package
+0x90105bec	string	seeall
+0x90105c20	string	frame
+0x90105c4a	string	description
+0x90105c5b	string	sets a breakpoint
+0x90105c72	string	usage
+0x90105c7d	string	bp{f=<filename>, l=<linenumber>}        -- sets a breakpoint on this line\nbp{fn=<functionname>}                   -- sets a function breakpoint\n
+0x90105d13	string	lists breakpoints
+0x90105d29	string	Bbl                                      -- lists all breakpoints\n
+0x90105d71	string	clears a breakpoint
+0x90105d8a	string	bc("*")                                 -- clears all breakpoints\nbc(<num>)                               -- clears breakpoint <num>\n
+0x90105e15	string	dumps a value
+0x90105e28	string	d(var)                                  -- dumps the contents of var\nd(var, <recursion-depth>)               -- dumps var recursively\n
+0x90105eb4	string	dumps upvalues
+0x90105ec7	string	+dup(<function>)                         -- dumps all upvalues of function\ndup(<function>, <recursion-depth>)      -- dumps upvalues recursively\ndup                                     -- dumps upvalues for current frame\ndup(nil, <recursion-depth>)             -- dumps current upvalues recursively\n
+0x90105ff7	string	2dumps locals and upvalues for current stack frame
+0x9010602f	string	dv                    -- dumps locals and upvalues for current stack frame\ndv(<recursion-depth>) -- dumps locals and upvalues recursively\n
+0x901060c7	string	dumps resource counters
+0x901060e3	string	6dc                    -- dumps all resource counters\n
+0x9010611e	string	 changes the current stack frame
+0x90106144	string	frame(<stack-frame>)                    -- changes the current stack frame\n                                        -- affects dv and dup\n
+0x901061d3	string	continues execution
+0x901061eb	string	@g                                       -- continues execution\n
+0x9010623a	string	,prints debugger help, see also help("help")
+0x9010626c	string	help                                    -- prints short help for all commands\nhelp("help")                            -- prints the text you're reading\n
+0x9010630a	string	prints a stack trace
+0x90106323	string	Ak                                       -- prints a stack trace\n
+0x90106371	string	steps over
+0x90106380	string	Hp                                       -- steps over the current line\n
+0x901063d5	string	steps into
+0x901063e4	string	Ht                                       -- steps into the current line\n
+0x90106432	string	notify
+0x9010643e	string	where
+0x90106453	string	_execEnvIndex
+0x90106466	string	_execEnvNewIndex
+0x9010647c	string	_execEnvMt
+0x9010648c	string	__index
+0x90106499	string	__newindex
+0x901064a8	string	\t_execEnv
+0x901064b6	string	\rsetmetatable
+0x901064c9	string	_valueToString
+0x901064dd	string	pairsByKeys
+0x901064ee	string	_getStackFrames
+0x90106503	string	_getCurrentFrame
+0x90106518	string	\r_bpiToString
+0x90106534	string	\n_checkBpi
+0x90106544	string	escapevalue
+0x901065c0	string	\n_checkBpi
+0x901065d7	string	\ndebuggerc
+0x901065e7	string	addbreakpoint
+0x90106685	string	ipairs
+0x90106690	string	\ndebuggerc
+0x901066a0	string	getbreakpoints
+0x901066b4	string	print
+0x901066d1	string	\r_bpiToString
+0x90106766	string	number
+0x90106771	string	\ndebuggerc
+0x90106781	string	removebreakpoint
+0x9010679e	string	removeallbreakpoints
+0x901067b8	string	error
+0x901067c2	string	2breakpoint number is invalid or was not specified
+0x901068ad	string	\ndebuggerc
+0x901068bc	string	\tgetstate
+0x901068cb	string	stopped
+0x901068d8	string	error
+0x901068e2	string	,Can't list stack because program is running
+0x90106914	string	ipairs
+0x90106920	string	_getStackFrames
+0x90106935	string	print
+0x90106a77	string	_getCurrentFrame
+0x90106a97	string	debug
+0x90106aa2	string	getupvalue
+0x90106ab2	string	print
+0x90106ac6	string	_valueToString
+0x90106bcf	string	\ndebuggerc
+0x90106bde	string	\tgetstate
+0x90106bed	string	stopped
+0x90106bfa	string	error
+0x90106c04	string	0Can't list variables because program is running
+0x90106c3a	string	_getStackFrames
+0x90106c58	string	index
+0x90106c63	string	print
+0x90106c6e	string	Locals:
+0x90106c84	string	debug
+0x90106c8e	string	\tgetlocal
+0x90106ca6	string	_valueToString
+0x90106cbf	string	\nUpvalues:
+0x90106d3f	string	print
+0x90106d4a	string	_valueToString
+0x90106dc3	string	\ndebuggerc
+0x90106dd2	string	\tgetstate
+0x90106de1	string	stopped
+0x90106dee	string	error
+0x90106df9	string	Program is already running
+0x90106e21	string	\tcontinue
+0x90106eb4	string	print
+0x90106ebf	string	usage
+0x90106eca	string	pairs
+0x90106ee8	string	description
+0x90106f30	string	\ndebuggerc
+0x90106f3f	string	\tstepover
+0x90106f8d	string	\ndebuggerc
+0x90106f9d	string	notify
+0x90106fe0	string	\ndebuggerc
+0x90106fef	string	\tstepinto
+0x90107075	string	\ndebuggerc
+0x90107084	string	\tgetstate
+0x90107093	string	stopped
+0x901070a0	string	error
+0x901070ab	string	Program is running
+0x901070c3	string	_getStackFrames
+0x901070e1	string	print
+0x901070ec	string	string
+0x901070f8	string	format
+0x90107174	string	\t_execEnv
+0x9010727a	string	\ndebuggerc
+0x90107289	string	\tgetstate
+0x90107298	string	stopped
+0x901072a5	string	_getStackFrames
+0x901072c3	string	debug
+0x901072cd	string	\tgetlocal
+0x901072dc	string	index
+0x901072e7	string	getupvalue
+0x90107449	string	\ndebuggerc
+0x90107458	string	\tgetstate
+0x90107467	string	stopped
+0x90107474	string	_getStackFrames
+0x90107492	string	debug
+0x9010749c	string	\tgetlocal
+0x901074ab	string	index
+0x901074b5	string	\tsetlocal
+0x901074c4	string	getupvalue
+0x901074de	string	setupvalue
+0x901074fb	string	rawset
+0x90107767	string	\tfunction
+0x90107776	string	table
+0x90107790	string	string
+0x901077bb	string	debug
+0x901077c6	string	getinfo
+0x901077dd	string	function: 
+0x901077ed	string	_valueToString
+0x9010780b	string	 Upvalues: 
+0x90107825	string	getupvalue
+0x90107847	string	pairsByKeys
+0x90107857	string	\ttostring
+0x901078e0	string	string
+0x901078ec	string	lower
+0x9010798b	string	pairs
+0x90107996	string	table
+0x901079a1	string	insert
+0x90107b63	string	debug
+0x90107b6e	string	getinfo
+0x90107b9f	string	source
+0x90107bb5	string	currentline
+0x90107bd0	string	index
+0x90107bdb	string	table
+0x90107be6	string	insert
+0x90107c3e	string	_getStackFrames
+0x90107c53	string	index
+0x90107d21	string	string
+0x90107d2d	string	format
+0x90107e0c	string	\ttostring
+0x90107e1b	string	string
+0x90107f65	string	pairs
+0x90107f81	string	string
+0x90107f8d	string	error
+0x90107f98	string	f (filename) must be a string
+0x90107fc2	string	4l (line) is required when f (filename) is specified
+0x90107ffc	string	number
+0x90108008	string	l (line) must be a number
+0x9010802f	string	fn (function) must be a string
+0x90108052	string	?f (function) and l (line) are not allowed when fn is specified
+0x90108097	string	Invalid option '
+0x9010828a	string	boolean
+0x90108297	string	string
+0x901082a3	string	format
+0x901082bb	string	\ttostring
+0x901082ca	string	number
+0x901082f1	string	\ndebuggerc
+0x90108301	string	getaddress
+0x90108310	string	\rescapestring
+0x90108323	string	table
+0x9010833f	string	\tfunction
+0x9010834e	string	f[%x]"function"
+0x90108363	string	thread
+0x90108381	string	\tuserdata
+0x9010839f	string	error
+0x901083a9	string	\rUnknown type
+0x901083d4	string	Debugger not initialized
+0x901083f0	string	\n[ERROR] %s\n
+0x90108400	string	debug
+0x90108414	string	CpuTimeLastSecondMs
+0x90108428	string	CpuTimeLastFrameUs
+0x9010843c	string	UnmanagedMemoryBytes
+0x90108454	string	ManagedMemoryBytes
+0x90108468	string	running
+0x90108470	string	stopped
+0x90108478	string	debugger.lua
+0x90108488	string	Invalid breakpoint index
+0x901084a4	string	Program is already stopped
+0x901084c0	string	Invalid value type. Value must be an object
+0x901084f4	string	state
+0x90108504	string	probe
+0x90108520	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luadebugstate.cpp
+0x90108568	string	Can't find function '%s'
+0x90108584	string	'debugger' module not loaded
+0x901085a4	string	debugger
+0x901085b0	string	This command can't be called while program is running
+0x901085ec	string	start
+0x901085f8	string	DebugBreak
+0x90108604	string	debuggerc
+0x90108610	string	Remote
+0x90108618	string	Voice
+0x90108620	string	NuiGesture
+0x9010862c	string	Controller
+0x90108638	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuiutil.cpp
+0x9010867c	string	hObj is invalid
+0x9010868c	string	_handle
+0x90108694	string	!LUA[%d]~%s
+0x901086a0	string	Xbox.XuiAppId
+0x901086b0	unicode	!LUA[
+0x901086bc	string	expected XUI object
+0x901086d0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxzploader.cpp
+0x90108718	string	loaded
+0x90108720	string	error loading module '%s'
+0x9010873c	string	\n\tno file '%s' in xzp package
+0x9010875c	unicode	.lub
+0x90108768	unicode	.lux
+0x90108774	unicode	.lua
+0x90108780	string	loaders
+0x90108788	string	_xzpmap
+0x90108790	string	%s%s%s
+0x90108798	string	IsValidObject
+0x901087a8	string	SetProperty
+0x901087b4	string	GetProperty
+0x901087c0	string	SetTimer
+0x901087cc	string	ReadFile
+0x901087d8	string	LoadVisual
+0x901087e4	string	LoadObject
+0x901087f0	string	KillTimer
+0x901087fc	string	GetObjectClass
+0x9010880c	string	GetClassName
+0x9010881c	string	GetBaseClass
+0x9010882c	string	FreeVisuals
+0x90108838	string	DestroyOrphan
+0x90108848	string	DestroyObject
+0x90108858	string	CreateObject
+0x90108868	string	ClassDerivesFrom
+0x90108880	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuibaseimpl.cpp
+0x901088c8	string	_XboxXuiBaseTerm
+0x901088dc	string	Xbox.Rm
+0x901088e4	string	%s#%s
+0x901088ec	string	Can't expand resource locator. Unknown alias.
+0x9010891c	string	Resource locators must start with '#'
+0x90108944	string	Xbox.XuiBaseImpl
+0x9010896c	string	Xbox.Object.LuaHXuiResourceWrapper
+0x90108990	string	File too big
+0x901089a0	string	ValueChanged
+0x901089b0	string	VideoEnd
+0x901089bc	string	SelectionChanged
+0x901089d0	string	SetFocus
+0x901089dc	string	KillFocus
+0x901089e8	string	Pressing
+0x901089f4	string	Press
+0x901089fc	string	LeaveTab
+0x90108a08	string	EnterTab
+0x90108a14	string	ParentChanged
+0x90108a2c	string	TransitionStart
+0x90108a3c	string	TransitionEnd
+0x90108a4c	string	Timer
+0x90108a54	string	TimelineEnd
+0x90108a68	string	KeyDown
+0x90108a70	string	Destroy
+0x90108a78	string	Unsubscribe
+0x90108a84	string	Subscribe
+0x90108a90	string	Xbox.XuiEvents
+0x90108aa0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuievents.cpp
+0x90108b3c	string	VK_PAD_BIGBUTTON
+0x90108b50	string	VK_PAD_RTHUMB_DOWNLEFT
+0x90108b68	string	VK_PAD_RTHUMB_DOWNRIGHT
+0x90108b80	string	VK_PAD_RTHUMB_UPRIGHT
+0x90108b98	string	VK_PAD_RTHUMB_UPLEFT
+0x90108bb0	string	VK_PAD_RTHUMB_LEFT
+0x90108bc4	string	VK_PAD_RTHUMB_RIGHT
+0x90108bd8	string	VK_PAD_RTHUMB_DOWN
+0x90108bec	string	VK_PAD_RTHUMB_UP
+0x90108c00	string	VK_PAD_LTHUMB_DOWNLEFT
+0x90108c18	string	VK_PAD_LTHUMB_DOWNRIGHT
+0x90108c30	string	VK_PAD_LTHUMB_UPRIGHT
+0x90108c48	string	VK_PAD_LTHUMB_UPLEFT
+0x90108c60	string	VK_PAD_LTHUMB_LEFT
+0x90108c74	string	VK_PAD_LTHUMB_RIGHT
+0x90108c88	string	VK_PAD_LTHUMB_DOWN
+0x90108c9c	string	VK_PAD_LTHUMB_UP
+0x90108cb0	string	VK_PAD_RTHUMB_PRESS
+0x90108cc4	string	VK_PAD_LTHUMB_PRESS
+0x90108cd8	string	VK_PAD_BACK
+0x90108ce4	string	VK_PAD_START
+0x90108cf4	string	VK_PAD_DPAD_RIGHT
+0x90108d08	string	VK_PAD_DPAD_LEFT
+0x90108d1c	string	VK_PAD_DPAD_DOWN
+0x90108d30	string	VK_PAD_DPAD_UP
+0x90108d40	string	VK_PAD_RTRIGGER
+0x90108d50	string	VK_PAD_LTRIGGER
+0x90108d60	string	VK_PAD_LSHOULDER
+0x90108d74	string	VK_PAD_RSHOULDER
+0x90108d88	string	VK_PAD_Y
+0x90108d94	string	VK_PAD_X
+0x90108da0	string	VK_PAD_B
+0x90108dac	string	VK_PAD_A
+0x90108db8	string	XUI_TRANSITION_TO
+0x90108dcc	string	XUI_TRANSITION_FROM
+0x90108de0	string	XUI_TRANSITION_BACKTO
+0x90108df8	string	XUI_TRANSITION_BACKFROM
+0x90108e10	string	Unknown
+0x90108e18	string	XUI_TRANSITION_ACTION_RELINK
+0x90108e38	string	XUI_TRANSITION_ACTION_UNLINK
+0x90108e58	string	XUI_TRANSITION_ACTION_DESTROY
+0x90108e9c	string	Can't subscribe to notifications because object has no parent
+0x90108edc	string	Event can't be subscribed to as a notification
+0x90108f0c	string	number or string expected
+0x90108f28	string	Invalid XUI event
+0x90108f3c	string	Event handler not found
+0x90108f54	string	MeasureText
+0x90108f60	string	SetText
+0x90108f68	string	GetText
+0x90108f70	string	Xbox.XuiTextImpl
+0x90108f88	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuitextimpl.cpp
+0x90108fd8	string	GetCurrentTab
+0x90108fe8	string	GetCount
+0x90108ff8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuitabsceneimpl.cpp
+0x90109044	string	Xbox.XuiTabSceneImpl
+0x9010905c	string	LookupByKey
+0x90109068	string	Lookup
+0x90109078	string	Xbox.Object.LuaXuiStringTable
+0x90109098	string	Xbox.XuiStringTableImpl
+0x901090b0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuistringtableimpl.cpp
+0x90109114	string	SetValue
+0x90109120	string	SetStep
+0x90109128	string	SetRange
+0x90109134	string	GetValue
+0x90109140	string	GetStep
+0x90109148	string	GetRange
+0x90109158	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuisliderimpl.cpp
+0x901091a4	string	Xbox.XuiSliderImpl
+0x901091b8	string	nRangeMin must be less than nRangeMax
+0x901091e0	string	InterruptTransitions
+0x901091f8	string	EnableTransitionDependency
+0x90109214	string	SetBackScene
+0x90109224	string	GetBackScene
+0x90109234	string	PlayBackFromTransition
+0x9010924c	string	PlayBackToTransition
+0x90109264	string	PlayFromTransition
+0x90109278	string	PlayToTransition
+0x9010928c	string	NavigateForward
+0x9010929c	string	NavigateFirstEx
+0x901092ac	string	NavigateBack
+0x901092bc	string	Create
+0x901092c8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuisceneimpl.cpp
+0x90109310	string	Invalid action
+0x90109320	string	Xbox.XuiSceneImpl
+0x90109334	string	SetChecked
+0x90109340	string	GetItemControl
+0x90109350	string	GetChecked
+0x9010935c	string	Xbox.XuiRadioGroupImpl
+0x90109378	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuiradiogroupimpl.cpp
+0x901093c8	string	Invalid item index
+0x901093e0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuiprogressbarimpl.cpp
+0x90109430	string	Xbox.XuiProgressBarImpl
+0x90109448	string	PressItem
+0x90109454	string	TwistRight
+0x90109460	string	TwistLeft
+0x9010946c	string	SetCurSel
+0x90109478	string	InsertItems
+0x90109484	string	GetItemCount
+0x90109494	string	GetCurSel
+0x901094a0	string	Xbox.XuiTwistImpl
+0x901094b8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuitwistimpl.cpp
+0x90109500	string	SetTopItem
+0x9010950c	string	SetItemEnable
+0x9010951c	string	SetItemCheck
+0x9010952c	string	SetImagePath
+0x9010953c	string	SetCurSelVisible
+0x90109550	string	IsItemVisible
+0x90109560	string	IsItemEnabled
+0x90109570	string	IsItemChecked
+0x90109580	string	GetVisibleItemCount
+0x90109594	string	GetTopItem
+0x901095a0	string	GetMaxVisibleItemCount
+0x901095b8	string	GetImagePath
+0x901095c8	string	GetDefaultItemSize
+0x901095dc	string	DeleteItems
+0x901095e8	string	Xbox.XuiListImpl
+0x90109600	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuilistimpl.cpp
+0x90109648	string	Unsupported type of size
+0x90109664	string	InterItemSize
+0x90109674	string	SelectedItemSize
+0x90109688	string	UnselectedItemSize
+0x901096a0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuiimageimpl.cpp
+0x901096e8	string	Xbox.XuiImageImpl
+0x901096fc	string	SetTextureTranslation
+0x90109714	string	SetTextureScale
+0x90109724	string	SetTextureRotation
+0x90109738	string	SetTextureFileName
+0x9010974c	string	GetTextureTranslation
+0x90109764	string	GetTextureScale
+0x90109774	string	GetTextureRotation
+0x90109788	string	GetTextureFileName
+0x9010979c	string	Xbox.XuiFigureImpl
+0x901097b0	unicode	TransformVersion
+0x901097d8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuifigureimpl.cpp
+0x90109824	string	Figure is not a texture fill type
+0x90109848	unicode	FillType
+0x9010985c	unicode	Fill
+0x90109868	unicode	TextureFileName
+0x90109888	unicode	Rotation
+0x9010989c	unicode	Scale
+0x901098a8	unicode	Translation
+0x901098c0	string	InitResources
+0x901098d0	string	TreeHasFocus
+0x901098e0	string	GetDescendantById
+0x901098f4	string	Unlink
+0x901098fc	string	SkinChanged
+0x90109908	string	SetWidth
+0x90109914	string	SetVisualPrefix
+0x90109924	string	SetShow
+0x9010992c	string	SetScale
+0x90109938	string	SetRotation
+0x90109944	string	SetPosition
+0x90109950	string	SetPivot
+0x9010995c	string	SetOpacity
+0x90109968	string	SetHeight
+0x90109974	string	PlayTimeline
+0x90109984	string	IsShown
+0x9010998c	string	IsDescendant
+0x9010999c	string	InsertChild
+0x901099a8	string	InputEnabled
+0x901099b8	string	InitFocus
+0x901099c4	string	GetWidth
+0x901099d0	string	GetVisualPrefix
+0x901099e0	string	GetScale
+0x901099ec	string	GetPrevious
+0x901099f8	string	GetPosition
+0x90109a04	string	GetPivot
+0x90109a10	string	GetParent
+0x90109a1c	string	GetOpacity
+0x90109a28	string	GetNext
+0x90109a30	string	GetLastChild
+0x90109a40	string	GetId
+0x90109a48	string	GetHeight
+0x90109a54	string	GetFocus
+0x90109a60	string	GetFirstChild
+0x90109a70	string	GetChildById
+0x90109a80	string	FindNamedFrame
+0x90109a90	string	EnableInput
+0x90109a9c	string	DisallowRecursiveTimelineControl
+0x90109ac0	string	AddChild
+0x90109ad0	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuielementimpl.cpp
+0x90109b1c	string	Named frame does not exist
+0x90109b38	string	Xbox.XuiElementImpl
+0x90109b4c	unicode	Height
+0x90109b5c	unicode	Width
+0x90109b6f	string	5SetTopLine
+0x90109b7c	string	Xbox.XuiEditImpl
+0x90109b90	string	InvalidateAll
+0x90109ba0	string	InvalidateNonItems
+0x90109bb4	string	Invalidate
+0x90109bc0	string	SetItemOverrideFunc
+0x90109bd4	string	SetSourceImageFunc
+0x90109be8	string	SetSourceTextFunc
+0x90109bfc	string	SetItemCount
+0x90109c14	string	GameIcon
+0x90109c20	string	GamerTileSmall
+0x90109c30	string	GamerTile
+0x90109c40	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuidatacache.cpp
+0x90109c88	string	Xbox.Object.LuaXuiDataCache
+0x90109ca4	string	Xbox.XuiDataCache
+0x90109cd0	string	__listCache
+0x90109cdc	string	XUI object
+0x90109d10	string	Callback must return a string or a table
+0x90109d3c	string	titleId
+0x90109d44	string	imageType
+0x90109d50	string	imageUserIndex
+0x90109d60	string	imageXuid
+0x90109d6c	string	Callback must return a table or nil
+0x90109d90	string	checked
+0x90109d98	string	enabled
+0x90109da0	string	height
+0x90109da8	string	width
+0x90109db0	string	Callback must return a string or a custom provider
+0x90109de4	string	Invalid XUI handle
+0x90109df8	string	WantsUnfocusedInput
+0x90109e0c	string	SetVisual
+0x90109e18	string	SetPress
+0x90109e24	string	SetEnable
+0x90109e30	string	IsPressed
+0x90109e3c	string	IsEnabled
+0x90109e48	string	GetVisual
+0x90109e54	string	Xbox.XuiControlImpl
+0x90109e68	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuicontrolimpl.cpp
+0x90109eb4	unicode	Visual
+0x90109ec4	string	SetCheck
+0x90109ed0	string	IsChecked
+0x90109edc	string	Xbox.XuiCheckboxImpl
+0x90109ef8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxui\src\luaxuicheckboximpl.cpp
+0x90109f48	string	pamxam
+0x90109f50	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\guideapp\luaguideapp.cpp
+0x90109f9c	unicode	XuiCanvas
+0x90109fb0	string	hr=0x
+0x9010a034	string	(no stack)
+0x9010a040	string	Package wasn't open
+0x9010a054	string	GetSessionId
+0x9010a064	string	UnloadStack
+0x9010a078	string	Xbox.App
+0x9010a084	string	HttpGet
+0x9010a08c	string	HttpPost
+0x9010a098	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\guideapp\httpexports.cpp
+0x9010a0ec	string	Xbox.Net
+0x9010a120	string	Xbox.Object.HttpWait
+0x9010a138	string	Only POST requests may have a body
+0x9010a15c	string	In a Live request, host name must be 'live'
+0x9010a188	unicode	live
+0x9010a194	string	Invalid URL scheme
+0x9010a1a8	string	https://
+0x9010a1b4	string	binaryPadding
+0x9010a1c4	string	isBinaryPayload
+0x9010a1d4	string	maxResponseSize
+0x9010a1e4	string	isLiveRequest
+0x9010a1f4	string	disableCaching
+0x9010a204	string	headers
+0x9010a20c	string	Post requires non-empty body
+0x9010a22c	string	DisableAutoLogoutRestoreDownloadState
+0x9010a254	string	EnableAutoLogoutRestoreDownloadState
+0x9010a27c	string	SetAutoLogoutDeleteProfiles
+0x9010a298	string	DisableAutoLogout
+0x9010a2ac	string	EnableAutoLogout
+0x9010a2c4	string	%.16I64X
+0x9010a2d8	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\guideapp\util.cpp
+0x9010a480	unicode	DepthColorGradient.png
+0x9010a4b0	unicode	ViewCamera/Alert.png
+0x9010a4dc	unicode	ViewCamera/IndicatorBox.png
+0x9010a514	unicode	ViewCamera/Joint.png
+0x9010a56b	string	ke:\bt\1c10e6\core.obj.fre\private\flash\xam\common\tsoobeshared\controls\xam\obj\xbox\DepthPixelShader.updb
+0x9010a65c	string	DepthColorMap
+0x9010a67c	string	c_DepthScaleFactor
+0x9010a6a0	string	myTexture
+0x9010a6aa	string	oldTexture1
+0x9010a6b6	string	oldTexture2
+0x9010a90b	string	ne:\bt\1c10e6\core.obj.fre\private\flash\xam\common\tsoobeshared\controls\xam\obj\xbox\DepthPixelShaderCSC.updb
+0x9010aa14	string	ColorConvertMatrix
+0x9010aa38	string	DepthColorMap
+0x9010aa58	string	c_DepthScaleFactor
+0x9010aa7c	string	myTexture
+0x9010aa86	string	oldTexture1
+0x9010aa92	string	oldTexture2
+0x9010ad0b	string	pe:\bt\1c10e6\core.obj.fre\private\flash\xam\common\tsoobeshared\controls\xam\obj\xbox\IsometricVertexShader.updb
+0x9010ae73	string	re:\bt\1c10e6\core.obj.fre\private\flash\xam\common\tsoobeshared\controls\xam\obj\xbox\PerspectiveVertexShader.updb
+0x9010b06b	string	ne:\bt\1c10e6\core.obj.fre\private\flash\xam\common\tsoobeshared\controls\xam\obj\xbox\TexturedPixelShader.updb
+0x9010b110	string	myTexture
+0x9010b1cb	string	qe:\bt\1c10e6\core.obj.fre\private\flash\xam\common\tsoobeshared\controls\xam\obj\xbox\TexturedPixelShaderCSC.updb
+0x9010b288	string	ColorConvertMatrix
+0x9010b2ac	string	myTexture
+0x9010b3f3	string	oe:\bt\1c10e6\core.obj.fre\private\flash\xam\common\tsoobeshared\controls\xam\obj\xbox\SkeletonVertexShader.updb
+0x9010b4ac	string	c_Color
+0x9010b5bb	string	ne:\bt\1c10e6\core.obj.fre\private\flash\xam\common\tsoobeshared\controls\xam\obj\xbox\SkeletonPixelShader.updb
+0x9010b6d3	string	qe:\bt\1c10e6\core.obj.fre\private\flash\xam\common\tsoobeshared\controls\xam\obj\xbox\SkeletonPixelShaderCSC.updb
+0x9010b77c	string	ColorConvertMatrix
+0x9010bb08	unicode	%s%s
+0x9010bbc0	string	SetShowDepthOnly
+0x9010bbd4	string	SetHighlightedJointIndex
+0x9010bbf0	string	SetTrackUserProgress
+0x9010bc08	string	Update
+0x9010bc10	string	TsOobeShared.Playspace
+0x9010bc28	string	e:\bt\1c10e6\core\private\flash\xam\common\tsoobeshared\luaxbox\src\luaplayspaceexports.cpp
+0x9010bce0	string	FIELDCALSUMMARY
+0x9010bcf0	string	FIELDCALIBLOG
+0x9010bd00	string	TURNITUP2
+0x9010bd0c	string	CAMSET
+0x9010bd14	string	PLAYSPACETEST
+0x9010bd24	string	PLAYSPACEPREP
+0x9010bd34	string	CLEARSPACE
+0x9010bd40	string	AUDIOSPH2
+0x9010bd4c	string	AUDIOAMB2
+0x9010bd58	string	AUDIOCAL
+0x9010bd64	string	IDENTITY
+0x9010bd78	string	PLAYSPACE
+0x9010bd8c	string	CAMLOC
+0x9010bd94	string	SUNLIGHT
+0x9010bdb4	string	AUDIOLAUNCH
+0x9010bdc0	string	LAUNCH
+0x9010bdc8	string	GetLastLoggedEvent
+0x9010bddc	string	SessionStorageGetSessionData
+0x9010bdfc	string	SessionStorageFetchSessions
+0x9010be18	string	LogAudioSpeechLevelTestUsage
+0x9010be38	string	LogAudioAmbientNoiseTestUsage
+0x9010be58	string	LogAudioCalibrationUsage
+0x9010be74	string	LogTurnItUp
+0x9010be80	string	LogCameraSettings
+0x9010be94	string	LogPlayspaceTest
+0x9010bea8	string	LogPlayspacePrep
+0x9010bebc	string	LogClearPlayspace
+0x9010bed0	string	LogTilt1Usage
+0x9010bee0	string	LogCameraLocation
+0x9010bef4	string	LogFatalHardwareError
+0x9010bf0c	string	LogHardwareCheckResult
+0x9010bf24	string	LogAudioLaunchInfo
+0x9010bf38	string	LogLaunchInfo
+0x9010bf70	string	TsCacheEntryUserData
+0x9010c238	string	TsLog
+0x9010c240	unicode	%I64u
+0x9010c290	string	deviceselector.xex
+0x9010c4d4	string	_nextafter
+0x9010c4f4	string	frexp
+0x9010c514	string	ldexp
+0x9010c52c	string	floor
+0x9010c550	string	atan2
+0x9010c588	string	log10
+0x9010c5ac	string	DELETE
+0x9010c5c0	string	Content-Type: xon/%x\r\n
+0x9010c5d8	string	Content-Type:
+0x9010c5e8	string	%x/1.00.%04u
+0x9010c5f8	string	Xbox Live Client/2.0.17559.0
+0x9010c618	string	%u.%u.%u.%u
+0x9010c634	string	remove
+0x9010c63c	string	insert
+0x9010c654	string	foreachi
+0x9010c660	string	foreach
+0x9010c668	string	concat
+0x9010c708	string	'setn' is obsolete
+0x9010c71c	string	wrong number of arguments to 'insert'
+0x9010c744	string	invalid value (%s) at index %d in table for 'concat'
+0x9010c77c	string	invalid order function for sorting
+0x9010c7a0	string	upper
+0x9010c7ac	string	reverse
+0x9010c7b8	string	match
+0x9010c7c0	string	lower
+0x9010c7d4	string	gmatch
+0x9010c7dc	string	gfind
+0x9010c7e4	string	format
+0x9010c8d8	string	string slice too long
+0x9010c8f0	string	invalid value
+0x9010c900	string	unable to dump given function
+0x9010c920	string	invalid capture index
+0x9010c938	string	invalid pattern capture
+0x9010c950	string	malformed pattern (ends with '%%')
+0x9010c974	string	malformed pattern (missing ']')
+0x9010c994	string	unbalanced pattern
+0x9010c9a8	string	too many captures
+0x9010c9bc	string	missing '[' after '%%f' in pattern
+0x9010c9e0	string	unfinished capture
+0x9010c9f4	string	^$*+?.([%-
+0x9010ca00	string	'string.gfind' was renamed to 'string.gmatch'
+0x9010ca30	string	invalid replacement value (a %s)
+0x9010ca54	string	string/function/table expected
+0x9010ca80	string	invalid format (width or precision too long)
+0x9010cab0	string	invalid format (repeated flags)
+0x9010cad0	string	-+ #0
+0x9010cad8	string	invalid option '%%%c' to 'format'
+0x9010cafc	string	module
+0x9010cb04	string	seeall
+0x9010cb0c	string	loadlib
+0x9010cb98	string	dynamic libraries not enabled; check your Lua installation
+0x9010cbd4	string	_LOADLIB
+0x9010cbe8	string	LOADLIB: 
+0x9010cbfc	string	absent
+0x9010cc04	string	\n\tno field package.preload['%s']
+0x9010cc28	string	'package.preload' must be a table
+0x9010cc4c	string	preload
+0x9010cc54	string	module '%s' not found:%s
+0x9010cc70	string	'package.loaders' must be a table
+0x9010cc94	string	loop or previous error loading module '%s'
+0x9010ccc0	string	'module' not called from a Lua function
+0x9010cce8	string	_PACKAGE
+0x9010ccf4	string	_NAME
+0x9010cd00	string	config
+0x9010cd08	string	\\n;\n?\n!\n-
+0x9010cd14	string	cpath
+0x9010cd1c	string	.\?.dll;!\?.dll;!\loadall.dll
+0x9010cd3c	string	.\?.lua;!\lua\?.lua;!\lua\?\init.lua;!\?.lua;!\?\init.lua
+0x9010cd78	string	randomseed
+0x9010cd84	string	random
+0x9010cedf	string	9interval is empty
+0x9010cef4	string	wrong number of arguments
+0x9010cf38	string	traceback
+0x9010cf44	string	setupvalue
+0x9010cf50	string	setmetatable
+0x9010cf60	string	setlocal
+0x9010cf6c	string	sethook
+0x9010cf74	string	setfenv
+0x9010cf7c	string	getupvalue
+0x9010cf88	string	getmetatable
+0x9010cf98	string	getregistry
+0x9010cfa4	string	getlocal
+0x9010cfb0	string	getinfo
+0x9010cfb8	string	gethook
+0x9010cfc0	string	getfenv
+0x9010cfc8	string	tail return
+0x9010cfd4	string	count
+0x9010d0b8	string	nil or table expected
+0x9010d0d0	string	'setfenv' cannot change environment of given object
+0x9010d104	string	function or level expected
+0x9010d128	string	activelines
+0x9010d134	string	namewhat
+0x9010d148	string	currentline
+0x9010d15c	string	lastlinedefined
+0x9010d16c	string	linedefined
+0x9010d178	string	short_src
+0x9010d184	string	source
+0x9010d18c	string	invalid option
+0x9010d1a0	string	flnSu
+0x9010d1a8	string	level out of range
+0x9010d1bc	string	external hook
+0x9010d1cc	string	\n\t...
+0x9010d1e4	string	 in function '%s'
+0x9010d1f8	string	 in main chunk
+0x9010d20c	string	 in function <%s:%d>
+0x9010d224	string	stack traceback:
+0x9010d23c	string	yield
+0x9010d24c	string	status
+0x9010d254	string	resume
+0x9010d25c	string	create
+0x9010d26c	string	normal
+0x9010d274	string	suspended
+0x9010d280	string	xpcall
+0x9010d288	string	unpack
+0x9010d298	string	tonumber
+0x9010d2a4	string	select
+0x9010d2ac	string	rawset
+0x9010d2b4	string	rawget
+0x9010d2bc	string	rawequal
+0x9010d2c8	string	pcall
+0x9010d2d8	string	loadstring
+0x9010d2ec	string	gcinfo
+0x9010d2f4	string	error
+0x9010d2fc	string	collectgarbage
+0x9010d30c	string	assert
+0x9010d314	string	setstepmul
+0x9010d320	string	setpause
+0x9010d334	string	collect
+0x9010d33c	string	restart
+0x9010d4c8	string	base out of range
+0x9010d4dc	string	__metatable
+0x9010d4e8	string	cannot change a protected metatable
+0x9010d50c	string	no function environment for tail call at level %d
+0x9010d540	string	invalid level
+0x9010d550	string	level must be non-negative
+0x9010d578	string	reader function must return a string
+0x9010d5a0	string	too many nested functions
+0x9010d5bc	string	=(load)
+0x9010d5c4	string	assertion failed!
+0x9010d5d8	string	too many results to unpack
+0x9010d5f4	string	index out of range
+0x9010d608	string	%s: %p
+0x9010d610	string	boolean or proxy expected
+0x9010d62c	string	coroutine expected
+0x9010d640	string	too many results to resume
+0x9010d65c	string	cannot resume %s coroutine
+0x9010d678	string	too many arguments to resume
+0x9010d698	string	Lua function expected
+0x9010d6b0	string	newproxy
+0x9010d6c0	string	pairs
+0x9010d6c8	string	ipairs
+0x9010d6d0	string	_VERSION
+0x9010d6dc	string	Lua 5.1
+0x9010d6e8	string	coroutine
+0x9010d73c	string	%s in precompiled chunk
+0x9010d754	string	invalid string id
+0x9010d770	string	bad block
+0x9010d77c	string	LDIDecompress failed
+0x9010d794	string	decoding mismatch
+0x9010d7a8	string	LDICreateDecompression failed
+0x9010d7c8	string	bad section
+0x9010d7d4	string	\n\tno file '%s' in binary package
+0x9010d7f8	string	package module required
+0x9010d810	string	unexpected
+0x9010d81c	string	Xbox.Unknown
+0x9010d830	string	e:\bt\1c10e6\core\private\flash\corelibs\luaxbox\src\luaxuid.cpp
+0x9010d874	string	Invalid xuid
+0x9010d884	string	Xuid expected
+0x9010da18	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\nuitroubleshooter\src\obj\xbox\Guide.NuiTroubleshooter.pdb
+0x90158539	string	abcdefghijklmnopqrstuvwxyz
+0x90158559	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9015c01f	string	MainMenu.xur
+0x9015c04f	string	HardwareCheckMainScene.xur
+0x9015c072	string	HardwareCheckErrorScene.xur
+0x9015c096	string	PlayspaceMainScene.xur
+0x9015c0b5	string	MoreInfoScene.xur
+0x9015c0cf	string	HistoryScene.xur
+0x9015c0e8	string	placeholderscene.xur
+0x9015c105	string	nuiplaceholderscene.xur
+0x9015c125	string	errplaceholderscene.xur
+0x9015c144	string	\nCamera.png
+0x9015c158	string	Microphone.png
+0x9015c16f	string	Strings.xus
+0x9015c183	string	viewcamera\Joint.png
+0x9015c1a0	string	viewcamera\IndicatorBox.png
+0x9015c1c4	string	viewcamera\Alert.png
+0x9015c1e1	string	depthcolorgradient.png
+0x9015c200	string	tuner_sensor.png
+0x9015c219	string	Calicard.png
+0x9015c22e	string	de-de\CameraLocation.xus
+0x9015c24f	string	de-de\errplaceholderscene.xus
+0x9015c274	string	!de-de\HardwareCheckErrorScene.xus
+0x9015c29e	string	 de-de\HardwareCheckMainScene.xus
+0x9015c2c8	string	de-de\HistoryScene.xus
+0x9015c2e7	string	de-de\MainMenu.xus
+0x9015c302	string	de-de\MoreInfoScene.xus
+0x9015c322	string	de-de\nuiplaceholderscene.xus
+0x9015c348	string	de-de\placeholderscene.xus
+0x9015c36b	string	de-de\PlayspaceMainScene.xus
+0x9015c390	string	de-de\Strings.xus
+0x9015c3aa	string	es-es\CameraLocation.xus
+0x9015c3cb	string	es-es\errplaceholderscene.xus
+0x9015c3f0	string	!es-es\HardwareCheckErrorScene.xus
+0x9015c41a	string	 es-es\HardwareCheckMainScene.xus
+0x9015c444	string	es-es\HistoryScene.xus
+0x9015c463	string	es-es\MainMenu.xus
+0x9015c47e	string	es-es\MoreInfoScene.xus
+0x9015c49e	string	es-es\nuiplaceholderscene.xus
+0x9015c4c4	string	es-es\placeholderscene.xus
+0x9015c4e7	string	es-es\PlayspaceMainScene.xus
+0x9015c50c	string	es-es\Strings.xus
+0x9015c526	string	fr-fr\CameraLocation.xus
+0x9015c547	string	fr-fr\errplaceholderscene.xus
+0x9015c56c	string	!fr-fr\HardwareCheckErrorScene.xus
+0x9015c596	string	 fr-fr\HardwareCheckMainScene.xus
+0x9015c5c0	string	fr-fr\HistoryScene.xus
+0x9015c5df	string	fr-fr\MainMenu.xus
+0x9015c5fa	string	fr-fr\MoreInfoScene.xus
+0x9015c61a	string	fr-fr\nuiplaceholderscene.xus
+0x9015c640	string	fr-fr\placeholderscene.xus
+0x9015c663	string	fr-fr\PlayspaceMainScene.xus
+0x9015c688	string	fr-fr\Strings.xus
+0x9015c6a2	string	it-it\CameraLocation.xus
+0x9015c6c3	string	it-it\errplaceholderscene.xus
+0x9015c6e6	string	.`!it-it\HardwareCheckErrorScene.xus
+0x9015c712	string	 it-it\HardwareCheckMainScene.xus
+0x9015c73c	string	it-it\HistoryScene.xus
+0x9015c75b	string	it-it\MainMenu.xus
+0x9015c776	string	it-it\MoreInfoScene.xus
+0x9015c796	string	it-it\nuiplaceholderscene.xus
+0x9015c7bc	string	it-it\placeholderscene.xus
+0x9015c7df	string	it-it\PlayspaceMainScene.xus
+0x9015c804	string	it-it\Strings.xus
+0x9015c81e	string	ko-kr\CameraLocation.xus
+0x9015c83f	string	ko-kr\errplaceholderscene.xus
+0x9015c864	string	!ko-kr\HardwareCheckErrorScene.xus
+0x9015c88e	string	 ko-kr\HardwareCheckMainScene.xus
+0x9015c8b8	string	ko-kr\HistoryScene.xus
+0x9015c8d7	string	ko-kr\MainMenu.xus
+0x9015c8f2	string	ko-kr\MoreInfoScene.xus
+0x9015c912	string	ko-kr\nuiplaceholderscene.xus
+0x9015c938	string	ko-kr\placeholderscene.xus
+0x9015c95b	string	ko-kr\PlayspaceMainScene.xus
+0x9015c980	string	ko-kr\Strings.xus
+0x9015c99a	string	ja-jp\CameraLocation.xus
+0x9015c9bb	string	ja-jp\errplaceholderscene.xus
+0x9015c9e0	string	!ja-jp\HardwareCheckErrorScene.xus
+0x9015ca09	string	3 ja-jp\HardwareCheckMainScene.xus
+0x9015ca34	string	ja-jp\HistoryScene.xus
+0x9015ca53	string	ja-jp\MainMenu.xus
+0x9015ca6e	string	ja-jp\MoreInfoScene.xus
+0x9015ca8e	string	ja-jp\nuiplaceholderscene.xus
+0x9015cab4	string	ja-jp\placeholderscene.xus
+0x9015cad7	string	ja-jp\PlayspaceMainScene.xus
+0x9015cafc	string	ja-jp\Strings.xus
+0x9015cb16	string	pl-pl\CameraLocation.xus
+0x9015cb37	string	pl-pl\errplaceholderscene.xus
+0x9015cb5c	string	!pl-pl\HardwareCheckErrorScene.xus
+0x9015cb86	string	 pl-pl\HardwareCheckMainScene.xus
+0x9015cbb0	string	pl-pl\HistoryScene.xus
+0x9015cbcf	string	pl-pl\MainMenu.xus
+0x9015cbea	string	pl-pl\MoreInfoScene.xus
+0x9015cc0a	string	pl-pl\nuiplaceholderscene.xus
+0x9015cc30	string	pl-pl\placeholderscene.xus
+0x9015cc53	string	pl-pl\PlayspaceMainScene.xus
+0x9015cc78	string	pl-pl\Strings.xus
+0x9015cc92	string	pt-br\CameraLocation.xus
+0x9015ccb3	string	pt-br\errplaceholderscene.xus
+0x9015ccd8	string	!pt-br\HardwareCheckErrorScene.xus
+0x9015cd00	string	;# pt-br\HardwareCheckMainScene.xus
+0x9015cd2c	string	pt-br\HistoryScene.xus
+0x9015cd4b	string	pt-br\MainMenu.xus
+0x9015cd66	string	pt-br\MoreInfoScene.xus
+0x9015cd86	string	pt-br\nuiplaceholderscene.xus
+0x9015cdac	string	pt-br\placeholderscene.xus
+0x9015cdcf	string	pt-br\PlayspaceMainScene.xus
+0x9015cdf4	string	pt-br\Strings.xus
+0x9015ce0e	string	ru-ru\CameraLocation.xus
+0x9015ce2f	string	ru-ru\errplaceholderscene.xus
+0x9015ce54	string	!ru-ru\HardwareCheckErrorScene.xus
+0x9015ce7c	string	w& ru-ru\HardwareCheckMainScene.xus
+0x9015cea8	string	ru-ru\HistoryScene.xus
+0x9015cec7	string	ru-ru\MainMenu.xus
+0x9015cee2	string	ru-ru\MoreInfoScene.xus
+0x9015cf02	string	ru-ru\nuiplaceholderscene.xus
+0x9015cf28	string	ru-ru\placeholderscene.xus
+0x9015cf4b	string	ru-ru\PlayspaceMainScene.xus
+0x9015cf70	string	ru-ru\Strings.xus
+0x9015cf8a	string	zh-tw\CameraLocation.xus
+0x9015cfab	string	zh-tw\errplaceholderscene.xus
+0x9015cfd0	string	!zh-tw\HardwareCheckErrorScene.xus
+0x9015d024	string	zh-tw\HistoryScene.xus
+0x9015d043	string	zh-tw\MainMenu.xus
+0x9015d05e	string	zh-tw\MoreInfoScene.xus
+0x9015d07e	string	zh-tw\nuiplaceholderscene.xus
+0x9015d0a4	string	zh-tw\placeholderscene.xus
+0x9015d0c7	string	zh-tw\PlayspaceMainScene.xus
+0x9015d0ec	string	zh-tw\Strings.xusXUIB
+0x9015d128	string	XVECT
+0x9015d16b	string	Scene_Main
+0x9015d176	string	NuiTroubleshooter.MainMenuScene
+0x9015d196	string	TaskList
+0x9015d19f	string	FadeOut
+0x9015d1a7	string	FadeIn
+0x9015d1ae	string	Select
+0x9015d1ba	string	List_threeline
+0x9015d1c9	string	XuiList
+0x9015d1d1	string	graphic_metapane
+0x9015d1e2	string	RightPanelShader
+0x9015d1f3	string	XuiLabel
+0x9015d1fc	string	Header_bkg
+0x9015d207	string	XuiFigure
+0x9015d211	string	NoDepthLabel
+0x9015d21e	string	Label_BodyWhite
+0x9015d22e	string	PlayspaceControlGroup
+0x9015d244	string	XuiGroup
+0x9015d24d	string	PlayspaceControlImage
+0x9015d263	string	XuiImage
+0x9015d26c	string	TrackingLabel
+0x9015d27a	string	Label_Head
+0x9015d285	string	WelcomeText
+0x9015d291	string	SceneHeader
+0x9015d29d	string	Kinect Tuner
+0x9015d2aa	string	HUDScene
+0x9015d2b3	string	XuiCanvas
+0x9015d53c	string	.Scene_Main
+0x9015d548	string	SelectionList
+0x9015d556	string	FadeOut
+0x9015d55e	string	FadeIn
+0x9015d565	string	Select
+0x9015d571	string	graphic_metapane
+0x9015d582	string	RightPanelShader
+0x9015d593	string	XuiLabel
+0x9015d59c	string	Header_bkg
+0x9015d5a7	string	XuiFigure
+0x9015d5b1	string	list_Common
+0x9015d5bd	string	XuiCommonList
+0x9015d5cb	string	StatusImage
+0x9015d5d7	string	XuiImage
+0x9015d5e0	string	SectionText
+0x9015d5ec	string	Label_Body_small
+0x9015d5fd	string	HeightText
+0x9015d608	string	Label_Body_small_white
+0x9015d61f	string	Place the sensor 2-6 ft (0.6-1.8 m) from the floor. Higher is better.
+0x9015d665	string	XuiGroupCameraLocations
+0x9015d67d	string	XuiImageGoodCameraPos2
+0x9015d694	string	goodCameraPos1.png
+0x9015d6a7	string	XuiImageGoodCameraPos1
+0x9015d6be	string	goodCameraPos2.png
+0x9015d6d1	string	Sunrays
+0x9015d6d9	string	XuiGroup
+0x9015d6e2	string	WizardSteps
+0x9015d6ee	string	List_WizardSteps
+0x9015d719	string	SceneHeader
+0x9015d725	string	Label_Head
+0x9015d730	string	Kinect Tuner
+0x9015d73d	string	SectionHeader
+0x9015d74b	string	SectionSubHeader
+0x9015d75c	string	Label_Body_1line_Dark
+0x9015d772	string	tv_image
+0x9015d77b	string	tuner_sensor.png
+0x9015d78c	string	line bottom
+0x9015d798	string	line top
+0x9015d7a1	string	Arrow
+0x9015d7a7	string	arrow mid
+0x9015d7b5	string	bottom
+0x9015d7bc	string	HUDScene
+0x9015d7c5	string	XuiCanvas
+0x9015dd43	string	MainScene
+0x9015dd4d	string	FadeOut
+0x9015dd55	string	FadeIn
+0x9015dd61	string	LoadingText
+0x9015dd6d	string	Loading...
+0x9015dd78	string	XuiText
+0x9015dd80	string	WaitCursorControl
+0x9015dd92	string	Loading_Small
+0x9015dda0	string	XuiControl
+0x9015ddab	string	HeaderLabel
+0x9015ddb7	string	Label_Head
+0x9015ddc2	string	XuiLabel
+0x9015ddcb	string	HUDScene
+0x9015ddd4	string	XuiCanvas
+0x9015dedb	string	Scene_Main
+0x9015dee6	string	NuiTroubleshooter.HardwareCheckErrorScene
+0x9015df10	string	FadeOut
+0x9015df18	string	FadeIn
+0x9015df1f	string	Select
+0x9015df2b	string	HeaderLabel
+0x9015df37	string	Label_Head
+0x9015df42	string	XuiLabel
+0x9015df4b	string	ErrorHeaderMsg
+0x9015df5a	string	XuiText
+0x9015df62	string	ErrorText
+0x9015df6c	string	CXuiEditRThumbScroll
+0x9015df81	string	edit_NoCaret
+0x9015df8e	string	XuiEdit
+0x9015df96	string	FatalErrorSelectionList
+0x9015dfae	string	list_Common
+0x9015dfba	string	XuiCommonList
+0x9015dfc8	string	NonFatalErrorSelectionList
+0x9015dfe3	string	HUDScene
+0x9015dfec	string	XuiCanvas
+0x9015e112	string	 CUST
+0x9015e148	string	7Scene_Main
+0x9015e154	string	FadeOut
+0x9015e15c	string	FadeIn
+0x9015e163	string	Select
+0x9015e16f	string	PlayspaceBackground
+0x9015e183	string	XuiFigure
+0x9015e18d	string	graphic_metapane
+0x9015e19e	string	RightPanelShader
+0x9015e1af	string	XuiLabel
+0x9015e1b8	string	Header_bkg
+0x9015e1c3	string	DoneOptionList
+0x9015e1d2	string	list_Common
+0x9015e1de	string	XuiCommonList
+0x9015e202	string	NextMoreInfoList
+0x9015e213	string	TiltBeginTestMoreInfoList
+0x9015e22d	string	IgnoreBeginTestMoreInfoList
+0x9015e249	string	TryAgainMoreInfoList
+0x9015e25e	string	BeginTestMoreInfoList
+0x9015e274	string	NextManualTiltList
+0x9015e287	string	NextOptionList
+0x9015e296	string	TryAgainContinueMoreInfoList
+0x9015e2b3	string	ManualTiltGroup
+0x9015e2c3	string	XuiButtonTiltDone
+0x9015e2d5	string	XuiButton
+0x9015e2df	string	XuiButtonTiltDown
+0x9015e2f1	string	XuiButtonTiltUp
+0x9015e30e	string	XuiGroup
+0x9015e317	string	WaitCursorControl
+0x9015e329	string	Loading_Small
+0x9015e337	string	XuiControl
+0x9015e342	string	PlayspaceControl
+0x9015e353	string	PlayspaceVisualControl
+0x9015e36a	string	PlayspaceControlImage
+0x9015e380	string	XuiImage
+0x9015e389	string	TrackingLabel
+0x9015e397	string	Label_Head
+0x9015e3a2	string	Tracking your body
+0x9015e3b5	string	StatusImage
+0x9015e3c1	string	SectionText
+0x9015e3cd	string	Label_Body_small
+0x9015e3de	string	WizardSteps
+0x9015e3ea	string	List_WizardSteps
+0x9015e415	string	SceneHeader
+0x9015e421	string	Kinect Tuner
+0x9015e42e	string	SectionHeader
+0x9015e43c	string	SectionSubHeader
+0x9015e44d	string	Label_Body_1line_Dark
+0x9015e463	string	HUDScene
+0x9015e46c	string	XuiCanvas
+0x9015e941	string	Scene_Main
+0x9015e94c	string	FadeOut
+0x9015e954	string	FadeIn
+0x9015e95b	string	Select
+0x9015e967	string	Header_bkg
+0x9015e972	string	XuiFigure
+0x9015e97c	string	SelectionList
+0x9015e98a	string	list_Common
+0x9015e996	string	XuiCommonList
+0x9015e9a4	string	SectionText
+0x9015e9b0	string	CXuiEditRThumbScroll
+0x9015e9c5	string	edit_NoCaretSmall
+0x9015e9d7	string	Text goes here
+0x9015e9e6	string	XuiEdit
+0x9015e9ee	string	WizardSteps
+0x9015e9fa	string	List_WizardSteps
+0x9015ea25	string	SceneHeader
+0x9015ea31	string	Label_Head
+0x9015ea3c	string	Kinect Tuner
+0x9015ea49	string	XuiLabel
+0x9015ea52	string	SectionHeader
+0x9015ea60	string	Label_Body_small
+0x9015ea71	string	SectionSubHeader
+0x9015ea82	string	Label_Body_1line_Dark
+0x9015ea98	string	HUDScene
+0x9015eaa1	string	XuiCanvas
+0x9015ecd6	string	RScene_Main
+0x9015ece2	string	SelectionList
+0x9015ecf0	string	FadeOut
+0x9015ecf8	string	FadeIn
+0x9015ed04	string	TableBackground
+0x9015ed14	string	Row_Status
+0x9015ed1f	string	XuiFigure
+0x9015ed29	string	Row_StepId
+0x9015ed34	string	Row_FlashVersion
+0x9015ed45	string	Row_XdkVersion
+0x9015ed54	string	Row_ConsoleId
+0x9015ed62	string	Row_Title
+0x9015ed6c	string	Row_Time
+0x9015ed75	string	Row_Date
+0x9015ed7e	string	RowHeadings
+0x9015ed8a	string	RowSeparator7
+0x9015ed98	string	RowSeparator6
+0x9015eda6	string	RowSeparator5
+0x9015edb4	string	RowSeparator4
+0x9015edc2	string	RowSeparator3
+0x9015edd0	string	RowSeparator2
+0x9015edde	string	RowSeparator1
+0x9015edec	string	ColumnSeparator2
+0x9015edfd	string	ColumnSeparator1
+0x9015ee0e	string	XuiGroup
+0x9015ee17	string	Session3
+0x9015ee20	string	Status3
+0x9015ee28	string	XuiLabelRightJustify
+0x9015ee3d	string	XuiLabel
+0x9015ee4e	string	FlashVersion3
+0x9015ee5c	string	XdkVersion3
+0x9015ee68	string	KinectSN3
+0x9015ee85	string	ImageSession3
+0x9015ee93	string	XuiImage
+0x9015ee9c	string	ColumnNumber3
+0x9015eeac	string	Session2
+0x9015eeb5	string	Status2
+0x9015eec5	string	FlashVersion2
+0x9015eed3	string	XdkVersion2
+0x9015eedf	string	KinectSN2
+0x9015eefc	string	ImageSession2
+0x9015ef0a	string	ColumnNumber2
+0x9015ef1a	string	Session1
+0x9015ef23	string	Status1
+0x9015ef33	string	FlashVersion1
+0x9015ef41	string	XdkVersion1
+0x9015ef4d	string	KinectSN1
+0x9015ef6a	string	ImageSession1
+0x9015ef78	string	ColumnNumber1
+0x9015ef88	string	StatusRH
+0x9015ef91	string	Label_Troubleshooter_RowHeading
+0x9015efb1	string	StepIdRH
+0x9015efba	string	FlashVersionRH
+0x9015efc9	string	XdkVersionRH
+0x9015efd6	string	KinectSNRH
+0x9015efe1	string	TitleRH
+0x9015efe9	string	TimeRH
+0x9015eff0	string	DateRH
+0x9015eff7	string	SectionHeader
+0x9015f005	string	Label_Head_22_dark
+0x9015f018	string	SceneHeader
+0x9015f024	string	Label_Head
+0x9015f02f	string	Kinect Tuner
+0x9015f03c	string	KSNLabel
+0x9015f045	string	HUDScene
+0x9015f04e	string	XuiCanvas
+0x9015f694	string	Scene_Main
+0x9015f69f	string	HUDScene
+0x9015f6a8	string	XuiCanvas
+0x9015f717	string	Scene_Main
+0x9015f722	string	HUDScene
+0x9015f72b	string	XuiCanvas
+0x9015f79a	string	Scene_Main
+0x9015f7a5	string	HUDScene
+0x9015f7ae	string	XuiCanvas
+0x9015fd6e	string	Audio and Speech
+0x9015fd7f	string	You need to recalibrate your sensor's audio. If you don't, you may experience problems with chat and speech recognition.\r\n\r\nCalibrate now?
+0x9015fe0a	string	Audio Calibration
+0x9015fe1c	string	Start Test
+0x9015fe27	string	Until your sensor is recalibrated, you may experience problems with chat and speech recognition.\r\n\r\nWhen you're ready to calibrate your sensor's audio, go to the Kinect Tuner and select Audio.
+0x9015fee8	string	Audio Calibration
+0x90160064	string	 Higher is better. If possible, put it above the TV.
+0x90160099	string	Sensor Position
+0x901600a9	string	Place the Kinect Sensor on a stable surface. Center it above your TV. If that's not possible, you can place it below.\r\n\r\nAfter you've positioned the sensor, it will adjust its angle.
+0x90160160	string	If the problem persists, unplug your sensor and visit www.xbox.com/support.
+0x901601ac	string	\r\n\r\nIf you need more help with Kinect, visit www.xbox.com/support/kinect.
+0x901601f6	string	Continue Anyway
+0x9016020b	string	Tilt Down
+0x90160215	string	Body tracking
+0x90160223	string	Hand tracking
+0x90160231	string	Your sensor is starting up. Please stand by.
+0x9016025e	string	USB bandwidth exceeded.
+0x90160276	string	The Kinect Sensor was unplugged.
+0x90160297	string	There was a problem with your USB connection.
+0x901602c5	string	The Kinect Sensor is blocked.
+0x901602e3	string	The Kinect Sensor is not level.
+0x90160303	string	The Kinect Sensor can't move enough.
+0x90160328	string	The Kinect Sensor can't move.
+0x90160346	string	The Kinect Sensor has insufficient power.
+0x90160370	string	The Kinect Sensor isn't connected.
+0x90160393	string	The Kinect Sensor needs to restart.
+0x901603b7	string	The Kinect Sensor is too hot.
+0x901603d5	string	Kinect is turned off.
+0x901603eb	string	The Kinect Sensor on this console isn't valid.
+0x9016041a	string	A problem has occurred with your Kinect Sensor (%s).
+0x9016044f	string	The Kinect Sensor couldn't start.
+0x90160471	string	There's a USB connection problem.
+0x90160493	string	The Kinect Sensor needs an update.
+0x901604b6	string	A Kinect Sensor is connected, but it can't be verified.
+0x901604ee	string	Too many devices are attached to the same USB hub. Make sure the Kinect Sensor is plugged in to a USB port on the back of the console, disconnect any unused devices, and try again.
+0x901605a3	string	Reconnect it and wait a few minutes, then try again.
+0x901605d8	string	The Kinect Sensor requires a high-speed USB connection. Make sure the sensor is plugged in to a USB port on the back of the console, and verify that there are no low-speed USB hubs between the sensor and your console.
+0x901606b2	string	There's something in front of the sensor. Remove any objects from the area and try again.
+0x9016070c	string	Place the sensor on a level surface and try again.
+0x9016073f	string	The sensor is trying to adjust its angle, but something is keeping it from moving. Remove any objects around the sensor and make sure it's on a level surface. If this doesn't work, unplug your sensor, plug it back in, and try again.
+0x90160828	string	The sensor is trying to adjust its angle, but something is keeping it from moving. Remove any objects around the sensor. If this doesn't work, unplug your sensor, plug it back in, and try again.
+0x901608eb	string	Make sure its power supply is plugged in.
+0x90160915	string	Connect your sensor and wait a few minutes, then try again.
+0x90160951	string	Please wait a few seconds and try again.
+0x9016097a	string	Make sure there's enough ventilation around the device. Then, after the sensor has cooled, unplug it and plug it back in again.
+0x901609fa	string	To turn it on, go to Settings, System, Kinect Settings.
+0x90160a32	string	Connect a valid sensor to your console.
+0x90160a5a	string	A problem has occurred with Kinect.
+0x90160a7e	string	Make sure the sensor is at room temperature, unplug it, and plug it back in again.
+0x90160ad1	string	Your Kinect Sensor is plugged in, but your console can't communicate with it.\r\n\r\nIf you have any unused devices connected, disconnect them and try again.
+0x90160b6b	string	To get the update, restart your console.
+0x90160b94	string	Unplug the sensor and plug it back in again.
+0x90160bc6	string	Kinect
+0x90160bcd	string	This game requires a Kinect Sensor.
+0x90160bf1	string	Plug your sensor into the back of your console. If you don't have one, select Exit Game to return to the Xbox Dashboard.
+0x90160c6a	string	Exit Game
+0x90160c74	string	Exit To Dashboard
+0x90160c8c	string	Current Kinect S/N:
+0x90160ca5	string	Flash Version
+0x90160cb3	string	Customer Support Information
+0x90160cd0	string	Kinect S/N
+0x90160cdb	string	Support Information
+0x90160cef	string	Status
+0x90160cf6	string	Step ID
+0x90160d03	string	Title
+0x90160d09	string	XDK Version
+0x90160d1a	string	Check Kinect audio if Kinect can't hear you.
+0x90160d47	string	Check Kinect tracking if Kinect can't see or recognize you.
+0x90160d83	string	Fine-tune Kinect to your play space.
+0x90160da8	string	Find and fix problems with Kinect.
+0x90160dd0	string	Tracking off
+0x90160ddd	string	This experience currently doesn't support Kinect tracking.
+0x90160e18	string	More Info
+0x90160e22	string	Picture
+0x90160e2a	string	Body Tracking
+0x90160e38	string	This test verifies that the sensor can see you and tell you apart from other objects in the room.\r\n\r\nIf you're standing, make sure you're in the center of the play space, and that you're not touching anything. Also check the floor for objects like tables, pillows, or pets.\r\n\r\nIf you're seated, make sure you sit up straight with both feet on the floor and that you're clear of objects like pillows or pets.
+0x90160fd0	string	Stand or sit 6-10 ft (1.8-3 m) from the sensor. You should see your head and as much of your body as possible.\r\n\r\nIf Kinect can't see enough of you, select Adjust Angle.
+0x9016107a	string	Body Tracking
+0x90161088	string	Stand 6-10 ft (1.8-3 m) from the sensor. You should see your head and as much of your body as possible.\r\n\r\nIf Kinect can't see enough of you, select Adjust Angle.
+0x9016112b	string	Sensor Angle
+0x90161138	string	The sensor needs to tilt. Make sure the sensor hasn't fallen over and isn't upside down. Remove any objects from around the sensor, or move it to an area that's clear. \r\n\r\nIf the problem persists, exit your game, then unplug the sensor and plug it back in.
+0x90161239	string	Couldn't adjust the sensor because something is keeping it from moving. \r\n\r\nMake sure the sensor is upright and that no objects are near it.
+0x901612c6	string	Sensor Angle
+0x901612d3	string	Couldn't adjust the sensor angle. Wait a few minutes and try again.
+0x90161317	string	Couldn't adjust the sensor. Please try again.
+0x90161345	string	Sensor Angle
+0x90161352	string	Couldn't adjust the sensor angle because it was moved while it was being adjusted. Make sure not to touch the sensor while it's moving.
+0x901613da	string	Couldn't adjust the sensor to the correct angle because it was moved. \r\n\r\nTry again, making sure not to touch the sensor.
+0x90161454	string	Sensor Angle
+0x90161461	string	Couldn't adjust the sensor angle.\r\n\r\nIf the problem persists, visit www.xbox.com/support.
+0x901614bb	string	Couldn't adjust the sensor to the correct angle. \r\n\r\nIf the problem persists, visit www.xbox.com/support.
+0x90161525	string	Sensor Angle
+0x90161532	string	Couldn't adjust the sensor angle. If the problem persists, visit www.xbox.com/support.
+0x90161589	string	Couldn't adjust the sensor. If the problem persists, visit www.xbox.com/support.
+0x901615da	string	Sensor Angle
+0x901615e7	string	The sensor might not be able to see the play space because the edge of the surface it's on is in the way. Move the sensor closer to the edge so it can see the floor.
+0x9016168d	string	Couldn't adjust the sensor because it can't see the floor.\r\n\r\nMove it closer to the edge of the shelf or table and try again.
+0x9016170b	string	Sensor Angle
+0x90161718	string	Couldn't adjust the sensor angle. Try the test again.\r\n\r\nIf the problem persists, restart the console and try again.
+0x9016178d	string	Couldn't adjust the sensor. Please try again.
+0x901617bb	string	Sensor Angle
+0x901617c8	string	The sensor is placed lower than recommended for body tracking.\r\n\r\nPosition the sensor at least 2 ft (0.6 m) above the floor. Higher is better because it helps Kinect see more of your body.\r\n\r\nSensor height is important for seated body tracking. If you can't move it up, make sure nothing's between you and the sensor and sit up straight.
+0x9016191a	string	Sensor too low.\r\n\r\nThe sensor is placed below the recommended height. Move the sensor up.
+0x90161974	string	The sensor angle has been adjusted.
+0x90161998	string	Kinect is finding the default viewing angle.
+0x901619c5	string	Saving Settings
+0x901619d5	string	You're ready to play!
+0x901619eb	string	Kinect can see you. You're ready to play!
+0x90161a15	string	Saving your tracking settings.
+0x90161a34	string	Sensor Angle
+0x90161a41	string	Play Space
+0x90161b2d	string	 Some types of clothing.\r\n\r\nCorrect the problem by removing or blocking the light or by changing your clothes.
+0x90161b9c	string	Play Space
+0x90161ba7	string	This picture shows what Kinect uses to find players.\r\n\r\nMake sure the area in front of the sensor is clear.\r\n\r\nSelect More Info to learn how sunlight, lamps, and some clothing can affect tracking.
+0x90161c6c	string	Adjust Angle
+0x90161c79	string	Tilt your sensor up or down. You should see all of your head and as much of your body as possible.
+0x90161cdc	string	Adjust Angle
+0x90161ce9	string	Kinect needs to verify that it can see you.\r\n\r\nMake sure you're the only one in the play space. Keep both feet on the floor, don't slouch, and face forward during the test.
+0x90161d96	string	There's been a change in your configuration. The Kinect Tuner will now restart.
+0x90161de6	string	The game that was running has changed. The Kinect Tuner will now restart.
+0x90161e30	string	Configuration Change
+0x90161e45	string	Kinect Tuner
+0x90161e52	string	Calibration
+0x90161e65	string	Try Again
+0x90161e6f	string	Tracking
+0x90161e78	string	Try Again
+0x90161e82	string	Tilt Up
+0x90161e8a	string	Body Turned
+0x90161e96	string	Turn your body to face the sensor. During the test, hold still and keep facing the sensor.
+0x90161ef1	string	Body turned.\r\n\r\nKinect can't see all of your body. Face forward and try again.
+0x90161f40	string	Looking for player...\r\n\r\nStay in the play space. Kinect is making sure it can distinguish you from other objects and players in the room.
+0x90161fca	string	Lower Body Not Detected
+0x90161fe2	string	Make sure you're in the center of the play space, and that nothing is in the way.\r\n    \r\nDuring the test, look at the image. You should see the room and yourself. If you don't see your head and most of your body, go back a few steps in the Kinect Tuner and adjust your sensor's angle.
+0x901620ff	string	Lower body not detected.\r\n\r\nKinect can't see the lower part of your body. Make sure nothing is in the way and try again.
+0x90162178	string	Too Far Left
+0x90162185	string	Make sure you're in the center of the play space. If you are, check the sensor to make sure it's pointing at you.
+0x901621f7	string	Too far left.\r\n\r\nYou're too far to the left. Make sure you're in the center of the play space and try again.
+0x90162264	string	Too Far Right
+0x90162272	string	Make sure you're in the center of the play space. If you are, check the sensor to make sure it's pointing at you.
+0x901622e4	string	Too far right.\r\n\r\nYou're too far to the right. Make sure you're in the center of the play space and try again.
+0x90162353	string	Skipped the play space verification tests.
+0x9016237e	string	Face Not Clear
+0x9016238d	string	Make sure nothing is covering your face, like a hat, reflective glasses, or your hair. Also check for reflections or glare.\r\n\r\nMake sure your room has enough light so that your face is clearly visible and evenly lit. Try to minimize side or back lighting, especially from a window.\r\n\r\nIf the problem persists, try placing the sensor closer to the top or bottom of the TV.
+0x90162501	string	Face not clear.\r\n\r\nThis picture shows what Kinect uses to recognize you. Make sure your face is clearly visible and evenly lit. Select More Info to see why this may be happening.
+0x901625b4	string	Status code: %s
+0x901625c4	string	Player or Play Space Not Detected
+0x901625e6	string	Make sure the sensor is pointing out into the room, your lights are on, and that your head is fully visible in the image.\r\n\r\nIf the problem persists, visit www.xbox.com/support.\r\n
+0x9016269a	string	Player or play space not detected.\r\n\r\nKinect can't see anyone. Please try again.
+0x901626eb	string	Head Not Detected
+0x901626fd	string	Make sure you're in the center of the play space.\r\n\r\nIn the image, you should see the room and yourself. If you don't see your head and most of your body, adjust your sensor's angle.
+0x901627b4	string	Head not detected.\r\n\r\nThis picture shows what Kinect uses to recognize you. Kinect can't see all of your head. Take a step back and try again.
+0x90162843	string	Face Obscured
+0x90162851	string	There might be something in front of your face. Make sure nothing is covering it, like a hat, reflective glasses, or your hair.\r\n\r\nAlso, try looking at the sensor during the test.
+0x90162905	string	Face obscured.\r\n\r\nKinect can't see your face. Make sure there's a clear line of sight between the sensor and your face, then try again.
+0x9016298d	string	Kinect can see you.\r\n\r\nYou look great!
+0x901629b4	string	Too Much Light
+0x901629c3	string	The light on your face is too bright for Kinect to see you. Turn down the lights, and check for any other sources of bright light.
+0x90162a46	string	Too much light.\r\n\r\nThis picture shows what Kinect uses to recognize you. There's too much light on your face. Try turning down the lights, then try again.
+0x90162ae1	string	Too Close
+0x90162aeb	string	Kinect works best when you're at least 6 ft (1.8 m) away from the sensor.\r\n\r\nIf you can't move back that far, you can skip this result.
+0x90162b73	string	Too close.\r\n\r\nYou're too close to the sensor. Move farther away and try again.
+0x90162bc2	string	Not Enough Light
+0x90162bd3	string	The light on your face is too dim for Kinect to see you. Try turning on some lights.
+0x90162c28	string	Not enough light.\r\n\r\nThis picture shows what Kinect uses to recognize you. There's not enough light on your face. Try turning up the lights, then try again.
+0x90162cc5	string	Too Far Away
+0x90162cd2	string	You're too far from the sensor. Move closer.
+0x90162cff	string	Too far away.\r\n\r\nKinect can see you, but you're too far away for optimal body tracking. Move closer and try again.
+0x90162d72	string	No Player Detected
+0x90162f02	string	No player detected.\r\n\r\nKinect can't see you. Wave at the sensor. \r\n\r\nIf you left the play space, come back and try again.
+0x90164574	string	her, desto besser.
+0x901645e5	string	Laden ...
+0x90164689	string	Weiter
+0x90164694	string	Nach unten
+0x901646a3	string	Nach oben
+0x901646b8	string	rper wird verfolgt
+0x901646f6	string	Audio und Sprache
+0x9016474c	string	nnen Probleme mit dem Chat und der Spracherkennung auftreten.\r\n\r\nJetzt kalibrieren?
+0x901647a0	string	Audio-Kalibrierung
+0x901647b3	string	Test starten
+0x9016487f	string	hlen Sie "Audio".
+0x90164891	string	Audio-Kalibrierung
+0x90164a98	string	Sensorposition
+0x90164b2f	string	nnen Sie ihn darunter aufstellen.\r\n\r\nNachdem Sie den Sensor aufgestellt haben, passt er seinen Winkel an.
+0x90164b99	string	Sollte dies nicht helfen, Verbindung zum Sensor trennen und www.xbox.com/support besuchen.
+0x90164c1f	string	tigen, besuchen Sie www.xbox.com/support/kinect.
+0x90164c50	string	Trotzdem fortfahren
+0x90164c64	string	Fertig
+0x90164c6b	string	Nach unten neigen
+0x90164c80	string	rpertracking
+0x90164c8d	string	Handtracking
+0x90164c9a	string	Der Sensor wird hochgefahren. Bitte bleiben Sie bereit.
+0x90164ce3	string	berschritten.
+0x90164cf1	string	Die Verbindung zum Kinect Sensor wurde getrennt.
+0x90164d22	string	Es gab ein Problem mit Ihrer USB-Verbindung.
+0x90164d4f	string	Der Kinect Sensor ist blockiert.
+0x90164d70	string	Der Kinect Sensor steht nicht gerade.
+0x90164d96	string	Der Kinect Sensor kann sich nicht genug bewegen.
+0x90164dc7	string	Der Kinect Sensor kann sich nicht bewegen.
+0x90164e13	string	gend Strom.
+0x90164e1f	string	Der Kinect Sensor ist nicht verbunden.
+0x90164e46	string	Der Kinect Sensor muss neu gestartet werden.
+0x90164e93	string	Kinect ist ausgeschaltet.
+0x90164ee4	string	Mit Ihrem Kinect Sensor (%s) ist ein Problem aufgetreten.
+0x90164f1e	string	Der Kinect Sensor konnte nicht gestartet werden.
+0x90164f4f	string	Es gibt ein Problem mit der USB-Verbindung.
+0x90164f92	string	tigt eine Aktualisierung.
+0x90164fac	string	Ein Kinect Sensor ist angeschlossen, kann aber nicht verifiziert werden.
+0x901650ca	string	te und versuchen Sie es erneut.
+0x90165141	string	end erneut.
+0x901651ce	string	ckseite der Konsole angeschlossen ist und dass sich keine Low-Speed-USB-Hubs zwischen dem Sensor und Ihrer Konsole befinden.
+0x9016524b	string	Es steht etwas vor dem Sensor. Entfernen Sie alle Objekte aus dem Bereich und versuchen Sie es erneut.
+0x901652dc	string	che und versuchen Sie es erneut.
+0x901652fd	string	Der Sensor wird am Anpassen seines Winkels gehindert. Entfernen Sie jegliche Hindernisse. Bleibt das Problem weiter bestehen, trennen Sie den Sensor ab, verbinden Sie ihn erneut und versuchen Sie es nochmals.
+0x90165436	string	nde um den Sensor. Besteht das Problem weiterhin, trennen Sie die Verbindung zum Sensor, stellen Sie sie wieder her und versuchen Sie es erneut.
+0x901654c7	string	Stellen Sie sicher, dass das Netzteil angeschlossen ist.
+0x90165559	string	end erneut.
+0x901655a5	string	end erneut.
+0x90165647	string	en Sie ihn wieder an.
+0x9016565d	string	Um es einzuschalten, gehen Sie zu "Einstellungen", "System", "Kinect-Einstellungen".
+0x901656ca	string	ltigen Sensor an Ihre Konsole an.
+0x901656ec	string	Es ist ein Problem mit Kinect aufgetreten.
+0x9016576e	string	en Sie ihn wieder an.
+0x901657fe	string	te angeschlossen sein, trennen Sie sie und versuchen Sie es erneut.
+0x90165842	string	Um diese Aktualisierung zu erhalten, starten Sie Ihre Konsole neu.
+0x901658b7	string	en Sie ihn wieder an.
+0x901658cd	string	Verlassen
+0x901658d8	string	Dieses Spiel erfordert einen Kinect Sensor.
+0x9016599f	string	Spiel verlassen
+0x901659af	string	Verlassen und zur Steuerung gehen
+0x901659d2	string	Aktuelle Kinect S/N:
+0x901659e7	string	Datum
+0x901659ed	string	Flash-Version
+0x901659fb	string	Kundensupportinformationen
+0x90165a17	string	Supportinformationen
+0x90165a2d	string	Schritt-ID
+0x90165a40	string	Titel
+0x90165a46	string	XDK-Version
+0x90165a54	string	berspringen
+0x90165a98	string	ren kann.
+0x90165ab6	string	fen, wenn Kinect Sie nicht sieht/erkennt.
+0x90165ae0	string	Passen Sie Kinect an Ihr Spielfeld an.
+0x90165b07	string	Finden und beheben Sie Probleme mit Kinect.
+0x90165b33	string	Weiter
+0x90165b3a	string	Tracking aus
+0x90165b61	string	tzt Kinect-Tracking zurzeit nicht.
+0x90165b84	string	Mehr Infos
+0x90165b97	string	rpertracking
+0x90165d59	string	nde wie Kissen oder Haustiere im Weg sind.
+0x90165e41	string	hlen Sie "Winkel anpassen".
+0x90165e60	string	rpertracking
+0x90165f1e	string	hlen Sie "Winkel anpassen".
+0x90165f3a	string	Sensorwinkel
+0x90166090	string	en Sie ihn erneut an.
+0x90166157	string	he befinden.
+0x90166164	string	Sensorwinkel
+0x90166171	string	Sensorwinkel konnte nicht angepasst werden. Warten Sie einige Minuten und versuchen Sie es erneut.
+0x901661d4	string	Sensor konnte nicht angepasst werden. Bitte versuchen Sie es noch einmal.
+0x9016621e	string	Sensorwinkel
+0x90166342	string	hren Sie aber auf keinen Fall den Sensor.
+0x9016636c	string	Sensorwinkel
+0x90166379	string	Sensorwinkel konnte nicht angepasst werden.\r\n\r\nWenn das Problem weiterhin besteht, besuchen Sie www.xbox.com/support.
+0x901663ef	string	Der Sensor konnte nicht auf den richtigen Winkel eingestellt werden. \r\n\r\nWenn das Problem weiterhin besteht, besuchen Sie www.xbox.com/support.
+0x9016647f	string	Sensorwinkel
+0x9016648c	string	Sensorwinkel konnte nicht angepasst werden. Wenn das Problem weiterhin besteht, gehen Sie zu www.xbox.com/support.
+0x901664ff	string	Sensor konnte nicht angepasst werden. Wenn das Problem weiterhin besteht, gehen Sie zu www.xbox.com/support.
+0x9016656c	string	Sensorwinkel
+0x90166612	string	che, damit er den Boden sehen kann.
+0x90166698	string	her an die Kante des Regals oder Tisches und versuchen Sie es erneut.
+0x901666de	string	Sensorwinkel
+0x901666eb	string	Sensorwinkel konnte nicht angepasst werden. Versuchen Sie den Test erneut.\r\n\r\nWenn das Problem weiterhin besteht, starten Sie die Konsole neu und versuchen Sie es erneut.
+0x90166796	string	Sensor konnte nicht angepasst werden. Bitte versuchen Sie es noch einmal.
+0x901667e0	string	Sensorwinkel
+0x9016692f	string	nnen, stellen Sie sicher, dass sich nichts zwischen Ihnen und dem Sensor befindet, und setzen Sie sich gerade hin.
+0x90166a05	string	Der Sensorwinkel wurde angepasst.
+0x90166a27	string	Kinect sucht nach dem voreingestellten Blickwinkel.
+0x90166a5b	string	Einstellungen werden gespeichert
+0x90166a7c	string	Sie sind bereit, um zu spielen!
+0x90166a9c	string	Kinect kann Sie sehen. Sie sind bereit zum Spielen
+0x90166acf	string	Ihre Trackingeinstellungen werden gespeichert.
+0x90166afe	string	Sensorwinkel
+0x90166b0b	string	Spielfeld
+0x90166c25	string	 Gewisse Arten Kleidung.\r\n\r\nBeheben Sie das Problem, indem Sie das Licht entfernen oder blockieren oder Ihre Kleidung wechseln.
+0x90166ca5	string	Spielfeld
+0x90166d2a	string	hlen Sie "Mehr Infos", wenn Kinect Probleme hat, Sie zu verfolgen.
+0x90166d6d	string	Winkel anpassen
+0x90166df2	string	rper sehen.
+0x90166dfe	string	Winkel anpassen
+0x90166ee8	string	hrend des Tests nach vorne.
+0x90166f21	string	ndert. Der Kinect Tuner wird jetzt neu gestartet.
+0x90166f7f	string	ndert. Der Kinect Tuner wird jetzt neu gestartet.
+0x90166fc1	string	nderung
+0x90166fca	string	Kalibrierung
+0x90166fd8	string	Erneut versuchen
+0x90166fea	string	Erneut versuchen
+0x90166ffb	string	Nach oben neigen
+0x9016700f	string	rper gedreht
+0x9016706a	string	hrend des Tests still und in Richtung Sensor stehen.
+0x90167118	string	t und versuchen Sie es erneut.
+0x901671a4	string	nden und Spielern im Raum unterscheiden kann.
+0x901671da	string	rper nicht erkannt
+0x9016732b	string	ck und passen Sie den Winkel des Sensors an.
+0x9016739d	string	rpers nicht sehen. Stellen Sie sicher, dass nichts im Weg steht, und versuchen Sie es erneut.
+0x901673fb	string	Zu weit links
+0x90167475	string	fen Sie den Sensor, um sicher zu stellen, dass dieser auf Sie gerichtet ist.
+0x901674c2	string	Zu weit links.\r\n\r\nSie sind zu weit links. Stellen Sie sicher, dass Sie sich in der Mitte des Spielfeldes befinden, und versuchen Sie es erneut.
+0x90167552	string	Zu weit rechts
+0x901675c2	string	fen Sie den Sensor, um sicherzustellen, dass er auf Sie gerichtet ist.
+0x90167609	string	Zu weit rechts.\r\n\r\nSie sind zu weit rechts. Stellen Sie sicher, dass Sie sich in der Mitte des Spielfeldes befinden, und versuchen Sie es erneut.
+0x901676b9	string	bersprungen.
+0x901676c6	string	Gesicht nicht deutlich erkannt
+0x9016791c	string	ts zu stellen.
+0x901679f4	string	hlen Sie "Mehr Infos", um zu sehen, warum dies passiert.
+0x90167a2d	string	Statuscode: %s
+0x90167a3c	string	Spieler oder Spielfeld nicht erkannt
+0x90167adf	string	ndig sichtbar ist.\r\n\r\nWenn das Problem weiterhin besteht, besuchen Sie www.xbox.com/support.\r\n
+0x90167b3e	string	Spieler oder Spielfeld nicht erkannt.\r\n\r\nKinect kann niemanden sehen. Bitte versuchen Sie es noch einmal.
+0x90167ba8	string	Kopf nicht erkannt
+0x90167c64	string	rpers nicht sehen, passen Sie den Winkel des Sensors an.
+0x90167d39	string	ck und versuchen Sie es erneut.
+0x90167d59	string	Gesicht verdunkelt
+0x90167e35	string	hrend des Tests in Richtung Sensor zu blicken.
+0x90167f10	string	end noch einmal.
+0x90167f21	string	Kinect kann Sie sehen.\r\n\r\nSie sehen toll aus!
+0x90167f4f	string	Zu viel Licht
+0x90167f5d	string	Das Licht auf Ihrem Gesicht ist zu hell und Kinect kann Sie nicht sehen. Passen Sie das Licht im Raum entsprechend an.
+0x90168086	string	end erneut.
+0x90168123	string	berspringen Sie dieses Ergebnis.
+0x9016818c	string	ck und versuchen Sie es erneut.
+0x901681ac	string	Nicht genug Licht
+0x901681be	string	Ihr Gesicht ist nicht ausreichend beleuchtet und Kinect kann Sie nicht sehen.  Passen Sie die Beleuchtung im Raum an.
+0x901682f9	string	end erneut.
+0x90168305	string	Zu weit entfernt
+0x90168349	string	her hin.
+0x901683e1	string	t heran und versuchen Sie es erneut.
+0x90168406	string	Kein Spieler erkannt
+0x90168629	string	e auf den Boden stellen.
+0x901686d3	string	ck und versuchen Sie es erneut.
+0x90168741	string	s alto mejor.
+0x90168753	string	Configurador de Kinect
+0x9016876e	string	Seleccionar
+0x901687a1	string	Seleccionar
+0x901687c8	string	Cargando...
+0x901687ef	string	Configurador de Kinect
+0x90168821	string	Configurador de Kinect
+0x9016883b	string	\tSeleccionar
+0x90168863	string	Configurador de Kinect
+0x9016887e	string	Seleccionar
+0x901688bd	string	Siguiente
+0x901688d5	string	Arriba
+0x901688e0	string	Seguimiento del cuerpo
+0x901688fb	string	Configurador de Kinect
+0x90168916	string	Seleccionar
+0x9016893d	string	Audio y voz
+0x901689d1	string	Calibrar ahora?
+0x901689ec	string	n de Audio
+0x90168a8e	string	s listo para calibrar el audio del sensor, ve al Configurador de Kinect y selecciona Audio.
+0x90168af5	string	n de Audio
+0x90168c76	string	s alto mejor. Si fuera posible, ponlo sobre la tele.
+0x90168cb3	string	n de sensor
+0x90168d8b	string	a, desconecta el sensor y visita www.xbox.com/support.
+0x90168dd6	string	s ayuda relacionada con Kinect, visita www.xbox.com/support/kinect.
+0x90168e1a	string	Continuar de todos modos
+0x90168e33	string	Listo
+0x90168e39	string	Inclinar hacia abajo
+0x90168e4e	string	Seguimiento del cuerpo
+0x90168e65	string	Seguimiento de la mano
+0x90168e8e	string	 iniciando. Espera...
+0x90168ea4	string	Se ha excedido el ancho de banda USB.
+0x90168eca	string	El sensor de Kinect se ha desconectado.
+0x90168f3a	string	 bloqueado.
+0x90168f62	string	 nivelado.
+0x90168f6d	string	El sensor de Kinect no se puede mover lo suficiente.
+0x90168fa2	string	El sensor de Kinect no se puede mover.
+0x90168fc9	string	No llega corriente suficiente al sensor de Kinect.
+0x90169018	string	 conectado.
+0x90169024	string	Es necesario reiniciar el sensor de Kinect.
+0x90169050	string	La temperatura del sensor de Kinect es demasiado alta.
+0x90169093	string	 apagado.
+0x901690d0	string	Hubo un problema con tu sensor de Kinect (%s).
+0x901690ff	string	No se ha podido iniciar el sensor de Kinect.
+0x90169152	string	Es necesario actualizar el sensor de Kinect.
+0x9016917f	string	Hay un sensor de Kinect conectado, pero no se puede verificar.
+0x9016922b	string	 conectado a un puerto USB de la parte posterior de la consola, desconecta los que no utilices y vuelve a intentarlo.
+0x901692a1	string	Vuelve a conectarlo, espera unos minutos y vuelve a intentarlo.
+0x90169387	string	rate de que no haya concentradores USB de baja velocidad entre el sensor y la consola.
+0x901693de	string	Hay algo delante del sensor. Retira todos los objetos y vuelve a intentarlo.
+0x9016942b	string	Coloca el sensor en una superficie nivelada y vuelve a intentarlo.
+0x90169561	string	falo de nuevo y vuelve a intentarlo.
+0x90169634	string	falo de nuevo y vuelve a intentarlo.
+0x90169687	string	 conectada.
+0x90169693	string	Conecta el sensor, espera unos minutos y vuelve a intentarlo.
+0x901696ed	string	ntalo de nuevo.
+0x9016978b	string	falo y vuelve a enchufarlo.
+0x901697e3	string	n de Kinect.
+0x90169805	string	lido a tu consola.
+0x90169818	string	Hubo un problema con Kinect.
+0x90169873	string	ctalo y vuelve a conectarlo.
+0x90169930	string	ctalo y vuelve a intentarlo.
+0x9016994d	string	Para actualizarlo, reinicia la consola.
+0x90169975	string	Desconecta el sensor y vuelve a conectarlo.
+0x901699a1	string	Salir
+0x901699a8	string	Este juego necesita un sensor de Kinect.
+0x901699d1	string	Conecta el sensor en la parte posterior de la consola. Si no tienes, selecciona Salir del juego para volver a la Interfaz Xbox.
+0x90169a51	string	Salir del juego
+0x90169a61	string	Salir a la interfaz
+0x90169a7a	string	 de serie actual de Kinect:
+0x90169a96	string	Fecha
+0x90169aa3	string	n Flash
+0x90169add	string	 de serie de Kinect
+0x90169b12	string	Estado
+0x90169b19	string	Id paso
+0x90169b3b	string	Omitir
+0x90169ba1	string	ste no puede verte o reconocerte.
+0x90169be4	string	rea de juego.
+0x90169bf2	string	Detectar y reparar problemas con Kinect.
+0x90169c1b	string	Siguiente
+0x90169c25	string	Seguimiento desactivado
+0x90169c3d	string	Esta experiencia no admite actualmente el seguimiento de Kinect.
+0x90169c90	string	Imagen
+0x90169c97	string	Seguimiento del cuerpo
+0x90169e21	string	rate de que no haya objetos en medio, como cojines o animales.
+0x90169f19	string	Seguimiento del cuerpo
+0x90169fe1	string	ngulo del sensor
+0x9016a0cc	string	a, sal del juego, desconecta el sensor y vuelve a conectarlo.
+0x9016a16b	string	 bien posicionado y que no hay objetos cerca.
+0x9016a19b	string	ngulo del sensor
+0x9016a1c9	string	ngulo del sensor. Espera unos minutos y vuelve a intentarlo.
+0x9016a206	string	No se ha podido ajustar el sensor. Vuelve a intentarlo.
+0x9016a240	string	ngulo del sensor
+0x9016a2af	string	rate de no tocar el sensor mientras se mueve.
+0x9016a348	string	ndote de no tocarlo.
+0x9016a35f	string	ngulo del sensor
+0x9016a3c1	string	a, visita www.xbox.com/support.
+0x9016a432	string	a, visita www.xbox.com/support.
+0x9016a454	string	ngulo del sensor
+0x9016a4ab	string	a, visita www.xbox.com/support.
+0x9016a505	string	a, visita www.xbox.com/support.
+0x9016a527	string	ngulo del sensor
+0x9016a5ae	string	 apoyado. Acerca el sensor al borde para que vea el suelo.
+0x9016a654	string	a o la mesa y vuelve a intentarlo.
+0x9016a679	string	ngulo del sensor
+0x9016a6f0	string	a, reinicia la consola y vuelve a intentarlo.
+0x9016a71e	string	No se ha podido ajustar el sensor. Vuelve a intentarlo.
+0x9016a758	string	ngulo del sensor
+0x9016a8e8	string	ntate recto.
+0x9016a976	string	ngulo del sensor.
+0x9016a9b2	string	n predeterminado.
+0x9016a9e2	string	Ya puedes jugar!
+0x9016aa11	string	s listo para jugar!
+0x9016aa3f	string	n de seguimiento.
+0x9016aa53	string	ngulo del sensor
+0x9016aa66	string	rea de juego
+0x9016abc6	string	mbiate de ropa.
+0x9016abd8	string	rea de juego
+0x9016acbc	string	mparas y algunas prendas de ropa pueden afectar al seguimiento.
+0x9016ad44	string	s ver toda tu cabeza y todo lo que se pueda del resto del cuerpo.
+0x9016adf6	string	rea de juego. Pon los dos pies en el suelo, ponte derecho y mira hacia delante durante la prueba.
+0x9016af30	string	Configurador de Kinect
+0x9016af55	string	Volver a intentarlo
+0x9016af69	string	Seguimiento
+0x9016af75	string	Volver a intentarlo
+0x9016af89	string	Inclinar hacia arriba
+0x9016af9f	string	Cuerpo girado
+0x9016aff9	string	a de cara al sensor.
+0x9016b00e	string	Cuerpo girado.\r\n\r\nKinect no puede ver todo tu cuerpo. Mira hacia adelante y vuelve a intentarlo.
+0x9016b0b7	string	 asegurando de que puede distinguirte de otros objetos y jugadores en la sala.
+0x9016b106	string	Parte inferior del cuerpo no detectada
+0x9016b256	string	ngulo del sensor.
+0x9016b2e8	string	culo y vuelve a intentarlo.
+0x9016b304	string	Demasiado a la izquierda
+0x9016b396	string	 enfocando.
+0x9016b407	string	rea de juego y vuelve a intentarlo.
+0x9016b42b	string	Demasiado a la derecha
+0x9016b4bb	string	 enfocando.
+0x9016b528	string	rea de juego y vuelve a intentarlo.
+0x9016b57b	string	rea de juego.
+0x9016b589	string	Cara borrosa
+0x9016b74c	string	s cerca de la parte superior o inferior del televisor.
+0x9016b83b	string	 puede suceder esto.
+0x9016b853	string	digo de estado: %s
+0x9016b872	string	rea de juego no detectados
+0x9016b933	string	a, visita www.xbox.com/support.\r\n
+0x9016b961	string	rea de juego no detectados.\r\n\r\nKinect no ve a nadie. Vuelve a intentarlo.
+0x9016b9ab	string	Cabeza no detectada
+0x9016ba6d	string	ngulo del sensor.
+0x9016ba7f	string	Cabeza no detectada.\r\n\r\nEsta imagen muestra lo que utiliza Kinect para reconocerte. Kinect no detecta toda tu cabeza. Retrocede un paso y prueba de nuevo.
+0x9016bb1a	string	Cara oscura
+0x9016bbd2	string	n mirar al sensor durante la prueba.
+0x9016bc3e	string	nea visual clara entre el sensor y la cara, y vuelve a intentarlo.
+0x9016bc9f	string	s genial!
+0x9016bca9	string	Demasiada luz
+0x9016bd0b	string	n y evita cualquier otra fuente de luz intensa.
+0x9016bdcb	string	n y vuelve a intentarlo.
+0x9016bde4	string	Demasiado cerca
+0x9016be3f	string	nima de 1,8 m del sensor.\r\n\r\nSi no te puedes alejar tanto, puedes omitir este resultado.
+0x9016bed3	string	jate y vuelve a intentarlo.
+0x9016beef	string	Luz insuficiente
+0x9016bf0e	string	n de tu cara es demasiado tenue para que Kinect pueda verte. Prueba a encender alguna luz.
+0x9016bffa	string	n y vuelve a intentarlo.
+0x9016c013	string	Demasiado lejos
+0x9016c04a	string	rcate.
+0x9016c0d2	string	ntalo de nuevo.
+0x9016c0e8	string	n jugador detectado
+0x9016c251	string	s sentado, hazlo recto y con ambos pies en el suelo.
+0x9016c304	string	ntalo de nuevo.
+0x9016c364	string	 haut, mieux c'est.
+0x9016c37c	string	Calibrage Kinect
+0x9016c394	string	lectionner
+0x9016c3a3	string	Retour
+0x9016c3c9	string	lectionner
+0x9016c3d8	string	Retour
+0x9016c3ef	string	Chargement en cours...
+0x9016c40a	string	Retour
+0x9016c421	string	Calibrage Kinect
+0x9016c435	string	?Retour
+0x9016c44d	string	Calibrage Kinect
+0x9016c465	string	lectionner
+0x9016c473	string	\nRetour
+0x9016c48b	string	Calibrage Kinect
+0x9016c4a3	string	lectionner
+0x9016c4b2	string	Retour
+0x9016c4e1	string	Suivant
+0x9016c4fe	string	Suivi du corps entier
+0x9016c518	string	Calibrage Kinect
+0x9016c530	string	lectionner
+0x9016c53f	string	Retour
+0x9016c556	string	Audio et voix
+0x9016c60e	string	Calibrage audio
+0x9016c61e	string	Commencez le test
+0x9016c703	string	lectionnez Audio.
+0x9016c715	string	Calibrage audio
+0x9016c929	string	viseur.
+0x9016c931	string	Position du capteur
+0x9016ca2b	string	branchez le capteur, et rendez-vous sur www.xbox.com/support.
+0x9016ca7b	string	aide sur Kinect, rendez-vous sur www.xbox.com/support/kinect.
+0x9016cad8	string	Incliner vers le bas
+0x9016caed	string	Suivi du corps
+0x9016cafc	string	Suivi de la main
+0x9016cb1b	string	marre. Veuillez patienter.
+0x9016cb84	string	me de connexion USB.
+0x9016cbd8	string	 plat.
+0x9016cbdf	string	Le capteur Kinect ne peut pas bouger suffisamment.
+0x9016cc12	string	Le capteur Kinect ne peut pas bouger.
+0x9016ccb3	string	marrer.
+0x9016ccbb	string	Le capteur Kinect est trop chaud.
+0x9016cd1c	string	est pas valide.
+0x9016cd36	string	me inconnu est survenu avec votre capteur Kinect (%s).
+0x9016cd7e	string	marrer le capteur Kinect.
+0x9016cd9f	string	me de connexion USB.
+0x9016cfb4	string	re de la console et que la liaison entre le capteur et la console ne passe pas par des hubs USB basse vitesse.
+0x9016d30e	string	alimentation.
+0x9016d3f9	string	branchez-le, puis rebranchez-le.
+0x9016d456	string	tres Kinect.
+0x9016d463	string	Connectez un capteur validez sur la console.
+0x9016d49a	string	me est survenu avec Kinect.
+0x9016d4f0	string	branchez-le, puis rebranchez-le.
+0x9016d605	string	marrez votre console.
+0x9016d61e	string	branchez, puis rebranchez le capteur.
+0x9016d644	string	Quitter
+0x9016d657	string	cessite un capteur Kinect.
+0x9016d6f7	string	Interface Xbox.
+0x9016d707	string	Quitter le jeu
+0x9016d725	string	Interface
+0x9016d757	string	Version de Flash
+0x9016d7a1	string	rie de Kinect
+0x9016d7c4	string	assistance
+0x9016d7cf	string	Statut
+0x9016d7e0	string	Heure
+0x9016d7e6	string	Titre
+0x9016d7ec	string	Version du XDK
+0x9016d7fb	string	Ignorer
+0x9016d811	string	audio Kinect si Kinect ne vous entend pas.
+0x9016d880	string	gler Kinect pour votre aire de jeu.
+0x9016d8c8	string	mes avec Kinect.
+0x9016d8d9	string	Suivant
+0x9016d8fc	string	rience actuelle ne prend pas en charge le suivi Kinect
+0x9016d93c	string	informations
+0x9016d949	string	Image
+0x9016d94f	string	Suivi du corps
+0x9016db44	string	 sur le sol.
+0x9016dc2c	string	angle.
+0x9016dc33	string	Suivi du corps
+0x9016dd06	string	angle.
+0x9016dd0d	string	Angle du capteur
+0x9016de14	string	branchez le capteur, puis rebranchez-le.
+0x9016dee1	string	Angle du capteur
+0x9016df81	string	Angle du capteur
+0x9016e015	string	place.
+0x9016e077	string	essayez, mais ne touchez pas au capteur.
+0x9016e0a0	string	Angle du capteur
+0x9016e0ed	string	me persiste, rendez-vous sur www.xbox.com/support.
+0x9016e18b	string	adresse www.xbox.com/support.
+0x9016e1a9	string	Angle du capteur
+0x9016e1f3	string	me persiste, rendez-vous sur www.xbox.com/support.
+0x9016e274	string	adresse www.xbox.com/support.
+0x9016e292	string	Angle du capteur
+0x9016e338	string	s du bord.
+0x9016e3ca	string	Angle du capteur
+0x9016e493	string	Angle du capteur
+0x9016e626	string	 entre vous et le capteur et asseyez-vous bien droit.
+0x9016e6aa	string	e. Placez-le plus haut.
+0x9016e70a	string	faut.
+0x9016e795	string	tres de suivi
+0x9016e7a3	string	Angle du capteur
+0x9016e7b4	string	Aire de jeu
+0x9016e917	string	tements.
+0x9016e920	string	Aire de jeu
+0x9016ea20	string	tements peuvent affecter le suivi.
+0x9016ea4f	string	angle
+0x9016ea8d	string	te et la plus grande partie possible de votre corps.
+0x9016eace	string	angle
+0x9016eb2f	string	aire de jeu. Gardez les deux pieds sur le sol, tenez-vous droit et mettez-vous de face pendant le test.
+0x9016ebda	string	marrer.
+0x9016ec20	string	marrer.
+0x9016ec28	string	Modification de la configuration
+0x9016ec49	string	Calibrage Kinect
+0x9016ec5a	string	Calibrage
+0x9016ec68	string	essayer
+0x9016ec79	string	essayer
+0x9016ec81	string	Incliner vers le haut
+0x9016eca5	string	Tournez votre corps vers le capteur. Pendant le test, faites face au capteur et restez immobile.
+0x9016ef32	string	angle du capteur.
+0x9016efce	string	 gauche
+0x9016f03e	string	 vers vous.
+0x9016f0bf	string	 droite
+0x9016f12f	string	 vers vous.
+0x9016f1dd	string	Visage obscurci
+0x9016f350	string	viseur.
+0x9016f41e	string	informations.
+0x9016f501	string	me persiste, rendez-vous sur www.xbox.com/support.\r\n
+0x9016f639	string	angle du capteur.
+0x9016f730	string	rifiez que rien ne le cache, par exemple un chapeau, des lunettes brillantes ou vos cheveux.\r\n\r\nEssayez aussi de regarder le capteur pendant le test.
+0x9016f8fb	string	rifiez les sources lumineuses.
+0x9016fa5f	string	sultat.
+0x9016fbd6	string	Trop loin
+0x9016fbe7	string	tes trop loin du capteur. Rapprochez-vous.
+0x9016fdf9	string	tes assis, tenez-vous droit, les deux pieds sur le sol.
+0x9016feac	string	aire de jeu.
+0x9016ff0e	string	 in alto.
+0x9016ff1c	string	Sintonizzatore Kinect
+0x9016ff36	string	Seleziona
+0x9016ff44	string	Indietro
+0x9016ff69	string	Seleziona
+0x9016ff77	string	Indietro
+0x9016ff90	string	Caricamento in corso...
+0x9016ffac	string	Indietro
+0x9016ffc5	string	Sintonizzatore Kinect
+0x9016ffde	string	?Indietro
+0x9016fff8	string	Sintonizzatore Kinect
+0x90170011	string	\tSeleziona
+0x9017001f	string	\nIndietro
+0x90170039	string	Sintonizzatore Kinect
+0x90170053	string	Seleziona
+0x90170061	string	Indietro
+0x90170092	string	Avanti
+0x901700ad	string	Rilevamento del corpo 
+0x901700c8	string	Sintonizzatore Kinect
+0x901700e2	string	Seleziona
+0x901700f0	string	Indietro
+0x90170109	string	Audio e voce
+0x90170116	string	Devi ripetere la taratura audio del sensore, per evitare problemi con la chat e il riconoscimento vocale.\r\n\r\nEseguire la taratura ora?
+0x9017019d	string	Taratura audio
+0x901701ac	string	Inizia test
+0x901701ca	string	 ripetuta la taratura del sensore, potresti avere problemi con la chat e il riconoscimento vocale.\r\n\r\nQuando sei pronto per eseguire la taratura audio del sensore, accedi al sintonizzatore Kinect e seleziona Audio.
+0x901702a1	string	Taratura audio
+0x9017045b	string	 preferibile collocarlo in alto, se possibile sopra il televisore.
+0x9017049e	string	Posizione sensore
+0x9017055d	string	 eseguita la regolazione automatica dell'angolazione.
+0x90170593	string	Se il problema persiste, scollega il sensore e visita il sito www.xbox.com/support.
+0x901705e7	string	\r\n\r\nPer maggiori informazioni su Kinect, visita www.xbox.com/support/kinect.
+0x90170634	string	Continua comunque
+0x90170646	string	Fatto
+0x9017064c	string	Inclina verso il basso
+0x90170663	string	Rilevamento corpo
+0x90170675	string	Controllo mano
+0x90170684	string	Avvio del sensore in corso, attendi
+0x901706a8	string	Larghezza di banda USB superata.
+0x901706c9	string	Sensore Kinect scollegato.
+0x901706e4	string	Problema con la connessione USB.
+0x90170705	string	Sensore Kinect bloccato.
+0x9017071e	string	Il sensore non si trova su una superficie piana.
+0x9017074f	string	Impossibile spostare come necessario il sensore Kinect.
+0x90170787	string	Impossibile spostare il sensore Kinect.
+0x901707cd	string	 insufficiente. 
+0x901707de	string	Sensore Kinect non collegato.
+0x901707fe	string	 necessario riavviare il sensore Kinect.
+0x90170827	string	Temperatura del sensore Kinect eccessiva.
+0x90170851	string	Dispositivo Kinect disattivato.
+0x901708a0	string	 valido.
+0x901708ae	string	 verificato un problema con il sensore Kinect (%s).
+0x901708e2	string	Impossibile avviare il sensore Kinect.
+0x90170909	string	Problema della connessione USB.
+0x9017092b	string	 necessario aggiornare il sensore Kinect.
+0x9017097f	string	 essere verificato.
+0x90170993	string	Troppi dispositivi collegati allo stesso hub USB. Verifica che il sensore sia collegato a una porta USB sul retro della console, scollega i dispositivi inutilizzati e riprova.
+0x90170a43	string	Ricollegalo, attendi alcuni minuti e riprova.
+0x90170b55	string	 qualcosa davanti al sensore. Rimuovi tutti gli oggetti dall'area e riprova.
+0x90170ba2	string	Colloca il sensore su una superficie piana e riprova.
+0x90170bda	string	 in corso la regolazione dell'angolazione del sensore, ma qualcosa gli impedisce di muoversi. Rimuovi tutti gli oggetti che si trovano vicino al sensore e verifica che si trovi su una superficie piana. Se questo non funziona, scollega il sensore, ricollegalo e riprova.
+0x90170cea	string	 in corso la regolazione dell'angolazione del sensore, ma qualcosa gli impedisce di muoversi. Rimuovi tutti gli oggetti che si trovano vicino al sensore. Se questa soluzione non funziona, scollega il sensore, ricollegalo e riprova.
+0x90170dd2	string	Verifica che l'alimentatore sia collegato.
+0x90170dfd	string	Collega il sensore, attendi alcuni istanti e riprova.
+0x90170e33	string	Attendi alcuni secondi e riprova.
+0x90170eb0	string	 raffreddato, scollegalo e ricollegalo.
+0x90170ed8	string	Attivalo, quindi vai a Impostazioni, Sistema, Impostazioni Kinect.
+0x90170f1b	string	Collega un sensore valido alla console.
+0x90170f48	string	 verificato un errore con Kinect.
+0x90170f6a	string	Verifica che il sensore sia a temperatura ambiente, quindi scollegalo e ricollegalo.
+0x90170fd3	string	 collegato, ma la console non riesce a comunicare con il dispositivo.\r\n\r\nSe sono collegati altri dispositivi che non utilizzi, scollegali e riprova.
+0x90171068	string	Per ottenere l'aggiornamento, riavvia la console.
+0x9017109a	string	Scollega e ricollega il sensore.
+0x901710c1	string	Questo gioco richiede un sensore Kinect.
+0x901710ea	string	Collega il sensore sul retro della console. Se non disponi di un sensore, seleziona Esci dal gioco per tornare alla Xbox Dashboard.
+0x9017116e	string	Esci dal gioco
+0x9017117d	string	Esci dalla Dashboard
+0x90171193	string	N. serie corrente Kinect:
+0x901711b2	string	Versione Flash
+0x901711c1	string	Informazioni supporto clienti
+0x901711df	string	N. serie Kinect
+0x901711ef	string	Informazioni per il supporto
+0x9017120c	string	Stato
+0x90171212	string	ID passaggio
+0x90171223	string	Titolo
+0x9017122a	string	Versione XDK
+0x90171237	string	Salta
+0x9017124d	string	 in grado di rilevare la tua voce, controlla l'audio di Kinect.
+0x9017129f	string	 vederti o riconoscerti, controlla il rilevamento.
+0x901712d2	string	Ottimizza il sensore Kinect per la tua area di gioco.
+0x90171308	string	Trova e correggi i problemi di Kinect.
+0x9017132f	string	Avanti
+0x90171336	string	Rilevamento disattivato
+0x9017134e	string	L'esperienza corrente non supporta il rilevamento Kinect .
+0x90171389	string	Ulteriori informazioni
+0x901713a0	string	Immagine
+0x901713a9	string	Rilevamento corpo
+0x901713bb	string	Questo test verifica che il sensore sia in grado di inquadrarti e distinguerti dagli oggetti presenti nella stanza.\r\n\r\nSe sei in piedi, verifica di essere al centro dell'area di gioco e non toccare nulla. Verifica inoltre che sul pavimento non siano presenti elementi come tavoli, cuscini o animali domestici.\r\n\r\nSe sei seduto, tieni la schiena dritta e appoggia entrambi i piedi sul pavimento, che non deve essere occupato da cuscini o animali domestici.
+0x90171583	string	Resta in piedi o seduto a 1,8-3 m dal sensore. Dovresti riuscire a vedere la tua testa e la maggior parte del corpo.\r\n\r\nSe il sensore Kinect non riesce a inquadrare una parte sufficiente del tuo corpo, seleziona Regola angolazione.
+0x9017166b	string	Rilevamento corpo
+0x9017167d	string	Rimani in piedi a 1,8 - 3 m dal sensore. Verifica che sia possibile inquadrare tutta la testa e buona parte del corpo.\r\n\r\nSe Kinect non riesce a inquadrarti, seleziona Regola angolazione.
+0x90171739	string	Angolazione sensore 
+0x90171804	string	 sgombra.\r\n\r\nSe il problema persiste, esci dal gioco, scollega il sensore e ricollegalo.
+0x90171884	string	 qualcosa ne impedisce il movimento. \r\n\r\nAssicurati che il sensore sia posizionato correttamente e che l'area intorno ad esso sia sgombra da oggetti.
+0x9017191a	string	Angolazione sensore 
+0x9017192f	string	Impossibile regolare il sensore. Attendi alcuni minuti e riprova.
+0x90171971	string	Impossibile regolare il sensore. Riprova.
+0x9017199b	string	Angolazione sensore 
+0x90171a0f	string	 stato spostato. Ricorda di non toccare il sensore mentre si muove.
+0x90171a9a	string	 stato spostato. Riprova, ma fai attenzione a non toccare il sensore.
+0x90171ae0	string	Angolazione sensore 
+0x90171af5	string	Impossibile regolare l'angolazione del sensore.\r\n\r\nSe il problema persiste, visita il sito www.xbox.com/support.
+0x90171b66	string	Impossibile regolare correttamente l'angolazione del sensore. Se il problema persiste, visita il sito www.xbox.com/support.
+0x90171be2	string	Angolazione sensore 
+0x90171bf7	string	Impossibile regolare l'angolazione del sensore. Se il problema persiste, visita il sito www.xbox.com/support.
+0x90171c65	string	Impossibile regolare il sensore. Se il problema persiste, visita il sito www.xbox.com/support.
+0x90171cc4	string	Angolazione sensore 
+0x90171d6e	string	 vicino al bordo della superficie su cui si trova in modo che riesca a inquadrare il pavimento.
+0x90171e12	string	 non riesce a inquadrare il pavimento. Spostalo sul bordo dello scaffale o del tavolo e riprova.
+0x90171e73	string	Angolazione sensore 
+0x90171e88	string	Impossibile regolare l'angolazione del sensore. Tenta di nuovo il test.\r\n\r\nSe il problema persiste, riavvia la console e tenta di nuovo.
+0x90171f11	string	Impossibile regolare il sensore. Riprova.
+0x90171f3b	string	Angolazione sensore 
+0x901720c3	string	 in alto, assicurati che non ci siano ostacoli fra te e il sensore e siediti con la schiena dritta.
+0x90172191	string	 in alto.
+0x901721c9	string	 terminata. 
+0x901721d6	string	Ricerca angolo di visualizzazione predefinito in corso.
+0x9017220e	string	Salvataggio impostazioni
+0x90172227	string	Ora puoi iniziare a giocare!
+0x90172244	string	Il dispositivo Kinect ti ha inquadrato, Puoi iniziare a giocare!
+0x90172285	string	Salvataggio delle tue impostazioni di rilevamento.
+0x901722b8	string	Angolazione sensore
+0x901722cc	string	Area di gioco 
+0x901723da	string	 Alcuni tipi di abbigliamento.\r\n\r\nPer risolvere il problema, elimina o modifica la fonte di illuminazione o cambia il tuo abbigliamento.
+0x90172463	string	Area di gioco
+0x90172471	string	Questa immagine mostra come Kinect trova i giocatori.\r\nVerifica che l'area davanti al sensore sia sgombra.\r\nPer informazioni sui possibili effetti di luce solare, luce artificiale e abiti sul rilevamento, seleziona Ulteriori informazioni.
+0x90172560	string	Regola angolazione
+0x90172573	string	Inclina il sensore verso l'alto o verso il basso. Verifica che il sensore riesca a inquadrarti tutta la testa e la maggior parte del corpo.
+0x901725ff	string	Regola angolazione
+0x90172612	string	Il dispositivo Kinect deve effettuare alcuni controlli per poterti inquadrare correttamente.\r\n\r\nVerifica di essere solo nell'area di gioco. Durante il test tieni entrambi i piedi appoggiati sul pavimento, stai composto e rimani girato verso il sensore.
+0x90172755	string	 riavviato.
+0x901727a4	string	 riavviato.
+0x901727b0	string	Configurazione modificata
+0x901727ca	string	Sintonizzatore Kinect
+0x901727e0	string	Taratura
+0x901727ea	string	Riprova
+0x901727f2	string	Rilevamento
+0x901727fe	string	Riprova
+0x90172806	string	Inclina verso l'alto
+0x9017281b	string	Corpo voltato
+0x90172829	string	Girati verso il sensore. Durante il test rimani fermo con viso e corpo rivolti verso il sensore.
+0x9017288a	string	Corpo voltato.\r\n\r\nImpossibile inquadrare completamente il tuo corpo. Rivolgiti al sensore e tenta di nuovo.
+0x901728f6	string	Ricerca giocatore in corso...\r\n\r\nRimani nell'area di gioco. Il dispositivo Kinect sta verificando di riuscire a distinguerti dagli altri oggetti e giocatori presenti nella stanza.
+0x901729aa	string	Parte inferiore del corpo non rilevata.
+0x901729d2	string	Verifica di essere al centro dell'area di gioco e che non ci siano ostacoli.\r\n    \r\nDurante il test osserva l'immagine. Dovresti vedere la stanza e il tuo corpo. Se il tuo corpo non viene inquadrato completamente, torna indietro di alcuni passaggi nel sintonizzatore Kinect e regola l'angolazione del sensore.
+0x90172b08	string	Parte inferiore del corpo non rilevata.\r\n\r\nImpossibile inquadrare la parte inferiore del corpo. Verifica che non ci siano ostacoli e riprova.
+0x90172b96	string	Troppo a sinistra 
+0x90172be5	string	 al centro, verifica che il sensore punti nella tua direzione.
+0x90172c24	string	Troppo a sinistra.\r\n\r\nSei troppo a sinistra. Verifica di essere al centro dell'area di gioco e riprova.
+0x90172c8c	string	Troppo a destra 
+0x90172cd9	string	 al centro, verifica che il sensore punti nella tua direzione.
+0x90172d18	string	Troppo a destra.\r\n\r\nSei troppo a destra. Verifica di essere al centro dell'area di gioco e riprova.
+0x90172d7c	string	I test per la verifica dell'area di gioco sono stati ignorati.
+0x90172dbb	string	Viso non definito
+0x90172f88	string	 vicino alla parte superiore o inferiore del televisore.
+0x9017309c	string	 si verifica il problema.
+0x901730b6	string	Codice di stato: %s
+0x901730ca	string	Area di gioco o giocatore non rilevato 
+0x901730f2	string	Verifica che il sensore sia diretto verso la stanza, che le luci siano accese e che la tua testa sia completamente visibile nell'immagine.\r\n\r\nSe il problema persiste, visita il sito www.xbox.com/support.\r\n
+0x90173201	string	 a inquadrarti. Prova di nuovo.
+0x90173221	string	Testa non rilevata 
+0x90173235	string	Verifica di essere al centro dell'area di gioco.\r\n\r\nNell'immagine dovresti vedere la stanza e il tuo corpo. Se il tuo corpo non viene inquadrato completamente, regola l'angolazione del sensore.
+0x90173355	string	 possibile inquadrare tutta la testa. Fai un passo indietro e riprova.
+0x9017339c	string	Viso nascosto
+0x901733aa	string	Il tuo viso potrebbe essere nascosto da qualcosa. Verifica che non sia coperto ad esempio da un cappello, da occhiali a specchio o dai tuoi capelli.\r\n\r\nProva anche a guardare in sensore durante il test.
+0x90173475	string	Viso nascosto.\r\n\r\nImpossibile inquadrare il tuo viso. Verifica che non ci sia nulla che ostruisce la visuale tra il tuo viso e il sensore, quindi riprova.
+0x90173510	string	Kinect ti ha inquadrato.\r\n\r\nSei in gran forma!
+0x9017353f	string	 Troppa luce
+0x9017354c	string	L'eccessiva illuminazione del tuo viso impedisce al sensore di inquadrarti. Abbassa le luci e verifica se ci sono altre fonti di luce molto intensa.
+0x90173640	string	 troppo illuminato. Abbassa le luci e riprova.
+0x9017366f	string	Troppo vicino
+0x9017367d	string	Kinect funziona in modo ottimale quando ti trovi a una distanza di 1,8 m dal sensore.\r\n\r\nSe non puoi allontanarti ulteriormente, ignora questo messaggio.
+0x90173717	string	Troppo vicino.\r\n\r\nSei troppo vicino al sensore. Allontanati dal sensore e riprova.
+0x9017376a	string	Luce insufficiente
+0x9017377d	string	La scarsa illuminazione del tuo viso impedisce al sensore di inquadrarti. Prova ad accendere le luci.
+0x9017385a	string	 insufficiente. Aumenta l'illuminazione e riprova.
+0x9017388d	string	Troppo lontano
+0x9017389c	string	Sei troppo lontano dal sensore. Avvicinati.
+0x901738c8	string	Troppo lontano.\r\n\r\nIl sensore riesce a inquadrarti, ma sei troppo lontano per il rilevamento ottimale del corpo. Avvicinati al sensore e riprova.
+0x9017395a	string	 Nessun giocatore rilevato
+0x90173975	string	Verifica di essere visibile nell'immagine e saluta per segnalare a Kinect la tua presenza.\r\n\r\nDurante il test osserva l'immagine. Dovresti vedere la stanza e il tuo corpo. Se la tua testa e il tuo corpo non sono inquadrati completamente, torna indietro di alcuni passaggi nel sintonizzatore Kinect e regola l'angolazione del sensore. Potrebbe essere necessario avvicinarsi.\r\n\r\nSe sei seduto, tieni la schiena dritta e appoggia entrambi i piedi sul pavimento.
+0x90173b40	string	Nessun giocatore rilevato.\r\n\r\nIl sensore Kinect non riesce a inquadrarti. Saluta il sensore. Se sei uscito dall'area di gioco, rientra e riprova.
+0x90179785	string	Flash
+0x9017cc71	string	ej, tym lepiej.
+0x9017cc85	string	Kalibrator Kinect
+0x9017ccef	string	adowanie...
+0x9017cd16	string	Kalibrator Kinect
+0x9017cd43	string	Kalibrator Kinect
+0x9017cd7c	string	Kalibrator Kinect
+0x9017ce06	string	Kalibrator Kinect
+0x9017cf01	string	Uruchom test
+0x9017d1d8	string	 go nad telewizorem.
+0x9017d1ed	string	Ustawienie sensora
+0x9017d312	string	: www.xbox.com/support.
+0x9017d369	string	 na stronie:  www.xbox.com/support/kinect.
+0x9017d394	string	Kontynuuj mimo to
+0x9017d3de	string	Trwa uruchamianie sensora. Czekaj.
+0x9017d427	string	a przekroczona.
+0x9017d475	string	czeniem USB.
+0x9017d482	string	Sensor Kinect jest zablokowany.
+0x9017d4e7	string	o miejsca do ruchu.
+0x9017d523	string	Sensor Kinect nie ma odpowiedniego zasilania.
+0x9017d55c	string	czono sensora Kinect.
+0x9017d572	string	Sensor Kinect wymaga ponownego uruchomienia.
+0x9017d59f	string	Sensor Kinect jest przegrzany.
+0x9017d627	string	 problem z sensorem Kinect (%s).
+0x9017d65d	string	 sensora Kinect.
+0x9017d689	string	czeniem USB.
+0x9017d696	string	Sensor Kinect wymaga aktualizacji.
+0x9017d7b4	string	buj ponownie.
+0x9017d7f9	string	buj ponownie.
+0x9017d941	string	buj ponownie.
+0x9017d978	string	buj ponownie.
+0x9017da59	string	buj ponownie.
+0x9017db2a	string	buj ponownie.
+0x9017dba6	string	buj ponownie.
+0x9017dbd1	string	buj ponownie.
+0x9017dc60	string	cz ponownie.
+0x9017dc8e	string	 do obszaru Ustawienia, System, Ustawienia sensora Kinect.
+0x9017dcd9	string	ciwy sensor do konsoli.
+0x9017dcfb	string	 problem z sensorem Kinect.
+0x9017dd5c	string	cz ponownie.
+0x9017de00	string	buj ponownie.
+0x9017de63	string	cz sensor.
+0x9017de76	string	Gra wymaga sensora Kinect.
+0x9017df11	string	wnego konsoli Xbox.
+0x9017df73	string	cego sensora Kinect
+0x9017df8c	string	Wersja Flash
+0x9017dfb4	string	ugi klienta
+0x9017dfc0	string	Numer seryjny sensora Kinect
+0x9017dfdd	string	Informacje pomocnicze
+0x9017dff8	string	Identyfikator kroku
+0x9017e01b	string	Wersja pakietu XDK
+0x9017e065	string	k sensora Kinect.
+0x9017e0a6	string	 nie widzi/rozpoznaje.
+0x9017e0bd	string	Skalibruj sensor Kinect w swoim miejscu gry.
+0x9017e102	string	 problemy z sensorem Kinect
+0x9017e16b	string	ledzenia przez sensor Kinect
+0x9017e18c	string	cej informacji
+0x9017e39c	string	ta domowe.
+0x9017e54d	string	t nachylenia sensora
+0x9017e671	string	cz go ponownie.
+0x9017e728	string	t nachylenia sensora
+0x9017e78b	string	buj ponownie.
+0x9017e7bf	string	buj ponownie.
+0x9017e7d0	string	t nachylenia sensora
+0x9017e900	string	 sensora.
+0x9017e90d	string	t nachylenia sensora
+0x9017e988	string	 do witryny: www.xbox.com/support.
+0x9017ea1f	string	 do witryny: www.xbox.com/support.
+0x9017ea45	string	t nachylenia sensora
+0x9017eac6	string	: www.xbox.com/support.
+0x9017eb39	string	: www.xbox.com/support.
+0x9017eb54	string	t nachylenia sensora
+0x9017ec0b	string	a widoczna.
+0x9017ecbd	string	buj ponownie.
+0x9017ecce	string	t nachylenia sensora
+0x9017ed7e	string	buj jeszcze raz.
+0x9017edb5	string	buj ponownie.
+0x9017edc6	string	t nachylenia sensora
+0x9017efb6	string	adne przeszkody.
+0x9017f04d	string	t nachylenia sensora.
+0x9017f080	string	t widzenia.
+0x9017f104	string	ledzenia.
+0x9017f111	string	t nachylenia sensora
+0x9017f126	string	Obszar gry
+0x9017f2ac	string	Obszar gry
+0x9017f394	string	ledzenie.
+0x9017f4dc	string	 do sensora na czas testu.
+0x9017f50a	string	 w konfiguracji. Kalibrator Kinect zostanie teraz uruchomiony ponownie.
+0x9017f570	string	a zmiana. Kalibrator Kinect zostanie teraz uruchomiony ponownie.
+0x9017f5b1	string	Zmiana konfiguracji
+0x9017f5c5	string	Kalibrator Kinect
+0x9017f5d7	string	Kalibracja
+0x9017f5e8	string	buj ponownie
+0x9017f5f7	string	ledzenie
+0x9017f605	string	buj ponownie
+0x9017f63d	string	cona w bok
+0x9017f70f	string	buj ponownie.
+0x9017f796	string	b w pomieszczeniu.
+0x9017f8f8	string	ta sensora.
+0x9017f98e	string	buj ponownie.
+0x9017f99c	string	Za bardzo na lewo
+0x9017fa83	string	buj ponownie.
+0x9017fa91	string	Zbyt daleko na prawo
+0x9017fb81	string	buj ponownie.
+0x9017fbc4	string	Twarz nie jest dobrze widoczna
+0x9017fda3	string	dzi telewizora.
+0x9017febc	string	Kod stanu: %s
+0x9017feca	string	Nie wykryto gracza lub obszaru gry
+0x9017ffbd	string	 www.xbox.com/support.\r\n
+0x90180022	string	buj ponownie.
+0x90180101	string	ta sensora.
+0x901801d4	string	buj ponownie.
+0x90180297	string	 na sensor podczas testu.
+0x9018035a	string	buj ponownie.
+0x901803ae	string	wietlenie
+0x90180544	string	buj ponownie.
+0x90180677	string	buj ponownie.
+0x90180692	string	wietlenie
+0x90180714	string	wietlenia.
+0x901807e4	string	buj ponownie.
+0x901808d0	string	buj ponownie.
+0x901808de	string	Nie wykryto gracza
+0x90180b5f	string	 ponownie.
+0x90180b9b	string	o. Quanto mais alto, melhor.
+0x90180bbc	string	Sintonizador Kinect
+0x90180bd4	string	Selecionar
+0x90180be3	string	Voltar
+0x90180c06	string	Selecionar
+0x90180c15	string	Voltar
+0x90180c2c	string	Carregando...
+0x90180c3e	string	Voltar
+0x90180c55	string	Sintonizador Kinect
+0x90180c6c	string	?Voltar
+0x90180c84	string	Sintonizador Kinect
+0x90180c9b	string	\tSelecionar
+0x90180caa	string	\nVoltar
+0x90180cc2	string	Sintonizador Kinect
+0x90180cda	string	Selecionar
+0x90180ce9	string	Voltar
+0x90180d25	string	Para Baixo
+0x90180d34	string	Para Cima
+0x90180d42	string	Acompanhamento do seu corpo
+0x90180d62	string	Sintonizador Kinect
+0x90180d7a	string	Selecionar
+0x90180d89	string	Voltar
+0x90180da2	string	udio e Fala
+0x90180df7	string	 problemas com o bate-papo e com o reconhecimento de fala.\r\n\r\nCalibrar agora?
+0x90180e5a	string	Iniciar Teste
+0x9018111a	string	vel, coloque acima da TV.
+0x9018113c	string	o do Sensor
+0x9018120e	string	Se o problema persistir, desconecte o sensor e visite www.xbox.com/support.
+0x9018125a	string	\r\n\r\nSe precisar de mais ajuda com o Kinect, visite www.xbox.com/support/kinect.
+0x901812aa	string	Continuar mesmo assim
+0x901812cb	string	Inclinar para Baixo
+0x901812df	string	Acompanhamento do corpo
+0x9018131c	string	 inicializando. Aguarde.
+0x90181335	string	Excedida a largura de banda do USB.
+0x90181359	string	Sensor Kinect Desconectado
+0x901813a3	string	 bloqueado.
+0x901813c9	string	 nivelado.
+0x901813ee	string	 se movimentando o suficiente.
+0x90181427	string	 se movimentando.
+0x9018144c	string	o tem energia suficiente.
+0x90181477	string	o conectado.
+0x90181484	string	O Sensor Kinect precisa ser reinicializado.
+0x901814c5	string	 muito quente.
+0x901814e2	string	 desativado.
+0x9018151e	string	Ocorreu um problema com o seu Sensor Kinect (%s).
+0x9018155f	string	vel iniciar o Sensor do Kinect.
+0x90181599	string	O Sensor Kinect precisa ser atualizado.
+0x901815ef	string	o foi confirmado.
+0x901816c3	string	o sendo usados e tente novamente.
+0x901816e5	string	Reconecte-o, aguarde alguns instantes e tente novamente.
+0x901817c9	string	o existam hubs USB de baixa velocidade entre o sensor e o console.
+0x9018184e	string	rea e tente de novo.
+0x90181886	string	cie nivelada e tente novamente.
+0x90181970	string	o funcionar, desligue e ligue o sensor e tente novamente.
+0x90181a33	string	o funcionar, desligue e ligue novamente o sensor e tente novamente.
+0x90181aa2	string	 conectada.
+0x90181aae	string	Conecte o sensor, espere alguns instantes e tente de novo.
+0x90181ae9	string	Aguarde alguns instantes e tente de novo.
+0x90181b61	string	s o sensor ter resfriado, desconecte-o e reconecte-o novamente.
+0x90181be1	string	es do Kinect.
+0x90181c04	string	lido ao console.
+0x90181c15	string	Ocorreu um problema com o Kinect.
+0x90181c5a	string	 na temperatura da sala, desconecte-o e conecte-o novamente.
+0x90181d15	string	o usado conectado, desconecte-o e tente novamente.
+0x90181d61	string	o, reinicie o console.
+0x90181d78	string	Desconecte o sensor e reconecte-o.
+0x90181da1	string	Este jogo precisa de um sensor Kinect.
+0x90181e02	string	o tiver um, selecione Sair do Jogo para retornar ao Menu Xbox.
+0x90181e41	string	Sair do jogo
+0x90181e4e	string	Sair para o Menu Xbox
+0x90181e6b	string	N/S do Kinect atual:
+0x90181e8b	string	o Flash
+0x90181e9e	string	es de Suporte do Cliente
+0x90181eb7	string	N/S do Kinect
+0x90181ed0	string	es de Suporte
+0x90181edf	string	ID da Etapa
+0x90181f04	string	Ignorar
+0x90181f34	string	o puder ouvi-lo.
+0x90181faf	string	o de jogo.
+0x90181fba	string	Ache e resolva os problemas com o Kinect.
+0x90181fed	string	Sem acompanhamento
+0x90182015	string	o tem suporte para acompanhamento do Kinect no momento.
+0x90182060	string	Imagem
+0x90182067	string	Acompanhamento do Corpo
+0x901821f1	string	o haja objetos como travesseiros ou animais.
+0x901822d8	string	Acompanhamento do Corpo
+0x901823b4	string	ngulo do Sensor
+0x901824cc	string	o conecte-o de novo.
+0x9018258f	string	ximos a ele.
+0x9018259e	string	ngulo do Sensor
+0x901825cd	string	ngulo do sensor. Espere alguns minutos e tente de novo.
+0x90182614	string	vel ajustar o sensor. Tente de novo.
+0x9018263b	string	ngulo do Sensor
+0x901826b8	string	o toque no sensor enquanto ele estiver se movimentando.
+0x9018276f	string	o tocar no sensor.
+0x90182784	string	ngulo do Sensor
+0x901827b3	string	ngulo do sensor.\r\n\r\nSe o problema persistir, visite www.xbox.com/support.
+0x90182826	string	ngulo correto.\r\n\r\nSe o problema persistir, visite www.xbox.com/support.
+0x90182870	string	ngulo do Sensor
+0x9018289f	string	ngulo do sensor. Se o problema persistir, visite www.xbox.com/support.
+0x901828f5	string	vel ajustar o sensor. Se o problema persistir, visite www.xbox.com/support.
+0x90182943	string	ngulo do Sensor
+0x90182a56	string	o.\r\n\r\nMova-o para perto da borda da prateleira ou mesa e tente novamente.
+0x90182aa2	string	ngulo do Sensor
+0x90182ad1	string	ngulo do sensor. Tente o teste novamente.\r\n\r\nSe o problema persistir, reinicie o console e tente de novo.
+0x90182b4a	string	vel ajustar o sensor. Tente de novo.
+0x90182b71	string	ngulo do Sensor
+0x90182d04	string	 e o sensor.
+0x90182d36	string	 mais baixo do que a altura recomendada. Levante o sensor.
+0x90182d75	string	ngulo do sensor foi ajustado.
+0x90182df6	string	 pronto para jogar!
+0x90182e2f	string	 pronto para jogar!
+0x90182e61	string	es de acompanhamento.
+0x90182e79	string	ngulo do Sensor
+0x90182e8f	string	o para Jogar
+0x90182f97	string	 Alguns tipos de roupas.\r\n\r\nPara corrigir o problema, remova ou bloqueie a luz ou mude de roupa.
+0x90182ffe	string	o para Jogar
+0x901830b6	string	mpadas e roupas afetam o rastreamento.
+0x9018314b	string	vel do resto do corpo.
+0x901831fd	string	o caminhe e olhe para frente durante o teste.
+0x90183273	string	 reiniciado.
+0x901832cb	string	 reiniciado.
+0x901832f6	string	Sintonizador Kinect
+0x9018330a	string	Calibragem
+0x90183316	string	Tentar Novamente
+0x90183327	string	Acompanhamento
+0x90183336	string	Tentar Novamente
+0x90183347	string	Inclinar para Cima
+0x9018335a	string	Corpo Virado
+0x90183367	string	Vire o corpo e fique de frente para o sensor. Durante o teste, fique parado e de frente para o sensor.
+0x901833eb	string	o conseguiu ver todo o seu corpo. Olhe de frente e tente de novo
+0x90183493	string	-lo de outros objetos e jogadores do local.
+0x901834bf	string	Parte Inferior do Corpo
+0x90183606	string	ngulo do seu sensor.
+0x90183691	string	 algo na frente e tente novamente.
+0x901836b4	string	Muito para a Esquerda
+0x901837a6	string	o para jogar e tente novamente.
+0x901837c6	string	Muito para a Direita
+0x901838a9	string	o para jogar e tente novamente.
+0x901838ed	string	o de jogo foram ignorados.
+0x90183911	string	o Reconhecido
+0x90183ad3	string	 borda superior ou inferior da TV.
+0x90183bba	string	es para saber por que isso pode estar acontecendo. 
+0x90183bf1	string	digo de status: %s
+0x90183c25	string	o detectado
+0x90183cad	string	vel na imagem.\r\n\r\nSe o problema persistir, visite www.xbox.com/support.\r\n
+0x90183d49	string	m. Tente de novo.
+0x90183d66	string	o Detectada
+0x90183e0e	string	ngulo do seu sensor.
+0x90183ecb	string	s e tente novamente.
+0x90183ee0	string	Rosto Obscurecido
+0x90183f97	string	m olhar para o sensor durante o teste.
+0x90184033	string	da entre seu rosto e o sensor, e tente novamente.
+0x90184089	string	 excelente!
+0x90184095	string	Muita Luz 
+0x90184112	string	 outras fontes de luz.
+0x9018418d	string	o no seu rosto. Tente apagar as luzes e tente novamente.
+0x90184231	string	vel se afastar tanto, ignore este resultado.
+0x90184287	string	ximo do sensor. Afaste-se um pouco e tente novamente.
+0x901842c5	string	 Luz Suficiente
+0x90184321	string	-lo. Tente acender algumas luzes.
+0x901843b4	string	o suficiente no seu rosto. Acenda as luzes e tente novamente.
+0x901843f2	string	Muito Longe
+0x90184409	string	 muito longe do sensor. Aproxime-se.
+0x90184467	string	 longe demais para que se possa realizar o rastreamento do corpo ideal. Aproxime-se do sensor e tente novamente.
+0x901844d8	string	Nenhum Jogador Detectado
+0x901846fe	string	o para jogar, retorne e tente novamente.
+0x901847bb	string	 Kinect
+0x9018486c	string	 Kinect
+0x9018489d	string	 Kinect
+0x901848e1	string	 Kinect
+0x9018498e	string	 Kinect
+0x90185150	string	 www.xbox.com/support.
+0x90185206	string	 www.xbox.com/support/kinect.
+0x90185536	string	 Kinect.  
+0x901855d3	string	 Kinect.
+0x90185611	string	 Kinect (%s).
+0x90185652	string	 Kinect.
+0x90186124	string	 Kinect".
+0x9018619c	string	 Kinect.
+0x9018642a	string	 Kinect.
+0x90186586	string	 Dashboard
+0x901865c6	string	 Kinect:
+0x90186658	string	 Kinect
+0x90186856	string	 Kinect.
+0x9018691d	string	 Kinect
+0x9018763a	string	 www.xbox.com/support.
+0x90187702	string	 www.xbox.com/support. 
+0x901877cc	string	 www.xbox.com/support.
+0x9018786a	string	 www.xbox.com/support.
+0x901888c6	string	 Kinect
+0x90189836	string	 www.xbox.com/support.\r\n
+0x90199c9f	string	coverage.lub
+0x90199cc4	string	console.lub
+0x90199cd8	string	user.lub
+0x90199ce9	string	profile.lub
+0x90199cfa	string	:1\rmpxmlutil.lub
+0x90199d41	string	y`\rxuiavatar.lub
+0x90199d5a	string	xuibase.lub
+0x90199d6e	string	xuicheckbox.lub
+0x90199d86	string	xuicolumnscene.lub
+0x90199da1	string	xuirowscene.lub
+0x90199db9	string	xuihubscene.lub
+0x90199dd1	string	xuiauracontrol.lub
+0x90199dec	string	xuihorizoncontrol.lub
+0x90199e0a	string	xuicontrol.lub
+0x90199e21	string	xuiedit.lub
+0x90199e35	string	xuielement.lub
+0x90199e4b	string	\rxuifigure.lub
+0x90199e62	string	xuihtmlcontrol.lub
+0x90199e7d	string	xuiimage.lub
+0x90199e92	string	xuilist.lub
+0x90199ea6	string	xuitwist.lub
+0x90199ebb	string	xuinavbutton.lub
+0x90199ed4	string	xuiprogressbar.lub
+0x90199eef	string	xuiradiogroup.lub
+0x90199f09	string	xuiscene.lub
+0x90199f1d	string	\rxuislider.lub
+0x90199f34	string	xuisound.lub
+0x90199f49	string	xuistringtable.lub
+0x90199f64	string	xuitabscene.lub
+0x90199f7c	string	xuitext.lub
+0x9019a05d	string	module
+0x9019a069	string	Xbox.Coverage
+0x9019a07c	string	package
+0x9019a089	string	seeall
+0x9019a0a8	string	\ncoveragec
+0x9019a0b8	string	CreateFile
+0x9019a0c7	string	\nWriteFile
+0x9019a0d6	string	\nCloseFile
+0x9019a0f8	string	save_stats
+0x9019a107	string	\tset_hook
+0x9019a15a	string	IsBeingStrict
+0x9019a16c	string	\tBeStrict
+0x9019a1b2	string	\tBeStrict
+0x9019a2a9	string	assert
+0x9019a2b4	string	\nstatsfile
+0x9019a2c3	string	9The name of the lua coverage stats file has not been set
+0x9019a302	string	pairs
+0x9019a47b	string	save_stats
+0x9019a48b	string	debug
+0x9019a496	string	getinfo
+0x9019a4bd	string	source
+0x9019a4c9	string	match
+0x9019a543	string	debug
+0x9019a54e	string	sethook
+0x9019a686	string	module
+0x9019a69b	string	package
+0x9019a6a8	string	seeall
+0x9019a6b3	string	\rStateMachine
+0x9019a6c6	string	States
+0x9019a6d3	string	CurrentStateId
+0x9019a6e7	string	DefaultStateEntry
+0x9019a6fe	string	DefaultStateExit
+0x9019a714	string	DefaultInitialTransition
+0x9019a732	string	PumpingExecute
+0x9019a747	string	\nExecuting
+0x9019a757	string	EventQueue
+0x9019a770	string	Initialize
+0x9019a780	string	SetDefaultTransitionFunctions
+0x9019a7a3	string	QueueEvent
+0x9019a7b3	string	XQueueEvent
+0x9019a7c4	string	Execute
+0x9019a7d1	string	Drain
+0x9019a7dc	string	TransitionToState
+0x9019a7f2	string	\t_OnError
+0x9019a801	string	_StateExit
+0x9019a811	string	_StateEntry
+0x9019a82f	string	_CallStateFunction
+0x9019a847	string	DumpDot
+0x9019a8ad	string	EventQueue
+0x9019a8bc	string	\rsetmetatable
+0x9019a8cf	string	__index
+0x9019a98c	string	assert
+0x9019a997	string	&State definition table not specified.
+0x9019a9c3	string	States
+0x9019a9cf	string	pairs
+0x9019a9da	string	Parent
+0x9019a9e6	string	IsCompositeState
+0x9019aa0a	string	string
+0x9019aa16	string	format
+0x9019aa21	string	:Initial state not found in state table (initialState=%s).
+0x9019aa61	string	TransitionToState
+0x9019aab0	string	DefaultStateExit
+0x9019aac6	string	DefaultStateEntry
+0x9019aadd	string	DefaultInitialTransition
+0x9019ab43	string	table
+0x9019ab4e	string	insert
+0x9019ab5a	string	EventQueue
+0x9019ab6a	string	Event
+0x9019ab75	string	Params
+0x9019abdd	string	QueueEvent
+0x9019abed	string	PumpingExecute
+0x9019ac03	string	Start
+0x9019ac7a	string	Execute
+0x9019ac87	string	PumpingExecute
+0x9019adcc	string	\nExecuting
+0x9019addc	string	EventQueue
+0x9019adf7	string	table
+0x9019ae02	string	remove
+0x9019ae17	string	CurrentStateId
+0x9019ae2b	string	_CallStateFunction
+0x9019ae43	string	Event
+0x9019ae4e	string	Params
+0x9019ae5a	string	States
+0x9019ae66	string	Parent
+0x9019ae72	string	assert
+0x9019ae7e	string	string
+0x9019ae8a	string	format
+0x9019ae95	string	-Unhandled event (currentState=%s, event=%s).
+0x9019aec7	string	\t_OnError
+0x9019aed6	string	TransitionToState
+0x9019aeed	string	Transitions
+0x9019af40	string	Execute
+0x9019b085	string	assert
+0x9019b090	string	NTransitionToState called with a nil state.  Is your transition table correct?
+0x9019b0ee	string	string
+0x9019b0fa	string	format
+0x9019b105	string	VTransitionToState called with invalid argument type (expected="string", actual="%s").
+0x9019b167	string	CurrentStateId
+0x9019b188	string	_StateExit
+0x9019b198	string	_StateEntry
+0x9019b1a9	string	_CallStateFunction
+0x9019b1c1	string	InitialTransition
+0x9019b1d8	string	DefaultInitialTransition
+0x9019b1f6	string	States
+0x9019b202	string	IsCompositeState
+0x9019b217	string	=State transition must end at a leaf-state (currentState=%s).
+0x9019b2ae	string	assert
+0x9019b2ba	string	string
+0x9019b2c6	string	format
+0x9019b2d1	string	7Error processing event (state=%s, event=%s, error=%s).
+0x9019b3d2	string	States
+0x9019b3de	string	assert
+0x9019b3ea	string	string
+0x9019b3f6	string	format
+0x9019b401	string	<Trying to call StateExit on a state not defined (state=%s).
+0x9019b443	string	_CallStateFunction
+0x9019b45a	string	\nStateExit
+0x9019b46a	string	DefaultStateExit
+0x9019b480	string	Parent
+0x9019b48c	string	_StateExit
+0x9019b544	string	assert
+0x9019b550	string	States
+0x9019b55c	string	Parent
+0x9019b568	string	_StateEntry
+0x9019b579	string	_CallStateFunction
+0x9019b591	string	StateEntry
+0x9019b5a1	string	DefaultStateEntry
+0x9019b6c6	string	States
+0x9019b6d2	string	Parent
+0x9019b802	string	States
+0x9019b80e	string	Module
+0x9019b81a	string	require
+0x9019b833	string	assert
+0x9019b83f	string	string
+0x9019b84b	string	format
+0x9019b856	string	"State was not found (stateId=%s).
+0x9019b888	string	table
+0x9019b892	string	3State object is not a table (stateId=%s, type=%s).
+0x9019ba7f	string	pairs
+0x9019ba92	string	write
+0x9019ba9c	string	\rdigraph G {\n
+0x9019baaf	string	compound=true;\n
+0x9019bac3	string	+graph[fontname="Courier New",fontsize=8];\n
+0x9019baf3	string	*node[fontname="Courier New",fontsize=8];\n
+0x9019bb22	string	*edge[fontname="Courier New",fontsize=8];\n
+0x9019bb52	string	State
+0x9019bb5d	string	Transitions
+0x9019bb7b	string	\tChildren
+0x9019bc4e	string	State
+0x9019bc58	string	\tChildren
+0x9019bc67	string	Parent
+0x9019bc73	string	table
+0x9019bc7e	string	insert
+0x9019bdc2	string	string
+0x9019bdce	string	format
+0x9019bdd9	string	\nlabel="%s
+0x9019bdf1	string	State
+0x9019bdfb	string	\rFriendlyName
+0x9019be28	string	Module
+0x9019be34	string	require
+0x9019be4d	string	StateEntry
+0x9019be5c	string	\rStateEntry\n
+0x9019be6e	string	\nStateExit
+0x9019be7e	string	StateExit\n
+0x9019be8f	string	InitialTransition
+0x9019bea6	string	InitialTransition\n
+0x9019bfc5	string	\tChildren
+0x9019bfe5	string	write
+0x9019bff0	string	string
+0x9019bffc	string	format
+0x9019c008	string	subgraph cluster_%s {\n
+0x9019c033	string	!self_%s [label="",shape=point];\n
+0x9019c05a	string	ipairs
+0x9019c06e	string	%s [%s,shape=rectangle];\n
+0x9019c169	string	assert
+0x9019c175	string	string
+0x9019c181	string	format
+0x9019c18d	string	self_%s
+0x9019c1a2	string	write
+0x9019c1ad	string	%s -> %s [label="%s"
+0x9019c1c7	string	,color=blue
+0x9019c2b9	string	require
+0x9019c2c6	string	Xbox.ConsoleImpl
+0x9019c2ea	string	module
+0x9019c2f5	string	\rXbox.Console
+0x9019c308	string	package
+0x9019c315	string	seeall
+0x9019c320	string	\rGetMachineId
+0x9019c333	string	TrustLevel
+0x9019c342	string	\nMachineId
+0x9019c352	string	GetConsoleTrustLevels
+0x9019c36d	string	GetCurrentConsoleTrustLevel
+0x9019c38e	string	SetCurrentConsoleTrustLevel
+0x9019c3af	string	GetOtherConsolesTrustedCount
+0x9019c3d0	string	&SetAllOtherConsoleTrustLevelUntrusted
+0x9019c3fc	string	ClearConsoleTrustLevels
+0x9019c4c0	string	\nMachineId
+0x9019c4d0	string	Invalid
+0x9019c4dd	string	GetConsoleTrustLevels
+0x9019c4f8	string	continuationToken
+0x9019c50f	string	ipairs
+0x9019c51b	string	userDeviceAssociations
+0x9019c537	string	table
+0x9019c542	string	insert
+0x9019c562	string	DbgPrintObject
+0x9019c575	string	)GetConsoleTrustLevels consoleTrustLevels
+0x9019c62b	string	\rGetMachineId
+0x9019c63e	string	GetConsoleTrustLevels
+0x9019c659	string	ipairs
+0x9019c665	string	machinePuid
+0x9019c676	string	trustLevel
+0x9019c6ee	string	SetConsoleTrustLevel
+0x9019c707	string	\rGetMachineId
+0x9019c71a	string	TrustLevel
+0x9019c729	string	\nUntrusted
+0x9019c739	string	ClearLogonTicketCaches
+0x9019c7e9	string	GetConsoleTrustLevels
+0x9019c80c	string	\rGetMachineId
+0x9019c81f	string	ipairs
+0x9019c82b	string	machinePuid
+0x9019c83c	string	trustLevel
+0x9019c84c	string	TrustLevel
+0x9019c85c	string	Trusted
+0x9019c91a	string	GetConsoleTrustLevels
+0x9019c934	string	\rGetMachineId
+0x9019c947	string	ipairs
+0x9019c953	string	machinePuid
+0x9019c964	string	trustLevel
+0x9019c974	string	TrustLevel
+0x9019c984	string	Trusted
+0x9019c991	string	SetConsoleTrustLevel
+0x9019c9aa	string	\nUntrusted
+0x9019c9fa	string	ClearConsoleTrustLevels
+0x9019cbfb	string	require
+0x9019cc08	string	Xbox.UserImpl
+0x9019cc1b	string	Xbox.Scheduler
+0x9019cc2f	string	module
+0x9019cc3a	string	\nXbox.User
+0x9019cc4a	string	package
+0x9019cc57	string	seeall
+0x9019cc63	string	MaxFriends
+0x9019cc7c	string	MaxSigninUsers
+0x9019cc99	string	_pendingProfileRequests
+0x9019ccb6	string	_currentProfileRequests
+0x9019ccd3	string	_profileReaderThread
+0x9019cced	string	GetFriends
+0x9019ccfd	string	GetFriendsOfFriend
+0x9019cd15	string	AreUsersFriends
+0x9019cd2a	string	GetSignedInUser
+0x9019cd3f	string	GetUserBasicRelationships
+0x9019cd5e	string	SendMessage
+0x9019cd6f	string	CreateLocalProfileEnumerator
+0x9019cd91	string	GetNextLocalProfile
+0x9019cdaa	string	ReleaseLocalProfileEnumerator
+0x9019cdcd	string	GetPartyUsers
+0x9019cde0	string	IsParentalControlled
+0x9019cdf9	string	\nIsPartial
+0x9019ce09	string	WlidGetMemberName
+0x9019ce1f	string	 WlidGetEncryptedProxyParameters
+0x9019ce44	string	\nWlidLogin
+0x9019ce54	string	CheckPrivilege
+0x9019ce68	string	CheckMuteList
+0x9019ce7b	string	GetGamertag
+0x9019ce8c	string	GetGamertagByXuid
+0x9019cea3	string	IsOfflineXuid
+0x9019ceb6	string	IsLocalXuid
+0x9019cec7	string	PresenceSubscribe
+0x9019cede	string	PresenceUnsubscribe
+0x9019cef7	string	EnumeratePresence
+0x9019cf0e	string	GetSessionInvitationData
+0x9019cf2c	string	GetAnId
+0x9019cf39	string	FlushLoginQueue
+0x9019cf4e	string	WriteProfileSettings
+0x9019cf68	string	GetLivePasscode
+0x9019cf7d	string	SetLivePasscode
+0x9019cf92	string	GetSigninState
+0x9019cfa6	string	SigninState
+0x9019cfb6	string	\nUserIndex
+0x9019cfc6	string	GetModernPresence
+0x9019cfdd	string	GetProfileInfo
+0x9019cff1	string	_ReadOnlineProfileSettings
+0x9019d011	string	_HandleProfileError
+0x9019d02a	string	_MakeArrayFromSet
+0x9019d041	string	_FillProfileInfoResults
+0x9019d1e1	string	\ncoroutine
+0x9019d1f1	string	running
+0x9019d1fe	string	error
+0x9019d208	string	,This function must be called asynchronously
+0x9019d242	string	\nuserIndex
+0x9019d25b	string	\tsettings
+0x9019d26a	string	thread
+0x9019d276	string	IsLocalXuid
+0x9019d287	string	result
+0x9019d293	string	ReadProfileSettings
+0x9019d2ac	string	_FillProfileInfoResults
+0x9019d2c9	string	IsOfflineXuid
+0x9019d2e5	string	_pendingProfileRequests
+0x9019d304	string	_profileReaderThread
+0x9019d31e	string	Start
+0x9019d329	string	_ReadOnlineProfileSettings
+0x9019d349	string	_HandleProfileError
+0x9019d36c	string	 Failed to read profile settings
+0x9019d536	string	_currentProfileRequests
+0x9019d55d	string	_pendingProfileRequests
+0x9019d579	string	\nuserIndex
+0x9019d59e	string	pairs
+0x9019d5a8	string	\tsettings
+0x9019d5b7	string	table
+0x9019d5c2	string	insert
+0x9019d5d7	string	_MakeArrayFromSet
+0x9019d5ee	string	results
+0x9019d5fb	string	ReadProfileSettings
+0x9019d614	string	result
+0x9019d620	string	_FillProfileInfoResults
+0x9019d63e	string	Resume
+0x9019d64a	string	thread
+0x9019d656	string	_ReadOnlineProfileSettings
+0x9019d6e2	string	pairs
+0x9019d6ed	string	_currentProfileRequests
+0x9019d70a	string	_pendingProfileRequests
+0x9019d728	string	Resume
+0x9019d734	string	thread
+0x9019d740	string	_profileReaderThread
+0x9019d7ba	string	pairs
+0x9019d7c5	string	table
+0x9019d7d0	string	insert
+0x9019d82c	string	pairs
+0x9019d836	string	\tsettings
+0x9019d845	string	result
+0x9019d8dd	string	require
+0x9019d8ea	string	Xbox.ProfileImpl
+0x9019d900	string	module
+0x9019d90b	string	\rXbox.Profile
+0x9019d91e	string	package
+0x9019d92b	string	seeall
+0x9019d937	string	CreateTitlesPlayedEnumerator
+0x9019d959	string	EnumerateTitlesPlayed
+0x9019d974	string	CreateAchievementsEnumerator
+0x9019d996	string	EnumerateAchievements
+0x9019d9b1	string	CloseHandle
+0x9019da2a	string	module
+0x9019da36	string	Xbox.MPXmlUtil
+0x9019da4a	string	package
+0x9019da57	string	seeall
+0x9019da63	string	require
+0x9019da70	string	Xbox.XuiStringTable
+0x9019da89	string	CreateXmlFilter
+0x9019da9e	string	AddLeafNodesToTable
+0x9019dc49	string	string
+0x9019dc55	string	match
+0x9019dc80	string	value
+0x9019dc8b	string	CreateXmlFilter
+0x9019dca0	string	table
+0x9019dcab	string	insert
+0x9019dd57	string	ChildNodes
+0x9019dd67	string	ipairs
+0x9019dd72	string	\tNodeType
+0x9019dd81	string	element
+0x9019dda0	string	\nLocalName
+0x9019ddaf	string	\nInnerText
+0x9019de33	string	module
+0x9019de3e	string	\nXbox.Util
+0x9019de4e	string	package
+0x9019de5b	string	seeall
+0x9019de71	string	CheckParameter
+0x9019de85	string	DbgPrintObject
+0x9019df3f	string	error
+0x9019df4a	string	string
+0x9019df56	string	format
+0x9019df61	string	&Argument %d: Expected type %s, got %s
+0x9019e1f1	string	string
+0x9019e210	string	table
+0x9019e21a	string	\ttostring
+0x9019e229	string	DbgPrintObject
+0x9019e23d	string	{ <recurse> }
+0x9019e259	string	pairs
+0x9019e27e	string	\tuserdata
+0x9019e28d	string	print
+0x9019e2a7	string	<userdata>
+0x9019e2b7	string	thread
+0x9019e2c2	string	\t<thread>
+0x9019e2d0	string	\tfunction
+0x9019e2df	string	<function>
+0x9019e627	string	module
+0x9019e641	string	package
+0x9019e64e	string	seeall
+0x9019e65a	string	require
+0x9019e667	string	Xbox.XmlParser
+0x9019e6a4	string	string
+0x9019e6ba	string	match
+0x9019e6c5	string	_attributes
+0x9019e6ef	string	_name
+0x9019e6fa	string	_nameTable
+0x9019e70a	string	_parent
+0x9019e717	string	_prefix
+0x9019e730	string	_value
+0x9019e73c	string	__index
+0x9019e749	string	__tostring
+0x9019e758	string	\rAddAttribute
+0x9019e76b	string	AddElement
+0x9019e77a	string	\rAddNamespace
+0x9019e78d	string	AddText
+0x9019e79a	string	CreateElement
+0x9019e7ac	string	\nFromTable
+0x9019e7bc	string	FromXmlString
+0x9019e7d8	string	GetAttributes
+0x9019e7eb	string	GetMultiple
+0x9019e7fc	string	GetKind
+0x9019e808	string	\rGetLocalName
+0x9019e81a	string	\rGetNamespace
+0x9019e82d	string	GetNamespaces
+0x9019e83f	string	\tGetQName
+0x9019e84d	string	\tGetValue
+0x9019e867	string	RemoveAttribute
+0x9019e87c	string	RemoveChild
+0x9019e88d	string	RemoveNamespace
+0x9019e8a1	string	\tSetValue
+0x9019e8b0	string	ToXmlString
+0x9019e93d	string	string
+0x9019ea04	string	\nAttribute
+0x9019ea14	string	string
+0x9019ea20	string	format
+0x9019ea2c	string	[xml-attribute] %s=%s
+0x9019ea53	string	_value
+0x9019ea5f	string	Element
+0x9019ea6c	string	[xml-element] %s (%d children)
+0x9019ea9a	string	[xml-content] %s
+0x9019ec2e	string	error
+0x9019ec38	string	9Can't add namespace attributes. Use AddNamespace instead
+0x9019ec7f	string	\nAttribute
+0x9019ec8f	string	_value
+0x9019ec9b	string	_attributes
+0x9019ecb2	string	_prefix
+0x9019ecbf	string	_name
+0x9019ecca	string	ipairs
+0x9019ecd6	string	Duplicate attribute 
+0x9019ecf9	string	_parent
+0x9019edfa	string	string
+0x9019ee06	string	Element
+0x9019ee13	string	table
+0x9019ee1e	string	_parent
+0x9019ee2b	string	error
+0x9019ee35	string	#Child element already has a parent
+0x9019ee67	string	Element or string expected
+0x9019ef56	string	_nameTable
+0x9019ef66	string	error
+0x9019ef70	string	 Duplicate namespace declaration
+0x9019f062	string	Element
+0x9019f06f	string	error
+0x9019f079	string	%Only Element nodes can have children
+0x9019f0c0	string	_value
+0x9019f0d5	string	_parent
+0x9019f13a	string	Element
+0x9019f26b	string	table
+0x9019f27f	string	string
+0x9019f28b	string	error
+0x9019f295	string	TTable and subtable must have the following format: { "Element-Name" [, children] } 
+0x9019f2f8	string	CreateElement
+0x9019f31d	string	AddText
+0x9019f329	string	\nFromTable
+0x9019f339	string	AddElement
+0x9019f4a5	string	stack
+0x9019f4b0	string	Element
+0x9019f4bd	string	buffer
+0x9019f4c9	string	OnElementBegin
+0x9019f4dd	string	OnElementContent
+0x9019f4f2	string	\rOnElementEnd
+0x9019f505	string	OnAttribute
+0x9019f515	string	\rOnCDATABegin
+0x9019f528	string	OnCDATAData
+0x9019f539	string	OnCDATAEnd
+0x9019f549	string	string
+0x9019f59e	string	Parse
+0x9019f5a9	string	error
+0x9019f5b3	string	'Reached end of file with open elements
+0x9019f5f1	string	)Document has multiple top level elements
+0x9019f620	string	_parent
+0x9019f78a	string	match
+0x9019f7a1	string	_attributes
+0x9019f7b2	string	ipairs
+0x9019f7be	string	_name
+0x9019f7d4	string	\nAttribute
+0x9019f7f2	string	Element
+0x9019f84b	string	_attributes
+0x9019f9bc	string	match
+0x9019f9d3	string	_attributes
+0x9019f9e4	string	ipairs
+0x9019f9f0	string	_name
+0x9019fa07	string	table
+0x9019fa12	string	insert
+0x9019faa9	string	_name
+0x9019fb1d	string	error
+0x9019fb27	string	 Can't resolve namespace prefix 
+0x9019fb4d	string	_prefix
+0x9019fbaf	string	_nameTable
+0x9019fcaf	string	_value
+0x9019fcc6	string	Element
+0x9019fea6	string	_attributes
+0x9019feb7	string	string
+0x9019fec3	string	match
+0x9019fee8	string	error
+0x9019fef2	string	?Can't remove namespace attributes. Use RemoveNamespace instead
+0x9019ff40	string	ipairs
+0x9019ff58	string	table
+0x9019ff63	string	remove
+0x9019ff6f	string	number
+0x901a0033	string	number
+0x901a003f	string	table
+0x901a004a	string	remove
+0x901a0056	string	ipairs
+0x901a00e1	string	_nameTable
+0x901a01c0	string	error
+0x901a01cb	string	Can't set value on Xml Nil
+0x901a01fe	string	\nAttribute
+0x901a0218	string	_value
+0x901a0224	string	assert
+0x901a0230	string	Element
+0x901a023d	string	AddText
+0x901a02e2	string	table
+0x901a02ed	string	insert
+0x901a02f8	string	'<?xml version="1.0" encoding="UTF-8"?>
+0x901a0325	string	concat
+0x901a051b	string	_nameTable
+0x901a052b	string	_attributes
+0x901a053c	string	string
+0x901a0548	string	format
+0x901a0569	string	pairs
+0x901a0596	string	ipairs
+0x901a05b0	string	_value
+0x901a05cd	string	table
+0x901a05d8	string	insert
+0x901a05f6	string	Element
+0x901a060d	string	error
+0x901a0618	string	Invalid node kind
+0x901a0846	string	_prefix
+0x901a0864	string	Element
+0x901a08f7	string	_nameTable
+0x901a0907	string	_parent
+0x901a0967	string	\rgetmetatable
+0x901a097a	string	error
+0x901a0984	string	\rXml expected
+0x901a09ff	string	\rgetmetatable
+0x901a0a1d	string	Element
+0x901a0a2a	string	error
+0x901a0a35	string	Element node expected
+0x901a0ac4	string	\rgetmetatable
+0x901a0ae2	string	Element
+0x901a0aee	string	\nAttribute
+0x901a0afe	string	error
+0x901a0b08	string	#Element or Attribute node expected
+0x901a0b8a	string	string
+0x901a0b96	string	error
+0x901a0ba1	string	String parameter expected
+0x901a0c19	string	number
+0x901a0c25	string	error
+0x901a0c30	string	Number parameter expected
+0x901a0cac	string	error
+0x901a0cb6	string	0This function can't be called on a nil Xml node
+0x901a0da7	string	error
+0x901a0db2	string	Invalid attribute/element name
+0x901a0df0	string	_prefix
+0x901a0e0f	string	_name
+0x901a0e81	string	\rsetmetatable
+0x901a0f04	string	stack
+0x901a0f0f	string	CreateElement
+0x901a0f22	string	AddElement
+0x901a0f32	string	table
+0x901a0f3d	string	insert
+0x901a0f99	string	stack
+0x901a0fa4	string	AddText
+0x901a1005	string	table
+0x901a1010	string	remove
+0x901a101c	string	stack
+0x901a1033	string	error
+0x901a103e	string	Element tag mismatch
+0x901a10fc	string	stack
+0x901a1107	string	match
+0x901a1135	string	\rAddNamespace
+0x901a1147	string	\rAddAttribute
+0x901a11d2	string	table
+0x901a11dd	string	insert
+0x901a11e9	string	buffer
+0x901a1281	string	buffer
+0x901a1296	string	table
+0x901a12a1	string	concat
+0x901a12ad	string	stack
+0x901a12b8	string	AddText
+0x901a1315	string	buffer
+0x901a1408	string	string
+0x901a141d	string	error
+0x901a1427	string	HTable attribute must have the format: { "Attrib-Name", "Attrib-Value" }
+0x901a147e	string	match
+0x901a14ac	string	\rAddNamespace
+0x901a14be	string	\rAddAttribute
+0x901a1671	string	module
+0x901a168b	string	package
+0x901a1698	string	seeall
+0x901a16ae	string	XuiAvatarImpl
+0x901a16c1	string	require
+0x901a16ce	string	Xbox.XuiAvatar
+0x901a16e1	string	\rXbox.XuiBase
+0x901a16f4	string	Xbox.XuiCheckbox
+0x901a170a	string	Xbox.XuiControl
+0x901a171e	string	\rXbox.XuiEdit
+0x901a1731	string	Xbox.XuiElement
+0x901a1746	string	Xbox.XuiFigure
+0x901a175a	string	XuiHtmlControlImpl
+0x901a1772	string	Xbox.XuiHtmlControl
+0x901a178b	string	Xbox.XuiImage
+0x901a179d	string	\rXbox.XuiList
+0x901a17b0	string	Xbox.XuiTwist
+0x901a17c3	string	XuiNavButtonImpl
+0x901a17d9	string	Xbox.XuiNavButton
+0x901a17f0	string	Xbox.XuiProgressBar
+0x901a1809	string	Xbox.XuiRadioGroup
+0x901a1821	string	Xbox.XuiScene
+0x901a1834	string	Xbox.XuiSlider
+0x901a1847	string	\rXuiSoundImpl
+0x901a185a	string	Xbox.XuiSound
+0x901a186d	string	Xbox.XuiTabScene
+0x901a1882	string	\rXbox.XuiText
+0x901a1895	string	XuiTextureSurfaceImpl
+0x901a18b0	string	Xbox.XuiTextureSurface
+0x901a18cb	string	\rXuiVideoImpl
+0x901a18de	string	Xbox.XuiVideo
+0x901a1acd	string	require
+0x901a1ad9	string	\rXbox.XuiBase
+0x901a1aec	string	Xbox.XuiControl
+0x901a1b01	string	Xbox.XuiAvatarImpl
+0x901a1b19	string	Xbox.Avatar
+0x901a1b2a	string	ImplementXuiClass
+0x901a1b41	string	Xbox.XuiAvatar
+0x901a1b54	string	\nXuiAvatar
+0x901a1b63	string	\rDontRegister
+0x901a1b76	string	EnableUserControl
+0x901a1b8d	string	IsUserControlEnabled
+0x901a1ba7	string	IsActiveUserAvatarEnabled
+0x901a1bc6	string	PlayAnimations
+0x901a1bda	string	SetMetadata
+0x901a1beb	string	EnableActiveUserAvatar
+0x901a1c07	string	IsCustomViewEnabled
+0x901a1c20	string	GetRenderViewMode
+0x901a1c37	string	GetCustomView
+0x901a1c4a	string	IsSelfShadowEnabled
+0x901a1c63	string	IsShadowEnabled
+0x901a1c78	string	GetUpdateInterval
+0x901a1c8f	string	EnableCustomView
+0x901a1ca5	string	SetRenderViewMode
+0x901a1cbc	string	SetCustomView
+0x901a1ccf	string	EnableSelfShadow
+0x901a1ce4	string	\rEnableShadow
+0x901a1cf7	string	SetUpdateInterval
+0x901a1d18	string	\tIsAsleep
+0x901a1d27	string	EnableCarryables
+0x901a1d3d	string	SetDetailLevel
+0x901a1d51	string	SetSelfShadowStrength
+0x901a1d6c	string	SetLighting
+0x901a1d7d	string	GetLighting
+0x901a1d8e	string	DisplaySilhouette
+0x901a1da4	string	\rFreezeAvatar
+0x901a1db7	string	QueryRenderStatus
+0x901a1dce	string	EnableRenderer
+0x901a1e16	string	EnableUserControl
+0x901a1e2d	string	_handle
+0x901a1e7a	string	IsEnableUserControl
+0x901a1e93	string	_handle
+0x901a1ee0	string	IsUseActiveUserAvatar
+0x901a1efb	string	_handle
+0x901a1f4c	string	PlayAnimations
+0x901a1f60	string	_handle
+0x901a1fad	string	SetAvatarMetadata
+0x901a1fc4	string	_handle
+0x901a2011	string	UseActiveUserAvatar
+0x901a202a	string	_handle
+0x901a2077	string	IsUseCustomView
+0x901a208c	string	_handle
+0x901a20d9	string	GetRenderView
+0x901a20ec	string	_handle
+0x901a2139	string	GetCustomView
+0x901a214c	string	_handle
+0x901a2199	string	IsShowSelfShadow
+0x901a21af	string	_handle
+0x901a21fb	string	\rIsShowShadow
+0x901a220e	string	_handle
+0x901a225b	string	GetUpdateInterval
+0x901a2272	string	_handle
+0x901a22bf	string	UseCustomView
+0x901a22d2	string	_handle
+0x901a231f	string	SetRenderView
+0x901a2332	string	_handle
+0x901a237f	string	SetCustomView
+0x901a2392	string	_handle
+0x901a23df	string	ShowSelfShadow
+0x901a23f3	string	_handle
+0x901a2440	string	ShowShadow
+0x901a2450	string	_handle
+0x901a249d	string	SetUpdateInterval
+0x901a24b4	string	_handle
+0x901a2500	string	\nSetAsleep
+0x901a2510	string	_handle
+0x901a255c	string	\tIsAsleep
+0x901a256b	string	_handle
+0x901a25b8	string	SetShowCarryable
+0x901a25ce	string	_handle
+0x901a261b	string	SetLevelOfDetail
+0x901a2631	string	_handle
+0x901a267e	string	SetSelfShadowStrength
+0x901a2699	string	_handle
+0x901a26e6	string	SetLighting
+0x901a26f7	string	_handle
+0x901a2744	string	GetLighting
+0x901a2755	string	_handle
+0x901a27a2	string	DisplaySilhouette
+0x901a27b9	string	_handle
+0x901a2805	string	\rFreezeAvatar
+0x901a2818	string	_handle
+0x901a2865	string	QueryRenderStatus
+0x901a287c	string	_handle
+0x901a28cd	string	EnableRenderer
+0x901a28e1	string	_handle
+0x901a2a9e	string	require
+0x901a2aab	string	Xbox.XuiBaseImpl
+0x901a2ac0	string	\nXbox.Util
+0x901a2ad0	string	module
+0x901a2adb	string	\rXbox.XuiBase
+0x901a2aee	string	package
+0x901a2afb	string	seeall
+0x901a2b06	string	\r_objectTable
+0x901a2b18	string	\r_orphanTable
+0x901a2b2b	string	_visualsTable
+0x901a2b3d	string	\n_xuiToLua
+0x901a2b4c	string	\rsetmetatable
+0x901a2b5f	string	__mode
+0x901a2b72	string	CheckParameter
+0x901a2b86	string	_AddToOrphanList
+0x901a2b9b	string	\r_CheckObject
+0x901a2bae	string	IsValidObject
+0x901a2bc1	string	ClassDerivesFrom
+0x901a2bd6	string	\rCreateObject
+0x901a2be9	string	DestroyObject
+0x901a2bfb	string	\rGetBaseClass
+0x901a2c0d	string	\rGetClassName
+0x901a2c20	string	_GetObject
+0x901a2c30	string	GetObjectClass
+0x901a2c44	string	ImplementXuiClass
+0x901a2c5a	string	\nKillTimer
+0x901a2c6a	string	LoadObject
+0x901a2c7a	string	LoadVisual
+0x901a2c8a	string	_MapXuiClassToLuaClass
+0x901a2ca6	string	_ObjectFromHandle
+0x901a2cbc	string	\tReadFile
+0x901a2ccb	string	_RemoveFromOrphanList
+0x901a2ce5	string	\tSetTimer
+0x901a2cf4	string	GetProperty
+0x901a2d05	string	SetProperty
+0x901a2d1e	string	_XboxXuiBaseTerm
+0x901a2d63	string	\r_orphanTable
+0x901a2de4	string	_handle
+0x901a2df1	string	error
+0x901a2dfc	string	Invalid object handle
+0x901a2e7c	string	_handle
+0x901a2e89	string	IsValidObject
+0x901a2ee0	string	ClassDerivesFrom
+0x901a2f4d	string	\rCreateObject
+0x901a2f60	string	_AddToOrphanList
+0x901a2f76	string	_ObjectFromHandle
+0x901a2fd5	string	DestroyObject
+0x901a2fe8	string	_handle
+0x901a2ff5	string	_RemoveFromOrphanList
+0x901a304f	string	\rGetBaseClass
+0x901a30a1	string	\rGetClassName
+0x901a3168	string	assert
+0x901a3173	string	\r_objectTable
+0x901a3186	string	GetObjectClass
+0x901a3199	string	\rGetClassName
+0x901a31ab	string	\n_xuiToLua
+0x901a31c4	string	_handle
+0x901a31d1	string	_name
+0x901a31db	string	\rGetBaseClass
+0x901a322e	string	GetObjectClass
+0x901a3242	string	_handle
+0x901a3374	string	string
+0x901a339b	string	_GetGlobal
+0x901a33b5	string	table
+0x901a33c0	string	error
+0x901a33cb	string	Base class is not defined
+0x901a33ea	string	_name
+0x901a33f4	string	\n_xuiToLua
+0x901a3404	string	XUI class '
+0x901a3415	string	' already declared
+0x901a342d	string	_BuildClass
+0x901a348a	string	\nKillTimer
+0x901a349a	string	_handle
+0x901a34ff	string	LoadObject
+0x901a350f	string	_AddToOrphanList
+0x901a3525	string	_ObjectFromHandle
+0x901a3584	string	LoadVisual
+0x901a3594	string	_visualsTable
+0x901a3608	string	\n_xuiToLua
+0x901a3618	string	error
+0x901a3623	string	Xui class 
+0x901a3633	string	 already mapped
+0x901a36a1	string	_GetObject
+0x901a36ec	string	\r_orphanTable
+0x901a3743	string	\tSetTimer
+0x901a3752	string	_handle
+0x901a37a3	string	GetProperty
+0x901a37b4	string	_handle
+0x901a3805	string	SetProperty
+0x901a3816	string	_handle
+0x901a38d4	string	\r_orphanTable
+0x901a38e7	string	DestroyOrphan
+0x901a38fb	string	_visualsTable
+0x901a390e	string	pcall
+0x901a3919	string	FreeVisuals
+0x901a39c2	string	require
+0x901a39ce	string	\rXbox.XuiBase
+0x901a39e1	string	Xbox.XuiControl
+0x901a39f6	string	Xbox.XuiCheckboxImpl
+0x901a3a10	string	ImplementXuiClass
+0x901a3a27	string	Xbox.XuiCheckbox
+0x901a3a3d	string	XuiCheckbox
+0x901a3a4d	string	\rDontRegister
+0x901a3a5f	string	\nIsChecked
+0x901a3a6e	string	\tSetCheck
+0x901a3ab0	string	\nIsChecked
+0x901a3ac0	string	_handle
+0x901a3b0c	string	\tSetCheck
+0x901a3b1b	string	_handle
+0x901a3c0c	string	require
+0x901a3c18	string	\rXbox.XuiBase
+0x901a3c2b	string	Xbox.XuiScene
+0x901a3c3e	string	Xbox.XuiColumnSceneImpl
+0x901a3c5b	string	ImplementXuiClass
+0x901a3c72	string	Xbox.XuiColumnScene
+0x901a3c8b	string	ControlPackRomeScene
+0x901a3ca4	string	\rDontRegister
+0x901a3cb6	string	\rCreateColumn
+0x901a3cc9	string	DeleteAllColumns
+0x901a3cde	string	\rDeleteColumn
+0x901a3cf1	string	GetColumnIndex
+0x901a3d04	string	\tGetCount
+0x901a3d13	string	GetColumnId
+0x901a3d24	string	GetCurrentColumn
+0x901a3d7f	string	\rCreateColumn
+0x901a3d92	string	_handle
+0x901a3ddb	string	DeleteAllColumns
+0x901a3df1	string	_handle
+0x901a3e3d	string	\rDeleteColumn
+0x901a3e50	string	_handle
+0x901a3ea1	string	GetColumnIndex
+0x901a3eb5	string	_handle
+0x901a3f01	string	\tGetCount
+0x901a3f10	string	_handle
+0x901a3f61	string	GetColumnId
+0x901a3f72	string	_handle
+0x901a3fd3	string	GetCurrentColumn
+0x901a3fe9	string	_handle
+0x901a3ff6	string	_ObjectFromHandle
+0x901a4057	string	_handle
+0x901a41b4	string	require
+0x901a41c0	string	\rXbox.XuiBase
+0x901a41d3	string	Xbox.XuiScene
+0x901a41e6	string	Xbox.XuiRowSceneImpl
+0x901a4200	string	ImplementXuiClass
+0x901a4217	string	Xbox.XuiRowScene
+0x901a422d	string	ControlPackMobyScene
+0x901a4246	string	\rDontRegister
+0x901a4258	string	\nCreateRow
+0x901a4267	string	\nDeleteRow
+0x901a4277	string	DeleteAllRows
+0x901a428a	string	GetRowCount
+0x901a429b	string	GetRowIndex
+0x901a42ab	string	\tGetRowId
+0x901a42ba	string	SetRowInitParameters
+0x901a42d4	string	CreateColumnInRow
+0x901a42eb	string	DeleteAllColumnsInRow
+0x901a4306	string	DeleteColumnInRow
+0x901a431d	string	GetColumnIndexInRow
+0x901a4336	string	GetColumnCountInRow
+0x901a434f	string	GetColumnIdInRow
+0x901a4365	string	ReplaceRowAndColumnScene
+0x901a4383	string	GetCurrentRowAndColumn
+0x901a439f	string	GotoRowAndColumn
+0x901a43b5	string	SetColumnInRowInitParameters
+0x901a4412	string	\nCreateRow
+0x901a4422	string	_handle
+0x901a4472	string	\nDeleteRow
+0x901a4482	string	_handle
+0x901a44cb	string	DeleteAllRows
+0x901a44de	string	_handle
+0x901a452b	string	GetRowCount
+0x901a453c	string	_handle
+0x901a458d	string	GetRowIndex
+0x901a459e	string	_handle
+0x901a45ee	string	\tGetRowId
+0x901a45fd	string	_handle
+0x901a464e	string	SetRowInitParameters
+0x901a4668	string	_handle
+0x901a46c1	string	CreateColumnInRow
+0x901a46d8	string	_handle
+0x901a4725	string	DeleteAllColumnsInRow
+0x901a4740	string	_handle
+0x901a4791	string	DeleteColumnInRow
+0x901a47a8	string	_handle
+0x901a47fd	string	GetColumnIndexInRow
+0x901a4816	string	_handle
+0x901a4867	string	GetColumnCountInRow
+0x901a4880	string	_handle
+0x901a48d5	string	GetColumnIdInRow
+0x901a48eb	string	_handle
+0x901a4940	string	ReplaceRowAndColumnScene
+0x901a495e	string	_handle
+0x901a49c3	string	GetCurrentRowAndColumn
+0x901a49df	string	_handle
+0x901a49ec	string	_ObjectFromHandle
+0x901a4a4b	string	GotoRowAndColumn
+0x901a4a61	string	_handle
+0x901a4ab6	string	SetColumnInRowInitParameters
+0x901a4ad8	string	_handle
+0x901a4b71	string	require
+0x901a4b7d	string	\rXbox.XuiBase
+0x901a4b90	string	Xbox.XuiScene
+0x901a4ba3	string	Xbox.XuiHubSceneImpl
+0x901a4bbd	string	ImplementXuiClass
+0x901a4bd4	string	Xbox.XuiHubScene
+0x901a4bea	string	ControlPackHubScene
+0x901a4c02	string	\rDontRegister
+0x901a4c15	string	SetLeftAlignTitleText
+0x901a4c64	string	SetLeftAlignTitleText
+0x901a4c7f	string	_handle
+0x901a4d54	string	require
+0x901a4d60	string	\rXbox.XuiBase
+0x901a4d73	string	Xbox.XuiScene
+0x901a4d86	string	Xbox.XuiAuraControlImpl
+0x901a4da3	string	ImplementXuiClass
+0x901a4dba	string	Xbox.XuiAuraControl
+0x901a4dd3	string	ControlPackAuraControl
+0x901a4dee	string	\rDontRegister
+0x901a4e00	string	\nSetActive
+0x901a4e10	string	SetBackgroundImage
+0x901a4e28	string	SetBannerImagePath
+0x901a4e40	string	SetSurfaceSphere
+0x901a4e56	string	SetSurfaceVignette
+0x901a4e6e	string	SetAttributes
+0x901a4eb4	string	\nSetActive
+0x901a4ec4	string	_handle
+0x901a4f15	string	SetBackgroundImage
+0x901a4f2d	string	_handle
+0x901a4f7a	string	SetBannerImagePath
+0x901a4f92	string	_handle
+0x901a4fdf	string	SetSurfaceSphere
+0x901a4ff5	string	_handle
+0x901a5042	string	SetSurfaceVignette
+0x901a505a	string	_handle
+0x901a50a7	string	SetAttributes
+0x901a50ba	string	_handle
+0x901a51fb	string	require
+0x901a5207	string	\rXbox.XuiBase
+0x901a521a	string	Xbox.XuiScene
+0x901a522d	string	Xbox.XuiHorizonControlImpl
+0x901a524d	string	ImplementXuiClass
+0x901a5264	string	Xbox.XuiHorizonControl
+0x901a5280	string	ControlPackHorizonControl
+0x901a529e	string	\rDontRegister
+0x901a52b1	string	SetPanelCount
+0x901a52c4	string	GetPanelCount
+0x901a52d7	string	DataChanged
+0x901a52e8	string	RemoveAllPanels
+0x901a52fd	string	SetActivePanel
+0x901a5311	string	GetActivePanel
+0x901a5325	string	SetActivePanelSlot
+0x901a533c	string	\nPageRight
+0x901a534b	string	\tPageLeft
+0x901a535a	string	SetPeekOffset
+0x901a536c	string	\rSnapToTarget
+0x901a537f	string	SetVirtualizationWindow
+0x901a539c	string	IsAnimating
+0x901a53ad	string	EnableReporting
+0x901a53c2	string	EnableZReorder
+0x901a540a	string	SetPanelCount
+0x901a541d	string	_handle
+0x901a546a	string	GetPanelCount
+0x901a547d	string	_handle
+0x901a54c6	string	DataChanged
+0x901a54d7	string	_handle
+0x901a5520	string	RemoveAllPanels
+0x901a5535	string	_handle
+0x901a5586	string	SetActivePanel
+0x901a559a	string	_handle
+0x901a55e7	string	GetActivePanel
+0x901a55fb	string	_handle
+0x901a5650	string	SetActivePanelSlot
+0x901a5668	string	_handle
+0x901a56b0	string	\nPageRight
+0x901a56c0	string	_handle
+0x901a5708	string	\tPageLeft
+0x901a5717	string	_handle
+0x901a5764	string	SetPeekOffset
+0x901a5777	string	_handle
+0x901a57bf	string	\rSnapToTarget
+0x901a57d2	string	_handle
+0x901a5823	string	SetVirtualizationWindow
+0x901a5840	string	_handle
+0x901a588d	string	IsAnimating
+0x901a589e	string	_handle
+0x901a58eb	string	EnableReporting
+0x901a5900	string	_handle
+0x901a594d	string	EnableZReorder
+0x901a5961	string	_handle
+0x901a5a8a	string	require
+0x901a5a96	string	\rXbox.XuiBase
+0x901a5aa9	string	Xbox.XuiElement
+0x901a5abe	string	Xbox.XuiControlImpl
+0x901a5ad7	string	ImplementXuiClass
+0x901a5aee	string	Xbox.XuiControl
+0x901a5b03	string	XuiControl
+0x901a5b12	string	\rDontRegister
+0x901a5b24	string	\rGetImagePath
+0x901a5b37	string	GetText
+0x901a5b43	string	\rGetTextField
+0x901a5b55	string	\nGetVisual
+0x901a5b64	string	\nIsEnabled
+0x901a5b73	string	\nIsPressed
+0x901a5b83	string	Press
+0x901a5b8d	string	\nSetEnable
+0x901a5b9c	string	\rSetImagePath
+0x901a5bae	string	\tSetPress
+0x901a5bbd	string	SetText
+0x901a5bc9	string	\nSetVisual
+0x901a5bd9	string	WantsUnfocusedInput
+0x901a5c25	string	\rGetImagePath
+0x901a5c38	string	_handle
+0x901a5c85	string	GetText
+0x901a5c92	string	_handle
+0x901a5ce7	string	GetText
+0x901a5cf4	string	_handle
+0x901a5d40	string	\nGetVisual
+0x901a5d50	string	_handle
+0x901a5d9c	string	\nIsEnabled
+0x901a5dac	string	_handle
+0x901a5df8	string	\nIsPressed
+0x901a5e08	string	_handle
+0x901a5e59	string	Press
+0x901a5e64	string	_handle
+0x901a5eb0	string	\nSetEnable
+0x901a5ec0	string	_handle
+0x901a5f0c	string	\rSetImagePath
+0x901a5f1f	string	_handle
+0x901a5f6b	string	\tSetPress
+0x901a5f7a	string	_handle
+0x901a5fc7	string	SetText
+0x901a5fd4	string	_handle
+0x901a6020	string	\nSetVisual
+0x901a6030	string	_handle
+0x901a607d	string	WantsUnfocusedInput
+0x901a6096	string	_handle
+0x901a612f	string	require
+0x901a613b	string	\rXbox.XuiBase
+0x901a614e	string	Xbox.XuiElement
+0x901a6163	string	Xbox.XuiEditImpl
+0x901a6179	string	ImplementXuiClass
+0x901a618f	string	\rXbox.XuiEdit
+0x901a61a2	string	Xbox.XuiControl
+0x901a61b7	string	XuiEdit
+0x901a61c3	string	\rDontRegister
+0x901a61d6	string	SetTopLine
+0x901a621e	string	SetTopLine
+0x901a622e	string	_handle
+0x901a659b	string	require
+0x901a65a7	string	\rXbox.XuiBase
+0x901a65ba	string	Xbox.XuiElementImpl
+0x901a65d3	string	Xbox.XuiEvents
+0x901a65e6	string	\nXbox.Util
+0x901a65f6	string	ImplementXuiClass
+0x901a660d	string	Xbox.XuiElement
+0x901a6622	string	XuiElement
+0x901a6631	string	\rDontRegister
+0x901a6644	string	_ObjectFromHandle
+0x901a665b	string	string
+0x901a6667	string	match
+0x901a667c	string	pcall
+0x901a6687	string	CheckParameter
+0x901a669b	string	Constructor
+0x901a66ab	string	\tAddChild
+0x901a66ba	string	AutoSubscribe
+0x901a66cd	string	_CleanupEventHandlers
+0x901a66e8	string	_CleanupThreads
+0x901a66fd	string	EnableInput
+0x901a670e	string	FindNamedFrame
+0x901a6721	string	!DisallowRecursiveTimelineControl
+0x901a6748	string	_EventDispatch
+0x901a675b	string	\rGetChildById
+0x901a676e	string	GetFirstChild
+0x901a6780	string	\tGetFocus
+0x901a678e	string	\nGetHeight
+0x901a679e	string	GetId
+0x901a67a8	string	\rGetLastChild
+0x901a67bb	string	GetNext
+0x901a67c7	string	 _GetObjectFromAutoSubscribeName
+0x901a67ed	string	GetOpacity
+0x901a67fc	string	\nGetParent
+0x901a680b	string	\tGetPivot
+0x901a681a	string	GetPosition
+0x901a682b	string	GetPrevious
+0x901a683b	string	\tGetScale
+0x901a684a	string	GetVisualPrefix
+0x901a685e	string	\tGetWidth
+0x901a686c	string	\nInitFocus
+0x901a687c	string	_IndexGetChildById
+0x901a6894	string	InsertChild
+0x901a68a4	string	\rInputEnabled
+0x901a68b6	string	\rIsDescendant
+0x901a68c9	string	IsShown
+0x901a68d6	string	MapChildControls
+0x901a68ec	string	_NotificationDispatch
+0x901a6906	string	\rPlayTimeline
+0x901a6918	string	\nSetHeight
+0x901a6927	string	\tSetFocus
+0x901a6936	string	SetOpacity
+0x901a6945	string	\tSetPivot
+0x901a6954	string	SetPosition
+0x901a6965	string	SetRotation
+0x901a6975	string	\tSetScale
+0x901a6984	string	SetShow
+0x901a6991	string	SetVisualPrefix
+0x901a69a5	string	\tSetWidth
+0x901a69b4	string	SkinChanged
+0x901a69c5	string	Start
+0x901a69d0	string	_Subscribe
+0x901a69df	string	\nSubscribe
+0x901a69ef	string	SubscribeNotification
+0x901a6a0a	string	_TryGetChildById
+0x901a6a20	string	Unlink
+0x901a6a2c	string	Unsubscribe
+0x901a6a3d	string	GetDescendantById
+0x901a6a53	string	\rTreeHasFocus
+0x901a6a66	string	InitResources
+0x901a6ac0	string	\rgetmetatable
+0x901a6ad2	string	\rsetmetatable
+0x901a6ae5	string	__index
+0x901a6b2a	string	_IndexGetChildById
+0x901a6b9d	string	\tAddChild
+0x901a6bac	string	_handle
+0x901a6bb9	string	_RemoveFromOrphanList
+0x901a6d86	string	SubscribeNotification
+0x901a6da0	string	\nSubscribe
+0x901a6db0	string	pairs
+0x901a6dc5	string	string
+0x901a6dd0	string	\tfunction
+0x901a6dde	string	\rOnNotify(.*)
+0x901a6df1	string	error
+0x901a6dfc	string	format
+0x901a6e07	string	)Failed to auto-subscribe '%s'. Error: %s
+0x901a6e4f	string	 _GetObjectFromAutoSubscribeName
+0x901a6e76	string	Can't find object
+0x901a6f0d	string	pairs
+0x901a6f18	string	_eventHandlers
+0x901a6f2c	string	Unsubscribe
+0x901a6f3e	string	_handle
+0x901a6f4b	string	Destroy
+0x901a6f58	string	_RemoveFromOrphanList
+0x901a6fc3	string	pairs
+0x901a6fcd	string	\t_threads
+0x901a6fdc	string	Cancel
+0x901a702c	string	EnableInput
+0x901a703d	string	_handle
+0x901a708e	string	FindNamedFrame
+0x901a70a2	string	_handle
+0x901a70ee	string	!DisallowRecursiveTimelineControl
+0x901a7115	string	_handle
+0x901a718a	string	param
+0x901a721f	string	\rGetChildById
+0x901a7232	string	_handle
+0x901a7240	string	error
+0x901a724b	string	Can't find child 
+0x901a7261	string	\ttostring
+0x901a72c1	string	GetFirstChild
+0x901a72d4	string	_handle
+0x901a7324	string	\tGetFocus
+0x901a7372	string	\nGetHeight
+0x901a7382	string	_handle
+0x901a73cf	string	GetId
+0x901a73da	string	_handle
+0x901a742e	string	\rGetLastChild
+0x901a7441	string	_handle
+0x901a7496	string	GetNext
+0x901a74a3	string	_handle
+0x901a757d	string	_TryGetChildById
+0x901a7592	string	 _GetObjectFromAutoSubscribeName
+0x901a75f8	string	GetOpacity
+0x901a7608	string	_handle
+0x901a765c	string	\nGetParent
+0x901a766c	string	_handle
+0x901a76b8	string	\tGetPivot
+0x901a76c7	string	_handle
+0x901a7714	string	GetPosition
+0x901a7725	string	_handle
+0x901a777a	string	GetPrevious
+0x901a778b	string	_handle
+0x901a77d7	string	\tGetScale
+0x901a77e6	string	_handle
+0x901a7833	string	GetVisualPrefix
+0x901a7848	string	_handle
+0x901a7894	string	\tGetWidth
+0x901a78a3	string	_handle
+0x901a78f7	string	\nInitFocus
+0x901a7907	string	_handle
+0x901a79c7	string	\tBeStrict
+0x901a79d6	string	_TryGetChildById
+0x901a79ec	string	rawset
+0x901a7a68	string	InsertChild
+0x901a7a79	string	_handle
+0x901a7a85	string	\r_CheckObject
+0x901a7a98	string	_RemoveFromOrphanList
+0x901a7af2	string	\rInputEnabled
+0x901a7b05	string	_handle
+0x901a7b55	string	\rIsDescendant
+0x901a7b68	string	_handle
+0x901a7bb5	string	IsShown
+0x901a7bc2	string	_handle
+0x901a7c73	string	pairs
+0x901a7c8a	string	error
+0x901a7c94	string	#There is already a member called '
+0x901a7ccc	string	\rGetChildById
+0x901a7cdf	string	assert
+0x901a7ceb	string	rawset
+0x901a7d73	string	param
+0x901a7ddc	string	\rPlayTimeline
+0x901a7def	string	_handle
+0x901a7e3b	string	\nSetHeight
+0x901a7e4b	string	_handle
+0x901a7e9f	string	\tSetFocus
+0x901a7ead	string	\r_CheckObject
+0x901a7f00	string	SetOpacity
+0x901a7f10	string	_handle
+0x901a7f64	string	\tSetPivot
+0x901a7f73	string	_handle
+0x901a7fc8	string	SetPosition
+0x901a7fd9	string	_handle
+0x901a802e	string	SetRotation
+0x901a803f	string	_handle
+0x901a8093	string	\tSetScale
+0x901a80a2	string	_handle
+0x901a80ef	string	SetShow
+0x901a80fc	string	_handle
+0x901a8149	string	SetVisualPrefix
+0x901a815e	string	_handle
+0x901a81aa	string	\tSetWidth
+0x901a81b9	string	_handle
+0x901a8202	string	SkinChanged
+0x901a8213	string	_handle
+0x901a82fe	string	table
+0x901a8312	string	\nScheduler
+0x901a8322	string	Start
+0x901a832c	string	\tBeStrict
+0x901a833a	string	\t_threads
+0x901a8349	string	\rsetmetatable
+0x901a835c	string	__mode
+0x901a836f	string	\nSubscribe
+0x901a837f	string	Destroy
+0x901a838c	string	_CleanupThreads
+0x901a84c6	string	table
+0x901a84da	string	string
+0x901a84e6	string	number
+0x901a84fa	string	\tfunction
+0x901a8513	string	event
+0x901a8526	string	param
+0x901a8531	string	isnotif
+0x901a853d	string	\tBeStrict
+0x901a854c	string	_eventHandlers
+0x901a8560	string	\nSubscribe
+0x901a8570	string	_handle
+0x901a857d	string	Destroy
+0x901a858a	string	_CleanupEventHandlers
+0x901a85a5	string	_NotificationDispatch
+0x901a85c0	string	_EventDispatch
+0x901a8620	string	_Subscribe
+0x901a867c	string	_Subscribe
+0x901a86ef	string	\rGetChildById
+0x901a8702	string	_handle
+0x901a875b	string	Unlink
+0x901a8767	string	_handle
+0x901a8774	string	_AddToOrphanList
+0x901a8807	string	table
+0x901a881b	string	_eventHandlers
+0x901a8830	string	Unsubscribe
+0x901a8841	string	_handle
+0x901a884e	string	event
+0x901a88c1	string	GetDescendantById
+0x901a88d8	string	_handle
+0x901a8924	string	\rTreeHasFocus
+0x901a8937	string	_handle
+0x901a8980	string	InitResources
+0x901a8993	string	_handle
+0x901a8a80	string	require
+0x901a8a8c	string	\rXbox.XuiBase
+0x901a8a9f	string	Xbox.XuiElement
+0x901a8ab4	string	Xbox.XuiFigureImpl
+0x901a8acc	string	ImplementXuiClass
+0x901a8ae3	string	Xbox.XuiFigure
+0x901a8af6	string	\nXuiFigure
+0x901a8b05	string	\rDontRegister
+0x901a8b18	string	GetTextureFileName
+0x901a8b30	string	GetTextureRotation
+0x901a8b48	string	GetTextureScale
+0x901a8b5d	string	GetTextureTranslation
+0x901a8b78	string	SetTextureFileName
+0x901a8b90	string	SetTextureRotation
+0x901a8ba8	string	SetTextureScale
+0x901a8bbd	string	SetTextureTranslation
+0x901a8c0c	string	GetTextureFileName
+0x901a8c24	string	_handle
+0x901a8c71	string	GetTextureRotation
+0x901a8c89	string	_handle
+0x901a8cd6	string	GetTextureScale
+0x901a8ceb	string	_handle
+0x901a8d38	string	GetTextureTranslation
+0x901a8d53	string	_handle
+0x901a8da0	string	SetTextureFileName
+0x901a8db8	string	_handle
+0x901a8e05	string	SetTextureRotation
+0x901a8e1d	string	_handle
+0x901a8e6e	string	SetTextureScale
+0x901a8e83	string	_handle
+0x901a8ed4	string	SetTextureTranslation
+0x901a8eef	string	_handle
+0x901a8fa0	string	require
+0x901a8fac	string	\rXbox.XuiBase
+0x901a8fbf	string	Xbox.XuiControl
+0x901a8fd4	string	Xbox.XuiHtmlControlImpl
+0x901a8ff1	string	ImplementXuiClass
+0x901a9008	string	Xbox.XuiHtmlControl
+0x901a9021	string	XuiHtmlControl
+0x901a9034	string	\rDontRegister
+0x901a9047	string	GetText
+0x901a9054	string	SetText
+0x901a9061	string	SetImageElementBrushFlags
+0x901a90b4	string	GetText
+0x901a90c1	string	_handle
+0x901a910e	string	SetText
+0x901a911b	string	_handle
+0x901a9168	string	SetImageElementBrushFlags
+0x901a9187	string	_handle
+0x901a9234	string	require
+0x901a9240	string	\rXbox.XuiBase
+0x901a9253	string	Xbox.XuiElement
+0x901a9268	string	Xbox.XuiImageImpl
+0x901a927f	string	ImplementXuiClass
+0x901a9296	string	Xbox.XuiImage
+0x901a92a8	string	\tXuiImage
+0x901a92b6	string	\rDontRegister
+0x901a92c8	string	\rGetImagePath
+0x901a92db	string	LoadRemoteImage
+0x901a92ef	string	\rSetImagePath
+0x901a9335	string	\rGetImagePath
+0x901a9348	string	_handle
+0x901a93a9	string	require
+0x901a93b6	string	Xbox.Dashboard
+0x901a93d3	string	\nDashboard
+0x901a93e3	string	LoadRemoteImage
+0x901a93f8	string	_handle
+0x901a9444	string	\rSetImagePath
+0x901a9457	string	_handle
+0x901a95e0	string	require
+0x901a95ec	string	\rXbox.XuiBase
+0x901a95ff	string	Xbox.XuiControl
+0x901a9614	string	Xbox.XuiListImpl
+0x901a962a	string	ImplementXuiClass
+0x901a9640	string	\rXbox.XuiList
+0x901a9653	string	XuiList
+0x901a965f	string	\rDontRegister
+0x901a9672	string	DeleteItems
+0x901a9682	string	\nGetCurSel
+0x901a9692	string	GetDefaultItemSize
+0x901a96a9	string	\rGetImagePath
+0x901a96bb	string	\rGetItemCount
+0x901a96ce	string	GetMaxVisibleItemCount
+0x901a96ea	string	GetText
+0x901a96f6	string	\rGetTextField
+0x901a9709	string	GetTopItem
+0x901a9719	string	GetVisibleItemCount
+0x901a9732	string	InsertItems
+0x901a9743	string	IsItemChecked
+0x901a9756	string	IsItemEnabled
+0x901a9769	string	IsItemVisible
+0x901a977b	string	\nSetCurSel
+0x901a978b	string	SetCurSelVisible
+0x901a97a0	string	\rSetImagePath
+0x901a97b2	string	\rSetItemCheck
+0x901a97c5	string	SetItemEnable
+0x901a97d8	string	SetText
+0x901a97e5	string	SetTopItem
+0x901a982d	string	DeleteItems
+0x901a983e	string	_handle
+0x901a988a	string	\nGetCurSel
+0x901a989a	string	_handle
+0x901a98eb	string	GetDefaultItemSize
+0x901a9903	string	_handle
+0x901a9953	string	\rGetImagePath
+0x901a9966	string	_handle
+0x901a99b2	string	\rGetItemCount
+0x901a99c5	string	_handle
+0x901a9a12	string	GetMaxVisibleItemCount
+0x901a9a2e	string	_handle
+0x901a9a7f	string	GetText
+0x901a9a8c	string	_handle
+0x901a9ae1	string	GetText
+0x901a9aee	string	_handle
+0x901a9b3b	string	GetTopItem
+0x901a9b4b	string	_handle
+0x901a9b98	string	GetVisibleItemCount
+0x901a9bb1	string	_handle
+0x901a9c02	string	InsertItems
+0x901a9c13	string	_handle
+0x901a9c64	string	IsItemChecked
+0x901a9c77	string	_handle
+0x901a9cc8	string	IsItemEnabled
+0x901a9cdb	string	_handle
+0x901a9d2c	string	IsItemVisible
+0x901a9d3f	string	_handle
+0x901a9d8b	string	\nSetCurSel
+0x901a9d9b	string	_handle
+0x901a9de8	string	SetCurSelVisible
+0x901a9dfe	string	_handle
+0x901a9e4e	string	\rSetImagePath
+0x901a9e61	string	_handle
+0x901a9eb1	string	\rSetItemCheck
+0x901a9ec4	string	_handle
+0x901a9f15	string	SetItemEnable
+0x901a9f28	string	_handle
+0x901a9f79	string	SetText
+0x901a9f86	string	_handle
+0x901a9fd3	string	SetTopItem
+0x901a9fe3	string	_handle
+0x901aa0e8	string	require
+0x901aa0f4	string	\rXbox.XuiBase
+0x901aa107	string	Xbox.XuiControl
+0x901aa11c	string	Xbox.XuiTwistImpl
+0x901aa133	string	ImplementXuiClass
+0x901aa14a	string	Xbox.XuiTwist
+0x901aa15c	string	\tXuiTwist
+0x901aa16a	string	\rDontRegister
+0x901aa17c	string	\nGetCurSel
+0x901aa18b	string	\rGetItemCount
+0x901aa19e	string	GetText
+0x901aa1aa	string	\rGetTextField
+0x901aa1bd	string	InsertItems
+0x901aa1cd	string	\nSetCurSel
+0x901aa1dd	string	SetText
+0x901aa1e9	string	\nTwistLeft
+0x901aa1f9	string	TwistRight
+0x901aa208	string	\nPressItem
+0x901aa24b	string	\nGetCurSel
+0x901aa25b	string	_handle
+0x901aa2a7	string	\rGetItemCount
+0x901aa2ba	string	_handle
+0x901aa30b	string	GetText
+0x901aa318	string	_handle
+0x901aa36d	string	GetText
+0x901aa37a	string	_handle
+0x901aa3cb	string	InsertItems
+0x901aa3dc	string	_handle
+0x901aa428	string	\nSetCurSel
+0x901aa438	string	_handle
+0x901aa489	string	SetText
+0x901aa496	string	_handle
+0x901aa4de	string	\nTwistLeft
+0x901aa4ee	string	_handle
+0x901aa537	string	TwistRight
+0x901aa547	string	_handle
+0x901aa593	string	\nPressItem
+0x901aa5a3	string	_handle
+0x901aa648	string	require
+0x901aa654	string	\rXbox.XuiBase
+0x901aa667	string	Xbox.XuiControl
+0x901aa67c	string	Xbox.XuiNavButtonImpl
+0x901aa697	string	ImplementXuiClass
+0x901aa6ae	string	Xbox.XuiNavButton
+0x901aa6c4	string	\rXuiNavButton
+0x901aa6d6	string	\rDontRegister
+0x901aa6e8	string	\rGetPressPath
+0x901aa6fa	string	\rSetPressPath
+0x901aa740	string	\rGetPressPath
+0x901aa753	string	_handle
+0x901aa79f	string	\rSetPressPath
+0x901aa7b2	string	_handle
+0x901aa86f	string	require
+0x901aa87b	string	\rXbox.XuiBase
+0x901aa88e	string	Xbox.XuiControl
+0x901aa8a3	string	Xbox.XuiProgressBarImpl
+0x901aa8c0	string	ImplementXuiClass
+0x901aa8d7	string	Xbox.XuiProgressBar
+0x901aa8f0	string	XuiProgressBar
+0x901aa903	string	\rDontRegister
+0x901aa915	string	\tGetRange
+0x901aa923	string	\tGetValue
+0x901aa931	string	\tSetRange
+0x901aa93f	string	\tSetValue
+0x901aa981	string	\tGetRange
+0x901aa990	string	_handle
+0x901aa9dc	string	\tGetValue
+0x901aa9eb	string	_handle
+0x901aaa3b	string	\tSetRange
+0x901aaa4a	string	_handle
+0x901aaa96	string	\tSetValue
+0x901aaaa5	string	_handle
+0x901aab62	string	require
+0x901aab6e	string	\rXbox.XuiBase
+0x901aab81	string	Xbox.XuiControl
+0x901aab96	string	Xbox.XuiRadioGroupImpl
+0x901aabb2	string	ImplementXuiClass
+0x901aabc9	string	Xbox.XuiRadioGroup
+0x901aabe1	string	XuiRadioGroup
+0x901aabf3	string	\rDontRegister
+0x901aac06	string	GetChecked
+0x901aac16	string	GetItemControl
+0x901aac2a	string	SetChecked
+0x901aac7a	string	_ObjectFromHandle
+0x901aac91	string	GetChecked
+0x901aaca1	string	_handle
+0x901aacfe	string	_ObjectFromHandle
+0x901aad15	string	GetItemControl
+0x901aad29	string	_handle
+0x901aad82	string	SetChecked
+0x901aad92	string	_handle
+0x901aad9e	string	\r_CheckObject
+0x901aaed9	string	require
+0x901aaee5	string	\rXbox.XuiBase
+0x901aaef8	string	Xbox.XuiControl
+0x901aaf0d	string	Xbox.XuiSceneImpl
+0x901aaf24	string	ImplementXuiClass
+0x901aaf3b	string	Xbox.XuiScene
+0x901aaf4d	string	\tXuiScene
+0x901aaf5b	string	\rDontRegister
+0x901aaf6e	string	_ObjectFromHandle
+0x901aaf85	string	Create
+0x901aaf90	string	\rNavigateBack
+0x901aafa3	string	NavigateFirst
+0x901aafb6	string	NavigateFirstEx
+0x901aafcb	string	NavigateForward
+0x901aafdf	string	\rGetBackScene
+0x901aaff1	string	\rSetBackScene
+0x901ab004	string	EnableTransitionDependency
+0x901ab024	string	PlayToTransition
+0x901ab03a	string	PlayFromTransition
+0x901ab052	string	PlayBackToTransition
+0x901ab06c	string	PlayBackFromTransition
+0x901ab088	string	InterruptTransitions
+0x901ab0fa	string	Create
+0x901ab106	string	_AddToOrphanList
+0x901ab11c	string	_ObjectFromHandle
+0x901ab17e	string	\rNavigateBack
+0x901ab191	string	_handle
+0x901ab19d	string	\r_CheckObject
+0x901ab1f4	string	require
+0x901ab201	string	Xbox.Dashboard
+0x901ab215	string	_NavigateFirst
+0x901ab269	string	NavigateForward
+0x901ab27e	string	_handle
+0x901ab2ea	string	\rGetBackScene
+0x901ab2fd	string	_handle
+0x901ab3d0	string	table
+0x901ab3da	string	\rSetBackScene
+0x901ab3ed	string	_handle
+0x901ab403	string	error
+0x901ab40e	string	Invalid backScene
+0x901ab469	string	EnableTransitionDependency
+0x901ab489	string	_handle
+0x901ab4d2	string	PlayToTransition
+0x901ab4e8	string	_handle
+0x901ab535	string	PlayFromTransition
+0x901ab54d	string	_handle
+0x901ab596	string	PlayBackToTransition
+0x901ab5b0	string	_handle
+0x901ab5f9	string	PlayBackFromTransition
+0x901ab615	string	_handle
+0x901ab65e	string	InterruptTransitions
+0x901ab678	string	_handle
+0x901ab74d	string	require
+0x901ab759	string	\rXbox.XuiBase
+0x901ab76c	string	Xbox.XuiControl
+0x901ab781	string	Xbox.XuiSliderImpl
+0x901ab799	string	ImplementXuiClass
+0x901ab7b0	string	Xbox.XuiSlider
+0x901ab7c3	string	\nXuiSlider
+0x901ab7d2	string	\rDontRegister
+0x901ab7e4	string	\tGetRange
+0x901ab7f3	string	GetStep
+0x901ab7ff	string	\tGetValue
+0x901ab80d	string	\tSetRange
+0x901ab81c	string	SetStep
+0x901ab828	string	\tSetValue
+0x901ab86a	string	\tGetRange
+0x901ab879	string	_handle
+0x901ab8c6	string	GetStep
+0x901ab8d3	string	_handle
+0x901ab91f	string	\tGetValue
+0x901ab92e	string	_handle
+0x901ab97e	string	\tSetRange
+0x901ab98d	string	_handle
+0x901ab9da	string	SetStep
+0x901ab9e7	string	_handle
+0x901aba33	string	\tSetValue
+0x901aba42	string	_handle
+0x901abb2f	string	require
+0x901abb3b	string	\rXbox.XuiBase
+0x901abb4e	string	Xbox.XuiElement
+0x901abb63	string	Xbox.XuiSoundImpl
+0x901abb7a	string	ImplementXuiClass
+0x901abb91	string	Xbox.XuiSound
+0x901abba3	string	\tXuiSound
+0x901abbb1	string	\rDontRegister
+0x901abbc4	string	GetFile
+0x901abbd0	string	\nGetVolume
+0x901abbe0	string	IsMuted
+0x901abc01	string	SetFile
+0x901abc0d	string	\nSetVolume
+0x901abc5b	string	GetFile
+0x901abc68	string	_handle
+0x901abcb4	string	\nGetVolume
+0x901abcc4	string	_handle
+0x901abd11	string	IsMuted
+0x901abd1e	string	_handle
+0x901abd75	string	_handle
+0x901abdc8	string	_handle
+0x901abe15	string	SetFile
+0x901abe22	string	_handle
+0x901abe6e	string	\nSetVolume
+0x901abe7e	string	_handle
+0x901abed1	string	_handle
+0x901abf6e	string	require
+0x901abf7a	string	\rXbox.XuiBase
+0x901abf8d	string	Xbox.XuiStringTableImpl
+0x901abfaa	string	ImplementClass
+0x901abfbe	string	Xbox.XuiStringTable
+0x901abfe1	string	Lookup
+0x901abfed	string	LookupByKey
+0x901ac06d	string	_handle
+0x901ac0be	string	Lookup
+0x901ac0ca	string	_handle
+0x901ac11b	string	LookupByKey
+0x901ac12c	string	_handle
+0x901ac1e1	string	require
+0x901ac1ed	string	\rXbox.XuiBase
+0x901ac200	string	Xbox.XuiScene
+0x901ac213	string	Xbox.XuiTabSceneImpl
+0x901ac22d	string	ImplementXuiClass
+0x901ac244	string	Xbox.XuiTabScene
+0x901ac25a	string	XuiTabScene
+0x901ac26a	string	\rDontRegister
+0x901ac27c	string	\tGetCount
+0x901ac28b	string	GetCurrentTab
+0x901ac2db	string	\tGetCount
+0x901ac2ea	string	_handle
+0x901ac34b	string	GetCurrentTab
+0x901ac35e	string	_handle
+0x901ac36b	string	_ObjectFromHandle
+0x901ac3d0	string	_handle
+0x901ac481	string	require
+0x901ac48d	string	\rXbox.XuiBase
+0x901ac4a0	string	Xbox.XuiElement
+0x901ac4b5	string	Xbox.XuiTextImpl
+0x901ac4cb	string	ImplementXuiClass
+0x901ac4e1	string	\rXbox.XuiText
+0x901ac4f4	string	XuiText
+0x901ac500	string	\rDontRegister
+0x901ac513	string	GetText
+0x901ac520	string	SetText
+0x901ac52d	string	MeasureText
+0x901ac572	string	GetText
+0x901ac57f	string	_handle
+0x901ac5cc	string	SetText
+0x901ac5d9	string	_handle
+0x901ac62a	string	MeasureText
+0x901ac63b	string	_handle
+0x901ac740	string	require
+0x901ac74c	string	\rXbox.XuiBase
+0x901ac75f	string	Xbox.XuiElement
+0x901ac774	string	Xbox.XuiVideoImpl
+0x901ac78b	string	ImplementXuiClass
+0x901ac7a2	string	Xbox.XuiVideo
+0x901ac7b4	string	\tXuiVideo
+0x901ac7c2	string	\rDontRegister
+0x901ac7d5	string	GetFile
+0x901ac7e1	string	\nGetVolume
+0x901ac7f1	string	IsMuted
+0x901ac7fd	string	\tIsPaused
+0x901ac816	string	Pause
+0x901ac82b	string	SetFile
+0x901ac837	string	\nSetVolume
+0x901ac885	string	GetFile
+0x901ac892	string	_handle
+0x901ac8de	string	\nGetVolume
+0x901ac8ee	string	_handle
+0x901ac93b	string	IsMuted
+0x901ac948	string	_handle
+0x901ac994	string	\tIsPaused
+0x901ac9a3	string	_handle
+0x901ac9fa	string	_handle
+0x901aca47	string	Pause
+0x901aca52	string	_handle
+0x901acaa9	string	_handle
+0x901acaf6	string	SetFile
+0x901acb03	string	_handle
+0x901acb4f	string	\nSetVolume
+0x901acb5f	string	_handle
+0x901acbb2	string	_handle

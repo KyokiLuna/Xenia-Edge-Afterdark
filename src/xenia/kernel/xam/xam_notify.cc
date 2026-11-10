@@ -8,6 +8,7 @@
  */
 
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_current_user_presets.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
@@ -93,6 +94,30 @@ dword_result_t XNotifyGetNext_entry(dword_t handle, dword_t match_id,
   return dequeued ? 1 : 0;
 }
 DECLARE_XAM_EXPORT2(XNotifyGetNext, kNone, kImplemented, kHighFrequency);
+
+// Native 17559 exports 214/215 are a DWORD slot/value setter (void) and a
+// DWORD-returning getter. These are per-console session presets, independent
+// of profile Live eligibility or actual peer/service presence.
+void XamSetUserPresetPresenceState_entry(dword_t user_index, dword_t state) {
+  if (user_index >= XUserMaxUserCount) {
+    return;
+  }
+  if (auto presets = CurrentUserPresetsForKernel(kernel_state())) {
+    presets->Set(user_index, state);
+  }
+}
+DECLARE_XAM_EXPORT1(XamSetUserPresetPresenceState, kUserProfiles, kImplemented);
+
+dword_result_t XamGetUserPresetPresenceState_entry(dword_t user_index) {
+  if (user_index >= XUserMaxUserCount) {
+    return 0;
+  }
+  if (auto presets = CurrentUserPresetsForKernel(kernel_state())) {
+    return presets->Get(user_index).value_or(0);
+  }
+  return 0;
+}
+DECLARE_XAM_EXPORT1(XamGetUserPresetPresenceState, kUserProfiles, kImplemented);
 
 dword_result_t XNotifyDelayUI_entry(dword_t delay_ms) {
   // Ignored.

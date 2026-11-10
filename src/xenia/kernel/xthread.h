@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -27,6 +28,7 @@
 #include "xenia/base/threading.h"
 #include "xenia/cpu/thread.h"
 #include "xenia/cpu/thread_state.h"
+#include "xenia/kernel/native_frame_owner.h"
 #include "xenia/kernel/util/native_list.h"
 #include "xenia/kernel/util/xfiletime.h"
 #include "xenia/kernel/xmutant.h"
@@ -387,6 +389,9 @@ struct FiberReentryException {
 };
 #endif
 
+class NativeSystemInvocationState;
+class NativeSystemAllocationAuthority;
+
 class XThread : public XObject, public cpu::Thread {
  public:
   static const XObject::Type kObjectType = XObject::Type::Thread;
@@ -434,6 +439,11 @@ class XThread : public XObject, public cpu::Thread {
   // True if the thread is created by the guest app.
   bool is_guest_thread() const { return guest_thread_; }
   bool main_thread() const { return main_thread_; }
+
+  // Bind only once, on the owner thread while this guest main thread is
+  // suspended. The generation belongs to the Emulator, not guest memory or
+  // save states, and is checked against the owning KernelState on callbacks.
+  void set_title_execution_identity(uint64_t generation, uint32_t hmodule);
   bool is_running() const { return running_; }
 
   // True for threads that run a host C++ routine (XHostThread) on a real host
@@ -443,6 +453,31 @@ class XThread : public XObject, public cpu::Thread {
   virtual bool is_host_thread() const { return false; }
 
   uint32_t thread_id() const { return thread_id_; }
+  // Persistent ownership, independent of TLS and abandoned fiber stack guards.
+  // Attachment happens once, on this actual SYSTEM XThread. No session keeps
+  // legacy allocation behavior; an attached but non-admitted session denies
+  // allocation rather than falling back to an unowned tag.
+  bool SetNativeFrameOwnerSession(
+      std::shared_ptr<NativeFrameOwnerSession> session);
+  std::shared_ptr<NativeFrameOwnerSession> native_frame_owner_session() const;
+  NativeFrameOwnerSession::ThreadIdentity native_frame_thread_identity() const;
+  struct NativeFrameAllocationDecision {
+    std::shared_ptr<NativeFrameOwnerSession> session;
+    std::optional<memory::PhysicalAllocationOwner> owner;
+  };
+  NativeFrameAllocationDecision native_frame_allocation_decision() const;
+  void RevokeNativeFrameOwnerSession();
+  // Host authority only. Not native TLS, current-app or Task storage.
+  bool AttachNativeSystemInvocation(
+      std::shared_ptr<NativeSystemInvocationState> invocation);
+  void DetachNativeSystemInvocation(
+      const NativeSystemInvocationState* invocation);
+  bool HasNativeSystemInvocation(
+      const NativeSystemInvocationState* invocation) const;
+  bool HasNativeSystemBootstrap(
+      const NativeSystemAllocationAuthority* authority) const;
+  std::shared_ptr<NativeSystemInvocationState> native_system_invocation() const;
+  void RevokeNativeSystemInvocation();
   uint32_t last_error();
   void set_last_error(uint32_t error_code);
   void set_name(const std::string_view name);
@@ -799,6 +834,15 @@ class XThread : public XObject, public cpu::Thread {
   uint32_t stack_limit_ = 0;       // Low address
   bool guest_thread_ = false;
   bool main_thread_ = false;  // Entry-point thread
+  std::atomic<uint64_t> title_execution_generation_{0};
+  uint32_t title_execution_hmodule_ = 0;
+  mutable std::mutex native_frame_owner_mutex_;
+  std::shared_ptr<NativeFrameOwnerSession> native_frame_owner_;
+  bool native_frame_owner_revoked_ = false;
+  std::shared_ptr<NativeSystemInvocationState> native_system_invocation_;
+  // Cached from the real owning process during Create, before thread start.
+  // Session identity queries must not dereference guest memory during teardown.
+  uint32_t native_frame_process_type_ = UINT32_MAX;
   bool running_ = false;
 
   int32_t priority_ = 0;       // current effective priority (may be decayed)

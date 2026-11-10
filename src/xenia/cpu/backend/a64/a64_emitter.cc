@@ -26,6 +26,10 @@
 #include "xenia/cpu/hir/label.h"
 #include "xenia/cpu/ppc/ppc_context.h"
 #include "xenia/cpu/processor.h"
+#include "xenia/base/native_system_ui_trace.h"
+#include "xenia/kernel/native_notification_presentation.h"
+#include "xenia/kernel/native_content_storage_driver.h"
+#include "xenia/kernel/native_managed_format_frontdoor.h"
 
 DECLARE_int64(a64_max_stackpoints);
 DECLARE_bool(a64_enable_host_guest_stack_synchronization);
@@ -259,6 +263,51 @@ bool A64Emitter::Emit(hir::HIRBuilder* builder, EmitFunctionInfo& func_info) {
   // ========================================================================
   code_offsets.body = getSize();
 
+  // Narrow production storage frontdoor; authenticated owners reject foreign calls.
+  if (kernel::NativeManagedFormatFrontdoor::HooksFunction(current_guest_function_)) {
+    mov(x1, static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeManagedFormatFrontdoor::ObserveEntry));
+  }
+  // Production processed-storage receipt; inactive owners reject at lookup.
+  if (current_guest_function_ == kernel::NativeContentStorageDriver::kProcessingFunction) {
+    mov(x1, static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(
+        kernel::NativeContentStorageDriver::ObserveProcessingEntry));
+  }
+  // One function-specific diagnostic, independent of global FTRACE.
+  if (cvars::native_system_ui_trace && current_guest_function_ == 0x817C8868) {
+    mov(x1, static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(
+        kernel::NativeNotificationPresentationObserver::ObserveTextSenderEntry));
+  }
+  // Common uses canonical restore25; only its normal own-return epilogue completes.
+  if (cvars::native_system_ui_trace && current_guest_function_ == 0x817BEBD0 && !guest_tlb_) {
+    mov(x1, static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(
+        kernel::NativeNotificationPresentationObserver::ObserveTextMeasureEntry));
+  }
+  // Font acquisition is scoped to the already matched common measurement.
+  if (cvars::native_system_ui_trace && !guest_tlb_) {
+    for (const auto& site : kernel::notification_detail::kFontAcquireSites) {
+      if (current_guest_function_ == site.function) {
+        mov(x1, static_cast<uint64_t>(current_guest_function_));
+        CallNative(reinterpret_cast<void*>(
+            kernel::NativeNotificationPresentationObserver::ObserveFontAcquireEntry));
+        break;
+      }
+    }
+  }
+  // Bounded native sound boundaries use the recognized non-TLB return path.
+  if (cvars::native_system_ui_trace && !guest_tlb_) {
+    for (const auto function : kernel::notification_detail::kNativeCueFunctions) {
+      if (current_guest_function_ == function) {
+        mov(x1, static_cast<uint64_t>(current_guest_function_));
+        CallNative(reinterpret_cast<void*>(
+            kernel::NativeNotificationPresentationObserver::ObserveNativeCueEntry));
+        break;
+      }
+    }
+  }
   // FTrace: log guest function entry when the backend was built with
   // function tracing available (gated at runtime by the trace_func flag).
   if (IsTracingFunc()) {
@@ -381,6 +430,51 @@ bool A64Emitter::Emit(hir::HIRBuilder* builder, EmitFunctionInfo& func_info) {
   if (synchronize_stack_on_next_instruction_) {
     synchronize_stack_on_next_instruction_ = false;
     EnsureSynchronizedGuestAndHostStack();
+  }
+  // Narrow production storage frontdoor; authenticated owners reject foreign calls.
+  if (kernel::NativeManagedFormatFrontdoor::HooksFunction(current_guest_function_)) {
+    mov(x1, static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeManagedFormatFrontdoor::ObserveReturn));
+  }
+  // Production processed-storage receipt; inactive owners reject at lookup.
+  if (current_guest_function_ == kernel::NativeContentStorageDriver::kProcessingFunction) {
+    mov(x1, static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(
+        kernel::NativeContentStorageDriver::ObserveProcessingReturn));
+  }
+  // One function-specific diagnostic, independent of global FTRACE.
+  if (cvars::native_system_ui_trace && current_guest_function_ == 0x817C8868) {
+    mov(x1, static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(
+        kernel::NativeNotificationPresentationObserver::ObserveTextSenderReturn));
+  }
+  // Common uses canonical restore25; only its normal own-return epilogue completes.
+  if (cvars::native_system_ui_trace && current_guest_function_ == 0x817BEBD0 && !guest_tlb_) {
+    mov(x1, static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(
+        kernel::NativeNotificationPresentationObserver::ObserveTextMeasureReturn));
+  }
+  // Font acquisition is scoped to the already matched common measurement.
+  if (cvars::native_system_ui_trace && !guest_tlb_) {
+    for (const auto& site : kernel::notification_detail::kFontAcquireSites) {
+      if (current_guest_function_ == site.function) {
+        mov(x1, static_cast<uint64_t>(current_guest_function_));
+        CallNative(reinterpret_cast<void*>(
+            kernel::NativeNotificationPresentationObserver::ObserveFontAcquireReturn));
+        break;
+      }
+    }
+  }
+  // Only this function's own restored-LR return epilogue completes a pair.
+  if (cvars::native_system_ui_trace && !guest_tlb_) {
+    for (const auto function : kernel::notification_detail::kNativeCueFunctions) {
+      if (current_guest_function_ == function) {
+        mov(x1, static_cast<uint64_t>(current_guest_function_));
+        CallNative(reinterpret_cast<void*>(
+            kernel::NativeNotificationPresentationObserver::ObserveNativeCueReturn));
+        break;
+      }
+    }
   }
   // FTrace: log the guest return value (r3) on normal return.
   if (IsTracingFunc()) {

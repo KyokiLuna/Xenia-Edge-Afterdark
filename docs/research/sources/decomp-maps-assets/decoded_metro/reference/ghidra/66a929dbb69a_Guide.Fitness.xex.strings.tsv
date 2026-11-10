@@ -1,0 +1,188 @@
+va	data_type	text
+0x901005ac	string	XAMFITNESSENGINE
+0x901005c0	string	FITNESSXAMAPI
+0x901005d0	string	XAMFITNESSUI
+0x90100650	unicode	CXuiEditAutoScroll
+0x90100678	unicode	TwoLabelButton
+0x90100698	unicode	xuiHWAGScene
+0x901006b4	unicode	xuiHeightScene
+0x901006d4	unicode	xuiWeightScene
+0x901006f4	unicode	xuiYearOfBirthScene
+0x9010071c	unicode	xuiGenderScene
+0x9010073c	unicode	xuiFirstTimeScene
+0x90100760	unicode	xuiPrivacyWarnScene
+0x90100788	unicode	xuiClearScene
+0x901007a4	unicode	xuiSyncingScene
+0x901007c4	unicode	xuiManageExerciseInfoScene
+0x90100834	unicode	xuiHwag.xur
+0x9010084c	unicode	cntrlHwag.xur
+0x90100868	unicode	xuiHeightInput.xur
+0x90100890	unicode	cntrlHeightInput.xur
+0x901008bc	unicode	xuiWeightInput.xur
+0x901008e4	unicode	cntrlWeightInput.xur
+0x90100910	unicode	xuiYearOfBirthInput.xur
+0x90100940	unicode	cntrlYearOfBirthInput.xur
+0x90100974	unicode	xuiGenderInput.xur
+0x9010099c	unicode	cntrlGenderInput.xur
+0x901009c8	unicode	txt_YearOfBirthValue
+0x901009f4	unicode	txt_GenderValue
+0x90100a14	unicode	txt_WeightValue
+0x90100a34	unicode	txt_HeightValue
+0x90100a54	unicode	editFirstLine
+0x90100a70	unicode	autoTextScroll
+0x90100a90	unicode	Backspace_Functionality
+0x90100ac0	unicode	Back_Functionality
+0x90100ae8	unicode	ButtonMicrosoft
+0x90100b08	unicode	ButtonNoOne
+0x90100b20	unicode	ButtonEveryone
+0x90100b40	unicode	ButtonFriends
+0x90100b5c	unicode	ButtonMale
+0x90100b74	unicode	ButtonFemale
+0x90100b90	unicode	ButtonDecimal
+0x90100bac	unicode	Button9
+0x90100bbc	unicode	Button8
+0x90100bcc	unicode	Button7
+0x90100bdc	unicode	Button6
+0x90100bec	unicode	Button5
+0x90100bfc	unicode	Button4
+0x90100c0c	unicode	Button3
+0x90100c1c	unicode	Button2
+0x90100c2c	unicode	Button1
+0x90100c3c	unicode	Button0
+0x90100c4c	unicode	ButtonBackspace
+0x90100c6c	unicode	ButtonDone
+0x90100c84	unicode	ButtonSaveAndExit
+0x90100ca8	unicode	ButtonGender
+0x90100cc4	unicode	ButtonYearOfBirth
+0x90100ce8	unicode	ButtonWeight
+0x90100d04	unicode	ButtonHeight
+0x90100d20	unicode	txt_message
+0x90100d38	unicode	txt_message1
+0x90100d54	unicode	HoverBackButton
+0x90100d74	unicode	ButtonCancel
+0x90100d90	unicode	ButtonNext
+0x90100da8	unicode	ButtonOk
+0x90100dc4	unicode	XuiEdit
+0x90100de0	unicode	HUDScene
+0x90100df4	unicode	XuiButton
+0x90100e08	unicode	xuiFirstTimeUser.xur
+0x90100e34	unicode	cntrlFirstTimeUser.xur
+0x90100e64	unicode	xuiPrivacyWarnScene.xur
+0x90100e94	unicode	cntrlPrivacyWarnScene.xur
+0x90100ec8	unicode	cntrlClearScene.xur
+0x90100ef0	unicode	xuiSyncingScene.xur
+0x90100f18	unicode	cntrlSyncingScene.xur
+0x90100f48	unicode	cntrlManageExerciseInfoScene.xur
+0x90100f98	unicode	XuiCanvas
+0x90101044	unicode	fitness
+0x9010115c	unicode	Fitness_Custom.xus
+0x90101184	unicode	Description
+0x9010119c	unicode	Title
+0x901011a8	unicode	waitCursorControl
+0x90101208	unicode	ButtonSkip
+0x90101220	unicode	txt_panel
+0x90101234	unicode	txt_title
+0x90101248	unicode	ButtonClear
+0x90101260	unicode	ButtonHWAG
+0x901012e4	unicode	FadeOut
+0x901012f4	unicode	FadeOutEnd
+0x9010130c	unicode	FadeIn
+0x9010131c	unicode	FadeInEnd
+0x90101330	unicode	sharedres://ico_32x_ConsoleTypeWinPC.png
+0x90101388	unicode	sharedres://ico_32x_ConsoleTypeXenon.png
+0x901013e0	unicode	sharedres://ico_32x_ConsoleTypeXbox.png
+0x90101430	unicode	sharedres://secretAchievement.png
+0x90101478	unicode	sharedres://unearnedAchievement.png
+0x901014c0	unicode	sharedres://ico_32x_Zone_Underground.png
+0x90101518	unicode	sharedres://ico_32x_Zone_Family.png
+0x90101560	unicode	sharedres://ico_32x_Zone_Pro.png
+0x901015a8	unicode	sharedres://ico_32x_Zone_RR.png
+0x90101660	unicode	sharedres://LiveProfile.xus
+0x90101698	unicode	sharedres://LiveAll.xus
+0x901016c8	string	deviceselector.xex
+0x901016e4	unicode	TV-MA
+0x901016f0	unicode	TV-14
+0x901016fc	unicode	TV-PG
+0x90101708	unicode	TV-G
+0x90101714	unicode	TV-Y7-FV
+0x90101728	unicode	TV-Y7
+0x90101734	unicode	TV-Y
+0x9010174c	unicode	NC-17
+0x9010175c	unicode	PG-13
+0x9010177c	unicode	EXPLICIT
+0x90101790	unicode	USTV
+0x9010179c	unicode	MPAA
+0x901022b8	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\fitness\fitness\src\obj\xbox\Guide.Fitness.pdb
+0x9010e4c1	string	abcdefghijklmnopqrstuvwxyz
+0x9010e4e1	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9010f01f	string	Fitness_Custom.xus
+0x9010f04e	string	xuiHeightInput.xur
+0x9010f069	string	xuiWeightInput.xur
+0x90110000	string	o-kr\xuiHeightInput.xus
+0x9011003a	string	ko-kr\xuiPrivacyWarnScene.xus
+0x90110060	string	ko-kr\xuiSettingFailure.xus
+0x90110084	string	ko-kr\xuiSyncingScene.xus
+0x901100a6	string	ko-kr\xuiWeightInput.xus
+0x901100c7	string	ko-kr\xuiYearOfBirthInput.xus
+0x901100ed	string	ja-jp\cntrlClearScene.xus
+0x9011010f	string	ja-jp\cntrlFirstTimeUser.xus
+0x90110134	string	ja-jp\cntrlGenderInput.xus
+0x90110157	string	ja-jp\cntrlHeightInput.xus
+0x9011017a	string	ja-jp\cntrlHwag.xus
+0x90110195	string	&ja-jp\cntrlManageExerciseInfoScene.xus
+0x901101c5	string	ja-jp\cntrlPrivacyWarnScene.xus
+0x90111200	string	console and Xbox Live.\r\n\r\nAre you sure you want to remove them?
+0x90111240	string	Exercise Info
+0x9011124e	string	\r\nRemove exercise info from this Xbox.\r\n\r\nWhen you remove exercise info, your exercise stat history and attributes will be deleted.\r\n        
+0x901112dc	string	Console only
+0x901112e9	string	Connect to Xbox Live
+0x901112fe	string	Your exercise stat history and attributes have been removed from this Xbox.
+0x9011134a	string	Exercise Info
+0x90111358	string	Exercise Info
+0x90111366	string	If you cancel now, your changes won't be saved. Are you sure you want to cancel?
+0x901113b7	string	Choose a year of birth (1901-%d) to calculate your exercise stats.
+0x901113fa	string	%d ft %d in - %d ft %d in
+0x90111414	string	%d - %d lbs
+0x90111420	string	%d ft %d in
+0x9011143a	string	Enter attributes
+0x9011144b	string	\r\nEnter a height, weight, year of birth, and gender that describe you.\r\n\r\nThese attributes are used by Xbox and some Kinect games and apps to improve estimates of your exercise stats. Exercise stats include fitness scores from calorie burn, time played, physical intensity of movement, and feedback from physical activity.\r\n        
+0x90111598	string	Female
+0x9011159f	string	Your profile's Xbox 360 exercise stat history and attributes have been removed from this Xbox and Xbox Live. \r\n\r\nThis info hasn't been removed from any other devices.
+0x90111646	string	Exercise Info
+0x90111659	string	Manage Exercise Info
+0x9011166e	string	%d - %d cm
+0x90111679	string	%d - %d kg
+0x901116a0	string	Not set
+0x901116a8	string	Includes fitness scores from calorie burn, time played, physical intensity of movement, and feedback from physical activity. Sharing with Everyone or Friends lets you use game features like leaderboards and exercise challenges. To change these settings, go to Settings, Privacy.\r\n\r\nHeight, weight, year of birth, and gender can be stored online but aren't shared regardless of the option you choose.\r\n\r\nEveryone: Info is available for online play. Anyone on Xbox Live can see prior and current exercise stats.\r\n\r\nFriends Only: Info is available for online play. Xbox Live friends can see prior and current exercise stats.\r\n\r\nPrivate: Info is available for online play, but isn't visible to Xbox Live friends.\r\n\r\nOffline: Info from Xbox 360 isn't saved online.
+0x901119a0	string	Includes your child's fitness scores from calorie burn, time played, physical intensity of movement, and feedback from physical activity. Sharing with Everyone or Friends lets your child use game features like leaderboards and exercise challenges. To change these settings, go to Settings, Privacy.\r\n\r\nHeight, weight, year of birth, and gender can be stored online but aren't shared regardless of the option you choose.\r\n\r\nFriends Only: Info is available for online play. Xbox Live friends can see prior and current exercise stats.\r\n\r\nPrivate: Info is available for online play, but isn't visible to Xbox Live friends.\r\n\r\nOffline: Info from Xbox 360 isn't saved online.
+0x90111c3e	string	Exercise info is only available to you on this Xbox. To remove your exercise info, go to Settings, Profile. To put it online or share it, change your privacy settings. \r\n\r\nDo you want to leave what you're doing and change your privacy settings? Your parent will need to make the change.
+0x90111d5d	string	Permission Required
+0x90111d71	string	Recommended
+0x90111d7d	string	Can't save online
+0x90111d8f	string	Sorry, we can't save your fitness data online right now. Your info will still be saved on this console.
+0x90111df7	string	Sorry, your exercise info sharing setting can't be saved right now. To change it later, go to Settings, Privacy.
+0x90111e68	string	\r\nUpdate the height, weight, year of birth, and gender that describe you.\r\n\r\nThese attributes are used by Xbox and some Kinect games and apps to improve the estimation of your calorie burn.\r\n        
+0x90111f30	string	Update attributes
+0x90111fa3	string	,xuiHwagScene
+0x90111fb1	string	xuiHWAGScene
+0x90111fbe	string	ButtonHeight
+0x90111fcb	string	TransFrom
+0x90111fd5	string	TransTo
+0x90111fdd	string	TransBackFrom
+0x90111feb	string	TransBackTo
+0x90111ff7	string	Select
+0x90112003	string	Back_Functionality
+0x90112016	string	XuiBackButton
+0x90112024	string	ButtonCancel
+0x90112031	string	NuiHudFitness
+0x9011203f	string	ButtonSaveAndExit
+0x90112051	string	ButtonYearOfBirth
+0x90112063	string	Cancel
+0x9011206a	string	XuiButton
+0x90112074	string	ButtonGender
+0x90112081	string	ButtonWeight
+0x90112093	string	TwoLabelButton
+0x901120a2	string	Gender
+0x901120a9	string	Year of Birth
+0x901120b7	string	Weight
+0x901120be	string	Height

@@ -1,0 +1,179 @@
+va	data_type	text
+0x9bf606c0	string	dash.attractionscreen.xex
+0x9bf606e4	string	Unknown exception
+0x9bf60700	string	bad allocation
+0x9bf607d4	unicode	runtime error 
+0x9bf607f8	unicode	TLOSS error\n
+0x9bf60814	unicode	SING error\n
+0x9bf6082c	unicode	DOMAIN error\n
+0x9bf60848	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9bf60a38	unicode	R6032\n- not enough space for locale information\n
+0x9bf60aa0	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9bf60b64	unicode	R6030\n- CRT not initialized\n
+0x9bf60ba0	unicode	R6028\n- unable to initialize heap\n
+0x9bf60be8	unicode	R6027\n- not enough space for lowio initialization\n
+0x9bf60c50	unicode	R6026\n- not enough space for stdio initialization\n
+0x9bf60cb8	unicode	R6025\n- pure virtual function call\n
+0x9bf60d00	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9bf60d68	unicode	R6019\n- unable to open console device\n
+0x9bf60db8	unicode	R6018\n- unexpected heap error\n
+0x9bf60df8	unicode	R6017\n- unexpected multithread lock error\n
+0x9bf60e50	unicode	R6016\n- not enough space for thread data\n
+0x9bf60ea8	unicode	R6010\n- abort() has been called\n
+0x9bf60ef0	unicode	R6009\n- not enough space for environment\n
+0x9bf60f48	unicode	R6008\n- not enough space for arguments\n
+0x9bf60f98	unicode	R6002\n- floating point support not loaded\n
+0x9bf610a0	string	 Complete Object Locator'
+0x9bf610bc	string	 Class Hierarchy Descriptor'
+0x9bf610dc	string	 Base Class Array'
+0x9bf610f0	string	 Base Class Descriptor at (
+0x9bf6110c	string	 Type Descriptor'
+0x9bf61120	string	`local static thread guard'
+0x9bf6113c	string	`managed vector copy constructor iterator'
+0x9bf61168	string	`vector vbase copy constructor iterator'
+0x9bf61194	string	`vector copy constructor iterator'
+0x9bf611b8	string	`dynamic atexit destructor for '
+0x9bf611dc	string	`dynamic initializer for '
+0x9bf611f8	string	`eh vector vbase copy constructor iterator'
+0x9bf61224	string	`eh vector copy constructor iterator'
+0x9bf6124c	string	`managed vector destructor iterator'
+0x9bf61274	string	`managed vector constructor iterator'
+0x9bf6129c	string	`placement delete[] closure'
+0x9bf612bc	string	`placement delete closure'
+0x9bf612d8	string	`omni callsig'
+0x9bf612e8	string	 delete[]
+0x9bf612f4	string	 new[]
+0x9bf612fc	string	`local vftable constructor closure'
+0x9bf61320	string	`local vftable'
+0x9bf61330	string	`RTTI
+0x9bf6133c	string	`udt returning'
+0x9bf6134c	string	`copy constructor closure'
+0x9bf61368	string	`eh vector vbase constructor iterator'
+0x9bf61390	string	`eh vector destructor iterator'
+0x9bf613b0	string	`eh vector constructor iterator'
+0x9bf613d4	string	`virtual displacement map'
+0x9bf613f0	string	`vector vbase constructor iterator'
+0x9bf61414	string	`vector destructor iterator'
+0x9bf61434	string	`vector constructor iterator'
+0x9bf61454	string	`scalar deleting destructor'
+0x9bf61474	string	`default constructor closure'
+0x9bf61494	string	`vector deleting destructor'
+0x9bf614b4	string	`vbase destructor'
+0x9bf614c8	string	`string'
+0x9bf614d4	string	`local static guard'
+0x9bf614ec	string	`typeof'
+0x9bf614f8	string	`vcall'
+0x9bf61500	string	`vbtable'
+0x9bf6150c	string	`vftable'
+0x9bf61594	string	operator
+0x9bf615bc	string	 delete
+0x9bf615cc	string	__unaligned
+0x9bf615d8	string	__restrict
+0x9bf615e4	string	__ptr64
+0x9bf615ec	string	__eabi
+0x9bf615f4	string	__clrcall
+0x9bf61600	string	__fastcall
+0x9bf6160c	string	__thiscall
+0x9bf61618	string	__stdcall
+0x9bf61624	string	__pascal
+0x9bf61630	string	__cdecl
+0x9bf61638	string	__based(
+0x9bf61810	unicode	HH:mm:ss
+0x9bf61824	unicode	dddd, MMMM dd, yyyy
+0x9bf6184c	unicode	MM/dd/yy
+0x9bf61870	unicode	December
+0x9bf61884	unicode	November
+0x9bf61898	unicode	October
+0x9bf618a8	unicode	September
+0x9bf618bc	unicode	August
+0x9bf618cc	unicode	July
+0x9bf618d8	unicode	June
+0x9bf618e4	unicode	April
+0x9bf618f0	unicode	March
+0x9bf618fc	unicode	February
+0x9bf61910	unicode	January
+0x9bf61980	unicode	Saturday
+0x9bf61994	unicode	Friday
+0x9bf619a4	unicode	Thursday
+0x9bf619b8	unicode	Wednesday
+0x9bf619cc	unicode	Tuesday
+0x9bf619dc	unicode	Monday
+0x9bf619ec	unicode	Sunday
+0x9bf61a34	string	HH:mm:ss
+0x9bf61a40	string	dddd, MMMM dd, yyyy
+0x9bf61a54	string	MM/dd/yy
+0x9bf61a68	string	December
+0x9bf61a74	string	November
+0x9bf61a80	string	October
+0x9bf61a88	string	September
+0x9bf61a94	string	August
+0x9bf61aac	string	April
+0x9bf61ab4	string	March
+0x9bf61abc	string	February
+0x9bf61ac8	string	January
+0x9bf61b00	string	Saturday
+0x9bf61b0c	string	Friday
+0x9bf61b14	string	Thursday
+0x9bf61b20	string	Wednesday
+0x9bf61b2c	string	Tuesday
+0x9bf61b34	string	Monday
+0x9bf61b3c	string	Sunday
+0x9bf62368	unicode	AttractionScreenDash.xzp
+0x9bf62420	unicode	AttractionScreenMainScene
+0x9bf62454	unicode	AvatarRetargetingVisualControl
+0x9bf62494	unicode	WaterRipplesVisualControl
+0x9bf624e8	unicode	XuiScene
+0x9bf624fc	unicode	XuiControl
+0x9bf62514	unicode	AttractionScreenMainScene.xur
+0x9bf6258b	string	[E:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\DepthPixelShader.updb
+0x9bf62644	string	DepthColorMap
+0x9bf62664	string	c_DepthScaleFactor
+0x9bf62688	string	myTexture
+0x9bf6274b	string	`E:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\IsometricVertexShader.updb
+0x9bf628f8	unicode	txtSystemGestureTip
+0x9bf62920	unicode	SystemGestureIcon
+0x9bf62983	string	]E:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\VSSimpleProjection.updb
+0x9bf62a18	string	WorldViewProj
+0x9bf62bab	string	^E:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\VSSimplePassThrough.updb
+0x9bf62d1b	string	YE:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\PSTexLookupRGB.updb
+0x9bf62dc0	string	Diffuse
+0x9bf62dd8	string	MainTexture
+0x9bf62e93	string	]E:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\PSUpdateSimulation.updb
+0x9bf62f50	string	EffectData
+0x9bf62f6c	string	FrameDelta
+0x9bf62f77	string	WaterParameters
+0x9bf63213	string	^E:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\PSUpdateColorTrails.updb
+0x9bf632e4	string	ColorData
+0x9bf63300	string	ColorParameters
+0x9bf63320	string	EffectData
+0x9bf6332b	string	FrameDelta
+0x9bf638cb	string	VE:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\VSWaterWall.updb
+0x9bf63958	string	EffectData
+0x9bf63b73	string	WE:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\PSDrawCircle.updb
+0x9bf63c14	string	UserGeneratedWave
+0x9bf63c38	string	WaveStrength
+0x9bf63d63	string	fE:\bt\248805\core\private\xam\dash\apps\attractionscreen\lib\obj\xbox\PSCalculateMergedWaterColor.updb
+0x9bf63e64	string	CameraPosition
+0x9bf63e84	string	ColorData
+0x9bf63ea0	string	EffectData
+0x9bf63eab	string	ReflectedTexture
+0x9bf63ebc	string	RefractedTexture
+0x9bf63ecd	string	WaterParameters
+0x9bf641d0	unicode	%s%s
+0x9bf641dc	unicode	background.png
+0x9bf6421c	unicode	WaterRipplesScene.xur
+0x9bf64410	string	e+000
+0x9bf644d8	unicode	(null)
+0x9bf645c7	string	$_nextafter
+0x9bf64620	string	floor
+0x9bf6469c	string	1#QNAN
+0x9bf646a4	string	1#INF
+0x9bf646ac	string	1#IND
+0x9bf646b4	string	1#SNAN
+0x9bf64818	string	e:\bt\248805\core\private\xam\dash\apps\attractionscreen\app\obj\xbox\Dash.AttractionScreen.pdb
+0x9bf7a068	string	.?AVbad_alloc@std@@
+0x9bf7a084	string	.?AVexception@std@@
+0x9bf7a6d9	string	abcdefghijklmnopqrstuvwxyz
+0x9bf7a6f9	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9bf7c036	string	Dash.AttractionScreen.xex
+0x9bf7c050	string	CreateDashAppInstance

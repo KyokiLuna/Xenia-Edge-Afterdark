@@ -1,0 +1,43 @@
+module	functions_discovered	functions_scanned	noncontiguous_functions_skipped	unknown_instructions	candidates	proven_endpoints	note
+AvatarEditor.xex	7785	7699	86	0	37	5	
+BiometricSetup.xex	6454	6393	61	0	68	4	
+Dash.FieldCalibration.lex	845	844	1	704	11	1	
+Dash.Kiosk.lex	748	742	6	0	13	1	
+Dash.NetworkStorage.lex	348	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+Dash.NuiTroubleshooter.lex	1152	1136	16	0	15	3	
+Dash.Search.xex	2098	2092	6	0	127	3	
+Guide.AccountRecovery.xex	2361	2360	1	0	35	5	
+Guide.AvatarMiniCreator.xex	270	270	0	0	1	3	
+Guide.CSVTrans.xex	184	184	0	0	0	1	
+Guide.Fitness.xex	339	339	0	0	1	1	
+Guide.NuiTroubleshooter.xex	1868	1866	2	556	14	4	
+Guide.TFA.xex	1974	1973	1	0	26	5	
+PlayReady.xex	1610	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+Title.Zune.xex	47094	46893	201	0	151	5	
+Xam.Community.xex	1215	1213	2	0	30	5	
+Xam.WordRegister.xex	216	216	0	0	11	1	
+Xna_TitleLauncher.xex	3060	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+dash.ClosedCaptionDll.xex	7915	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+dash.ExtraAVCodecs.xex	2854	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+dash.ExtraAVCodecs2.xex	1339	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+dash.natalpregame.xex	283	279	4	0	9	1	
+dash.xex	31056	31031	25	2666	269	6	
+dashnui.xex	6287	6211	76	0	21	4	
+natalsu.xex	124	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+nuihud.xex	270	270	0	0	4	2	
+packages/su20076000_00000000/$flash_bootanim.xex	1004	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+packages/su20076000_00000000/$flash_createprofile.xex	379	379	0	0	4	2	
+packages/su20076000_00000000/$flash_dash.xex	31056	31031	25	2666	269	6	
+packages/su20076000_00000000/$flash_deviceselector.xex	248	248	0	0	3	2	
+packages/su20076000_00000000/$flash_gamerprofile.xex	1029	1029	0	0	5	3	
+packages/su20076000_00000000/$flash_hud.xex	930	930	0	0	29	6	
+packages/su20076000_00000000/$flash_mfgbootlauncher.xex	314	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+packages/su20076000_00000000/$flash_minimediaplayer.xex	469	469	0	0	29	5	
+packages/su20076000_00000000/$flash_signin.xex	638	638	0	0	24	4	
+packages/su20076000_00000000/$flash_systemupdate.xex	2380	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+packages/su20076000_00000000/$flash_systemupdate2pre.xex	2424	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+packages/su20076000_00000000/$flash_updater.xex	249	249	0	0	3	4	
+packages/su20076000_00000000/$flash_vk.xex	312	312	0	0	11	2	
+packages/su20076000_00000000/$flash_xam.xex	13941	13770	171	0	279	9	
+packages/su20076000_00000000/$flash_ximecore.xex	573	573	0	0	5	4	
+packages/su20076000_00000000/$install_extender.xex	323	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted

@@ -1,0 +1,43 @@
+Call-graph coverage index (priority modules only)
+=====================================================
+Regenerate with: python3 _tool/build_04_calls.py
+
+Scope is intentionally limited to corpus_common.PRIORITY_MODULES
+(XAM/avatar/gamer-profile/content/title-relevant modules).
+
+Modules with >= 20 exports (xam.xex/$flash_xam.xexp) use
+export-boundary-only coverage (reliable boundaries, large export tables
+already give good coverage).
+
+Modules with fewer than 20 exports additionally get
+BFS-discovered internal-function coverage (capped at 250 functions,
+reached via `bl` starting from the entry point, PLUS an opportunistic
+callback-root expansion for *Register*-style imports) - these are
+application-style modules (gamerprofile/createprofile/deviceselector/
+signin/dash) whose real logic lives almost entirely in unexported
+functions, so export-only coverage would find almost nothing. Each
+function's calls/*.txt entry states EXACTLY how it was discovered
+(export / bfs entry-reachable / callback root / callback descendant) -
+only the function whose address was literally passed to a *Register*
+import is labeled as a callback root; anything reached from it via
+further `bl`s is honestly labeled a descendant, not another root.
+
+build_05_strings.py (string xrefs) and build_06_ipc.py (IPC candidate
+scanning) both reuse discover_module_functions() from this script, so
+they see exactly this same function set, including callback
+descendants - not a narrower export-only view.
+
+$flash_createprofile.xexp  ->  reference/calls/flash_createprofile.xexp.calls.txt  (0 exported + 1 BFS-discovered functions disassembled)
+$flash_dash.xex  ->  reference/calls/flash_dash.xex.calls.txt  (783 exported + 0 BFS-discovered functions disassembled)
+$flash_deviceselector.xexp  ->  reference/calls/flash_deviceselector.xexp.calls.txt  (0 exported + 1 BFS-discovered functions disassembled)
+$flash_gamerprofile.xexp  ->  reference/calls/flash_gamerprofile.xexp.calls.txt  (0 exported + 1 BFS-discovered functions disassembled)
+$flash_signin.xexp  ->  reference/calls/flash_signin.xexp.calls.txt  (0 exported + 70 BFS-discovered functions disassembled)
+$flash_xam.xexp  ->  reference/calls/flash_xam.xexp.calls.txt  (1004 exported + 0 BFS-discovered functions disassembled)
+AvatarEditor.xex  ->  reference/calls/AvatarEditor.xex.calls.txt  (0 exported + 242 BFS-discovered functions disassembled)
+AvatarMiniCreator.xex  ->  reference/calls/AvatarMiniCreator.xex.calls.txt  (0 exported + 13 BFS-discovered functions disassembled)
+createprofile.xex  ->  reference/calls/createprofile.xex.calls.txt  (2 exported + 19 BFS-discovered functions disassembled)
+dash.xex  ->  reference/calls/dash.xex.calls.txt  (1 exported + 243 BFS-discovered functions disassembled)
+deviceselector.xex  ->  reference/calls/deviceselector.xex.calls.txt  (3 exported + 16 BFS-discovered functions disassembled)
+gamerprofile.xex  ->  reference/calls/gamerprofile.xex.calls.txt  (0 exported + 13 BFS-discovered functions disassembled)
+signin.xex  ->  reference/calls/signin.xex.calls.txt  (0 exported + 15 BFS-discovered functions disassembled)
+xam.xex  ->  reference/calls/xam.xex.calls.txt  (647 exported + 0 BFS-discovered functions disassembled)

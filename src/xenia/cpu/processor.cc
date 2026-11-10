@@ -33,6 +33,7 @@
 #include "xenia/cpu/breakpoint.h"
 #include "xenia/cpu/cpu_flags.h"
 #include "xenia/cpu/export_resolver.h"
+#include "xenia/cpu/guest_call_abi.h"
 #include "xenia/cpu/module.h"
 #include "xenia/cpu/ppc/ppc_decode_data.h"
 #include "xenia/cpu/ppc/ppc_frontend.h"
@@ -971,7 +972,7 @@ bool Processor::Execute(ThreadState* thread_state, uint32_t address) {
 
   // Pad out stack a bit, as some games seem to overwrite the caller by about
   // 16 to 32b.
-  context->r[1] -= 64 + 112;
+  context->r[1] -= kGuestCallExecuteStackPadding;
 
   // This could be set to anything to give us a unique identifier to track
   // re-entrancy/etc.
@@ -982,7 +983,7 @@ bool Processor::Execute(ThreadState* thread_state, uint32_t address) {
   auto result = function->Call(thread_state, uint32_t(context->lr));
 
   context->lr = previous_lr;
-  context->r[1] += 64 + 112;
+  context->r[1] += kGuestCallExecuteStackPadding;
 
   return result;
 }
@@ -1013,11 +1014,13 @@ uint64_t Processor::Execute(ThreadState* thread_state, uint32_t address,
   if (arg_count > 7) {
     // Rest of the arguments go on the stack.
     // FIXME: This assumes arguments are 32 bits!
-    auto stack_arg_base =
-        memory()->TranslateVirtual((uint32_t)context->r[1] + 0x54 - (64 + 112));
+    auto stack_arg_base = memory()->TranslateVirtual(
+        (uint32_t)context->r[1] + kGuestCallStackArgumentOffset -
+        kGuestCallExecuteStackPadding);
     for (size_t i = 0; i < arg_count - 8; i++) {
-      xe::store_and_swap<uint32_t>(stack_arg_base + (i * 8),
-                                   (uint32_t)args[i + 8]);
+      xe::store_and_swap<uint32_t>(
+          stack_arg_base + (i * kGuestCallStackArgumentStride),
+          (uint32_t)args[i + 8]);
     }
   }
 

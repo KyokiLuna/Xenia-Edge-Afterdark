@@ -1,0 +1,170 @@
+va	data_type	text
+0x9800090c	string	mWorldViewProj
+0x98000933	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98000a5f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98000b24	string	MatClr
+0x98000b43	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98000c7c	string	Ambient
+0x98000c94	string	fMorphLevel
+0x98000cb0	string	mWorldViewProj
+0x98000cd0	string	vLightDir
+0x98000ce1	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98000edc	string	mWorldViewProj
+0x98000f03	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98001050	string	MatClr
+0x98001068	string	TextureMapSampler
+0x98001093	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98001174	string	mWorldViewProj
+0x9800119b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x980012af	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9800136c	string	mWorldViewProj
+0x98001393	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x980014b4	string	MatClr
+0x980014d3	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x980015a0	string	MatClr
+0x980015b8	string	TextureMapSampler
+0x980015e3	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x980016e8	string	MatClr
+0x98001700	string	TextureMapSampler
+0x9800172b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98001820	string	MatClr
+0x98001838	string	TextureMapSampler
+0x98001863	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98001980	string	mObjectWorld
+0x980019a0	string	mWorldViewProj
+0x980019af	string	vPointLightPos
+0x980019d0	string	vSpotLightPos
+0x980019f7	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98001da4	string	Ambient
+0x98001dbc	string	TextureMapSampler
+0x98001de0	string	alphaLightDir
+0x98001dee	string	dirLights
+0x98001e34	string	pointLights
+0x98001e40	string	falloff
+0x98001e67	string	8spotLights
+0x980024e8	string	mObjectWorld
+0x98002508	string	mWorldViewProj
+0x9800252c	string	vPointLightPos
+0x9800254c	string	vSpotLightPos
+0x98002573	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98002980	string	RefCenter
+0x9800299c	string	RefMapSampler
+0x980029c5	string	RefYAxis
+0x980029d7	string	Specular
+0x980029f0	string	TextureMapSampler
+0x98002a02	string	alphaLightDir
+0x98002a10	string	dirLights
+0x98002a44	string	pointLights
+0x98002a50	string	falloff
+0x98002a78	string	spotLights
+0x98002ab3	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x980034e0	string	mObjectWorld
+0x98003500	string	mWorldViewProj
+0x98003524	string	vLight
+0x98003532	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x980037c4	string	Ambient
+0x980037dc	string	Specular
+0x980037e5	string	TextureMapSampler
+0x98003808	string	theLight
+0x98003843	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98003aac	string	OverlaySampler
+0x98003acc	string	Scale
+0x98003ae4	string	offsets
+0x98003b03	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98003cb0	string	AlphaFalloff
+0x98003cd0	string	AlphaLightPos
+0x98003cde	string	MatClr
+0x98003cec	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98003ec8	string	mObjectWorld
+0x98003ee8	string	mWorldViewProj
+0x98003efe	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98004058	string	mObjectWorld
+0x98004078	string	mWorldViewProj
+0x9800408e	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98004218	string	alphaLightDir
+0x9800423f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98004310	string	audio
+0x980045f0	string	UVOffset
+0x9800460c	string	mWorldViewProj
+0x98004633	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98004870	string	Falloff
+0x98004880	string	GlowFalloff
+0x9800488c	string	LightPos
+0x980048a8	string	Sampler
+0x980048c7	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98004cdc	string	Scale
+0x98004cf4	string	mViewProj
+0x98004d17	string	vecEmission
+0x98004d3b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98004ff4	string	MatClr
+0x9800500c	string	Sampler
+0x9800503c	string	vecEmission
+0x9800504f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x98005528	string	ERR[D3D]: Unanticipated CPU_INTERRUPT.  Sign of a corrupt command buffer?\n
+0x98005600	string	PIX!OK
+0x98005608	string	PIX!NO
+0x98005634	string	unnamed.pix2
+0x98005648	string	\nThe PIX capture is now saved to xe:\pix\crashdump.pix2.  Please power cycle your\ndevkit and use the 'Open Crash Dump' option from the PIX File menu to load the file\nfor postmortem debugging.\n\n
+0x9800570c	string	PIX!Gpu
+0x98005714	string	crashdump.pix2
+0x98005728	string	e:\xbperfview.cap
+0x980057c0	string	D3D: GPU initialization (HSIO training) has failed so no graphics will render.\n
+0x98005b6c	string	PA_SU_DEBUG_DATA
+0x98005b80	string	PA_SC_DEBUG_DATA
+0x98005b94	string	RBBM DEBUG
+0x98005ba0	string	CP DEBUG
+0x98005bac	string	PTR_BUFF_STATUS 0xAc24
+0x98005bc4	string	PIX_TB_STATUS 0x9c24
+0x98005bdc	string	VTX_TB_STATUS 0x8C24
+0x98005bf4	string	RB_DEBUG_0
+0x98005c00	string	TPC_CNTL_STATUS
+0x98005c10	string	TP3_CNTL_STATUS
+0x98005c20	string	TP2_CNTL_STATUS
+0x98005c30	string	TP1_CNTL_STATUS
+0x98005c40	string	TP0_CNTL_STATUS
+0x98005c50	string	TC_CNTL_STATUS
+0x98005c60	string	PA_SU_CNTL_STATUS
+0x98005c74	string	PA_SC_CNTL_STATUS
+0x98005c88	string	PA_CL_CNTL_STATUS
+0x98005c9c	string	VC_CNTL_STATUS
+0x98005cac	string	VGT_CNTL_STATUS
+0x98005cbc	string	CP_MEQ_STAT
+0x98005cc8	string	CP_MEQ_AVAIL
+0x98005cd8	string	CP_CSQ_IB2_STAT
+0x98005ce8	string	CP_CSQ_IB1_STAT
+0x98005cf8	string	CP_CSQ_RB_STAT
+0x98005d08	string	CP_CSQ_AVAIL
+0x98005d18	string	CP_DEBUG
+0x98005d24	string	CP_STAT
+0x98005d2c	string	CP_IB2_BUFSZ
+0x98005d3c	string	CP_IB2_BASE
+0x98005d48	string	CP_IB1_BUFSZ
+0x98005d58	string	CP_IB1_BASE
+0x98005d7c	string	CP_RB_BASE
+0x98005d88	string	RBBM_STATUS
+0x98005dc8	string	CPU Synchronization
+0x98005de0	string	The GPU appears to be hung!  Specifically: 
+0x98005e10	string	%s 0x%02x: 
+0x98005e1c	string	%08x 
+0x98005e28	string	   %25s: 0x%08x\n
+0x98005e40	string	The GPU state doesn't match any known hangs.  Please send a repro\nscenario to xboxds@xbox.com so that we can fix the hardware or\nsupply a work-around.\n\n
+0x98005edc	string	\nD3D version is %i, frame is %i.\n\n
+0x98005f00	string	Breaking into the debugger.  The GPU is hung and can't be recovered\nwithout doing a cold boot.\n
+0x98005f60	string	ERR[D3D]: Try reproducing the hang with the debug or instrumented\n          versions of D3D (D3D9D.LIB or D3D9I.LIB) to capture a\n          crash-dump PIX file that can be sent to Xbox developer\n          support.\n\n
+0x98006038	string	+++++++++++++++++++++++++++++++++++++++++++++++++++++++\n
+0x98006a68	string	_nextafter
+0x98006ac0	string	floor
+0x98006b40	string	\SaveMeta.xbx
+0x98006b53	string	\r\TitleMeta.xbx
+0x98006b68	string	\TitleImage.xbx
+0x98006b7c	string	\SaveImage.xbx
+0x98006b90	string	\ContentMeta.xbx
+0x98006bb4	unicode	TitleName
+0x98006be4	unicode	[Default]
+0x98006c00	unicode	NoCopy=1\r\n
+0x98006c38	string	d:\xenonfre\flashrtm\core\private\xam\bootanim\dll\obj\xbox\bootanim.pdb
+0x98042044	string	Xbox360 Startup Animation
+0x9806804a	string	bootanim.dll
+0x98068057	string	EndBootAnimation
+0x98068068	string	PlayBootAnimation
+0x9806807a	string	SetLogo

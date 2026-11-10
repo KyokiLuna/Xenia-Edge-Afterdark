@@ -1,0 +1,18 @@
+{
+  "module": "Guide.TFA.xex",
+  "program": "86344162a452_Guide.TFA.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "b9d284279a2d053e561966cf027e9ec938b0277cbcfcdb25d33c3438a840bffb",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 1974,
+  "calls": 8905,
+  "strings": 2019,
+  "string_xrefs": 1984,
+  "independent_sha256": "b9d284279a2d053e561966cf027e9ec938b0277cbcfcdb25d33c3438a840bffb",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

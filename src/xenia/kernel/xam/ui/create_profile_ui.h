@@ -33,6 +33,15 @@ class CreateProfileUI final : public XamDialog {
   bool focus_set_ = false;
   char gamertag_[16] = "";
   bool valid_gamertag_ = false;
+  bool creation_failed_ = false;
+  // Once durable publication succeeds, retry discovery of THIS saved UID.
+  // Never create a second package merely because loading/sign-in was deferred.
+  uint64_t created_profile_xuid_ = 0;
+  bool created_profile_discovered_ = false;
+  bool created_profile_wanted_signin_ = false;
+  bool created_profile_signed_in_ = false;
+  int avatar_preset_ = 0;
+  int stock_picture_ = 0;
   Emulator* emulator_;
 };
 

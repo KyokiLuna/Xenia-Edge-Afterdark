@@ -385,6 +385,9 @@ uint32_t LoadGameConfigForFile(const std::filesystem::path& game_path) {
     size_t override_count = 0;
     for (auto& it : *cvar::ConfigVars) {
       auto config_var = static_cast<cvar::IConfigVar*>(it.second);
+      if (!xe::ui::CanOverrideCvarForGame(*config_var)) {
+        continue;
+      }
       toml::path config_key =
           toml::path(config_var->category() + "." + config_var->name());
 
@@ -562,6 +565,29 @@ toml::table LoadGameConfig(uint32_t title_id) {
     }
   }
   return config_table;
+}
+
+std::optional<int32_t> ResolveInt32GameConfig(uint32_t title_id,
+                                           std::string_view cvar_name) {
+  if (!cvar::ConfigVars) {
+    return std::nullopt;
+  }
+  const auto found = cvar::ConfigVars->find(std::string(cvar_name));
+  if (found == cvar::ConfigVars->end()) {
+    return std::nullopt;
+  }
+  const auto* variable =
+      dynamic_cast<const cvar::ConfigVar<int32_t>*>(found->second);
+  if (!variable) {
+    return std::nullopt;
+  }
+  if (!xe::ui::CanOverrideCvarForGame(*variable)) {
+    return variable->ResolveForGameConfig(std::nullopt);
+  }
+  const auto config = LoadGameConfig(title_id);
+  const auto value = config.at_path(toml::path(variable->category() + "." +
+                                              variable->name()));
+  return variable->ResolveForGameConfig(value.value<int32_t>());
 }
 
 void ReloadConfig() {

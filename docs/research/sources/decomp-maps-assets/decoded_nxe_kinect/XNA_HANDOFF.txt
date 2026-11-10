@@ -1,0 +1,25 @@
+XNA handoff: NXE Kinect
+=======================
+
+Each dashboard is a separate provenance and dependency domain.
+Native files remain in their source-relative paths; original XEX wrappers are in _sources/.
+Managed assemblies and APIs: reference/managed_assemblies.tsv, managed_api.tsv, managed_types.tsv.
+Dependencies and exact versions: reference/managed_dependencies.tsv.
+P/Invoke names and InternalCall flags are recorded; unresolved bridge identities are not invented.
+C# is decompiler output for research, not a claim of buildable original source.
+
+runtime/v3.0/Microsoft.Xna.Framework.Game.dlx: Microsoft.Xna.Framework.Game 3.0.0.0; 26 C# files -> xna/managed/703335ccceae/csharp
+runtime/v3.0/Microsoft.Xna.Framework.dlx: Microsoft.Xna.Framework 3.0.0.0; 405 C# files -> xna/managed/9a1033f4d3ed/csharp
+runtime/v3.0/mscorlib.dlx: mscorlib 3.5.0.0; 447 C# files -> xna/managed/66bfb91f0657/csharp
+runtime/v3.0/system.core.dlx: System.Core 3.5.0.0; 19 C# files -> xna/managed/d80163b793ad/csharp
+runtime/v3.0/system.dlx: System 3.5.0.0; 159 C# files -> xna/managed/a3f3a8dba4c9/csharp
+runtime/v3.0/system.sr.dlx: System.SR 3.5.0.0; 1 C# files -> xna/managed/c75354427ebc/csharp
+runtime/v3.0/system.xml.dlx: System.Xml 3.5.0.0; 588 C# files -> xna/managed/46d0be273918/csharp
+runtime/v3.0/system.xml.linq.dlx: System.Xml.Linq 3.5.0.0; 34 C# files -> xna/managed/203d48ab242f/csharp
+
+Native launcher/runtime candidates (name/role relationship is INFERRED unless supported by imports/strings):
+Xam.Community.xex: decoded; module version=2.0.12581.0; decoded SHA256=4145b298919bb9f58d2460212db39620684543d9dd1ac5500300232c5c4585cc
+Xna_TitleLauncher.xex: decoded; module version=3.2.1.0; decoded SHA256=07bfae53a28179f7d65c30a4cfd598949a53ac819be33f30069ad5cabcaaf378
+hostloader.dll: decoded; module version=2.0.7357.0; decoded SHA256=266d1a7f599584f7e5e3a97b48faba25ee2872240028a0ec0aef7e2a19a36e8d
+runtime/v3.0/runtimehost.xex: decoded; module version=2.0.7357.0; decoded SHA256=6036becd4d4eb4b19161dfdf6a43846d7511c046cf2149c17b017eec7b794fe6
+titlelauncher.xex: decoded; module version=2.0.7357.0; decoded SHA256=f3b81f99e068272495f475c1f09984b5eca101644a5daa3bf85e895beaf7838e

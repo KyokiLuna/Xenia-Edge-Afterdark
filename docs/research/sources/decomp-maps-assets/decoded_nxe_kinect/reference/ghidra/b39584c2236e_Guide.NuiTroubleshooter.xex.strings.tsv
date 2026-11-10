@@ -1,0 +1,1574 @@
+va	data_type	text
+0x9010086c	string	FIELDCALSUMMARY
+0x9010087c	string	FIELDCALIBLOG
+0x9010088c	string	TURNITUP
+0x90100898	string	CAMSET
+0x901008a0	string	PLAYSPACETEST
+0x901008b0	string	PLAYSPACEPREP
+0x901008c0	string	CLEARSPACE
+0x901008cc	string	AUDIOSPH
+0x901008d8	string	AUDIOAMB
+0x901008e4	string	AUDIOCAL
+0x901008f0	string	IDENTITY
+0x90100904	string	PLAYSPACE
+0x90100918	string	CAMLOC
+0x90100920	string	SUNLIGHT
+0x90100940	string	AUDIOLAUNCH
+0x9010094c	string	LAUNCH
+0x90100c68	string	GetUserIndex
+0x90100c78	string	SetRootScene
+0x90100c88	string	XDASHLAUNCHDATA
+0x90100c98	string	dash.NuiTroubleshooter.lex
+0x90100cb4	string	dash.FieldCalibration.lex
+0x90100cd0	string	luaapp
+0x90100d24	unicode	CXuiEditRThumbScroll
+0x90100d50	unicode	PlayspaceVisualControl
+0x90100d80	string	'Main' must return a scene
+0x90100d9c	string	Missing entry point 'Main'
+0x90100db8	string	e:\bt\248805\core\private\xam\apps\nuitroubleshooter\src\nuitroubleshooterdll.cpp
+0x90100e14	unicode	LegendY
+0x90100e24	unicode	XuiEdit
+0x90100e34	unicode	XuiControl
+0x90100e4c	unicode	media
+0x90100e5c	string	NuiTroubleshooterDll
+0x90100e74	string	Couldn't load LuaXboxXam.xzp
+0x90100e9c	unicode	section://%X,luaxbox
+0x90100ec8	string	IsPlayspaceSupportedByTitle
+0x90100ee4	string	TitleUsesSeatedTracking
+0x90100efc	string	BuildResourceLocator
+0x90100f14	string	GoToAudioTroubleshooter
+0x90100f2c	string	GoToCameraCalibration
+0x90100f44	string	ShouldShowBootConfirmation
+0x90100f60	string	LaunchDash
+0x90100f6c	string	FreeUnusedXuiTextures
+0x90100f84	string	RegisterNuiFrameCallback
+0x90100fa0	string	UnregisterNuiFrameCallback
+0x90100fbc	string	SetLegendY
+0x90100fc8	string	DestroyBackScenes
+0x90100fdc	string	NavigateBackToFirstScene
+0x90100ff8	string	RestartApp
+0x90101004	string	SetXamEngagedTrackingID
+0x9010101c	string	SetShowIdentityImage
+0x90101034	string	CheckHardware
+0x90101044	string	HardwareCheckDll
+0x90101058	string	GetNatalSerialNumber
+0x90101070	string	SetCameraElevationAngle
+0x90101088	string	e:\bt\248805\core\private\xam\apps\nuitroubleshooter\src\playspacetroubleshooterdll.cpp
+0x901010ec	string	PlayspaceTroubleshooterDll
+0x9010110a	string	ffGetCameraElevationAngle
+0x90101124	string	StopCameraMovement
+0x90101138	string	StartAutoTilt
+0x90101148	string	AbandonAutoTilt
+0x90101158	string	StartReverseAutoTilt
+0x90101170	string	GetAutotiltStatus
+0x90101184	string	WritePlayspaceDistanceSettings
+0x901011a4	string	ReadPlayspaceDistanceSettings
+0x901011c4	string	ValidatePlaySpace
+0x901011d8	string	CancelValidatePlaySpace
+0x901011f0	string	StartCheckingHeadClippedStatus
+0x90101210	string	StopCheckingHeadClippedStatus
+0x90101230	string	IgnorePlaySpaceFailure
+0x90101248	string	CreatePlayspaceControl
+0x90101260	string	DestroyPlayspaceControl
+0x901012a0	string	HH:mm:ss
+0x901012ac	string	dddd, MMMM dd, yyyy
+0x901012c0	string	MM/dd/yy
+0x901012d4	string	December
+0x901012e0	string	November
+0x901012ec	string	October
+0x901012f4	string	September
+0x90101300	string	August
+0x90101318	string	April
+0x90101320	string	March
+0x90101328	string	February
+0x90101334	string	January
+0x9010136c	string	Saturday
+0x90101378	string	Friday
+0x90101380	string	Thursday
+0x9010138c	string	Wednesday
+0x90101398	string	Tuesday
+0x901013a0	string	Monday
+0x901013a8	string	Sunday
+0x90101bd8	string	SunMonTueWedThuFriSat
+0x90101bf0	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x90101c18	string	$Lua: Lua 5.1.4 Copyright (C) 1994-2008 Lua.org, PUC-Rio $\n$Authors: R. Ierusalimschy, L. H. de Figueiredo & W. Celes $\n$URL: www.lua.org $\n
+0x90101ca8	string	no calling environment
+0x90101cc0	string	no value
+0x90101cdc	string	%s:%d: 
+0x90101ce8	string	stack overflow (%s)
+0x90101cfc	string	bad argument #%d to '%s' (%s)
+0x90101d1c	string	calling '%s' on bad self (%s)
+0x90101d3c	string	method
+0x90101d48	string	bad argument #%d (%s)
+0x90101d60	string	%s expected, got %s
+0x90101d74	string	value expected
+0x90101d84	string	name conflict for module '%s'
+0x90101da4	string	_LOADED
+0x90101dac	string	invalid option '%s'
+0x90101ed0	string	(null)
+0x90101ee4	string	[string "
+0x90101ef8	string	not enough memory
+0x90101f0c	string	error in error handling
+0x90101f2c	string	attempt to yield across metamethod/C-call boundary
+0x90101f60	string	stack overflow
+0x90101f70	string	C stack overflow
+0x90101f84	string	cannot resume non-suspended coroutine
+0x90101fac	string	(*temporary)
+0x90101fd4	string	=(tail call)
+0x90102014	string	upvalue
+0x9010201c	string	global
+0x90102024	string	field
+0x9010202c	string	local
+0x90102034	string	%s:%d: %s
+0x90102040	string	attempt to %s a %s value
+0x9010205c	string	attempt to %s %s '%s' (a %s value)
+0x90102080	string	concatenate
+0x9010208c	string	perform arithmetic on
+0x901020a4	string	attempt to compare %s with %s
+0x901020c4	string	attempt to compare two %s values
+0x901020e8	string	__call
+0x901020f0	string	__concat
+0x9010210c	string	__len
+0x90102114	string	__unm
+0x9010211c	string	__pow
+0x90102124	string	__mod
+0x9010212c	string	__div
+0x90102134	string	__mul
+0x9010213c	string	__sub
+0x90102144	string	__add
+0x90102154	string	__mode
+0x90102164	string	__newindex
+0x90102170	string	__index
+0x90102178	string	upval
+0x90102180	string	proto
+0x90102188	string	thread
+0x90102190	string	function
+0x9010219c	string	table
+0x901021a4	string	string
+0x901021ac	string	number
+0x901021b4	string	userdata
+0x901021c0	string	boolean
+0x90102244	string	%.14g
+0x9010224c	string	loop in gettable
+0x90102260	string	index
+0x90102268	string	loop in settable
+0x9010227c	string	string length overflow
+0x901022e4	string	get length of
+0x901022f4	string	'for' step must be a number
+0x90102310	string	'for' initial value must be a number
+0x90102338	string	'for' limit must be a number
+0x90102378	string	invalid key to 'next'
+0x90102390	string	table overflow
+0x901023a0	string	table index is NaN
+0x901023b4	string	table index is nil
+0x901023c8	string	memory allocation error: block too big
+0x90102410	string	'%s' expected
+0x90102420	string	function at line %d has more than %d %s
+0x90102448	string	main function has more than %d %s
+0x9010246c	string	'%s' expected (to close '%s' at line %d)
+0x90102498	string	too many local variables
+0x901024b4	string	local variables
+0x901024c4	string	upvalues
+0x901024d0	string	chunk has too many syntax levels
+0x901024f4	string	constant table overflow
+0x9010250c	string	items in a constructor
+0x90102528	string	<name> or '...' expected
+0x9010254c	string	ambiguous syntax (function call x new statement)
+0x90102580	string	function arguments expected
+0x9010259c	string	unexpected symbol
+0x901025b0	string	cannot use '...' outside a vararg function
+0x901025dc	string	variables in assignment
+0x901025f4	string	syntax error
+0x90102604	string	no loop to break
+0x90102620	string	(for step)
+0x9010262c	string	(for limit)
+0x90102638	string	(for index)
+0x90102644	string	(for control)
+0x90102654	string	(for state)
+0x90102660	string	(for generator)
+0x90102670	string	'=' or 'in' expected
+0x90102688	string	%s: %s in precompiled chunk
+0x901026a4	string	unexpected end
+0x901026b4	string	bad integer
+0x901026c0	string	bad constant
+0x901026d0	string	bad code
+0x901026dc	string	code too deep
+0x901026f4	string	bad header
+0x90102704	string	binary string
+0x90102714	string	<eof>
+0x9010271c	string	<string>
+0x90102728	string	<name>
+0x90102730	string	<number>
+0x90102750	string	while
+0x90102758	string	until
+0x90102770	string	return
+0x90102778	string	repeat
+0x90102794	string	false
+0x901027a0	string	elseif
+0x901027b4	string	break
+0x90102840	string	lexical element too long
+0x90102860	string	char(%d)
+0x9010286c	string	%s near '%s'
+0x9010287c	string	chunk has too many lines
+0x90102898	string	malformed number
+0x901028b4	string	unfinished long string
+0x901028cc	string	unfinished long comment
+0x901028e4	string	nesting of [[...]] is deprecated
+0x90102908	string	unfinished string
+0x9010291c	string	escape sequence too large
+0x90102938	string	invalid long string delimiter
+0x9010295c	string	VARARG
+0x90102964	string	CLOSURE
+0x9010296c	string	CLOSE
+0x90102974	string	SETLIST
+0x9010297c	string	TFORLOOP
+0x90102988	string	FORPREP
+0x90102990	string	FORLOOP
+0x90102998	string	RETURN
+0x901029a0	string	TAILCALL
+0x901029b4	string	TESTSET
+0x901029d4	string	CONCAT
+0x90102a08	string	NEWTABLE
+0x90102a14	string	SETTABLE
+0x90102a20	string	SETUPVAL
+0x90102a2c	string	SETGLOBAL
+0x90102a38	string	GETTABLE
+0x90102a44	string	GETGLOBAL
+0x90102a50	string	GETUPVAL
+0x90102a5c	string	LOADNIL
+0x90102a64	string	LOADBOOL
+0x90102a70	string	LOADK
+0x90102b44	string	control structure too long
+0x90102b60	string	function or expression too complex
+0x90102b84	string	code size overflow
+0x90102bc0	string	package
+0x90102bc8	string	(Can't convert to string)
+0x90102be4	string	tostring
+0x90102bf0	string	expected table of options
+0x90102c0c	string	hr=0x%x location=%s:%d msg=%s
+0x90102c2c	string	Expected string
+0x90102c3c	string	Failed to convert Utf8 string to unicode
+0x90102c68	string	Xbox.UnicodeUd
+0x90102c78	string	'tostring' must return a string to 'print'
+0x90102cb0	string	luadprint
+0x90102cbc	string	print
+0x90102cc4	string	***********************************************\n
+0x90102cf8	string	%s (%u)\n
+0x90102d04	string	%s:%u;
+0x90102d0c	string	******************* Lua Error *****************\n
+0x90102d40	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luautil.cpp
+0x90102d7c	string	Package module required
+0x90102d94	string	require
+0x90102d9c	string	Pointer type cannot be nil
+0x90102db8	string	wrong result type: expected number(double)
+0x90102de4	string	wrong result type: expected number(int)
+0x90102e0c	string	wrong result type: expected string(utf8)
+0x90102e38	string	wrong result type: expected userdata(Unicode)
+0x90102e68	string	wrong result type: expected number(uint)
+0x90102e94	string	invalid option '%c'
+0x90102ea8	string	Invalid user index
+0x90102ebc	string	expected user index
+0x90102ed4	string	XboxUd.%s
+0x90102ef0	string	Invalid string constant
+0x90102f08	string	This function must be called from a coroutine
+0x90102f38	string	Xbox.AppUrl
+0x90102f44	string	Privilege access is denied
+0x90102f60	string	Site access is denied
+0x90102f78	string	Not enough parameters specified to function
+0x90102fa4	string	Failed to parse unicode string
+0x90102fc4	string	too many arguments
+0x90102fd8	string	Not a valid function
+0x90102ff0	string	__tostring
+0x90103004	string	Resume
+0x9010300c	string	Cancel
+0x90103014	string	Sleep
+0x9010301c	string	Start
+0x90103028	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luasched.cpp
+0x90103064	string	Xbox.Sched.Deaths
+0x90103078	string	Xbox.Sched.Finals
+0x901030c0	string	Thread expected
+0x901030d0	string	Cancelled
+0x901030f0	string	Xbox.Object.LuaSchedWait
+0x9010312c	string	Xbox.Object.LuaSchedWaitResume
+0x9010316c	string	Xbox.Object.LuaSchedWaitThread
+0x9010318c	string	E:\bt\248805\core\private\corelibs\luaXbox\inc\LuaPub.h
+0x901031e4	string	Xbox.Object.LuaSchedWaitTime
+0x90103204	string	Can't resume itself
+0x90103218	string	interval must be positive
+0x90103234	string	Coroutine is not suspended
+0x90103254	string	Xbox.Scheduler
+0x90103264	string	GetCommonString
+0x90103274	string	Xbox.System
+0x90103280	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luacommonstrings.cpp
+0x901032c4	string	ShowMessageBox
+0x901032d8	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luamessageboxhud.cpp
+0x9010331c	string	XamShowMessageBox failed.
+0x90103358	string	Xbox.Object.LuaWaitHudMessageBox
+0x9010337c	string	Button text is too long
+0x90103394	string	Passcode Mode unsupported in the HUD
+0x901033bc	string	Already showing a HUD message box
+0x901033e0	string	Parse
+0x90103400	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luaxmlparser.cpp
+0x90103440	string	Xbox.XmlParser
+0x90103450	string	Handlers must specify OnCDATAEnd
+0x90103474	string	OnCDATAEnd
+0x90103480	string	Handlers must specify OnCDATAData
+0x901034a4	string	OnCDATAData
+0x901034b0	string	Handlers must specify OnCDATABegin
+0x901034d4	string	OnCDATABegin
+0x901034e4	string	Handlers must specify OnAttribute
+0x90103508	string	OnAttribute
+0x90103514	string	Handlers must specify OnElementEnd
+0x90103538	string	OnElementEnd
+0x90103548	string	Handlers must specify OnElementContent
+0x90103570	string	OnElementContent
+0x90103584	string	Handlers must specify OnElementBegin
+0x901035ac	string	OnElementBegin
+0x901035bc	string	AutoShutoff
+0x901035c8	string	ScreenSaver
+0x901035d4	string	SetEngagedTrackingID
+0x901035ec	string	ResetInactivity
+0x901035fc	string	SetInactivityTime
+0x90103610	string	SetInactivityEnabled
+0x90103628	string	GetTickCount
+0x90103638	string	GetSystemTime
+0x90103648	string	GetLocalTime
+0x90103658	string	SystemTimeToFileTime
+0x90103670	string	FileTimeToSystemTime
+0x90103688	string	GetLiveHiveValue
+0x9010369c	string	GetBuildInfo
+0x901036ac	string	TryGetInputState
+0x901036c0	string	ShowSignIn
+0x901036cc	string	LaunchDataMigration
+0x901036e0	string	LaunchDashApp
+0x901036f0	string	IsWideScreen
+0x90103778	string	DpadUp
+0x90103780	string	DpadDown
+0x9010378c	string	DpadLeft
+0x90103798	string	DpadRight
+0x901037ac	string	LeftThumb
+0x901037b8	string	RightThumb
+0x901037c4	string	LeftShoulder
+0x901037d4	string	RightShoulder
+0x901037e4	string	BigButton
+0x90103818	string	EnableGuest
+0x90103824	string	LocalSignInOnly
+0x90103834	string	ShowOnlyOnlineEnabled
+0x9010384c	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luaxbox.cpp
+0x90103888	string	Unable to retrieve LiveHive value
+0x901038ac	string	LiveHive key name must be specified
+0x901038d0	string	Milliseconds
+0x901038e0	string	Second
+0x901038e8	string	Minute
+0x901038f8	string	DayOfWeek
+0x90103908	string	Month
+0x90103918	string	RightThumbY
+0x90103924	string	RightThumbX
+0x90103930	string	LeftThumbY
+0x9010393c	string	LeftThumbX
+0x90103948	string	RightTrigger
+0x90103958	string	LeftTrigger
+0x90103964	string	PacketNumber
+0x90103974	string	Invalid number of panes
+0x9010398c	string	Conversion error
+0x901039a0	string	Invalid milliseconds
+0x901039c0	string	Invalid second
+0x901039d0	string	Invalid minute
+0x901039e8	string	Invalid hour
+0x90103a00	string	Invalid day
+0x90103a18	string	Invalid month
+0x90103a30	string	Invalid year
+0x90103a50	string	Xbox.Object.LuaXOverlapped
+0x90103b74	string	\tBeStrict
+0x90103b83	string	IsBeingStrict
+0x90103b95	string	\rgetmetatable
+0x90103bb0	string	\rsetmetatable
+0x90103bc3	string	__declared
+0x90103bd3	string	__newindex
+0x90103be3	string	__index
+0x90103bf0	string	_GetGlobal
+0x90103c00	string	_SetGlobal
+0x90103c10	string	_BuildClass
+0x90103c21	string	ImplementClass
+0x90103c35	string	import
+0x90103c41	string	require
+0x90103c4d	string	\tSafeCall
+0x90103c5b	string	\tDelegate
+0x90103cba	string	debug
+0x90103cc5	string	getinfo
+0x90103df7	string	__declared
+0x90103e18	string	error
+0x90103e22	string	 assign to undeclared variable '
+0x90103e5a	string	rawset
+0x90103ef2	string	__declared
+0x90103f09	string	error
+0x90103f14	string	variable '
+0x90103f24	string	' is not declared
+0x90104039	string	string
+0x90104175	string	string
+0x901041a7	string	rawset
+0x901042ab	string	\rgetmetatable
+0x901042be	string	_GetGlobal
+0x901042cd	string	\tBeStrict
+0x901042e6	string	__index
+0x901042fb	string	module
+0x90104307	string	package
+0x90104314	string	seeall
+0x9010431f	string	\rsetmetatable
+0x90104332	string	Constructor
+0x9010434c	string	_SetGlobal
+0x90104398	string	Constructor
+0x90104404	string	\rsetmetatable
+0x90104417	string	__index
+0x90104424	string	Constructor
+0x90104491	string	_BuildClass
+0x901045a0	string	assert
+0x901045b5	string	\tfunction
+0x901045c3	string	\ncoroutine
+0x901045d3	string	running
+0x901045e0	string	pcall
+0x901045ea	string	\tSafePack
+0x901045f9	string	Start
+0x9010460e	string	SafeUnpack
+0x9010465d	string	\tSafePack
+0x9010466c	string	SafeUnpack
+0x90104760	string	assert
+0x90104776	string	table
+0x90104780	string	\tuserdata
+0x9010478e	string	\tfunction
+0x901047f4	string	Count
+0x901047fc	string	e:\bt\248805\core\private\corelibs\luaxbox\src\xlua.cpp
+0x90104834	string	SafeUnpack
+0x90104840	string	SafePack
+0x9010484c	string	Out of Memory
+0x9010485c	string	common.lua
+0x90104868	string	CloseFile
+0x90104874	string	WriteFile
+0x90104880	string	CreateFile
+0x9010488c	string	Xbox.Object.LuaFileHandleWrapper
+0x901048b0	string	Xbox.Coverage
+0x901048c0	string	set_hook
+0x901048cc	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luacoverage.cpp
+0x90104920	string	Failed to Create File
+0x901049b8	string	NoIcon
+0x901049c0	string	ErrorIcon
+0x901049cc	string	WarningIcon
+0x901049d8	string	AlertIcon
+0x901049e4	string	InformationIcon
+0x901049f4	string	WaitAnimation
+0x90104a04	string	DeviceStatusAutoDismiss
+0x90104a1c	string	PasscodeMode
+0x90104a2c	string	LivePasscodeMode
+0x90104a40	string	VerifyPasscodeMode
+0x90104a54	string	NuiEnabled
+0x90104a60	string	ControllerRequiredMode
+0x90104a78	string	KinectTunerHwMode
+0x90104a8c	string	WaitForAuthenticatedMedia
+0x90104ab4	string	XMB_YESNO requires focus button to be 0, 1
+0x90104ae0	string	XMB_YESNO requires 0, 1 or 2 buttons
+0x90104b08	string	XMB_OK requires focus button to be 0
+0x90104b30	string	XMB_OK requires 0 or 1 as a button count
+0x90104b5c	string	XMB_OK and XMB_YESNO cannot be used simultaneously
+0x90104b90	string	No buttons available in passcode mode
+0x90104bb8	string	Invalid number of buttons or focus button specified
+0x90104bec	string	Invalid flags specified
+0x90104c08	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luamessageboxcommon.cpp
+0x90104c88	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luabignumber.cpp
+0x90104cc8	string	%I64u
+0x90104cd8	string	%s!%s %u %s 
+0x90104ce8	string	xbdm.xex
+0x90104cf4	string	luadebug
+0x90104d14	string	escapestring
+0x90104d24	string	getvalue
+0x90104d30	string	getaddress
+0x90104d3c	string	getcounters
+0x90104d48	string	getbreakpoints
+0x90104d58	string	removeallbreakpoints
+0x90104d70	string	removebreakpoint
+0x90104d84	string	addbreakpoint
+0x90104d94	string	getstate
+0x90104da0	string	stepover
+0x90104dac	string	stepinto
+0x90104db8	string	continue
+0x90104fed	string	module
+0x90104ff8	string	\tdebugger
+0x90105007	string	package
+0x90105014	string	seeall
+0x90105048	string	frame
+0x90105072	string	description
+0x90105083	string	sets a breakpoint
+0x9010509a	string	usage
+0x901050a5	string	bp{f=<filename>, l=<linenumber>}        -- sets a breakpoint on this line\nbp{fn=<functionname>}                   -- sets a function breakpoint\n
+0x9010513b	string	lists breakpoints
+0x90105151	string	Bbl                                      -- lists all breakpoints\n
+0x90105199	string	clears a breakpoint
+0x901051b2	string	bc("*")                                 -- clears all breakpoints\nbc(<num>)                               -- clears breakpoint <num>\n
+0x9010523d	string	dumps a value
+0x90105250	string	d(var)                                  -- dumps the contents of var\nd(var, <recursion-depth>)               -- dumps var recursively\n
+0x901052dc	string	dumps upvalues
+0x901052ef	string	+dup(<function>)                         -- dumps all upvalues of function\ndup(<function>, <recursion-depth>)      -- dumps upvalues recursively\ndup                                     -- dumps upvalues for current frame\ndup(nil, <recursion-depth>)             -- dumps current upvalues recursively\n
+0x9010541f	string	2dumps locals and upvalues for current stack frame
+0x90105457	string	dv                    -- dumps locals and upvalues for current stack frame\ndv(<recursion-depth>) -- dumps locals and upvalues recursively\n
+0x901054ef	string	dumps resource counters
+0x9010550b	string	6dc                    -- dumps all resource counters\n
+0x90105546	string	 changes the current stack frame
+0x9010556c	string	frame(<stack-frame>)                    -- changes the current stack frame\n                                        -- affects dv and dup\n
+0x901055fb	string	continues execution
+0x90105613	string	@g                                       -- continues execution\n
+0x90105662	string	,prints debugger help, see also help("help")
+0x90105694	string	help                                    -- prints short help for all commands\nhelp("help")                            -- prints the text you're reading\n
+0x90105732	string	prints a stack trace
+0x9010574b	string	Ak                                       -- prints a stack trace\n
+0x90105799	string	steps over
+0x901057a8	string	Hp                                       -- steps over the current line\n
+0x901057fd	string	steps into
+0x9010580c	string	Ht                                       -- steps into the current line\n
+0x9010585a	string	where
+0x9010586f	string	_execEnvIndex
+0x90105882	string	_execEnvNewIndex
+0x90105898	string	_execEnvMt
+0x901058a8	string	__index
+0x901058b5	string	__newindex
+0x901058c4	string	\t_execEnv
+0x901058d2	string	\rsetmetatable
+0x901058e5	string	_valueToString
+0x901058f9	string	_getStackFrames
+0x9010590e	string	_getCurrentFrame
+0x90105923	string	\r_bpiToString
+0x9010593f	string	\n_checkBpi
+0x9010594f	string	escapevalue
+0x901059cb	string	\n_checkBpi
+0x901059e2	string	\ndebuggerc
+0x901059f2	string	addbreakpoint
+0x90105a90	string	ipairs
+0x90105a9b	string	\ndebuggerc
+0x90105aab	string	getbreakpoints
+0x90105abf	string	print
+0x90105adc	string	\r_bpiToString
+0x90105b71	string	number
+0x90105b7c	string	\ndebuggerc
+0x90105b8c	string	removebreakpoint
+0x90105ba9	string	removeallbreakpoints
+0x90105bc3	string	error
+0x90105bcd	string	2breakpoint number is invalid or was not specified
+0x90105cb8	string	\ndebuggerc
+0x90105cc7	string	\tgetstate
+0x90105cd6	string	stopped
+0x90105ce3	string	error
+0x90105ced	string	,Can't list stack because program is running
+0x90105d1f	string	ipairs
+0x90105d2b	string	_getStackFrames
+0x90105d40	string	print
+0x90105e82	string	_getCurrentFrame
+0x90105ea2	string	debug
+0x90105ead	string	getupvalue
+0x90105ebd	string	print
+0x90105ed1	string	_valueToString
+0x90105fda	string	\ndebuggerc
+0x90105fe9	string	\tgetstate
+0x90105ff8	string	stopped
+0x90106005	string	error
+0x9010600f	string	0Can't list variables because program is running
+0x90106045	string	_getStackFrames
+0x90106063	string	index
+0x9010606e	string	print
+0x90106079	string	Locals:
+0x9010608f	string	debug
+0x90106099	string	\tgetlocal
+0x901060b1	string	_valueToString
+0x901060ca	string	\nUpvalues:
+0x9010614a	string	print
+0x90106155	string	_valueToString
+0x901061ce	string	\ndebuggerc
+0x901061dd	string	\tgetstate
+0x901061ec	string	stopped
+0x901061f9	string	error
+0x90106204	string	Program is already running
+0x9010622c	string	\tcontinue
+0x901062bf	string	print
+0x901062ca	string	usage
+0x901062d5	string	pairs
+0x901062f3	string	description
+0x9010633b	string	\ndebuggerc
+0x9010634a	string	\tstepover
+0x90106390	string	\ndebuggerc
+0x9010639f	string	\tstepinto
+0x90106425	string	\ndebuggerc
+0x90106434	string	\tgetstate
+0x90106443	string	stopped
+0x90106450	string	error
+0x9010645b	string	Program is running
+0x90106473	string	_getStackFrames
+0x90106491	string	print
+0x9010649c	string	string
+0x901064a8	string	format
+0x90106524	string	\t_execEnv
+0x9010662a	string	\ndebuggerc
+0x90106639	string	\tgetstate
+0x90106648	string	stopped
+0x90106655	string	_getStackFrames
+0x90106673	string	debug
+0x9010667d	string	\tgetlocal
+0x9010668c	string	index
+0x90106697	string	getupvalue
+0x901067f9	string	\ndebuggerc
+0x90106808	string	\tgetstate
+0x90106817	string	stopped
+0x90106824	string	_getStackFrames
+0x90106842	string	debug
+0x9010684c	string	\tgetlocal
+0x9010685b	string	index
+0x90106865	string	\tsetlocal
+0x90106874	string	getupvalue
+0x9010688e	string	setupvalue
+0x901068ab	string	rawset
+0x90106b13	string	\tfunction
+0x90106b22	string	table
+0x90106b3c	string	string
+0x90106b67	string	debug
+0x90106b72	string	getinfo
+0x90106b89	string	function: 
+0x90106b99	string	_valueToString
+0x90106bb7	string	 Upvalues: 
+0x90106bd1	string	getupvalue
+0x90106bf3	string	pairs
+0x90106bfd	string	\ttostring
+0x90106d4f	string	debug
+0x90106d5a	string	getinfo
+0x90106d8b	string	source
+0x90106da1	string	currentline
+0x90106dbc	string	index
+0x90106dc7	string	table
+0x90106dd2	string	insert
+0x90106e2a	string	_getStackFrames
+0x90106e3f	string	index
+0x90106f0d	string	string
+0x90106f19	string	format
+0x90106ff8	string	\ttostring
+0x90107007	string	string
+0x90107151	string	pairs
+0x9010716d	string	string
+0x90107179	string	error
+0x90107184	string	f (filename) must be a string
+0x901071ae	string	4l (line) is required when f (filename) is specified
+0x901071e8	string	number
+0x901071f4	string	l (line) must be a number
+0x9010721b	string	fn (function) must be a string
+0x9010723e	string	?f (function) and l (line) are not allowed when fn is specified
+0x90107283	string	Invalid option '
+0x90107476	string	boolean
+0x90107483	string	string
+0x9010748f	string	format
+0x901074a7	string	\ttostring
+0x901074b6	string	number
+0x901074dd	string	\ndebuggerc
+0x901074ed	string	getaddress
+0x901074fc	string	\rescapestring
+0x9010750f	string	table
+0x9010752b	string	\tfunction
+0x9010753a	string	f[%x]"function"
+0x9010754f	string	thread
+0x9010756d	string	\tuserdata
+0x9010758b	string	error
+0x90107595	string	\rUnknown type
+0x901075c4	string	Debugger not initialized
+0x901075e0	string	\n[ERROR] %s\n
+0x901075f0	string	debug
+0x90107604	string	CpuTimeLastSecondMs
+0x90107618	string	CpuTimeLastFrameUs
+0x9010762c	string	UnmanagedMemoryBytes
+0x90107644	string	ManagedMemoryBytes
+0x90107658	string	running
+0x90107660	string	stopped
+0x90107668	string	debugger.lua
+0x90107678	string	Invalid breakpoint index
+0x90107694	string	Program is already stopped
+0x901076b0	string	Invalid value type. Value must be an object
+0x901076e0	string	state
+0x901076f0	string	probe
+0x90107708	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luadebugstate.cpp
+0x9010774c	string	Can't find function '%s'
+0x90107768	string	'debugger' module not loaded
+0x90107788	string	debugger
+0x90107794	string	This command can't be called while program is running
+0x901077cc	string	start
+0x901077d8	string	DebugBreak
+0x901077e4	string	debuggerc
+0x901077f0	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuiutil.cpp
+0x90107830	string	hObj is invalid
+0x90107840	string	_handle
+0x90107848	string	!LUA[%d]~%s
+0x90107854	string	Xbox.XuiAppId
+0x90107864	unicode	!LUA[
+0x90107870	string	expected XUI object
+0x90107884	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxzploader.cpp
+0x901078c4	string	loaded
+0x901078cc	string	error loading module '%s'
+0x901078e8	unicode	.lub
+0x901078f4	unicode	.lux
+0x90107900	unicode	.lua
+0x9010790c	string	loaders
+0x90107914	string	_xzpmap
+0x9010791c	string	%s%s%s
+0x90107924	string	SetProperty
+0x90107930	string	GetProperty
+0x9010793c	string	SetTimer
+0x90107948	string	ReadFile
+0x90107954	string	LoadVisual
+0x90107960	string	LoadObject
+0x9010796c	string	KillTimer
+0x90107978	string	GetObjectClass
+0x90107988	string	GetClassName
+0x90107998	string	GetBaseClass
+0x901079a8	string	FreeVisuals
+0x901079b4	string	DestroyOrphan
+0x901079c4	string	DestroyObject
+0x901079d4	string	CreateObject
+0x901079e4	string	ClassDerivesFrom
+0x901079f8	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuibaseimpl.cpp
+0x90107a3c	string	_XboxXuiBaseTerm
+0x90107a50	string	Xbox.XuiBaseImpl
+0x90107a64	string	Xbox.Rm
+0x90107a6c	string	%s#%s
+0x90107a74	string	Can't expand resource locator. Unknown alias.
+0x90107aa4	string	Resource locators must start with '#'
+0x90107ae0	string	Xbox.Object.LuaHXuiResourceWrapper
+0x90107b04	string	E:\bt\248805\core\private\corelibs\luaxbox\inc\LuaPub.h
+0x90107b3c	string	File too big
+0x90107b4c	string	ValueChanged
+0x90107b5c	string	VideoEnd
+0x90107b68	string	SelectionChanged
+0x90107b7c	string	SetFocus
+0x90107b88	string	KillFocus
+0x90107b94	string	Pressing
+0x90107ba0	string	Press
+0x90107ba8	string	ParentChanged
+0x90107bc0	string	TransitionStart
+0x90107bd0	string	TransitionEnd
+0x90107be0	string	Timer
+0x90107be8	string	TimelineEnd
+0x90107bfc	string	KeyDown
+0x90107c04	string	Destroy
+0x90107c0c	string	Unsubscribe
+0x90107c18	string	Subscribe
+0x90107c24	string	Xbox.XuiEvents
+0x90107c34	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuievents.cpp
+0x90107ccc	string	Unknown
+0x90107cd4	string	VK_PAD_BIGBUTTON
+0x90107ce8	string	VK_PAD_RTHUMB_DOWNLEFT
+0x90107d00	string	VK_PAD_RTHUMB_DOWNRIGHT
+0x90107d18	string	VK_PAD_RTHUMB_UPRIGHT
+0x90107d30	string	VK_PAD_RTHUMB_UPLEFT
+0x90107d48	string	VK_PAD_RTHUMB_LEFT
+0x90107d5c	string	VK_PAD_RTHUMB_RIGHT
+0x90107d70	string	VK_PAD_RTHUMB_DOWN
+0x90107d84	string	VK_PAD_RTHUMB_UP
+0x90107d98	string	VK_PAD_LTHUMB_DOWNLEFT
+0x90107db0	string	VK_PAD_LTHUMB_DOWNRIGHT
+0x90107dc8	string	VK_PAD_LTHUMB_UPRIGHT
+0x90107de0	string	VK_PAD_LTHUMB_UPLEFT
+0x90107df8	string	VK_PAD_LTHUMB_LEFT
+0x90107e0c	string	VK_PAD_LTHUMB_RIGHT
+0x90107e20	string	VK_PAD_LTHUMB_DOWN
+0x90107e34	string	VK_PAD_LTHUMB_UP
+0x90107e48	string	VK_PAD_RTHUMB_PRESS
+0x90107e5c	string	VK_PAD_LTHUMB_PRESS
+0x90107e70	string	VK_PAD_BACK
+0x90107e7c	string	VK_PAD_START
+0x90107e8c	string	VK_PAD_DPAD_RIGHT
+0x90107ea0	string	VK_PAD_DPAD_LEFT
+0x90107eb4	string	VK_PAD_DPAD_DOWN
+0x90107ec8	string	VK_PAD_DPAD_UP
+0x90107ed8	string	VK_PAD_RTRIGGER
+0x90107ee8	string	VK_PAD_LTRIGGER
+0x90107ef8	string	VK_PAD_LSHOULDER
+0x90107f0c	string	VK_PAD_RSHOULDER
+0x90107f20	string	VK_PAD_Y
+0x90107f2c	string	VK_PAD_X
+0x90107f38	string	VK_PAD_B
+0x90107f44	string	VK_PAD_A
+0x90107f50	string	XUI_TRANSITION_TO
+0x90107f64	string	XUI_TRANSITION_FROM
+0x90107f78	string	XUI_TRANSITION_BACKTO
+0x90107f90	string	XUI_TRANSITION_BACKFROM
+0x90107fc8	string	Can't subscribe to notifications because object has no parent
+0x90108008	string	Event can't be subscribed to as a notification
+0x90108038	string	number or string expected
+0x90108054	string	Invalid XUI event
+0x90108068	string	Event handler not found
+0x90108080	string	SetText
+0x90108088	string	GetText
+0x90108090	string	Xbox.XuiTextImpl
+0x901080a8	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuitextimpl.cpp
+0x901080f4	string	GetCurrentTab
+0x90108104	string	GetCount
+0x90108110	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuitabsceneimpl.cpp
+0x90108158	string	Xbox.XuiTabSceneImpl
+0x90108170	string	Lookup
+0x90108180	string	Xbox.Object.LuaXuiStringTable
+0x901081a0	string	Xbox.XuiStringTableImpl
+0x901081b8	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuistringtableimpl.cpp
+0x90108220	string	SetStep
+0x90108228	string	SetRange
+0x90108234	string	GetValue
+0x90108240	string	GetStep
+0x90108248	string	GetRange
+0x90108258	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuisliderimpl.cpp
+0x9010829c	string	Xbox.XuiSliderImpl
+0x901082b0	string	nRangeMin must be less than nRangeMax
+0x901082d8	string	EnableTransitionDependency
+0x901082f4	string	SetBackScene
+0x90108304	string	GetBackScene
+0x90108314	string	PlayBackFromTransition
+0x9010832c	string	PlayBackToTransition
+0x90108344	string	PlayFromTransition
+0x90108358	string	PlayToTransition
+0x9010836c	string	NavigateForward
+0x9010837c	string	NavigateFirstEx
+0x9010838c	string	NavigateBack
+0x9010839c	string	Create
+0x901083a8	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuisceneimpl.cpp
+0x901083ec	string	Invalid action
+0x901083fc	string	Xbox.XuiSceneImpl
+0x90108410	string	SetChecked
+0x9010841c	string	GetItemControl
+0x9010842c	string	GetChecked
+0x90108438	string	Xbox.XuiRadioGroupImpl
+0x90108450	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuiradiogroupimpl.cpp
+0x90108498	string	Invalid item index
+0x901084b0	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuiprogressbarimpl.cpp
+0x901084f8	string	Xbox.XuiProgressBarImpl
+0x90108510	string	TwistRight
+0x9010851c	string	TwistLeft
+0x90108528	string	SetCurSel
+0x90108534	string	InsertItems
+0x90108540	string	GetItemCount
+0x90108550	string	GetCurSel
+0x9010855c	string	Xbox.XuiTwistImpl
+0x90108578	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuitwistimpl.cpp
+0x901085bc	string	SetTopItem
+0x901085c8	string	SetItemEnable
+0x901085d8	string	SetItemCheck
+0x901085e8	string	SetImagePath
+0x901085f8	string	SetCurSelVisible
+0x9010860c	string	IsItemVisible
+0x9010861c	string	IsItemEnabled
+0x9010862c	string	IsItemChecked
+0x9010863c	string	GetVisibleItemCount
+0x90108650	string	GetTopItem
+0x9010865c	string	GetMaxVisibleItemCount
+0x90108674	string	GetImagePath
+0x90108684	string	GetDefaultItemSize
+0x90108698	string	DeleteItems
+0x901086a4	string	Xbox.XuiListImpl
+0x901086b8	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuilistimpl.cpp
+0x901086fc	string	Unsupported type of size
+0x90108718	string	InterItemSize
+0x90108728	string	SelectedItemSize
+0x9010873c	string	UnselectedItemSize
+0x90108750	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuiimageimpl.cpp
+0x90108794	string	Xbox.XuiImageImpl
+0x901087a8	string	SetTextureTranslation
+0x901087c0	string	SetTextureScale
+0x901087d0	string	SetTextureRotation
+0x901087e4	string	SetTextureFileName
+0x901087f8	string	GetTextureTranslation
+0x90108810	string	GetTextureScale
+0x90108820	string	GetTextureRotation
+0x90108834	string	GetTextureFileName
+0x90108848	string	Xbox.XuiFigureImpl
+0x9010885c	unicode	TransformVersion
+0x90108880	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuifigureimpl.cpp
+0x901088c4	string	Figure is not a texture fill type
+0x901088e8	unicode	Fill
+0x901088f4	unicode	FillType
+0x90108908	unicode	TextureFileName
+0x90108928	unicode	Rotation
+0x9010893c	unicode	Scale
+0x90108948	unicode	Translation
+0x90108960	string	Unlink
+0x90108968	string	SkinChanged
+0x90108974	string	SetWidth
+0x90108980	string	SetVisualPrefix
+0x90108990	string	SetShow
+0x90108998	string	SetScale
+0x901089a4	string	SetRotation
+0x901089b0	string	SetPosition
+0x901089bc	string	SetPivot
+0x901089c8	string	SetOpacity
+0x901089d4	string	SetHeight
+0x901089e0	string	PlayTimeline
+0x901089f0	string	IsShown
+0x901089f8	string	IsDescendant
+0x90108a08	string	InsertChild
+0x90108a14	string	InputEnabled
+0x90108a24	string	InitFocus
+0x90108a30	string	GetWidth
+0x90108a3c	string	GetVisualPrefix
+0x90108a4c	string	GetScale
+0x90108a58	string	GetPrevious
+0x90108a64	string	GetPosition
+0x90108a70	string	GetPivot
+0x90108a7c	string	GetParent
+0x90108a88	string	GetOpacity
+0x90108a94	string	GetNext
+0x90108a9c	string	GetLastChild
+0x90108aac	string	GetId
+0x90108ab4	string	GetHeight
+0x90108ac0	string	GetFocus
+0x90108acc	string	GetFirstChild
+0x90108adc	string	GetChildById
+0x90108aec	string	FindNamedFrame
+0x90108afc	string	EnableInput
+0x90108b08	string	DisallowRecursiveTimelineControl
+0x90108b2c	string	AddChild
+0x90108b38	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuielementimpl.cpp
+0x90108b7c	string	Named frame does not exist
+0x90108b98	string	Xbox.XuiElementImpl
+0x90108bac	unicode	Height
+0x90108bbc	unicode	Width
+0x90108bcf	string	5SetTopLine
+0x90108bdc	string	Xbox.XuiEditImpl
+0x90108bf0	string	InvalidateAll
+0x90108c00	string	InvalidateNonItems
+0x90108c14	string	Invalidate
+0x90108c20	string	SetItemOverrideFunc
+0x90108c34	string	SetSourceImageFunc
+0x90108c48	string	SetSourceTextFunc
+0x90108c5c	string	SetItemCount
+0x90108c74	string	GameIcon
+0x90108c80	string	GamerTileSmall
+0x90108c90	string	GamerTile
+0x90108ca0	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuidatacache.cpp
+0x90108ce4	string	Xbox.Object.LuaXuiDataCache
+0x90108d00	string	Xbox.XuiDataCache
+0x90108d2c	string	__listCache
+0x90108d38	string	XUI object
+0x90108d6c	string	Callback must return a string or a table
+0x90108d98	string	titleId
+0x90108da0	string	imageType
+0x90108dac	string	imageUserIndex
+0x90108dbc	string	imageXuid
+0x90108dc8	string	Callback must return a table or nil
+0x90108dec	string	checked
+0x90108df4	string	enabled
+0x90108dfc	string	height
+0x90108e04	string	width
+0x90108e0c	string	Callback must return a string or a custom provider
+0x90108e40	string	Invalid XUI handle
+0x90108e54	string	WantsUnfocusedInput
+0x90108e68	string	SetVisual
+0x90108e74	string	SetPress
+0x90108e80	string	SetEnable
+0x90108e8c	string	IsPressed
+0x90108e98	string	IsEnabled
+0x90108ea4	string	GetVisual
+0x90108eb0	string	Xbox.XuiControlImpl
+0x90108ec8	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuicontrolimpl.cpp
+0x90108f0c	unicode	Visual
+0x90108f1c	string	SetCheck
+0x90108f28	string	IsChecked
+0x90108f34	string	Xbox.XuiCheckboxImpl
+0x90108f50	string	e:\bt\248805\core\private\corelibs\luaxui\src\luaxuicheckboximpl.cpp
+0x90108f9c	string	pamxam
+0x90108fa8	string	e:\bt\248805\core\private\corelibs\luaxbox\guideapp\luaguideapp.cpp
+0x90108fec	unicode	XuiCanvas
+0x90109000	string	hr=0x
+0x90109084	string	(no stack)
+0x90109090	string	Package wasn't open
+0x901090a4	string	GetSessionId
+0x901090b4	string	UnloadStack
+0x901090c8	string	Xbox.App
+0x901090d4	string	HttpGet
+0x901090dc	string	HttpPost
+0x901090e8	string	e:\bt\248805\core\private\corelibs\luaxbox\guideapp\httpexports.cpp
+0x90109134	string	Xbox.Net
+0x90109168	string	Xbox.Object.HttpWait
+0x90109180	string	Only POST requests may have a body
+0x901091a4	string	In a Live request, host name must be 'live'
+0x901091d0	unicode	live
+0x901091dc	string	Invalid URL scheme
+0x901091f0	string	https://
+0x901091fc	string	binaryPadding
+0x9010920c	string	isBinaryPayload
+0x9010921c	string	maxResponseSize
+0x9010922c	string	isLiveRequest
+0x9010923c	string	disableCaching
+0x9010924c	string	headers
+0x90109254	string	Post requires non-empty body
+0x90109278	string	e:\bt\248805\core\private\corelibs\luaxbox\guideapp\util.cpp
+0x901093b4	unicode	DepthColorGradient.png
+0x901093e4	unicode	ViewCamera/Alert.png
+0x90109410	unicode	ViewCamera/IndicatorBox.png
+0x90109448	unicode	ViewCamera/Joint.png
+0x90109558	string	DepthColorMap
+0x90109578	string	c_DepthScaleFactor
+0x9010959c	string	myTexture
+0x901095a6	string	oldTexture1
+0x901095b2	string	oldTexture2
+0x901095c5	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x90109623	string	UE:\bt\248805\core\private\xam\common\tsoobeshared\controls\xam\DepthPixelShader.updb
+0x9010993c	string	ColorConvertMatrix
+0x90109960	string	DepthColorMap
+0x90109980	string	c_DepthScaleFactor
+0x901099a4	string	myTexture
+0x901099ae	string	oldTexture1
+0x901099ba	string	oldTexture2
+0x901099cd	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x90109a2b	string	XE:\bt\248805\core\private\xam\common\tsoobeshared\controls\xam\DepthPixelShaderCSC.updb
+0x90109c97	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x90109d0f	string	ZE:\bt\248805\core\private\xam\common\tsoobeshared\controls\xam\IsometricVertexShader.updb
+0x90109e2b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x90109ea3	string	\E:\bt\248805\core\private\xam\common\tsoobeshared\controls\xam\PerspectiveVertexShader.updb
+0x90109fc4	string	myTexture
+0x90109fe7	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9010a047	string	XE:\bt\248805\core\private\xam\common\tsoobeshared\controls\xam\TexturedPixelShader.updb
+0x9010a164	string	ColorConvertMatrix
+0x9010a188	string	myTexture
+0x9010a1ab	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9010a20b	string	[E:\bt\248805\core\private\xam\common\tsoobeshared\controls\xam\TexturedPixelShaderCSC.updb
+0x9010a328	string	c_Color
+0x9010a35f	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9010a3d3	string	YE:\bt\248805\core\private\xam\common\tsoobeshared\controls\xam\SkeletonVertexShader.updb
+0x9010a4cf	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9010a52f	string	XE:\bt\248805\core\private\xam\common\tsoobeshared\controls\xam\SkeletonPixelShader.updb
+0x9010a620	string	ColorConvertMatrix
+0x9010a64b	string	Microsoft (R) Xbox 360 Shader Compiler 2.0.1901.0
+0x9010a6ab	string	[E:\bt\248805\core\private\xam\common\tsoobeshared\controls\xam\SkeletonPixelShaderCSC.updb
+0x9010a990	unicode	%s%s
+0x9010aa04	string	SetShowDepthOnly
+0x9010aa18	string	SetHighlightedJointIndex
+0x9010aa34	string	SetTrackUserProgress
+0x9010aa4c	string	Update
+0x9010aa54	string	TsOobeShared.Playspace
+0x9010aa70	string	e:\bt\248805\core\private\xam\common\tsoobeshared\luaxbox\src\luaplayspaceexports.cpp
+0x9010aacc	string	GetLastLoggedEvent
+0x9010aae0	string	SessionStorageGetSessionData
+0x9010ab00	string	SessionStorageFetchSessions
+0x9010ab1c	string	LogAudioSpeechLevelTestUsage
+0x9010ab3c	string	LogAudioAmbientNoiseTestUsage
+0x9010ab5c	string	LogAudioCalibrationUsage
+0x9010ab78	string	LogTurnItUp
+0x9010ab84	string	LogCameraSettings
+0x9010ab98	string	LogPlayspaceTest
+0x9010abac	string	LogPlayspacePrep
+0x9010abc0	string	LogClearPlayspace
+0x9010abd4	string	LogTilt1Usage
+0x9010abe4	string	LogCameraLocation
+0x9010abf8	string	LogFatalHardwareError
+0x9010ac10	string	LogHardwareCheckResult
+0x9010ac28	string	LogAudioLaunchInfo
+0x9010ac3c	string	LogLaunchInfo
+0x9010ac78	string	TsCacheEntryUserData
+0x9010aca0	string	TsLog
+0x9010aca8	unicode	%I64u
+0x9010acf8	string	deviceselector.xex
+0x9010afc8	string	_nextafter
+0x9010afe8	string	frexp
+0x9010b008	string	ldexp
+0x9010b020	string	floor
+0x9010b044	string	atan2
+0x9010b07c	string	log10
+0x9010b124	string	Content-Type: xon/%x\r\n
+0x9010b13c	string	Content-Type:
+0x9010b164	string	%x/1.00.%04u
+0x9010b174	string	Xbox Live Client/2.0.12581.0
+0x9010b194	string	%u.%u.%u.%u
+0x9010b1b0	string	remove
+0x9010b1b8	string	insert
+0x9010b1d0	string	foreachi
+0x9010b1dc	string	foreach
+0x9010b1e4	string	concat
+0x9010b240	string	'setn' is obsolete
+0x9010b254	string	wrong number of arguments to 'insert'
+0x9010b27c	string	invalid value (%s) at index %d in table for 'concat'
+0x9010b2b4	string	invalid order function for sorting
+0x9010b2d8	string	upper
+0x9010b2e4	string	reverse
+0x9010b2f0	string	match
+0x9010b2f8	string	lower
+0x9010b30c	string	gmatch
+0x9010b314	string	gfind
+0x9010b31c	string	format
+0x9010b3c8	string	string slice too long
+0x9010b3e0	string	invalid value
+0x9010b3f0	string	unable to dump given function
+0x9010b410	string	invalid capture index
+0x9010b428	string	invalid pattern capture
+0x9010b440	string	malformed pattern (ends with '%%')
+0x9010b464	string	malformed pattern (missing ']')
+0x9010b484	string	unbalanced pattern
+0x9010b498	string	too many captures
+0x9010b4ac	string	missing '[' after '%%f' in pattern
+0x9010b4d0	string	unfinished capture
+0x9010b4e4	string	^$*+?.([%-
+0x9010b4f0	string	'string.gfind' was renamed to 'string.gmatch'
+0x9010b520	string	invalid replacement value (a %s)
+0x9010b544	string	string/function/table expected
+0x9010b570	string	invalid format (width or precision too long)
+0x9010b5a0	string	invalid format (repeated flags)
+0x9010b5c0	string	-+ #0
+0x9010b5c8	string	invalid option '%%%c' to 'format'
+0x9010b5ec	string	module
+0x9010b5f4	string	seeall
+0x9010b5fc	string	loadlib
+0x9010b640	string	dynamic libraries not enabled; check your Lua installation
+0x9010b67c	string	_LOADLIB
+0x9010b688	string	LOADLIB: 
+0x9010b69c	string	absent
+0x9010b6a4	string	\n\tno field package.preload['%s']
+0x9010b6c8	string	'package.preload' must be a table
+0x9010b6ec	string	preload
+0x9010b6f4	string	module '%s' not found:%s
+0x9010b710	string	'package.loaders' must be a table
+0x9010b734	string	loop or previous error loading module '%s'
+0x9010b760	string	'module' not called from a Lua function
+0x9010b788	string	_PACKAGE
+0x9010b794	string	_NAME
+0x9010b7a0	string	config
+0x9010b7a8	string	\\n;\n?\n!\n-
+0x9010b7b4	string	cpath
+0x9010b7bc	string	.\?.dll;!\?.dll;!\loadall.dll
+0x9010b7dc	string	.\?.lua;!\lua\?.lua;!\lua\?\init.lua;!\?.lua;!\?\init.lua
+0x9010b818	string	randomseed
+0x9010b824	string	random
+0x9010b937	string	9interval is empty
+0x9010b94c	string	wrong number of arguments
+0x9010b990	string	traceback
+0x9010b99c	string	setupvalue
+0x9010b9a8	string	setmetatable
+0x9010b9b8	string	setlocal
+0x9010b9c4	string	sethook
+0x9010b9cc	string	setfenv
+0x9010b9d4	string	getupvalue
+0x9010b9e0	string	getmetatable
+0x9010b9f0	string	getregistry
+0x9010b9fc	string	getlocal
+0x9010ba08	string	getinfo
+0x9010ba10	string	gethook
+0x9010ba18	string	getfenv
+0x9010ba20	string	tail return
+0x9010ba2c	string	count
+0x9010bac8	string	nil or table expected
+0x9010bae0	string	'setfenv' cannot change environment of given object
+0x9010bb14	string	function or level expected
+0x9010bb38	string	activelines
+0x9010bb44	string	namewhat
+0x9010bb58	string	currentline
+0x9010bb6c	string	lastlinedefined
+0x9010bb7c	string	linedefined
+0x9010bb88	string	short_src
+0x9010bb94	string	source
+0x9010bb9c	string	invalid option
+0x9010bbb0	string	flnSu
+0x9010bbb8	string	level out of range
+0x9010bbcc	string	external hook
+0x9010bbdc	string	\n\t...
+0x9010bbf4	string	 in function '%s'
+0x9010bc08	string	 in main chunk
+0x9010bc1c	string	 in function <%s:%d>
+0x9010bc34	string	stack traceback:
+0x9010bc4c	string	yield
+0x9010bc5c	string	status
+0x9010bc64	string	resume
+0x9010bc6c	string	create
+0x9010bc7c	string	normal
+0x9010bc84	string	suspended
+0x9010bc90	string	xpcall
+0x9010bc98	string	unpack
+0x9010bca8	string	tonumber
+0x9010bcb4	string	select
+0x9010bcbc	string	rawset
+0x9010bcc4	string	rawget
+0x9010bccc	string	rawequal
+0x9010bcd8	string	pcall
+0x9010bce8	string	loadstring
+0x9010bcfc	string	gcinfo
+0x9010bd04	string	error
+0x9010bd0c	string	collectgarbage
+0x9010bd1c	string	assert
+0x9010bd24	string	setstepmul
+0x9010bd30	string	setpause
+0x9010bd44	string	collect
+0x9010bd4c	string	restart
+0x9010be98	string	base out of range
+0x9010beac	string	__metatable
+0x9010beb8	string	cannot change a protected metatable
+0x9010bedc	string	no function environment for tail call at level %d
+0x9010bf10	string	invalid level
+0x9010bf20	string	level must be non-negative
+0x9010bf48	string	reader function must return a string
+0x9010bf70	string	too many nested functions
+0x9010bf8c	string	=(load)
+0x9010bf94	string	assertion failed!
+0x9010bfa8	string	too many results to unpack
+0x9010bfc4	string	index out of range
+0x9010bfd8	string	%s: %p
+0x9010bfe0	string	boolean or proxy expected
+0x9010bffc	string	coroutine expected
+0x9010c010	string	too many results to resume
+0x9010c02c	string	cannot resume %s coroutine
+0x9010c048	string	too many arguments to resume
+0x9010c068	string	Lua function expected
+0x9010c080	string	newproxy
+0x9010c090	string	pairs
+0x9010c098	string	ipairs
+0x9010c0a0	string	_VERSION
+0x9010c0ac	string	Lua 5.1
+0x9010c0b8	string	coroutine
+0x9010c0c4	string	%s in precompiled chunk
+0x9010c0dc	string	invalid string id
+0x9010c0f8	string	bad block
+0x9010c104	string	LDIDecompress failed
+0x9010c11c	string	decoding mismatch
+0x9010c130	string	LDICreateDecompression failed
+0x9010c150	string	bad section
+0x9010c15c	string	\n\tno file '%s' in binary package
+0x9010c180	string	package module required
+0x9010c198	string	unexpected
+0x9010c1a4	string	Xbox.Unknown
+0x9010c1b4	string	e:\bt\248805\core\private\corelibs\luaxbox\src\luaxuid.cpp
+0x9010c1f0	string	Invalid xuid
+0x9010c200	string	Xuid expected
+0x9010c4a0	string	e:\bt\248805\core\private\xam\apps\nuitroubleshooter\src\obj\xbox\Guide.NuiTroubleshooter.pdb
+0x9015701f	string	MainMenu.xur
+0x9015800b	string	 pl-pl\HardwareCheckMainScene.xus
+0x90158035	string	pl-pl\HistoryScene.xus
+0x90158054	string	pl-pl\MainMenu.xus
+0x9015806f	string	pl-pl\MoreInfoScene.xus
+0x9015808f	string	pl-pl\nuiplaceholderscene.xus
+0x901580b5	string	pl-pl\placeholderscene.xus
+0x901580d8	string	pl-pl\PlayspaceMainScene.xus
+0x901580fd	string	pl-pl\Strings.xusXUIB
+0x9015817c	string	Scene_Main
+0x90158187	string	NuiTroubleshooter.MainMenuScene
+0x901581a7	string	TaskList
+0x901581b0	string	trans_FadeOut
+0x901581be	string	trans_FadeIn
+0x901581cb	string	Select
+0x901581d7	string	List_threeline
+0x901581e6	string	XuiList
+0x901581ee	string	graphic_metapane
+0x901581ff	string	RightPanelShader
+0x90158210	string	XuiLabel
+0x90158219	string	Header_bkg
+0x90158224	string	XuiFigure
+0x9015822e	string	NoDepthLabel
+0x9015823b	string	Label_BodyWhite
+0x9015824b	string	PlayspaceControlGroup
+0x90158261	string	XuiGroup
+0x9015826a	string	PlayspaceControlImage
+0x90158280	string	XuiImage
+0x90158289	string	TrackingLabel
+0x90158297	string	Label_Head
+0x901582a2	string	WelcomeText
+0x901582ae	string	SceneHeader
+0x901582ba	string	Kinect Tuner
+0x901582c7	string	HUDScene
+0x901582d0	string	XuiCanvas
+0x90159009	string	XuiText
+0x90159011	string	ErrorText
+0x9015901b	string	CXuiEditRThumbScroll
+0x90159030	string	edit_NoCaret
+0x9015903d	string	Error text
+0x90159048	string	XuiEdit
+0x90159050	string	FatalErrorSelectionList
+0x90159068	string	list_Common
+0x90159207	string	8Scene_Main
+0x90159213	string	trans_FadeOut
+0x90159221	string	trans_FadeIn
+0x9015922e	string	Select
+0x9015923a	string	PlayspaceBackground
+0x9015924e	string	XuiFigure
+0x90159258	string	graphic_metapane
+0x90159269	string	RightPanelShader
+0x9015927a	string	XuiLabel
+0x90159283	string	Header_bkg
+0x9015928e	string	DoneOptionList
+0x9015929d	string	list_Common
+0x901592a9	string	XuiCommonList
+0x901592b7	string	TestAgainMoreInfoList
+0x901592cd	string	NextMoreInfoList
+0x901592de	string	TiltBeginTestMoreInfoList
+0x901592f8	string	IgnoreBeginTestMoreInfoList
+0x90159314	string	TryAgainMoreInfoList
+0x90159329	string	BeginTestMoreInfoList
+0x90159356	string	NextManualTiltList
+0x90159369	string	NextOptionList
+0x90159378	string	TryAgainContinueMoreInfoList
+0x90159395	string	ManualTiltGroup
+0x901593a5	string	XuiButtonTiltDone
+0x901593b7	string	XuiButton
+0x901593c1	string	XuiButtonTiltDown
+0x901593d3	string	XuiButtonTiltUp
+0x901593f0	string	XuiGroup
+0x901593f9	string	WaitCursorControl
+0x9015940b	string	Loading_Large
+0x90159419	string	XuiControl
+0x90159424	string	PlayspaceControl
+0x90159435	string	PlayspaceVisualControl
+0x9015944c	string	PlayspaceControlImage
+0x90159462	string	XuiImage
+0x9015946b	string	TrackingLabel
+0x90159479	string	Label_Head
+0x90159484	string	Tracking your body
+0x90159497	string	StatusImage
+0x901594a3	string	SectionText
+0x901594af	string	Label_Body_small
+0x901594c0	string	WizardSteps
+0x901594cc	string	List_WizardSteps
+0x901594f7	string	SceneHeader
+0x90159503	string	Kinect Tuner
+0x90159510	string	SectionHeader
+0x9015951e	string	SectionSubHeader
+0x9015952f	string	Label_Body_1line_Dark
+0x90159545	string	HUDScene
+0x9015954e	string	XuiCanvas
+0x90159a24	string	Scene_Main
+0x90159a2f	string	trans_FadeOut
+0x90159a3d	string	trans_FadeIn
+0x90159a4a	string	Select
+0x90159a56	string	Header_bkg
+0x90159a61	string	XuiFigure
+0x90159a6b	string	SelectionList
+0x90159a79	string	list_Common
+0x90159a85	string	XuiCommonList
+0x90159a93	string	SectionText
+0x90159a9f	string	CXuiEditRThumbScroll
+0x90159ab4	string	edit_NoCaretSmall
+0x90159ac6	string	Text goes here
+0x90159ad5	string	XuiEdit
+0x90159add	string	WizardSteps
+0x90159ae9	string	List_WizardSteps
+0x90159b14	string	SceneHeader
+0x90159b20	string	Label_Head
+0x90159b2b	string	Kinect Tuner
+0x90159b38	string	XuiLabel
+0x90159b41	string	SectionHeader
+0x90159b4f	string	Label_Body_small
+0x90159b60	string	SectionSubHeader
+0x90159b71	string	Label_Body_1line_Dark
+0x90159b87	string	HUDScene
+0x90159b90	string	XuiCanvas
+0x90159dc5	string	SScene_Main
+0x90159dd1	string	SelectionList
+0x90159ddf	string	trans_FadeOut
+0x90159ded	string	trans_FadeIn
+0x90159dff	string	TableBackground
+0x90159e0f	string	Row_Status
+0x90159e1a	string	XuiFigure
+0x90159e24	string	Row_StepId
+0x90159e2f	string	Row_FlashVersion
+0x90159e40	string	Row_XdkVersion
+0x90159e4f	string	Row_ConsoleId
+0x90159e5d	string	Row_Title
+0x90159e67	string	Row_Time
+0x90159e70	string	Row_Date
+0x90159e79	string	RowHeadings
+0x90159e85	string	RowSeparator7
+0x90159e93	string	RowSeparator6
+0x90159ea1	string	RowSeparator5
+0x90159eaf	string	RowSeparator4
+0x90159ebd	string	RowSeparator3
+0x90159ecb	string	RowSeparator2
+0x90159ed9	string	RowSeparator1
+0x90159ee7	string	ColumnSeparator2
+0x90159ef8	string	ColumnSeparator1
+0x90159f09	string	XuiGroup
+0x90159f12	string	Session3
+0x90159f1b	string	Status3
+0x90159f23	string	XuiLabelRightJustify
+0x90159f38	string	XuiLabel
+0x90159f49	string	FlashVersion3
+0x90159f57	string	XdkVersion3
+0x90159f63	string	KinectSN3
+0x90159f80	string	ImageSession3
+0x90159f8e	string	XuiImage
+0x90159f97	string	ColumnNumber3
+0x90159fa7	string	Session2
+0x90159fb0	string	Status2
+0x90159fc0	string	FlashVersion2
+0x90159fce	string	XdkVersion2
+0x90159fda	string	KinectSN2
+0x90159ff7	string	ImageSession2
+0x9015a005	string	ColumnNumber2
+0x9015a015	string	Session1
+0x9015a01e	string	Status1
+0x9015a02e	string	FlashVersion1
+0x9015a03c	string	XdkVersion1
+0x9015a048	string	KinectSN1
+0x9015a065	string	ImageSession1
+0x9015a073	string	ColumnNumber1
+0x9015a083	string	StatusRH
+0x9015a08c	string	Label_Troubleshooter_RowHeading
+0x9015a0ac	string	StepIdRH
+0x9015a0b5	string	FlashVersionRH
+0x9015a0c4	string	XdkVersionRH
+0x9015a0d1	string	KinectSNRH
+0x9015a0dc	string	TitleRH
+0x9015a0e4	string	TimeRH
+0x9015a0eb	string	DateRH
+0x9015a0f2	string	SectionHeader
+0x9015a100	string	Label_Head_22_dark
+0x9015a113	string	SceneHeader
+0x9015a11f	string	Label_Head
+0x9015a12a	string	Kinect Tuner
+0x9015a137	string	KSNLabel
+0x9015a140	string	Kinect S/N goes here
+0x9015a155	string	HUDScene
+0x9015a15e	string	XuiCanvas
+0x9015a7a6	string	Scene_Main
+0x9015a7b1	string	HUDScene
+0x9015a7ba	string	XuiCanvas
+0x9015a829	string	Scene_Main
+0x9015a834	string	HUDScene
+0x9015a83d	string	XuiCanvas
+0x9015a8ac	string	Scene_Main
+0x9015a8b7	string	HUDScene
+0x9015a8c0	string	XuiCanvas
+0x9015b2cc	string	Audio and Speech
+0x9015b2dd	string	Start Test
+0x9015b2e8	string	Sensor Position
+0x9015b3f1	string	 Position the sensor as close to the top or bottom of the TV as possible, 2-6 ft (0.6-1.8 m) from the floor.
+0x9015b45e	string	Sensor Position
+0x9015b46e	string	Place the Kinect Sensor on a stable surface. Center it above or below your TV.\r\n\r\nAfter you've positioned the sensor, it will adjust its angle.
+0x9015b4fe	string	If the problem persists, unplug your sensor and visit www.xbox.com/support.
+0x9015b54a	string	\r\n\r\nIf you need more help with Kinect, visit www.xbox.com/support/kinect.
+0x9015b594	string	Continue Anyway
+0x9015b5a9	string	Tilt Down
+0x9015b5b3	string	Body tracking
+0x9015b5c1	string	Hand tracking
+0x9015b5cf	string	Your sensor is starting up. Please stand by.
+0x9015b5fc	string	USB bandwidth exceeded.
+0x9015b614	string	The Kinect Sensor was unplugged.
+0x9015b635	string	There was a problem with your USB connection.
+0x9015b663	string	The Kinect Sensor is blocked.
+0x9015b681	string	The Kinect Sensor is not level.
+0x9015b6a1	string	The Kinect Sensor can't move enough.
+0x9015b6c6	string	The Kinect Sensor can't move.
+0x9015b6e4	string	The Kinect Sensor has insufficient power.
+0x9015b70e	string	The Kinect Sensor isn't connected.
+0x9015b731	string	The Kinect Sensor needs to restart.
+0x9015b755	string	The Kinect Sensor is too hot.
+0x9015b773	string	Kinect is turned off.
+0x9015b789	string	The Kinect Sensor on this console isn't valid.
+0x9015b7b8	string	A problem has occurred with your Kinect Sensor (%s).
+0x9015b7ed	string	There's a USB connection problem.
+0x9015b80f	string	The Kinect Sensor needs an update.
+0x9015b832	string	A Kinect Sensor is connected, but it can't be verified.
+0x9015b86a	string	Too many devices are attached to the same USB hub. Make sure the Kinect Sensor is plugged in to a USB port on the back of the console, disconnect any unused devices, and try again.
+0x9015b91f	string	Reconnect it and wait a few minutes, then try again.
+0x9015b954	string	The Kinect Sensor requires a high-speed USB connection. Make sure the sensor is plugged in to a USB port on the back of the console, and verify that there are no low-speed USB hubs between the sensor and your console.
+0x9015ba2e	string	There's something in front of the sensor. Remove any objects from the area and try again.
+0x9015ba88	string	Place the sensor on a level surface and try again.
+0x9015babb	string	The sensor is trying to adjust its angle, but something is keeping it from moving. Remove any objects around the sensor and make sure it's on a level surface. If this doesn't work, unplug your sensor, plug it back in, and try again.
+0x9015bba4	string	The sensor is trying to adjust its angle, but something is keeping it from moving. Remove any objects around the sensor. If this doesn't work, unplug your sensor, plug it back in, and try again.
+0x9015bc67	string	Make sure its power supply is plugged in.
+0x9015bc91	string	Connect your sensor and wait a few minutes, then try again.
+0x9015bccd	string	Please wait a few seconds and try again.
+0x9015bcf6	string	Make sure there's enough ventilation around the device. Then, after the sensor has cooled, unplug it and plug it back in again.
+0x9015bd76	string	To turn it on, go to My Xbox and select System Settings, Kinect Settings.
+0x9015bdc0	string	Connect a valid sensor to your console.
+0x9015bde8	string	A problem has occurred with Kinect.
+0x9015be0c	string	Your Kinect Sensor is plugged in, but your console can't communicate with it.\r\n\r\nIf you have any unused devices connected, disconnect them and try again.
+0x9015bea6	string	To get the update, restart your console.
+0x9015becf	string	Unplug the sensor and plug it back in again.
+0x9015bf01	string	This game requires a Kinect Sensor.
+0x9015bf25	string	Plug your sensor into the back of your console. If you don't have one, select Exit Game to return to the Xbox Dashboard.
+0x9015bf9e	string	Kinect
+0x9015bfa5	string	Exit Game
+0x9015bfaf	string	Exit To Dashboard
+0x9015bfc1	string	Kinect
+0x9015bfce	string	Current Kinect S/N:
+0x9015bfe7	string	Flash Version
+0x9015bff5	string	Customer Support Information
+0x9015c012	string	Kinect S/N
+0x9015c01d	string	Support Information
+0x9015c031	string	Status
+0x9015c038	string	Step ID
+0x9015c045	string	Title
+0x9015c04b	string	XDK Version
+0x9015c05c	string	Check Kinect audio if Kinect can't hear you.
+0x9015c089	string	Check Kinect tracking if Kinect can't see or recognize you.
+0x9015c0c5	string	Fine-tune Kinect to your play space.
+0x9015c0ea	string	Find and fix problems with Kinect.
+0x9015c112	string	Tracking off
+0x9015c11f	string	This experience currently doesn't support Kinect tracking.
+0x9015c15a	string	More Info
+0x9015c164	string	Picture
+0x9015c16c	string	Body Tracking
+0x9015c17a	string	Kinect needs to make sure it can see your body. This test verifies that the sensor can see you and tell you apart from other objects in the room.\r\n\r\nFor the test, make sure you're standing in the center of the play space, and that you're not in contact with another object, like a couch. Also make sure nothing is on the floor near you, like a table, pillows, or pets.
+0x9015c2eb	string	Body Tracking
+0x9015c2f9	string	Stand 6-8 ft (1.8-2.5 m) from the sensor. You should see your head and as much of your body as possible.\r\n\r\nIf Kinect can't see enough of you, select Adjust Angle.
+0x9015c39d	string	Sensor Angle
+0x9015c3aa	string	The sensor needs to tilt. Make sure the sensor hasn't fallen over and isn't upside down. Remove any objects from around the sensor, or move it to an area that's clear. \r\n\r\nIf the problem persists, exit your game, then unplug the sensor and plug it back in.
+0x9015c4ab	string	Couldn't adjust the sensor because something is keeping it from moving. \r\n\r\nMake sure the sensor is upright and that no objects are near it.
+0x9015c538	string	Sensor Angle
+0x9015c545	string	Couldn't adjust the sensor angle. Wait a few minutes and try again.
+0x9015c589	string	Couldn't adjust the sensor. Please try again.
+0x9015c5b7	string	Sensor Angle
+0x9015c5c4	string	Couldn't adjust the sensor angle because it was moved while it was being adjusted. Make sure not to touch the sensor while it's moving.
+0x9015c64c	string	Couldn't adjust the sensor to the correct angle because it was moved. \r\n\r\nTry again, making sure not to touch the sensor.
+0x9015c6c6	string	Sensor Angle
+0x9015c6d3	string	Couldn't adjust the sensor angle.\r\n\r\nIf the problem persists, visit www.xbox.com/support.
+0x9015c72d	string	Couldn't adjust the sensor to the correct angle. \r\n\r\nIf the problem persists, visit www.xbox.com/support.
+0x9015c797	string	Sensor Angle
+0x9015c7a4	string	Couldn't adjust the sensor angle. If the problem persists, visit www.xbox.com/support.
+0x9015c7fb	string	Couldn't adjust the sensor. If the problem persists, visit www.xbox.com/support.
+0x9015c84c	string	Sensor Angle
+0x9015c859	string	The sensor might not be able to see the play space because the edge of the surface it's on is in the way. Move the sensor closer to the edge so it can see the floor.
+0x9015c8ff	string	Couldn't adjust the sensor because it can't see the floor.\r\n\r\nMove it closer to the edge of the shelf or table and try again.
+0x9015c97d	string	Sensor Angle
+0x9015c98a	string	Couldn't adjust the sensor angle. Try the test again.\r\n\r\nIf the problem persists, restart the console and try again.
+0x9015c9ff	string	Couldn't adjust the sensor. Please try again.
+0x9015ca2d	string	The sensor angle has been adjusted.
+0x9015ca51	string	Kinect is finding the default viewing angle.
+0x9015ca7e	string	Saving Settings
+0x9015ca8e	string	You're ready to play!
+0x9015caa4	string	Kinect can see you. You're ready to play!
+0x9015cace	string	Saving your tracking settings.
+0x9015caed	string	Sensor Angle
+0x9015cafa	string	Play Space
+0x9015cbe6	string	 Some types of clothing.\r\n\r\nCorrect the problem by removing or blocking the light or by changing your clothes.
+0x9015cc55	string	Play Space
+0x9015cc60	string	This picture shows what Kinect uses to find players.\r\n\r\nMake sure the area in front of the sensor is clear.\r\n\r\nSelect More Info to learn how sunlight, lamps, and some clothing can affect tracking.
+0x9015cd25	string	Adjust Angle
+0x9015cd32	string	Tilt your sensor up or down. You should see all of your head and as much of your body as possible.
+0x9015cd95	string	Adjust Angle
+0x9015cda2	string	Tilt your sensor up or down. You should see all of your head and as much of your body as possible.
+0x9015ce05	string	Kinect needs to verify that it can see you.\r\n\r\nMake sure you're the only one in the play space, face forward, and stand still during the test.
+0x9015ce94	string	Tracking
+0x9015ce9d	string	There's been a change in your configuration. The Kinect Tuner will now restart.
+0x9015ceed	string	The game that was running has changed. The Kinect Tuner will now restart.
+0x9015cf37	string	Configuration Change
+0x9015cf4c	string	Kinect Tuner
+0x9015cf59	string	Tracking
+0x9015cf62	string	Calibration
+0x9015cf75	string	Try Again
+0x9015cf7f	string	Try Again
+0x9015cf89	string	Tilt Up
+0x9015cf91	string	Body Turned
+0x9015cf9d	string	Turn your body to face the sensor. During the test, stand still and keep facing the sensor.
+0x9015cff9	string	Body turned.\r\n\r\nKinect can't see all of your body. Face forward and try again.
+0x9015d048	string	Looking for player...\r\n\r\nStay in the play space. Kinect is making sure it can distinguish you from other objects and players in the room.
+0x9015d0d2	string	Lower Body Not Detected
+0x9015d0ea	string	Make sure you're standing still in the center of the play space, and that nothing is in the way.\r\n    \r\nDuring the test, look at the image. You should see the room and yourself. If you don't see your head and most of your body, go back a few steps in the Kinect Tuner and adjust your sensor's angle.
+0x9015d216	string	Lower body not detected.\r\n\r\nKinect can't see the lower part of your body. Make sure nothing is in the way and try again.
+0x9015d28f	string	Too Far Left
+0x9015d29c	string	Make sure you're standing in the center of the play space. If you are, check the sensor to make sure it's pointing at you.
+0x9015d317	string	Too far left.\r\n\r\nYou're standing too far to the left. Make sure you're in the center of the play space and try again.
+0x9015d38d	string	Too Far Right
+0x9015d39b	string	Make sure you're standing in the center of the play space. If you are, check the sensor to make sure it's pointing at you.
+0x9015d416	string	Too far right.\r\n\r\nYou're standing too far to the right. Make sure you're in the center of the play space and try again.
+0x9015d48e	string	Skipped the play space verification tests.
+0x9015d4b9	string	Face Not Clear
+0x9015d4c8	string	Make sure nothing is covering your face, like a hat, reflective glasses, or your hair. Also check for reflections or glare.\r\n\r\nMake sure your room has enough light so that your face is clearly visible and evenly lit. Try to minimize side or back lighting, especially from a window.\r\n\r\nIf the problem persists, try placing the sensor closer to the top or bottom of the TV.
+0x9015d63c	string	Face not clear.\r\n\r\nThis picture shows what Kinect uses to recognize you. Make sure your face is clearly visible and evenly lit. Select More Info to see why this may be happening.
+0x9015d6ef	string	Status code: %s
+0x9015d6ff	string	Player or Play Space Not Detected
+0x9015d721	string	Make sure the sensor is pointing out into the room, that your lights are on, and that you're standing in the center of the play space.\r\n\r\nIf the problem persists, visit www.xbox.com/support.\r\n
+0x9015d7e2	string	Player or play space not detected.\r\n\r\nKinect can't see anyone. Please try again.
+0x9015d833	string	Head Not Detected
+0x9015d845	string	Make sure you're standing still in the center of the play space.\r\n\r\nIn the image, you should see the room and yourself. If you don't see your head and most of your body, adjust your sensor's angle.
+0x9015d90b	string	Head not detected.\r\n\r\nThis picture shows what Kinect uses to recognize you. Kinect can't see your head. Make sure you're standing still in the center of the play space.
+0x9015d9b4	string	Face Obscured

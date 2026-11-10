@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
 
-MAINICON               ICON                    "..\\..\\..\\assets\\icon\\icon.ico"
+MAINICON               ICON                    "..\\..\\..\\assets\\icon\\afterdark\\generated\\icon.ico"
 
 // wxWidgets resource file (cursors, icons, etc.)
 #include "wx/msw/wx.rc"

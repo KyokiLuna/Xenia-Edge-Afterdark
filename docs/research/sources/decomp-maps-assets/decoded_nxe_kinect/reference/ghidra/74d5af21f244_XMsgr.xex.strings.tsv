@@ -1,0 +1,234 @@
+va	data_type	text
+0x9172068c	unicode	strings.xus
+0x917206b0	unicode	XuiCanvas
+0x917206f0	unicode	XMsgr
+0x917207c0	unicode	MESSENGER/SETTINGS/PSM/TITLENAME
+0x91720804	unicode	MESSENGER/SETTINGS/PSM/TEXT
+0x91720844	unicode	prod
+0x91720850	unicode	MESSENGER/SETTINGS/SERVER
+0x91720884	unicode	noisy
+0x91720890	unicode	normal
+0x917208a0	unicode	quiet
+0x917208ac	unicode	MESSENGER/SETTINGS/POPUPS
+0x917208e0	unicode	MESSENGER/SETTINGS/PASSPORT%d
+0x9172091c	unicode	MESSENGER/SETTINGS/PASSWORD%d
+0x91720958	unicode	TRUE
+0x91720968	unicode	MESSENGER/SETTINGS/ALWAYSUSETHESECREDENTIALS
+0x917209c8	unicode	MESSENGER/SETTINGS/PROXYSERVER
+0x91720a08	string	\Device\Harddisk0\Partition1\DEVKIT\messenger.xml
+0x91720a3c	unicode	Ride the Metro!
+0x91720a70	string	HH:mm:ss
+0x91720a7c	string	dddd, MMMM dd, yyyy
+0x91720a90	string	MM/dd/yy
+0x91720aa4	string	December
+0x91720ab0	string	November
+0x91720abc	string	October
+0x91720ac4	string	September
+0x91720ad0	string	August
+0x91720ae8	string	April
+0x91720af0	string	March
+0x91720af8	string	February
+0x91720b04	string	January
+0x91720b3c	string	Saturday
+0x91720b48	string	Friday
+0x91720b50	string	Thursday
+0x91720b5c	string	Wednesday
+0x91720b68	string	Tuesday
+0x91720b70	string	Monday
+0x91720b78	string	Sunday
+0x917213a8	string	SunMonTueWedThuFriSat
+0x917213c0	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x91721440	unicode	<Data><PSM>%ws</PSM><CurrentMedia></CurrentMedia><MachineGuid></MachineGuid></Data>
+0x917214e8	unicode	<Data><PSM>%ws</PSM><CurrentMedia>XBOXMSGR\0Game\01\0{0}: {1} ({2})\0Xbox 360\0%ws\0%ws\0%ws\0%ws\0\0</CurrentMedia><MachineGuid></MachineGuid></Data>
+0x91721618	unicode	http://live.xbox.com/profile/profile.aspx?GamerTag=%ws&amp;appid=messenger
+0x917216b0	unicode	61056
+0x917216c8	unicode	%ws:
+0x917216d4	unicode	&quot;
+0x917216e4	unicode	&apos;
+0x917216f4	unicode	&amp;
+0x91721700	unicode	&gt;
+0x9172170c	unicode	&lt;
+0x91721738	string	0123456789ABCDEF
+0x91721760	string	0123456789abcdefSB
+0x91721780	unicode	Content-Type:
+0x9172179c	unicode	text/plain; charset=UTF-8
+0x917217d0	unicode	text/plain
+0x917217e8	unicode	text/html; charset=UTF-8
+0x9172181c	unicode	text/html
+0x91721830	unicode	text/x-msmsgscontrol
+0x9172185c	unicode	TypingUser:
+0x91721874	unicode	application/x-msmsgsspmessage
+0x917218b0	unicode	text/x-msmsgssystemmessage; charset=UTF-8
+0x91721904	unicode	text/x-msmsgssystemmessage
+0x91721940	unicode	application/x-msmsgssystemmessage
+0x91721984	unicode	application/x-msnmsgrp2p
+0x917219b8	unicode	text/x-msmsgsinvite; charset=UTF-8
+0x91721a00	unicode	text/x-msmsgsinvite
+0x91721a28	unicode	text/x-msnmsgr-datacast; charset=UTF-8
+0x91721a78	unicode	text/x-msnmsgr-datacast
+0x91721aa8	unicode	application/x-msnmsgrp2p; charset=UTF-8
+0x91721af8	unicode	text/x-msmsgsprofile; charset=UTF-8
+0x91721b40	unicode	text/x-msmsgsprofile
+0x91721b6c	unicode	Invitation-Cookie
+0x91721b90	unicode	Type:
+0x91721b9c	unicode	Arg1:
+0x91721ba8	unicode	Arg2:
+0x91721bb8	unicode	LoginTime:
+0x91721bd0	unicode	sid:
+0x91721be4	unicode	MSPAuth:
+0x91721bf8	unicode	ClientIP:
+0x91721c0c	unicode	ClientPort:
+0x91721c34	unicode	.NET Messenger Service
+0x91721c80	unicode	\r\nCancel-Code: REJECT_NOT_INSTALLED\r\n\r\n
+0x91721cd0	unicode	MIME-Version: 1.0\r\nContent-Type: text/x-msmsgsinvite; charset=UTF-8\r\n\r\nInvitation-Command: CANCEL\r\nInvitation-Cookie: 
+0x91721dd8	unicode	http://live.xbox.com/profile/profile.aspx?GamerTag=
+0x91721e40	unicode	Data/PSMURL
+0x91721e58	unicode	Data/PSM
+0x91721e74	string	memsvc
+0x91721e84	string	00000000000000000000000000000000
+0x91721eb0	string	mode=ttl&login=%2&username=%3&sid=%4!lu!&kv=%5!lu!&id=%6!lu!&sl=%7!lu!&%12=%8&auth=%9&creds=%10&svc=%11&js=yes
+0x91721f28	string	%hs&CLCID=0x%04x&Country=%hs
+0x91721f4c	string	0x0409
+0x91722140	string	7.5.0324
+0x91722150	string	winnt
+0x91722160	string	%d.%d
+0x91722170	string	0x%04x
+0x91722178	string	clcid
+0x91722180	string	7.5.0324
+0x917221ac	unicode	MIME-Version:
+0x917221d0	unicode	Content-Type:
+0x917221ec	unicode	text/plain; charset=UTF-8
+0x91722220	unicode	text/x-msmsgscontrol
+0x9172224c	unicode	TypingUser:
+0x917222f8	unicode	Message-ID:
+0x91722310	unicode	Chunks:
+0x91722320	unicode	Chunk:
+0x91722330	unicode	Message-ID: %1\r\nChunks: %2!d!\r\n\r\n
+0x91722378	unicode	Message-ID: %1\r\nChunk: %2!d!\r\n\r\n
+0x917223c0	string	MSMSGS
+0x9172246d	string	r$dMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n
+0x917225d8	string	%lu %s %s %s
+0x917225e8	string	%lu %s %s
+0x917225fd	string	lu %s
+0x91722604	string	%lu\r\n
+0x9172260c	string	%lu %c 
+0x91722614	string	MsgrProf
+0x91722620	unicode	%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x
+0x91722684	string	%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x
+0x917226f4	string	%s:\%s
+0x9172270c	unicode	lang_preference:
+0x91722730	unicode	country:
+0x91722744	unicode	PostalCode:
+0x9172275c	unicode	Gender:
+0x91722784	unicode	MemberIdHigh:
+0x917227a0	unicode	MemberIdLow:
+0x917227bc	unicode	EmailEnabled:
+0x917227e0	unicode	(E-mail Address Not Verified)
+0x9172281c	unicode	(E-mail Address Not Verified)
+0x91722858	string	buttons.buddy.microsoft.com
+0x91722874	string	wakko.buddy.microsoft.com
+0x91722890	string	sapphire.buddy.microsoft.com
+0x917228b0	string	ds9.buddy.microsoft.com
+0x917228c8	string	http://nexus.passporttest.com/next/rdr/pprdr.asp
+0x917228fc	string	spock.buddy.microsoft.com
+0x91722918	string	http://g.msn-ppe.com
+0x91722930	string	gateway.messenger.hotmail-ppe.com
+0x91722954	string	http://nexus.passporttest.com/rdr/pprdr.asp
+0x91722980	string	messenger.hotmail-ppe.com
+0x9172299c	string	http://g.msn-int.com
+0x917229b4	string	gateway.messenger.hotmail-int.com
+0x917229d8	string	http://MessWeb/AppDirectory/AppDirectory.asmx
+0x91722a08	string	http://nexus.passport-int.com/rdr/pprdr.asp
+0x91722a34	string	messenger.hotmail-int.com
+0x91722a50	string	http://g.msn.com
+0x91722a64	string	gateway.messenger.hotmail.com
+0x91722a84	string	http://nexus.passport.com/rdr/pprdr.asp
+0x91722aac	string	messenger.hotmail.com
+0x91722b9d	string	SNP11
+0x91722bb8	unicode	MIME-Version:
+0x91722bdc	unicode	Content-Type:
+0x91722bf8	unicode	application/x-msmsgsspmessage
+0x91722c34	unicode	Type:
+0x91722c40	unicode	Arg1:
+0x91722c68	string	fname
+0x91722c70	string	lname
+0x91722c80	string	state
+0x91722c88	string	country
+0x91722c98	string	MSMSGS
+0x91722cc4	string	PERSON
+0x91722ccc	string	COMPOSE
+0x91722cd4	string	INBOX
+0x91722cdc	string	FOLDERS
+0x91722ce4	string	MOBILE
+0x91722cec	string	CHGMOB
+0x91722cf4	string	PROFILE
+0x91722d04	string	PROFILE
+0x91722d0c	string	ADDRBOOK
+0x91722d18	string	ADVSEARCH
+0x91722d24	string	INTSEARCH
+0x91722da4	string	MSNP11
+0x91722e48	string	%u %s %d\r\n%s
+0x91722e58	string	%lu 0x040c Xbox 360 Xenon XBOXMSGR 2.0.%d msmsgs %s
+0x91722e8c	string	0x409
+0x91722e94	string	 %lu\r\n
+0x91722ea0	string	 %s %s
+0x91722ea8	string	WindowsMessenger
+0x91722ec0	string	%lu %s 0x%04x %s %s %s %s
+0x91722edc	string	%lu %lu 0x%04x %s %s %s %s
+0x91722ef8	string	%lu %s I %s
+0x91722f04	string	%lu %s S %s
+0x91722f10	string	%s %d\r\n%s %s\r\n
+0x91722f20	string	%s %S\r\n%s %S\r\n\r\n
+0x91722f34	string	%lu %s %d
+0x91722f40	string	%lu %c
+0x91722f48	string	%u %d\r\n
+0x91722fe0	string	close
+0x91723008	unicode	/gateway/gateway.dll
+0x917230a4	string	Action=%s&SessionID=%s
+0x917230bc	string	SessionID=%s
+0x917230cc	string	Action=%s&Server=%s&IP=%s
+0x917230e8	string	%d.%d.%d.%d
+0x917230f4	string	http://
+0x917231e0	string	PassportConfig:
+0x917231f0	string	PassportURLs:
+0x91723200	string	WWW-Authenticate:
+0x91723214	string	Authentication-Info:
+0x91723230	string	WS-SecureConversation
+0x91723248	string	<wsse:BinarySecurityToken Id='PPToken'>
+0x91723270	string	</wsse:BinarySecurityToken>
+0x9172328c	string	https://
+0x91723298	string	Authorization: Passport1.4 OrgVerb=GET,OrgURL=http://messenger.msn.com,sign-in=%s,pwd=%s,%s
+0x917232f8	string	Authorization: Passport1.4 OrgVerb=GET,OrgURL=http%%3A%%2F%%2Fmessenger%%2Emsn%%2Ecom,sign-in=%s,pwd=%s,%s
+0x91723364	unicode	Location:
+0x91723378	string	DALogin=
+0x91723384	string	da-status=
+0x91723390	string	from-PP=
+0x9172339c	string	redir
+0x917233a4	string	success
+0x917233ac	string	ConfigVersion=
+0x917233c4	string	%04u-%02u-%02uT%02u:%02u:%02uZ
+0x917233f4	string	&amp;
+0x917233fc	string	ru=http%3A%2F%2F
+0x91723424	string	close
+0x9172342c	string	Content-Length:
+0x9172343c	string	Connection:
+0x91723448	string	SessionID=
+0x91723454	string	GW-IP=
+0x9172345c	string	Session=close
+0x9172346c	string	Proxy-Authenticate:
+0x91723480	string	Basic
+0x91723488	string	realm="
+0x917234a8	unicode	amp;
+0x917234b4	unicode	quot;
+0x917234c0	unicode	apos;
+0x917234dc	string	deviceselector.xex
+0x9172352c	string	CertPack
+0x91723538	string	CertPack.ini
+0x91723548	string	CertPack:\*.cer
+0x9172358c	string	xam.xex
+0x91723730	string	e:\xenon\flash-fall08\core\private\xam\apps\messenger\src\obj\xbox\XMsgr.pdb
+0x91731a98	string	}d(P}k
+0x917573f4	string	POST http://%s/%s?%s
+0x91757410	string	 HTTP/1.1\r\nAccept: */*\r\nAccept-Language: en-us\r\nAccept-Encoding: gzip, deflate\r\nUser-Agent: MSMSGS\r\nHost: %s\r\nProxy-Connection: Keep-Alive\r\nConnection: Keep-Alive\r\nPragma: no-cache\r\nContent-Type: application/x-msn-messenger\r\nContent-Length: %d\r\n
+0x91757508	string	Proxy-Authorization: Basic %s\r\n
+0x91761006	unicode	dania filmu wideo

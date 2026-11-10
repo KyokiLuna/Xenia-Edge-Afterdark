@@ -1,0 +1,4 @@
+hostloader.dll exports
+======================
+
+{"confidence": "CONFIRMED", "function_va": "0x8A031780", "module": "hostloader.dll", "ordinal": "0x00000001", "resolved_name": ""}

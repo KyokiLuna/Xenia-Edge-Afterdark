@@ -278,6 +278,7 @@ void GraphicsSystem::Shutdown() {
   }
 
   StopFrameLimiter();
+  interrupt_callbacks_.Clear();
 
   if (presenter_) {
     if (app_context_) {
@@ -412,6 +413,7 @@ void GraphicsSystem::WriteRegister(uint32_t addr, uint32_t value) {
 }
 
 void GraphicsSystem::InitializeRingBuffer(uint32_t ptr, uint32_t size_log2) {
+  ring_initialization_generation_.fetch_add(1, std::memory_order_acq_rel);
   command_processor_->InitializeRingBuffer(ptr, size_log2);
 }
 
@@ -422,14 +424,75 @@ void GraphicsSystem::EnableReadPointerWriteBack(uint32_t ptr,
 
 void GraphicsSystem::SetInterruptCallback(uint32_t callback,
                                           uint32_t user_data) {
-  interrupt_callback_ = callback;
-  interrupt_callback_data_ = user_data;
+  interrupt_callbacks_.Set({callback, user_data});
   XELOGGPU("SetInterruptCallback({:08X}, {:08X})", callback, user_data);
 }
 
+void GraphicsSystem::SetInterruptCallbackForProcess(
+    uint32_t callback, uint32_t user_data, uint32_t process_type,
+    uint32_t owner_hmodule, std::shared_ptr<void> owner_pin) {
+  interrupt_callbacks_.Set({callback, user_data}, process_type, owner_hmodule,
+                           std::move(owner_pin));
+  XELOGGPU("SetInterruptCallback({:08X}, {:08X}), process {}, module {:08X}",
+           callback, user_data, process_type, owner_hmodule);
+}
+
 void GraphicsSystem::DispatchInterruptCallback(uint32_t source, uint32_t cpu) {
-  kernel_state()->EmulateCPInterruptDPC(interrupt_callback_,
-                                        interrupt_callback_data_, source, cpu);
+  // Registration provenance does not classify this event. Preserve the old
+  // legacy selection and TITLE DPC policy until submission ownership is known.
+  if (!interrupt_callbacks_.DispatchLegacy([&](const auto& registration) {
+        kernel_state()->EmulateCPInterruptDPC(
+            registration.callback(), registration.user_data(), source, cpu);
+      }) &&
+      !interrupt_callbacks_.IsStopped()) {
+    // Source-0 background scheduling still occurs once without a callback.
+    kernel_state()->EmulateCPInterruptDPC(0, 0, source, cpu);
+  }
+}
+
+GraphicsInterruptRegistry::Snapshot GraphicsSystem::CaptureInterruptCallback(
+    uint32_t process_type) const {
+  return interrupt_callbacks_.CaptureOwner(process_type);
+}
+
+bool GraphicsSystem::DispatchInterruptCallback(
+    const GraphicsInterruptRegistry::Snapshot& token, uint32_t process_type,
+    uint64_t generation, uint32_t source, uint32_t cpu) {
+  const bool invoked = interrupt_callbacks_.DispatchOwner(
+      token, process_type, generation, [&](const auto& registration) {
+        kernel_state()->EmulateCPInterruptDPC(registration.callback(),
+                                              registration.user_data(), source,
+                                              cpu, process_type);
+      });
+  if (!invoked && !interrupt_callbacks_.IsStopped()) {
+    kernel_state()->EmulateCPInterruptDPC(0, 0, source, cpu);
+  }
+  return invoked;
+}
+
+bool GraphicsSystem::PrepareInterruptCallbackModuleShutdown(uint32_t hmodule) {
+  return interrupt_callbacks_.PrepareModuleShutdown(hmodule);
+}
+
+bool GraphicsSystem::BeginInterruptCallbackModuleShutdown(uint32_t hmodule) {
+  return interrupt_callbacks_.BeginModuleShutdown(hmodule);
+}
+
+void GraphicsSystem::RetireInterruptCallbacksForModule(uint32_t hmodule) {
+  interrupt_callbacks_.RetireModule(hmodule);
+}
+
+bool GraphicsSystem::StopInterruptCallbacksAndWait() {
+  return interrupt_callbacks_.StopAndWait();
+}
+
+void GraphicsSystem::RebindRestoredInterruptCallbackModule() {
+  const auto pair = interrupt_callbacks_.legacy_pair();
+  if (pair.callback) {
+    kernel_state()->RegisterGraphicsInterruptCallback(
+        pair.callback, pair.user_data,
+        GraphicsInterruptRegistry::kUnclassified);
+  }
 }
 
 void GraphicsSystem::MarkVblank() {
@@ -550,15 +613,13 @@ void GraphicsSystem::Resume() {
 }
 
 bool GraphicsSystem::Save(ByteStream* stream) {
-  stream->Write<uint32_t>(interrupt_callback_);
-  stream->Write<uint32_t>(interrupt_callback_data_);
+  interrupt_callbacks_.SaveLegacy(stream);
 
   return command_processor_->Save(stream);
 }
 
 bool GraphicsSystem::Restore(ByteStream* stream) {
-  interrupt_callback_ = stream->Read<uint32_t>();
-  interrupt_callback_data_ = stream->Read<uint32_t>();
+  interrupt_callbacks_.RestoreLegacy(stream);
 
   return command_processor_->Restore(stream);
 }

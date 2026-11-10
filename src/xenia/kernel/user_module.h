@@ -25,6 +25,7 @@ class ElfModule;
 }  // namespace cpu
 namespace kernel {
 class XThread;
+class NativeImportDomain;
 }  // namespace kernel
 }  // namespace xe
 
@@ -35,7 +36,9 @@ constexpr fourcc_t kEXESignature = make_fourcc('M', 'Z', 0, 0);
 
 class UserModule : public XModule {
  public:
-  UserModule(KernelState* kernel_state);
+  explicit UserModule(
+      KernelState* kernel_state, bool system_app_module = false,
+      std::shared_ptr<const cpu::GuestImportProvider> import_provider = {});
   ~UserModule() override;
 
   const std::string& path() const override { return path_; }
@@ -69,6 +72,17 @@ class UserModule : public XModule {
 
   bool is_executable() const { return processor_module_->is_executable(); }
   bool is_dll_module() const { return is_dll_module_; }
+  bool is_system_app_module() const { return system_app_module_; }
+  uint64_t load_generation() const { return load_generation_; }
+  uint64_t native_import_domain_id() const {
+    return import_domain_id_.load(std::memory_order_acquire);
+  }
+  bool native_import_ready() const {
+    return native_import_ready_.load(std::memory_order_acquire);
+  }
+  bool has_execution_leases() const {
+    return execution_leases_.load(std::memory_order_acquire) != 0;
+  }
   bool is_attached() const {
     // Special case for skipping real XAM initialization as it will fail.
     if (bounding_filename() == "xam" || name_ == "xam" ||
@@ -125,8 +139,26 @@ class UserModule : public XModule {
   bool is_attached_ = false;
 
  private:
+  friend class KernelState;
+
   void CalculateHash();
   void DumpImage();
+
+  // Set before publication in the loader's module list. System DLLs must not
+  // receive title-process DLL notifications, even before their manual attach.
+  const bool system_app_module_;
+  const std::shared_ptr<const cpu::GuestImportProvider> import_provider_;
+  const uint64_t load_generation_;
+  // Membership is assigned before fresh child import compilation, or once
+  // explicitly for the separately loaded KRNL-only native root.
+  std::atomic<uint64_t> import_domain_id_{0};
+  std::weak_ptr<NativeImportDomain> import_domain_;
+  std::atomic<bool> native_import_finishing_{false};
+  std::atomic<bool> native_import_ready_{false};
+  // Protected by KernelState's global critical region.
+  bool unloading_ = false;
+  bool native_teardown_claimed_ = false;
+  std::atomic<uint32_t> execution_leases_{0};
 
   std::string name_;
   std::string path_;

@@ -1,0 +1,18 @@
+{
+  "module": "packages/su20076000_00000000/$flash_ximecore.xex",
+  "program": "aeea1bcb1d1c__flash_ximecore.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "49f9e186c1c5a38294f7dfb3d7b6195207c29e408b7889c1e62e2059c48f466a",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x91680400",
+  "functions": 573,
+  "calls": 1847,
+  "strings": 33,
+  "string_xrefs": 43,
+  "independent_sha256": "dc4e859c878a7afc58c8679431988d72c61113288b28d4642b39bbf6e548a2ed",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

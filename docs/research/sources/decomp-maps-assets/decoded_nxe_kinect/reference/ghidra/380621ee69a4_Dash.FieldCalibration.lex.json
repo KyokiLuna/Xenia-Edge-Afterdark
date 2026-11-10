@@ -1,0 +1,18 @@
+{
+  "module": "Dash.FieldCalibration.lex",
+  "program": "380621ee69a4_Dash.FieldCalibration.lex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "2e93e2fa332d4c3f151ea0ec27b79063a70dc91382c76d1ac06c58b4484b3de5",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9bd60400",
+  "functions": 837,
+  "calls": 2283,
+  "strings": 438,
+  "string_xrefs": 178,
+  "independent_sha256": "16afdba8a67731e93dedbc5b5f2a642ae3abea77119ab496d792c9853e995d29",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

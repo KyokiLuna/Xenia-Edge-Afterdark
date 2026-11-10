@@ -47,6 +47,13 @@ class SigninUI final : public XamDialog {
   bool creating_profile_ = false;
   char gamertag_[16] = "";
   bool valid_gamertag_ = false;
+  // A durable package may need a later metadata-discovery retry. Never create
+  // another package/XUID merely because LoadAccount was temporarily busy.
+  uint64_t created_profile_xuid_ = 0;
+  bool creation_failed_ = false;
+  bool signin_failed_ = false;
+  int avatar_preset_ = 0;
+  int stock_picture_ = 0;
 };
 
 }  // namespace ui

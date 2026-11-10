@@ -468,6 +468,9 @@ void GameConfigPanel::LoadOverrides() {
   std::map<std::string, std::string> rows;
   for (auto& [name, var] : *cvar::ConfigVars) {
     auto* config_var = static_cast<cvar::IConfigVar*>(var);
+    if (!xe::ui::IsUserEditableCvar(*config_var, true)) {
+      continue;
+    }
     auto path = toml::path(config_var->category() + "." + config_var->name());
     auto node = table.at_path(path);
     if (!node) {
@@ -541,7 +544,7 @@ bool GameConfigPanel::SaveOverrides() {
       continue;
     }
     auto* var = cvar::ConfigVars ? (*cvar::ConfigVars)[row->name] : nullptr;
-    if (!var || var->is_transient()) {
+    if (!var || !xe::ui::IsUserEditableCvar(*var, true)) {
       continue;
     }
     InsertTypedValue(by_category[var->category()], row->name,
@@ -578,7 +581,7 @@ void GameConfigPanel::OnAdd() {
   std::vector<std::string> names;
   std::vector<std::string> display;
   for (auto& [name, var] : *cvar::ConfigVars) {
-    if (var->is_transient()) {
+    if (!xe::ui::IsUserEditableCvar(*var, true)) {
       continue;
     }
     if (existing.count(name)) {

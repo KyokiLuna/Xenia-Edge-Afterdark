@@ -1,0 +1,85 @@
+Ghidra function and call graph
+==============================
+
+functions.tsv and calls.tsv cover every successfully analyzed unique image/header pair.
+Identical packaged/loose images share a program; aliases are in ghidra_programs.tsv.
+Indirect unresolved calls, dynamic code and missed functions remain outside static coverage.
+134555 functions; 342433 call/tail-jump references; 37802 string references.
+
+$flash_bootanim.xex: analyzed; functions=802; program=bdac8a810e8d__flash_bootanim.xex
+$flash_createprofile.xex: analyzed; functions=367; program=606759f54f86__flash_createprofile.xex
+$flash_dash.xex: analyzed; functions=26932; program=c62144f12a27__flash_dash.xex
+$flash_deviceselector.xex: analyzed; functions=229; program=2e8c3745a996__flash_deviceselector.xex
+$flash_gamerprofile.xex: analyzed; functions=974; program=3d18f82536bf__flash_gamerprofile.xex
+$flash_hud.xex: analyzed; functions=985; program=baa1200ad159__flash_hud.xex
+$flash_mfgbootlauncher.xex: analyzed; functions=313; program=01190a5d374c__flash_mfgbootlauncher.xex
+$flash_minimediaplayer.xex: analyzed; functions=462; program=c4809e1cc1e4__flash_minimediaplayer.xex
+$flash_signin.xex: analyzed; functions=506; program=48a0859f31d8__flash_signin.xex
+$flash_systemupdate.xex: analyzed; functions=2730; program=f042240ca76b__flash_systemupdate.xex
+$flash_systemupdate2pre.xex: analyzed; functions=2597; program=262df8ea0332__flash_systemupdate2pre.xex
+$flash_updater.xex: analyzed; functions=259; program=54443f41f7d8__flash_updater.xex
+$flash_vk.xex: analyzed; functions=268; program=56897db9c708__flash_vk.xex
+$flash_xam.xex: analyzed; functions=11851; program=54bd17895905__flash_xam.xex
+$flash_ximecore.xex: analyzed; functions=487; program=713c274a5600__flash_ximecore.xex
+$install_extender.xex: analyzed; functions=222; program=bd66d4514dca__install_extender.xex
+AvatarEditor.xex: analyzed; functions=7532; program=f335e4f4548c_AvatarEditor.xex
+AvatarMiniCreator.xex: analyzed; functions=260; program=e38ce775b8fa_AvatarMiniCreator.xex
+BiometricSetup.xex: analyzed; functions=5743; program=f7b7215b7d10_BiometricSetup.xex
+Dash.AttractionScreen.xex: analyzed; functions=474; program=c09e5b9599cb_Dash.AttractionScreen.xex
+Dash.FieldCalibration.lex: analyzed; functions=837; program=380621ee69a4_Dash.FieldCalibration.lex
+Dash.MP.Offline.lex: analyzed; functions=463; program=0f3888fd29de_Dash.MP.Offline.lex
+Dash.NuiTroubleshooter.lex: analyzed; functions=1121; program=5d9b1148e191_Dash.NuiTroubleshooter.lex
+Guide.AvatarMiniCreator.xex: analyzed; functions=265; program=63ea145e704e_Guide.AvatarMiniCreator.xex
+Guide.NuiTroubleshooter.xex: analyzed; functions=1763; program=b39584c2236e_Guide.NuiTroubleshooter.xex
+LivePack.xex: analyzed; functions=4259; program=870c8064b829_LivePack.xex
+Party.xex: analyzed; functions=1043; program=abe28672d49d_Party.xex
+XMsgr.xex: analyzed; functions=1100; program=74d5af21f244_XMsgr.xex
+Xam.Community.xex: analyzed; functions=1106; program=cf6f0be17cfa_Xam.Community.xex
+Xam.LiveMessenger.xex: analyzed; functions=898; program=9ca6332c61c0_Xam.LiveMessenger.xex
+Xam.WordRegister.xex: analyzed; functions=212; program=87dcc5973341_Xam.WordRegister.xex
+Xna_TitleLauncher.xex: analyzed; functions=3060; program=4f30fcbba42d_Xna_TitleLauncher.xex
+bootanim.xex: analyzed; functions=814; program=60ac8cd81fa6_bootanim.xex
+createprofile.xex: analyzed; functions=305; program=8b968b0f57d1_createprofile.xex
+dash.ExtraAVCodecs.xex: analyzed; functions=2181; program=eca91f842037_dash.ExtraAVCodecs.xex
+dash.NuiFirstUse.xex: analyzed; functions=698; program=e9ae762b3fec_dash.NuiFirstUse.xex
+dash.firstuse.xex: analyzed; functions=435; program=223b625ba437_dash.firstuse.xex
+dash.natalpregame.xex: analyzed; functions=267; program=d8ec5696180d_dash.natalpregame.xex
+dash.nuihub.xex: analyzed; functions=696; program=d3174f29c762_dash.nuihub.xex
+dash.xex: analyzed; functions=10507; program=79d0dd5ac21c_dash.xex
+dashnui.xex: analyzed; functions=5683; program=acf2bd2330c0_dashnui.xex
+deviceselector.xex: analyzed; functions=167; program=e5708845dfa8_deviceselector.xex
+feedback.xex: analyzed; functions=383; program=d8b2e787d5ad_feedback.xex
+friends.xex: analyzed; functions=1286; program=dc128d6f060e_friends.xex
+gamerprofile.xex: analyzed; functions=686; program=d8849922dc48_gamerprofile.xex
+hostloader.dll: analyzed; functions=3228; program=120b7f9906ca_hostloader.dll
+hud.xex: analyzed; functions=523; program=d280ec7cc7c7_hud.xex
+marketplace.xex: analyzed; functions=1935; program=fdacfc41f3d4_marketplace.xex
+mfgbootlauncher.xex: analyzed; functions=349; program=fa27ef0699b0_mfgbootlauncher.xex
+minimediaplayer.xex: analyzed; functions=361; program=bf9037085495_minimediaplayer.xex
+natalsu.xex: analyzed; functions=102; program=7bf4f5b3cad6_natalsu.xex
+nuihud.xex: analyzed; functions=259; program=3fa1a78a6211_nuihud.xex
+quickchat.xex: analyzed; functions=537; program=79f5281146fd_quickchat.xex
+runtime/v3.0/netcfusermode.dll: analyzed; functions=1447; program=774d91bfbf22_netcfusermode.dll
+runtime/v3.0/runtimehost.xex: analyzed; functions=10009; program=fa170df2b293_runtimehost.xex
+signin.xex: analyzed; functions=334; program=47cca1f27eca_signin.xex
+packages/su20076000_00000000/$flash_bootanim.xex: analyzed; functions=802; program=bdac8a810e8d__flash_bootanim.xex
+packages/su20076000_00000000/$flash_createprofile.xex: analyzed; functions=367; program=606759f54f86__flash_createprofile.xex
+packages/su20076000_00000000/$flash_dash.xex: analyzed; functions=26932; program=c62144f12a27__flash_dash.xex
+packages/su20076000_00000000/$flash_deviceselector.xex: analyzed; functions=229; program=2e8c3745a996__flash_deviceselector.xex
+packages/su20076000_00000000/$flash_gamerprofile.xex: analyzed; functions=974; program=3d18f82536bf__flash_gamerprofile.xex
+packages/su20076000_00000000/$flash_hud.xex: analyzed; functions=985; program=baa1200ad159__flash_hud.xex
+packages/su20076000_00000000/$flash_mfgbootlauncher.xex: analyzed; functions=313; program=01190a5d374c__flash_mfgbootlauncher.xex
+packages/su20076000_00000000/$flash_minimediaplayer.xex: analyzed; functions=462; program=c4809e1cc1e4__flash_minimediaplayer.xex
+packages/su20076000_00000000/$flash_signin.xex: analyzed; functions=506; program=48a0859f31d8__flash_signin.xex
+packages/su20076000_00000000/$flash_systemupdate.xex: analyzed; functions=2730; program=f042240ca76b__flash_systemupdate.xex
+packages/su20076000_00000000/$flash_systemupdate2pre.xex: analyzed; functions=2597; program=262df8ea0332__flash_systemupdate2pre.xex
+packages/su20076000_00000000/$flash_updater.xex: analyzed; functions=259; program=54443f41f7d8__flash_updater.xex
+packages/su20076000_00000000/$flash_vk.xex: analyzed; functions=268; program=56897db9c708__flash_vk.xex
+packages/su20076000_00000000/$flash_xam.xex: analyzed; functions=11851; program=54bd17895905__flash_xam.xex
+packages/su20076000_00000000/$flash_ximecore.xex: analyzed; functions=487; program=713c274a5600__flash_ximecore.xex
+packages/su20076000_00000000/$install_extender.xex: analyzed; functions=222; program=bd66d4514dca__install_extender.xex
+titlelauncher.xex: analyzed; functions=2460; program=c5e5aa1d1cb8_titlelauncher.xex
+updater.xex: analyzed; functions=107; program=970ce641951c_updater.xex
+vk.xex: analyzed; functions=504; program=c13a78561f33_vk.xex
+voicemail.xex: analyzed; functions=601; program=13fc6adbbdd9_voicemail.xex
+xam.xex: analyzed; functions=7571; program=f95146b44fbf_xam.xex

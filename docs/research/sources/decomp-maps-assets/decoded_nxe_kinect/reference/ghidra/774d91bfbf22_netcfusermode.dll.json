@@ -1,0 +1,19 @@
+{
+  "module": "runtime/v3.0/netcfusermode.dll",
+  "program": "774d91bfbf22_netcfusermode.dll",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "2b5ee33640aac709832f95a6f9135e02b38a3f0dcdc7ead632646bf3dbea68e8",
+  "import_envelope_version": 2,
+  "import_mode": "flat_image_fallback",
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x88500000",
+  "functions": 1447,
+  "calls": 4243,
+  "strings": 794,
+  "string_xrefs": 299,
+  "independent_sha256": "2b5ee33640aac709832f95a6f9135e02b38a3f0dcdc7ead632646bf3dbea68e8",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

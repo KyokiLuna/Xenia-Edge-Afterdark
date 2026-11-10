@@ -1,0 +1,18 @@
+{
+  "module": "xam.xex",
+  "program": "f95146b44fbf_xam.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "1733db65e4609b9567ddfc461933e957baac52a4783c0615133db31ab13407fd",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x81870400",
+  "functions": 7571,
+  "calls": 24615,
+  "strings": 1169,
+  "string_xrefs": 1208,
+  "independent_sha256": "1733db65e4609b9567ddfc461933e957baac52a4783c0615133db31ab13407fd",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

@@ -1,0 +1,570 @@
+va	data_type	text
+0x913e081c	unicode	klcc
+0x913e0828	unicode	diners
+0x913e0840	unicode	discover
+0x913e0854	unicode	amex
+0x913e0860	unicode	mastercard
+0x913e0878	unicode	visa
+0x913e0884	unicode	japanesekatakana
+0x913e08a8	unicode	japanesehiragana
+0x913e08cc	unicode	schfull
+0x913e08dc	unicode	latinextended
+0x913e08f8	unicode	russionfull
+0x913e0910	unicode	tchfull
+0x913e0920	unicode	koreanfull
+0x913e0938	unicode	japanesefull
+0x913e0954	unicode	latinalphabet
+0x913e0970	unicode	latinnumeric
+0x913e098c	unicode	latinipaddress
+0x913e09ac	unicode	latinphone
+0x913e09c4	unicode	latingamertag
+0x913e09e0	unicode	latinemail
+0x913e09f8	unicode	latinfull
+0x913e0a0c	unicode	phone
+0x913e0a18	unicode	contactemail
+0x913e0a34	unicode	postalcode
+0x913e0a4c	unicode	state
+0x913e0a58	unicode	city
+0x913e0a64	unicode	district
+0x913e0a78	unicode	street2
+0x913e0a88	unicode	street1
+0x913e0a98	unicode	none
+0x913e0aa4	string	GUIDEEVENT
+0x913e0ae8	unicode	LegendB
+0x913e0af8	unicode	btnB
+0x913e0b04	unicode	btnTryAgain
+0x913e0b1c	unicode	btnDismiss
+0x913e0b34	unicode	btnShutDown
+0x913e0b4c	unicode	btnSignIn
+0x913e0b60	unicode	labAccountEmail
+0x913e0b80	unicode	labSerialNum
+0x913e0b9c	unicode	labRemainingTime
+0x913e0bc0	unicode	Delinquent
+0x913e0bd8	unicode	TrayNavButton
+0x913e0c10	unicode	sharedres://ico_32x_OpticalMedia.png
+0x913e0c5c	unicode	memorykey://%x,%x_%016I64x
+0x913e0c94	string	minimediaplayer.xex
+0x913e0ca8	unicode	GamesTabScene
+0x913e0cd4	unicode	GamesTabSignedIn.xur
+0x913e0d00	unicode	GamesTabSignedOut.xur
+0x913e0d2c	unicode	GamesTabServer.xur
+0x913e0d5c	string	LiveServiceUrl.activity
+0x913e0d74	unicode	btnActivityFeed
+0x913e0d94	unicode	NatalTroubleshooterNavButton
+0x913e0dd0	unicode	AvatarAwardsNavButton
+0x913e0dfc	unicode	AchievementsNavButton
+0x913e0e28	unicode	ShutdownNavButton
+0x913e0e4c	unicode	ConnectToLiveNavButton
+0x913e0e7c	unicode	SignInNavButton
+0x913e0e9c	unicode	AccountManagementNavButton
+0x913e0ed4	unicode	RecoverGamerTagNavButton
+0x913e0f08	unicode	CreateNewProfileNavButton
+0x913e0f3c	unicode	ActiveDownloadsNavButton
+0x913e0f70	unicode	ActivityFeedNavButton
+0x913e0f9c	unicode	RedeemCodeNavButton
+0x913e0fc4	unicode	ProfileNavButton
+0x913e0fe8	unicode	QuickChatNavButton
+0x913e1010	unicode	MessagesNavButton
+0x913e1034	unicode	CommunitySessionsNavButton
+0x913e106c	unicode	PartyNavButton
+0x913e108c	unicode	BeaconsNavButton
+0x913e10b0	unicode	FriendsNavButton
+0x913e10e4	unicode	GuideMainSceneNavButton
+0x913e1120	unicode	sharedres://ico_32x_messenger.png
+0x913e1168	unicode	Options.xur
+0x913e1180	unicode	OptionsNotifications.xur
+0x913e11b4	unicode	QuickLaunch.xur
+0x913e11d4	string	ActivityFeed:
+0x913e1200	unicode	sharedres://ico_32x_Friend.png
+0x913e1250	unicode	sharedres://ico_32x_Beacons.png
+0x913e12a0	unicode	sharedres://ico_32x_StartParty.png
+0x913e12f4	unicode	sharedres://ico_32x_Mail.png
+0x913e133c	unicode	sharedres://GScore_white.png
+0x913e1394	unicode	GuideMainScene
+0x913e13b4	unicode	GuideMainServer.xur
+0x913e13dc	unicode	GuideMain.xur
+0x913e1428	unicode	Tab%u
+0x913e1438	unicode	%uCloseEnd
+0x913e1450	unicode	%uClose
+0x913e1460	unicode	%uOpenEnd
+0x913e1474	unicode	%uOpen
+0x913e1488	unicode	light%d
+0x913e14a0	unicode	LegendX
+0x913e14b0	unicode	txt_home
+0x913e14c4	unicode	txt_homeSel
+0x913e14dc	unicode	Tabscene
+0x913e14f8	unicode	imgHeadsetBattery
+0x913e151c	unicode	imgControllerBattery
+0x913e1548	unicode	btnX
+0x913e1554	unicode	HomeTabHostScene
+0x913e1580	unicode	HomeTabSignedIn.xur
+0x913e15a8	unicode	HomeTabSignedInLive.xur
+0x913e15d8	unicode	HomeTabSignedOut.xur
+0x913e1604	unicode	HomeTabServer.xur
+0x913e1628	unicode	HomeTabScene
+0x913e1654	unicode	btnBeacons
+0x913e166c	unicode	btnMessages
+0x913e1684	unicode	btnFriends
+0x913e169c	unicode	strings.xus
+0x913e16b4	string	Dash.MP.AccountMgmt.lex
+0x913e1700	unicode	XuiCanvas
+0x913e1740	unicode	MusicPlayPauseButton
+0x913e176c	unicode	MusicPlaybackModeButton
+0x913e179c	unicode	OptionsPlayTimer.xur
+0x913e17c8	unicode	COptionsPlayTimerScene
+0x913e17f8	unicode	COptionsPlayTimerAdjustTimeList
+0x913e1838	unicode	COptionsPlayTimerAddTimeScene
+0x913e1874	unicode	PasscodeScene
+0x913e1890	unicode	PasscodeGridScene
+0x913e18c8	unicode	MainScenePressPath
+0x913e18f0	unicode	GuideDashCommandNavButton
+0x913e1924	unicode	DashCommand
+0x913e193c	unicode	LiveRequiredNavButton
+0x913e1968	unicode	QLAllGamesTabScene
+0x913e1998	unicode	QLAllGamesList
+0x913e19b8	unicode	QLRecentlyPlayedTabScene
+0x913e19ec	unicode	QLRecentlyPlayedList
+0x913e1a18	unicode	QLRecentlyDownloadedTabScene
+0x913e1a5c	unicode	QLRecentlyDownloadedList
+0x913e1a90	unicode	ConsoleContractScene
+0x913e1abc	unicode	SmartGlassInfoScene
+0x913e1af4	string	createprofile.xex
+0x913e1be8	unicode	OptionsVoice.xur
+0x913e1c0c	unicode	SmartGlassInfo.xur
+0x913e1c34	unicode	btnWordRegister
+0x913e1d04	unicode	XuiButton
+0x913e1d18	unicode	XuiScene
+0x913e1d58	unicode	HUDScene
+0x913e1d6c	unicode	XuiList
+0x913e1d7c	unicode	XuiNavButton
+0x913e1dbc	string	event7
+0x913e1dc4	string	Guide
+0x913e1dcc	string	Guide/XButtonPress/
+0x913e1de0	string	event14
+0x913e1de8	string	GuideLaunch
+0x913e1df4	string	Guide/GuideLaunch/
+0x913e1e08	string	Select Music
+0x913e1e18	string	Guide/Media/SelectMusic/
+0x913e1e34	string	Volume
+0x913e1e3c	string	Guide/Media/Volume/
+0x913e1e50	string	Shuffle
+0x913e1e58	string	Guide/Media/Shuffle/
+0x913e1e70	string	Track Forward
+0x913e1e80	string	Guide/Media/TrackForward/
+0x913e1ea4	string	Guide/Media/Stop/
+0x913e1eb8	string	Track Back
+0x913e1ec4	string	Guide/Media/TrackBack/
+0x913e1ee4	string	Guide/Media/Play/
+0x913e1ef8	string	Windows Media Center
+0x913e1f10	string	Guide/Media/WindowsMediaCenter/
+0x913e1f30	string	Picture Library
+0x913e1f40	string	Guide/Media/PictureLibrary/
+0x913e1f5c	string	Music Library
+0x913e1f6c	string	Guide/Media/MusicLibrary/
+0x913e1f88	string	Video Library
+0x913e1f98	string	MediaTab
+0x913e1fa4	string	Guide/Media/VideoLibrary/
+0x913e1fc0	string	Turn Off Console
+0x913e1fd4	string	Guide/Settings/TurnOffConsole/
+0x913e1ff4	string	Account Management
+0x913e2008	string	Guide/Settings/AccountManagement/
+0x913e202c	string	System Settings
+0x913e203c	string	Guide/Settings/SystemSettings/
+0x913e205c	string	Family Settings
+0x913e206c	string	Guide/Settings/FamilySettings/
+0x913e208c	string	Preferences
+0x913e2098	string	Guide/Settings/Preferences/
+0x913e20b4	string	Notifications
+0x913e20c4	string	Guide/Settings/Notifications/
+0x913e20e4	string	Profile
+0x913e20ec	string	SettingsTab
+0x913e20f8	string	Guide/Settings/Profile/
+0x913e2110	string	Activity Feed
+0x913e2120	string	ActivityFeed
+0x913e2130	string	Redeem Code
+0x913e213c	string	Guide/Marketplace/RedeemCode/
+0x913e215c	string	Active Downloads
+0x913e2170	string	MarketplaceTab
+0x913e2180	string	Guide/Marketplace/ACTIVEDOWNLOADS/
+0x913e21a4	string	Game Library
+0x913e21b4	string	Guide/Games/GameLibrary/
+0x913e21d0	string	Achievements
+0x913e21e0	string	GamesTab
+0x913e21ec	string	Guide/Games/Achievements/
+0x913e2208	string	Open Tray
+0x913e2214	string	Guide/Main/DiscInTray/
+0x913e222c	string	Chat & IM
+0x913e2238	string	Guide/Main/ChatIM/
+0x913e224c	string	Game Activity
+0x913e225c	string	Guide/Main/Beacons/
+0x913e2270	string	Messages
+0x913e227c	string	Guide/Main/Messages/
+0x913e2294	string	Party
+0x913e229c	string	Guide/Main/Party/
+0x913e22b0	string	Friends
+0x913e22b8	string	Guide/Main/Friends/
+0x913e22cc	string	Quick Launch
+0x913e22dc	string	Guide/Main/Quicklaunch/
+0x913e22f4	string	Xbox Dashboard
+0x913e2304	string	MainTab
+0x913e230c	string	Guide/Main/XboxDashboard/
+0x913e2328	string	event9
+0x913e2330	unicode	InfoUpsellLive.xur
+0x913e2358	unicode	InfoUpsellLiveScene
+0x913e2388	unicode	btnJoinLive
+0x913e23a0	unicode	InfoMessage.xur
+0x913e23c0	unicode	InfoMessageScene
+0x913e23f4	unicode	LegendA
+0x913e2404	unicode	LegendY
+0x913e2414	unicode	btnTurnOff
+0x913e242c	unicode	labelBody
+0x913e2440	unicode	labelHeading
+0x913e245c	unicode	btnY
+0x913e2468	unicode	%s\n\n\n\nX: %d.%d
+0x913e2488	unicode	MiniMediaPlayer.xur
+0x913e24b0	unicode	MiniMediaPlayerScene
+0x913e2530	unicode	btnVolume
+0x913e2544	unicode	btnPlaybackMode
+0x913e2564	unicode	btnNext
+0x913e2574	unicode	btnPrev
+0x913e2584	unicode	btnStop
+0x913e2594	unicode	btnPlay
+0x913e25a4	unicode	btnPlaylist
+0x913e25bc	unicode	sceneControlsContainer
+0x913e25ec	unicode	sliderVolume
+0x913e2608	unicode	imgVolume
+0x913e261c	unicode	btnDismissVolumeSliderB
+0x913e264c	unicode	btnDismissVolumeSliderA
+0x913e267c	unicode	MediaTabScene
+0x913e2698	unicode	scnMusic
+0x913e26ac	unicode	OptionsNotificationsScene
+0x913e26e8	unicode	labelSoundDisabled
+0x913e2710	unicode	chkShowIPTV
+0x913e2728	unicode	chkSound
+0x913e273c	unicode	chkShowMovies
+0x913e2758	unicode	chkShow
+0x913e2768	unicode	OptionsOnline.xur
+0x913e278c	unicode	OptionsOnlineScene
+0x913e27bc	unicode	radgrpOnlineStateLive
+0x913e27e8	unicode	OptionsScene
+0x913e280c	unicode	btnPlayTimer
+0x913e2828	unicode	btnController
+0x913e2844	unicode	btnVoice
+0x913e2858	unicode	btnOnlineStatus
+0x913e2878	unicode	OptionsVoiceScene
+0x913e28ac	unicode	chkMuteKinect
+0x913e28c8	unicode	sliderDucking
+0x913e28e4	unicode	radgrpOutputLocation
+0x913e291c	unicode	OptionsController.xur
+0x913e2948	unicode	OptionsControllerScene
+0x913e2980	unicode	chkVibration
+0x913e299c	unicode	OptionsPlayTimerAddTime.xur
+0x913e29d4	unicode	%ls\n%ls
+0x913e29f4	unicode	btnAddMoreTime
+0x913e2a14	unicode	btnSuspendResume
+0x913e2a38	unicode	labResetDate
+0x913e2a54	unicode	labResetDateTitle
+0x913e2a78	unicode	labCurrentDate
+0x913e2a98	unicode	lstTime
+0x913e2ab0	unicode	XuiCommonList
+0x913e2ad4	unicode	XuiControl
+0x913e2aec	unicode	Button1
+0x913e2b04	unicode	Passcode3
+0x913e2b18	unicode	Passcode2
+0x913e2b2c	unicode	Passcode1
+0x913e2b40	unicode	Passcode0
+0x913e2b54	unicode	Grid/btnClear
+0x913e2b70	unicode	Grid/btn9
+0x913e2b84	unicode	Grid/btn8
+0x913e2b98	unicode	Grid/btn7
+0x913e2bac	unicode	Grid/btn6
+0x913e2bc0	unicode	Grid/btn5
+0x913e2bd4	unicode	Grid/btn4
+0x913e2be8	unicode	Grid/btn3
+0x913e2bfc	unicode	Grid/btn2
+0x913e2c10	unicode	Grid/btn1
+0x913e2c24	unicode	Grid/btn0
+0x913e2c38	unicode	btnA
+0x913e2c48	unicode	labelNoGames
+0x913e2c64	unicode	waitCursorControl
+0x913e2c88	unicode	listItems
+0x913e2ca0	unicode	downloadList
+0x913e2ccc	unicode	labelSignIn
+0x913e2ce4	unicode	gameList
+0x913e2cf8	unicode	QuickLaunchMainScene
+0x913e2d58	string	default.xex
+0x913e2d64	string	default.xbe
+0x913e2d7c	unicode	%08X
+0x913e2d9c	unicode	Tab1
+0x913e2da8	unicode	Tab2
+0x913e2db4	unicode	Tab3
+0x913e2dc0	unicode	SettingsTabScene
+0x913e2df4	unicode	btnShutdown
+0x913e2e0c	unicode	btnKinectTuner
+0x913e2e2c	unicode	SettingsTabSignedIn.xur
+0x913e2e5c	unicode	SettingsTabSignedOut.xur
+0x913e2e90	unicode	SettingsTabServer.xur
+0x913e2ebc	unicode	btnOk
+0x913e2ec8	unicode	Status.xur
+0x913e2ee0	unicode	StatusScene
+0x913e2f08	unicode	txtMessage
+0x913e2f20	unicode	memorykey://%X,%X_%016I64x
+0x913e2f58	unicode	memory://%X,%X
+0x913e37e0	unicode	sharedres://ico_32x_shuffle.png
+0x913e3820	unicode	sharedres://ico_32x_inorder.png
+0x913e3860	unicode	mediaPause.png
+0x913e3880	unicode	mediaPlay.png
+0x913e389c	unicode	common://btn_32x_Pause.png
+0x913e38d4	unicode	common://btn_32x_Play.png
+0x913e397e	unicode	dCommunityBarScene
+0x913e3a48	unicode	%ls, %d %ls
+0x913e3a60	unicode	%d %ls
+0x913e3a70	unicode	XNA Creators Club Game Launcher
+0x913e3ab0	string	xna_titlelauncher.xex
+0x913e3ac8	string	deviceselector.xex
+0x913e3af0	string	http://
+0x913e3af8	unicode	sharedres://LiveProfile.xus
+0x913e3b30	unicode	sharedres://LiveAll.xus
+0x913e3b60	string	xam.xex
+0x913e3b80	string	e:\bt\1c10e6\core.obj.fre\private\flash\xam\apps\hud\src\obj\xbox\hud.pdb
+0x913ff339	string	abcdefghijklmnopqrstuvwxyz
+0x913ff359	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x913ff590	unicode	AsyncTaskManager0
+0x9140001f	string	Strings.xus
+0x91401010	string	fr-fr\Controller_Full.xus
+0x91401032	string	fr-fr\Controller_Half.xus
+0x91401054	string	fr-fr\Controller_OneFourth.xus
+0x9140107a	string	!fr-fr\Controller_ThreeFourths.xus
+0x914010a5	string	fr-fr\Diagnostics.xus
+0x914010c3	string	fr-fr\GamesTabServer.xus
+0x914010e4	string	fr-fr\GamesTabSignedIn.xus
+0x91401107	string	fr-fr\GamesTabSignedOut.xus
+0x9140112b	string	fr-fr\GuideMain.xus
+0x91401147	string	fr-fr\GuideMainServer.xus
+0x91401169	string	fr-fr\Headset_Full.xus
+0x91401188	string	fr-fr\Headset_Half.xus
+0x914011a7	string	fr-fr\Headset_OneFourth.xus
+0x914011cb	string	fr-fr\Headset_ThreeFourths.xus
+0x914011f2	string	fr-fr\HomeTabServer.xus
+0x91401212	string	fr-fr\HomeTabSignedIn.xus
+0x91401234	string	fr-fr\HomeTabSignedInLive.xus
+0x9140125a	string	fr-fr\HomeTabSignedOut.xus
+0x9140127d	string	fr-fr\InfoMessage.xus
+0x9140129b	string	fr-fr\InfoUpsellLive.xus
+0x914012bc	string	fr-fr\MiniMediaPlayer.xus
+0x914012de	string	fr-fr\Options.xus
+0x914012f8	string	fr-fr\OptionsController.xus
+0x9140131c	string	fr-fr\OptionsNotifications.xus
+0x91401343	string	fr-fr\OptionsOnline.xus
+0x91401363	string	fr-fr\OptionsPlayTimer.xus
+0x91401383	string	WC!fr-fr\OptionsPlayTimerAddTime.xus
+0x914013b0	string	fr-fr\OptionsVoice.xus
+0x914013cf	string	fr-fr\QuickLaunch.xus
+0x914013ed	string	fr-fr\SettingsTabServer.xus
+0x91401411	string	fr-fr\SettingsTabSignedIn.xus
+0x91401437	string	fr-fr\SettingsTabSignedOut.xus
+0x91402000	string	_OneFourth.xus
+0x91402017	string	ja-jp\Headset_ThreeFourths.xus
+0x9140203e	string	ja-jp\HomeTabServer.xus
+0x91402200	string	p\OptionsVoice.xus
+0x9140221b	string	ja-jp\QuickLaunch.xus
+0x91402239	string	ja-jp\SettingsTabServer.xus
+0x9140225d	string	ja-jp\SettingsTabSignedIn.xus
+0x91402283	string	ja-jp\SettingsTabSignedOut.xus
+0x914022aa	string	ja-jp\SmartGlassInfo.xus
+0x914022cb	string	ja-jp\Status.xus
+0x914022e4	string	ja-jp\Strings.xus
+0x914022fe	string	pl-pl\ConsoleContract.xus
+0x91402320	string	pl-pl\Controller_Full.xus
+0x91402342	string	pl-pl\Controller_Half.xus
+0x91402364	string	pl-pl\Controller_OneFourth.xus
+0x9140238a	string	!pl-pl\Controller_ThreeFourths.xus
+0x914023b5	string	pl-pl\Diagnostics.xus
+0x914023d3	string	pl-pl\GamesTabServer.xus
+0x914023f4	string	pl-pl\GamesTabSignedIn.xus
+0x91402417	string	pl-pl\GamesTabSignedOut.xus
+0x9140243b	string	pl-pl\GuideMain.xus
+0x91402457	string	pl-pl\GuideMainServer.xus
+0x91402479	string	pl-pl\Headset_Full.xus
+0x91402498	string	pl-pl\Headset_Half.xus
+0x914024b7	string	pl-pl\Headset_OneFourth.xus
+0x914024db	string	pl-pl\Headset_ThreeFourths.xus
+0x91402502	string	pl-pl\HomeTabServer.xus
+0x91402522	string	pl-pl\HomeTabSignedIn.xus
+0x91402544	string	pl-pl\HomeTabSignedInLive.xus
+0x9140256a	string	pl-pl\HomeTabSignedOut.xus
+0x9140258d	string	pl-pl\InfoMessage.xus
+0x914025ab	string	pl-pl\InfoUpsellLive.xus
+0x914025cc	string	pl-pl\MiniMediaPlayer.xus
+0x914025ee	string	pl-pl\Options.xus
+0x91402608	string	pl-pl\OptionsController.xus
+0x9140262c	string	pl-pl\OptionsNotifications.xus
+0x91402653	string	pl-pl\OptionsOnline.xus
+0x91402673	string	pl-pl\OptionsPlayTimer.xus
+0x91402694	string	4!pl-pl\OptionsPlayTimerAddTime.xus
+0x914026c0	string	pl-pl\OptionsVoice.xus
+0x914026df	string	pl-pl\QuickLaunch.xus
+0x914026fd	string	pl-pl\SettingsTabServer.xus
+0x91402721	string	pl-pl\SettingsTabSignedIn.xus
+0x91402747	string	pl-pl\SettingsTabSignedOut.xus
+0x9140276e	string	pl-pl\SmartGlassInfo.xus
+0x9140278f	string	pl-pl\Status.xus
+0x914027a8	string	pl-pl\Strings.xus
+0x914027c2	string	pt-br\ConsoleContract.xus
+0x914027e4	string	pt-br\Controller_Full.xus
+0x91402806	string	pt-br\Controller_Half.xus
+0x91402828	string	pt-br\Controller_OneFourth.xus
+0x9140284e	string	!pt-br\Controller_ThreeFourths.xus
+0x91402879	string	pt-br\Diagnostics.xus
+0x91402897	string	pt-br\GamesTabServer.xus
+0x914028b8	string	pt-br\GamesTabSignedIn.xus
+0x914028db	string	pt-br\GamesTabSignedOut.xus
+0x914028ff	string	pt-br\GuideMain.xus
+0x9140291b	string	pt-br\GuideMainServer.xus
+0x9140293d	string	pt-br\Headset_Full.xus
+0x9140295c	string	pt-br\Headset_Half.xus
+0x9140297b	string	pt-br\Headset_OneFourth.xus
+0x9140299f	string	pt-br\Headset_ThreeFourths.xus
+0x914029c6	string	pt-br\HomeTabServer.xus
+0x914029e6	string	pt-br\HomeTabSignedIn.xus
+0x91402a08	string	pt-br\HomeTabSignedInLive.xus
+0x91402a2e	string	pt-br\HomeTabSignedOut.xus
+0x91402a51	string	pt-br\InfoMessage.xus
+0x91402a6f	string	pt-br\InfoUpsellLive.xus
+0x91402a90	string	pt-br\MiniMediaPlayer.xus
+0x91402ab2	string	pt-br\Options.xus
+0x91402acc	string	pt-br\OptionsController.xus
+0x91402af0	string	pt-br\OptionsNotifications.xus
+0x91402b17	string	pt-br\OptionsOnline.xus
+0x91402b37	string	pt-br\OptionsPlayTimer.xus
+0x91402b59	string	!pt-br\OptionsPlayTimerAddTime.xus
+0x91402b84	string	pt-br\OptionsVoice.xus
+0x91402ba3	string	pt-br\QuickLaunch.xus
+0x91402bc1	string	pt-br\SettingsTabServer.xus
+0x91402be5	string	pt-br\SettingsTabSignedIn.xus
+0x91402c0b	string	pt-br\SettingsTabSignedOut.xus
+0x91402c32	string	pt-br\SmartGlassInfo.xus
+0x91402c53	string	pt-br\Status.xus
+0x91402c6c	string	pt-br\Strings.xus
+0x91402c86	string	ru-ru\ConsoleContract.xus
+0x91402ca8	string	ru-ru\Controller_Full.xus
+0x91402cca	string	ru-ru\Controller_Half.xus
+0x91402cec	string	ru-ru\Controller_OneFourth.xus
+0x91402d11	string	_!ru-ru\Controller_ThreeFourths.xus
+0x91402d3d	string	ru-ru\Diagnostics.xus
+0x91402d5b	string	ru-ru\GamesTabServer.xus
+0x91402d7c	string	ru-ru\GamesTabSignedIn.xus
+0x91402d9f	string	ru-ru\GamesTabSignedOut.xus
+0x91402dc3	string	ru-ru\GuideMain.xus
+0x91402ddf	string	ru-ru\GuideMainServer.xus
+0x91402e01	string	ru-ru\Headset_Full.xus
+0x91402e20	string	ru-ru\Headset_Half.xus
+0x91402e3f	string	ru-ru\Headset_OneFourth.xus
+0x91402e63	string	ru-ru\Headset_ThreeFourths.xus
+0x91402e8a	string	ru-ru\HomeTabServer.xus
+0x91402eaa	string	ru-ru\HomeTabSignedIn.xus
+0x91402ecc	string	ru-ru\HomeTabSignedInLive.xus
+0x91402ef2	string	ru-ru\HomeTabSignedOut.xus
+0x91402f15	string	ru-ru\InfoMessage.xus
+0x91402f33	string	ru-ru\InfoUpsellLive.xus
+0x91402f54	string	ru-ru\MiniMediaPlayer.xus
+0x91402f76	string	ru-ru\Options.xus
+0x91402f90	string	ru-ru\OptionsController.xus
+0x91402fb4	string	ru-ru\OptionsNotifications.xus
+0x91402fdb	string	ru-ru\OptionsOnline.xus
+0x91402ffb	string	ru-ru\OptionsPlayTimer.xus
+0x9140301d	string	!ru-ru\OptionsPlayTimerAddTime.xus
+0x91403048	string	ru-ru\OptionsVoice.xus
+0x91403067	string	ru-ru\QuickLaunch.xus
+0x91403085	string	ru-ru\SettingsTabServer.xus
+0x914030a9	string	ru-ru\SettingsTabSignedIn.xus
+0x914030cf	string	ru-ru\SettingsTabSignedOut.xus
+0x914030f6	string	ru-ru\SmartGlassInfo.xus
+0x91403117	string	ru-ru\Status.xus
+0x91403130	string	ru-ru\Strings.xus
+0x9140314a	string	zh-tw\ConsoleContract.xus
+0x9140316c	string	zh-tw\Controller_Full.xus
+0x9140318e	string	zh-tw\Controller_Half.xus
+0x914031b0	string	zh-tw\Controller_OneFourth.xus
+0x914031d4	string	?a!zh-tw\Controller_ThreeFourths.xus
+0x91403201	string	zh-tw\Diagnostics.xus
+0x9140321f	string	zh-tw\GamesTabServer.xus
+0x91403240	string	zh-tw\GamesTabSignedIn.xus
+0x91403263	string	zh-tw\GamesTabSignedOut.xus
+0x91403287	string	zh-tw\GuideMain.xus
+0x914032a3	string	zh-tw\GuideMainServer.xus
+0x914032c5	string	zh-tw\Headset_Full.xus
+0x914032e4	string	zh-tw\Headset_Half.xus
+0x91403303	string	zh-tw\Headset_OneFourth.xus
+0x91403327	string	zh-tw\Headset_ThreeFourths.xus
+0x9140334e	string	zh-tw\HomeTabServer.xus
+0x9140336e	string	zh-tw\HomeTabSignedIn.xus
+0x91403390	string	zh-tw\HomeTabSignedInLive.xus
+0x914033b6	string	zh-tw\HomeTabSignedOut.xus
+0x914033d9	string	zh-tw\InfoMessage.xus
+0x914033f7	string	zh-tw\InfoUpsellLive.xus
+0x91403418	string	zh-tw\MiniMediaPlayer.xus
+0x9140343a	string	zh-tw\Options.xus
+0x91403454	string	zh-tw\OptionsController.xus
+0x91403478	string	zh-tw\OptionsNotifications.xus
+0x9140349f	string	zh-tw\OptionsOnline.xus
+0x914034bf	string	zh-tw\OptionsPlayTimer.xus
+0x914034e1	string	!zh-tw\OptionsPlayTimerAddTime.xus
+0x9140350c	string	zh-tw\OptionsVoice.xus
+0x9140352b	string	zh-tw\QuickLaunch.xus
+0x91403549	string	zh-tw\SettingsTabServer.xus
+0x9140356d	string	zh-tw\SettingsTabSignedIn.xus
+0x91403593	string	zh-tw\SettingsTabSignedOut.xus
+0x914035ba	string	zh-tw\SmartGlassInfo.xus
+0x914035db	string	zh-tw\Status.xus
+0x91403610	string	7%d hours
+0x9140361a	string	%d minutes
+0x91403625	string	Content Not Found
+0x91403637	string	Do you want to add this game to game exceptions? If you do, it'll no longer require a pass code to play.\r\n\r\nYou can remove the game from game exceptions in Family Settings.
+0x914036e4	string	Add Game Exception
+0x914036f7	string	Exit Session
+0x91403704	string	Insert the %s game disc.
+0x9140371d	string	Disc Required
+0x9140372b	string	Game not found. Insert the game disc or storage device, then try again.
+0x91403773	string	%1!u! of %2!u! Achievements
+0x9140378f	string	The Xbox Guide is not available while an original Xbox game is running.
+0x914037d7	string	The Xbox Guide gives you quick access to your friends, messages, and music, no matter what you're doing on your Xbox 360 console.\r\n\r\nSign in with your own profile to enable the Xbox Guide.
+0x91403900	string	 Customize your interface\r\n\r\nThe Xbox Guide is not available in demo mode.
+0x9140394b	string	You've pressed the Xbox Guide button, which gives you quick access to your friends, messages, and music, no matter what you're doing on your Xbox 360 console.\r\n\r\nFinish initial setup to enable the Xbox Guide.
+0x91403a1c	string	The Xbox Guide is not currently available.
+0x91403a47	string	Join Xbox Live
+0x91403a56	string	You need to be connected to Xbox Live to continue. Connect now?
+0x91403a96	string	Connect to Xbox Live
+0x91403aab	string	You need an Xbox Live profile to continue. Join Xbox Live?
+0x91403ae6	string	Create New Profile
+0x91403af9	string	Xbox Live Required
+0x91403b0c	string	You need an Xbox Live profile to continue. Sign in to Xbox Live?
+0x91403b4d	string	Select Music
+0x91403b5a	string	Show During TV
+0x91403b69	string	Clear
+0x91403b6f	string	The pass code you entered is not valid. Would you like to try again?
+0x91403bb4	string	Pass Code Not Valid
+0x91403bcd	string	Hours
+0x91403bd3	string	Minute
+0x91403bda	string	Minutes
+0x91403be2	string	Use X, Y, triggers, bumpers, and the D-pad to enter your 4-button pass code.
+0x91403c2f	string	Enter Pass Code
+0x91403c3f	string	Resume Timer
+0x91403c4c	string	Suspend Timer
+0x91403c5a	string	Hide Trial Games
+0x91403c6b	string	Launch
+0x91403c72	string	Show Trial Games
+0x91403c83	string	Sign In (%d Profiles)
+0x91403c99	string	Sign In (%d Profile)
+0x91403cbb	string	Close Tray
+0x91403cc6	string	Closing
+0x91403cce	string	Mixed Media Disc
+0x91403cdf	string	Play Game on Disc
+0x91403cf1	string	Play %s
+0x91403d02	string	Open Tray
+0x91403d0c	string	Opening
+0x91403d14	string	Reading
+0x91403d1c	string	Unplayable Disc
+0x91403d2c	string	Turning off the console will also turn off all controllers.
+0x91403d68	string	Xbox Guide
+0x91403d73	string	To play this indie game, you need to sign in to Xbox Live.

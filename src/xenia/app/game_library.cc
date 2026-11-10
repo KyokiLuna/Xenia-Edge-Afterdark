@@ -10,6 +10,7 @@
 #include "xenia/app/game_library.h"
 
 #include <algorithm>
+#include <charconv>
 #include <fstream>
 #include <regex>
 
@@ -20,7 +21,7 @@
 #include "xenia/base/logging.h"
 #include "xenia/base/string_util.h"
 #include "xenia/base/utf8.h"
-#include "xenia/emulator.h"
+#include "xenia/title_ids.h"
 #include "xenia/vfs/iso_metadata.h"
 #include "xenia/vfs/stfs_metadata.h"
 #include "xenia/vfs/xbe_metadata.h"
@@ -96,12 +97,29 @@ GameFileInfo FromXbe(vfs::XbeMetadata m) {
   info.icon = std::move(m.icon_png);
   info.title_name = std::move(m.title_name);
   info.content_type = XContentType::kXboxTitle;
+  info.title_id = m.title_id;
+  return info;
+}
+GameFileInfo FromXex(vfs::XexMetadata metadata) {
+  GameFileInfo info;
+  info.media_id = metadata.media_id;
+  info.version = metadata.version.value();
+  info.disc_number = metadata.disc_number;
+  info.disc_count = metadata.disc_count;
+  info.title_id = metadata.title_id;
+  info.title_resources_status = metadata.title_resources_status;
+  info.title_resources = std::move(metadata.title_resources);
+  if (info.title_resources) {
+    info.title_name = info.title_resources->Name();
+    info.display_name = info.title_name;
+    info.icon = info.title_resources->icon_png;
+  }
   return info;
 }
 }  // namespace
 
-std::optional<GameFileInfo> ReadGameFileInfo(
-    const std::filesystem::path& path) {
+std::optional<GameFileInfo> ReadGameFileInfo(const std::filesystem::path &path,
+                                             bool read_title_resources) {
   const auto extension =
       xe::utf8::lower_ascii(xe::path_to_utf8(path.extension()));
   if (extension == ".xbe") {
@@ -109,24 +127,22 @@ std::optional<GameFileInfo> ReadGameFileInfo(
       return FromXbe(std::move(*m));
     }
   } else if (extension == ".xex") {
-    if (auto m = vfs::ExtractXexMetadata(path)) {
-      return GameFileInfo{m->media_id, m->version.value(), m->disc_number,
-                          m->disc_count};
+    if (auto m = vfs::ExtractXexMetadata(path, read_title_resources)) {
+      return FromXex(std::move(*m));
     }
   } else if (extension == ".iso") {
-    if (auto m = vfs::ExtractIsoMetadata(path)) {
-      return GameFileInfo{m->media_id, m->version.value(), m->disc_number,
-                          m->disc_count};
+    if (auto m = vfs::ExtractIsoMetadata(path, read_title_resources)) {
+      return FromXex(std::move(*m));
     }
     if (auto m = vfs::ExtractXbeMetadata(path)) {
       return FromXbe(std::move(*m));
     }
   } else if (extension == ".zar") {
-    if (auto m = vfs::ExtractZarMetadata(path)) {
-      return GameFileInfo{m->media_id, m->version.value(), m->disc_number,
-                          m->disc_count};
+    if (auto m = vfs::ExtractZarMetadata(path, read_title_resources)) {
+      return FromXex(std::move(*m));
     }
-  } else if (auto m = vfs::ExtractStfsMetadata(path)) {
+  } else if (auto m = vfs::ExtractStfsMetadata(path, XLanguage::kEnglish,
+                                               read_title_resources)) {
     // An Xbox Original package is listed as the game its executable names.
     if (m->content_type == uint32_t(XContentType::kXboxTitle)) {
       if (auto xbe = vfs::ExtractXbeMetadata(path)) {
@@ -136,14 +152,28 @@ std::optional<GameFileInfo> ReadGameFileInfo(
     }
     // The container describes this release specifically, so take all of it
     // while we are here. The title-level record cannot tell releases apart.
-    return GameFileInfo{m->media_id,
-                        m->version,
-                        m->disc_number,
-                        m->disc_count,
-                        std::move(m->icon_data),
-                        std::move(m->title_name),
-                        std::move(m->display_name),
-                        XContentType(m->content_type)};
+    GameFileInfo info{m->media_id,
+                      m->version,
+                      m->disc_number,
+                      m->disc_count,
+                      std::move(m->icon_data),
+                      std::move(m->title_name),
+                      std::move(m->display_name),
+                      XContentType(m->content_type)};
+    info.title_id = m->title_id;
+    info.package_license_mask = m->package_license_mask;
+    info.native_category = m->native_category;
+    info.title_resources_status = m->title_resources_status;
+    info.title_resources = std::move(m->title_resources);
+    if (info.title_resources) {
+      if (info.icon.empty()) {
+        info.icon = info.title_resources->icon_png;
+      }
+      if (info.title_name.empty()) {
+        info.title_name = info.title_resources->Name();
+      }
+    }
+    return info;
   }
   return std::nullopt;
 }
@@ -247,6 +277,39 @@ bool GameLibrary::ReadEntry(const std::filesystem::path& game_toml,
         xe::string_util::from_string<uint32_t>(*content_type_str, true));
   }
 
+  entry.metadata_revision = tbl["metadata_revision"].value_or(uint32_t(0));
+  entry.package_license_mask =
+      tbl["package_license_mask"].value_or(uint32_t(0));
+  const auto resource_status =
+      tbl["title_resources_status"].value_or(uint32_t(0));
+  entry.title_resources_status =
+      resource_status <= uint32_t(vfs::TitleResourcesStatus::kInvalid)
+          ? static_cast<vfs::TitleResourcesStatus>(resource_status)
+          : vfs::TitleResourcesStatus::kNotRequested;
+  if (auto* spa = tbl["title_resources"].as_table()) {
+    vfs::TitleResourceMetadata resources;
+    resources.title_id = (*spa)["title_id"].value_or(uint32_t(0));
+    resources.raw_title_type = (*spa)["raw_title_type"].value_or(uint32_t(4));
+    resources.flags = (*spa)["flags"].value_or(uint32_t(0));
+    resources.default_language =
+        (*spa)["default_language"].value_or(uint32_t(1));
+    if (auto* names = (*spa)["names"].as_table()) {
+      for (const auto& [key, value] : *names) {
+        uint32_t language = 0;
+        const auto text = key.str();
+        const auto parsed =
+            std::from_chars(text.data(), text.data() + text.size(), language);
+        if (auto name = value.value<std::string>();
+            name && parsed.ec == std::errc() &&
+            parsed.ptr == text.data() + text.size() && language > 0 &&
+            language < uint32_t(XLanguage::kMaxLanguages)) {
+          resources.names.emplace(language, *name);
+        }
+      }
+    }
+    entry.title_resources = std::move(resources);
+  }
+
   if (auto* paths = tbl["paths"].as_array()) {
     for (auto&& node : *paths) {
       auto* pt = node.as_table();
@@ -321,6 +384,10 @@ std::vector<GameLibrary::Release> GameLibrary::SplitIntoReleases(
       part.entry.version = info.version;
       part.entry.name = entry.name;
       part.entry.content_type = info.content_type;
+      part.entry.metadata_revision = kLibraryMetadataRevision;
+      part.entry.package_license_mask = info.package_license_mask;
+      part.entry.title_resources_status = info.title_resources_status;
+      part.entry.title_resources = info.title_resources;
       result.push_back(std::move(part));
       best_disc.push_back(0);
       it = std::prev(result.end());
@@ -395,8 +462,7 @@ void GameLibrary::PlaceIcon(const std::filesystem::path& dir,
       return;
     }
   }
-  // ISO, XEX and ZAR carry no art, so the title's existing icon is all there
-  // is for this release.
+  // A file without a readable embedded image retains the previous title icon.
   const auto fallback = fallback_dir / "icon.png";
   if (std::filesystem::exists(fallback, ec)) {
     std::filesystem::copy_file(
@@ -537,13 +603,20 @@ std::vector<GameLibrary::MissingFields> GameLibrary::FindMissingFields() const {
   std::error_code ec;
   for (const auto& entry : entries_) {
     // A title still in an older layout gets its fields when it is migrated.
-    if (entry.content_type != XContentType::kInvalid ||
+    if ((entry.content_type != XContentType::kInvalid &&
+         entry.metadata_revision == kLibraryMetadataRevision) ||
         !std::filesystem::exists(EntryDir(entry.key()) / "game.toml", ec)) {
       continue;
     }
     MissingFields release{entry.key()};
+    if (!entry.paths.empty()) {
+      release.paths.push_back(entry.default_path().path);
+    }
     for (const auto& path : entry.paths) {
-      release.paths.push_back(path.path);
+      if (release.paths.empty() ||
+          !SamePath(path.path, release.paths.front())) {
+        release.paths.push_back(path.path);
+      }
     }
     missing.push_back(std::move(release));
   }
@@ -556,7 +629,8 @@ std::optional<GameFileInfo> GameLibrary::ReadMissingFields(
     // A path that was unreadable when the title was split can belong to
     // another release.
     auto info = ReadGameFileInfo(path);
-    if (info && info->version == missing.key.version) {
+    if (info && info->version == missing.key.version &&
+        info->title_id == missing.key.title_id) {
       return info;
     }
   }
@@ -566,13 +640,28 @@ std::optional<GameFileInfo> GameLibrary::ReadMissingFields(
 bool GameLibrary::FillMissingFields(const LibraryKey& key,
                                     const GameFileInfo& info) {
   const auto* existing = Find(key);
-  if (!existing || existing->content_type != XContentType::kInvalid ||
-      info.content_type == XContentType::kInvalid) {
+  if (!existing || info.content_type == XContentType::kInvalid ||
+      info.title_id != key.title_id || info.version != key.version) {
     return false;
   }
   LibraryEntry entry = *existing;
   entry.content_type = info.content_type;
-  return Upsert(std::move(entry));
+  entry.metadata_revision = kLibraryMetadataRevision;
+  entry.package_license_mask = info.package_license_mask;
+  entry.title_resources_status = info.title_resources_status;
+  entry.title_resources = info.title_resources;
+  if (entry.name.empty()) {
+    entry.name = info.title_name.empty() ? info.display_name : info.title_name;
+  }
+  if (!Upsert(std::move(entry))) {
+    return false;
+  }
+  std::error_code icon_error;
+  if (!info.icon.empty() &&
+      !std::filesystem::exists(IconPath(key), icon_error) && !icon_error) {
+    SetIcon(key, info.icon);
+  }
+  return true;
 }
 
 bool GameLibrary::WriteEntryAtomic(const LibraryEntry& entry,
@@ -610,6 +699,23 @@ bool GameLibrary::WriteEntryAtomic(const LibraryEntry& entry,
   // been launched doesn't carry a field claiming it was.
   if (entry.last_played) {
     tbl.insert("last_played", static_cast<int64_t>(entry.last_played));
+  }
+  tbl.insert("metadata_revision", entry.metadata_revision);
+  tbl.insert("package_license_mask", entry.package_license_mask);
+  tbl.insert("title_resources_status", uint32_t(entry.title_resources_status));
+  if (entry.title_resources) {
+    const auto& resources = *entry.title_resources;
+    toml::table spa;
+    spa.insert("title_id", resources.title_id);
+    spa.insert("raw_title_type", resources.raw_title_type);
+    spa.insert("flags", resources.flags);
+    spa.insert("default_language", resources.default_language);
+    toml::table names;
+    for (const auto& [language, name] : resources.names) {
+      names.insert(std::to_string(language), name);
+    }
+    spa.insert("names", std::move(names));
+    tbl.insert("title_resources", std::move(spa));
   }
   tbl.insert("name", entry.name);
   tbl.insert("paths", std::move(paths));
@@ -685,6 +791,10 @@ bool GameLibrary::AddDisc(uint32_t title_id, const std::string& name,
     entry.title_id = title_id;
     entry.version = key.version;
     entry.name = name;
+    if (entry.name.empty() && info) {
+      entry.name =
+          info->title_name.empty() ? info->display_name : info->title_name;
+    }
     if (entry.name.empty()) {
       // A recorded disc swap supplies no name. Borrow the title's, or the
       // release shows up in the list as a nameless entry.
@@ -706,12 +816,26 @@ bool GameLibrary::AddDisc(uint32_t title_id, const std::string& name,
   if (info) {
     added.media_id = info->media_id;
     added.disc_number = info->disc_number;
+    if (!existing || existing->paths.empty()) {
+      entry.metadata_revision = kLibraryMetadataRevision;
+      entry.package_license_mask = info->package_license_mask;
+      entry.title_resources_status = info->title_resources_status;
+      entry.title_resources = info->title_resources;
+    }
     if (entry.content_type == XContentType::kInvalid) {
       entry.content_type = info->content_type;
     }
   }
   entry.paths.push_back(std::move(added));
-  return Upsert(std::move(entry));
+  if (!Upsert(std::move(entry))) {
+    return false;
+  }
+  std::error_code icon_error;
+  if (info && !info->icon.empty() &&
+      !std::filesystem::exists(IconPath(key), icon_error) && !icon_error) {
+    SetIcon(key, info->icon);
+  }
+  return true;
 }
 
 bool GameLibrary::MarkPlayed(const LibraryKey& key, time_t when) {

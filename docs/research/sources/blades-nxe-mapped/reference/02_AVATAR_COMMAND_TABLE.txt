@@ -1,0 +1,86 @@
+Avatar-family XAM export -> message-port command table
+=========================================================
+Derived by disassembling $flash_xam.xexp (the retail, depatched xam.xex)
+with Capstone (PPC64BE), starting from the export table
+(reference/exports/flash_xam.xexp.exports.txt). See
+_avatar_disasm/avatar_disasm_full.txt for the raw disassembly this was
+read off of, and _avatar_disasm/disasm_avatar.py to redo/extend it for
+other ordinals.
+
+Almost every XamAvatarXxx export just marshals its arguments into a stack
+buffer and calls a shared helper at 0x818d2470 (or occasionally sends
+directly), which does:
+    li r3, 0xf3
+    bl 0x818fd2d8      ; XMsgStartIORequestEx-equivalent dispatcher
+i.e. "send a message to system-app port 0xf3" (this is the Avatar system
+app / avtr.xex-equivalent - not present as a standalone file in this dump).
+The low 16 bits of the command word (upper 16 bits are always 0x6000,
+i.e. commands are 0x6000XX) are listed below per export.
+
+ordinal  name                                          port   command    notes
+-------  --------------------------------------------  -----  ---------  -----------------------------------------
+0x5DC    XamAvatarInitialize                            0xf3   0x600001
+0x5DD    XamAvatarShutdown                               0xf3   0x600002   matches existing xam_avatar.cc comment exactly
+0x5DE    XamAvatarGetManifestLocalUser                   0xf3   0x600003
+0x5DF    XamAvatarGetManifestsByXuid                     0xf3   0x600004
+0x5E0    XamAvatarGetAssetsResultSize                    0xf3   0x600005
+0x5E1    XamAvatarGetAssets                              0xf3   0x600006
+0x5E2    XamAvatarGenerateMipMaps                        0xf3   0x600007
+0x5E3    XamAvatarSetCustomAsset                         0xf3   0x60000a
+0x5E4    XamAvatarSetManifest                            0xf3   0x600009
+0x5E7    XamAvatarLoadAnimation                          0xf3   0x60000f   matches existing xam_avatar.cc comment exactly
+0x5E8    XamAvatarBeginEnumAssets                        0xf3   0x60000c   matches existing xam_avatar.cc comment exactly
+0x5E9    XamAvatarEndEnumAssets                          0xf3   0x60000e   existing comment said port 0xf2 (older build 12611); this retail build uses 0xf3
+0x5EA    XamAvatarEnumAssets                             0xf3   0x60000d   matches existing xam_avatar.cc comment exactly
+0x5EB    XamAvatarGetMetadataRandom                      0xf3   0x600010
+0x5EE    XamAvatarGetMetadataSignedOutProfileCount       0xf3   0x600013
+0x5EF    XamAvatarGetMetadataSignedOutProfile            0xf3   0x600014
+0x5F1    XamAvatarManifestGetBodyType                    -      -          NO IPC - reads body-type byte from manifest locally (Xenia's Male-hardcode is a real gap)
+0x5F2    XamAvatarGetInstrumentation                     -      -          NO IPC - matches Xenia's stub byte-for-byte (safe to mark kImplemented)
+0x5F3    XamAvatarGetAssetIcon                           0xf3   0x60000b
+0x5F4    XamAvatarWearNow                                varies 0x600018   branches on title_id == kAvatarEditorID (0x584d07d1) before dispatching; else-branch hand-verified 2026: 0xf3/0x600018 (matches existing comment exactly). kAvatarEditorID branch does NOT use IPC at all - lock-free ring-buffer write instead (XamSendMessageToLoadedApps/XNotifyBroadcast per existing comment)
+0x5F5    XamAvatarGetAssetBinary                         0xf3   0x600008
+0x5F6    XamAvatarReinstallAwardedAsset                  -      -          NOT EXPORTED by this xam.xex build - unverifiable from this dump
+0x5F7    XamAvatarGetInstalledAssetPackageDescription    -      -          NO IPC - builds XCONTENT_AGGREGATE_DATA locally, same approach as Xenia's stub
+0x5F8    XamAvatarSetMocks                               -      -          NOT EXPORTED by this xam.xex build - unverifiable from this dump
+0x6A4    XamShowAvatarMiniCreatorUI                      0xfe   0x21018    UI-launch family (see below), guarded by an XamAlloc-table-style check
+0x207    XamUserValidateAvatarManifest                   0xfb   -          different subsystem (profile validation, not port 0xf3)
+0x22C    XamUserGetUsersMissingAvatars                   0xfe   0x2300a   (corrected 2026: was mistranscribed as 0x3000a - lis r4,2 was misread as loading 0)
+0x3C6    XamShowAvatarAwardsUI                           0xfe   0x21008
+0x3C7    XamShowAvatarAwardGamesUI                       0xfe   0x21008
+0x802    XamUserCreateAvatarAssetEnumerator              0xfb   -          calls into 0x81937588 with r4=0xfb
+0x7DB    XamLaunchAvatarEditor                           -      -          NOT EXPORTED by this xam.xex build - unverifiable from this dump
+
+Observed system-app message ports (not confirmed against real names, just
+grouped by what shares a port in this disassembly):
+  0xf3  Avatar system app - almost all XamAvatarXxx calls
+  0xfe  Shell/UI launcher - avatar-related UI show/launch calls (mini creator,
+        awards UI, "missing avatars" UI)
+  0xfb  Something profile/asset-enumeration related (XamUserValidateAvatarManifest,
+        XamUserCreateAvatarAssetEnumerator) - not further identified
+
+UPDATE (corpus-wide IPC work, see 06_IPC_SERVICE_MAP.txt / 08_STRUCTURES.txt):
+this table's "dispatcher" addresses (0x818fd2d8/540/548/5b8 and the shared
+helper 0x818d2470) are xam.xex's OWN internal implementations - xam.xex
+doesn't need to import these since it provides them. Other modules that
+import the same functionality do so via named imports, now confirmed:
+XMsgStartIORequestEx, XMsgStartIORequest, and XMsgInProcessCall (see
+reference/imports/flash_dash.xex.imports.txt for a live example). This
+confirms 0x818fd2d8-family really is "the XMsgStartIORequestEx-equivalent"
+as this table already assumed, just now backed by cross-module evidence
+rather than only the naming already present in xam_avatar.cc's comments.
+The 0xfb port is still not semantically named, but the corpus-wide scan
+found it reused by $flash_dash.xex too (commands 0xB0019/0xB003D) - see
+06_IPC_SERVICE_MAP.txt for more samples if you want to keep narrowing it
+down.
+
+How to extend this table
+-------------------------
+1. Look up the ordinal in xenia-edge/src/xenia/kernel/xam/xam_table.inc to
+   get more names if you need other (non-avatar) XAM functions.
+2. Find its address in reference/exports/flash_xam.xexp.exports.txt
+   (or any other module's .exports.txt).
+3. Re-run: python3 _avatar_disasm/disasm_avatar.py \
+     "$flash_xam.xexp.header" "$flash_xam.xexp" 0xORDINAL 0x81870000
+   (0x81870000 is xam.xex's load address - reuse it for any $flash_xam.xexp
+   ordinal since the patch doesn't relocate.)

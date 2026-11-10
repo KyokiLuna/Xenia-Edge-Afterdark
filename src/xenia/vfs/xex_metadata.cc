@@ -16,6 +16,7 @@
 
 #include "third_party/fmt/include/fmt/format.h"
 #include "xenia/base/byte_order.h"
+#include "xenia/base/mapped_memory.h"
 #include "xenia/kernel/util/xex2_info.h"
 #include "xenia/kernel/util/xex2_util.h"
 
@@ -134,6 +135,13 @@ toml::table XexMetadata::ToToml() const {
     }
   }
 
+  if (title_resources_status != TitleResourcesStatus::kNotRequested) {
+    root.insert("title_resources_status", uint32_t(title_resources_status));
+    if (title_resources) {
+      root.insert("title_resources", title_resources->ToToml());
+    }
+  }
+
   return root;
 }
 
@@ -149,9 +157,9 @@ bool XexMetadata::RunsFromPackageOnly() const {
          !(allowed_media_types & kDiscMedia);
 }
 
-std::optional<XexMetadata> ExtractXexMetadata(const uint8_t* data,
-                                              size_t size) {
-  if (size < sizeof(xex2_header)) {
+std::optional<XexMetadata> ExtractXexMetadata(const uint8_t* data, size_t size,
+                                              bool read_title_resources) {
+  if (!data || size < sizeof(xex2_header)) {
     return std::nullopt;
   }
 
@@ -168,8 +176,33 @@ std::optional<XexMetadata> ExtractXexMetadata(const uint8_t* data,
   }
 
   uint32_t header_size = header->header_size;
-  if (header_size < sizeof(xex2_header) || header_size > size) {
+  if (header_size < sizeof(xex2_header) || header_size > size ||
+      header_size > kMaxOfflineXexHeaderBytes) {
     return std::nullopt;
+  }
+
+  // The legacy optional-header accessor has no length parameter. Validate
+  // every referenced header before calling it on offline input.
+  if (header->header_count > (header_size - 24) / sizeof(xex2_opt_header)) {
+    return std::nullopt;
+  }
+  for (uint32_t i = 0; i < header->header_count; ++i) {
+    const auto& entry = header->headers[i];
+    const uint32_t words = uint32_t(entry.key) & 0xFF;
+    if (words <= 1) {
+      continue;
+    }
+    const uint32_t offset = entry.offset;
+    if (offset > header_size || header_size - offset < 4) {
+      return std::nullopt;
+    }
+    const uint32_t length =
+        words == 0xFF ? uint32_t(*reinterpret_cast<const xe::be<uint32_t>*>(
+                            data + offset))
+                      : words * 4;
+    if (length < 4 || length > header_size - offset) {
+      return std::nullopt;
+    }
   }
 
   XexMetadata metadata;
@@ -232,11 +265,42 @@ std::optional<XexMetadata> ExtractXexMetadata(const uint8_t* data,
     metadata.ratings.oflc_nz = static_cast<uint8_t>(ratings->oflcnz);
   }
 
+  if (read_title_resources) {
+    xex2_opt_resource_info* resources = nullptr;
+    if (!GetXexOptHeader(header, XEX_HEADER_RESOURCE_INFO, &resources)) {
+      metadata.title_resources_status = TitleResourcesStatus::kAbsent;
+    } else if (resources->size < 4 ||
+               (resources->size - 4) % sizeof(xex2_resource)) {
+      metadata.title_resources_status = TitleResourcesStatus::kInvalid;
+    } else {
+      const auto name = fmt::format("{:08X}", metadata.title_id);
+      bool found = false;
+      for (uint32_t i = 0; i < (resources->size - 4) / sizeof(xex2_resource);
+           ++i) {
+        found |= std::memcmp(resources->resources[i].name, name.data(), 8) == 0;
+      }
+      if (!found) {
+        metadata.title_resources_status = TitleResourcesStatus::kAbsent;
+      } else {
+        if (size <= kMaxOfflineXexFileBytes) {
+          metadata.title_resources = ExtractXexTitleResources({data, size});
+        }
+        metadata.title_resources_status = metadata.title_resources
+                                              ? TitleResourcesStatus::kLoaded
+                                              : TitleResourcesStatus::kInvalid;
+      }
+    }
+  }
   return metadata;
 }
 
-std::optional<XexMetadata> ExtractXexMetadata(
-    const std::filesystem::path& path) {
+std::optional<XexMetadata> ExtractXexMetadata(const std::filesystem::path& path,
+                                              bool read_title_resources) {
+  if (read_title_resources) {
+    auto mapping = MappedMemory::Open(path, MappedMemory::Mode::kRead);
+    return mapping ? ExtractXexMetadata(mapping->data(), mapping->size(), true)
+                   : std::nullopt;
+  }
   std::ifstream file(path, std::ios::binary);
   if (!file) {
     return std::nullopt;
@@ -255,7 +319,8 @@ std::optional<XexMetadata> ExtractXexMetadata(
   }
 
   uint32_t header_size = base_header.header_size;
-  if (header_size < sizeof(xex2_header)) {
+  if (header_size < sizeof(xex2_header) ||
+      header_size > kMaxOfflineXexHeaderBytes) {
     return std::nullopt;
   }
 

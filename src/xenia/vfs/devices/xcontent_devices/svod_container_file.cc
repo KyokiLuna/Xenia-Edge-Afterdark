@@ -9,6 +9,7 @@
 
 #include "xenia/vfs/devices/xcontent_devices/svod_container_file.h"
 #include "xenia/vfs/devices/xcontent_devices/svod_container_entry.h"
+#include "xenia/vfs/host_storage_errors.h"
 
 namespace xe {
 namespace vfs {
@@ -21,14 +22,12 @@ SvodContainerFile::~SvodContainerFile() = default;
 
 void SvodContainerFile::Destroy() { delete this; }
 
-size_t SvodContainerFile::Read(std::span<uint8_t> buffer, size_t offset,
-                               size_t record_file) {
+X_STATUS SvodContainerFile::Read(std::span<uint8_t> buffer, size_t offset,
+                                 size_t record_file, size_t* transferred) {
   auto& file = entry_->files()->at(record_file);
-  size_t bytes_read = 0;
-  if (!file->Read(offset, buffer.data(), buffer.size(), &bytes_read)) {
-    return 0;
-  }
-  return bytes_read;
+  const auto result = file->ReadResult(offset, buffer);
+  *transferred = result.bytes;
+  return HostStorageError(result.error);
 }
 
 }  // namespace vfs

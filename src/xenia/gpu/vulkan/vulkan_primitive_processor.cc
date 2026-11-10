@@ -51,6 +51,9 @@ void VulkanPrimitiveProcessor::Shutdown(bool from_destructor) {
   const VkDevice device = vulkan_device->device();
 
   frame_index_buffers_.clear();
+  native_resource_epoch_ = {};
+  native_resource_epoch_mode_ = false;
+  native_resource_epoch_completed_ = 0;
   frame_index_buffer_pool_.reset();
   ui::vulkan::util::DestroyAndNullHandle(dfn.vkDestroyBuffer, device,
                                          builtin_index_buffer_upload_);
@@ -116,7 +119,10 @@ void VulkanPrimitiveProcessor::BeginSubmission() {
 
 void VulkanPrimitiveProcessor::BeginFrame() {
   SCOPE_profile_cpu_f("gpu");
-  frame_index_buffer_pool_->Reclaim(command_processor_.GetCompletedFrame());
+  assert_false(native_resource_epoch_mode_);
+  if (!native_resource_epoch_mode_) {
+    frame_index_buffer_pool_->Reclaim(command_processor_.GetCompletedFrame());
+  }
 }
 
 void VulkanPrimitiveProcessor::EndSubmission() {
@@ -125,8 +131,47 @@ void VulkanPrimitiveProcessor::EndSubmission() {
 
 void VulkanPrimitiveProcessor::EndFrame() {
   SCOPE_profile_cpu_f("gpu");
+  assert_false(native_resource_epoch_mode_);
   ClearPerFrameCache();
   frame_index_buffers_.clear();
+}
+
+bool VulkanPrimitiveProcessor::BeginNativeResourceEpoch(
+    VulkanNativeResourceEpoch epoch, uint64_t completed_epoch) {
+  if (!epoch.valid() || native_resource_epoch_.valid() ||
+      completed_epoch < native_resource_epoch_completed_ ||
+      completed_epoch >= epoch.serial()) {
+    return false;
+  }
+  native_resource_epoch_mode_ = true;
+  native_resource_epoch_ = epoch;
+  ClearPerFrameCache();
+  frame_index_buffers_.clear();
+  ReclaimNativeResourceEpochs(completed_epoch);
+  return true;
+}
+
+bool VulkanPrimitiveProcessor::EndNativeResourceEpoch(
+    VulkanNativeResourceEpoch epoch) noexcept {
+  if (!native_resource_epoch_mode_ || native_resource_epoch_ != epoch) {
+    return false;
+  }
+  // CPU conversion handles are cleared by the next BeginNativeResourceEpoch,
+  // before that frame can inspect them. Avoid the common-cache lock here: this
+  // no-throw finalizer must preserve any uncertain submitted work. GPU pages
+  // remain owned and are reclaimed only from actual fence progress.
+  native_resource_epoch_ = {};
+  return true;
+}
+
+void VulkanPrimitiveProcessor::ReclaimNativeResourceEpochs(
+    uint64_t completed_epoch) {
+  if (!native_resource_epoch_mode_ ||
+      completed_epoch < native_resource_epoch_completed_) {
+    return;
+  }
+  native_resource_epoch_completed_ = completed_epoch;
+  frame_index_buffer_pool_->Reclaim(completed_epoch);
 }
 
 bool VulkanPrimitiveProcessor::InitializeBuiltinIndexBuffer(
@@ -191,7 +236,7 @@ bool VulkanPrimitiveProcessor::InitializeBuiltinIndexBuffer(
   }
   fill_callback(mapping);
   ui::vulkan::util::FlushMappedMemoryRange(
-      vulkan_device, builtin_index_buffer_memory_, upload_memory_type);
+      vulkan_device, builtin_index_buffer_upload_memory_, upload_memory_type);
   dfn.vkUnmapMemory(device, builtin_index_buffer_upload_memory_);
 
   // Schedule uploading in the first submission.
@@ -205,10 +250,14 @@ void* VulkanPrimitiveProcessor::RequestHostConvertedIndexBufferForCurrentFrame(
   SCOPE_profile_cpu_f("gpu");
   size_t index_size = format == xenos::IndexFormat::kInt16 ? sizeof(uint16_t)
                                                            : sizeof(uint32_t);
+  if (native_resource_epoch_mode_ && !native_resource_epoch_.valid()) {
+    return nullptr;
+  }
   VkBuffer buffer;
   VkDeviceSize offset;
   uint8_t* mapping = frame_index_buffer_pool_->Request(
-      command_processor_.GetCurrentFrame(),
+      native_resource_epoch_mode_ ? native_resource_epoch_.serial()
+                                  : command_processor_.GetCurrentFrame(),
       index_size * index_count +
           (coalign_for_simd ? XE_GPU_PRIMITIVE_PROCESSOR_SIMD_SIZE : 0),
       index_size, buffer, offset);

@@ -1,0 +1,6 @@
+$flash_deviceselector.xex exports
+=================================
+
+{"confidence": "CONFIRMED", "function_va": "0x916D60D8", "module": "$flash_deviceselector.xex", "ordinal": "0x00000001", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x916D6068", "module": "$flash_deviceselector.xex", "ordinal": "0x00000002", "resolved_name": ""}
+{"confidence": "CONFIRMED", "function_va": "0x916D5F80", "module": "$flash_deviceselector.xex", "ordinal": "0x00000003", "resolved_name": ""}

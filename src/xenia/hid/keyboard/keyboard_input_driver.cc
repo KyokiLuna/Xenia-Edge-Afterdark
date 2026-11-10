@@ -65,15 +65,27 @@ static uint8_t VirtualKeyToHIDUsage(ui::VirtualKey vk_enum) {
     return uint8_t(vk - 0x61 + 0x59);
   }
 
-  // L / R modifiers (Ctrl/Shift/Alt).
-  if (vk >= 0xA2 && vk <= 0xA5) {
-    return uint8_t(vk - 0xA2 + 0xE0);
-  }
-  if (vk >= 0xA6 && vk <= 0xA9) {
-    return uint8_t(vk - 0xA6 + 0xE4);
-  }
-
   switch (vk) {
+    case 0x10:
+    case 0xA0:
+      return 0xE1;  // Shift / Left Shift.
+    case 0xA1:
+      return 0xE5;  // Right Shift.
+    case 0x11:
+    case 0xA2:
+      return 0xE0;  // Control / Left Control.
+    case 0xA3:
+      return 0xE4;  // Right Control.
+    case 0x12:
+    case 0xA4:
+      return 0xE2;  // Alt / Left Alt.
+    case 0xA5:
+      return 0xE6;  // Right Alt.
+    case 0x5B:
+      return 0xE3;  // Left Super.
+    case 0x5C:
+      return 0xE7;  // Right Super.
+
     case '0':
       return 0x27;
     case 0x0D:
@@ -219,8 +231,13 @@ KeyboardInputDriver::KeyboardInputDriver(xe::ui::Window* window,
 #include "keyboard_binding_table.inc"
 #undef XE_HID_KEYBOARD_BINDING
 
+  native_text_available_ = window->SupportsNativeTextCommits();
   window->AddInputListener(&window_input_listener_, window_z_order);
   window->AddListener(&window_input_listener_);
+  // AddListener does not replay a focus event. Seed the already-focused case
+  // after attaching, on the UI thread, rather than awaiting a future
+  // transition.
+  native_text_.SetFocused(window->HasFocus());
 }
 
 KeyboardInputDriver::~KeyboardInputDriver() {
@@ -260,6 +277,10 @@ X_RESULT KeyboardInputDriver::GetState(uint32_t user_index,
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
+  auto global_lock = global_critical_region_.Acquire();
+  const auto native = native_text_.State(native_text_generation_);
+  const bool native_claimed =
+      native.owner_revision && native.user < XUserMaxUserCount;
   uint16_t buttons = 0;
   uint8_t left_trigger = 0;
   uint8_t right_trigger = 0;
@@ -268,7 +289,7 @@ X_RESULT KeyboardInputDriver::GetState(uint32_t user_index,
   int16_t thumb_rx = 0;
   int16_t thumb_ry = 0;
 
-  if (window()->HasFocus()) {
+  if (window()->HasFocus() && !native_claimed) {
     for (const KeyBinding& b : key_bindings_) {
       if (b.is_pressed) {
         switch (b.output_key) {
@@ -395,6 +416,9 @@ X_RESULT KeyboardInputDriver::GetKeystroke(uint32_t user_index, uint32_t flags,
   // Pop from the queue. A release is sent only for a press the title received,
   // and repeats of a press it didn't receive aren't a new press.
   auto global_lock = global_critical_region_.Acquire();
+  if (native_controller_keystroke_generation_) {
+    return X_ERROR_EMPTY;
+  }
   KeyEvent evt;
   do {
     if (key_events_.empty()) {
@@ -473,8 +497,34 @@ void KeyboardInputDriver::KeyboardWindowInputListener::OnKeyChar(
   driver_.OnChar(e);
 }
 
+void KeyboardInputDriver::KeyboardWindowInputListener::OnTextInput(
+    ui::TextInputEvent& e) {
+  driver_.OnText(e);
+}
+
+void KeyboardInputDriver::KeyboardWindowInputListener::OnGotFocus(
+    ui::UISetupEvent&) {
+  auto lock = driver_.global_critical_region_.Acquire();
+  driver_.native_text_.SetFocused(true);
+  if (driver_.native_text_.State(driver_.native_text_generation_)
+          .owner_revision) {
+    driver_.QuarantinePressedKeys();
+  }
+  for (auto it = driver_.quarantined_.begin();
+       it != driver_.quarantined_.end();) {
+    if (driver_.window()->QueryPhysicalKeyState(*it) ==
+        ui::Window::PhysicalKeyState::kReleased) {
+      driver_.keys_down_.erase(*it);
+      it = driver_.quarantined_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
 void KeyboardInputDriver::KeyboardWindowInputListener::OnLostFocus(
     ui::UISetupEvent& e) {
+  driver_.native_text_.SetFocused(false);
   driver_.ClearPressedKeys();
 }
 
@@ -486,11 +536,19 @@ void KeyboardInputDriver::ClearPressedKeys() {
     b.is_pressed = false;
   }
   // Keystroke readers get the releases too.
+  const auto native = native_text_.State(native_text_generation_);
   for (const auto& [virtual_key, is_capital] : keys_down_) {
+    if (native.owner_revision) {
+      quarantined_.insert(virtual_key);
+    }
     KeyEvent release;
     release.virtual_key = virtual_key;
     release.is_capital = is_capital;
-    key_events_.push(release);
+    if (!native_controller_keystroke_generation_) {
+      key_events_.push(release);
+    }
+    native_text_.PushKey(uint16_t(virtual_key), 0,
+                         VirtualKeyToHIDUsage(virtual_key), false, false);
   }
   keys_down_.clear();
 }
@@ -514,9 +572,98 @@ void KeyboardInputDriver::ResetKeystrokes() {
   delivered_.clear();
 }
 
+void KeyboardInputDriver::SetNativeControllerKeystrokeGeneration(
+    uint64_t generation) {
+  auto lock = global_critical_region_.Acquire();
+  if (native_controller_keystroke_generation_ == generation) {
+    return;
+  }
+  key_events_ = {};
+  delivered_.clear();
+  native_controller_keystroke_generation_ = generation;
+  // Actual held keys/mapped gamepad state remain intact for native191. Text
+  // availability is deliberately unchanged; this is not a Unicode/IME claim.
+}
+
+void KeyboardInputDriver::QuarantinePressedKeys() {
+  for (const auto& [key, capital] : keys_down_) {
+    quarantined_.insert(key);
+  }
+  for (auto& binding : key_bindings_) {
+    binding.is_pressed = false;
+  }
+  key_events_ = {};
+  delivered_.clear();
+}
+
+void KeyboardInputDriver::SetNativeTextGeneration(uint64_t generation) {
+  auto lock = global_critical_region_.Acquire();
+  if (native_text_generation_ == generation) {
+    return;
+  }
+  if (native_text_.State(native_text_generation_).owner_revision) {
+    QuarantinePressedKeys();
+  }
+  native_text_generation_ = generation;
+  native_text_.SetGeneration(native_text_available_ ? generation : 0);
+}
+
+bool KeyboardInputDriver::SetNativeTextOwner(uint64_t generation,
+                                             uint64_t revision, uint32_t user,
+                                             bool enabled) {
+  auto lock = global_critical_region_.Acquire();
+  const auto before = native_text_.State(generation);
+  const bool accepted =
+      native_text_.SetOwner(generation, revision, user, enabled);
+  if (accepted && before.invalidation_epoch !=
+                      native_text_.State(generation).invalidation_epoch) {
+    QuarantinePressedKeys();
+  }
+  return accepted;
+}
+
+NativeTextState KeyboardInputDriver::GetNativeTextState(
+    uint64_t generation) const {
+  return native_text_.State(generation);
+}
+
+void KeyboardInputDriver::SetNativeTextHostModal(uint64_t generation,
+                                                 bool blocked) {
+  auto lock = global_critical_region_.Acquire();
+  const auto before = native_text_.State(generation).invalidation_epoch;
+  native_text_.SetHostModal(generation, blocked);
+  if (before != native_text_.State(generation).invalidation_epoch) {
+    QuarantinePressedKeys();
+  }
+}
+
+void KeyboardInputDriver::ResetNativeText(uint64_t generation) {
+  auto lock = global_critical_region_.Acquire();
+  native_text_.Reset(generation);
+  if (generation == native_text_generation_ &&
+      native_text_.State(generation).owner_revision) {
+    QuarantinePressedKeys();
+  }
+}
+
+X_RESULT KeyboardInputDriver::GetNativeTextKeystroke(
+    uint64_t generation, uint32_t user_index, X_INPUT_KEYSTROKE* output) {
+  return native_text_.Pop(generation, user_index, output);
+}
+
 void KeyboardInputDriver::OnKey(ui::KeyEvent& e, bool is_down) {
   auto global_lock = global_critical_region_.Acquire();
 
+  if (quarantined_.contains(e.virtual_key())) {
+    if (!is_down) {
+      quarantined_.erase(e.virtual_key());
+      keys_down_.erase(e.virtual_key());
+    }
+    return;
+  }
+  const auto native = native_text_.State(native_text_generation_);
+  const bool native_claimed =
+      native.owner_revision && native.user < XUserMaxUserCount;
   // Ignore releases and repeats of keys whose press another listener handled.
   // A held key keeps the shift state of its press so it maps to one binding
   // throughout.
@@ -541,7 +688,27 @@ void KeyboardInputDriver::OnKey(ui::KeyEvent& e, bool is_down) {
   key.is_ctrl_pressed = e.is_ctrl_pressed();
   key.is_alt_pressed = e.is_alt_pressed();
 
-  key_events_.push(key);
+  if (!native_controller_keystroke_generation_ && !native_claimed) {
+    key_events_.push(key);
+  }
+  uint16_t native_modifiers = (key.is_capital ? 0x0008 : 0) |
+                              (key.is_ctrl_pressed ? 0x0010 : 0) |
+                              (key.is_alt_pressed ? 0x0020 : 0);
+  const uint16_t native_key = uint16_t(key.virtual_key);
+  const bool text_key = native_key == 0x20 ||
+                        (native_key >= '0' && native_key <= '9') ||
+                        (native_key >= 'A' && native_key <= 'Z') ||
+                        (native_key >= 0x60 && native_key <= 0x6F) ||
+                        (native_key >= 0xBA && native_key <= 0xE2);
+  const bool shortcut = key.is_ctrl_pressed != key.is_alt_pressed;
+  native_text_.PushKey(uint16_t(key.virtual_key), native_modifiers,
+                       VirtualKeyToHIDUsage(key.virtual_key), is_down,
+                       is_down && key.prev_state, text_key && !shortcut,
+                       e.text_input_id());
+  if (native_claimed) {
+    e.set_handled(true);
+    return;
+  }
   for (auto& key_binding : key_bindings_) {
     if (key_binding.input_key != key.virtual_key) {
       continue;
@@ -560,18 +727,30 @@ void KeyboardInputDriver::OnKey(ui::KeyEvent& e, bool is_down) {
 }
 
 void KeyboardInputDriver::OnChar(ui::KeyEvent& e) {
-  if (!IsPassthroughEnabled()) {
-    return;
-  }
   // WM_CHAR convention: OnKeyChar's virtual_key carries the unicode codepoint.
   auto global_lock = global_critical_region_.Acquire();
-  if (key_events_.empty()) {
+  const auto native = native_text_.State(native_text_generation_);
+  if (native.owner_revision) {
+    e.set_handled(true);
     return;
   }
-  auto& last = key_events_.back();
-  if (last.transition && last.unicode == 0) {
-    last.unicode = static_cast<uint16_t>(e.virtual_key());
+  if (IsPassthroughEnabled() && !key_events_.empty()) {
+    auto& last = key_events_.back();
+    if (last.transition && last.unicode == 0) {
+      last.unicode = static_cast<uint16_t>(e.virtual_key());
+    }
   }
+}
+
+void KeyboardInputDriver::OnText(ui::TextInputEvent& e) {
+  auto lock = global_critical_region_.Acquire();
+  const auto native = native_text_.State(native_text_generation_);
+  if (!native.owner_revision || native.user >= XUserMaxUserCount) {
+    return;
+  }
+  e.set_handled(true);
+  native_text_.CommitText(e.source_key(), e.text(), e.host_repeat(),
+                          e.composed());
 }
 
 InputType KeyboardInputDriver::GetInputType() const {

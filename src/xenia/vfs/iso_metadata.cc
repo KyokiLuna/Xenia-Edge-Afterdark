@@ -15,8 +15,8 @@
 namespace xe {
 namespace vfs {
 
-std::optional<XexMetadata> ExtractIsoMetadata(const uint8_t* data,
-                                              size_t size) {
+std::optional<XexMetadata> ExtractIsoMetadata(const uint8_t* data, size_t size,
+                                              bool read_title_resources) {
   // Find the game partition.
   auto partition = GdfxFindPartition(data, size);
   if (!partition) {
@@ -30,23 +30,24 @@ std::optional<XexMetadata> ExtractIsoMetadata(const uint8_t* data,
   }
 
   // Validate the file location.
-  if (location->offset + location->length > size) {
+  if (location->offset > size || location->length > size - location->offset) {
     return std::nullopt;
   }
 
   // Extract XEX metadata from the file data.
-  return ExtractXexMetadata(data + location->offset, location->length);
+  return ExtractXexMetadata(data + location->offset, location->length,
+                            read_title_resources);
 }
 
-std::optional<XexMetadata> ExtractIsoMetadata(
-    const std::filesystem::path& path) {
+std::optional<XexMetadata> ExtractIsoMetadata(const std::filesystem::path& path,
+                                              bool read_title_resources) {
   // Memory-map the ISO for efficient access.
   auto mmap = xe::MappedMemory::Open(path, xe::MappedMemory::Mode::kRead);
   if (!mmap) {
     return std::nullopt;
   }
 
-  return ExtractIsoMetadata(mmap->data(), mmap->size());
+  return ExtractIsoMetadata(mmap->data(), mmap->size(), read_title_resources);
 }
 
 }  // namespace vfs

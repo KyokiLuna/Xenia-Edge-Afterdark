@@ -10,11 +10,14 @@
 #ifndef XENIA_CPU_XEX_MODULE_H_
 #define XENIA_CPU_XEX_MODULE_H_
 
+#include <array>
 #include <atomic>
 #include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 #include "xenia/base/mapped_memory.h"
+#include "xenia/cpu/guest_import_provider.h"
 #include "xenia/cpu/module.h"
 #include "xenia/kernel/util/xex2_info.h"
 
@@ -142,7 +145,57 @@ class XexModule : public xe::cpu::Module {
   XexModule(Processor* processor, kernel::KernelState* kernel_state);
   virtual ~XexModule();
 
+  // Bind a real guest export entry to an implemented host export, including
+  // intra-image direct calls. Only a quiescent, not-yet-executed module runtime
+  // may install these. A previously compiled target is rejected: compiled
+  // callers may contain literal native addresses that invalidation cannot
+  // repair. The owner must prevent execution/precompilation while binding.
+  // Translation uses an owned syscall overlay; guest bytes remain unchanged.
+  bool BindGuestExportToHost(uint16_t ordinal, std::string_view host_library,
+                             uint16_t host_ordinal);
+  // Bind a genuine export with a checked complete original extent/hash. Unlike
+  // the legacy overload, this also enforces terminal and interior-entry checks.
+  // The export table is the entry witness; an intra-image BL is not required.
+  bool BindGuestExportToHost(uint16_t ordinal, std::string_view host_library,
+                             uint16_t host_ordinal, uint32_t full_size,
+                             std::string_view full_sha256);
+  // Bind a signature-verified internal entry (at least two instructions).
+  // Requires a concrete BL target in this image's mapped code and a complete
+  // terminal extent, with no interior entry or overlapping function. Only
+  // static trusted code may supply a handler; never load host pointers from
+  // guest data or configuration. Same quiescence rules as export binding.
+  bool BindGuestFunctionToHost(uint32_t address, uint32_t size,
+                               std::string_view expected_sha256,
+                               std::string_view host_library,
+                               uint16_t host_ordinal);
+  bool BindGuestFunctionToHost(uint32_t address, uint32_t size,
+                               std::string_view expected_sha256,
+                               GuestFunction::ExternHandler host_handler,
+                               std::string_view host_name);
+  // A version-verified, same-image native TaskSchedule registration. This
+  // accepts only the checked nine-instruction registration template described
+  // below, not an arbitrary address-taken pointer or a caller-supplied bypass.
+  // The callback and scheduler must have exact full-extent PE .pdata entries.
+  // Only trusted native runtime setup may supply this metadata and handler,
+  // retaining this exact private module generation and keeping it quiescent.
+  struct GuestTaskCallbackRegistration {
+    uint32_t registration_address = 0;
+    uint32_t registration_size = 0;
+    std::string_view registration_sha256;
+    uint32_t schedule_address = 0;
+    uint32_t schedule_size = 0;
+    std::string_view schedule_sha256;
+  };
+  bool BindGuestTaskCallbackToHost(
+      uint32_t address, uint32_t size, std::string_view expected_sha256,
+      const GuestTaskCallbackRegistration& registration,
+      GuestFunction::ExternHandler host_handler, std::string_view host_name);
+  const uint8_t* TranslateCode(uint32_t address) const override;
+  Symbol::Status DeclareFunction(uint32_t address,
+                                 Function** out_function) override;
+
   bool loaded() const { return loaded_; }
+  const std::string& image_code_sha1() const { return image_sha_str_; }
   const xex2_header* xex_header() const {
     return reinterpret_cast<const xex2_header*>(xex_header_mem_.data());
   }
@@ -230,6 +283,17 @@ class XexModule : public xe::cpu::Module {
   bool Load(const std::string_view name, const std::string_view path,
             const void* xex_addr, size_t xex_length);
   bool LoadContinue();
+  // Install only before loading a fresh module. One immutable provider covers
+  // its complete import list; missing claimed exports fail before slot writes.
+  void SetGuestImportProvider(
+      std::shared_ptr<const GuestImportProvider> provider) {
+    assert_false(loaded_);
+    guest_import_provider_ = std::move(provider);
+  }
+  const std::shared_ptr<const GuestImportProvider>& guest_import_provider()
+      const {
+    return guest_import_provider_;
+  }
   bool Unload();
 
   bool ContainsAddress(uint32_t address) override;
@@ -256,6 +320,10 @@ class XexModule : public xe::cpu::Module {
   InfoCacheFlags* GetInstructionAddressFlags(uint32_t guest_addr);
 
   virtual void Precompile() override;
+  // The no-argument virtual entry preserves normal module loading. Explicit
+  // fresh native runtimes may defer compilation until bridges are installed;
+  // hashing, save/restore metadata and info-cache setup still occur.
+  void Precompile(bool compile_discovered);
   // Compiles everything early precompilation discovers, if enabled.
   void PrecompileDiscoveredFunctions();
   // Compiles the CRT static initializers and their callees. Call after all
@@ -266,6 +334,29 @@ class XexModule : public xe::cpu::Module {
   std::unique_ptr<Function> CreateFunction(uint32_t address) override;
 
  private:
+  struct GuestHostBridge {
+    uint32_t original_size;
+    std::array<uint8_t, 8> translation;
+    // Native Task callback admission depends on these original native bytes.
+    // Protect them against all subsequent bridge installations too.
+    struct Dependency {
+      uint32_t address = 0;
+      uint32_t size = 0;
+    };
+    std::array<Dependency, 2> dependencies{};
+  };
+  enum class EntryWitness {
+    kExport,
+    kExportFullExtent,
+    kDirectCall,
+    kNativeTaskRegistration
+  };
+  bool InstallGuestFunctionBridge(
+      uint32_t address, uint32_t size, std::string_view expected_sha256,
+      GuestFunction::ExternHandler handler, Export* export_data,
+      std::string_view host_name, EntryWitness entry_witness,
+      const GuestTaskCallbackRegistration* task_registration = nullptr);
+  std::map<uint32_t, GuestHostBridge> guest_host_bridges_;
   void PrecompileKnownFunctions();
   std::vector<uint32_t> FindStaticInitializers() const;
   bool IsCodeAddress(uint32_t address) const {
@@ -308,6 +399,7 @@ class XexModule : public xe::cpu::Module {
 
   bool loaded_ = false;         // Loaded into memory?
   bool finished_load_ = false;  // PE/imports/symbols/etc all loaded?
+  std::shared_ptr<const GuestImportProvider> guest_import_provider_;
 
   uint32_t base_address_ = 0;
   uint32_t low_address_ = 0;

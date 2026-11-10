@@ -1,0 +1,401 @@
+Unresolved issues / anomaly register
+=======================================
+This is a hand-maintained file (NOT auto-regenerated) - add to it as new
+issues surface. VALIDATION_REPORT.txt cross-checks some of these mechanically
+but doesn't replace this register.
+
+-------------------------------------------------------------------------
+1. $flash_aac.xexp - missing base module
+-------------------------------------------------------------------------
+What's missing: the file is a DELTA (xexp) patch (load_address 0x91380000);
+no module anywhere in this dump loads at that address or is named "aac.xex".
+What was attempted: scanned every XEX2 file in the dump by load_address
+(not just filename) - no match.
+Why work stopped: a delta patch cannot be reconstructed without its base
+image; there is nothing left to try with only this dump.
+What would resolve it: the corresponding base "aac.xex" (or whatever the
+real base module is named) from the same or a compatible dashboard build.
+Priority/value: LOW. Likely an audio (AAC decode) system component, not on
+the avatar/XAM-storage/profile critical path this corpus currently targets.
+
+-------------------------------------------------------------------------
+2. $flash_nomni.xexp - missing base module
+-------------------------------------------------------------------------
+What's missing: DELTA patch, load_address 0x91090000, no matching base
+anywhere in the dump.
+What was attempted: same load-address scan as #1.
+Why work stopped: same as #1.
+What would resolve it: the base module (name unknown - "nomni" doesn't map
+to any other file in this dump).
+Priority/value: LOW/UNKNOWN - unidentified subsystem.
+
+-------------------------------------------------------------------------
+3. $flash_nomnifwm.xexp - missing base module
+-------------------------------------------------------------------------
+What's missing: DELTA patch, load_address 0x91070000, no matching base.
+What was attempted: same load-address scan as #1.
+Why work stopped: same as #1.
+What would resolve it: base module (name unknown).
+Priority/value: LOW/UNKNOWN. Load address is adjacent to $flash_nomni.xexp's
+(0x91070000 vs 0x91090000) - possibly a related pair (e.g. "nomni" +
+"nomni framework/manager"), pure speculation, not corroborated by anything
+in this corpus.
+
+-------------------------------------------------------------------------
+4. $flash_ximedic.xexp - header/security descriptor anomaly
+-------------------------------------------------------------------------
+What's wrong: base module (XIMEDIC.XEX) IS present and the delta-patch
+HEADER reconstruction is confirmed correct (the reconstructed AES key at
+the patched security_offset decrypts correctly and the image_key_source
+cross-check passes) - but after patching, security_info.image_size and
+security_info.page_descriptor_count both read as 0, which then fails body
+decompression (can't size the output buffer).
+What was attempted:
+  - Verified the LZX header-patch decompression itself succeeds (rc=0,
+    plausible-looking output bytes, including a correctly-recovered AES key
+    later in the same decompressed region).
+  - Confirmed security_offset itself is being read correctly post-patch
+    (0xB8, internally consistent with where the AES key and RSA signature
+    actually land).
+  - Did NOT find why specifically image_size/page_descriptor_count (the
+    first 8 bytes of xex2_security_info) read as zero when everything after
+    them in the same struct is correct.
+Why work stopped: this is the IME/handwriting-input dictionary component,
+not avatar/XAM/storage/profile-relevant - not worth further time against
+the current research priorities.
+What would resolve it: a focused debugging session on xextool.c's
+mode_patch() header-patch path specifically for this file (see
+decoded_dump/_tool/xextool.c), or an already-depatched reference copy of
+XIMEDIC's flash image from elsewhere to compare against.
+Priority/value: LOW.
+
+-------------------------------------------------------------------------
+5. SUSPECT_METADATA - reconstructed sidecar execution_info unreliable for
+   some depatched modules
+-------------------------------------------------------------------------
+What's wrong: for several successfully depatched $flash_*.xexp modules
+(at least $flash_createprofile.xexp, $flash_hud.xexp, $flash_signin.xexp,
+$flash_updater.xexp, $flash_xam.xexp, $flash_gamerprofile.xexp per the
+current 07_TITLE_IDS.txt Section 1b), the reconstructed ".header" sidecar's
+xex2_opt_execution_info (title_id/module_version/base_version) does NOT
+match the base module's own execution_info. Base modules consistently
+report title_id=0 (expected - they're system components, not titles); the
+sidecars report nonzero garbage. One sidecar's "title_id" literally decodes
+as the ASCII bytes "XBOX" - clearly not a real title ID field being read.
+What was attempted: cross-validated every depatched module's sidecar
+execution_info against its base module's (see corpus_common.py's
+`metadata_suspect` flag) - flagged, not silently corrected. The image_size/
+export_table_va/aes_key fields in the SAME reconstructed headers check out
+fine (export tables resolve correctly, body decrypts/decompresses
+correctly), so this looks narrowly scoped to the execution_info optional
+header specifically, not a wholesale patch-reconstruction failure.
+Why work stopped: doesn't block the primary avatar/XAM/storage/profile
+goals (title_id/version aren't load-bearing for export/import/call-graph/
+IPC work, which all check out against known-good data like AvatarEditor.xex
+and Xenia's own kAvatarEditorID/kDashboardID constants).
+What would resolve it: same xextool.c mode_patch() debugging as #4 -
+likely the header-patch delta entries don't cover 100% of the header area,
+leaving some optional-header offsets pointing at stale pre-patch data for
+a subset of modules.
+Priority/value: LOW-MEDIUM. Worth fixing before trusting title_id/version
+fields for depatched modules in any future work; does not affect
+addresses/exports/imports/calls, which are independently verified.
+
+-------------------------------------------------------------------------
+6. [RESOLVED] Command-word decoding stops at "port" for INFERRED IPC entries
+-------------------------------------------------------------------------
+Original text (kept for history): the automated IPC scan used to record
+only the message PORT, not the 0x6000XX-style COMMAND word.
+
+RESOLUTION: build_06_ipc.py now decodes the command word too, via
+disasm_support.py:resolve_register_value_before (backward dataflow through
+li/lis+ori/lis+addi/mr chains, including the cross-register
+`lis r11,HI; addi r5,r11,LO` address-formation idiom a first attempt at
+this missed). Classification of "leaf dispatcher" vs "helper" was
+rewritten as a two-pass bootstrap (see build_06_ipc.py's docstring) after
+a length-based heuristic first attempt mis-flagged a generic register-save
+prologue helper as a dispatcher. The decoder is cross-validated against
+every CONFIRMED avatar entry on every run (see the top of
+06_IPC_SERVICE_MAP.txt for the live count) - currently 23/23 exact matches
+(started at 22, +1 after XamAvatarWearNow was hand-verified and promoted -
+see item #7 below).
+
+That validation process caught two pre-existing transcription bugs in this
+corpus's own CONFIRMED_AVATAR table (not in the decoder): XamAvatarLoadAnimation
+and XamAvatarBeginEnumAssets had their VAs transposed, and
+XamUserGetUsersMissingAvatars' command word was mistranscribed as 0x3000a
+instead of the correct 0x2300a (a `lis r4, 2` was misread as loading 0).
+Both are now fixed in build_06_ipc.py's CONFIRMED_AVATAR table and
+02_AVATAR_COMMAND_TABLE.txt.
+
+Remaining gap: PORT_VALUE_MIN (0x80) is itself a heuristic cutoff chosen to
+separate real port values (0xf3/0xfb/0xfe/0xfa/0xfc/0xff, all observed in
+the top quarter of the byte range) from common small-integer false
+positives (li r3,0 / li r3,1 flags) that flooded results on non-XAM
+modules like AvatarEditor.xex before this cutoff was added. A real port
+below 0x80 would currently be missed - none has been observed yet, but
+this is a real limitation, not a proven-safe assumption.
+
+-------------------------------------------------------------------------
+7. [RESOLVED, WITH FINDINGS] IPC scan extended beyond xam.xex/$flash_xam.xexp
+-------------------------------------------------------------------------
+Original gap: build_06_ipc.py only scanned xam.xex / $flash_xam.xexp.
+
+RESOLUTION: the scan now runs across every module in PRIORITY_MODULES,
+using the same export+BFS function discovery build_04_calls.py uses (see
+item #4 below for the BFS work this depended on). Results:
+  - dash.xex / $flash_dash.xex: real hits (56 total), including previously
+    unseen ports 0xFA and 0xFF (in addition to 0xFC - see next line).
+  - signin.xex / $flash_signin.xexp: real hits on a NEW port, 0xFC, with
+    commands like 0x58003/0x58004/0x62D - a distinct command-word family
+    from the avatar 0x6000XX one. Not yet semantically identified (no
+    xam_avatar.cc-equivalent comments to cross-reference against for
+    sign-in).
+  - deviceselector.xex: one hit, port 0x80 (the lowest port value seen so
+    far - right at the PORT_VALUE_MIN cutoff). Hand-verified by reading the
+    actual disassembly at 0x916D38E0: genuine IPC-shaped call
+    (`li r3,0x80; bl 0x916d3db8; cmplwi r3,0; beq ...` - identical shape to
+    every other confirmed call site), but only one call site exists in this
+    small module, so it's a single data point, not cross-validated across
+    multiple callers the way the avatar/dash/signin findings are.
+  - gamerprofile.xex / createprofile.xex: no port/command IPC path found
+    in current static coverage - not a scan bug. Their call graphs
+    (reference/calls/gamerprofile.xex.calls.txt) show they register a
+    callback via XamRegisterSysApp/XamUnregisterSysApp instead, and that
+    mechanism is now identified and documented. This is a real, positive
+    finding about the mechanism these modules DO use - it is NOT proof
+    that no port/command IPC can ever occur via some other, unresolved
+    data-driven or indirect path this scan's bounded static analysis
+    can't see (e.g. a computed `bl` target, a function pointer loaded from
+    a table, or a path exceeding find_endpoint_chain's depth<=4/
+    node_cap<=40 search bound). Phrase any future claim about these two
+    modules as "no IPC path found in current static coverage", not as an
+    absolute "these modules don't do IPC" - see the "DO NOT OVER-PROMOTE
+    NEGATIVE RESULTS" item in the most recent cleanup pass's spec.
+
+HAND-VERIFICATION PASS (completed): sampled dash.xex/signin.xex call sites
+by reading raw disassembly directly (not just trusting the automated
+decoder). This caught a real over-permissiveness bug: $flash_dash.xex's
+0x921ea088 structurally looked like a forwarding helper (same
+`li r3,PORT;...;bl <leaf>` shape as the avatar family's 0x818d2470) but
+actually has a FIXED command word (0x58004) baked in via its own
+`lis r4,5;ori r4,r4,0x8004` - it does NOT forward its caller's r3 as the
+command the way 0x818d2470 does. This produced 9+ distinct WRONG "command"
+values across dash.xex entries (0x501, 0x512, 0x583, 0x901, 0x904, 0x930,
+0xE11, 0xE13, 0xE14, 0x1400, 0x1401 - actually the caller's r3 used for
+some other internal purpose). Fixed in build_06_ipc.py by checking whether
+a candidate helper's OWN command register resolves to a literal constant
+(fixed) vs stays unresolvable (genuinely forwarding a runtime parameter) -
+see 08_STRUCTURES.txt's "FIXED helper" entry for the full mechanism and a
+general early-warning heuristic (group ipc.tsv by dispatcher_va; if a
+"helper"-kind dispatcher's command never actually varies across callers,
+it's probably "fixed", not "helper"). 42 rows were corrected in one run.
+All 22 CONFIRMED avatar entries re-validated as still exact after the fix
+(the bug didn't affect them - 0x818d2470 IS a genuine forwarder, confirmed
+by the same check now finding its command register unresolvable).
+
+Also discovered while hand-verifying: some "leaf" dispatchers aren't
+internal functions at all - $flash_dash.xex's 0x92741174 is the raw
+(pre-Xenia-load-time-rewrite) import thunk for xam.xex's real exported
+`XMsgInProcessCall`. build_06_ipc.py now cross-references
+reference/imports/*.txt and labels these with the real import name
+instead of a generic "leaf @0xADDR".
+
+REMAINING DASH.XEX FAMILIES (completed): hand-verified the other 3
+dispatcher addresses that were flagged for follow-up, one at a time:
+  - 0x92468d28 (port 0xF7 family, e.g. command 0x20000A): read as a
+    genuine "wrapper leaf" - it's itself the direct target of callers'
+    `li r3,0xf7;bl 0x92468d28`, and internally just forwards its OWN
+    incoming r3-r6 (via plain `mr` copies, no `lis+ori` constant anywhere)
+    to XMsgInProcessCall. No fixed-command bug here - correctly classified
+    as "leaf" already (Pass 1b's fixed/helper check only applies to
+    HELPER-classified targets, and this one was already bootstrapped
+    straight into leaf_ports from direct caller evidence, so the check
+    never needed to run for it - reasoned through, not just re-tested).
+  - 0x92741154 and 0x92741164: also raw import thunks, like 0x92741174 -
+    confirmed against reference/imports/flash_dash.xex.imports.txt as
+    xam.xex's exported `XMsgStartIORequestEx` (0x92741154) and
+    `XMsgStartIORequest` (0x92741164) respectively. Both now labeled with
+    their real names in 06_IPC_SERVICE_MAP.txt.
+  - Corpus-wide cross-check for the SAME "fixed helper" bug class:
+    grouped every dispatcher_va in ipc.tsv by whether ALL its callers show
+    the identical command word (a red flag for "should be fixed, not
+    helper"). Found 3 more instances, all in $flash_xam.xexp, ALL already
+    correctly classified as "fixed" by the existing fix (0x81A3FE48,
+    0x81935B28, 0x81908468 - two of these are themselves other exported
+    XAM functions, e.g. XamContentGetDeviceData, being called internally
+    by other exports and sending their own fixed IPC command - a
+    legitimate pattern, not a bug). No new mis-classifications found.
+  - XamAvatarWearNow's previously-untraced else-branch command was also
+    hand-verified this pass (raw disassembly read: `lis r3,0x60;
+    ori r3,r3,0x18; bl 0x818d2470` = port 0xF3, command 0x600018) and
+    promoted from "believed"/INFERRED to CONFIRMED - see
+    02_AVATAR_COMMAND_TABLE.txt and CONFIRMED_AVATAR in build_06_ipc.py
+    (now 23 entries, up from 22).
+
+What would resolve it further: add a xam_avatar.cc-equivalent comment
+pass to Xenia's source for sign-in once a source file/export set is
+identified for it; semantically name the dash.xex/signin.xex command
+families (currently just hex values with no human-readable meaning).
+Priority/value: LOW now - all previously-flagged follow-up items in this
+entry are done. What's left (semantic naming) is genuinely open-ended
+without more reference material (e.g. a leaked symbol map or an SDK
+header) and isn't blocking any structural/connectivity work.
+
+-------------------------------------------------------------------------
+8. [PARTIALLY RESOLVED] Call-graph coverage extended for low-export modules
+-------------------------------------------------------------------------
+Original gap: call-graph/string-xref coverage was exported-functions-only,
+which found almost nothing for application-style modules with few/no
+exports (gamerprofile.xex: 0, createprofile.xex: 2, signin.xex: 0, etc.).
+
+RESOLUTION (partial): build_04_calls.py now also does a capped (250
+functions) breadth-first walk of internal `bl` targets starting from each
+low-export module's entry point (disasm_support.py:discover_functions_bfs),
+PLUS an opportunistic one-hop expansion that follows function-pointer
+arguments passed to *Register*-style import calls (e.g.
+XamRegisterSysApp's callback argument - see
+build_04_calls.py:find_callback_roots) - this is exactly the
+"repeatedly-seen internal helper" pattern this item originally called out,
+generalized into automation rather than done as one-off manual passes.
+Coverage went from 6/47/601 (exported/BFS functions/edges) to
+2440 exported + 634 BFS-discovered functions, 13878 edges, across all 14
+PRIORITY_MODULES (previously only 6 modules had any coverage at all).
+
+Remaining gap (AT THE TIME this item was written): this was still bounded
+(250-function cap per module, one hop of callback-pointer following) and
+did NOT expand string-xref coverage into BFS-discovered functions
+(build_05_strings.py only computed xrefs against exported-function
+disassembly) - a string referenced only from a BFS-discovered internal
+function wouldn't show an xref. Also, dash.xex/AvatarEditor.xex are large
+enough that the 250-function cap only reaches a small fraction of their
+real code from the entry point alone.
+
+RESOLUTION (string-xref part, later pass): build_05_strings.py's
+compute_xrefs() now reuses build_04_calls.discover_module_functions() -
+the SAME function set (exports + BFS-discovered internals + callback
+descendants) the call graph and IPC scan use, not a separate export-only
+walk - so a string referenced only from inside a BFS/callback-discovered
+function is now found. This surfaced (and then required fixing) a real
+bug in the matching logic: the `lis rX,HI` + `addi rD,rA,LO` /
+`la rD,LO(rA)` address-formation idiom was being checked against the
+WRONG operand (the destination register `rD` instead of the source
+register `rA`, which is the one that actually has to match the `lis`
+target - `rD` is frequently a DIFFERENT register, e.g.
+`lis r11,HI; addi r7,r11,LO`). Only the self-referencing `ori rX,rX,LO`
+idiom happened to match under the old (wrong) check, which is why a
+first attempt at this reuse regressed to just 1 function corpus-wide with
+any xref (verified: 0 xrefs even for a known-good hand-picked address in
+xam.xex). Fixed by comparing operand[1] (source) for addi/la and
+operand[0] (destination) only for the genuinely self-referencing `ori`
+case. After the fix: 9 distinct functions across 5 priority modules show
+at least one real string xref (spot-checked, not just count-checked -
+e.g. XamGetDefaultImage -> "defaultsystemimage.png",
+XamContentCreateEnumerator -> "XSYSLAUNCH:\", both clearly correct
+semantic correlations). This is still a bounded heuristic (adjacent
+`lis`+`addi/la/ori` PAIR match only, exact-VA match only - a candidate
+address landing a few bytes off a string's start, e.g. into padding
+before it or a table-entry pointing near-but-not-at a string, is a
+genuine miss, not a bug; several such near-misses were observed and are
+NOT counted as xrefs) - a low true xref count is expected and is not
+itself evidence of a remaining bug, given how narrow the matched
+instruction shape is relative to all the ways PPC code can form an
+address (TOC-relative loads, computed offsets, etc. are NOT covered).
+
+Remaining gap (still open): does NOT cover other address-formation idioms
+(indexed/computed addresses, loads through a pointer table, etc.) - only
+the direct 2-instruction lis+{addi,la,ori} pair. raise BFS_CAP for
+specific high-value modules if still needed for call-graph reach; further
+xref-idiom coverage should stay opportunistic (only if a specific known
+string reference is confirmed missing), not a blanket rewrite.
+Priority/value: LOW-MEDIUM - the highest-value instances (avatar's
+0x818d2470, gamerprofile's SysApp callback) are already covered; further
+expansion is diminishing returns without a specific new target function.
+
+-------------------------------------------------------------------------
+9. [RESOLVED] IPC classification rewritten from heuristic leaf/helper/fixed
+   to statically-proven endpoint-reachability chains
+-------------------------------------------------------------------------
+Original gap (see items #6/#7 above for the full history of the
+leaf/helper/fixed classifier they describe as "resolved" at the time):
+that classifier only handled 0-hop ("leaf") and 1-hop ("helper"/"fixed")
+dispatch shapes, hardcoded promotion of ANY `li r3,port-shaped-value;
+bl target` candidate straight into ipc.tsv without proving `target`
+actually reaches a real XMsg* endpoint, and recorded only ONE IPC callsite
+per function (a `break` after the first match), silently dropping
+functions that dispatch different commands on different branches.
+
+RESOLUTION: build_06_ipc.py was rewritten around an endpoint-proof
+architecture (see its module docstring for full detail):
+  - every `li r3,port;...;bl target` occurrence is now kept as its own
+    candidate (module, caller_va, callsite_va) - no more one-per-function
+    cap; 6 functions in the current corpus have >1 retained IPC callsite.
+  - a per-module endpoint registry is built from that module's own
+    exports/import-thunks whose real (ordinal-database-resolved) name
+    starts with "XMsg" - never hardcoded to a fixed function list.
+  - disasm_support.find_endpoint_chain does a bounded BFS (depth<=4,
+    node_cap<=40) over `bl` targets from each candidate looking for ANY
+    path to a registered endpoint. No path found -> candidate stays in
+    _ipc_candidates.tsv only, confidence=CANDIDATE, status
+    UNRESOLVED_NO_ENDPOINT or ENDPOINT_FOUND_BUT_ARGS_UNRESOLVED - NOT
+    written to ipc.tsv/06_IPC_SERVICE_MAP.txt. Path found -> promoted to
+    DERIVED, with the full hop-by-hop evidence_chain recorded (not
+    flattened into a single vague "dispatcher").
+  - resolve_ipc_args() generalizes the old 0/1-hop-only arg resolution to
+    arbitrary chain depth, walking hop-by-hop via
+    resolve_register_value_before (falls back to trace_incoming_register
+    to alias to the calling hop's own parameter and recurse toward the
+    original caller). Produces command_source/port_source in
+    {CALLER_CONSTANT, FIXED_WRAPPER, FORWARDED_ARGUMENT, COMPUTED_WRAPPER,
+    UNKNOWN} - see build_06_ipc.py's docstring.
+Result on this corpus: 23 CONFIRMED (unchanged - still hand-verified) +
+256 DERIVED (endpoint-proven, up from the old classifier's less-rigorous
+INFERRED set) = 279 entries; 91 candidates REJECTED for lacking endpoint
+proof, including every named false-positive this rewrite specifically set
+out to catch (XamUserCreateStatsEnumerator -> XamCreateEnumeratorHandle,
+SetFilePointer/SetFilePointerEx -> RtlSetLastError,
+XuiSceneNavigateForward -> XuiElementGetFocusUser,
+XamProfileOpen -> XamContentCreateInternal,
+XamBackgroundDownloadSelectDevice -> XamContentCreateDeviceEnumerator,
+XamProfileCreateEnumerator/XamContentCreateEnumeratorInternal/
+XamContentAggregateCreateEnumerator/XamContentCreateDeviceEnumerator, all
+verified via _ipc_candidates.tsv to show UNRESOLVED_NO_ENDPOINT). The
+chain-proof engine is re-validated against all 23 CONFIRMED entries on
+every run (23/23 matched, 0 mismatches at time of writing) before any of
+its DERIVED output is trusted.
+Items #6/#7 above are kept verbatim as historical record of the PRIOR
+(now-superseded) classification mechanism and the hand-verification work
+that fed into CONFIRMED_AVATAR - none of that hand-verified ground truth
+changed; only the automated classifier around it did.
+Priority/value: this was the highest-priority item in the most recent
+cleanup pass (see the "SEPARATE IPC CANDIDATES FROM PROVEN IPC" /
+"CRITICAL COVERAGE BUG" / "IPC EVIDENCE CHAINS FIRST-CLASS DATA" spec
+items) - now resolved. Semantic naming of non-avatar DERIVED command
+words remains open (see item #7's "what would resolve it further").
+
+-------------------------------------------------------------------------
+10. [RESOLVED] build_11_validate.py silently undercounted strings.tsv rows
+    (csv module's default quoting swallowed rows containing '"')
+-------------------------------------------------------------------------
+What was wrong: VALIDATION_REPORT.txt's "strings indexed" coverage figure
+read 40907 while strings.tsv actually had 43670 data rows (confirmed via
+`wc -l`) - a silent ~6% undercount, discovered while expanding
+build_11_validate.py with the semantic checks in item #9. Root cause:
+read_tsv() used Python's csv.DictReader with its default
+quoting=QUOTE_MINIMAL, which treats a bare `"` character as the start of
+a quoted field and will consume subsequent newlines into that field until
+it finds a closing quote (or EOF) - these TSVs have no quoting/escaping
+convention at all (plain tab-delimited, raw string/text content written
+as-is), and 963 lines in strings.tsv contain at least one `"` (e.g.
+literal quote characters inside extracted UI strings), so real row
+boundaries were being silently merged/eaten.
+RESOLUTION: read_tsv() now passes quoting=csv.QUOTE_NONE, which disables
+special '"' handling entirely - correct for these files, which were never
+quoted/escaped to begin with. Verified: 43670 rows now read back exactly
+matching build_05_strings.py's own reported count and strings.tsv's real
+line count.
+Priority/value: this affected every check that reads *.tsv via read_tsv()
+(not just the coverage summary line), so any future check added here
+should NOT assume csv.DictReader's default dialect is safe for these
+files - QUOTE_NONE is the correct dialect for all of this corpus's TSVs
+unless a quoting/escaping convention is deliberately introduced later.

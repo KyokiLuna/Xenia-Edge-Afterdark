@@ -204,6 +204,19 @@ XboxkrnlModule::XboxkrnlModule(Emulator* emulator, KernelState* kernel_state)
   std::memcpy(lpXboxKrnlVersion, kernel_state_->GetKernelVersion(),
               sizeof(KernelVersion));
 
+  // Match the existing HLE/XBDM virtual base-version policy, not a recovered
+  // retail bootloader value. This is a distinct guest copy: guest patching of
+  // either version record must not alias the other or the host version policy.
+  // KernelState has assigned its configured current version before this module
+  // is constructed (InitializeKernelGuestGlobals runs before that assignment).
+  const KernelVersion base_version(kBaseKernelBuildVersion);
+  uint32_t pXboxKrnlBaseVersion =
+      memory_->SystemHeapAlloc(sizeof(KernelVersion));
+  auto lpXboxKrnlBaseVersion = memory_->TranslateVirtual(pXboxKrnlBaseVersion);
+  std::memcpy(lpXboxKrnlBaseVersion, &base_version, sizeof(base_version));
+  export_resolver_->SetVariableMapping(
+      "xboxkrnl.exe", ordinals::XboxKrnlBaseVersion, pXboxKrnlBaseVersion);
+
   export_resolver_->SetVariableMapping("xboxkrnl.exe",
                                        ordinals::KeTimeStampBundle,
                                        kernel_state->GetKeTimestampBundle());
@@ -223,6 +236,8 @@ XboxkrnlModule::XboxkrnlModule(Emulator* emulator, KernelState* kernel_state)
   EXPORT_KVAR(ObDirectoryObjectType);
   EXPORT_KVAR(ObSymbolicLinkObjectType);
   EXPORT_KVAR(UsbdBootEnumerationDoneEvent);
+  EXPORT_KVAR(UsbdDriverLoadRequiredEvent);
+  EXPORT_KVAR(StfsDeviceErrorEvent);
 #undef EXPORT_KVAR
 }
 

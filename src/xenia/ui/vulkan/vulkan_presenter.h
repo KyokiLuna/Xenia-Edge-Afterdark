@@ -144,6 +144,28 @@ class VulkanPresenter final : public Presenter {
 
   bool CaptureGuestOutput(RawImage& image_out) override;
 
+  // Backend transport only. The lifetime owns the real CP image allocation,
+  // never a guest-memory completion lease. Source reads must already be done.
+  struct NativeUiPlaneImage {
+    const VulkanDevice* device = nullptr;
+    std::shared_ptr<const NativeUiPlaneAuthority> authority;
+    gpu::NativeFrameSubmissionIdentity identity;
+    uint64_t backend_epoch = 0, version = 0;
+    uint32_t width = 0, height = 0;
+    VkImage image = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    std::shared_ptr<void> lifetime;
+    gpu::GpuCompletion producer_completion;
+  };
+  bool PublishNativeUiPlane(NativeUiPlaneImage image);
+  bool BeginNativeGpuCohort(uint64_t backend_epoch) override;
+  NativeUiPlaneStatus GetNativeUiPlaneStatus(
+      const gpu::NativeFrameSubmissionIdentity& identity,
+      uint64_t image_version) override;
+  bool SealForBackendStop() override;
+  bool ReleaseNativeUiPlaneAfterBackendStopped(
+      const gpu::GpuBackendStopProof& proof) override;
+
   void AwaitUISubmissionCompletionFromUIThread(uint64_t submission_index) {
     ui_completion_timeline_.AwaitSubmissionAndUpdateCompleted(submission_index);
   }
@@ -330,11 +352,11 @@ class VulkanPresenter final : public Presenter {
       kGuestOutputDescriptorSetGuestOutput0Sampled,
 
       kGuestOutputDescriptorSetIntermediate0Sampled =
-          kGuestOutputDescriptorSetGuestOutput0Sampled +
+              kGuestOutputDescriptorSetGuestOutput0Sampled +
           kGuestOutputMailboxSize,
 
       kGuestOutputDescriptorSetCount =
-          kGuestOutputDescriptorSetIntermediate0Sampled +
+              kGuestOutputDescriptorSetIntermediate0Sampled +
           kMaxGuestOutputPaintEffects - 1,
     };
 
@@ -461,7 +483,59 @@ class VulkanPresenter final : public Presenter {
   bool InitializeSurfaceIndependent();
 
   [[nodiscard]] VkPipeline CreateGuestOutputPaintPipeline(
-      GuestOutputPaintEffect effect, VkRenderPass render_pass);
+      GuestOutputPaintEffect effect, VkRenderPass render_pass,
+      bool native_plane = false);
+
+  struct NativeUiPlanePublication {
+    NativeUiPlaneImage image;
+    NativeUiPlaneStatus status;
+    uint64_t last_paint_submission = 0;
+  };
+  NativeUiPlaneImageReference NativePlaneReference(
+      const std::shared_ptr<NativeUiPlanePublication>&) const;
+  void PollNativeUiPlaneCompletionsLocked();
+  void FailNativeUiPlane() noexcept;
+  bool AwaitNativeUiPlanePaintRetirementLocked();
+  bool RecordNativeUiPlane(
+      VkCommandBuffer command_buffer, uint64_t paint_submission,
+      const NativeUiPlaneVisibility& visibility,
+      const NativeUiPlaneImageSelection::Selection& selection,
+      const std::shared_ptr<NativeUiPlanePublication>& publication);
+  bool EnsureNativeUiPlanePipeline();
+  void DestroyNativeUiPlaneResources();
+
+  // Serializes every CPU path able to submit Presenter GPU work. Sealing
+  // drains the current callback/paint and prevents any later submit, before
+  // the CP's device-wide retirement wait begins.
+  mutable std::recursive_mutex submission_mutex_;
+  bool submissions_sealed_ = false;
+  uint64_t native_gpu_cohort_epoch_ = 0;
+  bool legacy_capture_failed_ = false;
+  bool native_ui_plane_failed_ = false;
+  bool native_ui_plane_stopped_ = false;
+  gpu::GpuCompletionQueue native_ui_plane_completions_;
+  // Latest receipt is not nonmodal approval. Only actual paint changes the
+  // separate qualified selection; both owners survive until sampling retires.
+  std::shared_ptr<NativeUiPlanePublication> native_ui_plane_current_;
+  NativeUiPlaneImageSelection native_ui_plane_selection_;
+  std::vector<std::shared_ptr<NativeUiPlanePublication>>
+      native_ui_plane_publications_;
+  std::array<std::shared_ptr<NativeUiPlanePublication>,
+             PaintContext::kSubmissionCount>
+      native_ui_plane_paint_refs_;
+  // Native-only fragment ABI: offset16 float2, offset24 float2, offset32
+  // normalized opacity. Guest output pipeline layouts remain unchanged.
+  struct NativeUiPlanePaintConstants {
+    float offset[2];
+    float size_inverse[2];
+    float opacity;
+  };
+  VkShaderModule native_ui_plane_fs_ = VK_NULL_HANDLE;
+  VkPipelineLayout native_ui_plane_pipeline_layout_ = VK_NULL_HANDLE;
+  VkDescriptorPool native_ui_plane_descriptor_pool_ = VK_NULL_HANDLE;
+  std::array<VkDescriptorSet, PaintContext::kSubmissionCount>
+      native_ui_plane_descriptor_sets_ = {};
+  std::map<VkFormat, VkPipeline> native_ui_plane_pipelines_;
 
   VulkanDevice* vulkan_device_;
   const UISamplers* ui_samplers_;

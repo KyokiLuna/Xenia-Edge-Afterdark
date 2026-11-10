@@ -13,26 +13,39 @@
 #include <cfloat>
 
 #include "third_party/imgui/imgui.h"
+#include "third_party/imgui/imgui_internal.h"
+#include "xenia/hid/input.h"
 #include "xenia/hid/input_system.h"
 
 namespace xe {
 namespace ui {
 
-ImGuiContextMenu::ImGuiContextMenu(ImGuiDrawer* drawer,
-                                   hid::InputSystem* input_system)
-    : ImGuiDialog(drawer), input_system_(input_system) {
+ImGuiContextMenu::ImGuiContextMenu(
+    ImGuiDrawer* drawer, hid::InputSystem* input_system, bool poll_gamepad,
+    std::shared_ptr<NativeUiBackendRoute::HostLease> lifetime,
+    std::function<void(bool)> visibility)
+    : ImGuiDialog(drawer),
+      lifetime_(std::move(lifetime)),
+      visibility_(std::move(visibility)),
+      input_system_(input_system),
+      poll_gamepad_(poll_gamepad),
+      input_capture_generation_(drawer->input_capture_generation()) {
   if (input_system_) {
     input_system_->AddUIInputBlocker();
 
     // Initialize prev_buttons_ to current state so held buttons aren't
     // detected as "just pressed" when the menu opens
     hid::X_INPUT_STATE state;
-    for (uint32_t user_index = 0; user_index < 4; user_index++) {
+    for (uint32_t user_index = 0; user_index < XUserMaxUserCount;
+         user_index++) {
       if (input_system_->GetStateForUI(user_index, 1, &state) == 0) {
-        prev_buttons_ = state.gamepad.buttons;
-        break;
+        prev_buttons_[user_index] = state.gamepad.buttons;
+        consumed_buttons_[user_index] = state.gamepad.buttons;
       }
     }
+  }
+  if (visibility_) {
+    visibility_(true);
   }
 }
 
@@ -40,9 +53,26 @@ ImGuiContextMenu::~ImGuiContextMenu() {
   if (input_system_) {
     input_system_->RemoveUIInputBlocker();
   }
+  if (visibility_) {
+    visibility_(false);
+  }
 }
 
 void ImGuiContextMenu::OnClose() {
+  // CloseMenu also runs between frames. CloseCurrentPopup needs an active
+  // BeginPopup scope, so remove only this menu's popup from its drawer context.
+  // Leaving its modal entry alive would continue to capture ImGui input.
+  if (popup_id_) {
+    GetIO();
+    auto& popups = ImGui::GetCurrentContext()->OpenPopupStack;
+    for (int i = 0; i < popups.Size; ++i) {
+      if (popups[i].PopupId == popup_id_) {
+        ImGui::ClosePopupToLevel(i, true);
+        break;
+      }
+    }
+    popup_id_ = 0;
+  }
   if (on_close_callback_) {
     on_close_callback_();
   }
@@ -50,7 +80,21 @@ void ImGuiContextMenu::OnClose() {
   // This prevents issues with operations like fullscreen that need the
   // ImGui state to be fully cleaned up first
   if (pending_callback_) {
-    imgui_drawer()->PostDeferredCallback(std::move(pending_callback_));
+    if (lifetime_) {
+      imgui_drawer()->PostDeferredCallback(
+          [owner = lifetime_,
+           callback = std::move(pending_callback_)]() mutable {
+            auto entered = owner->TryEnter();
+            if (!entered) {
+              return;
+            }
+            // All callback-local captured owners die before the route entry.
+            auto run = std::move(callback);
+            run();
+          });
+    } else {
+      imgui_drawer()->PostDeferredCallback(std::move(pending_callback_));
+    }
   }
 }
 
@@ -103,37 +147,107 @@ int ImGuiContextMenu::GetNextSelectableItem(int current, int direction) {
   return current;  // No selectable items found
 }
 
-void ImGuiContextMenu::PollGamepad() {
-  if (!input_system_ || items_.empty()) {
+bool ImGuiContextMenu::HasInputOwnership() const {
+  if (!imgui_drawer()->IsOnlyDialog(this) ||
+      (input_ownership_callback_ && !input_ownership_callback_())) {
+    return false;
+  }
+  const auto& popups = ImGui::GetCurrentContext()->OpenPopupStack;
+  if (popups.empty()) {
+    return !has_opened_;
+  }
+  return popup_id_ && popups.back().PopupId == popup_id_;
+}
+
+void ImGuiContextMenu::PollGamepad(bool owns_input) {
+  if (!input_system_) {
     return;
   }
 
-  for (uint32_t i = 0; i < 4; ++i) {
+  std::array<GamepadUiControllerInput, XUserMaxUserCount> inputs{};
+  for (uint32_t i = 0; i < XUserMaxUserCount; ++i) {
     hid::X_INPUT_STATE state;
     if (input_system_->GetStateForUI(i, 1, &state) == 0) {
       uint16_t buttons = state.gamepad.buttons;
-      uint16_t pressed = buttons & ~prev_buttons_;
+      inputs[i].buttons = buttons;
+      inputs[i].pressed_buttons = buttons & ~prev_buttons_[i];
+      prev_buttons_[i] = buttons;
+    } else {
+      prev_buttons_[i] = 0;
+    }
+  }
+  ApplyGamepadInput(inputs, owns_input, true);
+}
 
-      // D-pad navigation
-      if (pressed & 0x0001) {  // D-pad up
-        focused_index_ = GetNextSelectableItem(focused_index_, -1);
-      }
-      if (pressed & 0x0002) {  // D-pad down
-        focused_index_ = GetNextSelectableItem(focused_index_, 1);
-      }
+void ImGuiContextMenu::HandleGamepadInput(
+    const std::array<GamepadUiControllerInput, XUserMaxUserCount>& inputs) {
+  GetIO();  // External samples need this drawer's ImGui context too.
+  const uint64_t capture_generation =
+      imgui_drawer()->input_capture_generation();
+  if (input_capture_generation_ != capture_generation) {
+    for (size_t i = 0; i < inputs.size(); ++i) {
+      consumed_buttons_[i] |= inputs[i].buttons & ~inputs[i].pressed_buttons;
+    }
+    input_capture_generation_ = capture_generation;
+  }
+  ApplyGamepadInput(inputs, HasInputOwnership(), false);
+  if (activation_pending_) {
+    Destroy();
+  }
+}
 
-      // A button to activate focused item
-      if (pressed & 0x1000) {
-        ActivateItem(focused_index_);
-      }
-
-      // B button, Back button, or Guide button to close
-      if (pressed & (0x2000 | 0x0020 | 0x0400)) {
+void ImGuiContextMenu::ApplyGamepadInput(
+    const std::array<GamepadUiControllerInput, XUserMaxUserCount>& inputs,
+    bool owns_input, bool allow_dismissal) {
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    consumed_buttons_[i] &= inputs[i].buttons;
+    if (!owns_input) {
+      consumed_buttons_[i] |= inputs[i].buttons;
+    } else {
+      // A fresh edge proves a release happened even when the external poller
+      // did not deliver an idle/release-only sample to this menu.
+      consumed_buttons_[i] &= ~inputs[i].pressed_buttons;
+    }
+  }
+  if (!owns_input || items_.empty()) {
+    return;
+  }
+  for (const auto& input : inputs) {
+    if (input.pressed_buttons &
+        (hid::X_INPUT_GAMEPAD_B | hid::X_INPUT_GAMEPAD_BACK |
+         hid::X_INPUT_GAMEPAD_GUIDE)) {
+      if (allow_dismissal) {
         Close();
       }
+      return;
+    }
+  }
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    const auto& input = inputs[i];
+    const uint16_t pressed = input.pressed_buttons & ~consumed_buttons_[i];
+    const uint16_t navigate =
+        (pressed | input.menu_navigation | input.navigate) &
+        ~consumed_buttons_[i];
+    if ((navigate &
+         (hid::X_INPUT_GAMEPAD_DPAD_UP | hid::X_INPUT_GAMEPAD_DPAD_DOWN)) ||
+        (pressed & hid::X_INPUT_GAMEPAD_A)) {
+      // External controller edges may never reach an ImGui frame. Preserve
+      // controller modality for a following dialog without giving ImGui a
+      // second selection owner in this menu.
+      ImGui::SetNavCursorVisible(true);
+    }
+    // D-pad navigation
+    if (navigate & hid::X_INPUT_GAMEPAD_DPAD_UP) {
+      focused_index_ = GetNextSelectableItem(focused_index_, -1);
+    }
+    if (navigate & hid::X_INPUT_GAMEPAD_DPAD_DOWN) {
+      focused_index_ = GetNextSelectableItem(focused_index_, 1);
+    }
 
-      prev_buttons_ = buttons;
-      break;
+    // A button to activate focused item
+    if (pressed & hid::X_INPUT_GAMEPAD_A) {
+      ActivateItem(focused_index_);
+      return;
     }
   }
 }
@@ -152,13 +266,19 @@ void ImGuiContextMenu::ActivateItem(int index) {
 }
 
 void ImGuiContextMenu::OnDraw(ImGuiIO& io) {
-  // Poll gamepad input
-  PollGamepad();
-
   // Open popup on first draw
-  if (!has_opened_) {
+  if (!has_opened_ && HasInputOwnership()) {
+    popup_id_ = ImGui::GetID("##ContextMenu");
     ImGui::OpenPopup("##ContextMenu");
     has_opened_ = true;
+  }
+
+  const bool owns_input = has_opened_ && HasInputOwnership();
+  if (poll_gamepad_) {
+    PollGamepad(owns_input);
+  }
+  if (!has_opened_) {
+    return;
   }
 
   // Style the popup - white background, black text
@@ -199,23 +319,28 @@ void ImGuiContextMenu::OnDraw(ImGuiIO& io) {
                              ImGuiWindowFlags_NoTitleBar |
                                  ImGuiWindowFlags_AlwaysAutoResize |
                                  ImGuiWindowFlags_NoMove)) {
+    ImGui::BeginDisabled(!owns_input);
     // Handle keyboard input
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    if (owns_input && ImGui::IsKeyPressed(ImGuiKey_Escape)) {
       ImGui::CloseCurrentPopup();
       Close();
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
+    if (owns_input && ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
       focused_index_ = GetNextSelectableItem(focused_index_, -1);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
+    if (owns_input && ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
       focused_index_ = GetNextSelectableItem(focused_index_, 1);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
-        ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) ||
-        ImGui::IsKeyPressed(ImGuiKey_Space)) {
+    if (owns_input && (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+                       ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) ||
+                       ImGui::IsKeyPressed(ImGuiKey_Space))) {
       ActivateItem(focused_index_);
     }
 
+    // Custom controller/keyboard selection is the only navigation owner.
+    // Keep the window navigation-capable so ImGui doesn't hide its global
+    // navigation cursor before a deferred action opens another dialog.
+    ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
     // Draw menu items
     for (int i = 0; i < static_cast<int>(items_.size()); i++) {
       const auto& item = items_[i];
@@ -246,14 +371,22 @@ void ImGuiContextMenu::OnDraw(ImGuiIO& io) {
 
       // Create selectable item with minimum width
       ImGui::PushID(i);
-      if (ImGui::Selectable("##item", is_focused,
-                            ImGuiSelectableFlags_SpanAllColumns,
-                            ImVec2(min_width, 0))) {
+      const bool clicked =
+          ImGui::Selectable("##item", is_focused,
+                            ImGuiSelectableFlags_SpanAllColumns |
+                                ImGuiSelectableFlags_NoAutoClosePopups,
+                            ImVec2(min_width, 0));
+      if (clicked && owns_input &&
+          ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
         ActivateItem(i);
       }
 
-      // Update focus on hover
-      if (ImGui::IsItemHovered()) {
+      // Hover must represent fresh pointer movement, not a parked cursor or
+      // ImGui's older navigation ID. Otherwise it overwrites the controller /
+      // keyboard selection again on every draw before that choice activates.
+      if (owns_input && !io.WantSetMousePos &&
+          (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f) &&
+          ImGui::IsItemHovered(ImGuiHoveredFlags_NoNavOverride)) {
         focused_index_ = i;
       }
 
@@ -280,6 +413,8 @@ void ImGuiContextMenu::OnDraw(ImGuiIO& io) {
       ImGui::PopStyleColor(4);
     }
 
+    ImGui::PopItemFlag();
+    ImGui::EndDisabled();
     ImGui::EndPopup();
   } else {
     // Popup was closed (clicked outside)

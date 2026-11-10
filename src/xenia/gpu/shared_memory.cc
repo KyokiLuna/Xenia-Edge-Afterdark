@@ -23,7 +23,7 @@ SharedMemory::SharedMemory(Memory& memory) : memory_(memory) {
 
 SharedMemory::~SharedMemory() { ShutdownCommon(); }
 
-bool SharedMemory::InitializeCommon() {
+bool SharedMemory::InitializeCommon(bool register_guest_invalidations) {
   size_t num_system_page_flags_entries =
       ((kBufferSize >> page_size_log2_) + 63) / 64;
   num_system_page_flags_ = static_cast<uint32_t>(num_system_page_flags_entries);
@@ -46,9 +46,11 @@ bool SharedMemory::InitializeCommon() {
   memset(system_page_flags_valid_and_gpu_written_, 0,
          8 * num_system_page_flags_entries);
 
-  memory_invalidation_callback_handle_ =
-      memory_.RegisterPhysicalMemoryInvalidationCallback(
-          MemoryInvalidationCallbackThunk, this);
+  if (register_guest_invalidations) {
+    memory_invalidation_callback_handle_ =
+        memory_.RegisterPhysicalMemoryInvalidationCallback(
+            MemoryInvalidationCallbackThunk, this);
+  }
   return true;
 }
 
@@ -333,6 +335,9 @@ void SharedMemory::RangeWrittenByGpu(uint32_t start, uint32_t length,
   uint32_t page_first = start >> page_size_log2_;
   uint32_t page_last = end >> page_size_log2_;
 
+  if (external_source_) {
+    external_source_->GpuWritten(start, length);
+  }
   // Trigger modification callbacks so, for instance, resolved data is loaded to
   // the texture.
   FireWatches(page_first, page_last, true);
@@ -425,6 +430,34 @@ void SharedMemory::UnlinkWatchRange(WatchRange* range) {
 
 // todo: optimize, an enormous amount of cpu time (1.34%) is spent here.
 bool SharedMemory::RequestRange(uint32_t start, uint32_t length) {
+  if (external_source_ && !external_source_->CoversRead(start, length)) {
+    return false;
+  }
+  return RequestRangeInternal(start, length);
+}
+bool SharedMemory::RequestRangeForGpuWrite(uint32_t start, uint32_t length) {
+  if (external_source_ && !external_source_->CoversWrite(start, length)) {
+    return false;
+  }
+  return RequestRangeInternal(start, length);
+}
+bool SharedMemory::ReadRangeForCpu(uint32_t start,
+                                   std::span<uint8_t> destination) const {
+  if (destination.size() > kBufferSize || start > kBufferSize ||
+      destination.size() > kBufferSize - start) {
+    return false;
+  }
+  if (destination.empty()) {
+    return true;
+  }
+  if (external_source_) {
+    return external_source_->Read(start, destination);
+  }
+  std::memcpy(destination.data(), memory_.TranslatePhysical(start),
+              destination.size());
+  return true;
+}
+bool SharedMemory::RequestRangeInternal(uint32_t start, uint32_t length) {
   if (!length) {
     // Some texture or buffer is empty, for example - safe to draw in this case.
     return true;
@@ -498,6 +531,10 @@ bool SharedMemory::RequestRange(uint32_t start, uint32_t length) {
 }
 
 bool SharedMemory::IsRangeValid(uint32_t start, uint32_t length) const {
+  if (external_source_ && !external_source_->CoversRead(start, length)) {
+    return false;
+  }
+
   if (!length) {
     return true;
   }

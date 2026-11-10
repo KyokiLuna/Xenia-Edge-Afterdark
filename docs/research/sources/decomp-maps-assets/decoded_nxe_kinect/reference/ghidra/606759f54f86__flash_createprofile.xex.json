@@ -1,0 +1,18 @@
+{
+  "module": "$flash_createprofile.xex",
+  "program": "606759f54f86__flash_createprofile.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "edb5c882f43ca9411cc76151766666bfe68077d7913bfb63b5dc2c7276cf44e8",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x90100400",
+  "functions": 367,
+  "calls": 771,
+  "strings": 154,
+  "string_xrefs": 167,
+  "independent_sha256": "4c238daf1def368dd65d72669e98a16c11203c43cedce743bd93304026bc5302",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

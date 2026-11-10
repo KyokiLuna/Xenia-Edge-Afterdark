@@ -1,0 +1,18 @@
+{
+  "module": "Title.Zune.xex",
+  "program": "61fd4d045147_Title.Zune.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "3366b8fbe42c880d7cf0c9b73f896c1d64a8504d6fe42d0b2f7a794ebcb72d83",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x92000400",
+  "functions": 47094,
+  "calls": 90872,
+  "strings": 27736,
+  "string_xrefs": 10207,
+  "independent_sha256": "3366b8fbe42c880d7cf0c9b73f896c1d64a8504d6fe42d0b2f7a794ebcb72d83",
+  "independent_decode_matches": true,
+  "independent_image_matches": true,
+  "independent_padding_bytes": 0
+}

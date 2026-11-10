@@ -1,0 +1,19 @@
+{
+  "module": "packages/su20076000_00000000/$flash_dash.xex",
+  "program": "e7f6fdec2c4b__flash_dash.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "06a8446849184331dc1b513a894c08ad3f160dcec8473f70cdcae9f54b7c86f9",
+  "import_envelope_version": 2,
+  "import_mode": "flat_image_fallback",
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x92000000",
+  "functions": 31056,
+  "calls": 54182,
+  "strings": 65004,
+  "string_xrefs": 7768,
+  "independent_sha256": "0163ece9ec30efe65bac49f4ec7cc3e352e6c9d3efa57ace9108198e8f6d10e2",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

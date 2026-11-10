@@ -15,6 +15,7 @@
 #include "xenia/base/byte_stream.h"
 #include "xenia/base/clock.h"
 #include "xenia/base/logging.h"
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/cpu/ppc/ppc_context.h"
 #include "xenia/kernel/guest_scheduler.h"
 #include "xenia/kernel/kernel_state.h"
@@ -66,7 +67,7 @@ XObject::~XObject() {
     auto header = memory()->TranslateVirtual<X_OBJECT_HEADER*>(header_addr);
 
     // Free the object creation info
-    if (header->object_type_ptr) {
+    if (owns_guest_object_type_ && header->object_type_ptr) {
       memory()->SystemHeapFree(header->object_type_ptr);
     }
 
@@ -1088,6 +1089,28 @@ uint8_t* XObject::CreateNative(uint32_t size) {
   return memory()->TranslateVirtual(guest_object_ptr_);
 }
 
+uint8_t* XObject::CreateNativeNonDispatch(uint32_t size,
+                                           uint32_t object_type) {
+  auto lock = global_critical_region::AcquireDirect();
+  if (guest_object_ptr_ || !size || !object_type ||
+      size > UINT32_MAX - kGuestObjectPrePad - sizeof(X_OBJECT_HEADER)) {
+    return nullptr;
+  }
+  const uint32_t total = kGuestObjectPrePad + sizeof(X_OBJECT_HEADER) + size;
+  const uint32_t allocation = memory()->SystemHeapAlloc(total);
+  if (!allocation) { return nullptr; }
+  memory()->Zero(allocation, total);
+  const uint32_t header_address = allocation + kGuestObjectPrePad;
+  auto* header = memory()->TranslateVirtual<X_OBJECT_HEADER*>(header_address);
+  header->object_type_ptr = object_type;
+  allocated_guest_object_ = true;
+  owns_guest_object_type_ = false;
+  guest_object_ptr_ = header_address + sizeof(X_OBJECT_HEADER);
+  guest_object_type_ptr_.store(object_type);
+  kernel_state_->object_table()->AddAllocatedBody(guest_object_ptr_, this);
+  return memory()->TranslateVirtual(guest_object_ptr_);
+}
+
 void XObject::SetNativePointer(uint32_t native_ptr, bool uninitialized) {
   auto global_lock = xe::global_critical_region::AcquireDirect();
 
@@ -1127,6 +1150,14 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state,
     global_critical_region::mutex().lock();
   }
 
+  // Registered opaque bodies must be resolved before probing dispatcher
+  // bytes. Preserve guest dispatch reconciliation for genuine dispatcher types.
+  if (auto object = kernel_state->object_table()->LookupAllocatedBody(
+          kernel_state->memory()->HostToGuestVirtual(native_ptr))) {
+    if (HasDispatcherHeader(object->type())) { object->SyncFromGuest(); }
+    if (!already_locked) { global_critical_region::mutex().unlock(); }
+    return object;
+  }
   XObject* result = nullptr;
 
   auto header = reinterpret_cast<X_DISPATCH_HEADER*>(native_ptr);
@@ -1201,8 +1232,17 @@ object_ref<XObject> XObject::GetNativeObject(KernelState* kernel_state,
       case X_OBJECT_TYPES::ProfileObject:
       default:
         // Unimplemented object type - just log and return nullptr
-        XELOGW("GetNativeObject: Unimplemented object type {}",
-               static_cast<uint8_t>(type));
+        if (cvars::native_system_ui_trace) {
+          static NativeSystemUiTraceLimiter unsupported_trace;
+          unsupported_trace.Emit(
+              "wait_object", "unsupported_dispatch_type",
+              {{"type", static_cast<uint8_t>(type)},
+               {"object",
+                kernel_state->memory()->HostToGuestVirtual(native_ptr)}});
+        } else {
+          XELOGW("GetNativeObject: Unimplemented object type {}",
+                 static_cast<uint8_t>(type));
+        }
         result = nullptr;
     }
     // InitializeNative paths call SetNativePointer, which stashes the handle.

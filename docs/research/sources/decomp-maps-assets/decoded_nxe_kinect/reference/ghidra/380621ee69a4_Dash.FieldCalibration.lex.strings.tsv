@@ -1,0 +1,439 @@
+va	data_type	text
+0x9bd606cc	string	FIELDCALSUMMARY
+0x9bd606dc	string	FIELDCALIBLOG
+0x9bd606ec	string	TURNITUP
+0x9bd606f8	string	CAMSET
+0x9bd60700	string	PLAYSPACETEST
+0x9bd60710	string	PLAYSPACEPREP
+0x9bd60720	string	CLEARSPACE
+0x9bd6072c	string	AUDIOSPH
+0x9bd60738	string	AUDIOAMB
+0x9bd60744	string	AUDIOCAL
+0x9bd60750	string	IDENTITY
+0x9bd60764	string	PLAYSPACE
+0x9bd60778	string	CAMLOC
+0x9bd60780	string	SUNLIGHT
+0x9bd607a0	string	AUDIOLAUNCH
+0x9bd607ac	string	LAUNCH
+0x9bd60a50	string	BuildResourceLocator
+0x9bd60a68	string	FieldCalibrationDll
+0x9bd60ac8	unicode	RGBControl
+0x9bd60b18	unicode	XuiControl
+0x9bd60b30	string	Unknown exception
+0x9bd60b4a	string	k(bad allocation
+0x9bd60c00	unicode	HH:mm:ss
+0x9bd60c14	unicode	dddd, MMMM dd, yyyy
+0x9bd60c3c	unicode	MM/dd/yy
+0x9bd60c60	unicode	December
+0x9bd60c74	unicode	November
+0x9bd60c88	unicode	October
+0x9bd60c98	unicode	September
+0x9bd60cac	unicode	August
+0x9bd60cbc	unicode	July
+0x9bd60cc8	unicode	June
+0x9bd60cd4	unicode	April
+0x9bd60ce0	unicode	March
+0x9bd60cec	unicode	February
+0x9bd60d00	unicode	January
+0x9bd60d70	unicode	Saturday
+0x9bd60d84	unicode	Friday
+0x9bd60d94	unicode	Thursday
+0x9bd60da8	unicode	Wednesday
+0x9bd60dbc	unicode	Tuesday
+0x9bd60dcc	unicode	Monday
+0x9bd60ddc	unicode	Sunday
+0x9bd60e24	string	HH:mm:ss
+0x9bd60e30	string	dddd, MMMM dd, yyyy
+0x9bd60e44	string	MM/dd/yy
+0x9bd60e58	string	December
+0x9bd60e64	string	November
+0x9bd60e70	string	October
+0x9bd60e78	string	September
+0x9bd60e84	string	August
+0x9bd60e9c	string	April
+0x9bd60ea4	string	March
+0x9bd60eac	string	February
+0x9bd60eb8	string	January
+0x9bd60ef0	string	Saturday
+0x9bd60efc	string	Friday
+0x9bd60f04	string	Thursday
+0x9bd60f10	string	Wednesday
+0x9bd60f1c	string	Tuesday
+0x9bd60f24	string	Monday
+0x9bd60f2c	string	Sunday
+0x9bd60f78	unicode	runtime error 
+0x9bd60f9c	unicode	TLOSS error\n
+0x9bd60fb8	unicode	SING error\n
+0x9bd60fd0	unicode	DOMAIN error\n
+0x9bd60ff0	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x9bd611e0	unicode	R6032\n- not enough space for locale information\n
+0x9bd61248	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x9bd6130c	unicode	R6030\n- CRT not initialized\n
+0x9bd61348	unicode	R6028\n- unable to initialize heap\n
+0x9bd61390	unicode	R6027\n- not enough space for lowio initialization\n
+0x9bd613f8	unicode	R6026\n- not enough space for stdio initialization\n
+0x9bd61460	unicode	R6025\n- pure virtual function call\n
+0x9bd614a8	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x9bd61510	unicode	R6019\n- unable to open console device\n
+0x9bd61560	unicode	R6018\n- unexpected heap error\n
+0x9bd615a0	unicode	R6017\n- unexpected multithread lock error\n
+0x9bd615f8	unicode	R6016\n- not enough space for thread data\n
+0x9bd61650	unicode	R6010\n- abort() has been called\n
+0x9bd61698	unicode	R6009\n- not enough space for environment\n
+0x9bd616f0	unicode	R6008\n- not enough space for arguments\n
+0x9bd61740	unicode	R6002\n- floating point support not loaded\n
+0x9bd62050	string	 Complete Object Locator'
+0x9bd6206c	string	 Class Hierarchy Descriptor'
+0x9bd6208c	string	 Base Class Array'
+0x9bd620a0	string	 Base Class Descriptor at (
+0x9bd620bc	string	 Type Descriptor'
+0x9bd620d0	string	`local static thread guard'
+0x9bd620ec	string	`managed vector copy constructor iterator'
+0x9bd62118	string	`vector vbase copy constructor iterator'
+0x9bd62144	string	`vector copy constructor iterator'
+0x9bd62168	string	`dynamic atexit destructor for '
+0x9bd6218c	string	`dynamic initializer for '
+0x9bd621a8	string	`eh vector vbase copy constructor iterator'
+0x9bd621d4	string	`eh vector copy constructor iterator'
+0x9bd621fc	string	`managed vector destructor iterator'
+0x9bd62224	string	`managed vector constructor iterator'
+0x9bd6224c	string	`placement delete[] closure'
+0x9bd6226c	string	`placement delete closure'
+0x9bd62288	string	`omni callsig'
+0x9bd62298	string	 delete[]
+0x9bd622a4	string	 new[]
+0x9bd622ac	string	`local vftable constructor closure'
+0x9bd622d0	string	`local vftable'
+0x9bd622e0	string	`RTTI
+0x9bd622ec	string	`udt returning'
+0x9bd622fc	string	`copy constructor closure'
+0x9bd62318	string	`eh vector vbase constructor iterator'
+0x9bd62340	string	`eh vector destructor iterator'
+0x9bd62360	string	`eh vector constructor iterator'
+0x9bd62384	string	`virtual displacement map'
+0x9bd623a0	string	`vector vbase constructor iterator'
+0x9bd623c4	string	`vector destructor iterator'
+0x9bd623e4	string	`vector constructor iterator'
+0x9bd62404	string	`scalar deleting destructor'
+0x9bd62424	string	`default constructor closure'
+0x9bd62444	string	`vector deleting destructor'
+0x9bd62464	string	`vbase destructor'
+0x9bd62478	string	`string'
+0x9bd62484	string	`local static guard'
+0x9bd6249c	string	`typeof'
+0x9bd624a8	string	`vcall'
+0x9bd624b0	string	`vbtable'
+0x9bd624bc	string	`vftable'
+0x9bd62544	string	operator
+0x9bd6256c	string	 delete
+0x9bd6257c	string	__unaligned
+0x9bd62588	string	__restrict
+0x9bd62594	string	__ptr64
+0x9bd6259c	string	__eabi
+0x9bd625a4	string	__clrcall
+0x9bd625b0	string	__fastcall
+0x9bd625bc	string	__thiscall
+0x9bd625c8	string	__stdcall
+0x9bd625d4	string	__pascal
+0x9bd625e0	string	__cdecl
+0x9bd625e8	string	__based(
+0x9bd627c0	string	StorePamSessionId
+0x9bd627d4	unicode	fieldxzp
+0x9bd627f0	unicode	EndNextTargetClose
+0x9bd62818	unicode	StartNextTargetClose
+0x9bd62844	unicode	EndNextTargetFar
+0x9bd62868	unicode	StartNextTargetFar
+0x9bd62890	unicode	EndBucketSuccess
+0x9bd628b4	unicode	StartBucketSuccess
+0x9bd628dc	unicode	EndFinalSuccess
+0x9bd628fc	unicode	StartFinalSuccess
+0x9bd62920	unicode	Frame%i
+0x9bd62934	unicode	%s%s
+0x9bd62940	unicode	calibrationUI-%i.png
+0x9bd6296c	string	StoreHr
+0x9bd62974	string	StoreSamplesCompleted
+0x9bd6298c	string	StartCameraCalibration
+0x9bd629a4	string	StopCameraCalibration
+0x9bd629bc	string	RegisterSceneControls
+0x9bd629d4	string	UnregisterSceneControls
+0x9bd629ec	string	GetSampleCount
+0x9bd629fc	string	SwitchRenderMode
+0x9bd62a10	string	IsCalibrationComplete
+0x9bd62a28	string	ZoomInToDefault
+0x9bd62a38	string	StartToSaveCalibration
+0x9bd62a50	string	SetDefaultCalibrationValues
+0x9bd62a6c	string	EnsureNuiIsOn
+0x9bd62a7c	string	IsSavingSettings
+0x9bd62a90	string	IsFrameAvailable
+0x9bd62aa4	string	IsCalibrationRunning
+0x9bd62abc	string	HasEnoughDataPoints
+0x9bd62ad0	string	ZoomingInProgress
+0x9bd62ae4	string	IsSaveSettingsProblemDetected
+0x9bd62b04	string	IsCalibrationPaused
+0x9bd62b18	string	IsCameraMoving
+0x9bd62b53	string	ZE:\bt\248805\core\private\xam\dash\apps\fieldcalibration\lib\obj\xbox\RGBVertexShader.updb
+0x9bd62ccb	string	YE:\bt\248805\core\private\xam\dash\apps\fieldcalibration\lib\obj\xbox\RGBPixelShader.updb
+0x9bd62d84	string	boxDimensions
+0x9bd62da4	string	innerBoxDimensions
+0x9bd62db7	string	myTexture
+0x9bd6303b	string	]E:\bt\248805\core\private\xam\dash\apps\fieldcalibration\lib\obj\xbox\DefaultPixelShader.updb
+0x9bd630d0	string	myTexture
+0x9bd63290	string	unknown exception
+0x9bd632c8	string	CALIBRATION COMPLETE -- A: %f B: %f\n
+0x9bd632f0	string	ESTIMATED CALIB %f (%f) -- %f %f\n
+0x9bd63324	string	invalid map/set<T> iterator
+0x9bd63340	string	map/set<T> too long
+0x9bd63354	string	%f, %f, %f\n
+0x9bd63360	string	POINTS USED\n
+0x9bd63470	string	GetLastLoggedEvent
+0x9bd63484	string	SessionStorageGetSessionData
+0x9bd634a4	string	SessionStorageFetchSessions
+0x9bd634c0	string	LogAudioSpeechLevelTestUsage
+0x9bd634e0	string	LogAudioAmbientNoiseTestUsage
+0x9bd63500	string	LogAudioCalibrationUsage
+0x9bd6351c	string	LogTurnItUp
+0x9bd63528	string	LogCameraSettings
+0x9bd6353c	string	LogPlayspaceTest
+0x9bd63550	string	LogPlayspacePrep
+0x9bd63564	string	LogClearPlayspace
+0x9bd63578	string	LogTilt1Usage
+0x9bd63588	string	LogCameraLocation
+0x9bd6359c	string	LogFatalHardwareError
+0x9bd635b4	string	LogHardwareCheckResult
+0x9bd635cc	string	LogAudioLaunchInfo
+0x9bd635e0	string	LogLaunchInfo
+0x9bd63618	string	TsCacheEntryUserData
+0x9bd63640	unicode	%I64u
+0x9bd63760	string	e+000
+0x9bd637d8	unicode	(null)
+0x9bd63920	string	floor
+0x9bd63c9c	string	1#QNAN
+0x9bd63ca4	string	1#INF
+0x9bd63cac	string	1#IND
+0x9bd63cb4	string	1#SNAN
+0x9bd63cdc	string	e:\bt\248805\core\private\xam\dash\apps\fieldcalibration\app\obj\xbox\Dash.FieldCalibration.pdb
+0x9bd8d3c8	string	.?AVbad_alloc@std@@
+0x9bd8d3e4	string	.?AVexception@std@@
+0x9bd8da29	string	abcdefghijklmnopqrstuvwxyz
+0x9bd8da49	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9bd8e914	string	.?AVlogic_error@std@@
+0x9bd8e934	string	.?AVlength_error@std@@
+0x9bd8e954	string	.?AVout_of_range@std@@
+0x9bd90054	string	Dash.FieldCalibration.xex
+0x9bd9006e	string	PamInitializeDll
+0x9bd9007f	string	PamInitializeState
+0x9bd90092	string	PamRunFrame
+0x9bd9009e	string	PamTerminateDll
+0x9bd91000	string	oProp
+0x9bd9101f	string	FreeCustomAsset
+0x9bd91034	string	PlayAnimations
+0x9bd91052	string	LoadAnimation
+0x9bd9110d	string	module
+0x9bd91119	string	dash.FieldCalibration
+0x9bd91134	string	package
+0x9bd91141	string	seeall
+0x9bd9114d	string	require
+0x9bd91176	string	Xbox.System
+0x9bd91187	string	_scene
+0x9bd911a5	string	OnLiveConnectionChanged
+0x9bd91216	string	_scene
+0x9bd9122c	string	CreateFirstScene
+0x9bd91242	string	FieldCalibrationDll
+0x9bd9125b	string	StorePamSessionId
+0x9bd91284	string	\rGetSessionId
+0x9bd912ca	string	\nKeepAlive
+0x9bd91352	string	module
+0x9bd92008	string	_OnLegendA
+0x9bd92068	string	XUI_TRANSITION_TO
+0x9bd9223c	string	_handle
+0x9bd92249	string	_fStartedTimeline
+0x9bd92262	string	_fSkipEnabled
+0x9bd92275	string	FieldCalibrationDll
+0x9bd9228e	string	IsSavingSettings
+0x9bd922a4	string	Start
+0x9bd922af	string	GoToNextScene
+0x9bd9232a	string	FieldCalibrationDll
+0x9bd92343	string	IsSavingSettings
+0x9bd92359	string	ExceededWaitTime
+0x9bd9237a	string	RECHECK_PERIOD
+0x9bd9238d	string	\r_timesWaited
+0x9bd923a9	string	GoToNextScene
+0x9bd92454	string	_scene
+0x9bd9245f	string	\rPlayTimeline
+0x9bd9247c	string	FieldCalibrationDll
+0x9bd92495	string	IsSaveSettingsProblemDetected
+0x9bd924b8	string	ExceededWaitTime
+0x9bd924d8	string	NavigateToErrorScene
+0x9bd924f2	string	NavigateToNextScene
+0x9bd9259d	string	_fSkipEnabled
+0x9bd925b0	string	_fStartedTimeline
+0x9bd925c7	string	GoToNextScene
+0x9bd92629	string	\r_timesWaited
+0x9bd9263c	string	RECHECK_PERIOD
+0x9bd92650	string	MAX_WAIT_DURATION
+0x9bd92713	string	module
+0x9bd9271f	string	CompletedScene
+0x9bd92733	string	package
+0x9bd92740	string	seeall
+0x9bd9274c	string	require
+0x9bd92775	string	Xbox.System
+0x9bd92786	string	_scene
+0x9bd92792	string	_RecheckPeriod
+0x9bd927af	string	_MinTimeWaited
+0x9bd927cb	string	\r_CreateScene
+0x9bd927de	string	Create
+0x9bd927e9	string	\nOnKeyDown
+0x9bd92846	string	\tXuiScene
+0x9bd92855	string	Create
+0x9bd9286b	string	BuildMediaResource
+0x9bd92883	string	CompletedScene.xur
+0x9bd92927	string	_scene
+0x9bd92932	string	\r_CreateScene
+0x9bd92945	string	AutoSubscribe
+0x9bd92962	string	StartAvatarAnimationCoroutine
+0x9bd92985	string	Avatar
+0x9bd92991	string	BuildMediaResource
+0x9bd929a8	string	&generic_celebration.MsLiveAvatarAsset
+0x9bd929d3	string	\tLoopLast
+0x9bd929e4	string	Start
+0x9bd92b13	string	_scene
+0x9bd92b1f	string	SectionText
+0x9bd92b30	string	SetText
+0x9bd92b46	string	\nGetString
+0x9bd92b56	string	Strings
+0x9bd92b63	string	IDS_SAVINGSETTINGS
+0x9bd92b7a	string	\tlegend_a
+0x9bd92b88	string	\nSetEnable
+0x9bd92b98	string	Spinner
+0x9bd92ba5	string	SetShow
+0x9bd92bbb	string	FieldCalibrationDll
+0x9bd92bd4	string	IsSavingSettings
+0x9bd92bea	string	_MinTimeWaited
+0x9bd92bfe	string	_RecheckPeriod
+0x9bd92c26	string	IsSaveSettingsProblemDetected
+0x9bd92c49	string	NavigateToErrorScene
+0x9bd92c62	string	\rIDS_FINISHED
+0x9bd92d0b	string	VK_PAD_BACK
+0x9bd92d29	string	\rVK_PAD_START
+0x9bd92d3c	string	FieldCalibrationDll
+0x9bd92d55	string	IsSavingSettings
+0x9bd92d75	string	NavigateToNextScene
+0x9bd92d8e	string	_scene
+0x9bd92e5e	string	module
+0x9bd92e6a	string	CalibrationScene
+0x9bd92e80	string	package
+0x9bd92e8d	string	seeall
+0x9bd92e99	string	require
+0x9bd92ec2	string	Xbox.System
+0x9bd92ed3	string	_scene
+0x9bd92edf	string	MIN_WAIT_TIME
+0x9bd92efb	string	MAX_WAIT_TIME
+0x9bd92f16	string	\r_CreateScene
+0x9bd92f29	string	Create
+0x9bd92f35	string	OnTransitionEnd
+0x9bd92f49	string	\nOnKeyDown
+0x9bd92f59	string	GoToNextScene
+0x9bd92f6c	string	CanUserAdvance
+0x9bd92fcd	string	\tXuiScene
+0x9bd92fdc	string	Create
+0x9bd92ff2	string	BuildMediaResource
+0x9bd9300a	string	CalibrationScene.xur
+0x9bd930d0	string	_scene
+0x9bd930db	string	\r_CreateScene
+0x9bd930ee	string	AutoSubscribe
+0x9bd93101	string	FieldCalibrationDll
+0x9bd9311a	string	RegisterSceneControls
+0x9bd93135	string	RGBControl
+0x9bd93145	string	CalibrationVisualGroup
+0x9bd93161	string	TargetImage
+0x9bd93172	string	ProgressGroup
+0x9bd93184	string	\rTooCloseText
+0x9bd93197	string	TooFarText
+0x9bd931a7	string	SetShow
+0x9bd9321c	string	XUI_TRANSITION_TO
+0x9bd9323d	string	System
+0x9bd93248	string	\rGetTickCount
+0x9bd9325b	string	FieldCalibrationDll
+0x9bd93274	string	EnsureNuiIsOn
+0x9bd93287	string	_scene
+0x9bd93293	string	Start
+0x9bd9343a	string	FieldCalibrationDll
+0x9bd93453	string	IsCameraMoving
+0x9bd93484	string	IsFrameAvailable
+0x9bd934a4	string	System
+0x9bd934af	string	\rGetTickCount
+0x9bd934c2	string	MIN_WAIT_TIME
+0x9bd934d5	string	MAX_WAIT_TIME
+0x9bd934e8	string	_scene
+0x9bd934f3	string	\rPlayTimeline
+0x9bd93506	string	BlendToRGBStart
+0x9bd9351b	string	BlendToRGBEnd
+0x9bd9352e	string	ZoomInToDefault
+0x9bd93543	string	ZoomingInProgress
+0x9bd9355a	string	StartCameraCalibration
+0x9bd93576	string	InstructionText
+0x9bd9358b	string	SetShow
+0x9bd93598	string	CalibrationVisualGroup
+0x9bd935b4	string	CanUserAdvance
+0x9bd935c8	string	GoToNextScene
+0x9bd93675	string	VK_PAD_BACK
+0x9bd93686	string	CanUserAdvance
+0x9bd9369a	string	GoToNextScene
+0x9bd936ad	string	FieldCalibrationDll
+0x9bd936c6	string	IsCalibrationComplete
+0x9bd936e1	string	Start
+0x9bd9384c	string	FieldCalibrationDll
+0x9bd93865	string	HasEnoughDataPoints
+0x9bd93888	string	System
+0x9bd93894	string	ShowMessageBox
+0x9bd938ba	string	\nGetString
+0x9bd938ca	string	Strings
+0x9bd938d6	string	(IDS_QUIT_ENOUGHSAMPLES_MESSAGEBOX_TITLE
+0x9bd93903	string	'IDS_QUIT_ENOUGHSAMPLES_MESSAGEBOX_DESC
+0x9bd93930	string	GetCommonString
+0x9bd93960	string	WarningIcon
+0x9bd9397c	string	IsCalibrationComplete
+0x9bd93997	string	GoToNextScene
+0x9bd939a9	string	+IDS_QUIT_NOTENOUGHSAMPLES_MESSAGEBOX_TITLE
+0x9bd939d9	string	*IDS_QUIT_NOTENOUGHSAMPLES_MESSAGEBOX_DESC
+0x9bd93a09	string	QuitApp
+0x9bd93a96	string	_scene
+0x9bd93aa1	string	\rLoadingImage
+0x9bd93ab4	string	SetShow
+0x9bd93ac1	string	FieldCalibrationDll
+0x9bd93ada	string	UnregisterSceneControls
+0x9bd93af7	string	StopCameraCalibration
+0x9bd93b12	string	StartToSaveCalibration
+0x9bd93b38	string	NavigateToNextScene
+0x9bd93ba5	string	FieldCalibrationDll
+0x9bd93bbe	string	IsCalibrationComplete
+0x9bd93bd9	string	IsCalibrationRunning
+0x9bd93c8f	string	module
+0x9bd93c9b	string	ErrorScene
+0x9bd93cab	string	package
+0x9bd93cb8	string	seeall
+0x9bd93cc4	string	require
+0x9bd93ced	string	Xbox.System
+0x9bd93cfe	string	_scene
+0x9bd93d09	string	\r_CreateScene
+0x9bd93d1c	string	Create
+0x9bd93d27	string	\nOnKeyDown
+0x9bd93d84	string	\tXuiScene
+0x9bd93d93	string	Create
+0x9bd93da9	string	BuildMediaResource
+0x9bd93dc1	string	ErrorScene.xur
+0x9bd93e79	string	_scene
+0x9bd93e84	string	\r_CreateScene
+0x9bd93e97	string	AutoSubscribe
+0x9bd93eaa	string	SectionText
+0x9bd93ebb	string	SetText
+0x9bd93ed1	string	\nGetString
+0x9bd93ee1	string	Strings
+0x9bd93eee	string	IDS_PROBLEM
+0x9bd93eff	string	Avatar
+0x9bd93f0c	string	StartAvatarAnimationCoroutine
+0x9bd93f2e	string	\tLoopLast
+0x9bd93fb1	string	VK_PAD_BACK
+0x9bd93fcf	string	\rVK_PAD_START
+0x9bd93fec	string	QuitApp
+0x9bd94095	string	module

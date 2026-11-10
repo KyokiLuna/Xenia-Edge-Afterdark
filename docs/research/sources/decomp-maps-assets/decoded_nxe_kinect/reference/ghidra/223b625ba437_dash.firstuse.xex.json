@@ -1,0 +1,18 @@
+{
+  "module": "dash.firstuse.xex",
+  "program": "223b625ba437_dash.firstuse.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "d05a60c7c6fab71248150cece32849ec3204016382206662e5facc3c915c63b9",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9b760400",
+  "functions": 435,
+  "calls": 1116,
+  "strings": 211,
+  "string_xrefs": 150,
+  "independent_sha256": "da17d7631693f9130ca16f5cf6e8658c48f44d60555893d5a458df59a9cbb25c",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

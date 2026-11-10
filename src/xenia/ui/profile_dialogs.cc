@@ -34,7 +34,7 @@ void ProfileConfigDialog::LoadProfileIcon() {
                              ->kernel_state()
                              ->xam_state()
                              ->profile_manager()
-                             ->GetProfile(user_index);
+                             ->CaptureProfile(user_index);
 
     if (!profile) {
       continue;
@@ -56,7 +56,7 @@ void ProfileConfigDialog::LoadProfileIcon(const uint64_t xuid) {
     return;
   }
 
-  const auto profile = profile_manager->GetProfile(xuid);
+  const auto profile = profile_manager->CaptureProfile(xuid);
 
   if (!profile) {
     if (profile_icon_.contains(xuid)) {
@@ -188,9 +188,9 @@ void ProfileConfigDialog::OnDraw(ImGuiIO& io) {
         if (user_index == XUserIndexAny) {
           if (ImGui::MenuItem("Login")) {
             profile_manager->Login(xuid);
-            if (!profile_manager->GetProfile(xuid)
-                     ->GetProfileIcon(kernel::xam::XTileType::kGamerTile)
-                     .empty()) {
+            const auto actual = profile_manager->CaptureProfile(xuid);
+            if (actual &&
+                !actual->GetProfileIcon(kernel::xam::XTileType::kGamerTile).empty()) {
               LoadProfileIcon(xuid);
             }
           }

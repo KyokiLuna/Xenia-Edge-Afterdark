@@ -9,7 +9,9 @@
 
 #include "xenia/apu/xaudio2/xaudio2_audio_driver.h"
 
+#include <utility>
 #include "xenia/apu/apu_flags.h"
+#include "xenia/apu/audio_ducker_policy.h"
 #include "xenia/apu/conversion.h"
 #include "xenia/apu/xaudio2/xaudio2_api.h"
 #include "xenia/base/assert.h"
@@ -43,10 +45,11 @@ class XAudio2AudioDriver::VoiceCallback : public api::IXAudio2VoiceCallback {
   xe::threading::Semaphore* semaphore_ = nullptr;
 };
 
-XAudio2AudioDriver::XAudio2AudioDriver(xe::threading::Semaphore* semaphore,
-                                       uint32_t frequency, uint32_t channels,
-                                       bool need_format_conversion)
+XAudio2AudioDriver::XAudio2AudioDriver(
+    xe::threading::Semaphore* semaphore, uint32_t frequency, uint32_t channels,
+    bool need_format_conversion, std::shared_ptr<AudioDuckerPolicy> policy)
     : semaphore_(semaphore),
+      policy_(std::move(policy)),
       frame_frequency_(frequency),
       frame_channels_(channels),
       need_format_conversion_(need_format_conversion) {
@@ -221,6 +224,16 @@ void XAudio2AudioDriver::SubmitFrame(float* frame) {
                                                     channel_samples_);
   } else {
     memcpy(output_frame, frame, frame_size_);
+  }
+
+  if (policy_) {
+    const auto snapshot = policy_->Read();
+    if (!AudioDuckerPolicy::ApplyInterleaved(
+            *snapshot, policy_->NowNs(), frame_frequency_, frame_channels_, 0,
+            1.0f, {output_frame, size_t(frame_size_) / sizeof(float)})) {
+      XELOGE("APU: invalid local policy PCM block; frame not submitted");
+      return;
+    }
   }
 
   api::XAUDIO2_BUFFER buffer;

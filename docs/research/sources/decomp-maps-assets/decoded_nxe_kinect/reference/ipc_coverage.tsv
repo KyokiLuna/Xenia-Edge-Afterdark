@@ -1,0 +1,62 @@
+module	functions_discovered	functions_scanned	noncontiguous_functions_skipped	unknown_instructions	candidates	proven_endpoints	note
+$flash_bootanim.xex	802	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+$flash_createprofile.xex	367	367	0	0	6	2	
+$flash_dash.xex	26932	26911	21	3939	300	6	
+$flash_deviceselector.xex	229	229	0	0	3	1	
+$flash_gamerprofile.xex	974	974	0	0	7	4	
+$flash_hud.xex	985	985	0	0	46	6	
+$flash_mfgbootlauncher.xex	313	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+$flash_minimediaplayer.xex	462	462	0	0	27	5	
+$flash_signin.xex	506	506	0	0	29	4	
+$flash_systemupdate.xex	2730	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+$flash_systemupdate2pre.xex	2597	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+$flash_updater.xex	259	259	0	0	3	4	
+$flash_vk.xex	268	268	0	0	15	3	
+$flash_xam.xex	11851	11686	165	0	242	8	
+$flash_ximecore.xex	487	487	0	0	4	1	
+$install_extender.xex	222	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+AvatarEditor.xex	7532	7452	80	0	32	5	
+AvatarMiniCreator.xex	260	260	0	0	1	3	
+BiometricSetup.xex	5743	5693	50	0	65	4	
+Dash.AttractionScreen.xex	474	464	10	0	11	1	
+Dash.FieldCalibration.lex	837	815	22	0	10	1	
+Dash.MP.Offline.lex	463	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+Dash.NuiTroubleshooter.lex	1121	1106	15	0	16	3	
+Guide.AvatarMiniCreator.xex	265	265	0	0	2	3	
+Guide.NuiTroubleshooter.xex	1763	1759	4	0	23	4	
+LivePack.xex	4259	4227	32	0	19	4	
+Party.xex	1043	1039	4	0	19	3	
+XMsgr.xex	1100	1098	2	0	8	3	
+Xam.Community.xex	1106	1104	2	0	24	4	
+Xam.LiveMessenger.xex	898	898	0	0	7	3	
+Xam.WordRegister.xex	212	212	0	0	8	1	
+Xna_TitleLauncher.xex	3060	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+bootanim.xex	814	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+createprofile.xex	305	304	1	0	3	2	
+dash.ExtraAVCodecs.xex	2181	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+dash.NuiFirstUse.xex	698	687	11	0	12	1	
+dash.firstuse.xex	435	425	10	0	11	2	
+dash.natalpregame.xex	267	263	4	0	9	1	
+dash.nuihub.xex	696	691	5	0	11	1	
+dash.xex	10507	10373	134	0	202	6	
+dashnui.xex	5683	5591	92	0	19	3	
+deviceselector.xex	167	167	0	0	3	1	
+feedback.xex	383	383	0	0	8	3	
+friends.xex	1286	1285	1	0	56	4	
+gamerprofile.xex	686	685	1	0	4	3	
+hostloader.dll	3228	3199	29	0	63	2	
+hud.xex	523	523	0	0	17	5	
+marketplace.xex	1935	1932	3	0	26	5	
+mfgbootlauncher.xex	349	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+minimediaplayer.xex	361	361	0	0	26	5	
+natalsu.xex	102	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+nuihud.xex	259	259	0	0	4	2	
+quickchat.xex	537	536	1	0	32	2	
+runtime/v3.0/netcfusermode.dll	1447	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+runtime/v3.0/runtimehost.xex	10009	9947	62	0	116	4	
+signin.xex	334	334	0	0	4	4	
+titlelauncher.xex	2460	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+updater.xex	107	0	0	0	0	0	No resolved XMsg endpoint imports/exports; IPC proof not attempted
+vk.xex	504	503	1	0	2	1	
+voicemail.xex	601	597	4	0	10	3	
+xam.xex	7571	7522	49	0	176	8	

@@ -440,6 +440,7 @@
 #define CONFIG_WMAPRO_DECODER 1
 #define CONFIG_WMAV2_DECODER 1
 #define CONFIG_XMAFRAMES_DECODER 1
+#define CONFIG_XMA1_DECODER 1
 
 /* Enabled parsers */
 #define CONFIG_MPEGAUDIO_PARSER 1
@@ -447,6 +448,9 @@
 /* Enabled demuxers */
 #define CONFIG_ASF_DEMUXER 1
 #define CONFIG_MP3_DEMUXER 1
+#define CONFIG_WAV_DEMUXER 1
+#define CONFIG_W64_DEMUXER 0
+#define CONFIG_SPDIF_DEMUXER 0
 
 /* Enabled protocols */
 #define CONFIG_FILE_PROTOCOL 1

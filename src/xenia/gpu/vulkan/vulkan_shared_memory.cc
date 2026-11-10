@@ -38,8 +38,9 @@ namespace vulkan {
 VulkanSharedMemory::VulkanSharedMemory(
     VulkanCommandProcessor& command_processor, Memory& memory,
     TraceWriter& trace_writer,
-    VkPipelineStageFlags guest_shader_pipeline_stages)
+    VkPipelineStageFlags guest_shader_pipeline_stages, Backing backing)
     : SharedMemory(memory),
+      backing_(backing),
       command_processor_(command_processor),
       trace_writer_(trace_writer),
       guest_shader_pipeline_stages_(guest_shader_pipeline_stages) {}
@@ -47,7 +48,7 @@ VulkanSharedMemory::VulkanSharedMemory(
 VulkanSharedMemory::~VulkanSharedMemory() { Shutdown(true); }
 
 bool VulkanSharedMemory::Initialize() {
-  if (!InitializeCommon()) {
+  if (!InitializeCommon(backing_ == Backing::kGuestMemory)) {
     return false;
   }
 
@@ -59,7 +60,8 @@ bool VulkanSharedMemory::Initialize() {
   // Zero-copy: alias guest RAM as the buffer. On success the buffer is a single
   // fully-resident non-sparse allocation backed by guest RAM, so the normal
   // sparse/device-local paths below are skipped.
-  if (cvars::shared_memory_zero_copy && TryInitializeZeroCopy()) {
+  if (backing_ == Backing::kGuestMemory && cvars::shared_memory_zero_copy &&
+      TryInitializeZeroCopy()) {
     last_usage_ = Usage::kTransferDestination;
     last_written_range_ = std::make_pair<uint32_t, uint32_t>(0, 0);
     upload_buffer_pool_ = std::make_unique<ui::vulkan::VulkanUploadBufferPool>(
@@ -219,7 +221,9 @@ bool VulkanSharedMemory::Initialize() {
   // Second (host-imported) buffer for memexport-touching draws and resolve
   // readback on the device-local path, so their output stays coherent with the
   // CPU.
-  TryInitializeHostBuffer();
+  if (backing_ == Backing::kGuestMemory) {
+    TryInitializeHostBuffer();
+  }
 
   return true;
 }
@@ -420,7 +424,12 @@ void VulkanSharedMemory::Shutdown(bool from_destructor) {
   ui::vulkan::util::DestroyAndNullHandle(dfn.vkFreeMemory, device,
                                          host_buffer_memory_);
   // No import left to pin the alias.
-  memory().SetPhysicalAliasSkipHostProtect(false);
+  if (backing_ == Backing::kGuestMemory) {
+    memory().SetPhysicalAliasSkipHostProtect(false);
+  }
+  SetExternalSource(nullptr);
+  native_snapshot_.reset();
+  native_snapshot_valid_ = false;
 
   // If calling from the destructor, the SharedMemory destructor will call
   // ShutdownCommon.
@@ -620,6 +629,9 @@ bool VulkanSharedMemory::UploadRanges(
     return true;
   }
 
+  if (backing_ == Backing::kNativeSnapshot) {
+    return UploadSealedRanges(upload_page_ranges, num_upload_ranges);
+  }
   if (zero_copy_) {
     // The buffer aliases guest RAM - nothing to copy, just mark the pages valid
     // so RequestRange stops asking to upload them.
@@ -640,7 +652,8 @@ bool VulkanSharedMemory::UploadRanges(
   for (uint32_t i = 0; i < num_upload_ranges; ++i) {
     uint32_t range_base = upload_page_ranges[i].first << page_size_log2();
     uint32_t range_size = upload_page_ranges[i].second << page_size_log2();
-    if (command_processor_.EnsureMemexportRangeInDeviceBuffer(
+    if (backing_ == Backing::kGuestMemory &&
+        command_processor_.EnsureMemexportRangeInDeviceBuffer(
             range_base, range_size, true)) {
       MakeRangeValid(range_base, range_size, false);
       continue;
@@ -686,10 +699,13 @@ bool VulkanSharedMemory::UploadRanges(
   for (unsigned int i = 0; i < num_upload_ranges; ++i) {
     uint32_t upload_range_start = upload_page_ranges[i].first;
     uint32_t upload_range_length = upload_page_ranges[i].second;
-    trace_writer_.WriteMemoryRead(upload_range_start << page_size_log2(),
-                                  upload_range_length << page_size_log2());
+    if (backing_ == Backing::kGuestMemory) {
+      trace_writer_.WriteMemoryRead(upload_range_start << page_size_log2(),
+                                    upload_range_length << page_size_log2());
+    }
 
-    if (upload_range_length > 0 && !cvars::gpu_allow_invalid_upload_range) {
+    if (backing_ == Backing::kGuestMemory && upload_range_length > 0 &&
+        !cvars::gpu_allow_invalid_upload_range) {
       const uint32_t range_start_addr = upload_range_start << page_size_log2();
       const uint32_t upload_range_last_page =
           upload_range_start + upload_range_length - 1;
@@ -770,6 +786,127 @@ bool VulkanSharedMemory::UploadRanges(
   }
   command_processor_.PopDebugMarker();
   return successful;
+}
+
+namespace {
+bool Contains(memory::PhysicalRange outer, uint32_t start, uint32_t length) {
+  return outer.length && start >= outer.address &&
+         uint64_t(start) + length <= uint64_t(outer.address) + outer.length;
+}
+}  // namespace
+bool VulkanSharedMemory::BindNativeSnapshot(
+    std::shared_ptr<const NativeFrameInputSnapshot> snapshot,
+    memory::PhysicalRange output) {
+  if (backing_ != Backing::kNativeSnapshot || !snapshot || !snapshot->valid() ||
+      (snapshot->output_range().address != output.address ||
+       snapshot->output_range().length != output.length) ||
+      (snapshot->plan()->is_overlay_control()
+           ? (output.address || output.length)
+           : (!output.length || output.address >= kBufferSize ||
+              output.length > kBufferSize - output.address))) {
+    return false;
+  }
+  for (const auto& block : snapshot->blocks()) {
+    if ((block.range.address | block.range.length) & 3) {
+      return false;
+    }
+  }
+  // Fire ONLY this detached bank's cache watches and invalidate every old page.
+  // Never let prior-source GPU data satisfy a new-source input upload.
+  MemoryInvalidationCallback(0, kBufferSize, true);
+  native_snapshot_ = std::move(snapshot);
+  native_output_ = output;
+  native_output_written_ = {};
+  native_snapshot_valid_ = true;
+  SetExternalSource(this);
+  return true;
+}
+bool VulkanSharedMemory::CoversRead(uint32_t start,
+                                    uint32_t length) const noexcept {
+  return !length || (native_snapshot_valid_ && native_snapshot_ &&
+                     (native_snapshot_->Covers({start, length}) ||
+                      Contains(native_output_written_, start, length)));
+}
+bool VulkanSharedMemory::CoversWrite(uint32_t start,
+                                     uint32_t length) const noexcept {
+  return !length ||
+         (native_snapshot_valid_ && Contains(native_output_, start, length));
+}
+bool VulkanSharedMemory::Read(uint32_t start,
+                              std::span<uint8_t> destination) const noexcept {
+  // CPU resolve vertices are inputs, never read back from live guest RAM or
+  // from GPU output. Output consumers use actual GPU storage/visibility paths.
+  return native_snapshot_valid_ && native_snapshot_ &&
+         native_snapshot_->Read({start, uint32_t(destination.size())},
+                                destination);
+}
+void VulkanSharedMemory::GpuWritten(uint32_t start, uint32_t length) noexcept {
+  if (!CoversWrite(start, length)) {
+    native_snapshot_valid_ = false;
+    return;
+  }
+  native_output_written_ = {start, length};
+}
+bool VulkanSharedMemory::UploadSealedRanges(
+    const std::pair<uint32_t, uint32_t>* ranges, uint32_t count) {
+  if (!native_snapshot_valid_ || !native_snapshot_ || zero_copy_ ||
+      host_buffer_ != VK_NULL_HANDLE) {
+    return false;
+  }
+  auto& commands = command_processor_.deferred_command_buffer();
+  const uint64_t submission = command_processor_.GetCurrentSubmission();
+  for (uint32_t i = 0; i < count; ++i) {
+    const uint32_t start = ranges[i].first << page_size_log2();
+    const uint32_t length = ranges[i].second << page_size_log2();
+    if (!length || start >= kBufferSize || length > kBufferSize - start) {
+      return false;
+    }
+    // Initialize private storage holes on GPU. These bytes are not uploaded
+    // from any CPU RAM and exact read admission still rejects every hole.
+    Use(Usage::kTransferDestination, {start, length});
+    command_processor_.SubmitBarriers(true);
+    commands.CmdVkFillBuffer(buffer_, start, length, 0);
+    // Copy overwrites a subset of the fill: explicit transfer WAW ordering.
+    Use(Usage::kTransferDestination, {start, length});
+    command_processor_.SubmitBarriers(true);
+    const uint64_t end = uint64_t(start) + length;
+    const auto upload = [&](memory::PhysicalRange range,
+                            std::span<const uint8_t> bytes) -> bool {
+      uint64_t first = std::max<uint64_t>(start, range.address);
+      const uint64_t last =
+          std::min<uint64_t>(end, uint64_t(range.address) + range.length);
+      while (first < last) {
+        VkBuffer upload_buffer;
+        VkDeviceSize offset, size;
+        auto* mapped = upload_buffer_pool_->RequestPartial(
+            submission, size_t(last - first), 4, upload_buffer, offset, size);
+        if (!mapped || !size || size > last - first || ((offset | size) & 3)) {
+          return false;
+        }
+        // The only CPU input read in this mode is this sealed owned vector.
+        std::memcpy(mapped, bytes.data() + size_t(first - range.address),
+                    size_t(size));
+        const VkBufferCopy copy{offset, first, size};
+        commands.CmdVkCopyBuffer(upload_buffer, buffer_, 1, &copy);
+        first += size;
+      }
+      return true;
+    };
+    for (const auto& block : native_snapshot_->blocks()) {
+      if (!upload(block.range, block.bytes)) {
+        return false;
+      }
+    }
+    if (const auto& input = native_snapshot_->title_input()) {
+      if (!upload(input->range(), input->bytes())) {
+        return false;
+      }
+    }
+    // Detached immutable inputs cannot race guest invalidation. Publish local
+    // residency only after every fill/copy for the requested pages is encoded.
+    MakeRangeValid(start, length, false);
+  }
+  return true;
 }
 
 void VulkanSharedMemory::GetUsageMasks(Usage usage,

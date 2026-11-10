@@ -129,11 +129,16 @@ class VulkanGPUCompletionTimeline : public GPUCompletionTimeline {
                                  const VkSubmitInfo* submits);
 
   void UpdateCompletedSubmission() override;
+  // Strict completion consumers distinguish GPU errors from ordinary pending
+  // fences. Sticky for this timeline's lifetime; legacy consumers are
+  // unchanged.
+  VkResult last_completion_error() const { return last_completion_error_; }
 
  protected:
   void AwaitSubmissionImpl(uint64_t awaited_submission) override;
 
  private:
+  VkResult last_completion_error_ = VK_SUCCESS;
   VulkanDevice* const vulkan_device_;
   const char* const name_;
 

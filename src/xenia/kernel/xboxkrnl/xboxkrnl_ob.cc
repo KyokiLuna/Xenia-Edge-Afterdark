@@ -8,19 +8,29 @@
  */
 
 #include "xenia/kernel/xboxkrnl/xboxkrnl_ob.h"
+#include "xenia/kernel/xboxkrnl/ob_symbolic_link.h"
+#include "xenia/kernel/xfile.h"
 
+#include <atomic>
 #include <cstddef>
+#include <limits>
+#include <new>
 #include <unordered_map>
 #include <utility>
 
+#include "xenia/base/cvar.h"
 #include "xenia/base/logging.h"
 #include "xenia/cpu/processor.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/xboxkrnl/ob_waitable_object.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
 #include "xenia/kernel/xevent.h"
+#include "xenia/kernel/xstfs_device.h"
 #include "xenia/kernel/xthread.h"
 #include "xenia/xbox.h"
+
+DECLARE_bool(native_system_first_record_probe);
 
 namespace xe {
 namespace kernel {
@@ -68,6 +78,39 @@ class XGuestObject : public XObject {
 };
 
 namespace {
+
+// No extra guest reads or retained holders. The probe records the actual
+// object-to-waitable conversion without changing its result or references.
+void TraceWaitableObjectResolution(const WaitableObjectResolution& result,
+                                   KernelState* kernel,
+                                   const ppc_context_t& context) noexcept {
+  if (!cvars::native_system_first_record_probe || !XThread::IsInThread()) {
+    return;
+  }
+  auto* thread = XThread::GetCurrentThread();
+  if (thread->kernel_state() != kernel ||
+      thread->thread_state()->context() != context.value()) {
+    return;
+  }
+  static std::atomic<uint32_t> trace_count{0};
+  uint32_t count = trace_count.load(std::memory_order_relaxed);
+  while (count < 16) {
+    if (trace_count.compare_exchange_weak(count, count + 1,
+                                          std::memory_order_relaxed)) {
+      try {
+        XELOGI(
+            "Native first-record ObGetWaitableObject: body={:08X} "
+            "type={:08X} metadata={:08X} target={:08X} kind={} "
+            "tid={:08X} LR={:08X}",
+            result.body, result.object_type, result.default_object,
+            result.waitable, static_cast<uint32_t>(result.kind),
+            thread->thread_id(), uint32_t(context->lr));
+      } catch (...) {
+      }
+      return;
+    }
+  }
+}
 
 // Objects whose pointer and handle counts the guest header keeps, as the kernel
 // does for all of them, and whose type's procedures run as those drop. Xenia's
@@ -294,6 +337,34 @@ X_STATUS OpenCounted(uint32_t body, uint32_t pointer_bias, bool allow_wrapper,
 }
 
 }  // namespace
+
+pointer_result_t ObGetWaitableObject_entry(lpvoid_t object_ptr,
+                                           const ppc_context_t& context) {
+  const uint32_t body = object_ptr.guest_address();
+  if (!body) {
+    return 0;  // No Kernel or guest memory access for the null case.
+  }
+  auto* kernel = kernel_state();
+  if (!kernel) {
+    return 0;
+  }
+  const uint32_t globals = kernel->GetKernelGuestGlobals();
+  constexpr uint32_t default_offset =
+      uint32_t(offsetof(KernelGuestGlobals, XboxKernelDefaultObject));
+  const uint32_t exact_default =
+      globals &&
+              globals <= std::numeric_limits<uint32_t>::max() - default_offset
+          ? globals + default_offset
+          : 0;
+  const auto result =
+      ResolveWaitableObject(*kernel->memory(), body, exact_default);
+  TraceWaitableObjectResolution(result, kernel, context);
+  // The supplied native Task registration already references the outer object
+  // across its wait. This conversion borrows its embedded/default dispatcher;
+  // it neither wraps the event nor takes another Object Manager reference.
+  return result.waitable;
+}
+DECLARE_XBOXKRNL_EXPORT1(ObGetWaitableObject, kNone, kImplemented);
 
 void xeObSplitName(X_ANSI_STRING input_string,
                    X_ANSI_STRING* leading_path_component,
@@ -655,6 +726,10 @@ dword_result_t ObReferenceObjectByName_entry(pointer_t<X_ANSI_STRING> name,
 DECLARE_XBOXKRNL_EXPORT1(ObReferenceObjectByName, kNone, kImplemented);
 
 void xeObDereferenceObject(PPCContext* context, uint32_t native_ptr) {
+  if (auto stfs = XStfsDevice::Lookup(*kernel_state(), native_ptr)) {
+    stfs->DereferencePointer();
+    return;
+  }
   // Check if a dummy value from ObReferenceObjectByHandle.
   if (native_ptr == 0xDEADF00D) {
     return;
@@ -688,6 +763,10 @@ void ObDereferenceObject_entry(dword_t native_ptr, const ppc_context_t& ctx) {
 DECLARE_XBOXKRNL_EXPORT1(ObDereferenceObject, kNone, kImplemented);
 
 void ObReferenceObject_entry(dword_t native_ptr) {
+  if (auto stfs = XStfsDevice::Lookup(*kernel_state(), native_ptr)) {
+    stfs->ReferencePointer();
+    return;
+  }
   if (CountedBody(native_ptr)) {
     ReferenceCounted(native_ptr);
     return;
@@ -723,6 +802,55 @@ std::string xeObSymbolicLinkName(const std::string_view name) {
   }
   return path;
 }
+
+dword_result_t ObTranslateSymbolicLink_entry(dword_t attributes,
+                                             dword_t output_ansi,
+                                             const ppc_context_t& context) {
+  if (!context.value() || !context->kernel_state) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  auto* kernel = context->kernel_state;
+  try {
+    return TranslateSymbolicLinkGuest(
+        *kernel->memory(), *kernel->file_system(), attributes, output_ansi,
+        [kernel](uint32_t handle,
+                 RetainedSymbolicLinkRoot& output) -> X_STATUS {
+          struct Owner {
+            object_ref<XFile> file;
+            std::shared_ptr<vfs::Device> tree;
+          };
+          auto lock = global_critical_region::AcquireDirect();
+          auto object = kernel->object_table()->LookupObject<XObject>(handle);
+          if (!object) {
+            return X_STATUS_INVALID_HANDLE;
+          }
+          if (object->type() != XObject::Type::File) {
+            return X_STATUS_OBJECT_TYPE_MISMATCH;
+          }
+          auto file = kernel->object_table()->LookupObject<XFile>(handle);
+          if (!file) {
+            return X_STATUS_INVALID_HANDLE;
+          }
+          // Acquire the lease captured at open BEFORE touching a raw Entry.
+          // Container devices may already be detached from the namespace.
+          auto tree = file->file()->retained_device();
+          if (!tree) {
+            return X_STATUS_NOT_SUPPORTED;
+          }
+          auto owner = std::make_shared<Owner>();
+          owner->file = std::move(file);
+          owner->tree = std::move(tree);
+          output.guest_path = owner->file->entry()->absolute_path();
+          output.directory = (owner->file->entry()->attributes() &
+                              vfs::kFileAttributeDirectory) != 0;
+          output.owner = std::move(owner);
+          return X_STATUS_SUCCESS;
+        });
+  } catch (const std::bad_alloc&) {
+    return X_STATUS_NO_MEMORY;
+  }
+}
+DECLARE_XBOXKRNL_EXPORT1(ObTranslateSymbolicLink, kFileSystem, kImplemented);
 
 dword_result_t ObCreateSymbolicLink_entry(pointer_t<X_ANSI_STRING> path_ptr,
                                           pointer_t<X_ANSI_STRING> target_ptr) {

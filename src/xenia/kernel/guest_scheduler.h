@@ -94,12 +94,22 @@ class GuestScheduler {
     kSerial,
     kConcurrent,
   };
+  enum class HostCallDropReason {
+    kQueuedShutdown,     // Enqueued but unstarted when workers have joined.
+    kAdmissionShutdown,  // New admission rejected because shutdown began.
+  };
 
   // Runs |fn|, a blocking host call such as a disc read, on an I/O worker
   // without waiting. kSerial calls share one worker, kConcurrent calls go to a
-  // pool so one slow call cannot hold up the rest. Runs inline once shutdown
-  // has begun.
-  void PostHostCall(std::function<void()> fn, BlockingCallClass call_class);
+  // pool so one slow call cannot hold up the rest. Without on_drop, runs
+  // inline once shutdown has begun (existing caller behavior).
+  // An optional owned on_drop replaces only UNSTARTED work rejected/dropped
+  // by shutdown. It runs outside scheduler locks; queued shutdown settlement
+  // precedes parked-fiber reclamation. The caller must retain Kernel lifetime
+  // for admission-time settlement. It must be safe
+  // without a live guest caller/borrowed guest buffers and must not throw.
+  void PostHostCall(std::function<void()> fn, BlockingCallClass call_class,
+                    std::function<void(HostCallDropReason)> on_drop = {});
 
   // True when the calling thread is a scheduler-managed fiber, so a blocking
   // host call would stall other fibers and should be offloaded instead.
@@ -348,6 +358,7 @@ class GuestScheduler {
   // Heap-owned, deleted by the worker after running.
   struct BlockingCall {
     std::function<void()> fn;
+    std::function<void(HostCallDropReason)> on_drop;
     // Raw host ticks when queued, for the I/O wait-time counter.
     uint64_t queued_ns = 0;
   };

@@ -1,0 +1,15 @@
+XNA handoff: metro
+==================
+
+Each dashboard is a separate provenance and dependency domain.
+Native files remain in their source-relative paths; original XEX wrappers are in _sources/.
+Managed assemblies and APIs: reference/managed_assemblies.tsv, managed_api.tsv, managed_types.tsv.
+Dependencies and exact versions: reference/managed_dependencies.tsv.
+P/Invoke names and InternalCall flags are recorded; unresolved bridge identities are not invented.
+C# is decompiler output for research, not a claim of buildable original source.
+
+MISSING: no managed XNA/runtime assemblies are supplied in this dashboard tree or its five packages.
+
+Native launcher/runtime candidates (name/role relationship is INFERRED unless supported by imports/strings):
+Xam.Community.xex: decoded; module version=2.0.17559.0; decoded SHA256=cc71d326bbadfe767a11ff615adbbdc2ef107bd6afea656cb417a3f2899da6e4
+Xna_TitleLauncher.xex: decoded; module version=3.2.1.0; decoded SHA256=07bfae53a28179f7d65c30a4cfd598949a53ac819be33f30069ad5cabcaaf378

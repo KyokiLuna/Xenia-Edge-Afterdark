@@ -46,7 +46,8 @@ uint32_t xeMmAllocatePhysicalMemoryEx(uint32_t flags, uint32_t region_size,
                                       uint32_t protect_bits,
                                       uint32_t min_addr_range,
                                       uint32_t max_addr_range,
-                                      uint32_t alignment);
+                                      uint32_t alignment,
+                                      uint32_t return_address = 0);
 dword_result_t xeMmQueryStatistics(
     pointer_t<X_MM_QUERY_STATISTICS_RESULT> stats_ptr);
 uint32_t xeAllocatePoolTypeWithTag(PPCContext* context, uint32_t size,

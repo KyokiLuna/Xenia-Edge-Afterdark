@@ -166,11 +166,11 @@ class Param {
 template <>
 inline void Param::LoadValue<float>(Param::Init& init, float* out_value) {
   *out_value =
-      static_cast<float>(init.ppc_context->f[1 + ++init.float_ordinal]);
+      static_cast<float>(init.ppc_context->f[1 + init.float_ordinal++]);
 }
 template <>
 inline void Param::LoadValue<double>(Param::Init& init, double* out_value) {
-  *out_value = init.ppc_context->f[1 + ++init.float_ordinal];
+  *out_value = init.ppc_context->f[1 + init.float_ordinal++];
 }
 template <typename T>
 class ParamBase : public Param {
@@ -351,7 +351,15 @@ class ResultBase : public Result {
  public:
   ResultBase(T value) : value_(value) {}
   void Store(PPCContext* ppc_context) {
-    ppc_context->r[3] = uint64_t(int32_t(value_));
+    if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>) {
+      // PPC scalar results use f1. A single is widened to the context's double
+      // representation; it must not overwrite the independent GPR result.
+      ppc_context->f[1] = static_cast<double>(value_);
+    } else if constexpr (sizeof(T) == sizeof(uint64_t)) {
+      ppc_context->r[3] = uint64_t(value_);
+    } else {
+      ppc_context->r[3] = uint64_t(int32_t(value_));
+    }
   }
   ResultBase() = delete;
   ResultBase& operator=(const ResultBase&) = delete;
@@ -386,6 +394,8 @@ using pointer_t = const shim::TypedPointerParam<T>&;
 using int_result_t = shim::ResultBase<int32_t>;
 using dword_result_t = shim::ResultBase<uint32_t>;
 using qword_result_t = shim::ResultBase<uint64_t>;
+using float_result_t = shim::ResultBase<float>;
+using double_result_t = shim::ResultBase<double>;
 using pointer_result_t = shim::ResultBase<uint32_t>;
 using X_HRESULT_result_t = shim::ResultBase<X_HRESULT>;
 using ppc_context_t = shim::ContextParam;

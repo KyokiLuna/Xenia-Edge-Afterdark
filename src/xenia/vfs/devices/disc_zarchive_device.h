@@ -35,6 +35,10 @@ class DiscZarchiveDevice : public Device {
   ~DiscZarchiveDevice() override;
 
   bool Initialize() override;
+  std::optional<std::vector<filesystem::GuestHostBacking>> GuestBackings()
+      const override {
+    return std::vector<filesystem::GuestHostBacking>{{host_path_, false}};
+  }
   void Dump(StringBuffer* string_buffer) override;
   Entry* ResolvePath(const std::string_view path) override;
 

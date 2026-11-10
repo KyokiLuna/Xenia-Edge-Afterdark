@@ -1,0 +1,18 @@
+{
+  "module": "Dash.NuiTroubleshooter.lex",
+  "program": "5d9b1148e191_Dash.NuiTroubleshooter.lex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "715eb378be6f469929c38628d5b8a612519588de4f392c6693b89d5093b653f3",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x9cb50400",
+  "functions": 1121,
+  "calls": 3067,
+  "strings": 213,
+  "string_xrefs": 180,
+  "independent_sha256": "34bf73608f87659d1e99922a86a1d37a5a7a2982b19f0cc7eeb763116dad92d8",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

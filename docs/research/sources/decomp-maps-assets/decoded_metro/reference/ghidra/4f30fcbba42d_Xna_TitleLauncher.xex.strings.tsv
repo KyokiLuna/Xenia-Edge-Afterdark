@@ -1,0 +1,979 @@
+va	data_type	text
+0x920006e4	unicode	OKButtonString
+0x92000704	unicode	TUDeclinedString
+0x92000728	unicode	IndieProductNameString
+0x92000764	unicode	ru-ru
+0x92000770	unicode	pl-pl
+0x9200077c	unicode	zh-chs
+0x9200078c	unicode	pt-br
+0x92000798	unicode	zh-tw
+0x920007a4	unicode	ko-kr
+0x920007b0	unicode	it-it
+0x920007bc	unicode	es-es
+0x920007c8	unicode	fr-fr
+0x920007d4	unicode	de-de
+0x920007e0	unicode	ja-jp
+0x920007ec	unicode	MEDIA
+0x920007f8	unicode	section://%X,%s#%s%sStrings.xus
+0x92000840	string	XLNI_DASH_ARCADE
+0x92000854	string	XLNI_DASH_NUIHUB
+0x92000868	string	XLNI_DET_MEDIA
+0x920012e8	string	[XAPI RETURN VALUE] %d\n
+0x92001340	string	e+000
+0x92001348	unicode	runtime error 
+0x9200136c	unicode	TLOSS error\n
+0x92001388	unicode	SING error\n
+0x920013a0	unicode	DOMAIN error\n
+0x920013c0	unicode	R6033\n- Attempt to use MSIL code from this assembly during native code initialization\nThis indicates a bug in your application. It is most likely the result of calling an MSIL-compiled (/clr) function from a native constructor or from DllMain.\n
+0x920015b0	unicode	R6032\n- not enough space for locale information\n
+0x92001618	unicode	R6031\n- Attempt to initialize the CRT more than once.\nThis indicates a bug in your application.\n
+0x920016dc	unicode	R6030\n- CRT not initialized\n
+0x92001718	unicode	R6028\n- unable to initialize heap\n
+0x92001760	unicode	R6027\n- not enough space for lowio initialization\n
+0x920017c8	unicode	R6026\n- not enough space for stdio initialization\n
+0x92001830	unicode	R6025\n- pure virtual function call\n
+0x92001878	unicode	R6024\n- not enough space for _onexit/atexit table\n
+0x920018e0	unicode	R6019\n- unable to open console device\n
+0x92001930	unicode	R6018\n- unexpected heap error\n
+0x92001970	unicode	R6017\n- unexpected multithread lock error\n
+0x920019c8	unicode	R6016\n- not enough space for thread data\n
+0x92001a20	unicode	R6010\n- abort() has been called\n
+0x92001a68	unicode	R6009\n- not enough space for environment\n
+0x92001ac0	unicode	R6008\n- not enough space for arguments\n
+0x92001b10	unicode	R6002\n- floating point support not loaded\n
+0x92001cb8	unicode	HH:mm:ss
+0x92001ccc	unicode	dddd, MMMM dd, yyyy
+0x92001cf4	unicode	MM/dd/yy
+0x92001d18	unicode	December
+0x92001d2c	unicode	November
+0x92001d40	unicode	October
+0x92001d50	unicode	September
+0x92001d64	unicode	August
+0x92001d74	unicode	July
+0x92001d80	unicode	June
+0x92001d8c	unicode	April
+0x92001d98	unicode	March
+0x92001da4	unicode	February
+0x92001db8	unicode	January
+0x92001e28	unicode	Saturday
+0x92001e3c	unicode	Friday
+0x92001e4c	unicode	Thursday
+0x92001e60	unicode	Wednesday
+0x92001e74	unicode	Tuesday
+0x92001e84	unicode	Monday
+0x92001e94	unicode	Sunday
+0x92001edc	string	HH:mm:ss
+0x92001ee8	string	dddd, MMMM dd, yyyy
+0x92001efc	string	MM/dd/yy
+0x92001f10	string	December
+0x92001f1c	string	November
+0x92001f28	string	October
+0x92001f30	string	September
+0x92001f3c	string	August
+0x92001f54	string	April
+0x92001f5c	string	March
+0x92001f64	string	February
+0x92001f70	string	January
+0x92001fa8	string	Saturday
+0x92001fb4	string	Friday
+0x92001fbc	string	Thursday
+0x92001fc8	string	Wednesday
+0x92001fd4	string	Tuesday
+0x92001fdc	string	Monday
+0x92001fe4	string	Sunday
+0x9200281c	string	1#QNAN
+0x92002824	string	1#INF
+0x9200282c	string	1#IND
+0x92002834	string	1#SNAN
+0x92002ae0	string	VGT_DEBUG
+0x92002aec	string	PA_SU_DEBUG
+0x92002af8	string	PA_SC_DEBUG
+0x92002b04	string	RBBM DEBUG
+0x92002b10	string	CP DEBUG
+0x92002b1c	string	PTR_BUFF_STATUS 0xAc24
+0x92002b34	string	PIX_TB_STATUS 0x9c24
+0x92002b4c	string	VTX_TB_STATUS 0x8C24
+0x92002b64	string	RB_DEBUG_0
+0x92002b70	string	TPC_CNTL_STATUS
+0x92002b80	string	TP3_CNTL_STATUS
+0x92002b90	string	TP2_CNTL_STATUS
+0x92002ba0	string	TP1_CNTL_STATUS
+0x92002bb0	string	TP0_CNTL_STATUS
+0x92002bc0	string	TC_CNTL_STATUS
+0x92002bd0	string	PA_SU_CNTL_STATUS
+0x92002be4	string	PA_SC_CNTL_STATUS
+0x92002bf8	string	PA_CL_CNTL_STATUS
+0x92002c0c	string	VC_CNTL_STATUS
+0x92002c1c	string	VGT_CNTL_STATUS
+0x92002c2c	string	CP_MEQ_STAT
+0x92002c38	string	CP_MEQ_AVAIL
+0x92002c48	string	CP_CSQ_IB2_STAT
+0x92002c58	string	CP_CSQ_IB1_STAT
+0x92002c68	string	CP_CSQ_RB_STAT
+0x92002c78	string	CP_CSQ_AVAIL
+0x92002c88	string	CP_DEBUG
+0x92002c94	string	CP_STAT
+0x92002c9c	string	CP_IB2_BUFSZ
+0x92002cac	string	CP_IB2_BASE
+0x92002cb8	string	CP_IB1_BUFSZ
+0x92002cc8	string	CP_IB1_BASE
+0x92002cec	string	CP_RB_BASE
+0x92002d2c	string	%s 0x%02x: 
+0x92002d3c	string	%08x 
+0x92002d44	string	RB_SIDEBAND_DATA[0]
+0x92002d58	string	   %25s: 0x%08x\n
+0x92002d70	string	CPU Synchronization
+0x92002d88	string	   %25s: 0x%08x (
+0x92002d9c	string	RBBM_STATUS
+0x92002da8	string	crashdump.pix2
+0x92002db8	string	    command buffers with the D3DCREATECB_DEBUG_ALLOCATOR flag set and\n    build using instrumented or debug versions of the D3D library.\n
+0x92002e48	string	\n    A likely potential reason for the hang is a bad growable command\n    allocator.  To rule out that possibility, try creating all growable\n
+0x92002ed8	string	        0x%x 0x%x\n
+0x92002ef0	string	    Could the contents have become corrupted?  The list of indirect\n    buffer physical addresses and dword counts are as follows:\n
+0x92002f78	string	    It was a growable command buffer with its D3DALLOCATECALLBACK routine\n    at address 0x%x and a callback context of 0x%x.\n
+0x92002ff8	string	\n  o The GPU appears to have hung while executing the command buffer\n    represented by the D3DCommandBuffer structure at address 0x%x.\n
+0x92003088	string	\n  o The GPU appears to have hung while executing an asynchronous\n    command buffer set to the D3DCommandBuffer structure at address 0x%x.\n
+0x92003118	string	\n  o The GPU appears to have hung while executing an asynchronous\n    command buffer which was patched to NULL.\n
+0x92003190	string	\nThe GPU state doesn't match any recognized hangs.  Please send a repro\nscenario to gameds@microsoft.com so that we can supply a workaround.\n
+0x92003220	string	\nIf your hang didn't occur for the above reason, please send a repro\nscenario to gameds@microsoft.com so that we can supply a workaround.\n
+0x920032b0	string	   1) allocate memory for the base level, and point BaseAddress to it, or\n   2) set BaseAddress equal to MipAddress, until you have allocated memory\n   for the base texture level.\n
+0x92003368	string	   If you are setting a texture's BaseAddress to 0 because you have not yet\n   loaded the base level of the texture, you can work around this in two ways:\n
+0x92003408	string	\nNOTE: The hang may have occurred because multiple texture constants had\n   unique MipAddress fields, but shared a common BaseAddress field (usually 0).\n
+0x920034a4	string	    a stack trace may point to the culprit.\n
+0x920034d8	string	    non-debug build is being used and a resource is being locked while\n    in a tiling, Z-pass or XPS bracket.  Since this is likely a software hang,\n
+0x92003570	string	\nNOTE: The GPU appears to be running fine so the hang most likely occurred\n    because of a software problem.  Some possible causes are that a\n
+0x92003600	string	    If you hit this hang more than once we recommend using\n    D3DCREATE_CLIPPER_MODE_1 to implement a safe workaround which\n    comes at a slight clipper performance cost.\n
+0x920036b0	string	\nNOTE: The hang may have occurred because of a known hardware bug\n    in the clipper.  The bug is timing dependent and very rare.\n
+0x92003738	string	    on a draw call doesn't properly match the primitive type (e.g.,\n    by calling DrawVertices using D3DPT_TRILIST with a vertex\n    count of 4).\n
+0x920037d0	string	\nNOTE: The hang may have occurred because a partial primitive was\n    rendered.  A partial primitive occurs when the vertex count\n
+0x92003858	string	It appears there is a deadlock on a NUI internal asynchronous lock.\nThe semaphore involved (0x%08x) hasn't been signaled.\n\n
+0x920038d8	string	It appears there is a deadlock on an asynchronous command buffer.\nThe D3DASYNCCBBLOCK involved (0x%08x) hasn't been signaled via the\nSetAsyncCommandBuffer API.\n\n
+0x92003980	string	It appears that there is a deadlock on an asynchronous resources block.\nThe D3DASYNCBLOCK involved hasn't been signaled via the\nSignalAsyncResources API.\n\n
+0x92003a20	string	It appears that there is a deadlock on an asynchronous resources block.\nThe D3DASYNCBLOCK involved (0x%016I64x) hasn't been signaled via the\nSignalAsyncResources API.\n\n
+0x92003ad0	string	It appears that a callback routine invoked by InsertCallback never\nreturned.  The callback routine is at address 0x%x and was passed\na context value of 0x%x.\n\n
+0x92003b70	string	CPU fence 0x%x, GPU fence 0x%x\n\n
+0x92003b94	string	Device 0x%x, Snooped 0x%x, NonSnooped 0x%x,\n
+0x92003bc4	string	D3D version %i.%i %s, kernel %i, frame %i,\n
+0x92003bf0	string	retail
+0x92003bf8	string	ERR[D3D]: The GPU is hung!\n\n
+0x92003c18	string	Breaking into the debugger.  The GPU is hung and can't be recovered\nwithout doing a cold boot.\n
+0x92003c78	string	\nERR[D3D]: Try reproducing the hang with the debug or instrumented\n          versions of D3D (D3D9D.LIB or D3D9I.LIB) to capture a\n          crash-dump PIX file that can be sent to Xbox developer\n          support.\n\n
+0x92003d58	string	+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n
+0x92004f00	string	PIX!NO
+0x92004f9a	string	33e:\xbperfview.cap
+0x92006e10	string	PIX!OK
+0x92006e18	string	{EndCapture}
+0x92006e28	string	{BeginCapture}
+0x92006e38	string	{EndCaptureFileCreation}
+0x92006e54	string	{BeginCaptureFileCreation}
+0x92006e70	string	{LimitCaptureSize}
+0x92006e84	string	{Version}
+0x92006e90	string	{Disconnect}
+0x92006ea0	string	{Connect}
+0x92006f60	string	PIX!{CaptureEnded}
+0x92006f7c	string	%s:\%s
+0x92006f84	string	xbmovie
+0x92006f8c	string	%s 0x%08X
+0x92006f98	string	PIX!{CaptureFileCreationEnded}
+0x92009980	unicode	EndKillFocus
+0x9200999c	unicode	EndPressDisable
+0x920099bc	unicode	PressDisable
+0x920099d8	unicode	EndInitFocusCheckDisable
+0x92009a0c	unicode	InitFocusCheckDisable
+0x92009a38	unicode	EndInitFocusCheck
+0x92009a5c	unicode	InitFocusCheck
+0x92009a7c	unicode	EndInitFocusDisable
+0x92009aa4	unicode	InitFocusDisable
+0x92009ac8	unicode	EndInitFocus
+0x92009ae4	unicode	InitFocus
+0x92009af8	unicode	EndScrollMoreDisable
+0x92009b24	unicode	ScrollMoreDisable
+0x92009b48	unicode	EndScrolling
+0x92009b64	unicode	Scrolling
+0x92009b78	unicode	EndScrollMore
+0x92009b94	unicode	ScrollMore
+0x92009bac	unicode	EndNormalSelCheckDisable
+0x92009be0	unicode	NormalSelCheckDisable
+0x92009c0c	unicode	EndNormalSelDisable
+0x92009c34	unicode	NormalSelDisable
+0x92009c58	unicode	EndNormalSelCheck
+0x92009c7c	unicode	NormalSelCheck
+0x92009c9c	unicode	EndNormalSel
+0x92009cb8	unicode	NormalSel
+0x92009ccc	unicode	EndFocusCheckDisable
+0x92009cf8	unicode	FocusCheckDisable
+0x92009d1c	unicode	EndNormalCheckDisable
+0x92009d48	unicode	NormalCheckDisable
+0x92009d70	unicode	EndFocusCheck
+0x92009d8c	unicode	FocusCheck
+0x92009da4	unicode	EndNormalCheck
+0x92009dc4	unicode	NormalCheck
+0x92009ddc	unicode	EndNormalPress
+0x92009dfc	unicode	NormalPress
+0x92009e14	unicode	EndPress
+0x92009e28	unicode	Press
+0x92009e34	unicode	EndFocusDisable
+0x92009e54	unicode	FocusDisable
+0x92009e70	unicode	EndNormalDisable
+0x92009e94	unicode	NormalDisable
+0x92009eb0	unicode	KillFocus
+0x92009ec4	unicode	EndFocus
+0x92009ed8	unicode	Focus
+0x92009ee4	unicode	EndNormal
+0x92009ef8	unicode	Normal
+0x9200a088	unicode	ClassOverride
+0x9200a0b0	unicode	Width
+0x9200a0bc	unicode	Height
+0x9200a0cc	unicode	Pivot
+0x9200a0fc	unicode	XuiTransition
+0x9200a120	unicode	XuiCanvas
+0x9200a134	unicode	XuiElement
+0x9200a14c	unicode	XuiText
+0x9200a15c	unicode	XuiLabel
+0x9200a170	unicode	XuiControl
+0x9200a1a4	unicode	XuiFigure
+0x9200a1b8	unicode	XuiVisual
+0x9200a1cc	unicode	XuiScene
+0x9200a1e0	unicode	XuiButton
+0x9200a1f4	unicode	PressKey
+0x9200a208	unicode	XuiNavButton
+0x9200a224	unicode	XuiBackButton
+0x9200a240	unicode	XuiCheckbox
+0x9200a258	unicode	XuiRadioButton
+0x9200a278	unicode	XuiRadioGroup
+0x9200a294	unicode	XuiTextPresenter
+0x9200a2b8	unicode	XuiGroup
+0x9200a2cc	unicode	XuiSound
+0x9200a2e0	unicode	XuiListItem
+0x9200a2f8	unicode	XuiScrollEnd
+0x9200a314	unicode	XuiScrollBar
+0x9200a330	unicode	XuiList
+0x9200a340	unicode	XuiCommonList
+0x9200a35c	unicode	XuiComboBox
+0x9200a374	unicode	XuiComboBoxList
+0x9200a394	unicode	XuiProgressBar
+0x9200a3b4	unicode	XuiSlider
+0x9200a3cc	unicode	XuiEdit
+0x9200a3dc	unicode	XuiCaret
+0x9200a3f0	unicode	XuiMessageBox
+0x9200a40c	unicode	XuiImagePresenter
+0x9200a430	unicode	XuiImage
+0x9200a444	unicode	XuiTabScene
+0x9200a45c	unicode	XuiNineGrid
+0x9200a474	unicode	XuiEffect
+0x9200a488	unicode	XuiTextureEffect
+0x9200a4ac	unicode	XuiGrayscaleEffect
+0x9200a4d4	unicode	XuiRecolorEffect
+0x9200a4f8	unicode	XuiBrightPassEffect
+0x9200a520	unicode	XuiEdgeEffect
+0x9200a53c	unicode	XuiHVBlurEffect
+0x9200a55c	unicode	XuiHBlurEffect
+0x9200a57c	unicode	XuiVBlurEffect
+0x9200a5b8	unicode	MaxVisibleVertItems
+0x9200a5e0	unicode	ComboBoxStyle
+0x9200a5fc	unicode	BrushFlags
+0x9200a614	unicode	DataAssociation
+0x9200a634	unicode	SizeMode
+0x9200a648	unicode	GrayAmount
+0x9200a660	unicode	BlurAmount
+0x9200a678	unicode	Brightness
+0x9200a690	unicode	false
+0x9200a69c	unicode	true
+0x9200a6c0	unicode	0x%08x
+0x9200a6d0	unicode	%f,%f,%f
+0x9200a6e4	unicode	%f,%f,%f,%f
+0x9200a710	unicode	StrokeColor
+0x9200a728	unicode	StrokeWidth
+0x9200a740	unicode	StopPos
+0x9200a750	unicode	StopColor
+0x9200a764	unicode	NumStops
+0x9200a778	unicode	Radial
+0x9200a7a4	unicode	TransformVersion
+0x9200a7c8	unicode	WrapY
+0x9200a7d4	unicode	WrapX
+0x9200a7e0	unicode	Rotation
+0x9200a7f4	unicode	Scale
+0x9200a800	unicode	Translation
+0x9200a818	unicode	Gradient
+0x9200a82c	unicode	TextureFileName
+0x9200a84c	unicode	FillColor
+0x9200a860	unicode	FillType
+0x9200a874	unicode	Points
+0x9200a884	unicode	Closed
+0x9200a894	unicode	Fill
+0x9200a8a0	unicode	Stroke
+0x9200a8bc	unicode	Direction
+0x9200a8d0	unicode	MinThumbSize
+0x9200a8ec	unicode	DstBlendFactor
+0x9200a90c	unicode	SrcBlendFactor
+0x9200a92c	unicode	ColorFactor
+0x9200a944	unicode	Threshold
+0x9200a958	unicode	LineSpacingAdjust
+0x9200a97c	unicode	TextStyle
+0x9200a990	unicode	Font
+0x9200a99c	unicode	PointSize
+0x9200a9b0	unicode	DropShadowColor
+0x9200a9d0	unicode	TextColor
+0x9200a9e4	unicode	Text
+0x9200a9f0	unicode	IgnorePresses
+0x9200aa0c	unicode	InterruptTransitions
+0x9200aa38	unicode	TransBackTo
+0x9200aa50	unicode	TransBackFrom
+0x9200aa6c	unicode	TransTo
+0x9200aa7c	unicode	TransFrom
+0x9200aa90	unicode	DefaultFocus
+0x9200aaac	unicode	DestTransIndex
+0x9200aacc	unicode	SrcTransIndex
+0x9200aae8	unicode	StayVisible
+0x9200ab00	unicode	PressPath
+0x9200ab14	unicode	Volume
+0x9200ab24	unicode	Finish
+0x9200ab34	unicode	Loop
+0x9200ab40	unicode	State
+0x9200ab4c	unicode	SmoothScrollAcceleration
+0x9200ab80	unicode	SmoothScrollMaxSpeed
+0x9200abac	unicode	SmoothScrollBaseSpeed
+0x9200abd8	unicode	SmoothScroll
+0x9200abf4	unicode	InterItemSpacing
+0x9200ac18	unicode	KeepSizeUnfocused
+0x9200ac3c	unicode	SelectedSize
+0x9200ac58	unicode	Checkable
+0x9200ac6c	unicode	Layout
+0x9200ac7c	unicode	Wrap
+0x9200ac88	unicode	ItemsNavPath
+0x9200aca4	unicode	ItemsImage
+0x9200acbc	unicode	ItemsText
+0x9200acd0	unicode	Value
+0x9200acdc	unicode	RangeMax
+0x9200acf0	unicode	RangeMin
+0x9200ad04	unicode	AccelTime
+0x9200ad18	unicode	AccelInc
+0x9200ad2c	unicode	Vertical
+0x9200ad40	unicode	Step
+0x9200ad4c	unicode	Multiline
+0x9200ad60	unicode	ReadOnly
+0x9200ad74	unicode	PasswordChar
+0x9200ad90	unicode	AllowedChars
+0x9200adac	unicode	TextLimit
+0x9200adc0	unicode	ImagePath
+0x9200add4	unicode	DefaultTab
+0x9200adec	unicode	NoAutoHide
+0x9200ae04	unicode	VerticalTabs
+0x9200ae20	unicode	UserInterrupt
+0x9200ae3c	unicode	TabCount
+0x9200ae50	unicode	NoCenter
+0x9200ae64	unicode	BottomOffset
+0x9200ae80	unicode	RightOffset
+0x9200ae98	unicode	TopOffset
+0x9200aeac	unicode	LeftOffset
+0x9200aec4	unicode	DisableFocusRecursion
+0x9200aef0	unicode	EnableEffects
+0x9200af0c	unicode	ClipChildren
+0x9200af28	unicode	ColorWriteFlags
+0x9200af48	unicode	DesignTime
+0x9200af60	unicode	DisableTimelineRecursion
+0x9200af94	unicode	BlendMode
+0x9200afa8	unicode	Show
+0x9200afb4	unicode	Anchor
+0x9200afc4	unicode	Opacity
+0x9200afd4	unicode	Position
+0x9200afe8	unicode	NavTabBackward
+0x9200b008	unicode	NavTabForward
+0x9200b024	unicode	NavDown
+0x9200b034	unicode	NavUp
+0x9200b040	unicode	NavRight
+0x9200b054	unicode	NavLeft
+0x9200b064	unicode	UnfocusedInput
+0x9200b084	unicode	Enabled
+0x9200b094	unicode	Visual
+0x9200b158	unicode	[element][default]|MessageText|XuiEdit;[element][default]|Button0|XuiButton;[element]|Button1|XuiButton;[element]|Button2|XuiButton;[element]|Button3|XuiButton;[element]|Button4|XuiButton;
+0x9200b2e0	unicode	SliderThumb
+0x9200b2f8	unicode	ScrollDown
+0x9200b310	unicode	ScrollUp
+0x9200b324	unicode	ScrollRight
+0x9200b33c	unicode	ScrollLeft
+0x9200b354	unicode	Caret
+0x9200b368	unicode	Button
+0x9200b378	unicode	Tab%u
+0x9200b38c	unicode	%uTo%u
+0x9200b39c	unicode	%uTo1
+0x9200b3a8	unicode	1To%u
+0x9200b3b4	unicode	%uTo%uEnd
+0x9200b3c8	unicode	2To1End
+0x9200b3d8	unicode	ComboBoxList
+0x9200b3f4	unicode	ComboBoxDrop
+0x9200b410	unicode	ComboBoxValue
+0x9200b438	unicode	ScrollBarThumb
+0x9200b458	unicode	ScrollBarBody
+0x9200b474	unicode	ProgressBody
+0x9200b490	unicode	ScrollMax
+0x9200b4a4	unicode	ScrollMin
+0x9200b4b8	unicode	SliderBody
+0x9200b4d0	unicode	%f,%f,%f,%f,%f,%f,%d,
+0x9200b504	unicode	EndTransTo
+0x9200b51c	unicode	EndTransFrom
+0x9200b538	unicode	EndTransBackTo
+0x9200b558	unicode	EndTransBackFrom
+0x9200b580	unicode	(unnamed)
+0x9200b594	unicode	ListWatermark
+0x9200b5b0	unicode	ListItemGroup
+0x9200b5f4	unicode	0x%02x%02x%02x%02x
+0x9200b674	unicode	%s://%s
+0x9200b684	unicode	section
+0x9200b694	unicode	memory
+0x9200b714	unicode	file
+0x9200b894	string	InvViewport
+0x9200b8b0	string	LocalToTexTransform
+0x9200b8c4	string	UVTrans
+0x9200b8dc	string	WorldViewProj
+0x9200bad8	string	InvViewport
+0x9200baf4	string	ShadowOffset
+0x9200bb14	string	WorldViewProj
+0x9200bc94	string	ColorFactor
+0x9200bcb0	string	SolidColor
+0x9200bd84	string	ColorFactor
+0x9200bda0	string	TextureSampler
+0x9200bea4	string	ColorFactor
+0x9200bec0	string	TextureSampler
+0x9200c060	string	ColorConvertMatrix
+0x9200c084	string	ColorFactor
+0x9200c0a0	string	SolidColor
+0x9200c220	string	ColorConvertMatrix
+0x9200c244	string	ColorFactor
+0x9200c260	string	TextureSampler
+0x9200c410	string	ColorConvertMatrix
+0x9200c434	string	ColorFactor
+0x9200c450	string	TextureSampler
+0x9200c604	string	ColorFactor
+0x9200c620	string	TextureSampler
+0x9200c738	string	ColorFactor
+0x9200c754	string	ShadowColor
+0x9200c760	string	TextureSampler
+0x9200c950	string	ColorConvertMatrix
+0x9200c974	string	ColorFactor
+0x9200c990	string	TextureSampler
+0x9200cb4c	string	ColorConvertMatrix
+0x9200cb70	string	ColorFactor
+0x9200cb8c	string	ShadowColor
+0x9200cb98	string	TextureSampler
+0x9200cfa0	string	InvViewport
+0x9200d184	string	InvViewport
+0x9200d1a0	string	LocalToTexTransform
+0x9200d418	string	1-src.a
+0x9200d424	string	float4(1-dest.r, 1-dest.g, 1-dest.b, 1-dest.a)
+0x9200d458	string	float4(1,min(src.a,1-dest.a),min(src.a,1-dest.a),min(src.a,1-dest.a))
+0x9200d4a0	string	1-dest.a
+0x9200d4ac	string	dest.a
+0x9200d4b4	string	src.a
+0x9200d4bc	string	float4(1-src.r, 1-src.g, 1-src.b, 1-src.a)
+0x9200d4fc	string	ps_2_0
+0x9200d504	string	vs_2_0
+0x9200d518	string	// num coords/texinstr/alu/const : %d / %d / %d / %d\n
+0x9200d550	string	    return dest;\n}\n
+0x9200d568	string	    // Edge Detection\n    src = tex2D(TextureSampler[%d], Input.uvPosition[%d]);\n    dest += (abs(src - tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[%d].xy)) - 0.5f) * 1.2 + 0.5f;\n    dest += (abs(src - tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[%d].zw)) - 0.5f) * 1.2 + 0.5f;\n    dest += (abs(src - tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[%d].xy)) - 0.5f) * 1.2 + 0.5f;\n    dest += (abs(src - tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[%d].zw)) - 0.5f) * 1.2 + 0.5f;\n    dest = saturate(dot(float3(0.2125f, 0.7154f, 0.0721f), dest) * 5);\n    dest.a = src.r;\n\n
+0x9200d7d0	string	    // %s Gaussian Blur\n    for (int i=0; i<%d; ++i)\n    {\n        dest += Param[i].w * tex2D(TextureSampler[%d], Input.uvPosition[%d] + Param[i].xy);\n    }\n\n
+0x9200d870	string	    // Texture Sample\n    dest = tex2D(TextureSampler[0], Input.uvPosition[%d])*Param[%d];\n\n
+0x9200d8d0	string	    // Texture Sample\n    src  = tex2D(TextureSampler[%d], Input.uvPosition[%d])*Param[%d];\n    dest = src*(%s) + dest*(%s);\n\n
+0x9200d950	string	    // Texture Sample\n    src  = tex2D(TextureSampler[0], Input.uvPosition[%d])*Param[%d];\n    dest = src*(%s) + dest*(%s);\n\n
+0x9200d9d0	string	    // Texture Sample\n    dest = tex2D(TextureSampler[%d], Input.uvPosition[%d])*Param[%d];\n\n
+0x9200da30	string	    // Texture Sample\n    dest = tex2D(TextureSampler[1], Input.uvPosition[1]);\n    src  = tex2D(TextureSampler[%d], Input.uvPosition[%d])*Param[%d];\n    dest = src*(%s) + dest*(%s);\n\n
+0x9200daec	string	Horizontal
+0x9200daf8	string	Vertical
+0x9200db04	string	    dest = tex2D(TextureSampler[0], Input.uvPosition[0]);\n\n
+0x9200db40	string	    {\n        // Bright Pass\n        float Luminance = 0.08f;\n        float fMiddleGray = 0.18f;\n        float fWhiteCutoff = 0.8f;\n        float3 ColorOut = dest.rgb;\n        ColorOut *= fMiddleGray / (Luminance + 0.001f);\n        ColorOut *= (1.0f + (ColorOut / (fWhiteCutoff * fWhiteCutoff)));\n        ColorOut -= 5.0f;\n        ColorOut = max(ColorOut, 0.0f);\n        ColorOut /= (10.0f + ColorOut);\n        dest.rgb = ColorOut;\n\n    }\n
+0x9200dcf8	string	    {\n        // Grayscale\n        float4 gray = dot((float3)dest, float3(0.3f, 0.59f, 0.11f));\n        float3 invGrayAmount = float3(1-Param[%d].r, 1-Param[%d].g, 1-Param[%d].b);\n        dest.rgb = dest.rgb * invGrayAmount + gray.rgb * Param[%d].rgb;\n    }\n\n
+0x9200ddfc	string	    // Recolor\n    dest *= Param[%d];\n\n
+0x9200de24	string	    dest = tex2D(TextureSampler[1], Input.uvPosition[1]);\n\n
+0x9200de60	string	    // Texture Sample\n    dest = tex2D(TextureSampler[1], Input.uvPosition[1]);\n    src  = tex2D(TextureSampler[0], Input.uvPosition[%d])*Param[%d];\n    dest = src*(%s) + dest*(%s);\n\n
+0x9200df18	string	\n//----------------------------------------------------\n// PixelShader pass %d:\n//\n%s
+0x9200df70	string	struct VSOUT\n{\n    float4 Position : POSITION;\n    float2 uvPosition[8] : TEXCOORD;\n};\n\nsampler2D TextureSampler[BB] : register(s0);\nuniform float4 Param[CC] : register(c0);\n\nfloat4 PS\n(\n    VSOUT Input\n) : COLOR\n{\n    float4 src;\n    float4 srcFactor;\n    float4 dest = 0;\n    float4 destFactor;\n\n
+0x9200e128	string	XBOX360XTT
+0x9200e150	string	1.1.4
+0x9200e26c	string	need dictionary
+0x9200e27c	string	unknown compression method
+0x9200e298	string	invalid window size
+0x9200e2ac	string	incorrect header check
+0x9200e2c4	string	incorrect data check
+0x9200ed54	string	incompatible version
+0x9200ed6c	string	buffer error
+0x9200ed7c	string	insufficient memory
+0x9200ed90	string	data error
+0x9200ed9c	string	stream error
+0x9200edac	string	file error
+0x9200edb8	string	stream end
+0x9200ee54	string	invalid bit length repeat
+0x9200ee70	string	too many length or distance symbols
+0x9200ee94	string	invalid stored block lengths
+0x9200eeb4	string	invalid block type
+0x9200eedc	string	invalid literal/length code
+0x9200eef8	string	invalid distance code
+0x92010200	string	incomplete dynamic bit lengths tree
+0x92010224	string	oversubscribed dynamic bit lengths tree
+0x9201024c	string	incomplete literal/length tree
+0x9201026c	string	oversubscribed literal/length tree
+0x92010290	string	empty distance tree with lengths
+0x920102b4	string	incomplete distance tree
+0x920102d0	string	oversubscribed distance tree
+0x9201036c	string	SimpList: non-growable list ran out of room for new elements
+0x920107b8	string	%luk%s%s
+0x920107c4	string	BadBitsPerSample
+0x920107d8	string	Pcm32Bit
+0x920107e4	string	Pcm24Bit
+0x920107f0	string	Pcm16Bit
+0x920107fc	string	Pcm8Bit
+0x92010804	string	Unknown
+0x9201080c	string	AC3Spdif
+0x92010818	string	WMASpdif
+0x92010824	string	WMAPro
+0x9201082c	string	WMAStd
+0x9201083c	string	Adpcm
+0x92010844	string	Float
+0x9201084c	string	ManyChannels
+0x92010878	string	Stereo
+0x920109cc	unicode	Xbox 360 audio device
+0x92010b18	unicode	Copyright (c) Microsoft Corporation
+0x9201c708	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnop
+0x9201d6b2	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklm
+0x9201d78e	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLM
+0x9201ece6	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxy
+0x9201edda	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK
+0x9201fd62	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[
+0x920207b6	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x92021570	string	FT_Pad
+0x92021578	string	FT_Amc
+0x92021580	string	FT_Frg
+0x92021588	string	FT_Cpt
+0x92021590	string	FT_Ini
+0x92021598	string	SPE_GetBurst
+0x920215a8	string	SPE_ReadFrame
+0x920215b8	string	SPE_PutPacket
+0x920306d0	unicode	 !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abc
+0x9203144b	string	dCT_MISC  
+0x92031458	string	CT_ALBUM 
+0x92031464	string	CT_ARTIST
+0x92031470	string	CT_TITLE 
+0x9203147c	string	MD_FDMTX
+0x92031488	string	MD_DRC  
+0x92031494	string	MD_NONE 
+0x92031708	string	_nextafter
+0x92031760	string	floor
+0x920319c0	unicode	(null)
+0x920319d1	string	null)
+0x92031bfc	string	 Complete Object Locator'
+0x92031c18	string	 Class Hierarchy Descriptor'
+0x92031c38	string	 Base Class Array'
+0x92031c4c	string	 Base Class Descriptor at (
+0x92031c68	string	 Type Descriptor'
+0x92031c7c	string	`local static thread guard'
+0x92031c98	string	`managed vector copy constructor iterator'
+0x92031cc4	string	`vector vbase copy constructor iterator'
+0x92031cf0	string	`vector copy constructor iterator'
+0x92031d14	string	`dynamic atexit destructor for '
+0x92031d38	string	`dynamic initializer for '
+0x92031d54	string	`eh vector vbase copy constructor iterator'
+0x92031d80	string	`eh vector copy constructor iterator'
+0x92031da8	string	`managed vector destructor iterator'
+0x92031dd0	string	`managed vector constructor iterator'
+0x92031df8	string	`placement delete[] closure'
+0x92031e18	string	`placement delete closure'
+0x92031e34	string	`omni callsig'
+0x92031e44	string	 delete[]
+0x92031e50	string	 new[]
+0x92031e58	string	`local vftable constructor closure'
+0x92031e7c	string	`local vftable'
+0x92031e8c	string	`RTTI
+0x92031e98	string	`udt returning'
+0x92031ea8	string	`copy constructor closure'
+0x92031ec4	string	`eh vector vbase constructor iterator'
+0x92031eec	string	`eh vector destructor iterator'
+0x92031f0c	string	`eh vector constructor iterator'
+0x92031f30	string	`virtual displacement map'
+0x92031f4c	string	`vector vbase constructor iterator'
+0x92031f70	string	`vector destructor iterator'
+0x92031f90	string	`vector constructor iterator'
+0x92031fb0	string	`scalar deleting destructor'
+0x92031fd0	string	`default constructor closure'
+0x92031ff0	string	`vector deleting destructor'
+0x92032010	string	`vbase destructor'
+0x92032024	string	`string'
+0x92032030	string	`local static guard'
+0x92032048	string	`typeof'
+0x92032054	string	`vcall'
+0x9203205c	string	`vbtable'
+0x92032068	string	`vftable'
+0x920320f0	string	operator
+0x92032118	string	 delete
+0x92032128	string	__unaligned
+0x92032134	string	__restrict
+0x92032140	string	__ptr64
+0x92032148	string	__eabi
+0x92032150	string	__clrcall
+0x9203215c	string	__fastcall
+0x92032168	string	__thiscall
+0x92032174	string	__stdcall
+0x92032180	string	__pascal
+0x9203218c	string	__cdecl
+0x92032194	string	__based(
+0x92032380	string	e:\bt\271222\core\private\apps\xna\cgplayer\src\obj\xbox\Xna_TitleLauncher.pdb
+0x9210b779	string	abcdefghijklmnopqrstuvwxyz
+0x9210b799	string	ABCDEFGHIJKLMNOPQRSTUVWXYZ
+0x9210ef70	unicode	Filter
+0x9210f3a0	unicode	FilterMatrixMix
+0x9210f7ce	unicode	dADPCM decoder
+0x9210fc00	unicode	VolumeMeter
+0x92110030	unicode	Reverb
+0x92120363	string	Cornflower Blue
+0x92120467	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x921205be	string	Partita del Giocatore
+0x921205da	string	 Enables you to play Indie Games.
+0x921205ff	string	Microsoft Corporation
+0x92120618	string	Microsoft Corporation
+0x92120631	string	Altro
+0x92120646	string	Dal menu
+0x92120652	string	Config. delle impost.
+0x9212066b	string	Avvio del gioco
+0x9212067e	string	Sospeso
+0x92120689	string	Fine del gioco
+0x9212069b	string	Giocatore singolo
+0x921206b0	string	Multiplayer
+0x921206bf	string	Co-op locale
+0x921206cf	string	Confronto locale
+0x921206e3	string	Confronto online
+0x921206f7	string	Co-op online
+0x92120707	string	Confronto computer
+0x9212071d	string	Ricerca di giochi
+0x92120732	string	Attesa dei giocatori
+0x9212074a	string	In attesa nella sala
+0x92120762	string	Impostazione gara
+0x92120777	string	Gioco con amici
+0x921207a7	string	 storia
+0x921207b2	string	Visualizz. filmato
+0x921207c8	string	Visualizz. crediti
+0x921207e9	string	: facile
+0x92120800	string	: media
+0x92120816	string	: difficile
+0x92120830	string	: estrema
+0x9212083d	string	Personaliz. giocatore
+0x92120856	string	Modifica livello
+0x9212086a	string	Nel Marketplace giochi
+0x9212088d	string	 Arcade
+0x921208a1	string	 campagna
+0x921208ca	string	 esplorazione
+0x921208e4	string	 pratica
+0x921208f9	string	 scenario
+0x9212090f	string	 sopravvivenza
+0x92120921	string	Mod. esercit. pratica
+0x9212093a	string	Gioco libero
+0x9212094a	string	Per passare il tempo
+0x92120962	string	In combattimento
+0x92120976	string	Riproduzione minigioco
+0x92120990	string	Attacco a tempo
+0x921209a3	string	Tentat. battere record
+0x921209bd	string	Vittoria
+0x921209c8	string	\tSconfitta
+0x921209e1	string	Superato
+0x921209ec	string	\tOn A Roll
+0x921209fa	string	Bloc. su punto diff.
+0x92120a12	string	Quasi finito
+0x92120a22	string	Cornflower Blue
+0x92120a3d	string	Livello
+0x92120a47	string	\tPunteggio
+0x92120a55	string	Co-op: fase
+0x92120a64	string	Co-op: livello
+0x92120a76	string	Confr: punteggio
+0x92120a8a	string	Capo del combattimento
+0x92120aa4	string	Vincitore del gioco
+0x92120abb	string	Segreto trovato
+0x92120ae4	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x92120c2d	string	Mise en Relation
+0x92120c44	string	 Enables you to play Indie Games.
+0x92120c69	string	Microsoft Corporation
+0x92120c82	string	Microsoft Corporation
+0x92120c9b	string	Autre
+0x92120cb0	string	Dans les menus
+0x92120cdd	string	Lance le jeu
+0x92120ced	string	En pause
+0x92120cf8	string	\tGame Over
+0x92120d06	string	Mode un joueur
+0x92120d18	string	Multijoueur
+0x92120d26	string	\nCoop local
+0x92120d35	string	Versus local
+0x92120d45	string	Versus en ligne
+0x92120d57	string	\rCoop en ligne
+0x92120d69	string	Contre l'ordinateur
+0x92120d80	string	Recherche des jeux
+0x92120d96	string	En attente de joueurs
+0x92120daf	string	En attente dans Lobby
+0x92120dc8	string	Configure le match
+0x92120dde	string	Joue entre amis
+0x92120df1	string	Mode Puzzle
+0x92120dff	string	\rMode histoire
+0x92120e21	string	matique
+0x92120e3d	string	rique
+0x92120e53	string	: Facile
+0x92120e84	string	: Difficile
+0x92120eae	string	Personna. personnage
+0x92120ec6	string	Modifie un niveau
+0x92120edb	string	Dans boutique de jeux
+0x92120ef4	string	Mode Arcade
+0x92120f02	string	\rMode Campagne
+0x92120f14	string	Mode Challenge
+0x92120f26	string	Mode Exploration
+0x92120f46	string	nement
+0x92120f59	string	nario
+0x92120f62	string	Mode Survie
+0x92120f71	string	Mode Didacticiel
+0x92120f84	string	\tJeu libre
+0x92120f91	string	\rPerd du temps
+0x92120fa2	string	\tEn combat
+0x92120fb7	string	 un mini-jeu
+0x92120fc7	string	Mode contre la montre
+0x92120fe0	string	Tente nouveau record
+0x92120ff8	string	Gagne
+0x9212101d	string	En plus grand nombre
+0x92121067	string	Cornflower Blue
+0x9212107a	string	Stage
+0x9212108d	string	Score
+0x92121096	string	Coop : Stage
+0x921210a5	string	\rCoop : Niveau
+0x921210b7	string	Versus : Score
+0x921210c9	string	Combat un boss
+0x921210ec	string	couvert un secret
+0x92121117	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x921212a6	string	 Enables you to play Indie Games.
+0x921212cb	string	Microsoft Corporation
+0x921212e4	string	Microsoft Corporation
+0x921219c8	string	Cornflower Blue
+0x92121af1	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x92121c52	string	Partida por Jogador
+0x92121c6c	string	 Enables you to play Indie Games.
+0x92121c91	string	Microsoft Corporation
+0x92121caa	string	Microsoft Corporation
+0x92121cd8	string	No Menu
+0x92121ce3	string	Definindo Config.
+0x92121cf8	string	Iniciando Jogo
+0x92121d0a	string	Pausado
+0x92121d15	string	Fim de Jogo
+0x92121d23	string	\nUm Jogador
+0x92121d32	string	Multijogador
+0x92121d42	string	Cooperativo Local
+0x92121d57	string	Local Versus
+0x92121d66	string	\rOnline Versus
+0x92121d78	string	Cooperativo Online
+0x92121d8e	string	Versus Computador
+0x92121da3	string	Procurando Jogos
+0x92121db7	string	Aguardando Jogadores
+0x92121dcf	string	Aguardando No Lobby
+0x92121de6	string	Organizando Partida
+0x92121dfd	string	Jogando Com Amigos
+0x92121e13	string	Modo Enigma
+0x92121e58	string	ditos
+0x92121ea8	string	Dificuldade: Extrema
+0x92121ec0	string	Personalizando Jogador
+0x92121eed	string	Loja no Jogo
+0x92121efd	string	Modo Arcade
+0x92121f0b	string	\rModo Campanha
+0x92121f1d	string	Modo Desafio
+0x92121f42	string	Modo Treino
+0x92121f78	string	\rModo Tutorial
+0x92121f89	string	\nJogo Livre
+0x92121f97	string	\rMatando Tempo
+0x92121fa8	string	\nEm Combate
+0x92121fb7	string	Jogando Minijogo
+0x92121fcb	string	Time Attack
+0x92121fda	string	Tentando Bater Recorde
+0x92121ff4	string	Ganhando
+0x92122000	string	Perdendo
+0x9212200c	string	Placar Empatado
+0x92122036	string	\tEmpolgado
+0x92122044	string	Encarando Osso Duro
+0x9212205b	string	Quase Acabando
+0x9212206d	string	Cornflower Blue
+0x92122096	string	Placar
+0x921220c9	string	Versus: Placar
+0x921220da	string	\rBatalha Final
+0x921220eb	string	\rGanhou o Jogo
+0x921220fd	string	Descobriu Segredo
+0x92122128	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x92122270	string	Mitspieler-Suche
+0x92122287	string	 Enables you to play Indie Games.
+0x921222ac	string	Microsoft Corporation
+0x921222c5	string	Microsoft Corporation
+0x921222de	string	Andere
+0x92122300	string	Einst. werden konfig.
+0x92122319	string	Spiel wird gestartet
+0x92122330	string	\nAngehalten
+0x9212233f	string	Spiel vorbei
+0x9212234e	string	\rEinzelspieler
+0x92122360	string	Multiplayer
+0x9212236e	string	\rLokales Co-Op
+0x92122380	string	Lokales Versus
+0x92122391	string	\rOnline Versus
+0x921223a3	string	Online Co-Op
+0x921223b3	string	Versus Computer
+0x921223c6	string	Sucht nach Spielen
+0x921223dc	string	Wartet auf Spieler
+0x921223f2	string	Wartet in der Lobby
+0x92122409	string	Richt. Spiel ein
+0x9212241d	string	Spielt mit Freunden
+0x92122434	string	Puzzle-Modus
+0x92122444	string	Geschichten-Modus
+0x92122459	string	Sieht Filmseq.
+0x9212246b	string	Sieht Mitwirkende
+0x92122480	string	Schwierigkeit: Einfach
+0x9212249a	string	Schwierigkeit: Mittel
+0x921224b3	string	Schwierigkeit: Schwer
+0x921224cc	string	Schwierigkeit: Extrem
+0x921224e5	string	Passt Spieler an
+0x921224f9	string	Bearbeitet Level
+0x9212250d	string	Im Spielemarkt
+0x9212251f	string	Arcade-Modus
+0x9212252f	string	Kampagnen-Modus
+0x92122542	string	Herausforderungs-Modus
+0x9212255c	string	Erkundungs-Modus
+0x92122572	string	bungs-Modus
+0x92122581	string	Szenario-Modus
+0x92122595	string	berlebens-Modus
+0x921225a8	string	Tutorial-Modus
+0x921225ba	string	Kostenloses Spiel
+0x921225cf	string	Verschwendet Zeit
+0x921225e4	string	Im Kampf
+0x921225f0	string	Spielt Minigame
+0x92122603	string	Zeitangriff
+0x92122611	string	\rRekordversuch
+0x92122623	string	Gewinnt
+0x9212262e	string	Verliert
+0x9212263a	string	Punktegleichstand
+0x9212264e	string	\nUnterlegen
+0x92122678	string	In schwierigem Teil
+0x9212268f	string	Fast fertig
+0x9212269e	string	Cornflower Blue
+0x921226b1	string	Phase
+0x921226ba	string	Level
+0x921226cd	string	Co-Op: Phase
+0x921226dd	string	Co-Op: Level
+0x921226ed	string	Versus: Punkte
+0x92122704	string	mpft Endgegner
+0x92122716	string	Hat Spiel gewonnen
+0x9212272c	string	Hat Geheimnis gefunden
+0x9212275c	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x921228c2	string	 Enables you to play Indie Games.
+0x921228e7	string	Microsoft Corporation
+0x92122900	string	Microsoft Corporation
+0x92122d6d	string	Cornflower Blue
+0x92122e45	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x92122f7c	string	Player Match
+0x92122f8f	string	 Enables you to play Indie Games.
+0x92122fb4	string	Microsoft Corporation
+0x92122fcd	string	Microsoft Corporation
+0x92122fe6	string	Other
+0x92122ffb	string	At Menu
+0x92123006	string	Configuring Settings
+0x9212301d	string	\rStarting Game
+0x9212302f	string	Paused
+0x92123038	string	\tGame Over
+0x92123045	string	\rSingle Player
+0x92123057	string	Multiplayer
+0x92123066	string	Local Co-Op
+0x92123075	string	Local Versus
+0x92123084	string	\rOnline Versus
+0x92123096	string	Online Co-Op
+0x921230a6	string	Versus Computer
+0x921230b9	string	Looking For Games
+0x921230ce	string	Waiting For Players
+0x921230e5	string	Waiting In Lobby
+0x921230f9	string	Setting Up Match
+0x9212310d	string	Playing With Friends
+0x92123125	string	Puzzle Mode
+0x92123133	string	\nStory Mode
+0x92123142	string	Watching Cutscene
+0x92123157	string	Watching Credits
+0x9212316b	string	Difficulty: Easy
+0x9212317f	string	Difficulty: Medium
+0x92123195	string	Difficulty: Hard
+0x921231a9	string	Difficulty: Extreme
+0x921231c0	string	Customizing Player
+0x921231d5	string	\rEditing Level
+0x921231e6	string	\rIn Game Store
+0x921231f8	string	Arcade Mode
+0x92123206	string	\rCampaign Mode
+0x92123218	string	Challenge Mode
+0x9212322a	string	Exploration Mode
+0x9212323d	string	\rPractice Mode
+0x9212324e	string	\rScenario Mode
+0x9212325f	string	\rSurvival Mode
+0x92123270	string	\rTutorial Mode
+0x92123281	string	\tFree Play
+0x9212328f	string	Wasting Time
+0x9212329e	string	\tIn Combat
+0x921232ac	string	Playing Minigame
+0x921232c0	string	Time Attack
+0x921232cf	string	Trying For Record
+0x921232e4	string	Winning
+0x921232ef	string	Losing
+0x921232f8	string	\rScore Is Tied
+0x9212330a	string	Outnumbered
+0x92123318	string	\tOn A Roll
+0x92123326	string	Stuck On A Hard Bit
+0x9212333d	string	Nearly Finished
+0x92123350	string	Cornflower Blue
+0x92123363	string	Stage
+0x9212336c	string	Level
+0x92123375	string	Score
+0x9212337e	string	Co-Op: Stage
+0x9212338e	string	Co-Op: Level
+0x9212339d	string	\rVersus: Score
+0x921233ae	string	\rBattling Boss
+0x921233c0	string	Won The Game
+0x921233d0	string	Found Secret
+0x921233f6	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x9212354b	string	 Enables you to play Indie Games.
+0x92123570	string	Microsoft Corporation
+0x92123589	string	Microsoft Corporation
+0x92123959	string	Cornflower Blue
+0x92123a24	string	!{p0x4000001C}\r\n{c1} {p0x1000001D}XSTR
+0x92123b6b	string	Pojedynek graczy
+0x92123b82	string	 Enables you to play Indie Games.
+0x92123ba7	string	Microsoft Corporation
+0x92123bc0	string	Microsoft Corporation
+0x92123c11	string	Uruchamianie gry
+0x92123c24	string	\nWstrzymana
+0x92123c32	string	\nKoniec gry
+0x92123c41	string	Jeden gracz
+0x92123c50	string	Wielu graczy
+0x92123c71	string	praca
+0x92123c7a	string	Lokalnie, przeciwko
+0x92123c91	string	Online, przeciwko
+0x92123cb5	string	praca
+0x92123cbe	string	Przeciwko komputerowi
+0x92123cd7	string	Wyszukiwanie gier
+0x92123cec	string	Oczekiwanie na graczy
+0x92123d05	string	W poczekalni
+0x92123d15	string	Przygotowywanie gry
+0x92123d45	string	Tryb zagadek
+0x92123d6d	string	dam przer. filmowy
+0x92123d88	string	dam inf o autorach
+0x92123dc3	string	Poziom: Trudny
+0x92123dd5	string	Poziom: Ekstremalny
+0x92123e16	string	Sklep w grze
+0x92123e3d	string	\rTryb kampanii
+0x92123e5f	string	Tryb odkrywania
+0x92123e79	string	wiczenia
+0x92123e85	string	Tryb scenariuszy
+0x92123eac	string	Tryb samouczka
+0x92123ebe	string	Swobodna gra
+0x92123edf	string	W trakcje walki
+0x92123f05	string	Gra na czas
+0x92123f22	string	 rekord
+0x92123f38	string	\nPrzegrywam
+0x92123f46	string	\nJest remis
+0x92123f69	string	Dobra passa
+0x92123f85	string	\rPrawie koniec
+0x92123f97	string	Cornflower Blue
+0x92123fcc	string	praca: etap
+0x92123fe2	string	praca: poz.
+0x92123ff1	string	Przeciwko: wynik
+0x9212400c	string	 z bossem
+0x92124028	string	Odkryta tajemnica
+0x9212628a	string	XnaIcon.PNGXSRC
+0x921262a5	string	584E07D2.original.xlast

@@ -1,0 +1,255 @@
+Structure / offset notebook
+=============================
+Hand-maintained, NOT auto-regenerated. Records repeated structure-access
+patterns actually observed in disassembly/parsing, with evidence and
+confidence - not invented C structs. Add entries here as new patterns are
+found; cross-reference against 04_CALL_GRAPH_INDEX.txt / calls/*.txt and
+06_IPC_SERVICE_MAP.txt for the disassembly they came from.
+
+=============================================================================
+Candidate: xex2_delta_patch entry (DELTA-patch encoding)
+=============================================================================
+observed in: every successfully depatched $flash_*.xexp's header-patch and
+  body-patch blocks (see decoded_dump/_tool/xextool.c:lzxdelta_apply_patch).
+size: 12 logical header bytes + `compressed_len` bytes of trailing data
+  (0 bytes of trailing data when compressed_len is 0 or 1).
+field offsets:
+  +0x00  old_addr           (u32 BE) - source offset for copy/reference
+  +0x04  new_addr           (u32 BE) - destination offset to write
+  +0x08  uncompressed_len   (u16 BE)
+  +0x0A  compressed_len     (u16 BE) - 0=zero-fill, 1=raw copy old->new,
+                                       >=2=LZX-compressed delta (data follows
+                                       inline, `compressed_len` bytes, using
+                                       dest+old_addr as the LZX reference
+                                       window)
+  +0x0C  data[]             (present only when compressed_len >= 2)
+evidence: reverse-engineered against xenia-edge's own
+  xenia/src/xenia/cpu/lzx.cc:lzxdelta_apply_patch, and empirically verified
+  by successfully depatching 11 real modules (byte-exact PE output,
+  including correctly recovering an AES key embedded inside a
+  header-patched region - see $flash_xam.xexp).
+confidence: CONFIRMED (structural, matches Xenia's own loader source and
+  produces verified-correct output across 11 real files).
+
+=============================================================================
+Candidate: XEX import record pair (variable_slot / thunk)
+=============================================================================
+observed in: every parsed import library across all 34 modules with
+  import tables (see reference/imports/*.txt).
+size: two 4-byte big-endian words in the image, at addresses given by
+  xex2_import_library.import_table[i] and [i+1].
+field offsets (per xex2_import_library.import_table[i], NOT a fixed struct -
+  each entry is itself just a VA pointing at a single u32 "record" in the
+  image):
+  record_value:
+    bits [31:24]  record_type   (0 = variable, 1 = thunk)
+    bits [15:0]   ordinal
+  A "variable" record (type 0) and a "thunk" record (type 1) sharing the
+  same ordinal always appear as a consecutive pair in import_table[].
+  The thunk's own address (not its record_value) is the callable stub other
+  code does `bl` to; pre-Xenia-rewrite, the 16 bytes AT that address are:
+    +0x00  li r3, 0
+    +0x04  li r4, <ordinal>
+    +0x08  mtspr CTR, r11
+    +0x0C  bctr
+evidence: reverse-engineered against
+  xenia-edge/src/xenia/cpu/xex_module.cc:SetupLibraryImports (Xenia's own
+  loader), and cross-validated: every resolved xam.xex/xboxkrnl.exe/xbdm.xex
+  ordinal in reference/imports/*.txt matches a real, recognizable Xbox
+  kernel/XAM API name from Xenia's own ordinal database.
+confidence: CONFIRMED.
+
+=============================================================================
+Candidate: AvatarDescription-adjacent request buffer (avatar IPC family)
+=============================================================================
+observed in: $flash_xam.xexp's avatar-family exports (XamAvatarInitialize,
+  XamAvatarGetManifestLocalUser, XamAvatarSetManifest, etc. - see
+  02_AVATAR_COMMAND_TABLE.txt and calls/flash_xam.xexp.calls.txt).
+size: varies per call (each IPC command has its own request layout); the
+  one concretely sized so far is the XNA-managed-side "AvatarDescription"
+  data blob (1021 bytes: 1 validity byte + 1020 payload bytes), recovered
+  from decompiling Microsoft.Xna.Framework.dlx's
+  GamerServices.AvatarDescription class - NOT the same wire format as the
+  native X_AVATAR_METADATA struct in xam_avatar.h (0x3E8 = 1000 bytes, no
+  leading validity byte). The two are related but NOT byte-identical -
+  do not assume interchangeable without further verification.
+field offsets (managed AvatarDescription only):
+  +0x000  validity byte (0 = invalid, nonzero = valid)
+  +0x001..+0x3FC  1020-byte opaque payload (fields within it not yet mapped)
+evidence: ILSpy decompilation of runtime/v3.1/Microsoft.Xna.Framework.dlx
+  (see the earlier avatar/XNA cross-reference pass this session built on).
+confidence: CONFIRMED for the managed-side 1021-byte framing; UNKNOWN for
+  the native X_AVATAR_METADATA<->AvatarDescription field-level mapping.
+
+=============================================================================
+Candidate: avatar skeleton bone hierarchy (71 bones)
+=============================================================================
+observed in: Microsoft.Xna.Framework.dlx's AvatarRenderer.parentBoneIDs.
+size: int32[71] parent-bone-index array (see xam_avatar.h's placeholder
+  comments about the skeleton - this fills in the exact topology).
+evidence: ILSpy decompilation, same pass as above; the array is a plain
+  managed int[] literal, no ambiguity.
+confidence: CONFIRMED.
+
+=============================================================================
+Candidate: XMsgStartIORequestEx-style IPC dispatch (port, u32 command word)
+=============================================================================
+observed in: all 23 CONFIRMED avatar entries (port 0xF3/0xFE, commands
+  0x6000XX/0x2XXXX), plus 256 DERIVED (endpoint-chain-proven) entries in
+  reference/ipc.tsv / 06_IPC_SERVICE_MAP.txt covering xam.xex,
+  $flash_xam.xexp, dash.xex, $flash_dash.xex, signin.xex,
+  $flash_signin.xexp, deviceselector.xex, AvatarEditor.xex, and others
+  in PRIORITY_MODULES. 91 additional candidates were considered and
+  REJECTED (no statically-provable path to a registered XMsg* endpoint) -
+  see reference/_ipc_candidates.tsv; these are deliberately NOT counted
+  as IPC here (see 10_UNRESOLVED.txt and build_06_ipc.py's module
+  docstring for the endpoint-proof architecture and named false-positive
+  examples this replaced, e.g. XamUserCreateStatsEnumerator ->
+  XamCreateEnumeratorHandle, which is NOT an IPC call).
+calling convention: every proven row is one hop in a caller -> [0 or more
+  wrapper] -> XMsg* endpoint chain, statically proven by
+  disasm_support.find_endpoint_chain (bounded BFS, depth<=4, node_cap<=40)
+  against a per-module endpoint registry built from that module's own
+  XMsg*-named exports/import-thunks (never hardcoded to a fixed function
+  list). build_06_ipc.py's `dispatcher_kind_for()` classifies each proven
+  chain by hop count and how the final command value was established:
+    DIRECT_XMSG_THUNK / DIRECT_XMSG_EXPORT (0-hop) - the li-r3-port
+      candidate's own `bl` target IS the registered endpoint (an import
+      thunk or a local export), e.g. $flash_dash.xex's 0x92741174, the
+      thunk for xam.xex's exported XMsgInProcessCall.
+    FORWARDING_HELPER (1-hop, command traced back to the ORIGINAL
+      caller's own incoming parameter or a literal at the original
+      callsite) - the caller builds the command word itself; the
+      intermediate wrapper is pass-through plumbing only.
+    FIXED_COMMAND_HELPER (1-hop, command resolves to a literal constant
+      baked into the WRAPPER itself, not the caller) - a real
+      false-positive class this distinction exists specifically to catch:
+      some wrappers structurally look like forwarding helpers but have
+      their OWN hardcoded command word and ignore what looks like a
+      "forwarded" caller register (it's actually used for something else,
+      e.g. an internal branch/lookup). Hand-verified example from an
+      earlier pass: $flash_dash.xex's 0x921ea088 always calls
+      XMsgInProcessCall (via thunk 0x92741174) with fixed port=0xFC,
+      command=0x58004 regardless of its ~9 distinct callers, whose
+      differing r3 values are NOT the IPC command.
+    COMPUTED_COMMAND_HELPER (1-hop, command defined by something other
+      than a constant or a pure register copy - a memory load,
+      arithmetic, etc.) - genuinely not statically resolvable at this
+      granularity; command/port fields are UNKNOWN, not guessed.
+    WRAPPER_CHAIN_NHOP (N>=2 hops) - resolve_ipc_args() walks the proven
+      chain hop-by-hop the same way (resolve_register_value_before first,
+      falling back to trace_incoming_register to alias to a caller
+      parameter and recurse toward the original callsite), generalizing
+      the above to arbitrary depth rather than being limited to 0/1-hop.
+  IMPLICATION: don't trust a DERIVED command word just because a chain was
+  found - always check command_source (CALLER_CONSTANT / FIXED_WRAPPER /
+  FORWARDED_ARGUMENT / COMPUTED_WRAPPER / UNKNOWN, per build_06_ipc.py's
+  module docstring) before assigning meaning; a FIXED_WRAPPER row's own
+  caller_args are recorded for reference but are explicitly NOT the real
+  IPC command.
+
+  Trailing arguments (beyond port+command) - mechanically recomputed from
+  reference/ipc.tsv's `ipc_args` column (index 2 = the third trailing
+  register at the FINAL hop into the endpoint) for all 23 CONFIRMED avatar
+  rows, using the SAME chain-proof/argument-resolution engine validated
+  against them (see build_06_ipc.py: the hand-verification established
+  port+command only; trailing args were never hand-copied - this table is
+  now regenerate-able by rerunning that engine, not hand-maintained):
+      XamAvatarInitialize                          size=0x28
+      XamAvatarShutdown                             size=0x0
+      XamAvatarGetManifestLocalUser                 size=0x8
+      XamAvatarGetManifestsByXuid                   size=0x90
+      XamAvatarGetAssetsResultSize                  size=? (UNRESOLVED)
+      XamAvatarGetAssets                            size=0x3F8
+      XamAvatarGenerateMipMaps                      size=0x10
+      XamAvatarGetAssetBinary                       size=0x1C
+      XamAvatarSetManifest                          size=0x3EC
+      XamAvatarSetCustomAsset                       size=? (UNRESOLVED)
+      XamAvatarGetAssetIcon                         size=0x1C
+      XamAvatarBeginEnumAssets                      size=0x14
+      XamAvatarEnumAssets                           size=0x8
+      XamAvatarEndEnumAssets                        size=0x0
+      XamAvatarLoadAnimation                        size=0x18
+      XamAvatarGetMetadataRandom                    size=0xC
+      XamAvatarGetMetadataSignedOutProfileCount     size=0x4
+      XamAvatarGetMetadataSignedOutProfile          size=0x8
+      XamShowAvatarMiniCreatorUI                    size=? (UNRESOLVED; r6=0x8 instead)
+      XamUserGetUsersMissingAvatars                 size=0x4
+      XamShowAvatarAwardsUI                         size=? (UNRESOLVED; r6=0x220 instead)
+      XamShowAvatarAwardGamesUI                     size=? (UNRESOLVED; r6=0x220 instead)
+      XamAvatarWearNow                              size=0x14 (else-branch)
+  18 of 23 resolve to a concrete value at this position (16 nonzero, 2
+  exactly 0 - XamAvatarShutdown and XamAvatarEndEnumAssets genuinely pass
+  0, not "unresolved treated as 0"); 5 are UNRESOLVED ("?") and must NOT
+  be read as 0 - this corrects an earlier version of this doc, which
+  incorrectly claimed XamAvatarGetAssetsResultSize passed 0 here (it is
+  actually unresolved). The 3 UI-launch entries (MiniCreatorUI,
+  AwardsUI, AwardGamesUI) don't follow the "third register = size"
+  pattern at all - they carry a value in the SECOND trailing register
+  (r6) instead, consistent with them being UI-launch parameters rather
+  than a buffer-size'd data request.
+  reference/06_IPC_SERVICE_MAP.txt and reference/ipc.tsv record all 4
+  resolved trailing registers per site as `ipc_args` (endpoint-side,
+  "?" where unresolved) AND, separately, `caller_args` (the raw registers
+  at the ORIGINAL callsite, before any wrapper transforms them) for every
+  CONFIRMED and DERIVED entry - the two are only identical for 0-hop
+  direct calls; for FIXED_COMMAND_HELPER rows in particular, caller_args
+  are explicitly NOT what reaches the endpoint.
+
+  Command words seen so far cluster by module/subsystem:
+    0x6000XX  - avatar family (xam.xex, port 0xF3)
+    0x2XXXX / 0x2300A - avatar-adjacent UI/shell launches (port 0xFE)
+    0x58003 / 0x58004 / 0x62D - signin.xex, port 0xFC (NOT yet
+      semantically mapped to named functions - no xam_avatar.cc-equivalent
+      source file identified for sign-in yet)
+    dash.xex/$flash_dash.xex use several ports across the DERIVED set -
+      see 06_IPC_SERVICE_MAP.txt for the current full breakdown; none of
+      these non-avatar command families have been semantically named yet
+      (see 10_UNRESOLVED.txt - Section 10: do not over-promote negative
+      results, and do not invent semantic names for unresolved commands).
+evidence: hand-disassembled and cross-checked against xam_avatar.cc's
+  pre-existing speculative comments for the CONFIRMED avatar entries
+  (multiple exact matches - see 02_AVATAR_COMMAND_TABLE.txt). The
+  corpus-wide automated decoder (build_06_ipc.py, using
+  disasm_support.py:find_endpoint_chain / resolve_register_value_before /
+  trace_incoming_register) is self-validated against every CONFIRMED
+  entry on every run (see the top of 06_IPC_SERVICE_MAP.txt for the live
+  count/match rate - currently 23/23, 0 mismatches).
+confidence: CONFIRMED for the avatar exports in CONFIRMED_AVATAR
+  (build_06_ipc.py) - port+command only; their ipc_args/caller_args are
+  DERIVED-mechanism-sourced (see above). DERIVED for everything else -
+  every DERIVED row has a statically-proven evidence chain to a
+  registered XMsg* endpoint (not merely a plausible-looking `li r3,port`
+  candidate - unproven candidates are demoted to _ipc_candidates.tsv and
+  never appear in ipc.tsv), but individual non-avatar command words
+  haven't been independently hand-verified or semantically named
+  one-by-one yet.
+NOT a fixed struct - the "command word" is a bare u32 passed by register,
+not a field inside a larger request structure (the actual per-command
+request/response payloads are separate stack buffers built by each
+caller - see individual functions in calls/*.txt for their marshaling
+code; no common layout has been identified across commands).
+
+=============================================================================
+Candidate: xex2_opt_execution_info (module identity)
+=============================================================================
+observed in: every module's optional header key 0x00040006.
+size: 0x18 bytes.
+field offsets:
+  +0x00  media_id      (u32 BE)
+  +0x04  module_version (u32 BE, xex2_version bitfield: major:4 minor:4
+                          build:16 qfe:8)
+  +0x08  base_version   (u32 BE, same bitfield)
+  +0x0C  title_id       (u32 BE)
+  +0x10  platform       (u8)
+  +0x11  executable_table (u8)
+  +0x12  disc_number    (u8)
+  +0x13  disc_count     (u8)
+  +0x14  savegame_id    (u32 BE)
+evidence: matches xenia-edge/src/xenia/kernel/util/xex2_info.h's
+  xex2_opt_execution_info exactly; cross-validated by AvatarEditor.xex's
+  title_id reading back as exactly 0x584D07D1 == Xenia's own
+  kAvatarEditorID constant, and dash.xex's as exactly 0xFFFE07D1 ==
+  kDashboardID.
+confidence: CONFIRMED for un-patched modules. SUSPECT for several
+  reconstructed $flash_*.xexp sidecars - see 10_UNRESOLVED.txt #5.

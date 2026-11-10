@@ -1,0 +1,18 @@
+{
+  "module": "packages/su20076000_00000000/$flash_vk.xex",
+  "program": "9685a4dbb60f__flash_vk.xex",
+  "language": "PowerPC:BE:64:A2ALT-32addr",
+  "verified_decoded_sha256": "73f7d79e3929c212bf9c9f3122d4962f480dc78063dbafdfe4904aec467864d5",
+  "import_envelope_version": 2,
+  "analysis_timed_out": false,
+  "image_base_property": "0x00000000",
+  "minimum_mapped_address": "0x917d0400",
+  "functions": 312,
+  "calls": 990,
+  "strings": 204,
+  "string_xrefs": 540,
+  "independent_sha256": "4e4f3729aeff01e6c78572ce8b06cfb97a86af5ba6e266303df6371c6daf414b",
+  "independent_decode_matches": false,
+  "independent_image_matches": false,
+  "independent_padding_bytes": 0
+}

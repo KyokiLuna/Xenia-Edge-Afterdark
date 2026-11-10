@@ -19,6 +19,7 @@ namespace xe {
 namespace vfs {
 
 class NullEntry;
+class Device;
 
 class NullFile : public File {
  public:
@@ -32,6 +33,9 @@ class NullFile : public File {
   X_STATUS WriteSync(std::span<const uint8_t> buffer, size_t byte_offset,
                      size_t* out_bytes_written) override;
   X_STATUS SetLength(size_t length) override;
+
+ private:
+  std::shared_ptr<Device> device_owner_;
 };
 
 }  // namespace vfs

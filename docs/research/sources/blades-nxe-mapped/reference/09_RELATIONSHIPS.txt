@@ -1,0 +1,340 @@
+Module relationship / attachment map
+=======================================
+Regenerate with: python3 _tool/build_09_relationships.py
+
+For any module, this lists every OTHER artifact in this corpus that
+relates to it: header sidecar, base<->patch pairing, export/import/
+call-graph/string dumps, and (for the avatar-relevant XAM chain) the
+upstream source edits and raw disassembly this corpus already produced.
+
+----------------------------------------------------------------------
+
+XNA / managed-code chain
+    titlelauncher.xex -> hostloader.dll -> runtime/v3.{0,1}/runtimehost.xex -> runtime/v3.{0,1}/*.dlx (managed .NET assemblies, decompilable with ilspycmd - see the earlier avatar-XNA cross-reference work). Relationship INFERRED from module naming/role, not a traced call graph.
+    Fully decompiled (not just disassembled) via ilspycmd - see
+    runtime/v3.1/Microsoft.Xna.Framework.dlx for the managed
+    GamerServices.Avatar* classes cross-referenced against xam_avatar.cc.
+
+----------------------------------------------------------------------
+
+$flash_aac.xexp
+    decoded_body: $flash_aac.xexp  (in decoded_dump/, status=RAW - no base module in dump)
+
+$flash_bootanim.xexp
+    decoded_body: $flash_bootanim.xexp  (in decoded_dump/, status=depatched (base=bootanim.xex))
+    header_sidecar: $flash_bootanim.xexp.header
+    base_module: bootanim.xex  (this file is a DELTA patch reconstructed against it)
+    strings: strings/flash_bootanim.xexp.strings.txt
+
+$flash_createprofile.xexp
+    decoded_body: $flash_createprofile.xexp  (in decoded_dump/, status=depatched (base=createprofile.xex))
+    header_sidecar: $flash_createprofile.xexp.header
+    base_module: createprofile.xex  (this file is a DELTA patch reconstructed against it)
+    call_graph: calls/flash_createprofile.xexp.calls.txt
+    strings: strings/flash_createprofile.xexp.strings.txt
+
+$flash_dash.xex
+    decoded_body: $flash_dash.xex  (in decoded_dump/, status=decoded)
+    export_table: exports/flash_dash.xex.exports.txt
+    import_tables: imports/flash_dash.xex.imports.txt
+    call_graph: calls/flash_dash.xex.calls.txt
+    strings: strings/flash_dash.xex.strings.txt
+
+$flash_deviceselector.xexp
+    decoded_body: $flash_deviceselector.xexp  (in decoded_dump/, status=depatched (base=deviceselector.xex))
+    header_sidecar: $flash_deviceselector.xexp.header
+    base_module: deviceselector.xex  (this file is a DELTA patch reconstructed against it)
+    call_graph: calls/flash_deviceselector.xexp.calls.txt
+    strings: strings/flash_deviceselector.xexp.strings.txt
+
+$flash_gamerprofile.xexp
+    decoded_body: $flash_gamerprofile.xexp  (in decoded_dump/, status=depatched (base=gamerprofile.xex))
+    header_sidecar: $flash_gamerprofile.xexp.header
+    base_module: gamerprofile.xex  (this file is a DELTA patch reconstructed against it)
+    call_graph: calls/flash_gamerprofile.xexp.calls.txt
+    strings: strings/flash_gamerprofile.xexp.strings.txt
+
+$flash_hud.xexp
+    decoded_body: $flash_hud.xexp  (in decoded_dump/, status=depatched (base=hud.xex))
+    header_sidecar: $flash_hud.xexp.header
+    base_module: hud.xex  (this file is a DELTA patch reconstructed against it)
+    strings: strings/flash_hud.xexp.strings.txt
+
+$flash_huduiskin.xex
+    decoded_body: $flash_huduiskin.xex  (in decoded_dump/, status=decoded)
+    strings: strings/flash_huduiskin.xex.strings.txt
+
+$flash_mfgbootlauncher.xexp
+    decoded_body: $flash_mfgbootlauncher.xexp  (in decoded_dump/, status=depatched (base=mfgbootlauncher.xex))
+    header_sidecar: $flash_mfgbootlauncher.xexp.header
+    base_module: mfgbootlauncher.xex  (this file is a DELTA patch reconstructed against it)
+    strings: strings/flash_mfgbootlauncher.xexp.strings.txt
+
+$flash_minimediaplayer.xexp
+    decoded_body: $flash_minimediaplayer.xexp  (in decoded_dump/, status=depatched (base=minimediaplayer.xex))
+    header_sidecar: $flash_minimediaplayer.xexp.header
+    base_module: minimediaplayer.xex  (this file is a DELTA patch reconstructed against it)
+    strings: strings/flash_minimediaplayer.xexp.strings.txt
+
+$flash_nomni.xexp
+    decoded_body: $flash_nomni.xexp  (in decoded_dump/, status=RAW - no base module in dump)
+
+$flash_nomnifwm.xexp
+    decoded_body: $flash_nomnifwm.xexp  (in decoded_dump/, status=RAW - no base module in dump)
+
+$flash_signin.xexp
+    decoded_body: $flash_signin.xexp  (in decoded_dump/, status=depatched (base=signin.xex))
+    header_sidecar: $flash_signin.xexp.header
+    base_module: signin.xex  (this file is a DELTA patch reconstructed against it)
+    call_graph: calls/flash_signin.xexp.calls.txt
+    strings: strings/flash_signin.xexp.strings.txt
+
+$flash_systemupdate.xex
+    decoded_body: $flash_systemupdate.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/flash_systemupdate.xex.imports.txt
+    strings: strings/flash_systemupdate.xex.strings.txt
+
+$flash_updater.xexp
+    decoded_body: $flash_updater.xexp  (in decoded_dump/, status=depatched (base=updater.xex))
+    header_sidecar: $flash_updater.xexp.header
+    base_module: updater.xex  (this file is a DELTA patch reconstructed against it)
+    strings: strings/flash_updater.xexp.strings.txt
+
+$flash_vk.xexp
+    decoded_body: $flash_vk.xexp  (in decoded_dump/, status=depatched (base=vk.xex))
+    header_sidecar: $flash_vk.xexp.header
+    base_module: vk.xex  (this file is a DELTA patch reconstructed against it)
+    export_table: exports/flash_vk.xexp.exports.txt
+    strings: strings/flash_vk.xexp.strings.txt
+
+$flash_xam.xexp
+    decoded_body: $flash_xam.xexp  (in decoded_dump/, status=depatched (base=xam.xex))
+    header_sidecar: $flash_xam.xexp.header
+    base_module: xam.xex  (this file is a DELTA patch reconstructed against it)
+    export_table: exports/flash_xam.xexp.exports.txt
+    import_tables: imports/flash_xam.xexp.imports.txt
+    call_graph: calls/flash_xam.xexp.calls.txt
+    strings: strings/flash_xam.xexp.strings.txt
+    ipc_map: 06_IPC_SERVICE_MAP.txt (all avatar-family + heuristic entries)
+    avatar_command_table: 02_AVATAR_COMMAND_TABLE.txt
+    raw_avatar_disassembly: _avatar_disasm/avatar_disasm_full.txt
+    source_edits: xenia-edge/src/xenia/kernel/xam/xam_avatar.cc (comments cross-referenced against this module)
+
+$flash_ximecore.xex
+    decoded_body: $flash_ximecore.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/flash_ximecore.xex.imports.txt
+    strings: strings/flash_ximecore.xex.strings.txt
+
+$flash_ximedic.xexp
+    decoded_body: $flash_ximedic.xexp  (in decoded_dump/, status=RAW - depatch failed)
+    base_module: XIMEDIC.XEX  (this file is a DELTA patch reconstructed against it)
+
+$install_extender.xex
+    decoded_body: $install_extender.xex  (in decoded_dump/, status=decoded)
+    export_table: exports/install_extender.xex.exports.txt
+    import_tables: imports/install_extender.xex.imports.txt
+    strings: strings/install_extender.xex.strings.txt
+
+AvatarEditor.xex
+    decoded_body: AvatarEditor.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/AvatarEditor.xex.imports.txt
+    call_graph: calls/AvatarEditor.xex.calls.txt
+    strings: strings/AvatarEditor.xex.strings.txt
+
+AvatarMiniCreator.xex
+    decoded_body: AvatarMiniCreator.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/AvatarMiniCreator.xex.imports.txt
+    call_graph: calls/AvatarMiniCreator.xex.calls.txt
+    strings: strings/AvatarMiniCreator.xex.strings.txt
+
+Feedback.xex
+    decoded_body: Feedback.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/Feedback.xex.imports.txt
+    strings: strings/Feedback.xex.strings.txt
+
+Friends.xex
+    decoded_body: Friends.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/Friends.xex.imports.txt
+    strings: strings/Friends.xex.strings.txt
+
+LivePack.xex
+    decoded_body: LivePack.xex  (in decoded_dump/, status=decoded)
+    export_table: exports/LivePack.xex.exports.txt
+    import_tables: imports/LivePack.xex.imports.txt
+    strings: strings/LivePack.xex.strings.txt
+
+Marketplace.xex
+    decoded_body: Marketplace.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/Marketplace.xex.imports.txt
+    strings: strings/Marketplace.xex.strings.txt
+
+Party.xex
+    decoded_body: Party.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/Party.xex.imports.txt
+    strings: strings/Party.xex.strings.txt
+
+Quickchat.xex
+    decoded_body: Quickchat.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/Quickchat.xex.imports.txt
+    strings: strings/Quickchat.xex.strings.txt
+
+Voicemail.xex
+    decoded_body: Voicemail.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/Voicemail.xex.imports.txt
+    strings: strings/Voicemail.xex.strings.txt
+
+WORDREGISTER.XEX
+    decoded_body: WORDREGISTER.XEX  (in decoded_dump/, status=decoded)
+    import_tables: imports/WORDREGISTER.XEX.imports.txt
+    strings: strings/WORDREGISTER.XEX.strings.txt
+
+XIMEDIC.XEX
+    decoded_body: XIMEDIC.XEX  (in decoded_dump/, status=decoded)
+    patched_by: $flash_ximedic.xexp
+    strings: strings/XIMEDIC.XEX.strings.txt
+
+XIMEDICCH.XEX
+    decoded_body: XIMEDICCH.XEX  (in decoded_dump/, status=decoded)
+    strings: strings/XIMEDICCH.XEX.strings.txt
+
+XIMEDICEX.XEX
+    decoded_body: XIMEDICEX.XEX  (in decoded_dump/, status=decoded)
+    strings: strings/XIMEDICEX.XEX.strings.txt
+
+XMsgr.xex
+    decoded_body: XMsgr.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/XMsgr.xex.imports.txt
+    strings: strings/XMsgr.xex.strings.txt
+
+bootanim.xex
+    decoded_body: bootanim.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_bootanim.xexp
+    export_table: exports/bootanim.xex.exports.txt
+    import_tables: imports/bootanim.xex.imports.txt
+    strings: strings/bootanim.xex.strings.txt
+
+createprofile.xex
+    decoded_body: createprofile.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_createprofile.xexp
+    export_table: exports/createprofile.xex.exports.txt
+    import_tables: imports/createprofile.xex.imports.txt
+    call_graph: calls/createprofile.xex.calls.txt
+    strings: strings/createprofile.xex.strings.txt
+
+dash.xex
+    decoded_body: dash.xex  (in decoded_dump/, status=decoded)
+    export_table: exports/dash.xex.exports.txt
+    import_tables: imports/dash.xex.imports.txt
+    call_graph: calls/dash.xex.calls.txt
+    strings: strings/dash.xex.strings.txt
+
+deviceselector.xex
+    decoded_body: deviceselector.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_deviceselector.xexp
+    export_table: exports/deviceselector.xex.exports.txt
+    import_tables: imports/deviceselector.xex.imports.txt
+    call_graph: calls/deviceselector.xex.calls.txt
+    strings: strings/deviceselector.xex.strings.txt
+
+gamerprofile.xex
+    decoded_body: gamerprofile.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_gamerprofile.xexp
+    import_tables: imports/gamerprofile.xex.imports.txt
+    call_graph: calls/gamerprofile.xex.calls.txt
+    strings: strings/gamerprofile.xex.strings.txt
+
+hostloader.dll
+    decoded_body: hostloader.dll  (in decoded_dump/, status=decoded)
+    export_table: exports/hostloader.dll.exports.txt
+    import_tables: imports/hostloader.dll.imports.txt
+    strings: strings/hostloader.dll.strings.txt
+
+hud.xex
+    decoded_body: hud.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_hud.xexp
+    import_tables: imports/hud.xex.imports.txt
+    strings: strings/hud.xex.strings.txt
+
+huduiskin.xex
+    decoded_body: huduiskin.xex  (in decoded_dump/, status=decoded)
+    strings: strings/huduiskin.xex.strings.txt
+
+mfgbootlauncher.xex
+    decoded_body: mfgbootlauncher.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_mfgbootlauncher.xexp
+    import_tables: imports/mfgbootlauncher.xex.imports.txt
+    strings: strings/mfgbootlauncher.xex.strings.txt
+
+minimediaplayer.xex
+    decoded_body: minimediaplayer.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_minimediaplayer.xexp
+    import_tables: imports/minimediaplayer.xex.imports.txt
+    strings: strings/minimediaplayer.xex.strings.txt
+
+runtime/v3.0/BackCompatShim.xex
+    decoded_body: runtime/v3.0/BackCompatShim.xex  (in decoded_dump/, status=decoded)
+    export_table: exports/runtime__v3.0__BackCompatShim.xex.exports.txt
+    import_tables: imports/runtime__v3.0__BackCompatShim.xex.imports.txt
+    strings: strings/runtime__v3.0__BackCompatShim.xex.strings.txt
+
+runtime/v3.0/netcfusermode.dll
+    decoded_body: runtime/v3.0/netcfusermode.dll  (in decoded_dump/, status=decoded)
+    export_table: exports/runtime__v3.0__netcfusermode.dll.exports.txt
+    strings: strings/runtime__v3.0__netcfusermode.dll.strings.txt
+
+runtime/v3.0/runtimehost.xex
+    decoded_body: runtime/v3.0/runtimehost.xex  (in decoded_dump/, status=decoded)
+    export_table: exports/runtime__v3.0__runtimehost.xex.exports.txt
+    import_tables: imports/runtime__v3.0__runtimehost.xex.imports.txt
+    strings: strings/runtime__v3.0__runtimehost.xex.strings.txt
+
+runtime/v3.1/BackCompatShim.xex
+    decoded_body: runtime/v3.1/BackCompatShim.xex  (in decoded_dump/, status=decoded)
+    export_table: exports/runtime__v3.1__BackCompatShim.xex.exports.txt
+    import_tables: imports/runtime__v3.1__BackCompatShim.xex.imports.txt
+    strings: strings/runtime__v3.1__BackCompatShim.xex.strings.txt
+
+runtime/v3.1/netcfusermode.dll
+    decoded_body: runtime/v3.1/netcfusermode.dll  (in decoded_dump/, status=decoded)
+    export_table: exports/runtime__v3.1__netcfusermode.dll.exports.txt
+    strings: strings/runtime__v3.1__netcfusermode.dll.strings.txt
+
+runtime/v3.1/runtimehost.xex
+    decoded_body: runtime/v3.1/runtimehost.xex  (in decoded_dump/, status=decoded)
+    export_table: exports/runtime__v3.1__runtimehost.xex.exports.txt
+    import_tables: imports/runtime__v3.1__runtimehost.xex.imports.txt
+    strings: strings/runtime__v3.1__runtimehost.xex.strings.txt
+
+signin.xex
+    decoded_body: signin.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_signin.xexp
+    import_tables: imports/signin.xex.imports.txt
+    call_graph: calls/signin.xex.calls.txt
+    strings: strings/signin.xex.strings.txt
+
+titlelauncher.xex
+    decoded_body: titlelauncher.xex  (in decoded_dump/, status=decoded)
+    import_tables: imports/titlelauncher.xex.imports.txt
+    strings: strings/titlelauncher.xex.strings.txt
+
+updater.xex
+    decoded_body: updater.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_updater.xexp
+    import_tables: imports/updater.xex.imports.txt
+    strings: strings/updater.xex.strings.txt
+
+vk.xex
+    decoded_body: vk.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_vk.xexp
+    export_table: exports/vk.xex.exports.txt
+    import_tables: imports/vk.xex.imports.txt
+    strings: strings/vk.xex.strings.txt
+
+xam.xex
+    decoded_body: xam.xex  (in decoded_dump/, status=decoded)
+    patched_by: $flash_xam.xexp
+    export_table: exports/xam.xex.exports.txt
+    import_tables: imports/xam.xex.imports.txt
+    call_graph: calls/xam.xex.calls.txt
+    strings: strings/xam.xex.strings.txt
+

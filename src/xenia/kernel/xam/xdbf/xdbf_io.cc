@@ -8,13 +8,14 @@
  */
 
 #include "xenia/kernel/xam/xdbf/xdbf_io.h"
+#include "xenia/base/xdbf_view.h"
 
 namespace xe {
 namespace kernel {
 namespace xam {
 
 XdbfFile::XdbfFile(const std::span<const uint8_t> buffer) {
-  if (buffer.size() <= sizeof(XdbfHeader)) {
+  if (buffer.size() <= sizeof(XdbfHeader) || !XdbfTableView::Parse(buffer)) {
     return;
   }
 

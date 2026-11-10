@@ -1,0 +1,268 @@
+va	data_type	text
+0x901006b8	unicode	strings.xus
+0x90100788	unicode	XuiCanvas
+0x901007c8	unicode	LogonPane
+0x901007dc	unicode	SignIn
+0x901007ec	unicode	JoinScene
+0x90100800	unicode	UserList
+0x90100814	unicode	UserListScene
+0x90100830	unicode	PasscodeScene
+0x9010084c	unicode	StatusScene
+0x9010086c	unicode	SelectedProfile
+0x9010088c	unicode	InsPadScene
+0x901008ac	unicode	NuiSignIn
+0x901008c0	unicode	NuiUserListScene
+0x901008e4	unicode	PasscodeGridScene
+0x90100908	unicode	inspad.xur
+0x90100920	string	createprofile.xex
+0x901009d0	unicode	status.xur
+0x901009e8	unicode	passcode.xur
+0x90100a04	unicode	UserList.xur
+0x90100a20	unicode	UserListSinglePane.xur
+0x90100a50	unicode	join.xur
+0x90100a64	unicode	XuiScene
+0x90100a78	unicode	XuiControl
+0x90100ac8	unicode	HUDScene
+0x90100adc	unicode	XuiList
+0x90100aec	unicode	signin
+0x90100afc	unicode	signin1.xur
+0x90100b14	unicode	signin2.xur
+0x90100b2c	unicode	signin4.xur
+0x90100b44	unicode	signin1nui.xur
+0x90100b64	string	Guide.AvatarMiniCreator.xex
+0x90100b80	unicode	klcc
+0x90100b8c	unicode	diners
+0x90100ba4	unicode	discover
+0x90100bb8	unicode	amex
+0x90100bc4	unicode	mastercard
+0x90100bdc	unicode	visa
+0x90100be8	unicode	japanesekatakana
+0x90100c0c	unicode	japanesehiragana
+0x90100c30	unicode	schfull
+0x90100c40	unicode	latinextended
+0x90100c5c	unicode	russionfull
+0x90100c74	unicode	tchfull
+0x90100c84	unicode	koreanfull
+0x90100c9c	unicode	japanesefull
+0x90100cb8	unicode	latinalphabet
+0x90100cd4	unicode	latinnumeric
+0x90100cf0	unicode	latinipaddress
+0x90100d10	unicode	latinphone
+0x90100d28	unicode	latingamertag
+0x90100d44	unicode	latinemail
+0x90100d5c	unicode	latinfull
+0x90100d70	unicode	phone
+0x90100d7c	unicode	contactemail
+0x90100d98	unicode	postalcode
+0x90100db0	unicode	state
+0x90100dbc	unicode	city
+0x90100dc8	unicode	district
+0x90100ddc	unicode	street2
+0x90100dec	unicode	street1
+0x90100dfc	unicode	none
+0x90100e14	unicode	navBack
+0x90100e24	unicode	navJoin
+0x90100e34	unicode	light%d
+0x90100e48	unicode	listUser
+0x90100e5c	unicode	label_Gamertag
+0x90100e7c	unicode	txtIncorrectPasscode
+0x90100ea8	unicode	txtEnterPasscode
+0x90100ecc	unicode	Passcode3
+0x90100ee0	unicode	Passcode2
+0x90100ef4	unicode	Passcode1
+0x90100f08	unicode	Passcode0
+0x90100f1c	unicode	statusNui.xur
+0x90100f38	unicode	txtStarting
+0x90100f50	unicode	txtWaiting
+0x90100f68	unicode	btnStart
+0x90100f7c	unicode	txtInsPad
+0x90100f98	unicode	ROLGroup
+0x90100fac	unicode	ROLShadow
+0x90100fc0	unicode	Highlight_Group
+0x90100fe0	unicode	PreChangeLeft
+0x90100ffc	unicode	EndPreChangeLeft
+0x90101020	unicode	loop
+0x9010102c	unicode	loopend
+0x90101044	unicode	SignoutIcon.png
+0x90101064	unicode	CreateProfileIcon.png
+0x90101090	unicode	ico_32x_controller_wA.png
+0x901010c4	unicode	PreChangeRight
+0x901010e4	unicode	EndPreChangeRight
+0x90101108	unicode	passcodenui.xur
+0x90101128	unicode	NuiHudImageText
+0x90101148	unicode	NuiHudSignIn
+0x90101164	unicode	Visual
+0x9010117c	unicode	Grid/btnClear
+0x90101198	unicode	Grid/btn9
+0x901011ac	unicode	Grid/btn8
+0x901011c0	unicode	Grid/btn7
+0x901011d4	unicode	Grid/btn6
+0x901011e8	unicode	Grid/btn5
+0x901011fc	unicode	Grid/btn4
+0x90101210	unicode	Grid/btn3
+0x90101224	unicode	Grid/btn2
+0x90101238	unicode	Grid/btn1
+0x9010124c	unicode	Grid/btn0
+0x90101278	unicode	passcodeNui.xur
+0x90101298	unicode	UserListNui.xur
+0x901012bc	unicode	SpinnerGroup/SpinnerText
+0x901012f0	unicode	SpinnerGroup
+0x9010130c	unicode	HelpTextGroup/HelpText2
+0x9010133c	unicode	HelpTextGroup/HelpText1
+0x9010136c	unicode	HelpTextGroup
+0x90101388	unicode	Title
+0x90101394	unicode	Scene_Pane0
+0x901013ac	unicode	btnB
+0x901013b8	unicode	GridPanel/Panel%i
+0x901013dc	unicode	ControlPackNuiSideLeft
+0x9010140c	unicode	ControlPackNuiSideRight
+0x9010143c	unicode	HoverBack
+0x90101450	unicode	PageText
+0x90101464	unicode	GridPanel
+0x90101480	unicode	PostChangeLeft
+0x901014a0	unicode	EndPostChangeLeft
+0x901014c4	unicode	PostChangeRight
+0x901014e4	unicode	EndPostChangeRight
+0x9010150c	unicode	Scene_Pane3
+0x90101524	unicode	Scene_Pane2
+0x9010153c	unicode	Scene_Pane1
+0x90101558	unicode	sharedres://signin_livelogo.png
+0x90101638	string	deviceselector.xex
+0x90101654	unicode	sharedres://LiveProfile.xus
+0x9010168c	unicode	sharedres://LiveAll.xus
+0x901016bc	string	HH:mm:ss
+0x901016c8	string	dddd, MMMM dd, yyyy
+0x901016dc	string	MM/dd/yy
+0x901016f0	string	December
+0x901016fc	string	November
+0x90101708	string	October
+0x90101710	string	September
+0x9010171c	string	August
+0x90101734	string	April
+0x9010173c	string	March
+0x90101744	string	February
+0x90101750	string	January
+0x90101788	string	Saturday
+0x90101794	string	Friday
+0x9010179c	string	Thursday
+0x901017a8	string	Wednesday
+0x901017b4	string	Tuesday
+0x901017bc	string	Monday
+0x901017c4	string	Sunday
+0x90101ff0	string	SunMonTueWedThuFriSat
+0x90102008	string	JanFebMarAprMayJunJulAugSepOctNovDec
+0x90102030	string	xam.xex
+0x90102050	string	e:\bt\248805\core\private\xam\apps\signin\dll\obj\xbox\signin.pdb
+0x9011401f	string	strings.xus
+0x90115006	string	ru-ru\statusNui.xus
+0x90115022	string	ru-ru\strings.xus
+0x9011503c	string	ru-ru\UserList.xus
+0x90115057	string	ru-ru\UserListNui.xus
+0x90115075	string	ru-ru\UserListSinglePane.xus
+0x9011509a	string	pl-pl\inspad.xus
+0x901150b3	string	pl-pl\join.xus
+0x901150ca	string	pl-pl\passcode.xus
+0x901150e5	string	pl-pl\passcodenui.xus
+0x90115103	string	pl-pl\signin1.xus
+0x9011511d	string	pl-pl\signin1nui.xus
+0x9011513a	string	pl-pl\signin2.xus
+0x90115154	string	pl-pl\signin4.xus
+0x9011516e	string	pl-pl\status.xus
+0x90115187	string	pl-pl\statusNui.xus
+0x901151a3	string	pl-pl\strings.xus
+0x901151bd	string	pl-pl\UserList.xus
+0x901151d8	string	pl-pl\UserListNui.xus
+0x9011521d	string	KRevert to Free
+0x9011522d	string	Change Gamertag
+0x90116200	string	playing on Xbox LIVE.
+0x90116216	string	Your parent's Windows Live ID isn't valid. Your parent needs to choose a different Windows Live ID to manage your account.\r\n\r\nFor more info, please visit www.xbox.com/fixid.
+0x901162c4	string	Your Windows Live ID isn't valid. You need to associate a different Windows Live ID with this account.\r\n\r\nFor more info, please visit www.xbox.com/fixid.
+0x9011635e	string	The Xbox LIVE Terms of Use have changed. Please accept these new Terms of Use before playing on Xbox LIVE.
+0x901163c9	string	Your Xbox LIVE Gold Membership will expire on %s. Do you want to set your membership to automatically renew?
+0x90116436	string	You have been suspended from Xbox LIVE. You will not be able to sign in to Xbox LIVE until %s.\r\n\r\nEmail with more information has been sent to the Windows Live ID email address for this account.
+0x901164f9	string	Your account has been suspended due to a problem with your payment option. Have the primary family member update their current information in Account Management.
+0x9011659b	string	You have been suspended from communications on Xbox LIVE. You will not be able to communicate until %s.\r\n\r\nEmail with more information has been sent to the Windows Live ID email address for this account.
+0x9011666a	string	New Profile
+0x90116676	string	Xbox LIVE sign-in is blocked on this console.\r\n\r\nTo change your online safety settings, go to My Xbox, Family Settings.
+0x901166ee	string	No Xbox LIVE Gold Membership profiles found.\r\n\r\nJoin Xbox LIVE or insert a storage device containing a profile that has Xbox LIVE.
+0x90116771	string	Couldn't find any Xbox LIVE profiles.\r\n\r\nTo connect to Xbox LIVE, join Xbox LIVE or connect a storage device that contains an Xbox LIVE profile.
+0x90116802	string	Play offline
+0x9011680f	string	This profile is signed in. Sign it out?
+0x90116837	string	Select Action
+0x90116845	string	Can't sign in any more players. Play as a signed-in profile, or sign one out.
+0x90116893	string	Too Many Players
+0x901168a4	string	Recover Gamertag
+0x901168b5	string	Renew Gold Membership
+0x901168cb	string	Can't connect to Xbox LIVE. Select Test Connection to troubleshoot, or try recovering your profile.\r\n\r\nFor more info, go to www.xbox.com/support.
+0x9011695d	string	Switch Profile
+0x9011696c	string	Test Connection
+0x9011697c	string	No Profiles Found
+0x9011698e	string	Update Profile
+0x9011699d	string	View Terms of Use
+0x90116a05	string	XuiScene1
+0x90116a0f	string	InsPadScene
+0x90116a1b	string	FadeOut
+0x90116a23	string	txtInsPad
+0x90116a2d	string	XuiLabelCenterJustify
+0x90116a43	string	Connect controller
+0x90116a56	string	XuiControl
+0x90116a61	string	navBack
+0x90116a6e	string	XuiBackButton
+0x90116a7c	string	XuiScene
+0x90116a85	string	XuiCanvas
+0x90116b56	string	XuiScene1
+0x90116b60	string	JoinScene
+0x90116b6a	string	FadeOut
+0x90116b72	string	FadeIn
+0x90116b81	string	txt_Ready
+0x90116b90	string	UserList.xur
+0x90116b9d	string	XuiNavButton
+0x90116baa	string	navBack
+0x90116bb2	string	legend_B
+0x90116bc0	string	XuiBackButton
+0x90116bce	string	XuiLabel1
+0x90116bd8	string	Label_Body
+0x90116be3	string	XuiLabel
+0x90116bec	string	XuiScene
+0x90116bf5	string	XuiCanvas
+0x90116cfd	string	KXuiScene1
+0x90116d08	string	PasscodeScene
+0x90116d16	string	FadeOut
+0x90116d1e	string	FadeIn
+0x90116d25	string	PasscodeGridScene
+0x90116d37	string	Lines
+0x90116d3d	string	XuiFigure
+0x90116d47	string	XuiGroup
+0x90116d74	string	btn_Passcode
+0x90116d83	string	XuiLabel
+0x90116dcb	string	XuiGridPanel
+0x90116ddd	string	sharedres://lt_32x.png
+0x90116df4	string	XuiImage
+0x90116e02	string	sharedres://lb_32x.png
+0x90116e1e	string	sharedres://rb_32x.png
+0x90116e3a	string	sharedres://rt_32x.png
+0x90116e56	string	sharedres://left_d.png
+0x90116e72	string	sharedres://up_d.png
+0x90116e8c	string	sharedres://down_d.png
+0x90116ea8	string	sharedres://right_d.png
+0x90116ec5	string	sharedres://X-Button_full.png
+0x90116ee9	string	sharedres://Y-Button_full.png
+0x90116f07	string	XuiScene
+0x90116f10	string	Passcode3
+0x90116f1a	string	btn_PasscodeCheck
+0x90116f2c	string	XuiCheckbox
+0x90116f38	string	Passcode2
+0x90116f42	string	Passcode1
+0x90116f4c	string	Passcode0
+0x90116f56	string	txtEnterPasscode
+0x90116f67	string	Label_Body
+0x90116f72	string	Enter pass code.
+0x90116f83	string	XuiControl
+0x90116f8e	string	txtIncorrectPasscode
+0x90116fa3	string	Pass code incorrect.
+0x90116fb8	string	navBack
+0x90116fc0	string	legend_B
+0x90116fce	string	XuiBackButton
+0x90116fdc	string	label_Gamertag
+0x90116feb	string	XuiLabelCenterJustify
+0x90117001	string	XuiCanvas

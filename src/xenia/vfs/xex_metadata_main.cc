@@ -31,6 +31,11 @@ DEFINE_transient_path(
     target, "", "Path to game file or directory to scan for bootable files.",
     "General");
 
+DEFINE_bool(
+    read_title_resources, false,
+    "Decode embedded title names, SPA kind and icons without launching.",
+    "General");
+
 namespace {
 
 std::string ToLower(const std::string& s) {
@@ -65,19 +70,19 @@ std::optional<ExtractedMetadata> TryExtractMetadata(
 
     // Try to extract based on extension hint.
     if (ext == ".iso") {
-      if (auto m = ExtractIsoMetadata(path)) {
+      if (auto m = ExtractIsoMetadata(path, cvars::read_title_resources)) {
         return ExtractedMetadata{
             path,           "iso", fmt::format("{:08X}", m->title_id),
             m->module_name, "",    m->ToToml()};
       }
     } else if (ext == ".zar") {
-      if (auto m = ExtractZarMetadata(path)) {
+      if (auto m = ExtractZarMetadata(path, cvars::read_title_resources)) {
         return ExtractedMetadata{
             path,           "zar", fmt::format("{:08X}", m->title_id),
             m->module_name, "",    m->ToToml()};
       }
     } else if (ext == ".xex") {
-      if (auto m = ExtractXexMetadata(path)) {
+      if (auto m = ExtractXexMetadata(path, cvars::read_title_resources)) {
         return ExtractedMetadata{
             path,           "xex", fmt::format("{:08X}", m->title_id),
             m->module_name, "",    m->ToToml()};
@@ -86,25 +91,26 @@ std::optional<ExtractedMetadata> TryExtractMetadata(
 
     // Unknown extension or extension hint failed - try all formats.
     // Try XEX first (smallest header check).
-    if (auto m = ExtractXexMetadata(path)) {
+    if (auto m = ExtractXexMetadata(path, cvars::read_title_resources)) {
       return ExtractedMetadata{
           path,           "xex", fmt::format("{:08X}", m->title_id),
           m->module_name, "",    m->ToToml()};
     }
     // Try STFS/SVOD container.
-    if (auto m = ExtractStfsMetadata(path)) {
+    if (auto m = ExtractStfsMetadata(path, XLanguage::kEnglish,
+                                     cvars::read_title_resources)) {
       return ExtractedMetadata{
           path, "stfs",          fmt::format("{:08X}", m->title_id),
           "",   m->display_name, m->ToToml()};
     }
     // Try ZAR.
-    if (auto m = ExtractZarMetadata(path)) {
+    if (auto m = ExtractZarMetadata(path, cvars::read_title_resources)) {
       return ExtractedMetadata{
           path,           "zar", fmt::format("{:08X}", m->title_id),
           m->module_name, "",    m->ToToml()};
     }
     // Try ISO.
-    if (auto m = ExtractIsoMetadata(path)) {
+    if (auto m = ExtractIsoMetadata(path, cvars::read_title_resources)) {
       return ExtractedMetadata{
           path,           "iso", fmt::format("{:08X}", m->title_id),
           m->module_name, "",    m->ToToml()};

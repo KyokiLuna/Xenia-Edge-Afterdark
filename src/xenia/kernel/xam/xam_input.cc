@@ -7,11 +7,14 @@
  ******************************************************************************
  */
 
+#include <array>
+
 #include "xenia/base/logging.h"
 #include "xenia/emulator.h"
 #include "xenia/hid/input.h"
 #include "xenia/hid/input_system.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_system_ui_service.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xam/xam_state.h"
@@ -101,6 +104,14 @@ DECLARE_XAM_EXPORT1(XamInputGetCapabilitiesEx, kInput, kSketchy);
 // https://learn.microsoft.com/en-gb/windows/win32/api/xinput/nf-xinput-xinputgetcapabilities
 dword_result_t XamInputGetCapabilities_entry(
     dword_t user_index, dword_t flags, pointer_t<X_INPUT_CAPABILITIES> caps) {
+  const std::array<uint32_t, 3> arguments{user_index, flags,
+                                          caps.guest_address()};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kInputGetCapabilities,
+      arguments);
+  if (native.handled()) {
+    return native.value;
+  }
   X_HRESULT result;
   memset(caps, 0x0, sizeof(X_INPUT_CAPABILITIES));
   X_INPUT_CAPABILITIES_EX caps_ex = {};
@@ -112,9 +123,28 @@ dword_result_t XamInputGetCapabilities_entry(
 }
 DECLARE_XAM_EXPORT1(XamInputGetCapabilities, kInput, kSketchy);
 
+dword_result_t XamInputGetDeviceStats_entry(dword_t user_index,
+                                            lpvoid_t statistics) {
+  // Native XAM maps unavailable driver statistics to this Win32 failure.
+  // The driver's output packet is not implemented yet. Do not invent its
+  // extent or fields: HUD callers include an uninitialized stack buffer and
+  // read it only on success. Undefined-import fallthrough leaves user 0 in
+  // r3, incorrectly authorizing that read. Return the explicit failure and
+  // leave all caller storage untouched until the real packet is supported.
+  return X_ERROR_DEVICE_NOT_CONNECTED;
+}
+DECLARE_XAM_EXPORT1(XamInputGetDeviceStats, kInput, kStub);
+
 // https://msdn.microsoft.com/en-us/library/windows/desktop/microsoft.directx_sdk.reference.xinputgetstate(v=vs.85).aspx
 dword_result_t XamInputGetState_entry(dword_t user_index, dword_t flags,
                                       pointer_t<X_INPUT_STATE> input_state) {
+  const std::array<uint32_t, 3> arguments{user_index, flags,
+                                          input_state.guest_address()};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kInputGetState, arguments);
+  if (native.handled()) {
+    return native.value;
+  }
   if (input_state) {
     memset((void*)input_state.host_address(), 0, sizeof(X_INPUT_STATE));
   }
@@ -176,7 +206,18 @@ DECLARE_XAM_EXPORT2(XamInputGetState, kInput, kImplemented, kHighFrequency);
 dword_result_t XamInputSetState_entry(
     dword_t user_index,
     dword_t flags, /* flags, as far as i can see, is not used*/
-    pointer_t<X_INPUT_VIBRATION> vibration) {
+    pointer_t<X_INPUT_VIBRATION> vibration, dword_t extended0,
+    dword_t extended1, dword_t extended2) {
+  // Native192 forwards incoming r6..r8 unchanged. Their extended semantics are
+  // not inferred here; inactive ordinary HLE keeps ignoring them as before.
+  const std::array<uint32_t, 6> arguments{
+      user_index, flags,     vibration.guest_address(),
+      extended0,  extended1, extended2};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kInputSetState, arguments);
+  if (native.handled()) {
+    return native.value;
+  }
   if (user_index >= XUserMaxUserCount) {
     return X_E_DEVICE_NOT_CONNECTED;
   }
@@ -190,11 +231,30 @@ dword_result_t XamInputSetState_entry(
 }
 DECLARE_XAM_EXPORT1(XamInputSetState, kInput, kImplemented);
 
+// Native counters/selection policy belong to the same XAM generation. This
+// export previously had no HLE implementation; do not synthesize success.
+dword_result_t XamEnableSystemAppInput_entry(dword_t selector, dword_t enable) {
+  const std::array<uint32_t, 2> arguments{selector, enable};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kEnableSystemAppInput,
+      arguments);
+  return native.handled() ? native.value : X_ERROR_NOT_SUPPORTED;
+}
+DECLARE_XAM_EXPORT1(XamEnableSystemAppInput, kInput, kImplemented);
+
 // https://learn.microsoft.com/en-gb/windows/win32/api/xinput/nf-xinput-xinputgetkeystroke
 // Same as non-ex, just takes a pointer to user index.
 dword_result_t XamInputGetKeystrokeEx_entry(
     lpdword_t user_index_ptr, dword_t flags,
     pointer_t<X_INPUT_KEYSTROKE> keystroke) {
+  const std::array<uint32_t, 3> arguments{user_index_ptr.guest_address(), flags,
+                                          keystroke.guest_address()};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kInputGetKeystrokeEx,
+      arguments);
+  if (native.handled()) {
+    return native.value;
+  }
   // user index = index or XUSER_INDEX_ANY
   // flags = XINPUT_FLAG_GAMEPAD (| _ANYUSER | _ANYDEVICE)
 
@@ -258,6 +318,15 @@ DECLARE_XAM_EXPORT1(XamInputGetKeystrokeEx, kInput, kImplemented);
 
 dword_result_t XamInputGetKeystroke_entry(
     dword_t user_index, dword_t flags, pointer_t<X_INPUT_KEYSTROKE> keystroke) {
+  // 193 builds its own native stack index and calls198; do not pass a host
+  //  temporary's pointer into guest execution or translate userANY into0.
+  const std::array<uint32_t, 3> arguments{user_index, flags,
+                                          keystroke.guest_address()};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kInputGetKeystroke, arguments);
+  if (native.handled()) {
+    return native.value;
+  }
   // Ex reads the index through a guest pointer, so it must be big-endian.
   xe::be<uint32_t> actual_user_index = static_cast<uint32_t>(user_index);
   return XamInputGetKeystrokeEx_entry(

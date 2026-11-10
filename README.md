@@ -11,6 +11,7 @@
 </p>[!IMPORTANT]
 Active development — V62 is available as a prerelease, not a stable release. The HDD gate checkpoint 62 is a Linux x86-64 testing build. This is an experimental emulator, and features described as goals or work in progress are not promises of current functionality.
 
+
 What is Afterdark?
 Xenia Edge Afterdark is an independently maintained, experimental fork of Xenia Edge, itself built on the work of Xenia and Xenia Canary.
 
@@ -43,6 +44,8 @@ Performance and broader compatibility	Ongoing research and regression testing; n
 
 
 The [V62 checkpoint notes](docs/research/17559-hdd-profile-checkpoint-v62.md) document Linux tests including local profile persistence and Call of Duty: Black Ops storage/control settings. V62 is now published as a public prerelease. The combined HDD gate remains unfinished; publishing a checkpoint does not make it stable.
+
+
 Project priorities
 - Console-first correctness: implement shared Xbox 360 interfaces and preserve authentic behavior, including failure cases.
 - Reliable persistent state: protect profiles, saves, installed content, and system files from regressions.

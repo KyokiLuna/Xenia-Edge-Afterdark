@@ -58,6 +58,22 @@ The [HDD milestone notes for 2026-11-18](docs/research/17559-hdd-milestone-20261
 
 The [V62 checkpoint notes](docs/research/17559-hdd-profile-checkpoint-v62.md) remain a historical record of its Linux profile-persistence and Call of Duty: Black Ops storage/control-setting tests. V62 is a public prerelease; its results do not establish acceptance of later native profile or avatar work.
 
+## Upstream integration
+
+Upstream patches are included only after review shows that they support
+Afterdark's project goals and system contracts. Changes that conflict with
+those goals are excluded, even if they are useful in upstream Xenia Edge.
+Upstream origin, a clean merge or a working host-side alternative is not
+approval to include a change.
+
+For media, the target is the Xbox 360's native browser and player, connected to
+its storage, installed resources and guest services. Host import supplies that
+console path. An external media player or a replacement host playback window
+does not satisfy this goal or its acceptance tests.
+
+See the [upstream integration policy](docs/research/17559-upstream-integration-policy.md)
+for inclusion criteria and the required decision record.
+
 ## Project priorities
 
 - Console-first correctness: implement shared Xbox 360 interfaces and preserve authentic behavior, including failure cases.

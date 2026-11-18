@@ -1,5 +1,16 @@
 # Combined HDD, local profile, avatar and media gate
 
+Upstream changes are subject to the
+[project-goal inclusion policy](17559-upstream-integration-policy.md). Changes
+that conflict with the accepted console-level behavior are excluded.
+
+Media acceptance requires the Xbox 360's native browser/player and its guest
+storage, resource, codec and lifecycle services. Host file references and imports
+feed that path. External players, replacement host playback windows and
+standalone host decoding do not establish native viewing/playback, seeking or
+Guide handoff. Missing genuine codec/update prerequisites remain blockers for
+the affected native scenarios.
+
 Approved 2026-11-05, following the accepted Guide foundation release. This gate
 is **OPEN**. The Guide AppImage remains the rollback release; new source changes
 do not inherit its build or runtime acceptance.

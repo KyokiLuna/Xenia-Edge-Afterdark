@@ -23,6 +23,12 @@ follow the release contract below.
 
 ## Upstream review at each gate
 
+The [upstream integration policy](17559-upstream-integration-policy.md) governs
+every inclusion decision. Review does not imply adoption: an upstream change
+must support Afterdark's accepted goals and system contracts. A conflicting
+change is excluded, rather than added as an alternative implementation of a
+different goal.
+
 1. Review the latest [has207/xenia-edge](https://github.com/has207/xenia-edge)
    `edge` head, relevant releases, dependency/submodule revisions and build or
    packaging changes. Record retrieval UTC, full commit identities and source
@@ -31,15 +37,19 @@ follow the release contract below.
 2. Account for the delta in a short decision table: commit/change, affected area,
    included/equivalent/deferred/excluded, reason, and validation evidence.
    Summarize unrelated changes together without silently omitting them.
-3. Integrate applicable fixes through common interfaces while preserving the
+3. Integrate only fixes that pass the project-goal and system-contract review,
+   through common interfaces while preserving the
    existing dirty source, index and user data. Resolve overlaps deliberately;
    do not blindly merge or reset the working checkout. Rerun checks affected by
    integration, including earlier gate regressions where relevant.
-4. Give a concrete reason for each retained difference: incompatible ownership
-   contracts, reproduced regression, platform scope, missing prerequisite, or
+4. Give a concrete reason for each retained difference: conflict with an accepted
+   project goal, incompatible ownership contracts, reproduced regression,
+   platform scope, missing prerequisite, or
    an equivalent implementation already present. Calling our approach better
    requires observable behavior, correctness or measurements; speculation is
    recorded as uncertainty.
+   A goal conflict is sufficient grounds for exclusion; there is no requirement
+   to adopt or benchmark functionality that serves a different project goal.
 5. Check for a newer upstream head before closing the release. If it moved,
    review the additional delta and record the final snapshot. A release is
    current as of that recorded review, not a promise about future commits.

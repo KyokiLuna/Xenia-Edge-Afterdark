@@ -1,5 +1,23 @@
 # Contributing Code
 
+## Afterdark scope and upstream changes
+
+Afterdark restores console-level Xbox 360 behavior through shared system
+interfaces. Every proposed change, including an upstream patch, must fit the
+accepted project goals and recovered producer/consumer contracts before it is
+included. A change that conflicts with those goals is excluded; being present
+in upstream, applying cleanly or providing different host functionality is not
+sufficient.
+
+Media work must restore the console's native browsing and playback path. Host
+import and backend services support that path; an external player or replacement
+host playback UI cannot stand in for the Xbox 360 player or close media
+acceptance. Keep missing installed codec/update prerequisites explicit.
+
+Follow the [upstream integration policy](../docs/research/17559-upstream-integration-policy.md)
+and record included, equivalent, deferred and excluded decisions with their
+reasons and evidence.
+
 ## Information Sourcing
 
 All information in xenia has been derived from reverse engineering legally-owned

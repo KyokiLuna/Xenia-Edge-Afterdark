@@ -23,8 +23,16 @@ class SnapshotRecoveryOwner final {
   // reserve is allowed; isolated query authorities are never private owners.
   std::error_code CheckTarget(const HostStorageRoot&) const;
  private:
+  friend class SnapshotRecoveryOwnerTestAccess;
+  friend class ManagedStorageBootstrap;
+  friend class CacheStorageOwner;
   static std::unique_ptr<SnapshotRecoveryOwner> OpenInternal(
-      std::shared_ptr<const HostStorageRoot>, bool create);
+      std::shared_ptr<const HostStorageRoot>, bool create,
+      unsigned stop_boundary = 0,
+      HostStorageBootstrapDirectory* exact_completed = nullptr,
+      std::shared_ptr<const HostStorageIntentLease> same_parent_lease = {});
+  // Declared first: uncertainty retains native protection through root teardown.
+  std::unique_ptr<HostStorageBootstrapDirectory> bootstrap_;
   SnapshotRecoveryOwner() = default;
   std::shared_ptr<HostStorageRoot> root_;
   std::error_code error_;
@@ -66,12 +74,14 @@ class PreparedSnapshotPublication final {
  private:
   friend class SnapshotPublisher;
   friend class ContentMutationOwner;
+  friend class CacheStorageOwner;
   SnapshotPublicationReceipt receipt_;
   FileHandleInfo stage_info_{};
   std::vector<uint8_t> intended_;
   std::unique_ptr<HostStorageSnapshotStage> stage_;
   std::shared_ptr<const HostStorageSnapshotToken> recovery_;
   bool consumed_ = false;
+  PrivateSnapshotPurpose purpose_ = PrivateSnapshotPurpose::kOrdinary;
 };
 class SnapshotPublisher final {
  public:
@@ -100,12 +110,34 @@ class SnapshotPublisher final {
       const std::atomic<bool>* canceled = nullptr);
  private:
   friend class ContentMutationOwner;
+  friend class CacheStorageOwner;
+  friend class MediaReferenceStore;
+  static std::unique_ptr<PreparedSnapshotPublication> PrepareCacheTable(
+      const SnapshotRecoveryOwner&,
+      std::shared_ptr<const HostStorageSnapshotToken>, std::span<const uint8_t>,
+      const std::atomic<bool>*);
+  static SnapshotPublicationReceipt DeleteCacheTable(
+      const SnapshotRecoveryOwner&,
+      std::shared_ptr<const HostStorageSnapshotToken>, const std::atomic<bool>*);
+  static SnapshotPublicationReceipt PublishCacheTable(
+      const SnapshotRecoveryOwner&,
+      std::shared_ptr<const HostStorageSnapshotToken>, std::span<const uint8_t>,
+      const std::atomic<bool>*);
+  static SnapshotPublicationReceipt PublishMediaReference(
+      const SnapshotRecoveryOwner&,
+      std::shared_ptr<const HostStorageSnapshotToken>, std::span<const uint8_t>,
+      const std::atomic<bool>*);
+  static SnapshotPublicationReceipt DeleteInternal(
+      const SnapshotRecoveryOwner&,
+      std::shared_ptr<const HostStorageSnapshotToken>, const std::atomic<bool>*,
+      PrivateSnapshotPurpose purpose);
   static std::unique_ptr<PreparedSnapshotPublication> PrepareInternal(
       const SnapshotRecoveryOwner&,
       std::shared_ptr<const HostStorageSnapshotToken>, std::span<const uint8_t>,
       const std::atomic<bool>*, std::string_view exact_nonce,
       // Test fault may report uncertainty only AFTER the real parent barrier.
-      std::error_code post_stage_parent_error = {});
+      std::error_code post_stage_parent_error = {},
+      PrivateSnapshotPurpose purpose = PrivateSnapshotPurpose::kOrdinary);
 };
 }  // namespace xe::filesystem
 #endif

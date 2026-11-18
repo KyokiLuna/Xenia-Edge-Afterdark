@@ -9,6 +9,7 @@
 #define XENIA_APP_TITLE_METADATA_CACHE_H_
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -33,6 +34,8 @@ struct PhysicalTitleMetadata {
   GameFileInfo info;
   std::filesystem::path icon_path;
   bool from_cache = false;
+  // Keeps bounded exact publication/initialization failure receipts alive.
+  std::shared_ptr<filesystem::HostMetadataWriter> publication_owner;
 };
 
 std::optional<PhysicalTitleFingerprint>
@@ -42,7 +45,8 @@ FingerprintPhysicalTitle(const std::filesystem::path &path);
 // bounded payload integrity. Changed-during-read results are discarded.
 std::optional<PhysicalTitleMetadata>
 ReadCachedPhysicalTitle(const std::filesystem::path &cache_root,
-                        const std::filesystem::path &path);
+                        const std::filesystem::path &path,
+                        std::shared_ptr<filesystem::HostMetadataWriter> writer = {});
 
 // Pure composition; config precedence and verified DB membership are supplied
 // by the UI publisher, never guessed or persisted in the intrinsic cache.

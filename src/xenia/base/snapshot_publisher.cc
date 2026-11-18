@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include "xenia/base/platform.h"
+#include "xenia/base/mutex.h"
 #include "xenia/base/snapshot_io.h"
 namespace xe::filesystem {
 namespace {
@@ -53,61 +54,103 @@ std::unique_ptr<SnapshotRecoveryOwner> SnapshotRecoveryOwner::OpenExisting(
   return OpenInternal(std::move(parent), false);
 }
 std::unique_ptr<SnapshotRecoveryOwner> SnapshotRecoveryOwner::OpenInternal(
-    std::shared_ptr<const HostStorageRoot> parent, bool create) {
+    std::shared_ptr<const HostStorageRoot> parent, bool create,
+    unsigned stop_boundary, HostStorageBootstrapDirectory* exact_completed,
+    std::shared_ptr<const HostStorageIntentLease> same_parent_lease) {
   auto result = std::unique_ptr<SnapshotRecoveryOwner>(new SnapshotRecoveryOwner);
   auto& error = result->error_;
+  if (global_critical_region::is_held_by_current_thread()) {
+    error=std::make_error_code(std::errc::operation_not_permitted);return result;
+  }
 #if !XE_PLATFORM_LINUX && !XE_PLATFORM_MAC
-  static_cast<void>(parent);
-  error = std::make_error_code(std::errc::operation_not_supported);
-  return result;
+  static_cast<void>(parent);static_cast<void>(create);static_cast<void>(stop_boundary);
+  static_cast<void>(exact_completed);static_cast<void>(same_parent_lease);
+  error = std::make_error_code(std::errc::operation_not_supported);return result;
 #else
   if (!parent || parent->read_only() || parent->is_guest_private()) {
-    error = std::make_error_code(std::errc::permission_denied);
-    return result;
+    error = std::make_error_code(std::errc::permission_denied);return result;
   }
-#if XE_PLATFORM_MAC
-  // Prove capability before creating a private leaf. An unsupported SDK or
-  // physical namespace must not leave a partial directory for later adoption.
-  static_cast<void>(parent->IntentRootIdentity(error));
-  if (error) { return result; }
-#endif
-  auto raw = parent->Subroot(kDirectory, false, error);
-  if (!raw && error == std::errc::no_such_file_or_directory && create) {
-    error = parent->Create(kDirectory, true);
-    result->created_ = !error;
-    if (error && error != std::errc::file_exists) { return result; }
-    raw = parent->Subroot(kDirectory, false, error);
+  // A private coordinator may share only the already-held EX description
+  // belonging to this exact retained parent. A path-equivalent or foreign
+  // lease cannot authorize any recovery lookup, creation or receipt reclaim.
+  if (same_parent_lease && !parent->IntentLeaseMatches(*same_parent_lease)) {
+    error = std::make_error_code(std::errc::permission_denied);return result;
   }
-  if (!raw) { return result; }
-  if (!result->created_) {
-    // Never adopt an empty/partial/foreign directory. A portable marker is
-    // ownership/version metadata, not a host secret or an inode substitute.
-    auto marker = raw->CaptureSnapshot(kMarker, 256, error);
-    if (error) { return result; }
-    if (!marker->exists() || !SameBytes(marker->bytes(), OwnershipBytes())) {
-      error = std::make_error_code(std::errc::bad_message);
+  std::shared_ptr<HostStorageRoot> raw;
+  if (exact_completed) {
+    // Only the existing private coordinator can hand off a live capsule. Do
+    // not reselect/reclaim its active receipt through an ordinary path open.
+    // A foreign/staged capsule is refused before any publication attempt.
+    if (create || stop_boundary || exact_completed->target()!=kDirectory ||
+        !exact_completed->root() ||
+        exact_completed->root()->path()!=parent->path()/kDirectory) {
+      error=std::make_error_code(std::errc::permission_denied);return result;
+    }
+    const auto observed=parent->PublishBootstrapDirectory(*exact_completed);
+    error=observed.error;raw=observed.canonical_root;
+    if (!raw || error || !observed.durable) {
+      if (!error) {error=std::make_error_code(std::errc::state_not_recoverable);}
       return result;
     }
+  } else {
+    raw=parent->Subroot(kDirectory,false,error);
   }
-  result->root_ = raw->ProtectRecovery(error);
-  if (!result->root_) { return result; }
-  if (result->created_) {
-    // Establish guest exclusion BEFORE writing any private payload/marker.
-    // Bootstrap failures keep both the directory and protection owner alive.
-    error = parent->FlushDirectory();
-    if (error) { return result; }
-    const auto written = result->root_->WriteNewFile(kMarker, OwnershipBytes());
-    error = written.error;
-    if (!error && written.bytes != OwnershipBytes().size()) {
-      error = std::make_error_code(std::errc::io_error);
+  if (!raw && error == std::errc::no_such_file_or_directory && create) {
+    // This lower native bootstrap has no dependency on MVA or a ready recovery
+    // context. Unknown prior stages are preserved, never selected by prefix.
+    const auto nonce=UniqueLeaf("","");
+    result->bootstrap_=parent->BeginBootstrapDirectory(kDirectory,nonce,error,same_parent_lease);
+    if (!result->bootstrap_ || error) { return result; }
+    if (stop_boundary==1) { error=std::make_error_code(std::errc::operation_canceled);return result; }
+    const auto marker=result->bootstrap_->root()->PublishBootstrapRecord(kMarker,OwnershipBytes(),nonce);
+    error=marker.error;if (error) { return result; }
+    if (stop_boundary==2) { error=std::make_error_code(std::errc::operation_canceled);return result; }
+    if (stop_boundary==3) { parent->bootstrap_test_boundary_.store(3); }
+    const auto published=parent->PublishBootstrapDirectory(*result->bootstrap_);
+    error=published.error;result->created_=published.published;raw=published.canonical_root;
+    if (!raw) { return result; }
+    // Deny-only native fixture: the complete canonical directory and its real
+    // barriers exist, but no typed protection has yet replaced the capsule.
+    if (!error && stop_boundary==4) {
+      error=std::make_error_code(std::errc::operation_canceled);return result;
     }
+    // Refine the SAME native directory while bootstrap protection remains
+    // retained. On uncertain publication the typed protected root is returned
+    // with its error, so no failure owner exposes a private canonical tree.
+    std::error_code protection_error;
+    result->root_=raw->ProtectRecovery(protection_error);
+    if (!result->root_) { if (!error) { error=protection_error; } return result; }
     if (error) { return result; }
+  } else if (!raw) { return result; }
+  if (!result->root_) {
+    const auto marker=raw->CaptureSnapshot(kMarker,256,error);
+    if (!marker || !marker->exists() || !SameBytes(marker->bytes(),OwnershipBytes())) {
+      if (!error) { error=std::make_error_code(std::errc::bad_message); }return result;
+    }
+    // A live unrelated guest can retain this initializer's old registered
+    // protector after its capsule disappears. Reclaim only its exact native
+    // receipt under a newly acquired parent EX lease, after the complete
+    // canonical owner marker above has been validated. No stage prefix scan.
+    if (!exact_completed) {
+      result->bootstrap_=parent->ResumeRetainedBootstrapDirectory(kDirectory,*raw,error,same_parent_lease);
+      if (error) { return result; }
+    }
+    if (result->bootstrap_) {
+      const auto observed=parent->PublishBootstrapDirectory(*result->bootstrap_);
+      error=observed.error;raw=observed.canonical_root;
+      if (!raw || error) { return result; }
+    }
+    result->root_=raw->ProtectRecovery(error);if (!result->root_) { return result; }
   }
-  auto marker = result->root_->CaptureSnapshot(kMarker, 256, error);
-  if (!error && (!marker->exists() ||
-                 !SameBytes(marker->bytes(), OwnershipBytes()))) {
-    error = std::make_error_code(std::errc::bad_message);
+  const auto marker=result->root_->CaptureSnapshot(kMarker,256,error);
+  if (!marker || !marker->exists() || !SameBytes(marker->bytes(),OwnershipBytes())) {
+    if (!error) { error=std::make_error_code(std::errc::bad_message); }return result;
   }
+  const auto observed=result->root_->ObserveIntentSnapshot(*marker);
+  error=observed.error;
+  if (!error && !observed.durable) { error=std::make_error_code(std::errc::io_error); }
+  if (!error) { error=parent->FlushDirectory(); }
+  if (!error) { result->bootstrap_.reset(); }
   return result;
 #endif
 }
@@ -133,7 +176,8 @@ std::unique_ptr<PreparedSnapshotPublication> SnapshotPublisher::PrepareInternal(
     const SnapshotRecoveryOwner& owner,
     std::shared_ptr<const HostStorageSnapshotToken> expected,
     std::span<const uint8_t> intended, const std::atomic<bool>* canceled,
-    std::string_view exact_nonce, std::error_code post_stage_parent_error) {
+    std::string_view exact_nonce, std::error_code post_stage_parent_error,
+    PrivateSnapshotPurpose purpose) {
   auto prepared = std::make_unique<PreparedSnapshotPublication>();
   auto& receipt = prepared->receipt_;
   receipt.expected = expected;
@@ -153,11 +197,13 @@ std::unique_ptr<PreparedSnapshotPublication> SnapshotPublisher::PrepareInternal(
     return false;
   };
   if (owner.error() || !owner.root() || !expected ||
-      expected->root()->read_only() || expected->root()->is_guest_private()) {
+      expected->root()->read_only() ||
+      !expected->root()->IsPrivateSnapshotTarget(expected->relative(),purpose)) {
     receipt.error = owner.error() ? owner.error()
         : std::make_error_code(std::errc::permission_denied);
     return prepared;
   }
+  prepared->purpose_ = purpose;
   if (stop()) { return prepared; }
   const auto& root = expected->root();
   receipt.error = owner.CheckTarget(*root);
@@ -253,8 +299,9 @@ SnapshotPublicationReceipt SnapshotPublisher::Commit(
   }
   prepared.consumed_ = true;
   receipt.phase = SnapshotPublicationPhase::kCompareAndPublish;
-  const auto result = receipt.expected->root()->CompareAndPublishSnapshot(
-      *receipt.expected, *prepared.stage_, prepared.intended_, prepared.recovery_);
+  const auto result = receipt.expected->root()->CompareAndPublishSnapshotInternal(
+      *receipt.expected, *prepared.stage_, prepared.intended_, prepared.recovery_,
+      prepared.purpose_);
   receipt.error = result.error;
   receipt.published = result.published;
   receipt.durable = result.durable;
@@ -269,16 +316,50 @@ SnapshotPublicationReceipt SnapshotPublisher::Publish(
   auto prepared = Prepare(owner, std::move(expected), intended, canceled);
   return Commit(*prepared, canceled);
 }
+SnapshotPublicationReceipt SnapshotPublisher::PublishMediaReference(
+    const SnapshotRecoveryOwner& owner,
+    std::shared_ptr<const HostStorageSnapshotToken> expected,
+    std::span<const uint8_t> intended, const std::atomic<bool>* canceled) {
+  auto prepared = PrepareInternal(owner, std::move(expected), intended, canceled,
+                                  {}, {}, PrivateSnapshotPurpose::kMediaReference);
+  return Commit(*prepared, canceled);
+}
+std::unique_ptr<PreparedSnapshotPublication> SnapshotPublisher::PrepareCacheTable(
+    const SnapshotRecoveryOwner& owner,
+    std::shared_ptr<const HostStorageSnapshotToken> expected,
+    std::span<const uint8_t> intended,const std::atomic<bool>* canceled) {
+  return PrepareInternal(owner,std::move(expected),intended,canceled,
+      {},{},PrivateSnapshotPurpose::kCacheTable);
+}
+SnapshotPublicationReceipt SnapshotPublisher::DeleteCacheTable(
+    const SnapshotRecoveryOwner& owner,
+    std::shared_ptr<const HostStorageSnapshotToken> expected,const std::atomic<bool>* canceled) {
+  return DeleteInternal(owner,std::move(expected),canceled,PrivateSnapshotPurpose::kCacheTable);
+}
+SnapshotPublicationReceipt SnapshotPublisher::PublishCacheTable(
+    const SnapshotRecoveryOwner& owner,
+    std::shared_ptr<const HostStorageSnapshotToken> expected,
+    std::span<const uint8_t> intended, const std::atomic<bool>* canceled) {
+  auto prepared=PrepareInternal(owner,std::move(expected),intended,canceled,
+      {},{},PrivateSnapshotPurpose::kCacheTable);
+  return Commit(*prepared,canceled);
+}
 SnapshotPublicationReceipt SnapshotPublisher::Delete(
     const SnapshotRecoveryOwner& owner,
     std::shared_ptr<const HostStorageSnapshotToken> expected,
     const std::atomic<bool>* canceled) {
+  return DeleteInternal(owner, std::move(expected), canceled, PrivateSnapshotPurpose::kOrdinary);
+}
+SnapshotPublicationReceipt SnapshotPublisher::DeleteInternal(
+    const SnapshotRecoveryOwner& owner,
+    std::shared_ptr<const HostStorageSnapshotToken> expected,
+    const std::atomic<bool>* canceled, PrivateSnapshotPurpose purpose) {
   SnapshotPublicationReceipt receipt;
   receipt.kind = SnapshotMutationKind::kDelete;
   receipt.expected = expected;
   if (owner.error() || !owner.root() || !expected || !expected->exists() ||
       expected->relative().has_parent_path() || expected->root()->read_only() ||
-      expected->root()->is_guest_private()) {
+      !expected->root()->IsPrivateSnapshotTarget(expected->relative(),purpose)) {
     receipt.error = owner.error()
                         ? owner.error()
                         : std::make_error_code(std::errc::invalid_argument);
@@ -335,7 +416,8 @@ SnapshotPublicationReceipt SnapshotPublisher::Delete(
   }
   receipt.phase = SnapshotPublicationPhase::kCompareAndDelete;
   const auto result =
-      expected->root()->CompareAndDeleteSnapshot(*expected, recovery);
+      expected->root()->CompareAndDeleteSnapshotInternal(
+          *expected, recovery, {}, purpose);
   receipt.error = result.error;
   receipt.published = result.published;
   receipt.durable = result.durable;

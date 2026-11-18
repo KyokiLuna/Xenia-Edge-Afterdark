@@ -23,6 +23,7 @@
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
 #include "xenia/kernel/xenumerator.h"
+#include "xenia/kernel/native_media_object_admission.h"
 #include "xenia/kernel/xevent.h"
 #include "xenia/kernel/xfile.h"
 #include "xenia/kernel/xmodule.h"
@@ -93,6 +94,32 @@ bool XObject::ReleaseHandle() {
   // FIXME: Return true when handle is actually released.
   return !handles_.empty() && kernel_state_->object_table()->ReleaseHandle(
                                   handles_[0]) == X_STATUS_SUCCESS;
+}
+
+bool XObject::NativeMediaHandlePublicationAllowed() const noexcept {
+  return !native_media_admission_ ||
+      (!native_media_admission_->ingress_closed_.load(std::memory_order_acquire) &&
+       (!native_media_admission_->selected_.load(std::memory_order_acquire) ||
+        !native_media_admission_->handles_closed_.load(std::memory_order_acquire)) &&
+       !native_media_admission_->body_detached_.load(std::memory_order_acquire) &&
+       !native_media_admission_->issuer_.expired());
+}
+void XObject::NativeMediaLastHandleDetached() noexcept {
+  if(native_media_admission_ && handles_.empty()) {
+    native_media_admission_->publication_live_.store(false,std::memory_order_release);
+    native_media_admission_->handles_closed_.store(true,std::memory_order_release);
+  }
+}
+void XObject::NativeMediaHandleAdded() noexcept {
+  // Provisional real native objects retain ordinary pointer-reference reopen
+  // behavior. Only a selected binding makes last-alias closure irreversible.
+  if(native_media_admission_ && !native_media_admission_->selected_.load(std::memory_order_acquire))
+    native_media_admission_->handles_closed_.store(false,std::memory_order_release);
+}
+void XObject::NativeMediaHandleDetached(uint32_t actual_handle) noexcept {
+  if(native_media_admission_ && native_media_admission_->publication_handle_==actual_handle)
+    native_media_admission_->publication_live_.store(false,std::memory_order_release);
+  NativeMediaLastHandleDetached();
 }
 
 void XObject::Retain() { ++pointer_ref_count_; }

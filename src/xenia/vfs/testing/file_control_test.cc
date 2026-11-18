@@ -4,8 +4,11 @@
  */
 #include <algorithm>
 #include <array>
+#include <cstring>
+#include <utility>
 #include <fstream>
 #include <memory>
+#include <limits>
 #include <optional>
 #include <vector>
 #include <string>
@@ -18,6 +21,8 @@
 #endif
 #include "xenia/kernel/kernel.h"
 #include "xenia/vfs/devices/host_path_device.h"
+#include "xenia/vfs/devices/disc_image_device.h"
+#include "xenia/vfs/gdfx_util.h"
 #include "xenia/vfs/devices/host_path_entry.h"
 #include "xenia/vfs/devices/host_path_file.h"
 #include "xenia/vfs/devices/null_device.h"
@@ -397,6 +402,9 @@ TEST_CASE("Raw placeholders never acknowledge discarded nonempty storage I/O",
   CHECK(file.file->SetLength(0) == X_STATUS_NOT_SUPPORTED);
   CHECK(file.file->SetLength(512) == X_STATUS_NOT_SUPPORTED);
   CHECK(file.file->Flush() == X_STATUS_NOT_SUPPORTED);
+  uint64_t allocation=0xABABABABABABABABull;
+  CHECK(file.file->QueryAllocationSize(&allocation)==X_STATUS_NOT_SUPPORTED);
+  CHECK(allocation==0xABABABABABABABABull);
   CHECK_FALSE(file.file->DescribeDeviceControl(kFolderVolumeDriveGeometry));
   CHECK(file.file->ReadSync({}, 0, &count) == X_STATUS_SUCCESS);
   CHECK(count == 0);
@@ -404,7 +412,8 @@ TEST_CASE("Raw placeholders never acknowledge discarded nonempty storage I/O",
   CHECK(count == 0);
   CHECK_FALSE(fs.UnregisterDevice("\\Device\\Harddisk0"));
   CHECK(fs.RetireDevice("\\Device\\Harddisk0"));
-  auto* retired = fs.ResolvePath("\\Device\\Harddisk0\\Cache0");
+  CHECK_FALSE(fs.ResolvePath("\\Device\\Harddisk0\\Cache0"));
+  auto* retired = file.file->entry();
   REQUIRE(retired);
   FileOwner rejected;
   CHECK(retired->Open(FileAccess::kFileReadData, &rejected.file) ==
@@ -422,6 +431,7 @@ TEST_CASE("Raw placeholders never acknowledge discarded nonempty storage I/O",
 namespace xe::vfs {
 struct OverwriteFlushFaults {
   unsigned resize_failures = 0, flush_failures = 0;
+  unsigned allocation_failures = 0, allocation_queries = 0;
   std::error_code flush_error = std::make_error_code(std::errc::io_error);
   bool publish_before_resize_failure = false;
   size_t partial_write_bytes = 0;
@@ -432,6 +442,9 @@ struct OverwriteFlushFaults {
 };
 class HostPathFileTestAccess {
  public:
+  static intptr_t NativeDescriptor(const File& file) {
+    return static_cast<const HostPathFile&>(file).file_handle_->native_handle();
+  }
   static void Wrap(File& file, std::shared_ptr<OverwriteFlushFaults> faults) {
     auto& host = static_cast<HostPathFile&>(file);
     host.file_handle_ =
@@ -457,6 +470,16 @@ class HostPathFileTestAccess {
         return std::nullopt;
       }
       return real_->QueryInfo(error);
+    }
+    std::optional<uint64_t> QueryAllocatedBytes(
+        std::error_code& error) const override {
+      ++faults_->allocation_queries;
+      if (faults_->allocation_failures) {
+        --faults_->allocation_failures;
+        error = std::make_error_code(std::errc::io_error);
+        return std::nullopt;
+      }
+      return real_->QueryAllocatedBytes(error);
     }
     std::error_code LastError() const override { return real_->LastError(); }
     filesystem::FileIoResult ReadResult(
@@ -1122,3 +1145,106 @@ TEST_CASE("Retired source fails overwrite flush while the real file owns its tre
 }
 }  // namespace xe::vfs::test
 #endif  // !XE_PLATFORM_WIN32
+
+namespace xe::vfs::test {
+TEST_CASE("Allocation geometry conversion rejects zero and signed overflow without output",
+          "[vfs][allocation][geometry]") {
+  uint64_t result=0xABABABABABABABABull;
+  REQUIRE(RoundFileAllocationSize(0,512,&result)==X_STATUS_SUCCESS);REQUIRE(result==0);
+  REQUIRE(RoundFileAllocationSize(4096,8192,&result)==X_STATUS_SUCCESS);REQUIRE(result==8192);
+  REQUIRE(RoundFileAllocationSize(4096,512,&result)==X_STATUS_SUCCESS);REQUIRE(result==4096);
+  constexpr uint64_t maximum=uint64_t(std::numeric_limits<int64_t>::max());
+  for (const auto [bytes,unit]:std::array<std::pair<uint64_t,uint64_t>,4>{{
+      {1,0},{1,UINT64_MAX},{UINT64_MAX,512},{maximum,512}}}) {
+    result=0xABABABABABABABABull;
+    REQUIRE(RoundFileAllocationSize(bytes,unit,&result)==
+        (unit?X_STATUS(0xC0000095):X_STATUS_INVALID_PARAMETER));
+    REQUIRE(result==0xABABABABABABABABull);
+  }
+  REQUIRE(RoundFileAllocationSize(1,512,nullptr)==X_STATUS_INVALID_PARAMETER);
+}
+}
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::vfs::test {
+namespace {
+uint64_t NativeAllocationOf(const File& file) {
+  struct stat value{};
+  REQUIRE(::fstat(int(HostPathFileTestAccess::NativeDescriptor(file)),&value)==0);
+  REQUIRE(S_ISREG(value.st_mode));REQUIRE(value.st_blocks>=0);
+  REQUIRE(uint64_t(value.st_blocks)<=UINT64_MAX/512);
+  return uint64_t(value.st_blocks)*512;
+}
+class AllocationVolume final:public HostPathDevice {
+ public:
+  AllocationVolume(const std::filesystem::path& path,
+      std::shared_ptr<filesystem::HostStorageRoot> root,uint32_t sectors)
+      :HostPathDevice("\\Device\\AllocationVolume",path,false,false,"FATX",root),sectors_(sectors){}
+  uint32_t sectors_per_allocation_unit() const override{return sectors_;}
+ private:uint32_t sectors_;
+};
+}
+TEST_CASE("Host allocation uses the actual retained file and its guest geometry",
+          "[vfs][allocation][retained]") {
+  TemporaryDirectory directory;std::ofstream(directory.path/"file")<<"real";
+  std::error_code error;auto root=filesystem::HostStorageRoot::Open(directory.path,false,error,0);
+  REQUIRE(root);REQUIRE_FALSE(error);VirtualFileSystem fs;
+  auto device=std::make_unique<AllocationVolume>(directory.path,root,16);
+  REQUIRE(device->Initialize());auto* raw=device.get();REQUIRE(fs.RegisterDevice(std::move(device)));
+  FileOwner file;REQUIRE(raw->ResolvePath("file")->Open(FileAccess::kFileReadData,&file.file)==X_STATUS_SUCCESS);
+  REQUIRE(file.file);const auto native=NativeAllocationOf(*file.file);
+  uint64_t allocation=77;REQUIRE(file.file->QueryAllocationSize(&allocation)==X_STATUS_SUCCESS);
+  REQUIRE(allocation==((native+8191)/8192)*8192);
+  auto host=dynamic_cast<HostPathFile*>(file.file);REQUIRE(host);
+  const auto original=host->QueryBackingInfo(error);REQUIRE(original);REQUIRE_FALSE(error);
+  std::filesystem::rename(directory.path/"file",directory.path/"held");
+  std::ofstream(directory.path/"file")<<std::string(32768,'X');
+  REQUIRE(file.file->QueryAllocationSize(&allocation)==X_STATUS_SUCCESS);
+  REQUIRE(allocation==((NativeAllocationOf(*file.file)+8191)/8192)*8192);
+  const auto current=host->QueryBackingInfo(error);REQUIRE(current);REQUIRE_FALSE(error);
+  REQUIRE(current->file_id==original->file_id);REQUIRE(current->size==4);
+  {
+    auto outer=global_critical_region::AcquireDirect();allocation=77;
+    REQUIRE(file.file->QueryAllocationSize(&allocation)==X_STATUS_INVALID_DEVICE_REQUEST);
+    REQUIRE(allocation==77);
+  }
+  root->Retire();allocation=77;
+  REQUIRE(file.file->QueryAllocationSize(&allocation)==X_STATUS(0xC000009D));REQUIRE(allocation==77);
+}
+TEST_CASE("Allocation observes retained overwrite tail and denies host metadata failure",
+          "[vfs][allocation][overwrite_flush]") {
+  OverwriteFlushFixture f;
+  auto faults=std::make_shared<OverwriteFlushFaults>();HostPathFileTestAccess::Wrap(*f.file.file,faults);
+  REQUIRE(f.entry->size()==0);REQUIRE(f.PhysicalSize()==8);
+  uint64_t allocation=77;
+  REQUIRE(f.file.file->QueryAllocationSize(&allocation)==X_STATUS_SUCCESS);
+  REQUIRE(allocation==NativeAllocationOf(*f.file.file));
+  faults->allocation_failures=1;allocation=77;
+  REQUIRE(f.file.file->QueryAllocationSize(&allocation)==X_STATUS_UNSUCCESSFUL);REQUIRE(allocation==77);
+  REQUIRE(f.file.file->Flush()==X_STATUS_SUCCESS);REQUIRE(f.PhysicalSize()==0);
+  REQUIRE(f.file.file->QueryAllocationSize(&allocation)==X_STATUS_SUCCESS);
+  REQUIRE(allocation==NativeAllocationOf(*f.file.file));REQUIRE(allocation==0);
+  REQUIRE(faults->allocation_queries==3);
+}
+TEST_CASE("Readonly optical allocation stays unsupported without fabricated member space",
+          "[vfs][allocation][optical]") {
+  TemporaryDirectory directory;std::vector<uint8_t> image(40*kGdfxSectorSize);
+  std::memcpy(image.data()+32*kGdfxSectorSize,kGdfxMagic,kGdfxMagicSize);
+  xe::store<uint32_t>(image.data()+32*kGdfxSectorSize+20,33);
+  xe::store<uint32_t>(image.data()+32*kGdfxSectorSize+24,kGdfxSectorSize);
+  const auto entry=33*kGdfxSectorSize;
+  xe::store<uint32_t>(image.data()+entry+4,34);xe::store<uint32_t>(image.data()+entry+8,4);
+  image[entry+13]=4;std::memcpy(image.data()+entry+14,"file",4);
+  const std::array<uint8_t,4> bytes{1,2,3,4};
+  std::copy(bytes.begin(),bytes.end(),image.begin()+34*kGdfxSectorSize);
+  const auto path=directory.path/"small.iso";
+  {std::ofstream output(path,std::ios::binary);output.write(reinterpret_cast<const char*>(image.data()),image.size());REQUIRE(output.good());}
+  VirtualFileSystem fs;auto disc=std::make_unique<DiscImageDevice>("\\Device\\AllocationDisc",path);
+  REQUIRE(disc->Initialize());REQUIRE(fs.RegisterDevice(std::move(disc)));
+  FileOwner file;auto* actual=fs.ResolvePath("\\Device\\AllocationDisc\\file");REQUIRE(actual);
+  REQUIRE(actual->Open(FileAccess::kFileReadData,&file.file)==X_STATUS_SUCCESS);
+  uint64_t allocation=77;REQUIRE(file.file->QueryAllocationSize(&allocation)==X_STATUS_NOT_SUPPORTED);REQUIRE(allocation==77);
+  std::array<uint8_t,4> read{};size_t count=0;
+  REQUIRE(file.file->ReadSync(read,0,&count)==X_STATUS_SUCCESS);REQUIRE(count==read.size());REQUIRE(read==bytes);
+}
+} // namespace xe::vfs::test
+#endif

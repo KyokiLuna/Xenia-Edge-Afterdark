@@ -424,8 +424,19 @@ std::optional<std::string> NativeSystemContentRelativePackagePath(
 struct NativeSystemContent::State {
   std::shared_ptr<GuestRuntimeCallExecutor> calls;
   std::shared_ptr<NativeSystemAllocationAuthority> authority;
-  vfs::Device* volume = nullptr;  // Identity only; checked before each access.
+  std::shared_ptr<vfs::HostPathDevice> volume;
   xam::ContentSource source;
+  xam::ContentSourceState captured_source;
+  // Cached identity checks only. Call with namespace ownership; observation,
+  // callbacks and native filesystem work happen before acquiring that owner.
+  bool CurrentSource() const {
+    auto* kernel = calls->kernel();
+    return SameRoot(*calls, *authority) && volume &&
+           !volume->namespace_retiring() &&
+           kernel->file_system()->AcquireDevice(kVolume) == volume &&
+           kernel->content_manager()->sources().CaptureStorageVolume(
+               captured_source) == captured_source.storage_volume;
+  }
   uint32_t scratch = 0;
   std::mutex mutex;
   Snapshot observed;
@@ -449,6 +460,9 @@ bool NativeSystemContent::CheckStorageDriverContext(uint32_t callback) const {
     return false;
   }
   auto lock = global_critical_region::AcquireDirect();
+  if (!state_->CurrentSource()) {
+    return false;
+  }
   for (const auto& anchor : kAnchors) {
     if (!Code(calls, anchor.address, anchor.size, anchor.hash)) {
       return false;
@@ -530,76 +544,91 @@ std::shared_ptr<NativeSystemContent> NativeSystemContent::Create(
   if (!calls || !authority || !SameRoot(*calls, *authority)) {
     return fail("Native system-content root generation unavailable");
   }
-  for (const auto& anchor : kAnchors) {
-    if (!Code(*calls, anchor.address, anchor.size, anchor.hash)) {
-      return fail("Native system-content source/index closure changed");
-    }
-  }
-  for (const auto& profile : kProfiles) {
-    if (!Code(*calls, profile.address, profile.code_size,
-              profile.code_sha256)) {
-      return fail("Native system-content wrapper changed or overlaid");
-    }
-  }
   auto* kernel = calls->kernel();
-  if (calls->module()->GetProcAddressByOrdinal(0x640) != 0x816E8D40 ||
-      kernel->GetUserModuleForAddress(kManager).get() !=
-          calls->module().get() ||
-      kernel->memory()->QueryRangeAccess(kManager, 0xE0) !=
-          memory::PageAccess::kReadWrite) {
-    return fail("Native content exported entry/data ownership mismatch");
+  const auto execution = kernel->AcquireUserModuleExecutionLease(calls->module());
+  if (!execution) {
+    return fail("Native system-content module is retiring");
   }
-  auto lock = global_critical_region::AcquireDirect();
-  auto* fs = kernel->file_system();
-  auto* volume = dynamic_cast<vfs::HostPathDevice*>(fs->GetDevice(kVolume));
-  auto* volume_root =
-      dynamic_cast<vfs::HostPathEntry*>(fs->ResolvePath(kVolume));
-  auto* manifest = dynamic_cast<vfs::HostPathEntry*>(
-      fs->ResolvePath(std::string(kVolume) + "\\system.manifest"));
-  const auto source =
-      kernel->content_manager()->sources().Source("installed-system");
-  if (!volume || !volume->is_read_only() || !volume_root ||
-      volume_root->device() != volume || !manifest ||
-      manifest->device() != volume || !source || !source->available ||
+  // Observe outside GCRC and the service mutex. The retained exact generation
+  // below, rather than a later numeric device lookup, authorizes the read.
+  const auto source = kernel->content_manager()->sources().Source("installed-system");
+  if (!source || !source->available || !source->storage ||
       !source->source.read_only ||
       source->source.kind != xam::ContentSourceKind::kInstalledSystem ||
       source->source.device_type != xam::DeviceType::HDD ||
       !Equal(source->source.guest_root, std::string(kVolume) + "\\Content") ||
-      manifest->size() < 0x164 || manifest->size() > 0x10000) {
-    return fail(
-        "Actual read-only SystemExtPartition/installed source unavailable");
+      !kernel->content_manager()->sources().CaptureStorageVolume(*source)) {
+    return fail("Actual read-only installed source unavailable");
+  }
+  std::shared_ptr<vfs::HostPathDevice> volume;
+  {
+    auto lock = global_critical_region::AcquireDirect();
+    for (const auto& anchor : kAnchors) {
+      if (!Code(*calls, anchor.address, anchor.size, anchor.hash)) {
+        return fail("Native system-content source/index closure changed");
+      }
+    }
+    for (const auto& profile : kProfiles) {
+      if (!Code(*calls, profile.address, profile.code_size, profile.code_sha256)) {
+        return fail("Native system-content wrapper changed or overlaid");
+      }
+    }
+    if (calls->module()->GetProcAddressByOrdinal(0x640) != 0x816E8D40 ||
+        kernel->GetUserModuleForAddress(kManager).get() != calls->module().get() ||
+        kernel->memory()->QueryRangeAccess(kManager, 0xE0) !=
+            memory::PageAccess::kReadWrite) {
+      return fail("Native content exported entry/data ownership mismatch");
+    }
+    volume = std::dynamic_pointer_cast<vfs::HostPathDevice>(
+        kernel->file_system()->AcquireDevice(kVolume));
+    if (!volume || volume->namespace_retiring() || !volume->is_read_only() ||
+        !volume->storage() || !volume->storage()->read_only()) {
+      return fail("Actual read-only SystemExtPartition unavailable");
+    }
   }
   std::error_code ec;
-  const auto host = std::filesystem::canonical(volume_root->host_path(), ec);
-  if (ec) {
-    return fail("SystemExtPartition host root unavailable");
+  auto content_root = volume->storage()->Subroot("Content", true, ec);
+  if (!content_root || ec) {
+    return fail("SystemExtPartition content capability unavailable");
   }
-  const auto content = std::filesystem::canonical(source->source.root, ec);
-  if (ec || content != host / "Content") {
-    return fail("System volume and installed content source differ");
+  const auto& content_identity = content_root->directory_identity();
+  const auto& source_identity = source->storage->directory_identity();
+  // Both identities retain native nofollow directory pins. Compare their
+  // actual root entries; paths and matching storage types are insufficient.
+  if (!content_identity || !source_identity ||
+      !content_identity->SameEntry({}, *source_identity, {})) {
+    return fail("System volume and registered installed source differ");
   }
-  if (std::filesystem::canonical(manifest->host_path(), ec) !=
-          host / "system.manifest" ||
-      ec) {
-    return fail("System manifest escaped the installed system volume");
+  // Open through the captured native root, never re-open a canonical host path
+  // after namespace validation or borrow an Entry across filesystem work.
+  auto manifest = volume->storage()->OpenFile(
+      "system.manifest", filesystem::FileAccess::kFileReadData, ec);
+  const auto info = manifest ? manifest->QueryInfo(ec) : std::nullopt;
+  if (!info || ec || info->size < 0x164 || info->size > 0x10000) {
+    return fail("Installed system.manifest unavailable or invalid size");
   }
-  vfs::File* file = nullptr;
-  if (XFAILED(manifest->Open(vfs::FileAccess::kFileReadData, &file))) {
-    return fail("Installed system.manifest cannot be read");
-  }
-  std::vector<uint8_t> bytes(manifest->size());
-  size_t read = 0;
-  const auto result = file->ReadSync(bytes, 0, &read);
-  file->Destroy();
-  if (XFAILED(result) || read != bytes.size() ||
+  std::vector<uint8_t> bytes(static_cast<size_t>(info->size));
+  const auto read = manifest->ReadResult(0, bytes);
+  if (read.error || read.bytes != bytes.size() ||
       std::memcmp(bytes.data(), "XMNP", 4)) {
     return fail("Installed manifest read/magic invalid");
+  }
+  manifest.reset();
+  {
+    auto lock = global_critical_region::AcquireDirect();
+    if (!SameRoot(*calls, *authority) || volume->namespace_retiring() ||
+        kernel->file_system()->AcquireDevice(kVolume) != volume ||
+        kernel->content_manager()->sources().CaptureStorageVolume(*source) !=
+            source->storage_volume) {
+      return fail("Installed source replaced during manifest read");
+    }
   }
   auto state = std::make_unique<State>();
   state->calls = std::move(calls);
   state->authority = std::move(authority);
   state->volume = volume;
   state->source = source->source;
+  state->captured_source = *source;
   state->observed.source_device = source->source.device_id;
   state->observed.manifest_sha256 = Digest(bytes);
   auto service = std::shared_ptr<NativeSystemContent>(
@@ -658,16 +687,18 @@ std::optional<std::vector<uint32_t>> NativeSystemContent::Prepare(
     return fail("System content call lost its actual SYSTEM owner");
   }
   auto* kernel = state_->calls->kernel();
+  const auto source = kernel->content_manager()->sources().Source(state_->source.id);
+  const auto device = call == NativeSystemContentCall::kInitializeStorage
+      ? xam::GetStorageDeviceInfo(kernel, state_->source.device_id)
+      : std::optional<xam::StorageDeviceInfo>{};
   auto lock = global_critical_region::AcquireDirect();
   if (!HardwarePermitsIndex(*state_->calls)) {
     return fail("Actual native startup hardware mode excludes package index");
   }
-  const auto source =
-      kernel->content_manager()->sources().Source(state_->source.id);
-  if (kernel->file_system()->GetDevice(kVolume) != state_->volume || !source ||
-      !source->available || !source->source.read_only ||
-      source->source.root != state_->source.root ||
-      source->source.device_id != state_->source.device_id) {
+  if (!state_->CurrentSource() || !source || !source->available ||
+      source->storage_volume != state_->captured_source.storage_volume ||
+      kernel->content_manager()->sources().CaptureStorageVolume(*source) !=
+          state_->captured_source.storage_volume) {
     return fail("System content source removed/replaced");
   }
   const auto data = ReadNativeSystemContentManagerData(*kernel->memory());
@@ -687,8 +718,6 @@ std::optional<std::vector<uint32_t>> NativeSystemContent::Prepare(
   }
   switch (call) {
     case NativeSystemContentCall::kInitializeStorage: {
-      const auto device =
-          xam::GetStorageDeviceInfo(kernel, state_->source.device_id);
       if (observed.status != Status::kPrepared || !storage->Pristine() ||
           !data->PristineConstructor() || !device || !device->available ||
           device->device_type != xam::DeviceType::HDD ||
@@ -762,11 +791,18 @@ bool NativeSystemContent::Observe(NativeSystemContentCall call, XThread& thread,
       thread.native_frame_thread_identity().process_type != X_PROCTYPE_SYSTEM) {
     return fail("System content observation lost its actual SYSTEM owner");
   }
+  const auto source = kernel->content_manager()->sources().Source(state_->source.id);
+  if (!source || !source->available ||
+      source->storage_volume != state_->captured_source.storage_volume) {
+    return fail("Installed source observation unavailable or replaced");
+  }
+  std::string path;
+  {
   auto lock = global_critical_region::AcquireDirect();
   const auto data = ReadNativeSystemContentManagerData(*kernel->memory());
   const auto storage = ReadNativeSystemStorageData(*kernel->memory());
   const auto driver = NativeContentStorageDriver::Lookup(kernel);
-  if (kernel->file_system()->GetDevice(kVolume) != state_->volume || !data ||
+  if (!state_->CurrentSource() || !data ||
       !storage || !driver || !driver->snapshot().accepting ||
       !NativeStorageTasks(*storage) ||
       storage->FormattedBuiltinHdd() != state_->source.device_id ||
@@ -818,46 +854,61 @@ bool NativeSystemContent::Observe(NativeSystemContentCall call, XThread& thread,
   if (!end || end == output) {
     return fail("Native indexed-member output invalid");
   }
-  const std::string path(output, end);
+  path.assign(output, end);
+  }
   const auto relative = NativeSystemContentRelativePackagePath(path);
   if (!relative) {
     return fail("Native indexed package escaped system content source");
   }
-  const auto contained = kernel->content_manager()->sources().Resolve(
-      state_->source.id, *relative, false);
-  auto* package = dynamic_cast<vfs::HostPathEntry*>(
-      kernel->file_system()->ResolvePath(path));
-  std::error_code ec;
-  if (!contained || !package || package->device() != state_->volume ||
-      !package->is_read_only() ||
-      std::filesystem::canonical(package->host_path(), ec) != *contained ||
-      ec) {
-    return fail(
-        "Native indexed package has no contained read-only catalog source");
-  }
   auto* content = kernel->content_manager();
-  if (content->OpenContentFile(kProbeRoot, package) != X_ERROR_SUCCESS) {
+  // The path was produced by native lookup and checked above; common capture
+  // binds it to this exact registered generation before reading any package.
+  std::shared_ptr<vfs::Device> opened_device;
+  if (content->OpenContentFile(kProbeRoot, path, &state_->captured_source,
+                               0, &opened_device) != X_ERROR_SUCCESS) {
     return fail("Actual indexed package cannot be mounted by common backend");
   }
-  auto* toc = kernel->file_system()->ResolvePath(std::string(kProbeRoot) +
-                                                 ":\\" + kMember);
-  vfs::File* file = nullptr;
-  bool opened = toc && toc->is_read_only() && toc->size() &&
-                toc->size() <= 16 * 1024 * 1024 &&
-                XSUCCEEDED(toc->Open(vfs::FileAccess::kFileReadData, &file));
+  vfs::Entry* package_root = nullptr;
+  {
+    auto lock = global_critical_region::AcquireDirect();
+    if (opened_device && !opened_device->namespace_retiring()) {
+      package_root = opened_device->ResolvePath("");
+    }
+  }
+  vfs::File* raw_file = nullptr;
+  vfs::FileAction action;
+  bool opened = package_root && opened_device->is_read_only() &&
+      XSUCCEEDED(kernel->file_system()->OpenFile(
+          package_root, kMember, vfs::FileDisposition::kOpen,
+          vfs::FileAccess::kFileReadData, false, true, &raw_file, &action));
+  std::unique_ptr<vfs::File, void (*)(vfs::File*)> file(
+      raw_file, [](vfs::File* value) { if (value) value->Destroy(); });
+  uint64_t toc_size = opened ? file->entry()->size() : 0;
+  opened = opened && toc_size && toc_size <= 16 * 1024 * 1024;
   std::vector<uint8_t> bytes;
   size_t read = 0;
-  uint64_t toc_size = 0;
   if (opened) {
-    toc_size = toc->size();
-    bytes.resize(toc->size());
-    opened =
-        XSUCCEEDED(file->ReadSync(bytes, 0, &read)) && read == bytes.size();
-    file->Destroy();
+    bytes.resize(static_cast<size_t>(toc_size));
+    opened = XSUCCEEDED(file->ReadSync(bytes, 0, &read)) && read == bytes.size();
   }
-  const auto closed = content->CloseContent(kProbeRoot);
+  file.reset();
+  // Exact publication identity: an old probe may never close a reused alias.
+  const auto closed = content->CloseContent(kProbeRoot, opened_device.get());
   if (!opened || closed != X_ERROR_SUCCESS) {
     return fail("Actual indexed AvatarAssetPack TOC open/read/close failed");
+  }
+  {
+    auto lock = global_critical_region::AcquireDirect();
+    const auto data = ReadNativeSystemContentManagerData(*kernel->memory());
+    const auto storage = ReadNativeSystemStorageData(*kernel->memory());
+    const auto driver = NativeContentStorageDriver::Lookup(kernel);
+    if (!state_->CurrentSource() || !data || data->initialized != 1 ||
+        !storage || !NativeStorageTasks(*storage) || !driver ||
+        !driver->snapshot().accepting ||
+        storage->FormattedBuiltinHdd() != state_->source.device_id ||
+        !NativeBuiltinSource(*kernel->memory(), *data, state_->source.device_id)) {
+      return fail("Native source/index changed during actual package read");
+    }
   }
   std::lock_guard observed_lock(state_->mutex);
   state_->observed.package_path = path;
@@ -866,4 +917,26 @@ bool NativeSystemContent::Observe(NativeSystemContentCall call, XThread& thread,
   state_->observed.status = Status::kLookupAndOpenVerified;
   return true;
 }
+std::optional<xam::ContentSourceState> NativeSystemContent::CaptureAvatarSource(
+    const GuestRuntimeCallExecutor& calls) const {
+  const auto observed = snapshot();
+  if (&calls != state_->calls.get() ||
+      observed.status != Status::kLookupAndOpenVerified ||
+      observed.package_path.empty() || observed.toc_sha256.empty() ||
+      !observed.toc_size) return {};
+  auto* kernel = calls.kernel();
+  auto guard = global_critical_region::AcquireDirect();
+  const auto data = ReadNativeSystemContentManagerData(*kernel->memory());
+  const auto storage = ReadNativeSystemStorageData(*kernel->memory());
+  const auto driver = NativeContentStorageDriver::Lookup(kernel);
+  if (!state_->CurrentSource() || !data || data->initialized != 1 ||
+      !storage || !NativeStorageTasks(*storage) || !driver ||
+      !driver->snapshot().accepting ||
+      storage->FormattedBuiltinHdd() != state_->source.device_id ||
+      !NativeBuiltinSource(*kernel->memory(), *data, state_->source.device_id)) {
+    return {};
+  }
+  return state_->captured_source;
+}
+
 }  // namespace xe::kernel

@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include "xenia/base/platform.h"
+#include "xenia/base/managed_storage_bootstrap.h"
 namespace xe::filesystem {
 namespace {
 std::string Uuid(const ManagedDeviceIdentity::Uuid& id) {
@@ -16,15 +17,26 @@ std::string Uuid(const ManagedDeviceIdentity::Uuid& id) {
   }
   return out;
 }
-std::string Marker(const ManagedDeviceIdentity& id) {
+std::string Marker(const ManagedDeviceIdentity& id, uint64_t epoch) {
   return "Xenia Edge profile "
          "intents\nversion=3\npurpose=paired-gpd-redo\nuuid=" +
-         Uuid(id.uuid()) + "\nepoch=" + std::to_string(id.content_epoch()) +
+         Uuid(id.uuid()) + "\nepoch=" + std::to_string(epoch) +
          "\ndirectory=" + std::to_string(id.directory_file_id()) +
          "\nsource=" + id.source_id() +
          "\ndevice=" + std::to_string(id.device_id()) + "\n";
 }
 }  // namespace
+std::vector<uint8_t> ProfileIntentOwner::BootstrapMarker(
+    const ManagedDeviceIdentity& identity) {
+  return FormatInspectionMarker(identity, identity.content_epoch());
+}
+std::vector<uint8_t> ProfileIntentOwner::FormatInspectionMarker(
+    const ManagedDeviceIdentity& identity, uint64_t authenticated_epoch) {
+  // Detached serializer only. The actual existing Handoff authenticates epoch;
+  // these bytes never create/validate an owner, identity, permit or GuestView.
+  const auto marker = Marker(identity, authenticated_epoch);
+  return {marker.begin(), marker.end()};
+}
 std::unique_ptr<ProfileIntentOwner> ProfileIntentOwner::Open(
     std::shared_ptr<const HostStorageRoot> private_parent,
     std::shared_ptr<const ManagedDeviceIdentity> identity) {
@@ -38,7 +50,8 @@ std::unique_ptr<ProfileIntentOwner> ProfileIntentOwner::OpenExisting(
 std::unique_ptr<ProfileIntentOwner> ProfileIntentOwner::OpenInternal(
     std::shared_ptr<const HostStorageRoot> private_parent,
     std::shared_ptr<const ManagedDeviceIdentity> identity, bool create,
-    std::shared_ptr<const HostStorageIntentLease> source_lease) {
+    std::shared_ptr<const HostStorageIntentLease> source_lease,
+    ManagedBootstrapCreationPermit* creation) {
   auto result = std::unique_ptr<ProfileIntentOwner>(new ProfileIntentOwner);
   result->private_parent_ = std::move(private_parent);
   result->managed_identity_ = std::move(identity);
@@ -55,10 +68,32 @@ std::unique_ptr<ProfileIntentOwner> ProfileIntentOwner::OpenInternal(
     error = std::make_error_code(std::errc::permission_denied);
     return result;
   }
-  error = result->managed_identity_->CheckCurrent();
-  if (error) {
-    return result;
+  if (creation) {
+    // A pending producer must supply the exact retained source exclusion; a
+    // factory may not mint replacement authority from an absent filename.
+    if (!source_lease || !result->source_->IntentLeaseMatches(*source_lease) ||
+        (creation->purpose_ != ManagedBootstrapCreationPermit::Purpose::kProfile &&
+         creation->purpose_ != ManagedBootstrapCreationPermit::Purpose::kFormatProfile)) {
+      error = std::make_error_code(std::errc::permission_denied);
+      return result;
+    }
+    error = creation->Consume(creation->purpose_, *result->managed_identity_,
+                              *result->private_parent_, *source_lease);
+    if (!error) { error = result->managed_identity_->CheckBootstrapCurrent(*creation); }
+    // Bootstrap has already published a complete native component. Only the
+    // distinct owned-format permit retains its existing create operation.
+    if (creation->purpose_ == ManagedBootstrapCreationPermit::Purpose::kProfile) {
+      create = false;
+    }
+  } else {
+    error = result->managed_identity_->CheckCurrent();
+    if (!error && result->managed_identity_->binding_required()) {
+      error = ManagedStorageBootstrap::ValidateOwnerParent(
+          *result->managed_identity_, *result->private_parent_);
+      create = false;
+    }
   }
+  if (error) { return result; }
   // Canonical owned coordinates can reject the known inside-source topology
   // before creating a private leaf. Physical overlap is still checked below.
   const auto relative_parent =
@@ -104,9 +139,7 @@ std::unique_ptr<ProfileIntentOwner> ProfileIntentOwner::OpenInternal(
   if (!result->source_lease_) {
     return result;
   }
-  const auto marker_wire = Marker(*result->managed_identity_);
-  const auto marker_bytes = std::span<const uint8_t>(
-      reinterpret_cast<const uint8_t*>(marker_wire.data()), marker_wire.size());
+  const auto marker_bytes = BootstrapMarker(*result->managed_identity_);
   bool created = false;
   auto raw = result->private_parent_->Subroot(directory, false, error);
   if (!raw && error == std::errc::no_such_file_or_directory && create) {
@@ -119,6 +152,12 @@ std::unique_ptr<ProfileIntentOwner> ProfileIntentOwner::OpenInternal(
   }
   if (!raw) {
     return result;
+  }
+  if (creation && creation->purpose_!=ManagedBootstrapCreationPermit::Purpose::kFormatProfile) {
+    // Named resolution alone loses the capsule's native ownership proof.
+    // Rebind only through this consumed permit's exact retained component.
+    raw=creation->ComponentRoot(raw,error);
+    if (!raw || error) { return result; }
   }
   // Overlap is permitted only when the exact trusted device projection
   // excludes this actual retained private container from every guest view.

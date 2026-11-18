@@ -23,8 +23,8 @@ DEFINE_bool(show_achievement_notification, true,
             "Show achievement notification on screen.", "UI");
 
 DEFINE_bool(achievement_notification_position_by_game, false,
-            "Use game-specified notification position for achievements. "
-            "When disabled, achievements always appear at center-bottom.",
+            "Legacy compatibility setting; ignored. Achievements use the "
+            "game-requested notification position (default: center-bottom).",
             "UI");
 
 DEFINE_string(
@@ -168,10 +168,9 @@ void AchievementManager::ShowAchievementEarnedNotification(
       emulator->display_window()->app_context();
   ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
 
-  // Use game-specified position if enabled, otherwise default to center-bottom
-  const uint8_t position = cvars::achievement_notification_position_by_game
-                               ? kernel_state()->notification_position_
-                               : 2;
+  // XNotifyPositionUI owns the requested position; the Kernel's initial
+  // value supplies the existing center-bottom default before a request.
+  const uint8_t position = kernel_state()->notification_position_;
 
   app_context.CallInUIThread([imgui_drawer, description, position, event = std::move(event)]() {
         if (!event || !event->Current() || !event->TryConsume()) {

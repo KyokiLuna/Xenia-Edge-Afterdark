@@ -1218,8 +1218,9 @@ PrepareNativeSystemFrameExecutionRequest(
   }
   try {
     diagnostics.phase = "freeze_and_hold_preparation";
-    const auto source = session->FreezeCurrentUpdate(thread, record.primary,
-                                                     completed->title_input);
+    const auto source = session->FreezeCurrentUpdate(
+        thread, record.primary, completed->title_input,
+        completed->presentation_guard);
     if (source) {
       report.owner = source->owner();
       report.source = source->serial();

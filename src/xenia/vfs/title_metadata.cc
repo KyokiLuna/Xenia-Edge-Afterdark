@@ -70,9 +70,15 @@ TitlePresentationDescriptor DescribeTitlePresentation(
   if (type == XContentType::kArcadeTitle) {
     result.entitlement = effective_license_mask & 1 ? TitleEntitlement::kFull
                                                     : TitleEntitlement::kTrial;
-  } else if (type == XContentType::kGameDemo ||
-             (resources && resources->raw_title_type == 2)) {
+  } else if (type == XContentType::kGameDemo) {
+    // An explicit standalone demo package stays a demo with any license mask.
     result.entitlement = TitleEntitlement::kTrial;
+  } else if (resources && resources->raw_title_type == 2) {
+    // The SPA marker alone does not establish effective entitlement. Retail
+    // Minecraft also carries it; honor the supplied runtime license without
+    // changing the original package type, resource marker or active config.
+    result.entitlement = effective_license_mask & 1 ? TitleEntitlement::kFull
+                                                   : TitleEntitlement::kTrial;
   } else if (type == XContentType::kXboxTitle ||
              type == XContentType::kInstalledGame ||
              (resources && resources->raw_title_type == 1)) {

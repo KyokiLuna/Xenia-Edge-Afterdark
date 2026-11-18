@@ -30,6 +30,11 @@ class Emulator;
 
 namespace xe {
 namespace kernel {
+class NativeMediaService;
+class NativeMediaObjectAdmission;
+namespace xboxkrnl { class NativeMediaCountedBodyAccess; }
+namespace util { class ObjectTable; }
+namespace test { class NativeMediaDeniedAliasTestAccess; }
 
 constexpr fourcc_t kXObjSignature = make_fourcc('X', 'E', 'N', '\0');
 
@@ -380,6 +385,17 @@ class XObject {
   bool signal_ring_quiet_ = false;
 
  private:
+  friend class NativeMediaService;
+  friend class test::NativeMediaDeniedAliasTestAccess;
+  friend class xboxkrnl::NativeMediaCountedBodyAccess;
+  friend class util::ObjectTable;
+  // Table/GCRC callers only consult/mutate preheld denial metadata; no
+  // callbacks, PPC, weak owner acquisition or native-resource destruction.
+  bool NativeMediaHandlePublicationAllowed() const noexcept;
+  void NativeMediaLastHandleDetached() noexcept;
+  void NativeMediaHandleDetached(uint32_t actual_handle) noexcept;
+  void NativeMediaHandleAdded() noexcept;
+  std::shared_ptr<NativeMediaObjectAdmission> native_media_admission_;
   std::atomic<int32_t> pointer_ref_count_;
 
   Type type_;

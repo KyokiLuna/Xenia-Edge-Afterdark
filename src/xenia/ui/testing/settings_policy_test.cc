@@ -27,10 +27,17 @@ namespace {
 TEST_CASE("Settings hide only audited internal names and preserve real choices",
           "[settings][ownership]") {
   for (const char* name : {"default_achievements_backend",
+                           "allow_avatar_initialization",
+                           "allow_nui_initialization",
+                           "achievement_notification_position_by_game",
                            "logged_profile_slot_0_xuid",
                            "logged_profile_slot_1_xuid",
                            "logged_profile_slot_2_xuid",
                            "logged_profile_slot_3_xuid",
+                           "logged_profile_slot_0_source_id",
+                           "logged_profile_slot_1_source_id",
+                           "logged_profile_slot_2_source_id",
+                           "logged_profile_slot_3_source_id",
                            "system_readonly_source_root",
                            "host_storage_protected_root",
                            "managed_device_state_root",
@@ -82,9 +89,9 @@ TEST_CASE("Settings hide only audited internal names and preserve real choices",
         "storage_request_timing", "user_language", "user_country", "audio_flag",
         "widescreen", "video_standard", "use_50Hz_mode", "xmp_default_volume",
         // Keep current fallback controls until real native replacements land.
-        "guide_button", "dashboard_game_library", "allow_avatar_initialization",
+        "guide_button", "dashboard_game_library",
         "show_achievement_notification",
-        "achievement_notification_position_by_game", "achievement_sound_path",
+        "achievement_sound_path",
         // An unreviewed future native option is not hidden by prefix/category.
         "native_texture_copy", "logged_profile_slot_debug_visualization"}) {
     CAPTURE(name);
@@ -179,13 +186,16 @@ TEST_CASE(
     "Actual game config files cannot replace global identity or runtime "
     "ownership",
     "[settings][ownership][config]") {
-  std::string profile_value, plan_value, storage_value, handoff_value,
+  std::string profile_value, profile_source_value, plan_value, storage_value, handoff_value,
       gpu_value, system_source_value;
-  bool native_value = false, notification_value = true;
+  bool native_value = false, notification_value = true, nui_value = false;
   int32_t license_value = 0, kernel_value = 17559;
   cvar::ConfigVar<std::string> profile("logged_profile_slot_1_xuid",
                                        &profile_value, "", "", "Profiles",
                                        false, false);
+  cvar::ConfigVar<std::string> profile_source("logged_profile_slot_1_source_id",
+      &profile_source_value,"","","Profiles",false,false);
+  cvar::ConfigVar<bool> nui("allow_nui_initialization",&nui_value,"","","Console",false,false);
   cvar::ConfigVar<std::string> plan("native_system_ui_startup_plan",
                                     &plan_value, "", "", "Kernel", false,
                                     false);
@@ -213,6 +223,8 @@ TEST_CASE(
                                      &notification_value, "", "", "UI", false,
                                      false);
   profile.SetConfigValue("E000000000000001");
+  profile_source.SetConfigValue("hdd");
+  nui.SetConfigValue(true);
   plan.SetConfigValue("/verified/startup.json");
   native.SetConfigValue(true);
   storage.SetConfigValue("/owned/console");
@@ -220,7 +232,7 @@ TEST_CASE(
   gpu.SetConfigValue("vulkan");
   std::map<std::string, cvar::IConfigVar*> variables;
   for (auto* variable : std::vector<cvar::IConfigVar*>{
-           &profile, &plan, &native, &storage, &handoff, &gpu, &license,
+           &profile, &profile_source, &nui, &plan, &native, &storage, &handoff, &gpu, &license,
            &kernel, &notification, &system_source, &protected_root, &state_root}) {
     variables.emplace(variable->name(), variable);
   }
@@ -230,6 +242,9 @@ TEST_CASE(
   toml::table file = toml::parse(R"(
 [Profiles]
 logged_profile_slot_1_xuid = "E000000000000002"
+logged_profile_slot_1_source_id = "other-device"
+[Console]
+allow_nui_initialization = false
 [Kernel]
 native_system_ui = false
 native_system_ui_startup_plan = "/untrusted/other.json"
@@ -256,6 +271,8 @@ show_achievement_notification = false
         17559);
   REQUIRE(config::LoadGameConfigForFile(title) == title_id);
   CHECK(profile_value == "E000000000000001");
+  CHECK(profile_source_value == "hdd");
+  CHECK(nui_value);  // The title cannot replace the legacy global first seed.
   CHECK(plan_value == "/verified/startup.json");
   CHECK(native_value);
   CHECK(storage_value == "/owned/console");
@@ -269,12 +286,16 @@ show_achievement_notification = false
   CHECK(gpu_value == "null");
   CHECK_FALSE(notification_value);  // The current fallback was not retired.
   CHECK(profile.GetTypedConfigValue() == "E000000000000001");
+  CHECK(profile_source.GetTypedConfigValue() == "hdd");
+  CHECK(nui.GetTypedConfigValue());
   CHECK(plan.GetTypedConfigValue() == "/verified/startup.json");
   CHECK(gpu.GetTypedConfigValue() == "vulkan");
   CHECK(ConfigFixture::Read(config_path) == before);  // Read does not rewrite.
 
   // Explicit CLI remains highest priority for allowed and global-only values.
   license.SetCommandLineValue(0);
+  profile_source.SetCommandLineValue("explicit-cli-source");
+  nui.SetCommandLineValue(false);
   kernel.SetCommandLineValue(1888);
   system_source.SetCommandLineValue("/verified/read-only-system");
   CHECK(config::ResolveInt32GameConfig(title_id, "license_mask") == 0);
@@ -282,6 +303,10 @@ show_achievement_notification = false
         1888);
   REQUIRE(config::LoadGameConfigForFile(title) == title_id);
   CHECK(license_value == 0);
+  CHECK(profile_source_value == "explicit-cli-source");
+  CHECK_FALSE(nui_value);
+  CHECK(profile_source.GetTypedConfigValue() == "hdd");
+  CHECK(nui.GetTypedConfigValue());
   CHECK(kernel_value == 1888);
   CHECK(system_source_value == "/verified/read-only-system");
   const auto second = fixture.WriteTitle(title_id + 1);
@@ -296,26 +321,31 @@ TEST_CASE(
     "User settings reset preserves hidden persisted state and global "
     "diagnostics",
     "[settings][ownership][config]") {
-  std::string profile_value, plan_value;
+  std::string profile_value, profile_source_value, plan_value;
   int32_t volume_value = 100;
   cvar::ConfigVar<std::string> profile("logged_profile_slot_0_xuid",
                                        &profile_value, "", "", "Profiles",
                                        false, false);
+  cvar::ConfigVar<std::string> profile_source("logged_profile_slot_0_source_id",
+      &profile_source_value,"","","Profiles",false,false);
   cvar::ConfigVar<std::string> plan("native_system_ui_startup_plan",
                                     &plan_value, "", "", "Kernel", false,
                                     false);
   cvar::ConfigVar<int32_t> volume("volume", &volume_value, "", "", "APU", false,
                                   false);
   profile.SetConfigValue("E000000000000001");
+  profile_source.SetConfigValue("hdd");
   plan.SetConfigValue("/verified/startup.json");
   volume.SetConfigValue(42);
   for (auto* variable :
-       std::vector<cvar::IConfigVar*>{&profile, &plan, &volume}) {
+       std::vector<cvar::IConfigVar*>{&profile, &profile_source, &plan, &volume}) {
     if (IsUserEditableCvar(*variable)) {
       variable->ResetConfigValueToDefault();
     }
   }
   CHECK(profile_value == "E000000000000001");
+  CHECK(profile_source_value == "hdd");
+  CHECK_FALSE(profile_source.is_transient());
   CHECK(plan_value == "/verified/startup.json");
   CHECK(volume_value == 100);
   CHECK_FALSE(profile.is_transient());

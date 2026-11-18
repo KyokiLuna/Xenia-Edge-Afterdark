@@ -10,12 +10,16 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <cstring>
 #include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
+#include <utility>
 
 #include "third_party/catch/include/catch.hpp"
 #include "third_party/mbedtls/include/mbedtls/sha1.h"
@@ -24,6 +28,15 @@
 #include "xenia/cpu/export_resolver.h"
 #include "xenia/cpu/testing/util.h"
 #include "xenia/cpu/xex_module.h"
+#include "xenia/emulator.h"
+#include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/kernel.h"
+#include "xenia/kernel/testing/isolated_kernel_runtime_settings.h"
+#include "xenia/kernel/user_module.h"
+#include "xenia/kernel/util/xex_guest_header.h"
+#include "xenia/kernel/xmodule.h"
+#include "xenia/vfs/devices/host_path_device.h"
+#include "xenia/vfs/virtual_file_system.h"
 
 namespace xe::cpu::test {
 namespace {
@@ -857,5 +870,342 @@ TEST_CASE("Duplicate bridge rejection preserves the admitted handler",
   fixture.CheckGuestBytes();
 }
 
+// Host-side loader/data regression: actual Kernel/Memory/UserModule, no guest
+// execution, native startup, activation or service readiness is fabricated.
+TEST_CASE("Loaded XEX security uses the real executable LDR address chain",
+          "[kernel][xex][guest_header]") {
+  REQUIRE(kernel::KernelState::shared() == nullptr);
+  kernel::test::IsolatedKernelRuntimeSettings settings;
+  struct Scratch {
+    std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("xenia-guest-header-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+    Scratch() {
+      REQUIRE(std::filesystem::create_directory(root));
+      REQUIRE(std::filesystem::create_directory(root / "content"));
+      REQUIRE(std::filesystem::create_directory(root / "cache"));
+    }
+    ~Scratch() { std::error_code ignored; std::filesystem::remove_all(root, ignored); }
+  } scratch;
+  auto emulator = std::make_unique<Emulator>("", scratch.root,
+      scratch.root / "content", scratch.root / "cache");
+  REQUIRE(emulator->Setup(nullptr, nullptr, false, {}, {}, {}) == X_STATUS_SUCCESS);
+  auto* state = emulator->kernel_state();
+  auto module = kernel::object_ref<kernel::UserModule>(new kernel::UserModule(state));
+  const auto raw = MakeXex({});
+  const auto original = raw;
+  REQUIRE(module->LoadFromMemoryNamed("guest-header-fixture", raw.data(), raw.size()) == X_STATUS_PENDING);
+  REQUIRE(module->LoadContinue() == X_STATUS_SUCCESS);
+  state->SetExecutableModule(module);
+  auto* memory = emulator->memory();
+  const auto word = [&](uint32_t address) {
+    return xe::load_and_swap<uint32_t>(memory->TranslateVirtual(address));
+  };
+  const auto* exported = emulator->processor()->export_resolver()->GetExportByOrdinal(
+      "xboxkrnl.exe", 0x193); // Actual XexExecutableModuleHandle variable.
+  REQUIRE(exported); REQUIRE(exported->variable_ptr);
+  const uint32_t ldr = word(exported->variable_ptr);
+  REQUIRE(ldr == module->hmodule_ptr());
+  const uint32_t resident = word(ldr + offsetof(kernel::X_LDR_DATA_TABLE_ENTRY, xex_header_base));
+  REQUIRE(resident == module->guest_xex_header());
+  // Exact native E1E40 chain after the imported export cell: LDR+58,
+  // resident+10, security+10C. Guard the expected address before dereference so
+  // the old raw-offset defect fails this assertion rather than faulting host.
+  const uint32_t security = word(resident + 0x10);
+  REQUIRE(security == resident + 0x100);
+  CHECK(word(security + 0x10C) == 0);
+  CHECK((word(security + 0x10C) & XEX_IMAGE_ONLINE_ACTIVATION_REQUIRED) == 0);
+  CHECK(module->xex_module()->xex_header()->security_offset == 0x100);
+  CHECK(module->xex_module()->xex_security_info()->image_flags == 0);
+  CHECK(raw == original);
+  uint32_t entry = 0;
+  REQUIRE(module->GetOptHeader(XEX_HEADER_ENTRY_POINT, &entry) == X_STATUS_SUCCESS);
+  CHECK(entry == kCaller); // Optional-header offsets/immediates stay unchanged.
+  uint32_t format = 0;
+  REQUIRE(module->GetOptHeader(XEX_HEADER_FILE_FORMAT_INFO, &format) == X_STATUS_SUCCESS);
+  REQUIRE(format == resident + 0x40);
+  CHECK(word(format) == 8);
+  REQUIRE(module->LoadContinue() == X_STATUS_SUCCESS);
+  CHECK(module->guest_xex_header() == resident);
+  CHECK(word(resident + 0x10) == security); // Real producer returns its once-published view.
+}
+
+TEST_CASE("Guest XEX security projection preserves every supported raw layout",
+          "[kernel][xex][guest_header]") {
+  struct Format { uint32_t magic; size_t prefix, flags; };
+  const std::array formats{
+      Format{0x58455831, offsetof(xex1_security_info, page_descriptors), offsetof(xex1_security_info, image_flags)},
+      Format{0x58455832, offsetof(xex2_security_info, page_descriptors), offsetof(xex2_security_info, image_flags)},
+      Format{0x58455825, offsetof(xex25_security_info, page_descriptors), offsetof(xex25_security_info, image_flags)}};
+  Memory memory; REQUIRE(memory.Initialize());
+  for (const auto& format : formats) {
+    std::vector<uint8_t> raw(0x1000, 0xA7);
+    WriteBe(raw, 0, format.magic); WriteBe(raw, 8, uint32_t(raw.size()));
+    WriteBe(raw, 0x10, 0x100); WriteBe(raw, 0x14, 1);
+    WriteBe(raw, 0x18, XEX_HEADER_ENTRY_POINT); WriteBe(raw, 0x1C, kCaller);
+    WriteBe(raw, 0x100, uint32_t(format.prefix + sizeof(xex2_page_descriptor)));
+    WriteBe(raw, 0x100 + format.prefix - 4, 1);
+    WriteBe(raw, 0x100 + format.flags, XEX_IMAGE_ONLINE_ACTIVATION_REQUIRED);
+    const auto original = raw;
+    const uint32_t guest = memory.SystemHeapAlloc(uint32_t(raw.size())); REQUIRE(guest);
+    struct Release { Memory& memory; uint32_t guest; ~Release() { memory.SystemHeapFree(guest); } } release{memory, guest};
+    auto* destination = memory.TranslateVirtual<uint8_t*>(guest);
+    std::memcpy(destination, raw.data(), raw.size());
+    REQUIRE(RelocateXexSecurityInfoForGuest({destination, raw.size()}, guest));
+    const uint32_t security = xe::load_and_swap<uint32_t>(destination + 0x10);
+    REQUIRE(security == guest + 0x100);
+    CHECK(xe::load_and_swap<uint32_t>(memory.TranslateVirtual(security + uint32_t(format.flags))) == XEX_IMAGE_ONLINE_ACTIVATION_REQUIRED);
+    std::vector<uint8_t> projected(destination, destination + raw.size());
+    WriteBe(projected, 0x10, 0x100);
+    CHECK(projected == original); // The one pointer field is the only change.
+    CHECK(raw == original);
+    const std::vector<uint8_t> once(destination, destination + raw.size());
+    CHECK_FALSE(RelocateXexSecurityInfoForGuest({destination, raw.size()}, guest));
+    CHECK(std::equal(once.begin(), once.end(), destination)); // This actual resident address is outside raw file-offset bounds.
+  }
+}
+
+TEST_CASE("Malformed guest XEX security projection refuses without partial writes",
+          "[kernel][xex][guest_header]") {
+  auto raw = MakeXex({}); raw.resize(kHeaderSize);
+  for (uint32_t fault = 0; fault < 13; ++fault) {
+    auto bad = raw; uint32_t guest = 0x30010000;
+    if (fault == 0) bad.resize(0x10);
+    if (fault == 1) WriteBe(bad, 0, 0x58455830); // Unsupported XEX0.
+    if (fault == 2) WriteBe(bad, 8, uint32_t(bad.size()) + 4);
+    if (fault == 3) WriteBe(bad, 0x14, UINT32_MAX);
+    if (fault == 4) WriteBe(bad, 0x10, 0x18); // Overlaps optional table.
+    if (fault == 5) WriteBe(bad, 0x10, 0xFFC); // Security prefix truncated.
+    if (fault == 6) WriteBe(bad, 0x100, 0x180);
+    if (fault == 7) WriteBe(bad, 0x100, 0x1000);
+    if (fault == 8) WriteBe(bad, 0x280, UINT32_MAX); // Descriptors out of extent.
+    if (fault == 9) guest = 0;
+    if (fault == 10) guest |= 1; // A handle/tag is not a guest header address.
+    if (fault == 11) guest |= 2;
+    if (fault == 12) guest = 0xFFFFF004; // 32-bit address extent would wrap.
+    const auto original = bad;
+    CHECK_FALSE(RelocateXexSecurityInfoForGuest(bad, guest));
+    CHECK(bad == original);
+  }
+}
+
+TEST_CASE("XexLoadImageHeaders rejects real short reads before publishing a pointer",
+          "[kernel][xex][guest_header][exports]") {
+  REQUIRE(kernel::KernelState::shared() == nullptr);
+  kernel::test::IsolatedKernelRuntimeSettings settings;
+  struct Scratch {
+    std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("xenia-header-reads-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+    Scratch() {
+      REQUIRE(std::filesystem::create_directory(root));
+      for (const auto* name : {"content", "cache", "inputs"})
+        REQUIRE(std::filesystem::create_directory(root / name));
+    }
+    ~Scratch() { std::error_code ignored; std::filesystem::remove_all(root, ignored); }
+  } scratch;
+  const auto raw = MakeXex({});
+  for (const auto& file : {std::pair{"first.xex", size_t(0x200)},
+                           std::pair{"tail.xex", size_t(0x900)},
+                           std::pair{"full.xex", size_t(kHeaderSize)}}) {
+    std::ofstream stream(scratch.root / "inputs" / file.first, std::ios::binary);
+    stream.write(reinterpret_cast<const char*>(raw.data()), file.second);
+    stream.close(); REQUIRE(stream.good());
+  }
+  auto emulator = std::make_unique<Emulator>("", scratch.root,
+      scratch.root / "content", scratch.root / "cache");
+  REQUIRE(emulator->Setup(nullptr, nullptr, false, {}, {}, {}) == X_STATUS_SUCCESS);
+  auto device = std::make_unique<vfs::HostPathDevice>(
+      "\\Device\\XexHeaders", scratch.root / "inputs", true);
+  REQUIRE(device->Initialize());
+  auto* observed_device = device.get();
+  REQUIRE(emulator->kernel_state()->file_system()->RegisterDevice(std::move(device)));
+  auto* memory = emulator->memory();
+  const uint32_t page = memory->SystemHeapAlloc(0x3000); REQUIRE(page);
+  struct Release { Memory* memory; uint32_t page; ~Release() { memory->SystemHeapFree(page); } } release{memory, page};
+  const uint32_t header = page + 0x1000;
+  auto* entry = emulator->export_resolver()->GetExportByOrdinal("xboxkrnl.exe", 0x19B);
+  REQUIRE(entry); REQUIRE(entry->function_data.trampoline);
+  for (const auto* name : {"first.xex", "tail.xex", "full.xex"}) {
+    const std::string path = std::string("\\Device\\XexHeaders\\") + name;
+    std::memcpy(memory->TranslateVirtual(page + 0x100), path.c_str(), path.size() + 1);
+    auto* ansi = memory->TranslateVirtual<kernel::X_ANSI_STRING*>(page);
+    ansi->length = uint16_t(path.size()); ansi->maximum_length = uint16_t(path.size() + 1);
+    ansi->pointer = page + 0x100;
+    // An incomplete successful read must not validate or relocate these old
+    // caller bytes, even though their raw header/security data is well formed.
+    std::memcpy(memory->TranslateVirtual(header), raw.data(), kHeaderSize);
+    ppc::PPCContext context{};
+    context.kernel_state = emulator->kernel_state();
+    context.virtual_membase = memory->virtual_membase();
+    context.r[3] = page; context.r[4] = header; context.r[5] = kHeaderSize;
+    entry->function_data.trampoline(&context);
+    const bool complete = std::string_view(name) == "full.xex";
+    CHECK(uint32_t(context.r[3]) == (complete ? X_STATUS_SUCCESS : X_STATUS_INVALID_IMAGE_FORMAT));
+    const auto security = xe::load_and_swap<uint32_t>(memory->TranslateVirtual(header + 0x10));
+    CHECK(security == (complete ? header + 0x100 : 0x100));
+    CHECK_FALSE(observed_device->has_open_files());
+  }
+}
+
 }  // namespace
+}  // namespace xe::cpu::test
+namespace xe::cpu::test {
+namespace {
+// Exact retail17559 native cache-query instructions, relocated together into
+// the generated XEX. Only the two relative save/restore thunk targets change.
+// The real fixed native cache address stays81AA28E0. This fixture deliberately
+// keeps native cache policy28DC zero, so8470's external policy calls are not
+// taken; no provider, Task, native publication or renderer is simulated.
+constexpr uint32_t kNativeQueryBase = kCode + 0x1000;
+constexpr uint32_t QueryAddress(uint32_t native) {
+  return kNativeQueryBase + native - 0x816D8470;
+}
+constexpr std::array<uint32_t, 39> kNativeQueryValidity{{
+    0x7D8802A6, 0x9181FFF8, 0xFBC1FFE8, 0xFBE1FFF0, 0x9421FF90, 0x7C7F1B78,
+    0x7C9E2378, 0x2B030004, 0x41980010, 0x3C608007, 0x60630057, 0x48000058,
+    0x3D6081AA, 0x816B28DC, 0x2F0B0000, 0x40990028, 0x4BFDFCE1, 0x2C030000,
+    0x4182001C, 0x480087AD, 0x2C030000, 0x40820010, 0x3C608007, 0x60630525,
+    0x48000024, 0x1D7F0290, 0x7D6BF02E, 0x556B07FE, 0x3D408007, 0x316BFFFF,
+    0x614A0525, 0x7D6B5910, 0x7D635038, 0x38210070, 0x8181FFF8, 0x7D8803A6,
+    0xEBC1FFE8, 0xEBE1FFF0, 0x4E800020,
+}};
+
+constexpr std::array<uint32_t, 31> kNativeGetXuidBody{{
+    0x7D8802A6, 0x48054EB5, 0x9421FF80, 0x7C9D2378, 0x7CC43378, 0x7C7F1B78,
+    0x7CBC2B78, 0x7CDE3378, 0x4BFFFF41, 0x2C030000, 0x41800044, 0x1D7F0290,
+    0x7D6BF214, 0x814B0000, 0x7D4AE838, 0x554907BD, 0x4182000C, 0xE96B003C,
+    0x48000028, 0x5549077B, 0x4082FFF4, 0x554A07FF, 0x4182000C, 0xE96B0008,
+    0x48000010, 0x3C608007, 0x60630525, 0x39600000, 0xF97C0000, 0x38210080,
+    0x48054E90,
+}};
+
+constexpr std::array<uint32_t, 3> kNativeGetXuidEntry{{
+    0x3D6081AA,
+    0x38CB28E0,
+    0x4BFFFF78,
+}};
+
+constexpr std::array<uint32_t, 32> kNativeGetIndexBody{{
+    0x39400000, 0x3966003C, 0x812BFFC4, 0x7D292038, 0x552807BD, 0x41820010,
+    0xE90B0000, 0x7F234040, 0x419A0040, 0x5528077B, 0x41820010, 0xE90B0000,
+    0x7F234040, 0x419A002C, 0x552907FF, 0x41820010, 0xE92BFFCC, 0x7F234840,
+    0x419A0018, 0x394A0001, 0x396B0290, 0x2B0A0004, 0x4198FFB0, 0x4800000C,
+    0x2B0A0004, 0x41980010, 0x3C608007, 0x60630525, 0x4E800020, 0x91450000,
+    0x38600000, 0x4E800020,
+}};
+
+constexpr std::array<uint32_t, 3> kNativeGetIndexEntry{{
+    0x3D6081AA,
+    0x38CB28E0,
+    0x4BFFFF78,
+}};
+
+constexpr std::array<uint32_t, 6> kNativeSave28{{
+    0xFB81FFD8,
+    0xFBA1FFE0,
+    0xFBC1FFE8,
+    0xFBE1FFF0,
+    0x9181FFF8,
+    0x4E800020,
+}};
+
+constexpr std::array<uint32_t, 7> kNativeRestore28{{
+    0xEB81FFD8,
+    0xEBA1FFE0,
+    0xEBC1FFE8,
+    0xEBE1FFF0,
+    0x8181FFF8,
+    0x7D8803A6,
+    0x4E800020,
+}};
+
+void NativeCacheQueriesImage(std::vector<uint8_t>& image) {
+  const auto copy = [&](uint32_t address, const auto& words) {
+    for (size_t i = 0; i < words.size(); ++i) {
+      ImageWord(image, address + uint32_t(i * 4), words[i]);
+    }
+  };
+  copy(QueryAddress(0x816D8470), kNativeQueryValidity);
+  copy(QueryAddress(0x816D8510), kNativeGetXuidBody);
+  copy(QueryAddress(0x816D8590), kNativeGetXuidEntry);
+  copy(QueryAddress(0x816D8618), kNativeGetIndexBody);
+  copy(QueryAddress(0x816D8698), kNativeGetIndexEntry);
+  copy(kCode + 0x1400, kNativeSave28);
+  copy(kCode + 0x1440, kNativeRestore28);
+  ImageWord(image, QueryAddress(0x816D8514),
+            Branch(QueryAddress(0x816D8514), kCode + 0x1400, true));
+  ImageWord(image, QueryAddress(0x816D8588),
+            Branch(QueryAddress(0x816D8588), kCode + 0x1440, false));
+}
+}  // namespace
+
+TEST_CASE(
+    "Native cache queries do not expose host selected users before publication",
+    "[cpu][guest_function_bridge][native_cache_query]") {
+  BridgeFixture fixture(NativeCacheQueriesImage);
+  constexpr uint32_t cache_block = 0x81AA0000, cache = 0x81AA28E0;
+  auto* heap = fixture.memory.LookupHeap(cache_block);
+  REQUIRE(heap);
+  REQUIRE(heap->AllocFixed(cache_block, 0x10000, 0x10000,
+                           kMemoryAllocationReserve | kMemoryAllocationCommit,
+                           kMemoryProtectRead | kMemoryProtectWrite));
+  std::memset(fixture.memory.TranslateVirtual(cache_block), 0, 0x10000);
+  const auto slot = GENERATE(0u, 1u, 2u, 3u);
+  const auto mask = GENERATE(1u, 2u, 4u);
+  constexpr uint64_t host_selected_xuid = 0xE0000078AABBCCDDull;
+  constexpr uint64_t online_xuid = 0x0009000011223344ull;
+  const auto expected_xuid = mask == 1 ? host_selected_xuid : online_xuid;
+  constexpr uint32_t output = cache_block + 0x8000;
+  const auto store32 = [&](uint32_t address, uint32_t value) {
+    xe::store_and_swap<uint32_t>(fixture.memory.TranslateVirtual(address),
+                                 value);
+  };
+  const auto store64 = [&](uint32_t address, uint64_t value) {
+    xe::store_and_swap<uint64_t>(fixture.memory.TranslateVirtual(address),
+                                 value);
+  };
+  const auto call = [&](uint32_t native, uint64_t first) {
+    auto* c = fixture.thread->context();
+    c->r[3] = first;
+    c->r[4] = mask;
+    c->r[5] = output;
+    REQUIRE(
+        fixture.processor->Execute(fixture.thread.get(), QueryAddress(native)));
+    return uint32_t(c->r[3]);
+  };
+  // A selected host identity alone is not a native-cache hit. The native
+  // index getter leaves its output untouched on no-match; XUID getter clears
+  // it.
+  store64(output, 0xAABBCCDDEEFF0011ull);
+  CHECK(call(0x816D8698, expected_xuid) == 0x80070525u);
+  CHECK(xe::load_and_swap<uint64_t>(fixture.memory.TranslateVirtual(output)) ==
+        0xAABBCCDDEEFF0011ull);
+  CHECK(call(0x816D8590, slot) == 0x80070525u);
+  CHECK(xe::load_and_swap<uint64_t>(fixture.memory.TranslateVirtual(output)) ==
+        0);
+
+  // Only the actual native row fields make either native query succeed.
+  const auto row = cache + slot * 0x290;
+  store32(row, 1 | mask);
+  store64(row + 8, host_selected_xuid);
+  store64(row + 0x3C, online_xuid);
+  store32(output, 0xAABBCCDD);
+  CHECK(call(0x816D8698, expected_xuid) == 0);
+  CHECK(xe::load_and_swap<uint32_t>(fixture.memory.TranslateVirtual(output)) ==
+        slot);
+  CHECK(call(0x816D8590, slot) == 0);
+  CHECK(xe::load_and_swap<uint64_t>(fixture.memory.TranslateVirtual(output)) ==
+        expected_xuid);
+  CHECK(call(0x816D8590, 4) == 0x80070057u);
+  CHECK(xe::load_and_swap<uint64_t>(fixture.memory.TranslateVirtual(output)) ==
+        0);
+  // No bridge overlay is installed. The native cache is independent from the
+  // generated image's immutable bytes and from the ordinary title-import HLE.
+  fixture.CheckNoOverlay();
+  CHECK(fixture.Hash(QueryAddress(0x816D8698), 12) ==
+        "766cd6615f5d7580131ee3c03e89d7c9e83ea3a78027cf618f78909fa3886151");
+  CHECK(fixture.Hash(QueryAddress(0x816D8590), 12) ==
+        "766cd6615f5d7580131ee3c03e89d7c9e83ea3a78027cf618f78909fa3886151");
+}
 }  // namespace xe::cpu::test

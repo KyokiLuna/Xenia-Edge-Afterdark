@@ -49,7 +49,7 @@ UserProfile::UserProfile(const uint64_t xuid,
 
 std::shared_ptr<const ProfileGpdReadModels> UserProfile::CaptureGpds() const {
   std::error_code error;
-  auto owner = gpd_model_;
+  auto owner = gpd_model_.lock();
   if (!owner) {
     return {};
   }

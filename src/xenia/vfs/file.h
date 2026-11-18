@@ -29,6 +29,11 @@ namespace vfs {
 class Entry;
 class Device;
 
+// Pure checked guest-unit conversion; this grants no filesystem/allocation
+// authority and is never a substitute for an actual backend observation.
+X_STATUS RoundFileAllocationSize(uint64_t native_bytes, uint64_t guest_unit,
+                                uint64_t* output);
+
 class File {
  public:
   struct DeviceControlLayout {
@@ -66,6 +71,12 @@ class File {
     return X_STATUS_NOT_IMPLEMENTED;
   }
 
+  // Actual retained-file allocation in guest allocation-unit geometry.
+  // Only an explicit backend implementation may succeed; no cached Entry
+  // allocation/EOF fallback. Output is unchanged on every failure.
+  virtual X_STATUS QueryAllocationSize(uint64_t* output) const {
+    return X_STATUS_NOT_SUPPORTED;
+  }
   virtual X_STATUS SetLength(size_t length) { return X_STATUS_NOT_IMPLEMENTED; }
   // Unsupported backends must never imply that host data reached storage.
   virtual X_STATUS Flush() { return X_STATUS_NOT_SUPPORTED; }

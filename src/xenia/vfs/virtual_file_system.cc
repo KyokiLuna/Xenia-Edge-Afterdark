@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <utility>
 #include "devices/host_path_entry.h"
 #include "third_party/utfcpp/source/utf8.h"
 #include "xenia/base/literals.h"
@@ -136,11 +137,27 @@ VirtualFileSystem::~VirtualFileSystem() {
   Clear();
 }
 
+void VirtualFileSystem::BeginStoragePreparation() {
+  auto next=std::make_shared<std::stop_source>();
+  std::shared_ptr<std::stop_source> old;
+  auto namespace_lock=global_critical_region_.Acquire();
+  { std::lock_guard lock(preparation_mutex_); old=std::exchange(preparation_stop_,std::move(next)); }
+  if (old) old->request_stop();
+}
+void VirtualFileSystem::SealStoragePreparation() {
+  std::shared_ptr<std::stop_source> stop;
+  // Serialize the cutoff with metadata publication, not with filesystem IO.
+  auto namespace_lock=global_critical_region_.Acquire();
+  { std::lock_guard lock(preparation_mutex_); stop=preparation_stop_; }
+  if (stop) stop->request_stop();
+}
 void VirtualFileSystem::Clear() {
   std::vector<std::shared_ptr<Device>> retired;
   {
     auto lock = global_critical_region_.Acquire();
+    for (const auto& device : devices_) { device->BeginNamespaceRetirement(); }
     retired.swap(devices_);
+    if (device_epoch_ != UINT64_MAX) { ++device_epoch_; }
     symlinks_.clear();
   }
   // Newest first, outside the namespace lock: devices can own other files.
@@ -152,40 +169,153 @@ void VirtualFileSystem::Clear() {
 
 std::unique_ptr<VirtualFileSystem::PreparedDeviceRegistration>
 VirtualFileSystem::PrepareDeviceRegistration(std::unique_ptr<Device>& device,
-                                             std::error_code& error) {
+                                             std::error_code& error,
+                                             const std::shared_ptr<Device>& parent,
+                                             std::unique_ptr<SourceParentSelection> source_selection,
+                                             filesystem::HostStorageFailureObservation* diagnostic) {
   error.clear();
+  filesystem::HostStorageFailureScope observation{diagnostic,error,5};
+  observation.At(1);
   if (xe::global_critical_region::is_held_by_current_thread()) {
     error = std::make_error_code(std::errc::device_or_resource_busy);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
-  if (!device) { error = std::make_error_code(std::errc::invalid_argument); return {}; }
+  std::shared_ptr<std::stop_source> epoch;
+  { std::lock_guard lock(preparation_mutex_); epoch=preparation_stop_; }
+  filesystem::HostStoragePreparationWait preparation(
+      std::chrono::steady_clock::now()+std::chrono::seconds(2));
+  if (!epoch || !preparation.LinkCancellation(epoch->get_token())) {
+    error=std::make_error_code(std::errc::operation_canceled); observation.Capture(__LINE__); return {};
+  }
+  const auto backing_parent = device ? device->RetainedBackingParent() : nullptr;
+  observation.At(2);
+  if (parent && backing_parent && parent != backing_parent) {
+    error = std::make_error_code(std::errc::invalid_argument); observation.Capture(__LINE__); return {};
+  }
+  const auto exact_parent = parent ? parent : backing_parent;
+  observation.At(3);
+  if (exact_parent && exact_parent->namespace_retiring()) {
+    error = std::make_error_code(std::errc::no_such_device); observation.Capture(__LINE__); return {};
+  }
+  observation.At(4);
+  if (source_selection && (!device || source_selection->child_ != device.get() ||
+      source_selection->parent_ != exact_parent || !source_selection->volume_ ||
+      source_selection->volume_ != device->storage_volume() ||
+      !source_selection->certificate_ || !source_selection->source_ ||
+      source_selection->certificate_->retiring() || source_selection->source_->retiring())) {
+    error = std::make_error_code(std::errc::invalid_argument); observation.Capture(__LINE__); return {};
+  }
+  observation.At(5);
+  if (source_selection) {
+    const auto certificate = source_selection->certificate_->directory_identity();
+    const auto source = source_selection->source_->directory_identity();
+    if (!certificate || !source || !certificate->SameEntry({}, *source, {})) {
+      error = std::make_error_code(std::errc::permission_denied); observation.Capture(__LINE__); return {};
+    }
+  }
+  observation.At(6);
+  if (!device || device->namespace_retiring() || !device->BindMountParent(exact_parent,
+      source_selection ? source_selection->volume_ : nullptr)) {
+    error = std::make_error_code(std::errc::invalid_argument); observation.Capture(__LINE__); return {};
+  }
   // Every path, including the legacy convenience APIs, uses the SAME actual
   // backing/projection/private-store admission. No marker or caller bool
   // substitutes for that retained common authority.
-  if (!device->AdmitGuestStorage(error)) { return {}; }
+  device->FreezeStorageVolume();
+  // Lifetime edges are retained and immutable. Each linked token is negative
+  // cancellation only; no volume/source/parent permission is inferred.
+  size_t depth=0;
+  for (const Device* node=device.get();node;node=node->mount_parent().get()) {
+    const auto volume=node->storage_volume();
+    if (++depth>1024 || !preparation.LinkCancellation(node->namespace_retirement_token()) ||
+        (volume && !preparation.LinkCancellation(volume->retirement_token()))) {
+      error=std::make_error_code(std::errc::value_too_large); observation.Capture(__LINE__); return {};
+    }
+  }
+  if (source_selection &&
+      (!source_selection->certificate_->LinkPreparationCancellation(preparation) ||
+       !source_selection->source_->LinkPreparationCancellation(preparation))) {
+    error=std::make_error_code(std::errc::value_too_large); observation.Capture(__LINE__); return {};
+  }
+  // Waiting may observe a source withdrawal before the original metadata
+  // checks run. Preserve its specific disconnected status; an epoch or raw
+  // cache cancellation alone remains cancellation and grants no authority.
+  const auto classify_cancellation = [&] {
+    if (error == std::errc::operation_canceled &&
+        (device->namespace_retiring() ||
+         (source_selection && (source_selection->certificate_->retiring() ||
+                               source_selection->source_->retiring())))) {
+      error = std::make_error_code(std::errc::no_such_device);
+    }
+  };
+  observation.At(7);
+  if (!device->AdmitGuestStorage(error, diagnostic, &preparation)) {
+    classify_cancellation();
+    observation.Capture(__LINE__); return {};
+  }
   // A prior registry can own real directory/ancestor pins. Replace it only
   // in this prepared host lane, never under commit's inherited GCRC. The VFS
   // lifetime tag fixes this binding for the exact later metadata publication.
+  if ((error=preparation.Check()) || device->namespace_retiring() ||
+      (source_selection && (source_selection->certificate_->retiring() || source_selection->source_->retiring()))) {
+    if (!error) error=std::make_error_code(std::errc::no_such_device);
+    classify_cancellation();
+    observation.Capture(__LINE__); return {};
+  }
   device->SetManagedFileRegistry(managed_files_);
   // Allocate the capsule before consuming the caller. shared_ptr's
   // unique_ptr conversion preserves that unique_ptr if allocation throws.
   auto prepared = std::unique_ptr<PreparedDeviceRegistration>(
       new PreparedDeviceRegistration(registration_owner_,{}));
+  prepared->preparation_tokens_.assign(preparation.cancellation_tokens().begin(),preparation.cancellation_tokens().end());
+  prepared->preparation_flags_.assign(preparation.cancellation_flags().begin(),preparation.cancellation_flags().end());
   prepared->device_ = std::shared_ptr<Device>(std::move(device));
+  prepared->source_selection_ = std::move(source_selection);
   return prepared;
 }
 X_STATUS VirtualFileSystem::CommitPreparedDevice(
     PreparedDeviceRegistration& prepared,bool exclusive,
-    std::shared_ptr<Device>* registered) {
+    std::shared_ptr<Device>* registered,
+    const std::shared_ptr<Device>& expected,std::shared_ptr<Device>* retired) {
   // Never overwrite/release a caller's old device while its outer lock is
   // still held. All failure/success paths retain the opaque capsule itself.
   if (prepared.owner_ != registration_owner_ || !prepared.device_ ||
-      (registered && *registered)) { return X_STATUS_INVALID_PARAMETER; }
+      (registered && *registered) || (retired && *retired) ||
+      (expected && (!exclusive || !retired))) { return X_STATUS_INVALID_PARAMETER; }
   auto lock = global_critical_region_.Acquire();
   if (prepared.consumed_) { return X_STATUS_INVALID_PARAMETER; }
   const auto& device = prepared.device_;
+  const auto volume = device->storage_volume();
+  if (device->namespace_retiring() || (volume && !volume->available_cached())) {
+    return X_STATUS(0xC000009D);
+  }
+  // The immutable edge names actual registered objects, never a same-name
+  // relookup. This also rejects stale grandparents and impossible cycles.
+  size_t remaining = devices_.size() + 1;
+  for (auto parent = device->mount_parent(); parent; parent = parent->mount_parent()) {
+    if (!remaining-- || parent == device || parent->namespace_retiring() ||
+        std::ranges::find(devices_, parent) == devices_.end()) { return X_STATUS(0xC000009D); }
+    const auto ancestor_volume = parent->storage_volume();
+    if (ancestor_volume && !ancestor_volume->available_cached()) { return X_STATUS(0xC000009D); }
+  }
+  if (prepared.source_selection_ && (prepared.source_selection_->source_->retiring() ||
+      prepared.source_selection_->certificate_->retiring())) { return X_STATUS(0xC000009D); }
+  if (device_epoch_ == UINT64_MAX) { return X_STATUS_INSUFFICIENT_RESOURCES; }
+  if(expected) {
+    if(std::ranges::find(devices_,expected)==devices_.end() ||
+        !xe::utf8::equal_case(expected->mount_path(),device->mount_path()) ||
+        expected->retirement_owner_.lock() || expected->has_open_files() ||
+        std::ranges::any_of(devices_,[&](const auto& candidate){
+          for(auto parent=candidate->mount_parent();parent;parent=parent->mount_parent())
+            if(parent==expected)return true;
+          return false;
+        }))return HostStorageError(std::make_error_code(std::errc::device_or_resource_busy));
+    for(auto parent=device->mount_parent();parent;parent=parent->mount_parent())
+      if(parent==expected)return X_STATUS_INVALID_PARAMETER;
+  }
   if (exclusive) {
     for (const auto& existing : devices_) {
+      if(existing==expected)continue;
       if (xe::utf8::equal_case(existing->mount_path(),device->mount_path())) {
         return X_STATUS_OBJECT_NAME_COLLISION;
       }
@@ -196,9 +326,23 @@ X_STATUS VirtualFileSystem::CommitPreparedDevice(
       }
     }
   }
+  // Preserve specific source/device/parent validation failures before the
+  // generic preparation cancellation result. Cancellation is still checked
+  // under GCRC before any publication or mutation of registered devices.
+  if (std::any_of(prepared.preparation_tokens_.begin(),prepared.preparation_tokens_.end(),
+        [](const auto& token){return token.stop_requested();}) ||
+      std::any_of(prepared.preparation_flags_.begin(),prepared.preparation_flags_.end(),
+        [](const auto& flag){return flag->load(std::memory_order_acquire);})) return X_STATUS_CANCELLED;
   // Metadata only. push_back has its usual strong exception guarantee: the
   // capsule keeps the actual admitted device on allocation/publication failure.
+  // Allocation/strong exception guarantee precedes any old-node mutation.
   devices_.push_back(device);
+  if(expected) {
+    *retired=expected;
+    expected->BeginNamespaceRetirement();
+    devices_.erase(std::ranges::find(devices_,expected));
+  }
+  ++device_epoch_;
   prepared.consumed_ = true;
   if (registered) { *registered = device; }
   return X_STATUS_SUCCESS;
@@ -209,6 +353,11 @@ bool VirtualFileSystem::RegisterPreparedDevice(PreparedDeviceRegistration& prepa
 X_STATUS VirtualFileSystem::RegisterPreparedDeviceExclusive(
     PreparedDeviceRegistration& prepared,std::shared_ptr<Device>& registered) {
   return CommitPreparedDevice(prepared,true,&registered);
+}
+X_STATUS VirtualFileSystem::ReplacePreparedDeviceExclusive(
+    PreparedDeviceRegistration& prepared,const std::shared_ptr<Device>& expected,
+    std::shared_ptr<Device>& registered,std::shared_ptr<Device>& retired) {
+  return CommitPreparedDevice(prepared,true,&registered,expected,&retired);
 }
 bool VirtualFileSystem::RegisterDevice(std::unique_ptr<Device> device) {
   std::error_code error;
@@ -232,31 +381,153 @@ X_STATUS VirtualFileSystem::RegisterDeviceExclusive(
   return RegisterPreparedDeviceExclusive(*prepared,registered);
 }
 
-bool VirtualFileSystem::UnregisterDevice(const std::string_view path,
-                                          const Device* expected) {
-  auto global_lock = global_critical_region_.Acquire();
-  for (auto it = devices_.begin(); it != devices_.end(); ++it) {
-    if ((*it)->mount_path() == path) {
-      if (expected && it->get() != expected) { return false; }
-      if ((*it)->has_open_files()) return false;
-      (*it)->Retire();
-      XELOGD("Unregistered device: {}", (*it)->mount_path());
-      devices_.erase(it);
-      return true;
+std::shared_ptr<Device> VirtualFileSystem::DetachDevice(
+    std::string_view path, const Device* expected) {
+  auto lock = global_critical_region_.Acquire();
+  const auto found = std::ranges::find_if(devices_, [&](const auto& device) {
+    return device->mount_path() == path;
+  });
+  if (found == devices_.end() || (expected && found->get() != expected) ||
+      (*found)->has_open_files()) { return {}; }
+  (*found)->BeginNamespaceRetirement();
+  auto retired = std::move(*found);
+  devices_.erase(found);
+  if (device_epoch_ != UINT64_MAX) { ++device_epoch_; }
+  return retired;
+}
+
+std::unique_ptr<VirtualFileSystem::DeviceRetirement>
+VirtualFileSystem::PrepareDeviceRetirement(const std::shared_ptr<Device>& root,
+    bool include_root, X_STATUS& status, DeviceRetirementPolicy policy) {
+  status = X_STATUS_INVALID_PARAMETER;
+  if (!root) { return {}; }
+  auto lock = global_critical_region_.Acquire();
+  // An already withdrawn exact root may still own genuinely live descendants
+  // or retained Files. It cannot select a replacement through its old name.
+  if (std::ranges::find(devices_, root) == devices_.end() && !root->namespace_retiring()) {
+    status = X_STATUS_INVALID_HANDLE; return {};
+  }
+  auto plan = std::unique_ptr<DeviceRetirement>(new DeviceRetirement(
+      registration_owner_, root, device_epoch_, policy));
+  plan->devices_.reserve(devices_.size() + 1);
+  plan->devices_.push_back(root);
+  for (size_t i = 0; i != plan->devices_.size(); ++i) {
+    const auto& parent = plan->devices_[i];
+    for (const auto& device : devices_) {
+      if (device->mount_parent() == parent &&
+          std::ranges::find(plan->devices_, device) == plan->devices_.end()) {
+        plan->devices_.push_back(device);
+      }
     }
   }
-  return false;
+  if (!include_root) { plan->devices_.erase(plan->devices_.begin()); }
+  status = X_STATUS_SUCCESS;
+  return plan;
+}
+X_STATUS VirtualFileSystem::CommitDeviceRetirement(DeviceRetirement& plan) {
+  auto lock = global_critical_region_.Acquire();
+  if (plan.owner_ != registration_owner_ || plan.committed_ ||
+      plan.epoch_ != device_epoch_) { return X_STATUS_INVALID_HANDLE; }
+  const auto claimed_elsewhere = [&](const auto& device) {
+    const auto active = device->retirement_owner_.lock();
+    return active && active != plan.closure_owner_;
+  };
+  if (claimed_elsewhere(plan.root_) ||
+      std::ranges::any_of(plan.devices_, claimed_elsewhere)) {
+    return HostStorageError(std::make_error_code(std::errc::device_or_resource_busy));
+  }
+  plan.root_->retirement_owner_ = plan.closure_owner_;
+  for (const auto& device : plan.devices_) {
+    device->retirement_owner_ = plan.closure_owner_;
+  }
+  plan.root_->BeginNamespaceRetirement();
+  for (const auto& device : plan.devices_) { device->BeginNamespaceRetirement(); }
+  // Keep nodes in the one graph until real handle rundown. New children and
+  // Entry admission are now closed, while genuine old owners can still drain.
+  if (device_epoch_ != UINT64_MAX) { ++device_epoch_; }
+  plan.committed_ = true;
+  return X_STATUS_SUCCESS;
+}
+X_STATUS VirtualFileSystem::FinishDeviceRetirement(DeviceRetirement& plan,
+    size_t index, std::shared_ptr<Device>& retired) {
+  auto lock = global_critical_region_.Acquire();
+  if (retired || plan.owner_ != registration_owner_ || !plan.committed_ ||
+      index >= plan.devices_.size() || !plan.devices_[index]) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  const auto& device = plan.devices_[index];
+  if (device->retirement_owner_.lock() != plan.closure_owner_) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  // A failed/busy descendant cannot be bypassed by finalizing an ancestor.
+  for (const auto& pending : plan.devices_) {
+    if (!pending || pending == device) { continue; }
+    for (auto parent = pending->mount_parent(); parent;
+         parent = parent->mount_parent()) {
+      if (parent == device) { return HostStorageError(std::make_error_code(std::errc::device_or_resource_busy)); }
+    }
+  }
+  if (plan.policy_ == DeviceRetirementPolicy::kDrainOpenFiles &&
+      device->has_open_files()) {
+    return HostStorageError(std::make_error_code(std::errc::device_or_resource_busy));
+  }
+  // Exact pointer membership only. An already withdrawn old node may finish;
+  // an unrelated replacement at the old name is never selected or detached.
+  const auto found = std::ranges::find(devices_, device);
+  if (found != devices_.end()) {
+    retired = std::move(plan.devices_[index]);
+    devices_.erase(found);
+    if (device_epoch_ != UINT64_MAX) { ++device_epoch_; }
+  } else { retired = std::move(plan.devices_[index]); }
+  return X_STATUS_SUCCESS;
+}
+X_STATUS VirtualFileSystem::RetireDeviceBackings(DeviceRetirement& plan) {
+  if (plan.owner_ != registration_owner_ || !plan.committed_ ||
+      global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  X_STATUS result = X_STATUS_SUCCESS;
+  for (size_t i = plan.devices_.size(); i--;) {
+    std::shared_ptr<Device> retired;
+    const auto status = FinishDeviceRetirement(plan, i, retired);
+    if (XFAILED(status)) { result = status; continue; }
+    retired->Retire();
+    retired.reset(); // Release the child backing before testing its parent.
+  }
+  return result;
+}
+bool VirtualFileSystem::UnregisterDevice(const std::string_view path,
+                                          const Device* expected) {
+  if (xe::global_critical_region::is_held_by_current_thread()) { return false; }
+  std::unique_ptr<DeviceRetirement> plan;
+  {
+    auto lock = global_critical_region_.Acquire();
+    auto root = AcquireDevice(path);
+    // Preserve the legacy convenience API's busy result. Runtime withdrawal
+    // uses the explicit owned batch after arranging genuine handle rundown.
+    if (!root || (expected && root.get() != expected) || root->has_open_files()) { return false; }
+    X_STATUS status;
+    plan = PrepareDeviceRetirement(root, true, status,
+        DeviceRetirementPolicy::kDrainOpenFiles);
+    if (!plan || XFAILED(CommitDeviceRetirement(*plan))) { return false; }
+  }
+  return XSUCCEEDED(RetireDeviceBackings(*plan));
 }
 
 bool VirtualFileSystem::RetireDevice(const std::string_view path) {
-  auto global_lock = global_critical_region_.Acquire();
-  for (const auto& device : devices_) {
-    if (device->mount_path() == path) {
-      device->Retire();
-      return true;
-    }
+  if (xe::global_critical_region::is_held_by_current_thread()) { return false; }
+  std::shared_ptr<Device> retired;
+  {
+    auto lock = global_critical_region_.Acquire();
+    const auto found = std::ranges::find_if(devices_, [&](const auto& device) {
+      return device->mount_path() == path;
+    });
+    if (found == devices_.end()) { return false; }
+    retired = *found;
+    retired->BeginNamespaceRetirement();
   }
-  return false;
+  retired->Retire();
+  return true;
 }
 
 std::shared_ptr<Device> VirtualFileSystem::AcquireDevice(
@@ -288,7 +559,8 @@ std::optional<std::string> NamespacePath(std::string_view path) {
     return {};
   }
   auto result = xe::utf8::canonicalize_guest_path(path);
-  for (std::string_view prefix : {"\\??\\", "\\DosDevices\\", "\\System??\\"}) {
+  // Bare/DosDevices names are TITLE aliases. SYSTEM aliases remain distinct.
+  for (std::string_view prefix : {"\\??\\", "\\DosDevices\\"}) {
     if (xe::utf8::starts_with_case(result, prefix)) {
       result.erase(0, prefix.size());
       break;
@@ -338,6 +610,17 @@ bool VirtualFileSystem::RegisterSymbolicLink(const std::string_view path,
   XELOGD("Registered symbolic link: {} => {}", path, target);
 
   return true;
+}
+
+void VirtualFileSystem::UnregisterExpectedSymbolicLink(std::string_view alias,
+    std::string_view target, const Device* expected) {
+  auto lock = global_critical_region_.Acquire();
+  const auto actual = expected ? AcquireDevice(expected->mount_path()) : nullptr;
+  if (!expected || (actual && actual.get() != expected)) { return; }
+  const auto found = std::ranges::find_if(symlinks_, [&](const auto& link) {
+    return xe::utf8::equal_case(alias, link.first) && xe::utf8::equal_case(target, link.second);
+  });
+  if (found != symlinks_.end()) { symlinks_.erase(found); }
 }
 
 bool VirtualFileSystem::UnregisterSymbolicLink(const std::string_view path) {
@@ -455,6 +738,24 @@ bool MountPathMatches(const std::string_view path,
 
 }  // namespace
 
+std::shared_ptr<Device> VirtualFileSystem::AcquirePathDevice(std::string_view path) {
+  std::shared_ptr<Device> selected;
+  {
+    // GCRC is recursive; TranslateSymbolicPath takes its bounded link copy
+    // while this same transaction excludes alias/mount replacement.
+    auto lock = global_critical_region_.Acquire();
+    std::string translated;
+    if (XFAILED(TranslateSymbolicPath(path,translated))) { return {}; }
+    for (const auto& device : devices_) {
+      if (!device->namespace_retiring() && MountPathMatches(translated,device->mount_path()) &&
+          (!selected || device->mount_path().size()>selected->mount_path().size())) {
+        selected=device;
+      }
+    }
+  }
+  return selected;
+}
+
 Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
   std::string normalized_path;
   if (XFAILED(TranslateSymbolicPath(path, normalized_path))) {
@@ -472,6 +773,7 @@ Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
       device = d.get();
     }
   }
+  if (device && device->namespace_retiring()) { return nullptr; }
   if (!device) {
     // Supress logging the error for ShaderDumpxe:\CompareBackEnds as this is
     // not an actual problem nor something we care about.
@@ -509,7 +811,7 @@ Entry* VirtualFileSystem::ResolveMountRoot(const std::string_view path) {
       mount_path.remove_suffix(1);
     }
     if (xe::utf8::equal_case(normalized_path, mount_path)) {
-      return d->ResolvePath("");
+      return d->namespace_retiring() ? nullptr : d->ResolvePath("");
     }
   }
   return nullptr;
@@ -576,6 +878,10 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry,
   // TODO(gibbed): should 'is_directory' remain as a bool or should it be
   // flipped to a generic FileAttributeFlags?
 
+  if (root_entry && root_entry->device()->namespace_retiring()) {
+    return HostStorageError(std::make_error_code(std::errc::no_such_device));
+  }
+
   // Cleanup access.
   if (desired_access & FileAccess::kGenericRead) {
     desired_access |= FileAccess::kFileReadData;
@@ -619,6 +925,21 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry,
     entry = root_entry;
   } else {
     entry = !root_entry ? ResolvePath(path) : root_entry->GetChild(path);
+  }
+
+  // Selected ordinary media never grants a weaker handle than requested.
+  // Apply its exact immutable Device role BEFORE managed-file dispatch and
+  // the old readonly-disc/package write-to-read compatibility downgrade.
+  const auto* requested_device=entry?entry->device():
+      (parent_entry?parent_entry->device():nullptr);
+  if(requested_device && requested_device->requires_strict_read_only_open()) {
+    constexpr uint32_t read=FileAccess::kGenericRead|FileAccess::kGenericExecute|
+        FileAccess::kFileReadData|0x8u|0x20u|0x80u|0x20000u|0x100000u;
+    if((desired_access&~read) ||
+        (creation_disposition!=FileDisposition::kOpen &&
+         (creation_disposition!=FileDisposition::kOpenIf || !entry))) {
+      *out_action=FileAction::kDoesNotExist;return X_STATUS_ACCESS_DENIED;
+    }
   }
 
   // Protected managed leaves are resolved BEFORE exists checks, supersede,

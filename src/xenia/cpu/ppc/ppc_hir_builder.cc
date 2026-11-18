@@ -31,6 +31,7 @@
 #include "xenia/cpu/ppc/ppc_opcode_info.h"
 #include "xenia/cpu/processor.h"
 #include "xenia/cpu/xex_module.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 DEFINE_bool(
     break_on_unimplemented_instructions, true,
     "Break to the host debugger (or crash if no debugger attached) if an "
@@ -183,6 +184,32 @@ bool PPCHIRBuilder::Emit(GuestFunction* function, uint32_t flags) {
 
     MaybeBreakOnInstruction(address);
 
+    if(start_address==0x816A2588 && address==0x816A2630 && code==0x939E0000){
+      // Actual 17559 Complete: length/error stores + sync precede this Status
+      // store. A real HIR boundary flushes cached GPR/CR state on BOTH backends
+      // and prevents call/store motion; SOURCE_OFFSET alone is not a barrier.
+      // The owner authenticates its exact admitted native frame/Task/packet.
+      ContextBarrier();
+      CallExtern(builtins()->native_avatar_completion_publication);
+    }
+
+    if(start_address==0x816CD6E8 && address==0x816CD920 && code==0x393F0034){
+      // Actual manager iteration ends here even when Query returned zero.
+      // The native refcount path follows; it is not a clear/GPU acknowledgement.
+      ContextBarrier();
+      CallExtern(builtins()->native_identity_render_iteration_end);
+    }
+
+    // Match original function/address/opcode before a diagnostic-only HIR
+    // barrier. ContextBarrier materializes the actual native GPR operands on
+    // both backends; no SOURCE_OFFSET-only or inferred return observation.
+    const auto& task_sites=kernel::NativeProfileIdentityOwner::kTaskDiagnosticSites;
+    for(size_t site=0;site<task_sites.size();++site){
+      const auto& cut=task_sites[site];
+      if(start_address==cut.function && address==cut.address && code==cut.word){
+        ContextBarrier();CallExtern(builtins()->native_identity_task_diagnostic[site]);break;
+      }
+    }
     InstrData i;
     i.address = address;
     i.code = code;

@@ -6,6 +6,8 @@
  ******************************************************************************
  */
 #include "xenia/app/title_metadata_cache.h"
+#include "xenia/base/host_metadata_writer.h"
+#include "xenia/base/platform.h"
 
 #include <algorithm>
 #include <array>
@@ -157,95 +159,28 @@ std::optional<GameFileInfo> DecodeInfo(const toml::table &value) {
   return info;
 }
 
-bool AtomicBytes(const std::filesystem::path &path,
-                 std::span<const uint8_t> bytes) {
-  auto temporary = path;
-  temporary +=
-      "." +
-      std::to_string(
-          std::chrono::steady_clock::now().time_since_epoch().count()) +
-      ".tmp";
-  {
-    std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
-    if (!file || !file.write(reinterpret_cast<const char *>(bytes.data()),
-                             bytes.size())) {
-      std::error_code ec;
-      std::filesystem::remove(temporary, ec);
-      return false;
-    }
-    file.flush();
-    file.close();
-    if (file.fail()) {
-      std::error_code ec;
-      std::filesystem::remove(temporary, ec);
-      return false;
-    }
-  }
-  std::error_code ec;
-  std::filesystem::rename(temporary, path, ec);
-  if (ec) {
-    std::filesystem::remove(temporary, ec);
-    return false;
-  }
-  return true;
-}
-
 std::optional<std::vector<uint8_t>>
-BoundedBytes(const std::filesystem::path &path, uint64_t limit) {
-  std::error_code ec;
-  const auto size = std::filesystem::file_size(path, ec);
-  if (ec || size > limit) {
-    return std::nullopt;
-  }
+BoundedBytes(const std::shared_ptr<filesystem::HostMetadataWriter>& writer,
+             const std::filesystem::path &path, uint64_t limit) {
+  std::error_code error;
+  const auto absolute = std::filesystem::absolute(path, error).lexically_normal();
+  if (error) return std::nullopt;
+  const auto token = writer->Capture(absolute.lexically_relative(writer->path()), limit, error);
+  if (token && !error && token->exists())
+    return std::vector<uint8_t>(token->bytes().begin(), token->bytes().end());
+#if XE_PLATFORM_WIN32
+  // Existing cache reads stay available; no raw Windows publication fallback.
+  if (error != std::errc::operation_not_supported) return std::nullopt;
+  const auto size = std::filesystem::file_size(path, error);
+  if (error || size > limit) return std::nullopt;
   std::ifstream file(path, std::ios::binary);
   std::vector<uint8_t> bytes(static_cast<size_t>(size));
-  if (!file ||
-      !file.read(reinterpret_cast<char *>(bytes.data()), bytes.size())) {
+  if (!file || !file.read(reinterpret_cast<char*>(bytes.data()), std::streamsize(bytes.size())))
     return std::nullopt;
-  }
   return bytes;
-}
-
-void PruneOldIcons(const std::filesystem::path &folder,
-                   const std::filesystem::path &current) {
-  struct Images {
-    std::filesystem::file_time_type time{};
-    std::vector<std::filesystem::path> paths;
-  };
-  std::unordered_map<std::string, Images> generations;
-  std::error_code ec;
-  const auto current_prefix = current.filename().string().substr(0, 16);
-  std::filesystem::directory_iterator it(folder, ec), end;
-  for (; !ec && it != end; it.increment(ec)) {
-    const auto name = it->path().filename().string();
-    if ((name.size() != 20 && name.size() != 24) ||
-        (name.substr(16) != ".png" && name.substr(16) != ".spa.png") ||
-        !std::all_of(name.begin(), name.begin() + 16,
-                     [](unsigned char c) { return std::isxdigit(c); }) ||
-        name.substr(0, 16) == current_prefix) {
-      continue;
-    }
-    const auto time = it->last_write_time(ec);
-    if (!ec) {
-      auto &images = generations[name.substr(0, 16)];
-      if (images.paths.empty() || time > images.time) {
-        images.time = time;
-      }
-      images.paths.push_back(it->path());
-    }
-  }
-  std::vector<Images> old;
-  for (auto &[key, images] : generations) {
-    old.push_back(std::move(images));
-  }
-  std::sort(old.begin(), old.end(),
-            [](const auto &a, const auto &b) { return a.time > b.time; });
-  // Keep one previous generation for readers of the prior immutable snapshot.
-  for (size_t i = 1; i < old.size(); ++i) {
-    for (const auto &path : old[i].paths) {
-      std::filesystem::remove(path, ec);
-    }
-  }
+#else
+  return std::nullopt;
+#endif
 }
 } // namespace
 
@@ -264,20 +199,25 @@ FingerprintPhysicalTitle(const std::filesystem::path &path) {
 
 std::optional<PhysicalTitleMetadata>
 ReadCachedPhysicalTitle(const std::filesystem::path &cache_root,
-                        const std::filesystem::path &path) {
+                        const std::filesystem::path &path,
+                        std::shared_ptr<filesystem::HostMetadataWriter> writer) {
   const auto before = FingerprintPhysicalTitle(path);
   if (!before) {
     return std::nullopt;
   }
+  std::error_code writer_error;
+  if (!writer) writer = filesystem::HostMetadataWriter::Open(cache_root, writer_error);
+  const auto expected_root = std::filesystem::absolute(cache_root, writer_error).lexically_normal();
+  if (writer_error || writer->path() != expected_root) return std::nullopt;
   const auto folder =
       cache_root / Hex(Hash(before->source_path.generic_string()));
   const auto manifest_path = folder / "metadata.toml";
   const auto icon_path = folder / (Hex(before->value) + ".png");
-  std::error_code ec;
-  if (std::filesystem::file_size(manifest_path, ec) <= kMaxCacheMetadataBytes &&
-      !ec) {
+  const auto manifest_bytes = BoundedBytes(writer, manifest_path, kMaxCacheMetadataBytes);
+  if (manifest_bytes) {
     try {
-      const auto manifest = toml::parse_file(xe::path_to_utf8(manifest_path));
+      const auto manifest = toml::parse(std::string_view(
+          reinterpret_cast<const char*>(manifest_bytes->data()), manifest_bytes->size()));
       const auto seal = manifest["record_hash"].value<std::string>();
       auto unsealed = manifest;
       unsealed.erase("record_hash");
@@ -294,7 +234,7 @@ ReadCachedPhysicalTitle(const std::filesystem::path &cache_root,
           const auto icon_hash = manifest["icon_hash"].value<std::string>();
           const bool has_icon = manifest["has_icon"].value_or(false);
           if (has_icon) {
-            const auto bytes = BoundedBytes(icon_path, kMaxCacheIconBytes);
+            const auto bytes = BoundedBytes(writer, icon_path, kMaxCacheIconBytes);
             if (!bytes || !icon_hash ||
                 *icon_hash != Hex(XXH3_64bits(bytes->data(), bytes->size()))) {
               info.reset();
@@ -307,7 +247,7 @@ ReadCachedPhysicalTitle(const std::filesystem::path &cache_root,
             const auto spa_path =
                 shared_icon ? icon_path
                             : folder / (Hex(before->value) + ".spa.png");
-            const auto bytes = BoundedBytes(spa_path, kMaxCacheIconBytes);
+            const auto bytes = BoundedBytes(writer, spa_path, kMaxCacheIconBytes);
             const auto hash = manifest["spa_icon_hash"].value<std::string>();
             if (!info->title_resources || !bytes || !hash ||
                 *hash != Hex(XXH3_64bits(bytes->data(), bytes->size()))) {
@@ -336,7 +276,7 @@ ReadCachedPhysicalTitle(const std::filesystem::path &cache_root,
             if (after && *after == *before) {
               return PhysicalTitleMetadata{
                   *before, std::move(*info),
-                  has_icon ? icon_path : std::filesystem::path{}, true};
+                  has_icon ? icon_path : std::filesystem::path{}, true, writer};
             }
           }
         }
@@ -350,7 +290,7 @@ ReadCachedPhysicalTitle(const std::filesystem::path &cache_root,
   if (!info || !after || *after != *before) {
     return std::nullopt;
   }
-  PhysicalTitleMetadata result{*after, std::move(*info), {}, false};
+  PhysicalTitleMetadata result{*after, std::move(*info), {}, false, writer};
   const auto payload = EncodeInfo(result.info);
   toml::table manifest;
   manifest.insert("revision", kPhysicalMetadataRevision);
@@ -377,20 +317,20 @@ ReadCachedPhysicalTitle(const std::filesystem::path &cache_root,
                     Hex(XXH3_64bits(spa_icon.data(), spa_icon.size())));
   }
   manifest.insert("record_hash", Hex(Hash(Dump(manifest))));
-  std::filesystem::create_directories(folder, ec);
-  if (!ec && result.info.icon.size() <= kMaxCacheIconBytes &&
+  const auto relative = folder.lexically_relative(cache_root);
+  if (result.info.icon.size() <= kMaxCacheIconBytes &&
       spa_icon.size() <= kMaxCacheIconBytes &&
-      (result.info.icon.empty() || AtomicBytes(icon_path, result.info.icon)) &&
+      (result.info.icon.empty() || writer->Write(relative / icon_path.filename(), result.info.icon)) &&
       (spa_icon.empty() || shared_icon ||
-       AtomicBytes(folder / (Hex(after->value) + ".spa.png"), spa_icon))) {
+       writer->Write(relative / (Hex(after->value) + ".spa.png"), spa_icon))) {
     const auto text = Dump(manifest);
     if (text.size() <= kMaxCacheMetadataBytes &&
-        AtomicBytes(
-            manifest_path,
-            {reinterpret_cast<const uint8_t *>(text.data()), text.size()})) {
-      result.icon_path =
-          result.info.icon.empty() ? std::filesystem::path{} : icon_path;
-      PruneOldIcons(folder, icon_path);
+        writer->Write(relative / "metadata.toml",
+            {reinterpret_cast<const uint8_t*>(text.data()), text.size()})) {
+      result.icon_path = result.info.icon.empty() ? std::filesystem::path{} : icon_path;
+      // Prior named files lack an exact retirement/ownership receipt after
+      // restart. Keep them; never delete unknown artwork by a hex-name scan.
+      // The same shared20GiB admission floor bounds future cache growth.
     }
   }
   return result;

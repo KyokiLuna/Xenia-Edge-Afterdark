@@ -84,17 +84,25 @@ std::optional<StorageDeviceInfo> GetStorageDeviceInfo(KernelState* state,
   optical.device_id = device_id;
   optical.device_type = DeviceType::ODD;
   optical.name = u"Title Media";
-  optical.guest_root = state->title_mount_path_ + "\\content";
-  optical.guest_volume_root = state->title_mount_path_;
-  // Preserve the existing title-media content adapter, without claiming that
-  // a physical DVD is present. The current VFS device supplies its geometry.
-  const auto* root =
-      state->title_mount_path_.empty()
-          ? nullptr
-          : state->file_system()->ResolvePath(state->title_mount_path_);
-  if (root) {
-    const auto* device = root->device();
-    optical.available = true;
+  std::string title_mount;
+  std::shared_ptr<vfs::Device> device;
+  {
+    auto lock = global_critical_region::AcquireDirect();
+    title_mount = state->title_mount_path_;
+    // Resolve the original root and retain its exact registered device before
+    // releasing namespace protection. No borrowed Entry escapes this scope.
+    const auto* root = title_mount.empty() ? nullptr
+        : state->file_system()->ResolvePath(title_mount);
+    if (root) {
+      auto retained = state->file_system()->AcquirePathDevice(title_mount);
+      if (retained.get() == root->device()) { device = std::move(retained); }
+    }
+  }
+  optical.guest_root = title_mount + "\\content";
+  optical.guest_volume_root = title_mount;
+  // Preserve the existing title-media adapter, without claiming a physical
+  // DVD. Potential backend geometry observation runs outside namespace locks.
+  if (device) {
     uint64_t bytes = device->total_allocation_units();
     for (const uint64_t factor :
          {uint64_t(device->sectors_per_allocation_unit()),
@@ -103,7 +111,12 @@ std::optional<StorageDeviceInfo> GetStorageDeviceInfo(KernelState* state,
                   ? std::numeric_limits<uint64_t>::max()
                   : bytes * factor;
     }
-    optical.total_bytes = bytes;
+    auto lock = global_critical_region::AcquireDirect();
+    if (state->title_mount_path_ == title_mount && !device->namespace_retiring() &&
+        state->file_system()->AcquirePathDevice(title_mount) == device) {
+      optical.available = true;
+      optical.total_bytes = bytes;
+    }
   }
   return optical;
 }

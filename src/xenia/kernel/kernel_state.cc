@@ -11,14 +11,18 @@
 #include <atomic>
 #include <chrono>
 #include <ranges>
+#include <string_view>
 
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/xam/host_ui_fallback.h"
+#include "xenia/hid/input_system.h"
 #include "xenia/kernel/native_system_ui_notifications.h"
 
 #include <cstdlib>
 
 #include "xenia/base/byte_stream.h"
 #include "xenia/base/logging.h"
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/base/snapshot_publisher.h"
 #include "xenia/emulator.h"
 #include "xenia/gpu/graphics_system.h"
@@ -100,6 +104,7 @@ KernelState::KernelState(
   shared_kernel_state_ = this;
   processor_ = emulator->processor();
   file_system_ = emulator->file_system();
+  file_system_->BeginStoragePreparation();
   // Explicit authority already protected by Emulator before VFS construction.
   // Keep it independent of XConfig and alive before XamState/profile discovery.
   snapshot_recovery_owner_ = std::move(recovery_owner);
@@ -111,6 +116,11 @@ KernelState::KernelState(
   xconfig_ = std::make_unique<XConfig>(std::move(console_settings),
                                        console_settings_error);
   xam_state_ = std::make_unique<xam::XamState>(emulator, this);
+  host_ui_access_ = std::make_shared<xam::HostUiFallbackAccess>(this);
+  if (auto* input = emulator_->input_system()) {
+    auto lock = input->lock();
+    input->BeginHostUiInputEpoch();
+  }
   guest_scheduler_ = std::make_unique<GuestScheduler>(this);
   smc_ = std::make_unique<SystemManagementController>();
   nui_ = std::make_unique<NUIController>();
@@ -125,12 +135,18 @@ KernelState::KernelState(
       kMemoryProtectRead | kMemoryProtectWrite);
 
   xenia_assert(fixed_alloc_worked);
+  // Host profile creation is valid before the first title. Initialize the
+  // existing SYSTEM dispatch worker once, outside dispatch/GCRC locks, after
+  // its actual scheduler, process globals and allocation heaps exist.
+  InitializeDispatchThread();
 }
 
 KernelState::~KernelState() {
+  SealStoragePreparation();
   // Before anything a timer callback touches goes away.
   XTimer::CancelAll();
 
+  if (!SealLegacyHostUi()) { std::quick_exit(EXIT_FAILURE); }
   ShutdownNativeGuideBootstrapProbe();
 
   SetExecutableModule(nullptr);
@@ -318,14 +334,94 @@ void KernelState::ReleaseIoEvent(object_ref<XEvent> event) {
 }
 
 void KernelState::ShutdownDispatchThread() {
-  if (dispatch_thread_running_) {
-    {
-      std::lock_guard lock(dispatch_mutex_);
-      dispatch_thread_running_ = false;
-    }
+  bool running;
+  {
+    std::lock_guard lock(dispatch_mutex_);
+    dispatch_stopping_ = true;
+    running = dispatch_thread_running_.exchange(false);
+  }
+  if (running) {
     dispatch_cond_.notify_all();
     dispatch_thread_->Wait(0, 0, 0, nullptr);
   }
+}
+
+std::shared_ptr<NativeUiBackendRoute::HostLease>
+KernelState::AcquireLegacyHostUi() {
+  const auto title = emulator_->title_execution_state().snapshot();
+  if (title.phase == TitleExecutionState::Phase::kStopping ||
+      (emulator_->input_system() &&
+       emulator_->input_system()->IsNativeInputOwned())) { return {}; }
+  bool expected = false;
+  if (!xam_state_->is_xam_dialog_present_.compare_exchange_strong(expected, true)) {
+    return {};
+  }
+  auto admission = host_ui_route_.AdmitHostOnly(host_ui_epoch_, title.generation);
+  if (!admission.host) { xam_state_->is_xam_dialog_present_.store(false); }
+  return std::move(admission.host);
+}
+bool KernelState::InitializeDispatchThread() {
+  // Constructor-only, before public queue ingress. Never create/restart this
+  // guest-aware host thread from a title callback or under a Kernel lock.
+  if (global_critical_region::is_held_by_current_thread() || dispatch_stopping_) {
+    return false;
+  }
+  if (!dispatch_thread_running_) {
+    dispatch_thread_running_ = true;
+    dispatch_thread_ = object_ref<XHostThread>(new XHostThread(
+        this, 128 * 1024, 0,
+        [this]() {
+          // As we run guest callbacks the debugger must be able to suspend us.
+          dispatch_thread_->set_can_debugger_suspend(true);
+
+          while (true) {
+            std::function<void()> fn;
+            {
+              std::unique_lock lock(dispatch_mutex_);
+              dispatch_cond_.wait(lock, [this]() {
+                return !dispatch_queue_.empty() || !dispatch_thread_running_;
+              });
+              if (!dispatch_thread_running_) {
+                break;
+              }
+              fn = std::move(dispatch_queue_.front());
+              dispatch_queue_.pop_front();
+            }
+            fn();
+          }
+          return 0;
+        },
+        GetSystemProcess()));  // don't think an equivalent exists on real hw
+    dispatch_thread_->set_name("Kernel Dispatch");
+    if (XFAILED(dispatch_thread_->Create())) {
+      dispatch_thread_running_ = false;
+      dispatch_thread_.reset();
+      return false;
+    }
+  }
+  return dispatch_thread_running_;
+}
+bool KernelState::QueueHostUiWork(std::function<void()> work) {
+  std::lock_guard lock(dispatch_mutex_);
+  if (dispatch_stopping_ || !dispatch_thread_running_) { return false; }
+  dispatch_queue_.push_back(std::move(work));
+  dispatch_cond_.notify_all();
+  return true;
+}
+void KernelState::BeginStopLegacyHostUi() noexcept { host_ui_route_.BeginStop(); }
+bool KernelState::SealLegacyHostUi() noexcept {
+  BeginStopLegacyHostUi();
+  return host_ui_route_.Drain(std::chrono::steady_clock::now() +
+                              std::chrono::seconds(5));
+}
+
+std::shared_ptr<NativeUiBackendRoute::NativeCreationLease>
+KernelState::AcquireNativeUiCreation() {
+  if (xam_state_->IsUIActive() ||
+      (emulator_->input_system() && emulator_->input_system()->IsUIInputBlocked())) {
+    return {};
+  }
+  return host_ui_route_.ReserveNativeCreation(host_ui_epoch_);
 }
 
 KernelState* KernelState::shared() { return shared_kernel_state_; }
@@ -340,6 +436,13 @@ xam::AppManager* KernelState::app_manager() const {
 
 xam::ContentManager* KernelState::content_manager() const {
   return xam_state()->content_manager();
+}
+X_STATUS KernelState::RetireMountedDeviceTree(
+    const std::shared_ptr<vfs::Device>& root, bool include_root) {
+  if (!xam_state_ || !root || global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  return xam_state_->content_manager()->RetireMountedDeviceTree(root, include_root);
 }
 
 uint32_t KernelState::title_id() const {
@@ -627,10 +730,11 @@ object_ref<XModule> KernelState::GetModule(const std::string_view name,
     }
   }
 
-  auto path(name);
+  std::string path(name);
+  xboxkrnl::xeObCaptureFilePathForCaller(path, 0);
 
   // Resolve the path to an absolute path.
-  auto entry = file_system_->ResolvePath(name);
+  auto entry = file_system_->ResolvePath(path);
   if (entry) {
     path = entry->absolute_path();
   }
@@ -855,38 +959,6 @@ void KernelState::SetExecutableModule(object_ref<UserModule> module) {
   // Initialize file I/O hooks for XMP volume title-specific patches.
   InitXmpVolumePatch();
 
-  // Spin up deferred dispatch worker.
-  // TODO(benvanik): move someplace more appropriate (out of ctor, but around
-  // here).
-  if (!dispatch_thread_running_) {
-    dispatch_thread_running_ = true;
-    dispatch_thread_ = object_ref<XHostThread>(new XHostThread(
-        this, 128 * 1024, 0,
-        [this]() {
-          // As we run guest callbacks the debugger must be able to suspend us.
-          dispatch_thread_->set_can_debugger_suspend(true);
-
-          while (true) {
-            std::function<void()> fn;
-            {
-              std::unique_lock lock(dispatch_mutex_);
-              dispatch_cond_.wait(lock, [this]() {
-                return !dispatch_queue_.empty() || !dispatch_thread_running_;
-              });
-              if (!dispatch_thread_running_) {
-                break;
-              }
-              fn = std::move(dispatch_queue_.front());
-              dispatch_queue_.pop_front();
-            }
-            fn();
-          }
-          return 0;
-        },
-        GetSystemProcess()));  // don't think an equivalent exists on real hw
-    dispatch_thread_->set_name("Kernel Dispatch");
-    dispatch_thread_->Create();
-  }
 }
 
 void KernelState::LoadKernelModule(object_ref<KernelModule> kernel_module) {
@@ -925,6 +997,7 @@ object_ref<UserModule> KernelState::LoadUserModule(
   // Some games try to load relative to launch module, others specify full path.
   auto name = xe::utf8::find_name_from_guest_path(raw_name);
   std::string path(raw_name);
+  xboxkrnl::xeObCaptureFilePathForCaller(path, 0);
   if (name == raw_name) {
     if (import_domain) {
       // A native system child belongs to its root's loader namespace, even
@@ -1860,8 +1933,37 @@ void KernelState::InitXmpVolumePatch() {
   xmp_volume_patch_ = XmpVolumePatch::CreateForTitle(title_id(), this);
 }
 
+void KernelState::SealStoragePreparation() {
+  if (file_system_) file_system_->SealStoragePreparation();
+}
+
 void KernelState::TerminateTitle() {
   XELOGI("KernelState::TerminateTitle");
+  if (emulator_->HasLifecycleDriver()) {
+    const auto generation =
+        emulator_->title_execution_state().snapshot().generation;
+    if (!emulator_->RequestLifecycleQuit(generation)) {
+      XELOGE("Title termination was not accepted; native drain is NOT proved");
+      xe::FlushLog();
+      std::quick_exit(EXIT_FAILURE);
+    }
+    // No owner is retained on this never-unwound guest/fiber stack. The host
+    // worker preserves the exact title owner through its real native stop.
+    auto* current = XThread::GetCurrentThread();
+    if (current) {
+      current->Suspend(nullptr);
+    }
+    for (;;) {
+      xe::threading::NanoSleep(int64_t(1'000'000'000));
+    }
+  }
+  // Legacy/headless processes have no owned UI worker. Keep their old process
+  // exit only in the absence of every recorded native domain/authority.
+  if (HasNativeImportDomains() || HasNativeSystemAllocationAuthorities()) {
+    XELOGE("Unowned process termination: native drain is NOT proved");
+    xe::FlushLog();
+    std::quick_exit(EXIT_FAILURE);
+  }
   emulator_->NotifyTitleExecutionStopped(0, this);
   xe::FlushLog();
   std::quick_exit(EXIT_SUCCESS);
@@ -1878,7 +1980,7 @@ static void HandOffToHostUI(Emulator* emulator,
   const auto generation =
       emulator->title_execution_state().snapshot().generation;
   if (handler && handler()) {
-    if (generation) {
+    if (generation && !emulator->HasLifecycleDriver()) {
       emulator->NotifyTitleExecutionStopped(generation, owner);
     }
     // Park off guest code until the host's reset or exit ends us; Suspend can
@@ -2079,6 +2181,9 @@ void KernelState::BroadcastNotification(XNotificationID id, uint32_t data) {
 }
 
 void KernelState::BroadcastNativeSystemUiNotification(bool visible) {
+  // Actual native notification observer, not a host fallback timer or title
+  // notification. Its publication resolves the pending native admission gap.
+  host_ui_route_.ObserveNativeUiVisibility(visible);
   auto global_lock = global_critical_region_.Acquire();
   const bool active = visible || xam_state()->IsUIActive();
   for (const auto& listener : notify_listeners_) {
@@ -2104,12 +2209,34 @@ void KernelState::CompleteOverlappedEx(uint32_t overlapped_ptr, X_RESULT result,
   XOverlappedSetContext(ptr, 0);
   std::atomic_thread_fence(std::memory_order_release);
   XOverlappedSetResult(ptr, result);
+  // Observe only the values the real completion just published. No guest
+  // polling, extra pointer reads, replay or event/APC order changes.
+  static std::atomic<uint64_t> completion_observations{0};
+  const auto observation = cvars::native_system_ui_trace
+      ? completion_observations.fetch_add(1, std::memory_order_relaxed) : UINT64_MAX;
+  auto trace = [observation, overlapped_ptr, result, extended_error, length,
+                thread_handle](const char* stage, uint32_t event, uint32_t routine) noexcept {
+    if (observation > 128) return;
+    try {
+      if (observation == 128) {
+        if (std::string_view(stage) == "published")
+          XELOGI("StorageDiagnostic overlap budget_exhausted limit=128 later_completions=unknown");
+        return;
+      }
+      XELOGI("StorageDiagnostic overlap id={} stage={} overlap={:08X} result={:08X} "
+             "extended={:08X} length={} thread={:08X} event={:08X} routine={:08X}",
+             observation, stage, overlapped_ptr, result, extended_error,
+             length, thread_handle, event, routine);
+    } catch (...) {}
+  };
+  trace("published", 0, 0);
   // The event is left unsignaled when there is a completion routine.
   X_HANDLE event_handle = XOverlappedGetEvent(ptr);
   if (event_handle && !XOverlappedGetCompletionRoutine(ptr)) {
     auto ev = object_table()->LookupObject<XEvent>(event_handle);
     assert_not_null(ev);
     if (ev) {
+      trace("signal_event", event_handle, 0);
       ev->Set(0, false);
     }
   }
@@ -2118,6 +2245,7 @@ void KernelState::CompleteOverlappedEx(uint32_t overlapped_ptr, X_RESULT result,
     if (thread) {
       // Queue APC on the thread that requested the overlapped operation.
       uint32_t routine = XOverlappedGetCompletionRoutine(ptr);
+      trace("queue_apc", 0, routine);
       thread->EnqueueApc(routine, result, length, overlapped_ptr);
     }
   }

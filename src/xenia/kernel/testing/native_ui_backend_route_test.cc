@@ -7,6 +7,13 @@
  ******************************************************************************
  */
 #include "xenia/base/native_ui_backend_route.h"
+#include "xenia/kernel/native_system_ui_public_calls.h"
+#include "xenia/kernel/native_system_ui_service.h"
+#include "xenia/kernel/guest_runtime_plan.h"
+#include "xenia/cpu/ppc/ppc_context.h"
+#include "xenia/cpu/export_resolver.h"
+#include "xenia/kernel/xam/xam_module.h"
+#include "xenia/kernel/xam/xam_private.h"
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -21,6 +28,7 @@
 #include "xenia/kernel/testing/native_system_title_input_test_access.h"
 #include "xenia/kernel/xam/host_ui_fallback.h"
 #include "xenia/ui/windowed_app_context.h"
+#include "xenia/xbox.h"
 
 namespace xe::kernel::test {
 namespace {
@@ -35,6 +43,89 @@ class Context final : public ui::WindowedAppContext {
 };
 auto Now() { return std::chrono::steady_clock::now(); }
 }  // namespace
+// CPU ownership endpoints only. A production no-op/queue decision still
+// requires the complete original native helper/sender observation; these tests
+// do not mint that receipt, native visibility, account selection or readiness.
+TEST_CASE("Native signin no-op retires only creation while queued request awaits visibility",
+          "[kernel][native_ui_route][native_signin]") {
+  Route gate,prepared;
+  auto epoch=std::make_shared<const Route::HostOnlyEpoch>();
+  const bool queued=GENERATE(false,true);
+  auto ingress=gate.ReserveNativeCreation(epoch);REQUIRE(ingress);
+  REQUIRE(prepared.Admit(Cohort(),Input::kReady,true).decision==Decision::kNative);
+  NativeSigninCreationFacts facts;
+  facts.armed=true;facts.entered=true;facts.returned=true;
+  facts.sender_entered=queued;facts.sender_returned=queued;
+  const auto decision=DecideNativeSigninCreation(facts,true,true,0);
+  REQUIRE(decision==(queued?NativeSigninCreationDecision::kQueued:NativeSigninCreationDecision::kNoUi));
+  // A normal authenticated public continuation proves completion without
+  // fabricating an own-return flag (A64 tail-restore can bypass that hook).
+  auto incomplete=facts;incomplete.returned=false;incomplete.sender_returned=false;
+  CHECK(DecideNativeSigninCreation(incomplete,true,true,0)==decision);
+  CHECK_FALSE(incomplete.returned);CHECK_FALSE(incomplete.sender_returned);
+  incomplete=facts;incomplete.entered=false;
+  CHECK(DecideNativeSigninCreation(incomplete,true,true,0)==NativeSigninCreationDecision::kUncertain);
+  CHECK(DecideNativeSigninCreation(facts,true,false,0)==NativeSigninCreationDecision::kUncertain);
+  CHECK(DecideNativeSigninCreation(facts,false,true,0)==NativeSigninCreationDecision::kUncertain);
+  incomplete=facts;incomplete.sender_entered=false;incomplete.sender_returned=true;
+  CHECK(DecideNativeSigninCreation(incomplete,true,true,0)==NativeSigninCreationDecision::kUncertain);
+  incomplete=facts;incomplete.lost=true;
+  CHECK(DecideNativeSigninCreation(incomplete,true,true,0)==NativeSigninCreationDecision::kUncertain);
+  CHECK(DecideNativeSigninCreation(facts,true,true,5)==NativeSigninCreationDecision::kUncertain);
+  if(queued){
+    incomplete=facts;incomplete.sender_returned=false;
+    CHECK(DecideNativeSigninCreation(incomplete,true,true,0)==NativeSigninCreationDecision::kQueued);
+    incomplete=facts;incomplete.sender_value=0x80004005;
+    CHECK(DecideNativeSigninCreation(incomplete,true,true,0)==NativeSigninCreationDecision::kUncertain);
+    incomplete.helper_value=1627;
+    CHECK(DecideNativeSigninCreation(incomplete,true,true,1627)==NativeSigninCreationDecision::kNoUi);
+    incomplete.returned=false; // exact adapter proof must still crosscheck raw sender
+    CHECK(DecideNativeSigninCreation(incomplete,true,true,5)==NativeSigninCreationDecision::kUncertain);
+    incomplete.sender_value=0x8007000E;
+    CHECK(DecideNativeSigninCreation(incomplete,true,true,1627)==NativeSigninCreationDecision::kUncertain);
+    CHECK(DecideNativeSigninCreation(incomplete,true,true,14)==NativeSigninCreationDecision::kNoUi);
+    incomplete.sender_returned=false;
+    CHECK(DecideNativeSigninCreation(incomplete,true,true,5)==NativeSigninCreationDecision::kUncertain);
+  }
+  ingress->MarkExecutionAttempt();ingress->Finish(decision==NativeSigninCreationDecision::kQueued);
+  auto next=gate.ReserveNativeCreation(epoch);
+  CHECK(bool(next)==!queued);
+  // Releasing a temporary no-op claim never unseals the prepared native route.
+  CHECK(prepared.Admit(Cohort(),Input::kProvenNoInitialSwap,true).decision==Decision::kDenied);
+  if(queued){
+    gate.ObserveNativeUiVisibility(true);
+    next=gate.ReserveNativeCreation(epoch);REQUIRE(next);next->Finish(false);
+    gate.ObserveNativeUiVisibility(false);
+  }else next->Finish(false);
+  CHECK(prepared.Admit(Cohort(),Input::kProvenNoInitialSwap,true).decision==Decision::kDenied);
+}
+TEST_CASE("Selected signin cancellation retires ingress before publication and delayed factory",
+          "[kernel][native_ui_route][native_signin][host_ui_fallback]") {
+  Context app;Route gate,prepared;
+  auto epoch=std::make_shared<const Route::HostOnlyEpoch>();
+  auto ingress=gate.ReserveNativeCreation(epoch);REQUIRE(ingress);
+  auto selected=prepared.Admit(Cohort(),Input::kProvenNoInitialSwap,true).host;
+  REQUIRE(selected);selected->RetainHostIngress(std::move(ingress));
+  auto delayed=selected;
+  auto completion=std::make_shared<xam::HostUiFallbackCompletion>();
+  uint32_t factories=0;
+  REQUIRE(xam::QueueHostUiFallback(app,selected,completion,[&](const auto&){++factories;}));
+  auto finish=std::make_shared<xam::HostUiFallbackOperationCompletion>(selected);
+  auto run=[selected,completion,finish=std::move(finish)]() mutable {
+    auto before_publication=std::move(finish);
+    CHECK(completion->closed.TryWait());
+    return selected->TryEnter()?X_ERROR_SUCCESS:X_ERROR_CANCELLED;
+  };
+  selected->Cancel();
+  // Fence auto-resets: the dispatch run is the sole consuming waiter.
+  CHECK(run()==X_ERROR_CANCELLED);
+  // Actual production dispatch publishes only AFTER run's completion guard.
+  auto next=gate.ReserveNativeCreation(epoch);REQUIRE(next);next->Finish(false);
+  CHECK_FALSE(delayed->TryEnter());
+  app.ExecutePendingFunctionsFromUIThread();CHECK(factories==0);
+  CHECK_FALSE(completion->admitted.load());
+}
+
 TEST_CASE("UI route never treats unknown input or a foreign cohort as fallback",
           "[kernel][native_ui_route]") {
   Route route;
@@ -274,3 +365,257 @@ TEST_CASE("Host factory drain refuses a nested callback ancestor",
   CHECK(second.Drain(Now()));
 }
 }  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Explicit host-only epoch neither invents native readiness nor crosses Kernels",
+          "[kernel][native_ui_route][host_ui_fallback]") {
+  Route route;
+  auto first = std::make_shared<const Route::HostOnlyEpoch>();
+  auto replacement = std::make_shared<const Route::HostOnlyEpoch>();
+  CHECK_FALSE(route.AdmitHostOnly({}, 0).host);
+  auto host = route.AdmitHostOnly(first, 0).host;
+  REQUIRE(host);
+  CHECK_FALSE(host->cohort().valid());
+  CHECK_FALSE(route.AdmitHostOnly(first, 0).host);
+  CHECK(route.Admit(Cohort(), Input::kReady, true).decision == Decision::kDenied);
+  host.reset();
+  CHECK_FALSE(route.AdmitHostOnly(replacement, 0).host);
+  auto title = route.AdmitHostOnly(first, 23).host;
+  REQUIRE(title);
+  title->FinishHostOnly();
+  CHECK_FALSE(title->TryEnter());
+  auto next = route.AdmitHostOnly(first, 23).host;
+  REQUIRE(next);  // Retained stale dialog/result cannot hold the next modal.
+  title = next;
+  unsigned canceled = 0;
+  title->SetCancellation([&] { ++canceled; });
+  auto entered = title->TryEnter();
+  REQUIRE(entered);
+  route.BeginStop();
+  CHECK(canceled == 1);
+  CHECK_FALSE(title->TryEnter());
+  CHECK_FALSE(route.Drain(Now()));  // Own/nested callback may not self-drain.
+  entered.reset();
+  CHECK(route.Drain(Now()));
+  CHECK_FALSE(route.AdmitHostOnly(first, 24).host);
+  Route native;
+  REQUIRE(native.Admit(Cohort(), Input::kReady, true).decision == Decision::kNative);
+  CHECK_FALSE(native.AdmitHostOnly(first, 23).host);
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Shared Kernel metadata admits exactly one native-or-legacy creating ingress",
+          "[kernel][native_ui_route][host_ui_fallback][interleaving]") {
+  Route gate;
+  auto epoch = std::make_shared<const Route::HostOnlyEpoch>();
+  // Native wins the short admission race, before any input/UI publication.
+  auto native = gate.ReserveNativeCreation(epoch);
+  REQUIRE(native);
+  CHECK_FALSE(gate.AdmitHostOnly(epoch, 17).host);
+  CHECK_FALSE(gate.ReserveNativeCreation(epoch));
+  native->Finish(true);  // Real native call returned queued, no SYS_UI yet.
+  CHECK_FALSE(gate.AdmitHostOnly(epoch, 17).host);
+  CHECK_FALSE(gate.ReserveNativeCreation(epoch));
+  gate.ObserveNativeUiVisibility(true);
+  CHECK_FALSE(gate.AdmitHostOnly(epoch, 17).host);
+  gate.ObserveNativeUiVisibility(false);
+  auto host = gate.AdmitHostOnly(epoch, 17).host;
+  REQUIRE(host);
+  // Host wins the opposite interleaving. Native cannot pass a stale flag read
+  // because its reservation uses this SAME State mutex and host record.
+  CHECK_FALSE(gate.ReserveNativeCreation(epoch));
+  host->FinishHostOnly();
+  auto synchronous = gate.ReserveNativeCreation(epoch);
+  REQUIRE(synchronous);
+  gate.ObserveNativeUiVisibility(true);
+  gate.ObserveNativeUiVisibility(false);
+  synchronous->Finish(true);  // Actual open+close already observed inside call.
+  REQUIRE(gate.AdmitHostOnly(epoch, 17).host);
+}
+TEST_CASE("Native-selected host fallback retains shared ingress through queue and modal",
+          "[kernel][native_ui_route][host_ui_fallback][interleaving]") {
+  Route gate;
+  auto epoch = std::make_shared<const Route::HostOnlyEpoch>();
+  auto ingress = gate.ReserveNativeCreation(epoch);
+  REQUIRE(ingress);
+  Route prepared;
+  auto fallback = prepared.Admit(Cohort(), Input::kProvenNoInitialSwap, true).host;
+  REQUIRE(fallback);
+  fallback->RetainHostIngress(std::move(ingress));
+  CHECK_FALSE(gate.AdmitHostOnly(epoch, 19).host);
+  CHECK_FALSE(gate.ReserveNativeCreation(epoch));
+  fallback->Cancel();
+  CHECK_FALSE(gate.AdmitHostOnly(epoch, 19).host);
+  fallback.reset();
+  auto host = gate.AdmitHostOnly(epoch, 19).host;
+  REQUIRE(host);
+  host->FinishHostOnly();
+  auto old = gate.ReserveNativeCreation(epoch);
+  REQUIRE(old);
+  gate.BeginStop();
+  old->Finish(true);  // Stop wins before native publication.
+  CHECK_FALSE(gate.AdmitHostOnly(epoch, 20).host);
+  CHECK_FALSE(gate.ReserveNativeCreation(epoch));
+  Route replacement;
+  auto fresh = std::make_shared<const Route::HostOnlyEpoch>();
+  auto current = replacement.AdmitHostOnly(fresh, 20).host;
+  REQUIRE(current);
+  old.reset();
+  CHECK(current->TryEnter());
+  CHECK_FALSE(replacement.ReserveNativeCreation(epoch));
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Uncertain native creating execution keeps legacy ingress closed until observation",
+          "[kernel][native_ui_route][host_ui_fallback][interleaving]") {
+  Route gate;
+  auto epoch = std::make_shared<const Route::HostOnlyEpoch>();
+  auto call = gate.ReserveNativeCreation(epoch);
+  REQUIRE(call);
+  call->MarkExecutionAttempt();
+  call.reset();  // Exception/uncertain return cannot silently permit host replay.
+  CHECK_FALSE(gate.AdmitHostOnly(epoch, 31).host);
+  gate.ObserveNativeUiVisibility(false);
+  REQUIRE(gate.AdmitHostOnly(epoch, 31).host);
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Completed selected host modal frees both exact slots while delayed references survive",
+          "[kernel][native_ui_route][host_ui_fallback][completion][interleaving]") {
+  Route gate;
+  auto epoch = std::make_shared<const Route::HostOnlyEpoch>();
+  auto ingress = gate.ReserveNativeCreation(epoch);
+  REQUIRE(ingress);
+  std::vector<bool> visibility;
+  Route prepared([&](bool visible) { visibility.push_back(visible); });
+  const auto cohort = Cohort();
+  auto old = prepared.Admit(cohort, Input::kProvenNoInitialSwap, true).host;
+  REQUIRE(old);
+  old->RetainHostIngress(std::move(ingress));
+  auto delayed_post = old;
+  auto delayed_dialog = old;
+  old->SetVisible(true);
+  old->SetVisible(false);  // Existing actual close observation precedes retire.
+  old->FinishHostOperation();
+  CHECK(old->cancelled());
+  CHECK_FALSE(old->TryEnter());
+  REQUIRE(visibility == std::vector<bool>{true, false});
+
+  // Both the Kernel gate and prepared route admit the next request now,
+  // without waiting for the old 200ms post or dialog/input references to die.
+  auto next_ingress = gate.ReserveNativeCreation(epoch);
+  REQUIRE(next_ingress);
+  auto next = prepared.Admit(cohort, Input::kProvenNoInitialSwap, true).host;
+  REQUIRE(next);
+  next->RetainHostIngress(std::move(next_ingress));
+  REQUIRE(prepared.CurrentHost(cohort) == next);
+  next->SetVisible(true);
+  delayed_post->SetVisible(false);
+  delayed_dialog->FinishHostOperation();
+  delayed_dialog->Cancel();
+  CHECK_FALSE(delayed_post->TryEnter());
+  CHECK(prepared.CurrentHost(cohort) == next);
+  CHECK(next->TryEnter());
+  CHECK_FALSE(gate.ReserveNativeCreation(epoch));
+  REQUIRE(visibility == std::vector<bool>{true, false, true});
+  delayed_post.reset();
+  delayed_dialog.reset();
+  old.reset();
+  CHECK(prepared.CurrentHost(cohort) == next);
+  CHECK_FALSE(gate.ReserveNativeCreation(epoch));
+
+  next->SetVisible(false);
+  next->FinishHostOperation();
+  auto native_request = gate.ReserveNativeCreation(epoch);
+  REQUIRE(native_request);
+  CHECK(prepared.Admit(cohort, Input::kReady, true).decision == Decision::kNative);
+  // Completion never resets the original cohort/readiness seal into a host
+  // replay. The retained old lease cannot cancel the new creating receipt.
+  CHECK(prepared.Admit(cohort, Input::kProvenNoInitialSwap, true).decision ==
+        Decision::kDenied);
+  native_request->Finish(false);
+  auto host = gate.AdmitHostOnly(epoch, 43).host;
+  REQUIRE(host);
+  host->FinishHostOnly();
+}
+}  // namespace xe::kernel::test
+
+
+namespace xe::kernel::test {
+TEST_CASE("SYSTEM Editor loader ABI preserves actual paired stack edges",
+          "[kernel][native_ui][editor_handoff][abi]") {
+  const auto layout=CaptureNativeEditorLoaderStack(0x70001000,0x70000000,0x70002000);
+  REQUIRE(layout);
+  CHECK(layout->producer_sp==0x70000BD0);
+  CHECK(layout->data==0x70000ED0);
+  CHECK(layout->path==0x70000C90);
+  CHECK(MatchesNativeEditorLoaderEdge(false,layout->producer_sp,0x70000BD0,0x817F5744));
+  CHECK(MatchesNativeEditorLoaderEdge(true,layout->producer_sp,0x70000BD0,0x817F5758));
+  CHECK_FALSE(MatchesNativeEditorLoaderEdge(false,layout->producer_sp,0x70000BD0,0x817F5758));
+  CHECK_FALSE(MatchesNativeEditorLoaderEdge(true,layout->producer_sp,0x70000BC0,0x817F5758));
+  CHECK_FALSE(MatchesNativeEditorLoaderEdge(true,layout->producer_sp,0x170000BD0ull,0x817F5758));
+  CHECK_FALSE(MatchesNativeEditorLoaderEdge(true,layout->producer_sp,0x70000BD0,0x1817F5758ull));
+  CHECK_FALSE(CaptureNativeEditorLoaderStack(0x420,0,0x70002000));
+  CHECK_FALSE(CaptureNativeEditorLoaderStack(0x70001004,0x70000000,0x70002000));
+  CHECK_FALSE(CaptureNativeEditorLoaderStack(0x70001000,0x70000BD1,0x70002000));
+  CHECK_FALSE(CaptureNativeEditorLoaderStack(0x70001000,0x70000000,0x70000FFF));
+  CHECK_FALSE(CaptureNativeEditorLoaderStack(0x70001000,0x70002000,0x70000000));
+  // Exercise the actual refusal policy: BOOL false must not be a nonzero
+  // HRESULT, while the producer's HRESULT still reports failure.
+  CHECK_FALSE(bool(NativeEditorLoaderRefusal(true)));
+  CHECK(XFAILED(NativeEditorLoaderRefusal(false)));
+}
+TEST_CASE("Editor loader pair requires both real deferred SYSTEM source contracts",
+          "[kernel][native_ui][editor_handoff][plan]") {
+  ValidatedGuestRuntimePlan plan;
+  for (const auto& body:NativeEditorLoaderCodeProfiles()) {
+    if (!body.arguments) continue;
+    GuestRuntime::Function function;
+    function.identity=std::string(body.identity);function.address=body.address;
+    function.arguments.assign(body.arguments,0);
+    function.return_kind=GuestRuntime::ReturnKind::kUInt32;
+    plan.catalog.emplace(function.identity,function);
+    ValidatedGuestRuntimePlan::Contract contract;
+    contract.caller=ValidatedGuestRuntimePlan::CallerPolicy::kSystemTaskOnly;
+    contract.result=ValidatedGuestRuntimePlan::ResultPolicy::kAny;
+    plan.contracts.emplace(function.identity,contract);
+  }
+  REQUIRE(NativeEditorLoaderPlanPairValid(plan));
+  REQUIRE(plan.catalog.size()==2);
+  for (const auto& [name,function]:plan.catalog) {
+    auto changed=plan;changed.catalog.erase(name);CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.contracts.erase(name);CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.catalog.at(name).address+=4;CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.catalog.at(name).arguments[0]=1;CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.catalog.at(name).arguments.pop_back();CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.catalog.at(name).return_kind=GuestRuntime::ReturnKind::kVoid;CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.contracts.at(name).caller=ValidatedGuestRuntimePlan::CallerPolicy::kOriginalTitleOrSystem;CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.contracts.at(name).result=ValidatedGuestRuntimePlan::ResultPolicy::kZero;CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.contracts.at(name).before.push_back({0x1000,0,true});CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.contracts.at(name).after.push_back({0x1000,0,true});CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+    changed=plan;changed.plan.phases.push_back({"not initialization",{function}});CHECK_FALSE(NativeEditorLoaderPlanPairValid(changed));
+  }
+  // Metadata never enables the public family or creates a Task/launch owner.
+  CHECK_FALSE(NativeSystemPublicFamilyRouteEnabled(NativeSystemPublicFamily::kAvatarEditor));
+  cpu::ExportResolver resolver;
+  xam::RegisterAvatarExports(&resolver,nullptr);
+  xam::XamModule::RegisterExportTable(&resolver);
+  const auto* host=resolver.GetExportByOrdinal("xam.xex",0x7DB);
+  REQUIRE(host);
+  CHECK(host->is_implemented());
+  CHECK(host->function_data.trampoline!=nullptr);
+}
+TEST_CASE("Unclaimed native loader calls keep their original body and registers",
+          "[kernel][native_ui][editor_handoff][passthrough]") {
+  cpu::ppc::PPCContext context{};
+  context.r[3]=0x1122334455667788ull;
+  CHECK(NativeSystemUiService::GuardEditorLoaderEntry(nullptr,0x816A0D70)==1);
+  for (const auto address:{0x8169F4A8ull,0x816A0D70ull}) {
+    CHECK(NativeSystemUiService::GuardEditorLoaderEntry(&context,address)==1);
+    CHECK(context.r[3]==0x1122334455667788ull);
+  }
+}
+} // namespace xe::kernel::test

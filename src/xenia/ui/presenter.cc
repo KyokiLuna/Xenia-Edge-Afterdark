@@ -13,6 +13,7 @@
 #include "xenia/base/cvar.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/platform.h"
+#include "xenia/gpu/native_frame_execution.h"
 #include "xenia/ui/native_ui_plane_handoff.h"
 #include "xenia/ui/window.h"
 
@@ -591,7 +592,8 @@ bool Presenter::IsGuestOutputDrivingPaints() const {
 }
 
 bool NativeUiPlaneImageReference::valid() const noexcept {
-  if (!publication || !authority || !image.valid()) {
+  if (!publication || !authority || !image.valid() ||
+      (presentation_guard && presentation_guard->IsRevoked())) {
     return false;
   }
   const auto owner = authority->owner();
@@ -647,15 +649,52 @@ std::optional<NativeUiPlanePaintProjection> ProjectNativeUiPlanePresentation(
   return result;
 }
 
+namespace {
+bool PresentationGuardLive(
+    const NativeUiPlaneImageReference& reference) noexcept {
+  const auto& guard = reference.presentation_guard;
+  return !guard || (!guard->IsRevoked() && guard->IsLive() &&
+                    !guard->IsRevoked());
+}
+bool SameGuardReference(const NativeUiPlaneImageReference& a,
+                        const NativeUiPlaneImageReference& b) noexcept {
+  return a.publication == b.publication && a.image == b.image &&
+         a.authority == b.authority && a.backend_epoch == b.backend_epoch &&
+         a.presentation_guard == b.presentation_guard;
+}
+bool PresentationGuardChecked(
+    const NativeUiPlaneImageSelection::Preflight& probe,
+    const NativeUiPlaneImageReference& reference) noexcept {
+  if (!reference.presentation_guard) return true;
+  if (reference.presentation_guard->IsRevoked()) return false;
+  return (SameGuardReference(reference, probe.desired_reference) &&
+          probe.desired_reference_live) ||
+         (SameGuardReference(reference, probe.modal_reference) &&
+          probe.modal_reference_live) ||
+         (SameGuardReference(reference, probe.previous.reference) &&
+          probe.previous_reference_live);
+}
+}  // namespace
+
 void NativeUiPlaneImageSelection::Preflight::CheckLiveness() noexcept {
   authority_live = visibility.authority && visibility.authority->IsLive();
   desired_live =
       visibility.image_permission && visibility.image_permission->IsLive();
   previous_live = previous.permission && previous.permission->IsLive();
+  desired_reference_live = PresentationGuardLive(desired_reference);
+  modal_reference_live = PresentationGuardLive(modal_reference);
+  previous_reference_live = PresentationGuardLive(previous.reference);
 }
 NativeUiPlaneImageSelection::Preflight NativeUiPlaneImageSelection::Prepare(
-    const NativeUiPlaneVisibility& visibility) const {
-  return {visibility, qualified_};
+    const NativeUiPlaneVisibility& visibility,
+    const NativeUiPlaneImageReference& desired,
+    const NativeUiPlaneImageReference& modal) const {
+  Preflight result;
+  result.visibility = visibility;
+  result.previous = qualified_;
+  result.desired_reference = desired;
+  result.modal_reference = modal;
+  return result;
 }
 bool NativeUiPlaneImageSelection::Matches(
     const Preflight& probe, const NativeUiPlaneVisibility& current) const {
@@ -744,8 +783,10 @@ NativeUiPlaneImageSelection::Selection NativeUiPlaneImageSelection::Current(
   }
   Selection result;
   if (!current.image_permission) {
+    if (!PresentationGuardChecked(probe, modal)) return {};
     result = {modal, {}, current.revision};
-  } else if (probe.desired_live && probe.previous_live) {
+  } else if (probe.desired_live && probe.previous_live &&
+             PresentationGuardChecked(probe, qualified_.reference)) {
     result = qualified_;
     result.visibility_revision = current.revision;
   }
@@ -767,7 +808,8 @@ NativeUiPlaneImageSelection::Selection NativeUiPlaneImageSelection::Select(
       return {};
     }
     const auto& permission = current.image_permission;
-    if (desired.image == permission->image()) {
+    if (desired.image == permission->image() &&
+        PresentationGuardChecked(probe, desired)) {
       Selection ready{desired, permission, current.revision};
       if (CanRecord(current, ready)) {
         qualified_ = ready;
@@ -781,6 +823,7 @@ NativeUiPlaneImageSelection::Selection NativeUiPlaneImageSelection::Select(
     Selection retained = qualified_;
     retained.visibility_revision = current.revision;
     if (retained.permission &&
+        PresentationGuardChecked(probe, retained.reference) &&
         retained.permission->epoch() == permission->epoch() &&
         CanRecord(current, retained)) {
       qualified_ = retained;
@@ -791,7 +834,8 @@ NativeUiPlaneImageSelection::Selection NativeUiPlaneImageSelection::Select(
   }
   if (!probe.authority_live || !current.visible || !current.image_permission) {
     Reset();
-    if (probe.authority_live && current.visible && !current.image_permission) {
+    if (probe.authority_live && current.visible && !current.image_permission &&
+        PresentationGuardChecked(probe, modal)) {
       Selection result{modal, {}, current.revision};
       if (CanRecord(current, result)) {
         return result;
@@ -799,7 +843,7 @@ NativeUiPlaneImageSelection::Selection NativeUiPlaneImageSelection::Select(
     }
     return {};
   }
-  if (probe.desired_live &&
+  if (probe.desired_live && PresentationGuardChecked(probe, desired) &&
       desired.image == current.image_permission->image()) {
     Selection result{desired, current.image_permission, current.revision};
     if (CanRecord(current, result)) {

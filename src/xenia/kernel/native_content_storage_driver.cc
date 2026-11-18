@@ -31,6 +31,7 @@
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/native_wait_snapshot.h"
 #include "xenia/kernel/xam/content_source.h"
+#include "xenia/kernel/xam/selected_media_source_proof.h"
 #include "xenia/kernel/xam/content_manager.h"
 #include "xenia/memory.h"
 
@@ -170,8 +171,9 @@ struct NativeContentStorageDriver::State {
   uint32_t callback = 0;
   uint64_t registration = 1, wake_epoch = 0, announced_epoch = 0;
   uint64_t delivered = 0, empty_drains = 0;
-  size_t batch_cost = 0, active_calls = 0, pending_callbacks = 0;
-  bool stopping = false, failed = false;
+  size_t batch_cost = 0, active_calls = 0, pending_callbacks = 0, config_uses = 0;
+  bool stopping = false, failed = false, drain_proved = false;
+  bool retired = false, retiring = false;
   struct ProcessingDelivery {
     NativeContentStorageDevice device;
     uint64_t cookie = 0;
@@ -202,22 +204,26 @@ struct NativeContentStorageDriver::State {
   }
 };
 struct NativeContentStorageDriver::Call {
-  std::shared_ptr<NativeContentStorageDriver> owner;
+  std::shared_ptr<const NativeContentStorageDriver> owner;
+  bool config_use = false;
   ~Call() {
     std::lock_guard lock(owner->state_->mutex);
-    --owner->state_->active_calls;
+    if (config_use) --owner->state_->config_uses;
+    else --owner->state_->active_calls;
     owner->state_->drained.notify_all();
   }
 };
 NativeContentStorageDriver::NativeContentStorageDriver(Config config)
-    : config_(std::move(config)), state_(std::make_unique<State>()) {}
+    : kernel_identity_(config.kernel), generation_(config.generation),
+      config_(std::move(config)), state_(std::make_unique<State>()) {}
 std::shared_ptr<NativeContentStorageDriver> NativeContentStorageDriver::Create(
     Config config) {
+  const auto domain = config.dispatcher ? config.dispatcher->domain() : nullptr;
   if (!config.kernel || !config.generation || !config.dispatcher ||
       !config.source || !config.authorize_current_caller ||
       !config.validate_callback || !config.validate_context ||
       !config.protocol_failed ||
-      config.dispatcher->domain()->id() != config.generation ||
+      !domain || domain->id() != config.generation ||
       !config.dispatcher->IsAccepting()) {
     return {};
   }
@@ -228,7 +234,8 @@ std::shared_ptr<NativeContentStorageDriver> NativeContentStorageDriver::Create(
 std::unique_ptr<NativeContentStorageDriver::Installation>
 NativeContentStorageDriver::Install(
     const std::shared_ptr<NativeContentStorageDriver>& owner) {
-  if (!owner || !owner->IsCurrent()) {
+  const auto config_use = owner ? owner->AcquireConfigUse() : nullptr;
+  if (!config_use || !owner->IsCurrent()) {
     return {};
   }
   {
@@ -260,6 +267,7 @@ NativeContentStorageDriver::Install(
   {
     std::lock_guard lock(owner->state_->mutex);
     owner->state_->subscription = std::move(connection->subscription);
+    owner->state_->drain_proved = false;
   }
   owner->Publish(std::move(connection->initial));
   if (!owner->IsCurrent() || !owner->snapshot().accepting) {
@@ -286,9 +294,14 @@ NativeContentStorageDriver::Installation::~Installation() {
 }
 std::shared_ptr<NativeContentStorageDriver> NativeContentStorageDriver::Lookup(
     KernelState* kernel) {
-  std::lock_guard lock(registry_mutex);
-  const auto found = registry.find(kernel);
-  return found == registry.end() ? nullptr : found->second.lock();
+  std::shared_ptr<NativeContentStorageDriver> owner;
+  {std::lock_guard lock(registry_mutex);
+    const auto found = registry.find(kernel);
+    if (found != registry.end()) owner = found->second.lock();}
+  if (!owner) return {};
+  std::lock_guard lock(owner->state_->mutex);
+  return owner->state_->retired || owner->state_->retiring ||
+                 owner->kernel_identity_ != kernel ? nullptr : owner;
 }
 NativeContentStorageDriver::~NativeContentStorageDriver() {
   BeginStop();
@@ -300,21 +313,28 @@ NativeContentStorageDriver::~NativeContentStorageDriver() {
     }
   }
   std::lock_guard lock(registry_mutex);
-  const auto found = registry.find(config_.kernel);
-  if (found != registry.end() && found->second.expired()) {
+  const auto found = registry.find(kernel_identity_);
+  const auto self = weak_from_this();
+  if (found != registry.end() && !found->second.owner_before(self) &&
+      !self.owner_before(found->second)) {
     registry.erase(found);
   }
 }
 bool NativeContentStorageDriver::IsCurrent() const {
+  const auto use = AcquireConfigUse();
+  if (!use) return false;
   try {
-    return config_.dispatcher->domain()->active() &&
-           config_.dispatcher->domain()->id() == config_.generation &&
+    const auto domain = config_.dispatcher ? config_.dispatcher->domain() : nullptr;
+    return domain && domain->active() &&
+           domain->id() == generation_ &&
            config_.dispatcher->IsAccepting() && config_.validate_context();
   } catch (...) {
     return false;
   }
 }
 bool NativeContentStorageDriver::AuthorizeCurrentCaller() const {
+  const auto use = AcquireConfigUse();
+  if (!use) return false;
   try {
     return IsCurrent() && XThread::IsInThread() &&
            XThread::GetCurrentThread()->kernel_state() == config_.kernel &&
@@ -329,7 +349,8 @@ bool NativeContentStorageDriver::AuthorizeCurrentCaller() const {
 std::shared_ptr<NativeContentStorageDriver::Call>
 NativeContentStorageDriver::AcquireCall() {
   std::lock_guard lock(state_->mutex);
-  if (state_->stopping || state_->active_calls == SIZE_MAX) {
+  if (state_->stopping || state_->retiring || state_->retired ||
+      state_->active_calls == SIZE_MAX) {
     return {};
   }
   auto call = std::make_shared<Call>();
@@ -337,6 +358,19 @@ NativeContentStorageDriver::AcquireCall() {
   ++state_->active_calls;
   return call;
 }
+std::shared_ptr<NativeContentStorageDriver::Call>
+NativeContentStorageDriver::AcquireConfigUse(bool stopping_allowed) const noexcept try {
+  std::lock_guard lock(state_->mutex);
+  if (state_->retiring || state_->retired ||
+      (!stopping_allowed && state_->stopping) || state_->config_uses == SIZE_MAX)
+    return {};
+  const auto owner = shared_from_this();
+  auto use = std::make_shared<Call>();
+  use->owner = owner;
+  use->config_use = true;
+  ++state_->config_uses;
+  return use;
+} catch (...) {return {};}
 bool NativeContentStorageDriver::SetCallback(uint32_t address) {
   const auto call = AcquireCall();
   if (!call || !AuthorizeCurrentCaller()) {
@@ -413,6 +447,8 @@ void NativeContentStorageDriver::Publish(
   }
 }
 bool NativeContentStorageDriver::QueueWake() noexcept {
+  const auto use = AcquireConfigUse();
+  if (!use) return false;
   uint64_t registration = 0, announced = 0;
   try {
     {
@@ -502,6 +538,23 @@ bool NativeContentStorageDriver::QueueWake() noexcept {
   }
   return false;
 }
+uint32_t NativeContentStorageDriver::GetOrCreateGuestPathLocked(
+    const std::string& path) {
+  auto found = state_->guest_paths.find(path);
+  if (found == state_->guest_paths.end()) {
+    if (state_->guest_paths.size() == 1024) return 0;
+    found = state_->guest_paths.emplace(path,0).first;
+  }
+  if (!found->second) {
+    const uint32_t address = config_.kernel->memory()->SystemHeapAlloc(
+        uint32_t(path.size()+1));
+    if (!address) return 0;
+    found->second = address;
+    std::memcpy(config_.kernel->memory()->TranslateVirtual(address),
+                path.c_str(),path.size()+1);
+  }
+  return found->second;
+}
 X_STATUS NativeContentStorageDriver::GetNotification(uint32_t guest_output) {
   const auto call = AcquireCall();
   if (!call || !AuthorizeCurrentCaller()) {
@@ -559,28 +612,12 @@ X_STATUS NativeContentStorageDriver::GetNotification(uint32_t guest_output) {
         return kDeviceNotConnected;
       }
       const auto& path = delivery->change().device.guest_volume_root;
-      auto found = state_->guest_paths.find(path);
-      if (found == state_->guest_paths.end()) {
-        if (state_->guest_paths.size() == 1024) {
-          lock.unlock();
-          memory_lock.unlock();
-          ProtocolFailed();
-          return X_STATUS_NO_MEMORY;
-        }
-        found = state_->guest_paths.emplace(path, 0).first;
-      }
-      if (!found->second) {
-        const uint32_t address =
-            memory.SystemHeapAlloc(uint32_t(path.size() + 1));
-        if (!address) {
-          lock.unlock();
-          memory_lock.unlock();
-          ProtocolFailed();
-          return X_STATUS_NO_MEMORY;
-        }
-        found->second = address;
-        std::memcpy(memory.TranslateVirtual(address), path.c_str(),
-                    path.size() + 1);
+      const uint32_t path_address = GetOrCreateGuestPathLocked(path);
+      if (!path_address) {
+        lock.unlock();
+        memory_lock.unlock();
+        ProtocolFailed();
+        return X_STATUS_NO_MEMORY;
       }
       std::optional<State::ProcessingDelivery> processing;
       auto* current_thread = XThread::GetCurrentThread();
@@ -595,10 +632,10 @@ X_STATUS NativeContentStorageDriver::GetNotification(uint32_t guest_output) {
         processing.emplace(State::ProcessingDelivery{
             delivery->change().device, state_->processing_cookie + 1,
             current_thread->thread_id(), *worker_pcr, *worker_sp,
-            found->second, delivery->change().transition, false});
+            path_address, delivery->change().transition, false});
       }
       NativeContentStorageNotification output{};
-      output.volume_path = found->second;
+      output.volume_path = path_address;
       output.transition = uint32_t(delivery->change().transition);
       output.device_type = uint32_t(delivery->change().device.type);
       if (state_->delivered == UINT64_MAX) {
@@ -698,8 +735,9 @@ void NativeContentStorageDriver::StopFormatBindings() noexcept {
 void NativeContentStorageDriver::OnProcessingEntry(
     const cpu::ppc::PPCContext& context) {
   const auto pointer = Pointer(context.r[3]);
-  const auto frame = pointer ? ActualFrame(*config_.kernel,
-      *config_.dispatcher->domain(), context, *pointer) : std::nullopt;
+  const auto domain = config_.dispatcher ? config_.dispatcher->domain() : nullptr;
+  const auto frame = pointer && domain ? ActualFrame(*config_.kernel,
+      *domain, context, *pointer) : std::nullopt;
   if (!frame) { StopFormatBindings(); return; }
   const auto packet = ReadProcessingPacket(*config_.kernel->memory(), *pointer);
   if (!packet) { StopFormatBindings(); return; }
@@ -762,8 +800,9 @@ void NativeContentStorageDriver::OnProcessingReturn(
     saved = state_->processing.Pending(XThread::GetCurrentThread()->thread_id());
   }
   if (!saved) { return; }
-  const auto frame = ActualFrame(*config_.kernel, *config_.dispatcher->domain(),
-                                 context, saved->packet);
+  const auto domain = config_.dispatcher ? config_.dispatcher->domain() : nullptr;
+  const auto frame = domain ? ActualFrame(*config_.kernel, *domain,
+                                         context, saved->packet) : std::nullopt;
   if (!frame) { StopFormatBindings(); return; }
   const auto packet = ReadProcessingPacket(*config_.kernel->memory(), saved->packet);
   if (!packet) { StopFormatBindings(); return; }
@@ -784,7 +823,9 @@ void NativeContentStorageDriver::OnProcessingReturn(
   auto owned = std::move(**delivery);
   delivery->reset();
   if (!receipt->succeeded || receipt->call.transition != 1 ||
-      !owned.device.managed_format_proof || !BindingType(receipt->call.type) ||
+      (!owned.device.managed_format_proof && !owned.device.selected_media_proof) ||
+      (owned.device.selected_media_proof && !owned.device.selected_media_proof->SourceCurrentCached()) ||
+      !BindingType(receipt->call.type) ||
       !state_->queue.IsDesired(owned.device)) { return; }
   auto same_id = std::find_if(state_->bindings.begin(), state_->bindings.end(),
       [&](const auto& value) { return value && value->native_id == receipt->native_id; });
@@ -880,7 +921,45 @@ NativeContentStorageDriver::CaptureFormatSource(uint32_t native_id,
   // retirement boundary. Never resolve a native number or path a second time.
   return proof;
 }
+std::optional<NativeContentStorageDriver::SelectedMediaProcessingReceipt>
+NativeContentStorageDriver::CaptureSelectedMediaProcessing(
+    std::string_view actual_native_path) const noexcept try {
+  if(!IsCurrent() || !AuthorizeCurrentCaller())return {};
+  std::lock_guard lock(state_->mutex);
+  if(state_->stopping || state_->binding_failed)return {};
+  std::optional<SelectedMediaProcessingReceipt> result;
+  for(const auto& binding:state_->bindings) {
+    if(!binding || !binding->cookie || !binding->native_id ||
+        binding->device.guest_volume_root!=actual_native_path ||
+        binding->device.type!=xam::DeviceType::USBMASS ||
+        !binding->device.selected_media_proof ||
+        !binding->device.selected_media_proof->SourceCurrentCached() ||
+        !state_->queue.IsDesired(binding->device))continue;
+    const auto& proof=binding->device.selected_media_proof;
+    if(proof->source_id()!=binding->device.identity ||
+        proof->generation()!=binding->device.generation || result)return {};
+    result=SelectedMediaProcessingReceipt{this,generation_,binding->cookie,
+        binding->native_id,proof};
+  }
+  return result;
+} catch(...) {return {};}
+bool NativeContentStorageDriver::SelectedMediaProcessingCurrent(
+    const SelectedMediaProcessingReceipt& receipt) const noexcept try {
+  if(receipt.issuer!=this || receipt.driver_generation!=generation_ ||
+      !receipt.cookie || !receipt.native_id || !receipt.source ||
+      !receipt.source->SourceCurrentCached() || !IsCurrent())return false;
+  std::lock_guard lock(state_->mutex);
+  return !state_->stopping && !state_->binding_failed &&
+      std::any_of(state_->bindings.begin(),state_->bindings.end(),[&](const auto& binding){
+        return binding && binding->native_id==receipt.native_id &&
+            binding->cookie==receipt.cookie && binding->device.selected_media_proof==receipt.source &&
+            state_->queue.IsDesired(binding->device);
+      });
+} catch(...) {return false;}
+
 void NativeContentStorageDriver::ProtocolFailed() noexcept {
+  const auto use = AcquireConfigUse();
+  if (!use) return;
   bool first = false;
   {
     std::lock_guard lock(state_->mutex);
@@ -896,22 +975,33 @@ void NativeContentStorageDriver::ProtocolFailed() noexcept {
   }
 }
 void NativeContentStorageDriver::BeginStop() noexcept {
+  // No allocation is needed to close ingress. This counted tail is declared
+  // before Subscription, so every held source callback owner is gone before
+  // stopped retirement can observe zero Config users.
+  struct Tail {
+    State* state;bool counted=false;
+    ~Tail(){if(counted){std::lock_guard lock(state->mutex);
+      --state->config_uses;state->drained.notify_all();}}
+  } tail{state_.get()};
   std::shared_ptr<NativeContentStorageSource::Subscription> subscription;
   {
     std::lock_guard lock(state_->mutex);
     state_->stopping = true;
+    if (state_->retired || state_->retiring) return;
     state_->CloseBindings();
     state_->callback = 0;
-    subscription = state_->subscription;
     state_->drained.notify_all();
+    if (state_->config_uses == SIZE_MAX) return;
+    ++state_->config_uses;tail.counted=true;
+    subscription = state_->subscription;
   }
-  if (subscription) {
-    subscription->BeginStop();
-  }
+  if (subscription) subscription->BeginStop();
 }
 bool NativeContentStorageDriver::Drain() noexcept {
+  const auto use = AcquireConfigUse(true);
+  if (!use) {std::lock_guard lock(state_->mutex);return state_->retired;}
   BeginStop();
-  if (config_.dispatcher->IsCurrentWorker()) {
+  if (config_.dispatcher && config_.dispatcher->IsCurrentWorker()) {
     return false;
   }
   std::shared_ptr<NativeContentStorageSource::Subscription> subscription;
@@ -923,9 +1013,106 @@ bool NativeContentStorageDriver::Drain() noexcept {
     return false;
   }
   std::unique_lock lock(state_->mutex);
-  return state_->drained.wait_for(lock, std::chrono::seconds(5), [&] {
+  if (!state_->drained.wait_for(lock, std::chrono::seconds(5), [&] {
     return !state_->active_calls && !state_->pending_callbacks;
-  });
+  })) return false;
+  if (state_->subscription != subscription) return false;
+  state_->drain_proved = true;
+  return true;
+}
+bool NativeContentStorageDriver::RetireAfterActualKernelStop(
+    KernelState* expected_kernel) noexcept try {
+  if (XThread::IsInThread() || global_critical_region::is_held_by_current_thread())
+    return false;
+  // Exact live owner through every resource move/free/destructor tail. The
+  // private caller is Service after its factual whole CPU/IO/GPU stop proof.
+  const auto owner = shared_from_this();
+  {
+    std::lock_guard lock(state_->mutex);
+    if (!expected_kernel || expected_kernel != kernel_identity_) return false;
+    if (state_->retired) return true;
+    if (config_.kernel != expected_kernel || !state_->stopping ||
+        !state_->drain_proved || state_->active_calls ||
+        state_->pending_callbacks || state_->config_uses || state_->retiring)
+      return false;
+    // The zero-use check and refusal of new short Config users are one gate.
+    state_->retiring = true;
+  }
+  struct ReopenRetirement {
+    State* state;
+    ~ReopenRetirement() {std::lock_guard lock(state->mutex);
+      if (!state->retired) state->retiring = false;}
+  } reopen{state_.get()};
+  for (const auto& thread : expected_kernel->object_table()->GetObjectsByType<XThread>(
+           XObject::Type::Thread))
+    if (thread->is_running()) return false;
+  Config config;
+  std::shared_ptr<NativeContentStorageSource::Subscription> subscription;
+  std::map<std::string,uint32_t> paths;
+  {
+    std::lock_guard lock(state_->mutex);
+    if (!state_->retiring || state_->retired || !state_->stopping ||
+        !state_->drain_proved || state_->active_calls ||
+        state_->pending_callbacks || state_->config_uses ||
+        config_.kernel != expected_kernel) return false;
+    config = std::move(config_);config_ = {};
+    subscription = std::move(state_->subscription);
+    paths = std::move(state_->guest_paths);
+    state_->guest_paths.clear();
+    state_->retired = true;
+  }
+  {
+    std::lock_guard lock(registry_mutex);
+    const auto found = registry.find(kernel_identity_);
+    if (found != registry.end() && found->second.lock().get() == this)
+      registry.erase(found);
+  }
+  // These are ONLY allocations made by this driver's existing host path
+  // producer. No native private pointer, native Close/free, device action or
+  // producer callback is fabricated. Memory and providers are still alive.
+  for (const auto& [path,address] : paths)
+    if (address) expected_kernel->memory()->SystemHeapFree(address);
+  // Config/source/subscription/code closure destruction is outside all locks.
+  return true;
+} catch (...) {return false;}
+namespace test {
+class NativeContentStorageDriverTestAccess {
+ public:
+  static std::shared_ptr<NativeContentStorageDriver> HostOnlyOwner(
+      KernelState*,std::shared_ptr<void>);
+  static uint32_t AllocateHostPath(
+      const std::shared_ptr<NativeContentStorageDriver>&,const std::string&);
+  static std::shared_ptr<void> HoldConfigUse(
+      const std::shared_ptr<NativeContentStorageDriver>&);
+  static bool Retire(const std::shared_ptr<NativeContentStorageDriver>&,KernelState*);
+};
+}  // namespace test
+std::shared_ptr<NativeContentStorageDriver>
+test::NativeContentStorageDriverTestAccess::HostOnlyOwner(
+    KernelState* kernel,std::shared_ptr<void> lifetime) {
+  // Deliberately UNINSTALLED partial host owner. No dispatcher/domain/source
+  // exists and no native Create, caller or device permission is granted.
+  NativeContentStorageDriver::Config config;
+  config.kernel=kernel;
+  config.validate_context=[lifetime=std::move(lifetime)]{return false;};
+  return std::shared_ptr<NativeContentStorageDriver>(
+      new NativeContentStorageDriver(std::move(config)));
+}
+uint32_t test::NativeContentStorageDriverTestAccess::AllocateHostPath(
+    const std::shared_ptr<NativeContentStorageDriver>& owner,const std::string& path) {
+  const auto use=owner->AcquireConfigUse();
+  if(!use)return 0;
+  auto memory_guard=global_critical_region::AcquireDirect();
+  std::lock_guard lock(owner->state_->mutex);
+  return owner->GetOrCreateGuestPathLocked(path);
+}
+std::shared_ptr<void> test::NativeContentStorageDriverTestAccess::HoldConfigUse(
+    const std::shared_ptr<NativeContentStorageDriver>& owner) {
+  return owner->AcquireConfigUse();
+}
+bool test::NativeContentStorageDriverTestAccess::Retire(
+    const std::shared_ptr<NativeContentStorageDriver>& owner,KernelState* kernel) {
+  return owner->RetireAfterActualKernelStop(kernel);
 }
 NativeContentStorageDriver::Snapshot NativeContentStorageDriver::snapshot()
     const {

@@ -6,16 +6,22 @@
 #define _GNU_SOURCE
 #endif
 #include "xenia/base/host_storage.h"
+#include "xenia/base/managed_storage_bootstrap.h"
 #include "xenia/base/content_package_mutation_wire.h"
+#include "xenia/base/content_mutation_wire.h"
+#include "third_party/mbedtls/include/mbedtls/sha256.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cerrno>
 #include <cstring>
+#include <condition_variable>
+#include <utility>
 #include <fstream>
 #include <limits>
 #include <map>
 #include <mutex>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -57,15 +63,23 @@ std::error_code NativeError() {
 }
 bool ContentMutationLeaf(std::string_view leaf) {
   if (leaf == "owner.v1") { return true; }
-  constexpr std::string_view prefix = "content-";
-  if (!leaf.starts_with(prefix)) { return false; }
-  leaf.remove_prefix(prefix.size());
-  if (leaf.size() != 32 + 7 && leaf.size() != 32 + 5) { return false; }
-  if (leaf.substr(32) != ".intent" && leaf.substr(32) != ".done" &&
-      leaf.substr(32) != ".retire") { return false; }
-  return std::all_of(leaf.begin(), leaf.begin() + 32, [](char c) {
-    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
-  });
+  if (!leaf.starts_with("content-")) { return false; }
+  leaf.remove_prefix(8);
+  auto hex = [](std::string_view text) {
+    return text.size() == 32 && std::all_of(text.begin(), text.end(), [](char c) {
+      return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+    });
+  };
+  if (leaf.size() < 37 || !hex(leaf.substr(0,32))) { return false; }
+  auto suffix = leaf.substr(32);
+  const auto partial = suffix.find(".partial-");
+  if (partial != std::string_view::npos) {
+    if (!hex(suffix.substr(partial+9))) { return false; }
+    suffix = suffix.substr(0,partial);
+  }
+  return suffix == ".intent" || suffix == ".done" || suffix == ".retire" ||
+      suffix == ".stream" || suffix == ".plan" || suffix == ".abort" ||
+      suffix == ".keep0" || suffix == ".keep1";
 }
 bool RecoveryLeaf(std::string_view leaf) {
   return leaf == "owner.v1" || (leaf.size() == 45 &&
@@ -83,9 +97,15 @@ bool IntentLeaf(std::string_view leaf) {
         return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
       }));
 }
+bool NativeSpelling(const std::filesystem::path& path) {
+  // Counted C++ path strings must describe exactly the native C-string path.
+  // An embedded NUL would otherwise name its existing prefix at stat/openat.
+  return path.native().find(std::filesystem::path::value_type{}) ==
+      std::filesystem::path::string_type::npos;
+}
 bool Relative(const std::filesystem::path& path, bool allow_empty = false) {
-  if ((!allow_empty && path.empty()) || path.is_absolute() ||
-      path.has_root_name()) {
+  if (!NativeSpelling(path) || (!allow_empty && path.empty()) ||
+      path.is_absolute() || path.has_root_name()) {
     return false;
   }
   for (const auto& part : path) {
@@ -950,6 +970,9 @@ std::shared_ptr<const HostStorageDirectoryIdentity>
 HostStorageDirectoryIdentity::Capture(const std::filesystem::path& path,
                                      std::error_code& error) {
   error.clear();
+  if (!NativeSpelling(path)) {
+    error = Error(std::errc::invalid_argument); return {};
+  }
   // Native observation/preparation is never performed by the metadata-only
   // namespace reader. A caller that skipped preparation gets a truthful BUSY.
   if (xe::global_critical_region::is_held_by_current_thread()) {
@@ -1210,8 +1233,74 @@ bool Descendant(const std::filesystem::path& child,
   return !relative.empty() && !relative.is_absolute() && *relative.begin() != "..";
 }
 }
+namespace {
+// BasicLockable with unchanged ordinary lock/try_lock semantics. All original
+// users (including Observe and reserve pooling) release through unlock, so an
+// admission waiter is notified without polling or losing an unlock race.
+class StorageMutex final {
+ public:
+  void lock() {
+    std::unique_lock lock(mutex_);
+    available_.wait(lock, [&] { return !held_; });
+    held_ = true;
+  }
+  bool try_lock() {
+    std::unique_lock lock(mutex_, std::try_to_lock);
+    if (!lock || held_) return false;
+    held_ = true;
+    return true;
+  }
+  bool lock_until(const HostStoragePreparationWait& preparation) {
+    std::unique_lock lock(mutex_);
+    if (!available_.wait_until(lock, preparation.token(), preparation.deadline(),
+                               [&] { return !held_; }) || preparation.Check()) {
+      return false;
+    }
+    held_ = true;
+    return true;
+  }
+  void unlock() {
+    { std::lock_guard lock(mutex_); held_ = false; }
+    available_.notify_all();
+  }
+ private:
+  std::mutex mutex_;
+  std::condition_variable_any available_;
+  bool held_ = false;
+};
+}  // namespace
+bool HostStoragePreparationWait::LinkCancellation(std::stop_token token) {
+  if (!token.stop_possible()) return true;
+  if (links_.size() == 4096) return false;
+  links_.push_back(std::make_unique<std::stop_callback<ForwardStop>>(
+      token, ForwardStop{&stop_}));
+  tokens_.push_back(std::move(token));
+  return true;
+}
+bool HostStoragePreparationWait::LinkCancellationFlag(std::shared_ptr<const std::atomic<bool>> flag) {
+  if (!flag) return true;
+  if (flags_.size()==4096) return false;
+  flags_.push_back(std::move(flag));
+  return true;
+}
+std::error_code HostStoragePreparationWait::Check() const {
+  if (stop_.stop_requested()) return Error(std::errc::operation_canceled);
+  for (const auto& flag:flags_) if (flag->load(std::memory_order_acquire)) return Error(std::errc::operation_canceled);
+  if (std::chrono::steady_clock::now() >= deadline_) return Error(std::errc::timed_out);
+  return {};
+}
+void HostStoragePreparationWait::PauseForExternalLock() const {
+  // flock has no portable cancellable timed-lock API. Only the LOCK_NB lock
+  // acquisition is retried; never the file open/IO or complete preparation.
+  std::mutex mutex;
+  std::condition_variable_any wake;
+  std::unique_lock lock(mutex);
+  wake.wait_until(lock, token(), std::min(deadline_,
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(10)),
+      [] { return false; });
+}
 struct HostStorageSpace::State {
-  mutable std::mutex mutex;
+  mutable StorageMutex mutex;
   std::atomic<const void*> guard_thread{nullptr};
   uint64_t reserve = 0;
   bool isolated = false;
@@ -1252,16 +1341,19 @@ struct HostStorageSpace::MutationGuard::State {
   std::shared_ptr<HostStorageSpace> owner;
   std::filesystem::path path;
   std::shared_ptr<const HostStorageDirectoryIdentity> directory_identity;
-  std::unique_lock<std::mutex> lock;
+  std::unique_lock<StorageMutex> lock;
   bool process_locked = false;
   State(std::shared_ptr<HostStorageSpace> value, std::filesystem::path root,
         std::shared_ptr<const HostStorageDirectoryIdentity> identity = {},
-        bool try_only = false)
+        bool try_only = false, HostStoragePreparationWait* preparation = nullptr)
       : owner(std::move(value)),
         path(std::move(root)),
         directory_identity(std::move(identity)),
         lock(owner->state_->mutex, std::defer_lock) {
-    if (try_only) {
+    if (preparation) {
+      if (!owner->state_->mutex.lock_until(*preparation)) return;
+      lock = std::unique_lock<StorageMutex>(owner->state_->mutex, std::adopt_lock);
+    } else if (try_only) {
       if (!lock.try_lock()) {
         return;
       }
@@ -1463,6 +1555,9 @@ std::shared_ptr<HostStorageSpace> HostStorageSpace::ForPath(
     const std::filesystem::path& path, uint64_t reserve, std::error_code& error,
     Query query) {
   error.clear();
+  if (!NativeSpelling(path)) {
+    error = Error(std::errc::invalid_argument); return {};
+  }
   std::string identity;
 #if XE_PLATFORM_WIN32
   wchar_t volume[MAX_PATH] = {};
@@ -1573,6 +1668,10 @@ bool HostStorageSpace::NativeAuthorityFor(uint64_t filesystem_id) const {
 }
 HostStorageSnapshot HostStorageSpace::Observe(
     const std::filesystem::path& path) const {
+  if (!NativeSpelling(path)) {
+    HostStorageSnapshot result; result.error = Error(std::errc::invalid_argument);
+    return result;
+  }
   std::lock_guard lock(state_->mutex);
   return state_->Observe(path);
 }
@@ -1580,6 +1679,9 @@ std::unique_ptr<HostStorageSpace::MutationGuard> HostStorageSpace::Begin(
     const std::filesystem::path& path, std::error_code& error,
     std::shared_ptr<const HostStorageDirectoryIdentity> identity) {
   error.clear();
+  if (!NativeSpelling(path)) {
+    error = Error(std::errc::invalid_argument); return {};
+  }
   if (identity && identity->path() != path) {
     error=Error(std::errc::invalid_argument); return {};
   }
@@ -1598,30 +1700,99 @@ std::unique_ptr<HostStorageSpace::MutationGuard> HostStorageSpace::Begin(
 #endif
   return std::unique_ptr<MutationGuard>(new MutationGuard(std::move(state)));
 }
+std::unique_ptr<HostStorageSpace::MutationGuard> HostStorageSpace::BeginPreparation(
+    const std::filesystem::path& path, std::error_code& error,
+    HostStoragePreparationWait& preparation,
+    std::shared_ptr<const HostStorageDirectoryIdentity> identity,
+    HostStorageFailureObservation* diagnostic) {
+  error.clear();
+  HostStorageFailureScope observation{diagnostic,error,1};
+  if (diagnostic && !diagnostic->line) {
+    diagnostic->space=uint64_t(reinterpret_cast<uintptr_t>(this));
+    diagnostic->filesystem=state_->filesystem_id; diagnostic->available|=1;
+  }
+  observation.At(8);
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    error=Error(std::errc::device_or_resource_busy); observation.Capture(__LINE__); return {};
+  }
+  observation.At(1);
+  if (!NativeSpelling(path) || (identity && identity->path()!=path)) {
+    error=Error(std::errc::invalid_argument); observation.Capture(__LINE__); return {};
+  }
+  const auto owner=state_->guard_thread.load(std::memory_order_acquire);
+  const auto request=StorageThreadToken();
+  if (diagnostic && !diagnostic->line) {
+    diagnostic->guard_owner=uint64_t(reinterpret_cast<uintptr_t>(owner));
+    diagnostic->guard_request=uint64_t(reinterpret_cast<uintptr_t>(request));
+    diagnostic->available|=4;
+  }
+  observation.At(2);
+  if (owner==request) {
+    error=Error(std::errc::device_or_resource_busy); observation.Capture(__LINE__); return {};
+  }
+  observation.At(6);
+  if ((error=preparation.Check())) { observation.Capture(__LINE__); return {}; }
+  auto state=std::make_unique<MutationGuard::State>(
+      shared_from_this(),path,std::move(identity),false,&preparation);
+  if (!state->lock.owns_lock() || (error=preparation.Check())) {
+    if (!error) error=preparation.Check();
+    observation.Capture(__LINE__); return {};
+  }
+#if !XE_PLATFORM_WIN32
+  if (state_->lock_fd>=0) {
+    observation.At(7);
+    while (flock(state_->lock_fd,LOCK_EX|LOCK_NB)) {
+      if (errno!=EWOULDBLOCK && errno!=EAGAIN && errno!=EINTR) {
+        error=NativeError(); observation.Capture(__LINE__); return {};
+      }
+      if ((error=preparation.Check())) { observation.Capture(__LINE__); return {}; }
+      preparation.PauseForExternalLock();
+    }
+    state->process_locked=true;
+  }
+#endif
+  if ((error=preparation.Check())) { observation.Capture(__LINE__); return {}; }
+  return std::unique_ptr<MutationGuard>(new MutationGuard(std::move(state)));
+}
 std::unique_ptr<HostStorageSpace::MutationGuard> HostStorageSpace::TryBegin(
     const std::filesystem::path& path, std::error_code& error,
-    std::shared_ptr<const HostStorageDirectoryIdentity> identity) {
+    std::shared_ptr<const HostStorageDirectoryIdentity> identity,
+    HostStorageFailureObservation* diagnostic) {
   error.clear();
-  if (state_->guard_thread.load(std::memory_order_acquire) ==
-      StorageThreadToken()) {
-    error = Error(std::errc::device_or_resource_busy);
-    return {};
+  HostStorageFailureScope observation{diagnostic,error,1};
+  if(diagnostic && !diagnostic->line){diagnostic->space=uint64_t(reinterpret_cast<uintptr_t>(this));
+    diagnostic->filesystem=state_->filesystem_id;diagnostic->available|=1;}
+  observation.At(1);
+  if (!NativeSpelling(path)) {
+    error = Error(std::errc::invalid_argument); observation.Capture(__LINE__); return {};
   }
+  const auto guard_owner=state_->guard_thread.load(std::memory_order_acquire);
+  const auto guard_request=StorageThreadToken();
+  if(diagnostic && !diagnostic->line){diagnostic->guard_owner=uint64_t(reinterpret_cast<uintptr_t>(guard_owner));
+    diagnostic->guard_request=uint64_t(reinterpret_cast<uintptr_t>(guard_request));diagnostic->available|=4;}
+  observation.At(2);
+  if (guard_owner == guard_request) {
+    error = Error(std::errc::device_or_resource_busy);
+    observation.Capture(__LINE__); return {};
+  }
+  observation.At(3);
   if (identity && identity->path() != path) {
-    error=Error(std::errc::invalid_argument); return {};
+    error=Error(std::errc::invalid_argument); observation.Capture(__LINE__); return {};
   }
   auto state = std::make_unique<MutationGuard::State>(
       shared_from_this(), path, std::move(identity), true);
+  observation.At(4);
   if (!state->lock.owns_lock()) {
     error = Error(std::errc::device_or_resource_busy);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
 #if !XE_PLATFORM_WIN32
   if (state_->lock_fd >= 0) {
+    observation.At(5);
     if (flock(state_->lock_fd, LOCK_EX | LOCK_NB)) {
       error = errno == EWOULDBLOCK ? Error(std::errc::device_or_resource_busy)
                                    : NativeError();
-      return {};
+      observation.Capture(__LINE__); return {};
     }
     state->process_locked = true;
   }
@@ -1631,10 +1802,21 @@ std::unique_ptr<HostStorageSpace::MutationGuard> HostStorageSpace::TryBegin(
 namespace {
 struct ProtectionLocation;
 }
+// One opaque metadata receipt shared by the exact stage/canonical registered
+// protectors of a native bootstrap. Native pins prevent inode reuse. This is
+// not a second registry or IO authority; entries remain in Protection::All.
+struct BootstrapProtectionGroup {
+  std::shared_ptr<const HostStorageDirectoryIdentity> parent_identity;
+  uint64_t filesystem = 0, parent_directory = 0, mount = 0, directory = 0;
+  std::filesystem::path target, staging;
+  std::weak_ptr<const uint8_t> active_owner;  // only under Protection::All mutex
+};
 struct HostStorageRoot::State {
   std::filesystem::path path;
   bool read_only = true;
   std::atomic<bool> retired{false};
+  std::stop_source retirement_stop;
+  std::shared_ptr<const std::atomic<bool>> cache_owner_canceled,cache_slot_canceled;
   std::atomic<size_t> open_handles{0};
   std::shared_ptr<HostStorageSpace> space;
   std::shared_ptr<const HostStorageDirectoryIdentity> directory_identity;
@@ -1644,6 +1826,9 @@ struct HostStorageRoot::State {
   bool recovery_private = false;
   bool intent_private = false;
   bool content_mutation_private = false;
+  bool bootstrap_private = false;
+  std::weak_ptr<const uint8_t> bootstrap_owner;
+  std::shared_ptr<BootstrapProtectionGroup> bootstrap_group;
   bool snapshot_namespace = false;
   std::shared_ptr<const HostStorageFileLease> content_permit;
   std::shared_ptr<const ProtectionLocation> private_location;
@@ -1673,6 +1858,20 @@ struct HostStorageRoot::State {
     }
   }
 #endif
+};
+
+struct HostStorageBootstrapDirectory::State {
+  std::shared_ptr<const HostStorageRoot> parent;
+  std::shared_ptr<const HostStorageIntentLease> lease;
+  std::shared_ptr<const uint8_t> owner = std::make_shared<const uint8_t>(0);
+  std::shared_ptr<HostStorageRoot> root;
+  std::vector<std::shared_ptr<HostStorageRoot>> protections;
+  std::shared_ptr<HostStorageRoot> public_view;
+  std::weak_ptr<const HostStorageGuestProjection> public_projection;
+  std::filesystem::path target, staging;
+  uint64_t native_directory = 0;
+  bool canonical = false, durable = false, public_admitted = false;
+  bool private_settled = false;
 };
 
 namespace {
@@ -1728,6 +1927,10 @@ std::string MountUnescape(std::string_view text) {
 #endif
 }  // namespace
 struct HostStorageGuestProjection::State {
+  enum class GuestAdmission { kOrdinary, kSourceUnadmitted, kBootstrapAdmitted, kRetiredFormatObservation };
+  std::atomic<GuestAdmission> guest_admission{GuestAdmission::kOrdinary};
+  // Set only by actual native format drain/retirement, never logical Retire.
+  std::atomic<bool> format_drained{false};
   std::shared_ptr<const HostStorageRoot> source;
   ProtectionLocation source_location;
   std::vector<std::pair<std::shared_ptr<const HostStorageRoot>, ProtectionLocation>> public_scopes;
@@ -1801,12 +2004,56 @@ class HostStorageProtection {
     }
     return error;
   }
+  static bool DrainedFormatGuest(const HostStorageGuestMount& guest, size_t i) {
+    const auto& p=guest.state_->projections[i];
+    return p && p->state_->format_drained.load(std::memory_order_acquire) &&
+        p->state_->source->state_->retired.load(std::memory_order_acquire);
+  }
+  // Metadata-only under All. Owned old-generation mounts may remain pinned;
+  // arbitrary raw/different-projection aliases are not part of that drain.
+  static bool ForeignFormatGuest(const HostStorageGuestProjection& previous,
+                                const HostStorageGuestMount& guest) {
+    if (guest.state_->unknown) {return true;}
+    for (size_t i=0;i<guest.state_->locations.size();++i) {
+      if (DrainedFormatGuest(guest,i)) {continue;}
+      const auto& location=guest.state_->locations[i];
+      const bool overlaps=Overlaps(previous.state_->source_location,location) ||
+          std::any_of(previous.state_->exclusions.begin(),previous.state_->exclusions.end(),
+              [&](const auto& e) {return !e.private_tree && Overlaps(e.location,location);});
+      if (overlaps && guest.state_->projections[i].get()!=&previous) {return true;}
+    }
+    return false;
+  }
+  static std::error_code CheckFormatGuests(const HostStorageGuestProjection& previous) {
+    auto& all=All();std::lock_guard lock(all.mutex);
+    for (const auto& weak:all.guests) {
+      if (const auto guest=weak.lock();guest && ForeignFormatGuest(previous,*guest)) {
+        return Error(std::errc::device_or_resource_busy);
+      }
+    }
+    return {};
+  }
   static bool Excluded(const HostStorageGuestProjection& p,
                        const ProtectionLocation& private_location) {
     return std::any_of(p.state_->exclusions.begin(), p.state_->exclusions.end(),
         [&](const auto& e) {
           return e.private_tree && ContainsLocation(e.location, private_location);
         });
+  }
+  // An explicit volume may contain its managed Content directory. Keep that
+  // PUBLIC namespace in the common overlap/seal registry, but do not mistake
+  // its proven physical ancestor for an exclusion of the source itself.
+  // Equal/disjoint/descendant namespaces retain their existing exclusion.
+  // No path spelling or caller flag establishes this relationship.
+  static bool SourceNamespaceContainer(
+      const HostStorageGuestProjection& p,
+      const HostStorageGuestProjection::State::Exclusion& e) {
+    const auto& source = p.state_->source_location;
+    return !e.private_tree && e.location.filesystem == source.filesystem &&
+        e.location.inode && source.inode && e.location.inode != source.inode &&
+        std::find(source.physical_ancestors.begin(),
+                  source.physical_ancestors.end(), e.location.inode) !=
+            source.physical_ancestors.end();
   }
 #if !XE_PLATFORM_WIN32
   static std::error_code ProjectedDirectory(const HostStorageGuestProjection& p,
@@ -1817,7 +2064,9 @@ class HostStorageProtection {
     if (error) { return error; }
     if (ancestors.empty()) { return Error(std::errc::state_not_recoverable); }
     for (const auto& e : p.state_->exclusions) {
-      if (public_scope && !e.private_tree) { continue; }
+      if ((public_scope && !e.private_tree) || SourceNamespaceContainer(p, e)) {
+        continue;
+      }
       if (e.location.filesystem != uint64_t(device)) { continue; }
       if (std::find(ancestors.begin(), ancestors.end(), e.location.inode) != ancestors.end() ||
           (structural && std::find(e.location.physical_ancestors.begin(),
@@ -1836,11 +2085,65 @@ class HostStorageProtection {
     return std::any_of(p.state_->public_scopes.begin(), p.state_->public_scopes.end(),
         [&](const auto& scope) { return ContainsLocation(scope.second, backing); });
   }
+  static bool ProjectionPermits(
+      const std::shared_ptr<const HostStorageGuestProjection>& projection,
+      const ProtectionLocation& backing,
+      const ProtectionLocation& private_location) {
+    return projection && BackingProjected(*projection, backing) &&
+           Excluded(*projection, private_location);
+  }
   static bool Permits(const HostStorageGuestMount& mount, size_t i,
                       const ProtectionLocation& private_location) {
-    const auto& p = mount.state_->projections[i];
-    return p && BackingProjected(*p, mount.state_->locations[i]) &&
-           Excluded(*p, private_location);
+    // This exact old guest is irreversibly inert after native format drain.
+    // It may retain pins without permanently denying a new private epoch.
+    return DrainedFormatGuest(mount,i) ||
+        ProjectionPermits(mount.state_->projections[i],
+                          mount.state_->locations[i], private_location);
+  }
+  // Deny-only preflight for ordinary source-marker creation. The caller holds
+  // this exact native filesystem's existing mutation guard, also used by
+  // typed Protect before the registry. The source SH/EX directory lease spans
+  // ordinary metadata creation versus bootstrap. No guest ownership,
+  // projection seal or bootstrap receipt transfer is published by this check.
+  static std::error_code CheckManagedSourceCreation(const HostStorageRoot& root) {
+    auto error = root.CheckGuestAccess({});
+    if (error) { return error; }
+    const auto projection = root.Projection();
+    ProtectionLocation source;
+    error = Location(root, true, source);
+    if (error) { return error; }
+    if (projection && !BackingProjected(*projection, source)) {
+      return Error(std::errc::permission_denied);
+    }
+    auto& all = All();
+    std::lock_guard lock(all.mutex);
+    for (const auto& weak : all.projections) {
+      const auto p = weak.lock();
+      if (!p) { continue; }
+      if (p->state_->guest_admission.load(std::memory_order_acquire) ==
+              HostStorageGuestProjection::State::GuestAdmission::kSourceUnadmitted &&
+          (Overlaps(p->state_->source_location, source) ||
+           std::any_of(p->state_->exclusions.begin(), p->state_->exclusions.end(),
+               [&](const auto& e) { return !e.private_tree && Overlaps(e.location, source); }))) {
+        return Error(std::errc::operation_in_progress);
+      }
+      for (const auto& exclusion : p->state_->exclusions) {
+        if (exclusion.private_tree && Overlaps(exclusion.location, source) &&
+            !ProjectionPermits(projection, source, exclusion.location)) {
+          return Error(std::errc::permission_denied);
+        }
+      }
+    }
+    for (const auto& weak : all.private_roots) {
+      const auto private_root = weak.lock();
+      if (!private_root) { continue; }
+      const auto& location = private_root->state_->private_location;
+      if (!location) { return Error(std::errc::operation_not_supported); }
+      if (Overlaps(*location, source) && !ProjectionPermits(projection, source, *location)) {
+        return Error(std::errc::permission_denied);
+      }
+    }
+    return {};
   }
   // Called only under this exact root filesystem's existing admission guard.
   static std::error_code Contents(const HostStorageRoot& root,
@@ -1937,8 +2240,30 @@ class HostStorageProtection {
       const FileHandleInfo* guest = nullptr, bool initial = false) {
     return Contents(root, guest, initial, 64, false);
   }
+  static std::error_code BootstrapContents(const HostStorageRoot& root,
+      const FileHandleInfo* guest = nullptr) {
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+    FlushTreeNode tree; size_t remaining = 512;
+    auto error = PrepareFlushTree(root.state_->directory, ".", root.state_->device,
+        root.state_->mount, tree, remaining);
+    if (error) { return error; }
+    const auto check = [&](const auto& self, const FlushTreeNode& node) -> std::error_code {
+      if (node.identity.st_uid != geteuid() || (node.identity.st_mode & 077) ||
+          (guest && uint64_t(node.identity.st_dev) == guest->filesystem_id &&
+                    uint64_t(node.identity.st_ino) == guest->file_id)) {
+        return Error(std::errc::permission_denied);
+      }
+      for (const auto& child : node.children) { if (auto e = self(self, child)) { return e; } }
+      return {};
+    };
+    return check(check, tree);
+#else
+    return Error(std::errc::operation_not_supported);
+#endif
+  }
   static std::error_code PrivateContents(const HostStorageRoot& root,
       const FileHandleInfo* guest = nullptr, bool initial = false) {
+    if (root.state_->bootstrap_private) { return BootstrapContents(root, guest); }
     return Contents(root, guest, initial,
                     (root.is_recovery_private() || root.is_profile_intent_private() || root.is_content_mutation_private())
                         ? 8192 : 64,
@@ -2110,10 +2435,94 @@ class HostStorageProtection {
     }
     return {};
   }
+  static bool BootstrapBindingMatches(const BootstrapProtectionGroup& group,
+      const HostStorageRoot& parent, const HostStorageRoot& root,
+      const std::filesystem::path& target, const std::filesystem::path& staging) {
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+    return group.filesystem == uint64_t(parent.state_->device) &&
+        group.parent_directory == uint64_t(parent.state_->inode) &&
+        group.mount == parent.state_->mount.id &&
+        group.filesystem == uint64_t(root.state_->device) &&
+        group.directory == uint64_t(root.state_->inode) &&
+        group.mount == root.state_->mount.id && group.target == target &&
+        group.staging == staging && group.parent_identity &&
+        parent.state_->directory_identity && group.parent_identity->SameEntry(
+            {}, *parent.state_->directory_identity, {});
+#else
+    return false;
+#endif
+  }
+  static std::shared_ptr<BootstrapProtectionGroup> ClaimBootstrap(
+      const HostStorageRoot& parent, const HostStorageRoot& root,
+      const std::filesystem::path& target, const std::filesystem::path& staging,
+      const std::shared_ptr<const uint8_t>& owner, std::error_code& error) {
+    error.clear();
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+    auto proposed = std::make_shared<BootstrapProtectionGroup>();
+    proposed->parent_identity = parent.state_->directory_identity;
+    proposed->filesystem = parent.state_->device;
+    proposed->parent_directory = parent.state_->inode;
+    proposed->mount = parent.state_->mount.id;
+    proposed->directory = root.state_->inode;
+    proposed->target = target; proposed->staging = staging;
+    auto& all = All(); std::lock_guard lock(all.mutex);
+    std::shared_ptr<BootstrapProtectionGroup> found;
+    for (const auto& weak : all.private_roots) {
+      const auto registered = weak.lock();
+      if (!registered || !registered->state_->bootstrap_private) { continue; }
+      const auto& group = registered->state_->bootstrap_group;
+      if (!group || group->filesystem != uint64_t(root.state_->device) ||
+          group->directory != uint64_t(root.state_->inode)) { continue; }
+      if (!BootstrapBindingMatches(*group, parent, root, target, staging) ||
+          (found && found != group)) {
+        error = Error(std::errc::permission_denied); return {};
+      }
+      found = group;
+    }
+    if (!found) { found = std::move(proposed); }
+    const auto prior_owner = found->active_owner.lock();
+    if (prior_owner && prior_owner != owner) {
+      error = Error(std::errc::device_or_resource_busy); return {};
+    }
+    found->active_owner = owner; return found;
+#else
+    error = Error(std::errc::operation_not_supported); return {};
+#endif
+  }
+  static std::optional<std::filesystem::path> RetainedBootstrapStage(
+      const HostStorageRoot& parent, const HostStorageRoot& canonical,
+      const std::filesystem::path& target, std::error_code& error) {
+    error.clear();
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+    auto& all = All(); std::lock_guard lock(all.mutex);
+    std::shared_ptr<BootstrapProtectionGroup> found;
+    for (const auto& weak : all.private_roots) {
+      const auto registered = weak.lock();
+      if (!registered || !registered->state_->bootstrap_private) { continue; }
+      const auto& group = registered->state_->bootstrap_group;
+      if (!group || group->filesystem != uint64_t(canonical.state_->device) ||
+          group->directory != uint64_t(canonical.state_->inode)) { continue; }
+      if (!BootstrapBindingMatches(*group, parent, canonical, target, group->staging) ||
+          (found && found != group)) {
+        error = Error(std::errc::permission_denied); return {};
+      }
+      found = group;
+    }
+    return found ? std::optional(found->staging) : std::nullopt;
+#else
+    error = Error(std::errc::operation_not_supported); return {};
+#endif
+  }
   static std::shared_ptr<HostStorageRoot> Protect(const HostStorageRoot& root,
                                                   std::error_code& error,
-                                                  unsigned purpose = 0) {
+                                                  unsigned purpose = 0,
+                                                  std::shared_ptr<BootstrapProtectionGroup> media_transfer = {}) {
     const bool recovery = purpose == 1, intents = purpose == 2, content = purpose == 3;
+    const bool bootstrap = purpose == 4;
+    const bool media = bool(media_transfer);
+    if (media && purpose != 0) { error = Error(std::errc::permission_denied); return {}; }
+    const auto bootstrap_owner = root.state_->bootstrap_owner.lock();
+    if (bootstrap && !bootstrap_owner) { error = Error(std::errc::permission_denied); return {}; }
     auto view = root.Subroot({}, false, error);
     if (!view) {
       return {};
@@ -2132,8 +2541,9 @@ class HostStorageProtection {
     if (error) {
       return {};
     }
-    error = Contents(root, nullptr, true, (recovery || intents || content) ? 8192 : 64,
-                     recovery, intents, content);
+    error = bootstrap ? BootstrapContents(root) :
+        Contents(root, nullptr, true, (recovery || intents || content) ? 8192 : 64,
+                 recovery, intents, content);
     if (error) {
       return {};
     }
@@ -2145,6 +2555,32 @@ class HostStorageProtection {
     auto pinned_location = std::make_shared<ProtectionLocation>(location);
     auto& all = All();
     std::unique_lock lock(all.mutex);
+    const auto bootstrap_group = root.state_->bootstrap_group;
+    const bool owns_bootstrap = bootstrap_group && bootstrap_owner &&
+        bootstrap_group->active_owner.lock() == bootstrap_owner;
+    if (bootstrap && !owns_bootstrap) { error = Error(std::errc::permission_denied); return {}; }
+    if (media && (!owns_bootstrap || bootstrap_group != media_transfer ||
+        std::none_of(all.private_roots.begin(), all.private_roots.end(),
+            [&](const auto& weak) {
+              const auto registered = weak.lock();
+              if (!registered || !registered->state_->bootstrap_private ||
+                  registered->state_->bootstrap_group != media_transfer) { return false; }
+              const auto& prior = registered->state_->private_location;
+              return prior && prior->filesystem == location.filesystem &&
+                  prior->inode == location.inode &&
+                  prior->filesystem_path == location.filesystem_path;
+            }))) {
+      error = Error(std::errc::permission_denied); return {};
+    }
+    std::shared_ptr<BootstrapProtectionGroup> refined_bootstrap;
+    const auto retire_refined = [&](const HostStorageRoot* keep = nullptr) {
+      if (!refined_bootstrap) { return; }
+      std::erase_if(all.private_roots, [&](const auto& weak) {
+        const auto prior = weak.lock();
+        return prior && prior.get() != keep && prior->state_->bootstrap_private &&
+            prior->state_->bootstrap_group == refined_bootstrap;
+      });
+    };
     std::erase_if(all.guests, [](const auto& w) { return w.expired(); });
     std::erase_if(all.private_roots, [](const auto& w) { return w.expired(); });
     for (const auto& weak : all.private_roots) {
@@ -2153,15 +2589,35 @@ class HostStorageProtection {
         if (prior && prior->filesystem == location.filesystem &&
             prior->inode == location.inode &&
             prior->filesystem_path == location.filesystem_path) {
-          if (existing->is_recovery_private() != recovery ||
+          const bool refining_bootstrap = existing->state_->bootstrap_private &&
+              (bootstrap || recovery || intents || content || media) && owns_bootstrap &&
+              existing->state_->bootstrap_group == bootstrap_group;
+          if (!refining_bootstrap && (existing->state_->bootstrap_private != bootstrap ||
+              existing->is_recovery_private() != recovery ||
               existing->is_profile_intent_private() != intents ||
               existing->is_content_mutation_private() != content ||
-              (!root.read_only() && existing->read_only())) {
+              (!root.read_only() && existing->read_only()))) {
             error = Error(std::errc::permission_denied);
             return {};
           }
-          lock.unlock();
-          return existing->Subroot({}, root.read_only(), error);
+          if (!refining_bootstrap) {
+            lock.unlock();
+            auto reused=existing->Subroot({}, root.read_only(), error);
+            if (!reused || !refined_bootstrap) { return reused; }
+            lock.lock();
+            if (refined_bootstrap->active_owner.lock()!=bootstrap_owner ||
+                std::none_of(all.private_roots.begin(),all.private_roots.end(),
+                    [&](const auto& weak) { return weak.lock()==existing; })) {
+              error=Error(std::errc::permission_denied);return {};
+            }
+            // Reuse was genuinely observed outside the registry lock before
+            // its still-registered typed policy replaces the old receipt.
+            retire_refined();return reused;
+          }
+          // Publish a current native protector first; only then retire the
+          // exact receipt's old stage/canonical roots in this same lock. The
+          // registry never keeps a vanished stage pathname after rename.
+          refined_bootstrap = bootstrap_group;
         }
       }
     }
@@ -2192,7 +2648,10 @@ class HostStorageProtection {
       }
     }
     view->state_->private_location = std::move(pinned_location);
-    view->state_->flat_private = !recovery && !intents && !content;
+    view->state_->flat_private = !recovery && !intents && !content && !bootstrap;
+    view->state_->bootstrap_private = bootstrap;
+    view->state_->bootstrap_owner = root.state_->bootstrap_owner;
+    view->state_->bootstrap_group = root.state_->bootstrap_group;
     view->state_->recovery_private = recovery;
     view->state_->intent_private = intents;
     view->state_->content_mutation_private = content;
@@ -2202,50 +2661,87 @@ class HostStorageProtection {
       }
     }
     all.private_roots.push_back(view);
+    // Stage and canonical locations differ, so the old receipt may not have
+    // matched the same-location loop above. Its immutable native proof still
+    // identifies exactly this family, never an arbitrary same-inode policy.
+    if (bootstrap) { refined_bootstrap = bootstrap_group; }
+    retire_refined(bootstrap ? view.get() : nullptr);
     return view;
   }
   static std::shared_ptr<const HostStorageGuestMount> Admit(
       std::optional<std::vector<GuestHostBacking>> backings,
-      std::error_code& error) {
+      std::error_code& error,
+      std::shared_ptr<BootstrapProtectionGroup> bootstrap_transfer = {},
+      const HostStorageRoot* bootstrap_source = nullptr,
+      HostStorageFailureObservation* diagnostic = nullptr,
+      HostStoragePreparationWait* preparation = nullptr) {
     error.clear();
+    HostStorageFailureScope observation{diagnostic,error,4};
+    const auto transferred = [&](const auto& root) {
+      return bootstrap_transfer && root->state_->bootstrap_private &&
+          root->state_->bootstrap_group == bootstrap_transfer;
+    };
     auto state = std::make_unique<HostStorageGuestMount::State>();
     state->unknown = !backings;
+    observation.At(1);
     if (backings && backings->size() > 1024) {
       error = Error(std::errc::value_too_large);
-      return {};
+      observation.Capture(__LINE__); return {};
     }
     auto protected_roots = Private();
+    std::erase_if(protected_roots, transferred);
+    struct PrivateScan {
+      std::shared_ptr<HostStorageRoot> root;
+      FileHandleInfo info;
+      std::vector<std::shared_ptr<const HostStorageRoot>> roots;
+    };
+    std::vector<PrivateScan> private_scans;
     for (const auto& backing :
          backings.value_or(std::vector<GuestHostBacking>{})) {
-      if (backing.requires_projection && !backing.projection) {
-        error = Error(std::errc::no_such_device); return {};
+      if (preparation) {
+        if (backing.source && !backing.source->LinkPreparationCancellation(*preparation)) {
+          error=Error(std::errc::value_too_large); observation.Capture(__LINE__); return {};
+        }
+        if (backing.projection &&
+            !backing.projection->state_->source->LinkPreparationCancellation(*preparation)) {
+          error=Error(std::errc::value_too_large); observation.Capture(__LINE__); return {};
+        }
+        if ((error=preparation->Check())) { observation.Capture(__LINE__); return {}; }
       }
+      observation.At(2);
+      if (backing.requires_projection && !backing.projection) {
+        error = Error(std::errc::no_such_device); observation.Capture(__LINE__); return {};
+      }
+      observation.At(3);
       if (backing.path.empty()) {
         error = Error(std::errc::invalid_argument);
-        return {};
+        observation.Capture(__LINE__); return {};
       }
+      observation.At(4);
       const auto canonical =
           backing.subtree
               ? std::filesystem::weakly_canonical(backing.path, error)
               : std::filesystem::canonical(backing.path, error);
       if (error) {
-        return {};
+        observation.Capture(__LINE__); return {};
       }
       auto existing = backing.subtree ? canonical : canonical.parent_path();
       while (backing.subtree && !std::filesystem::exists(existing, error)) {
         if (error || existing == existing.root_path()) {
-          return {};
+          observation.Capture(__LINE__); return {};
         }
         existing = existing.parent_path();
       }
+      observation.At(5);
       auto root = HostStorageRoot::Open(existing, true, error, 0);
       if (!root) {
-        return {};
+        observation.Capture(__LINE__); return {};
       }
       ProtectionLocation location;
+      observation.At(6);
       error = Location(*root, backing.subtree, location);
       if (error && !protected_roots.empty()) {
-        return {};
+        observation.Capture(__LINE__); return {};
       }
       if (error) {
         error.clear();
@@ -2266,80 +2762,202 @@ class HostStorageProtection {
         location.inode = 0;
       }
       if (!backing.subtree) {
+        observation.At(7);
         auto file = root->OpenFileInternal(canonical.filename(),
                                            FileAccess::kFileReadData, error,
-                                           false, false, true);
+                                           false, false, true, false, nullptr, diagnostic, preparation);
         if (!file) {
-          return {};
+          observation.Capture(__LINE__); return {};
         }
+        observation.At(8);
         const auto info = file->QueryInfo(error);
         if (!info || !info->regular) {
           if (!error) {
             error = Error(std::errc::invalid_argument);
           }
-          return {};
+          observation.Capture(__LINE__); return {};
         }
+        if(diagnostic && !diagnostic->line && info){diagnostic->filesystem=info->filesystem_id;
+          diagnostic->file=info->file_id;diagnostic->available|=2;}
+        observation.At(9);
         if (backing.opened_file &&
             (backing.opened_file->filesystem_id != info->filesystem_id ||
              backing.opened_file->file_id != info->file_id)) {
           error = Error(std::errc::state_not_recoverable);
-          return {};
+          observation.Capture(__LINE__); return {};
         }
         location.canonical = canonical;
         location.filesystem_path /= canonical.filename();
         location.inode = info->file_id;
-        // Check currently protected inodes under one nonwaiting actual-FS
-        // guard.
-        auto guard = root->state_->space->TryBegin(root->path(), error,root->state_->directory_identity);
+        // Refresh under the SAME acquired filesystem guard: a preparation
+        // may have waited while a new private protector was registered.
+        observation.At(10);
+        auto guard = preparation
+            ? root->state_->space->BeginPreparation(root->path(),error,*preparation,
+                  root->state_->directory_identity,diagnostic)
+            : root->state_->space->TryBegin(root->path(),error,
+                  root->state_->directory_identity,diagnostic);
         if (!guard) {
-          return {};
+          observation.Capture(__LINE__); return {};
+        }
+        if (preparation) {
+          if ((error=root->Validate())) { observation.Capture(__LINE__); return {}; }
+          protected_roots=Private();
+          std::erase_if(protected_roots,transferred);
         }
         for (const auto& private_root : protected_roots) {
           if (private_root->state_->space.get() != root->state_->space.get()) {
 #if !XE_PLATFORM_WIN32
             if (private_root->state_->device == root->state_->device) {
               error = Error(std::errc::operation_not_supported);
-              return {};
+              observation.Capture(__LINE__); return {};
             }
 #endif
             continue;
           }
+          observation.At(11);
           error = PrivateContents(*private_root, &*info);
           if (error) {
-            return {};
+            observation.Capture(__LINE__); return {};
           }
         }
+        if (preparation) private_scans.push_back({root,*info,protected_roots});
         state->files.push_back(std::move(file));
       }
+      observation.At(12);
       if (backing.projection &&
           (!backing.subtree ||
            !BackingProjected(*backing.projection, location))) {
         error = Error(std::errc::permission_denied);
-        return {};
+        observation.Capture(__LINE__); return {};
       }
       state->locations.push_back(std::move(location));
       state->projections.push_back(backing.projection);
       state->roots.push_back(std::move(root));
     }
+    if (bootstrap_transfer) {
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+      if (!bootstrap_source || state->unknown || state->roots.size() != 1 ||
+          state->locations.size() != 1 || !state->locations.front().subtree ||
+          state->locations.front().inode != bootstrap_source->state_->inode ||
+          state->locations.front().filesystem != uint64_t(bootstrap_source->state_->device) ||
+          state->roots.front()->state_->mount.id != bootstrap_source->state_->mount.id) {
+        error = Error(std::errc::state_not_recoverable); observation.Capture(__LINE__); return {};
+      }
+#else
+      error = Error(std::errc::operation_not_supported); observation.Capture(__LINE__); return {};
+#endif
+    }
     auto mount = std::shared_ptr<HostStorageGuestMount>(
         new HostStorageGuestMount(std::move(state)));
+    // Retain every newly observed protector through registry unlock, including
+    // a concurrent last external-owner release. Bound: initial + eight rescans.
+    std::vector<std::shared_ptr<const HostStorageRoot>> observed_protectors;
+    if (preparation) observed_protectors.reserve(9*1024);
     auto& all = All();
-    std::lock_guard lock(all.mutex);
+    std::unique_lock lock(all.mutex);
+    // A legitimate concurrent private-root registration after the inode scan
+    // causes only that scan to run again. Retain the SAME opened files/device;
+    // do not reopen, read headers, redo initialization or restart admission.
+    unsigned rescans=0;
+    if (preparation) for (;;) {
+      observation.At(13);
+      if (preparation && (error=preparation->Check())) { observation.Capture(__LINE__); return {}; }
+      bool changed=false;
+      for (const auto& weak:all.private_roots) {
+        if (observed_protectors.size()==observed_protectors.capacity()) {
+          error=Error(std::errc::too_many_files_open); observation.Capture(__LINE__); return {};
+        }
+        const auto& private_root=observed_protectors.emplace_back(weak.lock());
+        if (!private_root || transferred(private_root)) continue;
+        for (const auto& scan:private_scans) {
+          bool same_filesystem=scan.root->state_->space==private_root->state_->space;
+#if !XE_PLATFORM_WIN32
+          same_filesystem |= scan.info.filesystem_id==uint64_t(private_root->state_->device);
+#endif
+          if (same_filesystem && std::find(scan.roots.begin(),scan.roots.end(),private_root)==scan.roots.end()) changed=true;
+        }
+      }
+      if (!changed) break;
+      if (!preparation || ++rescans>8) {
+        error=Error(std::errc::resource_unavailable_try_again);
+        observation.Capture(__LINE__); return {};
+      }
+      lock.unlock();
+      for (auto& scan:private_scans) {
+        auto guard=scan.root->state_->space->BeginPreparation(scan.root->path(),error,*preparation,
+            scan.root->state_->directory_identity,diagnostic);
+        if (!guard) { observation.Capture(__LINE__); return {}; }
+        if ((error=scan.root->Validate())) { observation.Capture(__LINE__); return {}; }
+        auto current=Private();
+        std::erase_if(current,transferred);
+        for (const auto& private_root:current) {
+          if (private_root->state_->space!=scan.root->state_->space) {
+#if !XE_PLATFORM_WIN32
+            if (private_root->state_->device==scan.root->state_->device) {
+              error=Error(std::errc::operation_not_supported); observation.Capture(__LINE__); return {};
+            }
+#endif
+            continue;
+          }
+          if ((error=PrivateContents(*private_root,&scan.info))) { observation.Capture(__LINE__); return {}; }
+        }
+        scan.roots=std::move(current);
+      }
+      lock.lock();
+    }
+    observation.At(12);
+    if (bootstrap_transfer && (!bootstrap_source ||
+        bootstrap_source->state_->bootstrap_group != bootstrap_transfer ||
+        !bootstrap_source->state_->bootstrap_owner.lock() ||
+        bootstrap_transfer->active_owner.lock() != bootstrap_source->state_->bootstrap_owner.lock())) {
+      error = Error(std::errc::permission_denied); observation.Capture(__LINE__); return {};
+    }
+    // A prevalidated old observation may have waited for the exact format
+    // admission transfer. Never register it after that generation retires.
+    for (const auto& p:mount->state_->projections) {
+      if (p && (p->state_->source->retiring() ||
+          p->state_->guest_admission.load(std::memory_order_acquire)==
+              HostStorageGuestProjection::State::GuestAdmission::kRetiredFormatObservation)) {
+        error=Error(std::errc::no_such_device);observation.Capture(__LINE__); return {};
+      }
+    }
     std::erase_if(all.guests, [](const auto& w) { return w.expired(); });
     std::erase_if(all.private_roots, [](const auto& w) { return w.expired(); });
     if (all.guests.size() >= 512) {
       error = Error(std::errc::too_many_files_open);
-      return {};
+      observation.Capture(__LINE__); return {};
+    }
+    std::erase_if(all.projections, [](const auto& w) { return w.expired(); });
+    for (const auto& w : all.projections) {
+      const auto p = w.lock();
+      if (!p || p->state_->guest_admission.load(std::memory_order_acquire) !=
+          HostStorageGuestProjection::State::GuestAdmission::kSourceUnadmitted) { continue; }
+      // Every actual guest admission observes this shared generation seal,
+      // even a raw backing or an independently reopened/older root that did
+      // not carry the initializer's projection. Compare native locations;
+      // names and a caller-provided projection cannot establish readiness.
+      if (mount->state_->unknown) {
+        error=Error(std::errc::operation_in_progress);observation.Capture(__LINE__); return {};
+      }
+      for (const auto& guest : mount->state_->locations) {
+        if (Overlaps(p->state_->source_location, guest) ||
+            std::any_of(p->state_->exclusions.begin(),p->state_->exclusions.end(),
+                [&](const auto& e) { return !e.private_tree && Overlaps(e.location,guest); })) {
+          error = Error(std::errc::operation_in_progress); observation.Capture(__LINE__); return {};
+        }
+      }
     }
     for (const auto& w : all.private_roots) {
       if (auto private_root = w.lock()) {
+        if (transferred(private_root)) { continue; }
         if (mount->state_->unknown) {
           error = Error(std::errc::operation_not_supported);
-          return {};
+          observation.Capture(__LINE__); return {};
         }
         if (!private_root->state_->private_location) {
           error = Error(std::errc::operation_not_supported);
-          return {};
+          observation.Capture(__LINE__); return {};
         }
         mount->state_->private_dependencies.push_back(private_root);
         const auto& location = *private_root->state_->private_location;
@@ -2347,7 +2965,7 @@ class HostStorageProtection {
           const auto& guest = mount->state_->locations[i];
           if (Overlaps(location, guest) && !Permits(*mount, i, location)) {
             error = Error(std::errc::permission_denied);
-            return {};
+            observation.Capture(__LINE__); return {};
           }
         }
       }
@@ -2359,15 +2977,22 @@ class HostStorageProtection {
       for (const auto& e : p->state_->exclusions) {
         if (!e.private_tree) { continue; }
         if (mount->state_->unknown) {
-          error = Error(std::errc::permission_denied); return {};
+          error = Error(std::errc::permission_denied); observation.Capture(__LINE__); return {};
         }
         for (size_t i = 0; i != mount->state_->locations.size(); ++i) {
           if (Overlaps(e.location, mount->state_->locations[i]) &&
               !Permits(*mount, i, e.location)) {
-            error = Error(std::errc::permission_denied); return {};
+            error = Error(std::errc::permission_denied); observation.Capture(__LINE__); return {};
           }
         }
       }
+    }
+    // All checks/allocation precede this exact private->guest metadata transfer.
+    all.guests.reserve(all.guests.size() + 1);
+    if (bootstrap_transfer) {
+      std::erase_if(all.private_roots, [&](const auto& weak) {
+        const auto root = weak.lock(); return root && transferred(root);
+      });
     }
     for (const auto& p : mount->state_->projections) {
       if (p) { p->state_->sealed.store(true, std::memory_order_release); }
@@ -2404,7 +3029,7 @@ bool HostStorageRoot::is_recovery_private() const {
          (state_->parent && state_->parent->is_recovery_private());
 }
 bool HostStorageRoot::is_guest_private() const {
-  return state_->flat_private || state_->content_mutation_private || state_->recovery_private ||
+  return state_->bootstrap_private || state_->flat_private || state_->content_mutation_private || state_->recovery_private ||
          state_->intent_private ||
          (state_->parent && state_->parent->is_guest_private());
 }
@@ -2413,13 +3038,24 @@ bool HostStorageRoot::HasProtectedGuestStorage() {
 }
 std::shared_ptr<const HostStorageGuestMount> HostStorageRoot::AdmitGuestMount(
     std::optional<std::vector<GuestHostBacking>> backings,
-    std::error_code& error) {
-  return HostStorageProtection::Admit(std::move(backings), error);
+    std::error_code& error, HostStorageFailureObservation* diagnostic,
+    HostStoragePreparationWait* preparation) {
+  return HostStorageProtection::Admit(std::move(backings), error, {}, nullptr, diagnostic, preparation);
 }
 std::shared_ptr<HostStorageRoot> HostStorageRoot::GuestView(
     std::error_code& error) const {
   if (has_guest_projection() && !Projection()) {
     error = Error(std::errc::no_such_device); return {};
+  }
+  if (has_guest_projection()) {
+    // An excluded native root is not an empty admitted guest device. Refuse
+    // before sealing the projection or publishing any guest ownership.
+    error=CheckGuestAccess({});if (error) { return {}; }
+  }
+  const auto projection = Projection();
+  if (projection && projection->state_->guest_admission.load(std::memory_order_acquire) ==
+      HostStorageGuestProjection::State::GuestAdmission::kSourceUnadmitted) {
+    error=Error(std::errc::operation_in_progress);return {};
   }
   auto view = Subroot({}, false, error);
   if (!view) {
@@ -2443,7 +3079,7 @@ bool HostStorageRoot::has_guest_projection() const {
       (state_->parent && state_->parent->has_guest_projection());
 }
 GuestHostBacking HostStorageRoot::GuestBacking() const {
-  return {path(), true, std::nullopt, Projection(), has_guest_projection()};
+  return {path(), true, std::nullopt, Projection(), has_guest_projection(), shared_from_this()};
 }
 void HostStorageRoot::SetFormatEligibility(bool allow) {
   state_->format_eligible = allow;
@@ -2455,6 +3091,11 @@ std::shared_ptr<HostStorageRoot> HostStorageRoot::CaptureGuestDirectory(
     const std::filesystem::path& directory, bool readonly, bool& matched,
     std::error_code& error) const {
   matched = false;
+  if (!NativeSpelling(directory)) {
+    // Malformed input is a denial, never an unmatched classification that
+    // permits the caller to retry the same truncated path without authority.
+    matched = true; error = Error(std::errc::invalid_argument); return {};
+  }
   error = Validate();
   if (error) { return {}; }
   // Classification only: no bytes, guest mount, borrowed path authority or
@@ -2510,7 +3151,8 @@ std::error_code HostStorageRoot::CheckGuestAccess(
   const auto target = p ? (scope_location->filesystem_path / here / relative).lexically_normal()
                         : std::filesystem::path{};
   if (p) { for (const auto& e : p->state_->exclusions) {
-    if (public_scope && !e.private_tree) { continue; }
+    if ((public_scope && !e.private_tree) ||
+        HostStorageProtection::SourceNamespaceContainer(*p, e)) { continue; }
     if (e.location.filesystem != p->state_->source_location.filesystem) { continue; }
     if (target == e.location.filesystem_path || Below(e.location.filesystem_path, target) ||
         (structural && Below(target, e.location.filesystem_path))) {
@@ -2555,17 +3197,130 @@ std::shared_ptr<const HostStorageGuestProjection> HostStorageRoot::InstallProjec
     std::vector<std::shared_ptr<const HostStorageRoot>> private_roots,
     std::vector<std::shared_ptr<const HostStorageRoot>> namespace_roots,
     bool allow_format, std::error_code& error) {
+  return InstallProjectionInternal(std::move(private_roots),std::move(namespace_roots),
+      allow_format,{},nullptr,ProjectionAdmissionRole::kOrdinary,error);
+}
+std::shared_ptr<const HostStorageGuestProjection> HostStorageRoot::InstallBootstrapProjection(
+    std::vector<std::shared_ptr<const HostStorageRoot>> private_roots,
+    std::vector<std::shared_ptr<const HostStorageRoot>> namespace_roots,
+    bool allow_format, std::span<HostStorageBootstrapDirectory* const> settled_private,
+    HostStorageBootstrapDirectory* exact_public, std::error_code& error) {
+  return InstallProjectionInternal(std::move(private_roots),std::move(namespace_roots),
+      allow_format,settled_private,exact_public,
+      ProjectionAdmissionRole::kBootstrapSourceUnadmitted,error);
+}
+std::shared_ptr<const HostStorageGuestProjection> HostStorageRoot::InstallFormatProjection(
+    const std::shared_ptr<const HostStorageGuestProjection>& previous,
+    std::vector<std::shared_ptr<const HostStorageRoot>> private_roots,
+    std::vector<std::shared_ptr<const HostStorageRoot>> namespace_roots,
+    bool allow_format, std::error_code& error) {
+  // Only the native metadata format producer calls this after real drain/EX.
+  // Old admitted generations retire before any epoch/data publication.
+  return InstallProjectionInternal(std::move(private_roots),std::move(namespace_roots),
+      allow_format,{},nullptr,ProjectionAdmissionRole::kOwnedFormatSourceUnadmitted,error,previous.get());
+}
+std::shared_ptr<const HostStorageGuestProjection> HostStorageRoot::InstallProjectionInternal(
+    std::vector<std::shared_ptr<const HostStorageRoot>> private_roots,
+    std::vector<std::shared_ptr<const HostStorageRoot>> namespace_roots,
+    bool allow_format, std::span<HostStorageBootstrapDirectory* const> settled_private,
+    HostStorageBootstrapDirectory* exact_public, ProjectionAdmissionRole role,
+    std::error_code& error, const HostStorageGuestProjection* exact_previous_format) {
   error.clear();
+  if ((role!=ProjectionAdmissionRole::kOrdinary ||
+       !settled_private.empty() || exact_public) && global_critical_region::is_held_by_current_thread()) {
+    error=Error(std::errc::operation_not_permitted);return {};
+  }
   if (has_guest_projection() || HostStorageProtection::Guest(*this)) {
     error = Error(std::errc::device_or_resource_busy); return {};
   }
   auto s = std::make_unique<HostStorageGuestProjection::State>();
+  if (role!=ProjectionAdmissionRole::kOrdinary) {
+    s->guest_admission.store(HostStorageGuestProjection::State::GuestAdmission::kSourceUnadmitted,
+                             std::memory_order_relaxed);
+  }
   s->source = shared_from_this();
   error = HostStorageProtection::Location(*this, true, s->source_location);
   if (error) { return {}; }
-  // Include already-protected authorities physically beneath this source,
-  // e.g. a legacy whole-volume Content containing the emulator data folder.
+  if (role==ProjectionAdmissionRole::kOwnedFormatSourceUnadmitted &&
+      (!exact_previous_format ||
+       exact_previous_format->state_->source_location.filesystem!=s->source_location.filesystem ||
+       exact_previous_format->state_->source_location.inode!=s->source_location.inode ||
+       exact_previous_format->state_->source_location.canonical!=s->source_location.canonical ||
+       exact_previous_format->state_->source_location.filesystem_path!=s->source_location.filesystem_path ||
+       exact_previous_format->state_->source_location.physical_ancestors!=s->source_location.physical_ancestors)) {
+    error=Error(std::errc::permission_denied);return {};
+  }
+  struct CapsuleProof {
+    HostStorageBootstrapDirectory* capsule;
+    std::shared_ptr<BootstrapProtectionGroup> receipt;
+    ProtectionLocation location;
+  };
+  std::vector<CapsuleProof> private_proofs;
+  std::optional<CapsuleProof> public_proof;
+  if (settled_private.size()>64) { error=Error(std::errc::value_too_large);return {}; }
+  const auto prove_capsule = [&](HostStorageBootstrapDirectory* capsule,
+                                 CapsuleProof& proof) -> std::error_code {
+    if (!capsule || !capsule->state_) { return Error(std::errc::invalid_argument); }
+    auto& native=*capsule->state_;
+    if (!native.canonical || !native.durable || native.public_admitted || native.private_settled ||
+        !native.root || !native.parent || !native.lease ||
+        !native.parent->IntentLeaseMatches(*native.lease)) {
+      return Error(std::errc::permission_denied);
+    }
+    auto failure=native.root->Validate();if (failure) { return failure; }
+    const auto& receipt=native.root->state_->bootstrap_group;
+    if (!receipt || !HostStorageProtection::BootstrapBindingMatches(
+        *receipt,*native.parent,*native.root,native.target,native.staging) ||
+        native.native_directory!=receipt->directory) { return Error(std::errc::permission_denied); }
+    proof={capsule,receipt,{}};
+    failure=HostStorageProtection::Location(*native.root,true,proof.location);
+    if (!failure && proof.location.filesystem!=s->source_location.filesystem) {
+      failure=Error(std::errc::cross_device_link);
+    }
+    return failure;
+  };
+  for (auto* capsule : settled_private) {
+    CapsuleProof proof{};error=prove_capsule(capsule,proof);if (error) { return {}; }
+    if (std::any_of(private_proofs.begin(),private_proofs.end(),
+        [&](const auto& prior) { return prior.receipt==proof.receipt; })) {
+      error=Error(std::errc::invalid_argument);return {};
+    }
+    bool covered=false;
+    for (const auto& root : private_roots) {
+      if (!root || (error=root->Validate())) { if (!error) { error=Error(std::errc::invalid_argument); }return {}; }
+      ProtectionLocation exclusion;error=HostStorageProtection::Location(*root,true,exclusion);
+      if (error) { return {}; }
+      covered|=ContainsLocation(exclusion,proof.location);
+    }
+    if (!covered) { error=Error(std::errc::permission_denied);return {}; }
+    private_proofs.push_back(std::move(proof));
+  }
+  if (exact_public) {
+    CapsuleProof proof{};error=prove_capsule(exact_public,proof);if (error) { return {}; }
+    if (std::none_of(namespace_roots.begin(),namespace_roots.end(),
+            [&](const auto& root) { return root.get()==exact_public->state_->root.get(); }) ||
+        std::any_of(private_proofs.begin(),private_proofs.end(),
+            [&](const auto& prior) { return prior.receipt==proof.receipt; })) {
+      error=Error(std::errc::permission_denied);return {};
+    }
+    for (const auto& root : private_roots) {
+      if (!root || (error=root->Validate())) { if (!error) { error=Error(std::errc::invalid_argument); }return {}; }
+      ProtectionLocation exclusion;error=HostStorageProtection::Location(*root,true,exclusion);
+      if (error) { return {}; }
+      if (Overlaps(exclusion,proof.location)) { error=Error(std::errc::permission_denied);return {}; }
+    }
+    public_proof=std::move(proof);
+  }
+  const auto settled_receipt = [&](const auto& root) {
+    return root->state_->bootstrap_private &&
+        (std::any_of(private_proofs.begin(),private_proofs.end(),
+            [&](const auto& proof) { return proof.receipt==root->state_->bootstrap_group; }) ||
+         (public_proof && public_proof->receipt==root->state_->bootstrap_group));
+  };
+  // Include every other already-protected authority physically beneath this
+  // source. Only these exact proved receipts change their projection roles.
   for (const auto& root : HostStorageProtection::Private()) {
+    if (settled_receipt(root)) { continue; }
     if (ContainsLocation(s->source_location, *root->state_->private_location)) {
       private_roots.push_back(root);
     }
@@ -2588,11 +3343,42 @@ std::shared_ptr<const HostStorageGuestProjection> HostStorageRoot::InstallProjec
   auto projection = std::shared_ptr<const HostStorageGuestProjection>(
       new HostStorageGuestProjection(std::move(s)));
   auto& all = HostStorageProtection::All();
-  std::lock_guard lock(all.mutex);
+  std::unique_lock lock(all.mutex);
+  const auto current_receipt = [&](const CapsuleProof& proof) {
+    return proof.capsule->state_->root->state_->bootstrap_group==proof.receipt &&
+        proof.receipt->active_owner.lock()==proof.capsule->state_->owner &&
+        std::any_of(all.private_roots.begin(),all.private_roots.end(),[&](const auto& weak) {
+          const auto root=weak.lock();return root && root->state_->bootstrap_private &&
+              root->state_->bootstrap_group==proof.receipt;
+        });
+  };
+  if (std::any_of(private_proofs.begin(),private_proofs.end(),
+          [&](const auto& proof) { return !current_receipt(proof); }) ||
+      (public_proof && !current_receipt(*public_proof))) {
+    error=Error(std::errc::permission_denied);return {};
+  }
   for (const auto& w : all.guests) {
     if (auto guest = w.lock()) {
       if (guest->state_->unknown) {
         error = Error(std::errc::permission_denied); return {};
+      }
+      if (role==ProjectionAdmissionRole::kOwnedFormatSourceUnadmitted &&
+          HostStorageProtection::ForeignFormatGuest(*exact_previous_format,*guest)) {
+        error=Error(std::errc::device_or_resource_busy);return {};
+      }
+      if (role==ProjectionAdmissionRole::kBootstrapSourceUnadmitted) {
+        // An existing raw guest may not share a projection or retain managed
+        // metadata. Do not install a pending generation beneath that live
+        // reader/writer and pretend it has become unadmitted retroactively.
+        for (size_t i=0;i<guest->state_->locations.size();++i) {
+          if (HostStorageProtection::DrainedFormatGuest(*guest,i)) {continue;}
+          const auto& admitted=guest->state_->locations[i];
+          if (Overlaps(projection->state_->source_location,admitted) ||
+              std::any_of(projection->state_->exclusions.begin(),projection->state_->exclusions.end(),
+                  [&](const auto& e) { return !e.private_tree && Overlaps(e.location,admitted); })) {
+            error=Error(std::errc::device_or_resource_busy);return {};
+          }
+        }
       }
       for (const auto& e : projection->state_->exclusions) {
         if (!e.private_tree) { continue; }
@@ -2605,28 +3391,185 @@ std::shared_ptr<const HostStorageGuestProjection> HostStorageRoot::InstallProjec
       }
     }
   }
+  all.projections.reserve(all.projections.size()+1);
   all.projections.push_back(projection);
+  // The permanent native exclusions are registered before their exact private
+  // bootstrap receipts retire. Public protection remains until actual Admit.
+  std::erase_if(all.private_roots,[&](const auto& weak) {
+    const auto root=weak.lock();
+    return root && root->state_->bootstrap_private &&
+        std::any_of(private_proofs.begin(),private_proofs.end(),
+            [&](const auto& proof) { return proof.receipt==root->state_->bootstrap_group; });
+  });
+  for (const auto& proof : private_proofs) { proof.capsule->state_->private_settled=true; }
+  if (public_proof) { public_proof->capsule->state_->public_projection=projection; }
   state_->projection = projection;
   state_->projection_required = true;
   state_->format_eligible = allow_format;
   // No strong Root->projection edge: admitted mounts/the bundle own this
   // capability, which itself retains the native source and exclusions.
+  lock.unlock();
+  for (const auto& proof : private_proofs) { proof.capsule->state_->protections.clear(); }
   return projection;
 }
-std::error_code HostStorageRoot::AttachPublicProjection(const HostStorageRoot& source) {
+std::error_code HostStorageRoot::AdmitBootstrapProjection(
+    ManagedBootstrapGuestAdmissionPermit& permit) {
+  if (global_critical_region::is_held_by_current_thread()) {
+    return Error(std::errc::operation_not_permitted);
+  }
+  const auto projection=Projection();
+  if (!projection || projection->state_->source.get()!=this ||
+      projection->state_->guest_admission.load(std::memory_order_acquire)!=
+          HostStorageGuestProjection::State::GuestAdmission::kSourceUnadmitted) {
+    return Error(std::errc::permission_denied);
+  }
+  std::error_code error;
+  {
+    // Refuse inherited same-filesystem guards before the coordinator consumer
+    // can observe/recover native owners; release this real try-guard first.
+    auto unlocked=state_->space->TryBegin(path(),error,state_->directory_identity);
+    if (!unlocked) { return error; }
+  }
+  error=Validate();
+  if (!error) { error=HostStorageProtection::ProjectionCurrent(*projection); }
+  if (error) { return error; }
+  // The opaque coordinator consumer performs actual source/identity/lease and
+  // ready mutation-owner observations. Never call it under space/registry or
+  // model locks; a committed file alone cannot release this generation.
+  error=permit.Consume(*this,*projection);if (error) { return error; }
+  auto& all=HostStorageProtection::All();std::lock_guard lock(all.mutex);
+  if (!permit.FinalCurrent() || Projection()!=projection || projection->state_->source.get()!=this ||
+      state_->retired.load(std::memory_order_acquire) ||
+      projection->state_->sealed.load(std::memory_order_acquire) ||
+      projection->state_->guest_admission.load(std::memory_order_acquire)!=
+          HostStorageGuestProjection::State::GuestAdmission::kSourceUnadmitted ||
+      std::none_of(all.projections.begin(),all.projections.end(),
+          [&](const auto& weak) { return weak.lock()==projection; })) {
+    return Error(std::errc::permission_denied);
+  }
+  // This same registry lock serializes every actual guest registration. Old
+  // projections and stale permits cannot change this exact generation.
+  projection->state_->guest_admission.store(
+      HostStorageGuestProjection::State::GuestAdmission::kBootstrapAdmitted,
+      std::memory_order_release);
+  return {};
+}
+std::error_code HostStorageRoot::AdmitFormatProjection(
+    ManagedFormatGuestAdmissionPermit& permit) {
+  if (global_critical_region::is_held_by_current_thread()) {
+    return Error(std::errc::operation_not_permitted);
+  }
+  const auto projection=Projection();
+  if (!projection || projection!=permit.projection_ || permit.source_.get()!=this ||
+      projection->state_->source.get()!=this) {
+    return Error(std::errc::permission_denied);
+  }
+  const auto admission=projection->state_->guest_admission.load(std::memory_order_acquire);
+  const bool admitted=admission==HostStorageGuestProjection::State::GuestAdmission::kBootstrapAdmitted;
+  if (!admitted && admission!=HostStorageGuestProjection::State::GuestAdmission::kSourceUnadmitted) {
+    return Error(std::errc::permission_denied);
+  }
+  std::error_code error;
+  {
+    auto unlocked=state_->space->TryBegin(path(),error,state_->directory_identity);
+    if (!unlocked) {return error;}
+  }
+  error=Validate();
+  if (!error) {error=HostStorageProtection::ProjectionCurrent(*projection);}
+  if (error) {return error;}
+  // Actual Handoff/marker/nonce/binding/EX and ready recovered-owner proof all
+  // happen outside the registry and filesystem admission locks.
+  error=permit.Consume(*this,*projection);if (error) {return error;}
+  const auto& old=permit.observation_projection_;
+  const auto& old_source=permit.observation_source_;
+  if (bool(old)!=bool(old_source)) {return Error(std::errc::permission_denied);}
+  if (old) {
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+    struct stat retained;
+    if (fstat(old_source->state_->directory,&retained)) {return NativeError();}
+    if (old==projection || old_source.get()==this ||
+        old->state_->source!=old_source || old_source->path()!=path() ||
+        !old_source->state_->directory_identity || !state_->directory_identity ||
+        !old_source->state_->directory_identity->SameEntry({},*state_->directory_identity,{}) ||
+        retained.st_dev!=state_->device || retained.st_ino!=state_->inode ||
+        (error=ConfinedMount(old_source->state_->directory,state_->mount))) {
+      return error?error:Error(std::errc::permission_denied);
+    }
+#else
+    return Error(std::errc::operation_not_supported);
+#endif
+  }
+  auto& all=HostStorageProtection::All();std::lock_guard lock(all.mutex);
+  const auto registered=[&](const auto& p) {
+    return std::any_of(all.projections.begin(),all.projections.end(),
+        [&](const auto& weak) {return weak.lock()==p;});
+  };
+  if (!permit.FinalCurrent() || Projection()!=projection ||
+      state_->retired.load(std::memory_order_acquire) ||
+      (!admitted && projection->state_->sealed.load(std::memory_order_acquire)) ||
+      !registered(projection) ||
+      projection->state_->guest_admission.load(std::memory_order_acquire)!=admission ||
+      (old && (!registered(old) || old->state_->source!=old_source ||
+          (admitted && !old_source->state_->retired.load(std::memory_order_acquire)) ||
+          old->state_->guest_admission.load(std::memory_order_acquire)!=
+              (admitted?HostStorageGuestProjection::State::GuestAdmission::kRetiredFormatObservation:
+                        HostStorageGuestProjection::State::GuestAdmission::kSourceUnadmitted)))) {
+    return Error(std::errc::permission_denied);
+  }
+  // Exact metadata-only transfer under the same lock as common guest Admit.
+  // A failed bootstrap's unrelated pending projection is never exempted.
+  // A retry after real admission still consumed a new exact current permit;
+  // retain its admitted state and never reset/reopen the old generation.
+  if (admitted) {return {};}
+  if (old) {
+    old_source->state_->retired.store(true,std::memory_order_release);
+    old->state_->guest_admission.store(
+        HostStorageGuestProjection::State::GuestAdmission::kRetiredFormatObservation,
+        std::memory_order_release);
+  }
+  projection->state_->guest_admission.store(
+      HostStorageGuestProjection::State::GuestAdmission::kBootstrapAdmitted,
+      std::memory_order_release);
+  return {};
+}
+std::error_code HostStorageRoot::AttachPublicProjection(const HostStorageRoot& source,
+    HostStorageBootstrapDirectory* exact_public) {
   const auto p = source.Projection();
   if (!p || has_guest_projection() || HostStorageProtection::Guest(*this)) {
     return Error(std::errc::invalid_argument);
+  }
+  std::shared_ptr<BootstrapProtectionGroup> public_receipt;
+  if (exact_public) {
+    auto& native=*exact_public->state_;
+    if (!native.canonical || !native.durable || native.public_admitted || native.private_settled ||
+        !native.root || native.public_projection.lock()!=p || p->state_->source.get()!=&source ||
+        state_->dependency.get()!=native.root.get() ||
+        path()!=native.root->path() || !native.parent || !native.lease ||
+        !native.parent->IntentLeaseMatches(*native.lease)) {
+      return Error(std::errc::permission_denied);
+    }
+    public_receipt=native.root->state_->bootstrap_group;
+    if (!public_receipt || !HostStorageProtection::BootstrapBindingMatches(
+        *public_receipt,*native.parent,*native.root,native.target,native.staging)) {
+      return Error(std::errc::permission_denied);
+    }
   }
   ProtectionLocation location;
   auto error = Validate();
   if (!error) { error = HostStorageProtection::Location(*this, true, location); }
   if (error) { return error; }
-  if (location.filesystem != p->state_->source_location.filesystem || !format_eligible()) {
+  if (location.filesystem != p->state_->source_location.filesystem ||
+      (!format_eligible() && !public_receipt)) {
     return Error(std::errc::permission_denied);
   }
   auto& all = HostStorageProtection::All();
   std::lock_guard lock(all.mutex);
+  if (public_receipt && (public_receipt->active_owner.lock()!=exact_public->state_->owner ||
+      public_receipt->directory!=location.inode ||
+      std::none_of(all.private_roots.begin(),all.private_roots.end(),[&](const auto& weak) {
+        const auto root=weak.lock();return root && root->state_->bootstrap_private &&
+            root->state_->bootstrap_group==public_receipt;
+      }))) { return Error(std::errc::permission_denied); }
   if (p->state_->sealed.load(std::memory_order_acquire) ||
       !p->state_->public_scopes.empty()) {
     return Error(std::errc::device_or_resource_busy);
@@ -2811,6 +3754,92 @@ std::shared_ptr<HostStorageRoot> HostStorageRoot::IndependentNamespaceView(
   error = Error(std::errc::operation_not_supported); return {};
 #endif
 }
+std::shared_ptr<HostStorageRoot> HostStorageRoot::RetainBootstrapNamespace(
+    const HostStorageIntentLease& lease, std::error_code& error) const {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread()) {
+    error = Error(std::errc::operation_not_permitted); return {};
+  }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  if (!IntentLeaseMatches(lease) || read_only() || is_guest_private() ||
+      HostStorageProtection::Guest(*this) || has_guest_projection()) {
+    error = Error(std::errc::permission_denied); return {};
+  }
+  static_cast<void>(IntentRootIdentity(error));
+  if (error) { return {}; }
+  auto anchor = CloneNativeLineage(error);
+  if (!anchor || !IntentLeaseMatches(lease)) {
+    if (!error) { error = Error(std::errc::permission_denied); }
+    return {};
+  }
+  return anchor;
+#else
+  error = Error(std::errc::operation_not_supported); return {};
+#endif
+}
+std::shared_ptr<HostStorageRoot> HostStorageRoot::CloneNativeLineage(
+    std::error_code& error) const {
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  // Retain the same physical ancestor/dependency checks, without retaining
+  // their logical generation objects. In particular, an ancestor replaced by
+  // a symlink cannot become current merely because the final inode matches.
+  // These copies carry no protection, permit, projection or guest authority.
+  std::map<const HostStorageRoot*, std::shared_ptr<HostStorageRoot>> copies;
+  std::set<const HostStorageRoot*> visiting;
+  auto clone = [&](auto&& self, const HostStorageRoot& root,
+                   unsigned depth) -> std::shared_ptr<HostStorageRoot> {
+    if (const auto found = copies.find(&root); found != copies.end()) {
+      return found->second;
+    }
+    if (depth == 128 || copies.size() + visiting.size() == 128 ||
+        !visiting.insert(&root).second) {
+      error = Error(std::errc::value_too_large); return {};
+    }
+    error = root.Validate();
+    if (error) { return {}; }
+    auto next = std::make_unique<State>();
+    next->directory = fcntl(root.state_->directory, F_DUPFD_CLOEXEC, 0);
+    struct stat info;
+    if (next->directory < 0 || fstat(next->directory, &info)) {
+      error = NativeError(); return {};
+    }
+    if (!S_ISDIR(info.st_mode) || info.st_dev != root.state_->device ||
+        info.st_ino != root.state_->inode ||
+        (error = ConfinedMount(next->directory, root.state_->mount))) {
+      if (!error) { error = Error(std::errc::state_not_recoverable); }
+      return {};
+    }
+    next->path = root.state_->path;
+    next->read_only = root.state_->read_only;
+    next->space = root.state_->space;
+    next->directory_identity = root.state_->directory_identity;
+    next->device = root.state_->device;
+    next->inode = root.state_->inode;
+    next->mount = root.state_->mount;
+    next->format_eligible = false;
+#if XE_PLATFORM_MAC
+    next->darwin_authority.store(root.state_->darwin_authority.load());
+#endif
+    if (root.state_->parent) {
+      next->parent = self(self, *root.state_->parent, depth + 1);
+      if (!next->parent) { return {}; }
+    }
+    if (root.state_->dependency) {
+      next->dependency = self(self, *root.state_->dependency, depth + 1);
+      if (!next->dependency) { return {}; }
+    }
+    auto copy = std::shared_ptr<HostStorageRoot>(new HostStorageRoot(std::move(next)));
+    error = copy->Validate();
+    if (error) { return {}; }
+    visiting.erase(&root);
+    copies.emplace(&root, copy);
+    return copy;
+  };
+  return clone(clone, *this, 0);
+#else
+  error = Error(std::errc::operation_not_supported); return {};
+#endif
+}
 std::shared_ptr<HostStorageRoot> HostStorageRoot::MountedFilesystemRoot(
     std::error_code& error) const {
   error = Validate();
@@ -2863,10 +3892,28 @@ bool HostStorageRoot::native_filesystem_authority() const {
   return false;
 #endif
 }
-void HostStorageRoot::Retire() { state_->retired.store(true); }
+void HostStorageRoot::Retire() {
+  state_->retired.store(true);
+  state_->retirement_stop.request_stop();
+}
+bool HostStorageRoot::LinkPreparationCancellation(HostStoragePreparationWait& wait) const {
+  return wait.LinkCancellation(state_->retirement_stop.get_token()) &&
+      wait.LinkCancellationFlag(state_->cache_owner_canceled) &&
+      wait.LinkCancellationFlag(state_->cache_slot_canceled) &&
+      (!state_->parent || state_->parent->LinkPreparationCancellation(wait)) &&
+      (!state_->dependency || state_->dependency->LinkPreparationCancellation(wait));
+}
 bool HostStorageRoot::retiring() const {
   return state_->retired.load(std::memory_order_acquire) ||
+         (state_->cache_owner_canceled && state_->cache_owner_canceled->load(std::memory_order_acquire)) ||
+         (state_->cache_slot_canceled && state_->cache_slot_canceled->load(std::memory_order_acquire)) ||
          (state_->parent && state_->parent->retiring());
+}
+bool HostStorageRoot::BindCacheCancellation(std::shared_ptr<const std::atomic<bool>> owner,
+    std::shared_ptr<const std::atomic<bool>> slot) {
+  if(!owner || !slot || owner->load(std::memory_order_acquire) || slot->load(std::memory_order_acquire) ||
+      state_->cache_owner_canceled || state_->cache_slot_canceled || !state_->guest_mount)return false;
+  state_->cache_owner_canceled=std::move(owner);state_->cache_slot_canceled=std::move(slot);return true;
 }
 size_t HostStorageRoot::open_file_count() const {
   return state_->open_handles.load();
@@ -2884,7 +3931,7 @@ void HostStorageRoot::ReleaseHandle() const {
   }
 }
 std::error_code HostStorageRoot::Validate() const {
-  if (state_->retired.load()) {
+  if (retiring()) {
     return Error(std::errc::no_such_device);
   }
   if (state_->parent) {
@@ -2937,6 +3984,9 @@ std::shared_ptr<HostStorageRoot> HostStorageRoot::Open(
     const std::filesystem::path& path, bool readonly, std::error_code& error,
     uint64_t reserve, std::shared_ptr<HostStorageSpace> space) {
   error.clear();
+  if (!NativeSpelling(path)) {
+    error = Error(std::errc::invalid_argument); return {};
+  }
   auto state = std::make_unique<State>();
   state->path = std::filesystem::canonical(path, error);
   if (error) {
@@ -3031,29 +4081,32 @@ std::unique_ptr<HostStorageSpace::MutationGuard> HostStorageRoot::Mutation(
 }
 std::shared_ptr<HostStorageRoot> HostStorageRoot::Subroot(
     const std::filesystem::path& relative, bool readonly,
-    std::error_code& error) const {
+    std::error_code& error, HostStorageFailureObservation* diagnostic) const {
+  HostStorageFailureScope observation{diagnostic,error,3};
+  observation.At(1);
   if (!ContentNamespaceReady(relative)) {
-    error = Error(std::errc::device_or_resource_busy); return {};
+    error = Error(std::errc::device_or_resource_busy); observation.Capture(__LINE__); return {};
   }
+  observation.At(0);
   if (HostStorageProtection::Guest(*this)) {
     error = CheckGuestAccess(relative);
-    if (error) { return {}; }
+    if (error) { observation.Capture(__LINE__); return {}; }
   }
   error = Validate();
   if (is_guest_private() && !relative.empty()) {
     error = Error(std::errc::permission_denied);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   if (error || !Relative(relative, true)) {
     if (!error) {
       error = Error(std::errc::invalid_argument);
     }
-    return {};
+    observation.Capture(__LINE__); return {};
   }
 #if XE_PLATFORM_WIN32
   if (!relative.empty()) {
     error = Error(std::errc::operation_not_supported);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   auto next = Open(state_->path, readonly || state_->read_only, error, 0,
                    state_->space);
@@ -3065,7 +4118,7 @@ std::shared_ptr<HostStorageRoot> HostStorageRoot::Subroot(
   std::string leaf;
   auto parent = Parent(state_->directory, relative, leaf, error);
   if (parent.value < 0) {
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   auto next = std::make_unique<State>();
   next->directory = openat(parent.value, leaf.c_str(),
@@ -3073,11 +4126,11 @@ std::shared_ptr<HostStorageRoot> HostStorageRoot::Subroot(
   struct stat info;
   if (next->directory < 0 || fstat(next->directory, &info)) {
     error = NativeError();
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   error = ConfinedMount(next->directory, state_->mount);
   if (error) {
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   next->mount = state_->mount;
   next->device = info.st_dev;
@@ -3089,7 +4142,7 @@ std::shared_ptr<HostStorageRoot> HostStorageRoot::Subroot(
       : HostStorageDirectoryIdentity::Capture(next->path,error);
   if (!next->directory_identity ||
       !next->directory_identity->MatchesNativeDirectory(next->device,next->inode)) {
-    if (!error) { error=Error(std::errc::state_not_recoverable); } return {};
+    if (!error) { error=Error(std::errc::state_not_recoverable); } observation.Capture(__LINE__); return {};
   }
   next->read_only = readonly || state_->read_only;
   next->format_eligible = relative.empty() ? state_->format_eligible : true;
@@ -3142,6 +4195,11 @@ class PolicyFileHandle final : public FileHandle {
       std::error_code& error) const override {
     error = root_->Validate();
     return error ? std::nullopt : file_->QueryInfo(error);
+  }
+  std::optional<uint64_t> QueryAllocatedBytes(
+      std::error_code& error) const override {
+    error = root_->Validate();
+    return error ? std::nullopt : file_->QueryAllocatedBytes(error);
   }
   std::error_code LastError() const override { return last_error_; }
   FileIoResult ReadResult(size_t offset, std::span<uint8_t> bytes) override {
@@ -3378,8 +4436,10 @@ class PolicyFileHandle final : public FileHandle {
 };
 std::unique_ptr<FileHandle> HostStorageRoot::OpenFile(
     const std::filesystem::path& relative, uint32_t access,
-    std::error_code& error, bool create_exclusive) const {
-  return OpenFileInternal(relative, access, error, create_exclusive, false);
+    std::error_code& error, bool create_exclusive,
+    HostStorageFailureObservation* diagnostic) const {
+  return OpenFileInternal(relative, access, error, create_exclusive, false,
+                          false, false, nullptr, diagnostic);
 }
 std::unique_ptr<FileHandle> HostStorageRoot::ReserveOverwrite(
     const std::filesystem::path& relative, std::error_code& error) const {
@@ -3389,70 +4449,78 @@ std::unique_ptr<FileHandle> HostStorageRoot::ReserveOverwrite(
 std::unique_ptr<FileHandle> HostStorageRoot::OpenFileInternal(
     const std::filesystem::path& relative, uint32_t access,
     std::error_code& error, bool create_exclusive, bool overwrite,
-    bool nonwaiting_admission, bool stage, bool* created) const {
+    bool nonwaiting_admission, bool stage, bool* created,
+    HostStorageFailureObservation* diagnostic,
+    HostStoragePreparationWait* preparation) const {
+  HostStorageFailureScope observation{diagnostic,error,2};
+  if(diagnostic && !diagnostic->line){diagnostic->root=uint64_t(reinterpret_cast<uintptr_t>(this));
+    diagnostic->space=uint64_t(reinterpret_cast<uintptr_t>(state_->space.get()));diagnostic->available|=24;}
   if (created) { *created = false; }
   if ((is_recovery_private() || is_profile_intent_private() || is_content_mutation_private()) &&
       (!Relative(relative) || relative.has_parent_path() ||
        !(is_content_mutation_private() ? ContentMutationLeaf(relative.string()) : is_profile_intent_private() ? IntentLeaf(relative.string())
                                     : RecoveryLeaf(relative.string())))) {
     error = Error(std::errc::permission_denied);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   if (HostStorageProtection::Guest(*this)) {
     error = CheckGuestAccess(relative);
-    if (error) { return {}; }
+    if (error) { observation.Capture(__LINE__); return {}; }
   }
   error = Validate();
   if (is_guest_private() && relative.has_parent_path()) {
     error = Error(std::errc::permission_denied);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   if (error || !Relative(relative, true)) {
     if (!error) {
       error = Error(std::errc::invalid_argument);
     }
-    return {};
+    observation.Capture(__LINE__); return {};
   }
-  auto guard = nonwaiting_admission
-                   ? state_->space->TryBegin(state_->path, error, state_->directory_identity)
+  observation.At(1);
+  auto guard = preparation
+                   ? state_->space->BeginPreparation(state_->path,error,*preparation,state_->directory_identity,diagnostic)
+               : nonwaiting_admission
+                   ? state_->space->TryBegin(state_->path, error, state_->directory_identity, diagnostic)
                : (create_exclusive || overwrite)
                    ? Mutation(error)
                    : state_->space->Begin(state_->path, error, state_->directory_identity);
   if (!guard) {
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   error = Validate();
   if (error) {
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   if (create_exclusive && (is_recovery_private() || is_profile_intent_private() || is_content_mutation_private())) {
     // Refuse BEFORE creation when no recovery directory slot remains.
     error = HostStorageProtection::Contents(*this, nullptr, true, 8191,
         is_recovery_private(), is_profile_intent_private(), is_content_mutation_private());
-    if (error) { return {}; }
+    if (error) { observation.Capture(__LINE__); return {}; }
   }
   if (create_exclusive) {
     error = guard->Admit(kMetadataAllowance);
     if (error) {
-      return {};
+      observation.Capture(__LINE__); return {};
     }
   }
 #if XE_PLATFORM_WIN32
   error = Error(std::errc::operation_not_supported);
-  return {};
+  observation.Capture(__LINE__); return {};
 #else
   std::string leaf;
   auto parent = Parent(state_->directory, relative, leaf, error);
   if (parent.value < 0) {
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   if (HostStorageProtection::Guest(*this)) {
     const auto projection = Projection();
-    if (has_guest_projection() && !projection) { error = Error(std::errc::no_such_device); return {}; }
+    if (has_guest_projection() && !projection) { error = Error(std::errc::no_such_device); observation.Capture(__LINE__); return {}; }
     if (projection) {
       error = HostStorageProtection::ProjectedDirectory(*projection, parent.value,
                                                         state_->device, state_->mount, false, PublicProjectionScope());
-      if (error) { return {}; }
+      if (error) { observation.Capture(__LINE__); return {}; }
     }
   }
 
@@ -3464,7 +4532,7 @@ std::unique_ptr<FileHandle> HostStorageRoot::OpenFileInternal(
       (access & (FileAccess::kGenericWrite | FileAccess::kFileWriteData |
                  FileAccess::kFileAppendData | FileAccess::kGenericAll));
   if ((is_profile_intent_private() || is_content_mutation_private()) && write && !create_exclusive) {
-    error = Error(std::errc::permission_denied); return {};
+    error = Error(std::errc::permission_denied); observation.Capture(__LINE__); return {};
   }
   const bool append = write && !(access & (FileAccess::kGenericWrite |
                                            FileAccess::kFileWriteData |
@@ -3479,20 +4547,23 @@ std::unique_ptr<FileHandle> HostStorageRoot::OpenFileInternal(
   if (create_exclusive) {
     flags |= O_CREAT | O_EXCL;
   }
+  observation.At(2);
   if (!ContentNamespaceReady(relative)) {
-    error = Error(std::errc::device_or_resource_busy); return {};
+    error = Error(std::errc::device_or_resource_busy); observation.Capture(__LINE__); return {};
   }
+  observation.At(3);
   const int fd = openat(parent.value, leaf.c_str(), flags, 0600);
   if (fd < 0) {
     error = NativeError();
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   if (created && create_exclusive) { *created = true; }
   struct stat opened;
+  observation.At(4);
   if (fstat(fd, &opened)) {
     error = NativeError();
     close(fd);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   if ((!S_ISREG(opened.st_mode) && !S_ISDIR(opened.st_mode)) ||
       opened.st_dev != state_->device) {
@@ -3500,28 +4571,38 @@ std::unique_ptr<FileHandle> HostStorageRoot::OpenFileInternal(
                 ? Error(std::errc::cross_device_link)
                 : Error(std::errc::operation_not_supported);
     close(fd);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   error = ConfinedMount(fd, state_->mount);
   if (error) {
     close(fd);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   auto file = FileHandle::AdoptNative(fd, append);
+  observation.At(5);
   const auto info = file->QueryInfo(error);
   if (!info) {
-    return {};
+    observation.Capture(__LINE__); return {};
   }
+  if(diagnostic && !diagnostic->line && info){diagnostic->filesystem=info->filesystem_id;diagnostic->file=info->file_id;
+    diagnostic->available|=2;}
+  observation.At(6);
   if ((overwrite || stage) && (!info->regular || info->links > 1)) {
     error = Error(std::errc::permission_denied);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
-  if (((overwrite || stage) && guard->Conflicts(state_->path / relative, false,
-                                     info->filesystem_id, info->file_id, ContentPermit())) ||
-      guard->Reserved(state_->path / relative, *info, ContentPermit())) {
+  observation.At(7);
+  if ((overwrite || stage) && guard->Conflicts(state_->path / relative, false,
+                                     info->filesystem_id, info->file_id, ContentPermit())) {
     error = Error(std::errc::device_or_resource_busy);
-    return {};
+    observation.Capture(__LINE__); return {};
   }
+  observation.At(8);
+  if (guard->Reserved(state_->path / relative, *info, ContentPermit())) {
+    error = Error(std::errc::device_or_resource_busy);
+    observation.Capture(__LINE__); return {};
+  }
+  observation.At(0);
   if (is_guest_private()) {
     error = HostStorageProtection::PrivateContents(*this);
   }
@@ -3529,7 +4610,7 @@ std::unique_ptr<FileHandle> HostStorageRoot::OpenFileInternal(
     error = HostStorageProtection::GuestFile(*this, *info);
   }
   if (error) {
-    return {};
+    observation.Capture(__LINE__); return {};
   }
   // storage_lease() is an owning public token and may outlive the FileHandle.
   // Duplicate the actual validated description before publishing its weak row;
@@ -3537,13 +4618,13 @@ std::unique_ptr<FileHandle> HostStorageRoot::OpenFileInternal(
   Fd identity_pin(fcntl(int(file->native_handle()), F_DUPFD_CLOEXEC, 0));
   struct stat pinned;
   if (identity_pin.value < 0 || fstat(identity_pin.value, &pinned)) {
-    error = NativeError(); return {};
+    error = NativeError(); observation.Capture(__LINE__); return {};
   }
   if (uint64_t(pinned.st_dev) != info->filesystem_id ||
       uint64_t(pinned.st_ino) != info->file_id ||
       bool(S_ISREG(pinned.st_mode)) != info->regular ||
       bool(S_ISDIR(pinned.st_mode)) != info->directory) {
-    error = Error(std::errc::state_not_recoverable); return {};
+    error = Error(std::errc::state_not_recoverable); observation.Capture(__LINE__); return {};
   }
   auto lease = guard->TrackOpen(state_->path / relative, *info,
                                  overwrite || stage, false, ContentPermit());
@@ -3914,6 +4995,7 @@ struct HostStorageRoot::SnapshotReplacement {
   std::shared_ptr<const HostStorageSnapshotToken> recovery;
   // Prepared before rename so no allocation is required after publication.
   mutable std::shared_ptr<const HostStorageSnapshotToken> current;
+  PrivateSnapshotPurpose purpose = PrivateSnapshotPurpose::kOrdinary;
 };
 std::shared_ptr<const HostStorageSnapshotToken> HostStorageRoot::CaptureSnapshot(
     const std::filesystem::path& relative, uint64_t maximum,
@@ -4015,6 +5097,150 @@ HostStorageRoot::ReplaceResult HostStorageRoot::CompareAndPublishSnapshot(
     const HostStorageSnapshotToken& expected, HostStorageSnapshotStage& stage,
     std::span<const uint8_t> intended,
     std::shared_ptr<const HostStorageSnapshotToken> recovery) const {
+  return CompareAndPublishSnapshotInternal(expected, stage, intended,
+                                           std::move(recovery), PrivateSnapshotPurpose::kOrdinary);
+}
+bool HostStorageRoot::IsFlatSnapshotTarget() const {
+  if (read_only()) { return false; }
+  // ProtectFlat reuse returns an empty Subroot of its actual retained policy.
+  // Follow only identical native directories in that ownership chain: a raw
+  // reopen, descendant, sibling or other typed private policy gains no grant.
+  const HostStorageRoot* protector = this;
+  while (!protector->state_->flat_private) {
+    const auto& state = *protector->state_;
+    const auto* parent = state.parent.get();
+    if (state.bootstrap_private || state.recovery_private || state.intent_private ||
+        state.content_mutation_private || !parent ||
+        state.path != parent->state_->path ||
+        state.device != parent->state_->device ||
+        state.inode != parent->state_->inode ||
+        state.mount.id != parent->state_->mount.id) {
+      return false;
+    }
+    protector = parent;
+  }
+  return true;
+}
+bool HostStorageRoot::IsMediaReferenceSnapshotTarget(
+    const std::filesystem::path& relative) const {
+  if (relative.has_parent_path() || !IsFlatSnapshotTarget()) { return false; }
+  const auto leaf = relative.string();
+  return leaf.size() == 73 && leaf.starts_with("media-") &&
+      leaf.ends_with(".v1") &&
+      std::all_of(leaf.begin() + 6, leaf.begin() + 70, [](unsigned char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      });
+}
+std::error_code HostStorageRoot::EnsureMediaReferenceReserve() const {
+  if (global_critical_region::is_held_by_current_thread() || read_only() ||
+      is_guest_private()) {
+    return Error(std::errc::operation_not_permitted);
+  }
+  auto error = Validate();
+  if (error) {
+    return error;
+  }
+  // Raise the SAME physical filesystem's existing floor. A path replacement
+  // cannot substitute another native space or grant a different parent.
+  const auto space =
+      HostStorageSpace::ForPath(path(), kHostStorageReserve, error);
+  if (!space || error) {
+    return error;
+  }
+  if (space != state_->space) {
+    return Error(std::errc::no_such_device);
+  }
+  return Validate();
+}
+std::vector<std::filesystem::path> HostStorageRoot::ListMediaReferenceFiles(
+    std::error_code& error) const {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread()) {
+    error = Error(std::errc::operation_not_permitted);
+    return {};
+  }
+  if (!IsFlatSnapshotTarget()) {
+    error = Error(std::errc::permission_denied);
+    return {};
+  }
+  auto guard = Mutation(error);
+  if (!guard) {
+    return {};
+  }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  Fd fd(openat(state_->directory, ".",
+               O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+  if (fd.value < 0) {
+    error = NativeError();
+    return {};
+  }
+  DIR* stream = fdopendir(fd.value);
+  if (!stream) {
+    error = NativeError();
+    return {};
+  }
+  fd.Release();
+  std::vector<std::filesystem::path> result;
+  size_t count = 0;
+  while (true) {
+    errno = 0;
+    auto* entry = readdir(stream);
+    if (!entry) {
+      if (errno) {
+        error = NativeError();
+      }
+      break;
+    }
+    const std::string_view name(entry->d_name);
+    if (name == "." || name == "..") {
+      continue;
+    }
+    if (++count > 64) {
+      error = Error(std::errc::file_too_large);
+      break;
+    }
+    if (name == "owner.v1") {
+      continue;
+    }
+    if (!IsMediaReferenceSnapshotTarget(entry->d_name)) {
+      error = Error(std::errc::bad_message);
+      break;
+    }
+    result.emplace_back(entry->d_name);
+  }
+  closedir(stream);
+  std::sort(result.begin(), result.end());
+  return error ? std::vector<std::filesystem::path>{} : result;
+#else
+  error = Error(std::errc::operation_not_supported);
+  return {};
+#endif
+}
+bool HostStorageRoot::IsCacheSnapshotTarget(
+    const std::filesystem::path& relative) const {
+  if (relative.has_parent_path() || !IsFlatSnapshotTarget()) { return false; }
+  const auto leaf=relative.string();
+  return leaf=="cache-table.v1" || leaf=="cache-format-0.v1" ||
+      leaf=="cache-format-1.v1" || leaf=="cache-format-2.v1";
+}
+bool HostStorageRoot::IsPrivateSnapshotTarget(const std::filesystem::path& relative,
+    PrivateSnapshotPurpose purpose) const {
+  switch(purpose) {
+    case PrivateSnapshotPurpose::kOrdinary:return !is_guest_private();
+    case PrivateSnapshotPurpose::kMediaReference:return IsMediaReferenceSnapshotTarget(relative);
+    case PrivateSnapshotPurpose::kCacheTable:return IsCacheSnapshotTarget(relative);
+  }
+  return false;
+}
+HostStorageRoot::ReplaceResult HostStorageRoot::CompareAndPublishSnapshotInternal(
+    const HostStorageSnapshotToken& expected, HostStorageSnapshotStage& stage,
+    std::span<const uint8_t> intended,
+    std::shared_ptr<const HostStorageSnapshotToken> recovery,
+    PrivateSnapshotPurpose purpose) const {
+  if (purpose!=PrivateSnapshotPurpose::kOrdinary &&
+      !IsPrivateSnapshotTarget(expected.relative(), purpose)) {
+    return {Error(std::errc::permission_denied)};
+  }
   std::lock_guard stage_lock(stage.mutex_);
   if (stage.sealed_ || expected.root_.get() != this ||
       stage.root_.get() != this ||
@@ -4027,7 +5253,8 @@ HostStorageRoot::ReplaceResult HostStorageRoot::CompareAndPublishSnapshot(
     return {Error(std::errc::invalid_argument)};
   }
   stage.sealed_ = true;
-  SnapshotReplacement checked{expected, stage, intended, recovery, {}};
+  SnapshotReplacement checked{expected, stage, intended, recovery, {},
+                              purpose};
   const auto& backup_root = recovery ? *recovery->root() : *this;
   return ReplaceFile(stage.relative_, expected.relative_, backup_root,
                      recovery ? recovery->relative() : std::filesystem::path{},
@@ -4052,6 +5279,533 @@ class HostStorageIntentLease final {
   int fd_;
 };
 
+namespace {
+bool BootstrapLeaf(std::string_view leaf) {
+  return !leaf.empty() && leaf.size() <= 128 && leaf != "." && leaf != ".." &&
+      std::all_of(leaf.begin(), leaf.end(), [](unsigned char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_';
+      });
+}
+bool BootstrapRecordLeaf(std::string_view leaf) {
+  const auto partial = leaf.find(".partial-");
+  if (partial != std::string_view::npos) {
+    if (!content_mutation_wire::ValidNonce(leaf.substr(partial + 9))) { return false; }
+    leaf = leaf.substr(0, partial);
+  }
+  if (leaf == "owner.v1" || leaf == "cache-table.v1" || leaf == "bootstrap.pending.v1" ||
+      leaf == "bootstrap.commit.v1" || leaf == "bootstrap-source.v1") { return true; }
+  constexpr std::string_view component = "bootstrap.component-";
+  if (leaf.size() == component.size() + 5 && leaf.starts_with(component) &&
+      leaf.ends_with(".v1")) {
+    const auto part = leaf.substr(component.size(), 2);
+    return part[0] == '0' && ((part[1] >= '0' && part[1] <= '9') ||
+        (part[1] >= 'A' && part[1] <= 'F'));
+  }
+  constexpr std::string_view preserve = "bootstrap-preserve-", link = "content-mutations-v1-";
+  return (leaf.starts_with(preserve) && leaf.ends_with(".v1") &&
+          content_mutation_wire::ValidNonce(leaf.substr(preserve.size(), leaf.size()-preserve.size()-3))) ||
+      (leaf.starts_with(link) && leaf.ends_with(".owner") &&
+          content_mutation_wire::ValidNonce(leaf.substr(link.size(), leaf.size()-link.size()-6)));
+}
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+std::error_code BootstrapRename(int parent, const char* from, const char* to, bool exchange = false) {
+#if XE_PLATFORM_LINUX && defined(SYS_renameat2)
+  return syscall(SYS_renameat2, parent, from, parent, to, exchange ? 2u : 1u) ? NativeError() : std::error_code{};
+#elif XE_PLATFORM_MAC && defined(RENAME_EXCL) && defined(RENAME_SWAP)
+  return renameatx_np(parent, from, parent, to, exchange ? RENAME_SWAP : RENAME_EXCL) ? NativeError() : std::error_code{};
+#else
+  return Error(std::errc::operation_not_supported);
+#endif
+}
+std::error_code BootstrapWrite(int fd, std::span<const uint8_t> bytes,
+    FileHandleInfo& info) {
+  for (size_t done = 0; done != bytes.size();) {
+    const auto count = pwrite(fd, bytes.data()+done, bytes.size()-done, off_t(done));
+    if (count < 0 && errno == EINTR) { continue; }
+    if (count <= 0) { return count ? NativeError() : Error(std::errc::io_error); }
+    done += size_t(count);
+  }
+  std::vector<uint8_t> actual;
+  auto error = SnapshotRead(fd, 65536, info, actual);
+  if (!error && (actual.size() != bytes.size() || !std::equal(actual.begin(),actual.end(),bytes.begin()))) {
+    error = Error(std::errc::state_not_recoverable);
+  }
+  return error ? error : SyncStorage(fd) ? NativeError() : std::error_code{};
+}
+#endif
+}  // namespace
+
+HostStorageBootstrapDirectory::HostStorageBootstrapDirectory(std::unique_ptr<State> state)
+    : state_(std::move(state)) {}
+HostStorageBootstrapDirectory::~HostStorageBootstrapDirectory() = default;
+const std::shared_ptr<HostStorageRoot>& HostStorageBootstrapDirectory::root() const { return state_->root; }
+const std::filesystem::path& HostStorageBootstrapDirectory::target() const { return state_->target; }
+const std::filesystem::path& HostStorageBootstrapDirectory::staging() const { return state_->staging; }
+uint64_t HostStorageBootstrapDirectory::native_directory() const { return state_->native_directory; }
+std::error_code HostStorageRoot::CheckBootstrapBrowseDirectory(
+    const HostStorageRoot& actual_source) const {
+  if (global_critical_region::is_held_by_current_thread()) { return Error(std::errc::operation_not_permitted); }
+  auto error=Validate();if (!error) { error=actual_source.Validate(); }if (error) { return error; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  if (state_->device!=actual_source.state_->device || state_->mount.id!=actual_source.state_->mount.id) {
+    return Error(std::errc::cross_device_link);
+  }
+  if (state_->inode==actual_source.state_->inode && state_->directory_identity &&
+      actual_source.state_->directory_identity && state_->directory_identity->SameEntry(
+          {},*actual_source.state_->directory_identity,{})) { return {}; }
+  Fd scan(openat(state_->directory,".",O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC));
+  if (scan.value<0) { return NativeError(); }
+  DIR* stream=fdopendir(scan.value);if (!stream) { return NativeError(); }scan.Release();
+  while (true) {
+    errno=0;const auto* row=readdir(stream);
+    if (!row) { if (errno) { error=NativeError(); }break; }
+    if (!strcmp(row->d_name,".") || !strcmp(row->d_name,"..")) { continue; }
+    error=Error(std::errc::directory_not_empty);break;
+  }
+  closedir(stream);return error;
+#else
+  return Error(std::errc::operation_not_supported);
+#endif
+}
+std::error_code HostStorageRoot::CheckCacheBootstrapSource(
+    const HostStorageRoot* binding,uint64_t marker_file,
+    std::span<const std::shared_ptr<const HostStorageRoot>> preserved) const {
+  if(global_critical_region::is_held_by_current_thread())return Error(std::errc::operation_not_permitted);
+  auto error=Validate();if(!error && binding)error=binding->Validate();if(error)return error;
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  if(binding && (binding->path().parent_path()!=path() || binding->state_->device!=state_->device ||
+      binding->state_->mount.id!=state_->mount.id))return Error(std::errc::permission_denied);
+  for(const auto& root:preserved)if(!root || root->path().parent_path()!=path() ||
+      root->state_->device!=state_->device || root->state_->mount.id!=state_->mount.id ||
+      (error=root->Validate()))return error?error:Error(std::errc::permission_denied);
+  Fd scan(openat(state_->directory,".",O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC));
+  if(scan.value<0)return NativeError();DIR* stream=fdopendir(scan.value);
+  if(!stream)return NativeError();scan.Release();size_t count=0;
+  while(true){
+    errno=0;const auto* row=readdir(stream);if(!row){if(errno)error=NativeError();break;}
+    if(!strcmp(row->d_name,".") || !strcmp(row->d_name,".."))continue;
+    if(++count>2+preserved.size()){error=Error(std::errc::directory_not_empty);break;}
+    struct stat named;
+    if(fstatat(state_->directory,row->d_name,&named,AT_SYMLINK_NOFOLLOW)){error=NativeError();break;}
+    const bool own_binding=binding && binding->path().filename()==row->d_name && S_ISDIR(named.st_mode) &&
+        uint64_t(named.st_dev)==binding->state_->device && uint64_t(named.st_ino)==binding->state_->inode;
+    const bool own_marker=marker_file && !strcmp(row->d_name,ManagedDeviceIdentity::kMarker) &&
+        S_ISREG(named.st_mode) && named.st_nlink==1 && uint64_t(named.st_dev)==state_->device &&
+        uint64_t(named.st_ino)==marker_file;
+    const bool opaque=std::any_of(preserved.begin(),preserved.end(),[&](const auto& root){
+      return root->path().filename()==row->d_name && S_ISDIR(named.st_mode) &&
+          uint64_t(named.st_dev)==root->state_->device && uint64_t(named.st_ino)==root->state_->inode;
+    });
+    if(!own_binding && !own_marker && !opaque){error=Error(std::errc::directory_not_empty);break;}
+  }
+  closedir(stream);return error;
+#else
+  return Error(std::errc::operation_not_supported);
+#endif
+}
+std::filesystem::path HostStorageRoot::MetadataBootstrapTemporary(std::string_view nonce) {
+  return content_mutation_wire::ValidNonce(nonce) ?
+      std::filesystem::path(".xenia-bootstrap-" + std::string(nonce) + ".tmp") : std::filesystem::path{};
+}
+std::filesystem::path HostStorageRoot::DirectoryBootstrapTemporary(
+    const std::filesystem::path& target, std::string_view nonce) {
+  return !target.has_parent_path() && BootstrapLeaf(target.string()) &&
+      content_mutation_wire::ValidNonce(nonce) ?
+      std::filesystem::path(".xenia-bootstrap-" + std::string(nonce) + ".dir") : std::filesystem::path{};
+}
+std::shared_ptr<HostStorageRoot> HostStorageRoot::ProtectBootstrap(std::error_code& error) const {
+  return HostStorageProtection::Protect(*this, error, 4);
+}
+std::shared_ptr<HostStorageRoot> HostStorageRoot::RebaseBootstrapRoot(
+    const HostStorageRoot& root, const std::filesystem::path& leaf, std::error_code& error) const {
+  if (global_critical_region::is_held_by_current_thread()) { error=Error(std::errc::operation_not_permitted);return {}; }
+  error = Validate();
+  if (error || !BootstrapLeaf(leaf.string())) { if (!error) { error=Error(std::errc::invalid_argument); } return {}; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  struct stat named, retained;
+  if (fstat(root.state_->directory,&retained) ||
+      fstatat(state_->directory,leaf.c_str(),&named,AT_SYMLINK_NOFOLLOW)) { error=NativeError(); return {}; }
+  if (!SameNode(named,retained) || !S_ISDIR(named.st_mode) || named.st_uid!=geteuid() ||
+      (named.st_mode&077) || named.st_dev!=state_->device) { error=Error(std::errc::state_not_recoverable); return {}; }
+  error=ConfinedMount(root.state_->directory,state_->mount); if (error) { return {}; }
+  auto next=std::make_unique<State>(); next->path=path()/leaf;
+  next->read_only=false; next->space=state_->space; next->parent=shared_from_this();
+  next->device=retained.st_dev; next->inode=retained.st_ino; next->mount=state_->mount;
+  next->directory=fcntl(root.state_->directory,F_DUPFD_CLOEXEC,0);
+  if (next->directory<0) { error=NativeError(); return {}; }
+  next->directory_identity=HostStorageDirectoryIdentity::Capture(next->path,error);
+  if (!next->directory_identity || !next->directory_identity->MatchesNativeDirectory(next->device,next->inode)) {
+    if (!error) { error=Error(std::errc::state_not_recoverable); } return {};
+  }
+  next->bootstrap_owner=root.state_->bootstrap_owner;
+  next->bootstrap_group=root.state_->bootstrap_group; next->format_eligible=false;
+  auto result=std::shared_ptr<HostStorageRoot>(new HostStorageRoot(std::move(next)));
+  error=result->Validate(); return error ? nullptr : result;
+#else
+  error=Error(std::errc::operation_not_supported); return {};
+#endif
+}
+std::unique_ptr<HostStorageBootstrapDirectory> HostStorageRoot::BeginBootstrapDirectory(
+    const std::filesystem::path& target, std::string_view nonce, std::error_code& error,
+    std::shared_ptr<const HostStorageIntentLease> lease) const {
+  if (global_critical_region::is_held_by_current_thread()) { error=Error(std::errc::operation_not_permitted);return {}; }
+  error=Validate();
+  if (error || read_only() || is_guest_private() || target.has_parent_path() ||
+      !BootstrapLeaf(target.string()) || !content_mutation_wire::ValidNonce(nonce)) {
+    if (!error) { error=Error(std::errc::permission_denied); } return {};
+  }
+  // Preserve native capability proof before creating even a private stage.
+  static_cast<void>(IntentRootIdentity(error));if (error) { return {}; }
+  if (lease ? !IntentLeaseMatches(*lease) : false) { error=Error(std::errc::permission_denied); return {}; }
+  if (!lease) { lease=AcquireIntentLease(error,true); }
+  if (!lease) { return {}; }
+  auto state=std::make_unique<HostStorageBootstrapDirectory::State>();
+  state->parent=shared_from_this(); state->lease=std::move(lease); state->target=target;
+  state->staging=DirectoryBootstrapTemporary(target,nonce);
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  {
+    auto guard=Mutation(error); if (!guard) { return {}; }
+    struct stat existing;
+    if (!fstatat(state_->directory,target.c_str(),&existing,AT_SYMLINK_NOFOLLOW) || errno!=ENOENT) {
+      error=Error(std::errc::file_exists); return {};
+    }
+    error=guard->Admit(kMetadataAllowance);
+    if (!error && bootstrap_test_boundary_.load()==4) {
+      bootstrap_test_boundary_.store(0);error=Error(std::errc::no_space_on_device);
+    }
+    if (error) { return {}; }
+    if (mkdirat(state_->directory,state->staging.c_str(),0700)) { error=NativeError(); return {}; }
+  }
+  state->root=Subroot(state->staging,false,error); if (!state->root) { return {}; }
+  state->root->state_->bootstrap_owner=state->owner;
+  state->root->state_->bootstrap_group=HostStorageProtection::ClaimBootstrap(
+      *this,*state->root,state->target,state->staging,state->owner,error);
+  if (!state->root->state_->bootstrap_group) { return {}; }
+  state->native_directory=state->root->state_->inode;
+  auto protection=state->root->ProtectBootstrap(error); if (!protection) { return {}; }
+  state->protections.push_back(std::move(protection));
+  auto result=std::unique_ptr<HostStorageBootstrapDirectory>(new HostStorageBootstrapDirectory(std::move(state)));
+  if (bootstrap_test_boundary_.exchange(0)==1) { error=Error(std::errc::operation_canceled);return result; }
+  if (SyncStorage(state_->directory)) { error=NativeError(); }
+  return result;
+#else
+  error=Error(std::errc::operation_not_supported); return {};
+#endif
+}
+std::unique_ptr<HostStorageBootstrapDirectory> HostStorageRoot::ResumeBootstrapDirectory(
+    const std::filesystem::path& target, const std::filesystem::path& staging,
+    uint64_t directory, std::error_code& error,
+    std::shared_ptr<const HostStorageIntentLease> lease) const {
+  if (global_critical_region::is_held_by_current_thread()) { error=Error(std::errc::operation_not_permitted);return {}; }
+  error=Validate(); const auto text=staging.string();
+  constexpr std::string_view prefix=".xenia-bootstrap-";
+  if (error || !directory || read_only() || is_guest_private() || target.has_parent_path() ||
+      staging.has_parent_path() || !BootstrapLeaf(target.string()) ||
+      text.size()!=prefix.size()+32+4 || !text.starts_with(prefix) || !text.ends_with(".dir") ||
+      !content_mutation_wire::ValidNonce(std::string_view(text).substr(prefix.size(),32))) {
+    if (!error) { error=Error(std::errc::permission_denied); } return {};
+  }
+  if (lease && !IntentLeaseMatches(*lease)) { error=Error(std::errc::permission_denied); return {}; }
+  if (!lease) { lease=AcquireIntentLease(error,true); }
+  if (!lease) { return {}; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  auto state=std::make_unique<HostStorageBootstrapDirectory::State>();
+  state->parent=shared_from_this();state->lease=std::move(lease);state->target=target;state->staging=staging;
+  {
+    auto guard=Mutation(error);if (!guard) { return {}; }
+    struct stat a{},b{};const bool has_stage=!fstatat(state_->directory,staging.c_str(),&a,AT_SYMLINK_NOFOLLOW);
+    if (!has_stage && errno!=ENOENT) { error=NativeError(); return {}; }
+    const bool has_target=!fstatat(state_->directory,target.c_str(),&b,AT_SYMLINK_NOFOLLOW);
+    if (!has_target && errno!=ENOENT) { error=NativeError(); return {}; }
+    const auto& actual=has_stage?a:b;
+    if (has_stage==has_target || !S_ISDIR(actual.st_mode) || actual.st_dev!=state_->device ||
+        uint64_t(actual.st_ino)!=directory || actual.st_uid!=geteuid() || (actual.st_mode&077)) {
+      error=Error(std::errc::state_not_recoverable);return {};
+    }
+    state->canonical=has_target;
+  }
+  state->root=Subroot(state->canonical?target:staging,false,error);if (!state->root) { return {}; }
+  if (uint64_t(state->root->state_->inode)!=directory) { error=Error(std::errc::state_not_recoverable); return {}; }
+  state->native_directory=directory;state->root->state_->bootstrap_owner=state->owner;
+  state->root->state_->bootstrap_group=HostStorageProtection::ClaimBootstrap(
+      *this,*state->root,state->target,state->staging,state->owner,error);
+  if (!state->root->state_->bootstrap_group) { return {}; }
+  auto protection=state->root->ProtectBootstrap(error);if (!protection) { return {}; }
+  state->protections.push_back(std::move(protection));
+  return std::unique_ptr<HostStorageBootstrapDirectory>(new HostStorageBootstrapDirectory(std::move(state)));
+#else
+  error=Error(std::errc::operation_not_supported);return {};
+#endif
+}
+std::unique_ptr<HostStorageBootstrapDirectory> HostStorageRoot::ResumeRetainedBootstrapDirectory(
+    const std::filesystem::path& target, const HostStorageRoot& canonical,
+    std::error_code& error,
+    std::shared_ptr<const HostStorageIntentLease> same_parent_lease) const {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread()) { error=Error(std::errc::operation_not_permitted);return {}; }
+  error=Validate();if (!error) { error=canonical.Validate(); }
+  if (error || target.has_parent_path() || !BootstrapLeaf(target.string()) ||
+      canonical.path()!=path()/target || canonical.read_only() || canonical.is_guest_private()) {
+    if (!error) { error=Error(std::errc::permission_denied); }return {};
+  }
+  if (same_parent_lease && !IntentLeaseMatches(*same_parent_lease)) {
+    error=Error(std::errc::permission_denied);return {};
+  }
+  const auto stage=HostStorageProtection::RetainedBootstrapStage(*this,canonical,target,error);
+  if (error || !stage) { return {}; }  // no registered receipt means no adoption
+  auto lease=std::move(same_parent_lease);
+  if (!lease) {lease=AcquireIntentLease(error,true);}
+  if (!lease) { return {}; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  return ResumeBootstrapDirectory(target,*stage,canonical.state_->inode,error,std::move(lease));
+#else
+  error=Error(std::errc::operation_not_supported);return {};
+#endif
+}
+HostStorageBootstrapPublication HostStorageRoot::PublishBootstrapDirectory(
+    HostStorageBootstrapDirectory& capsule) const {
+  HostStorageBootstrapPublication result;
+  if (global_critical_region::is_held_by_current_thread()) { result.error=Error(std::errc::operation_not_permitted);return result; }
+  auto& state=*capsule.state_;
+  if (state.parent.get()!=this || state.public_admitted || state.private_settled || !state.root ||
+      !state.lease || !IntentLeaseMatches(*state.lease)) {
+    result.error=Error(std::errc::permission_denied);return result;
+  }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  auto guard=Mutation(result.error);if (!guard) { return result; }
+  result.error=guard->Admit(kMetadataAllowance);if (result.error) { return result; }
+  const auto leaf=state.canonical?state.target:state.staging;
+  FlushTreeNode tree;size_t remaining=512;
+  result.error=PrepareFlushTree(state_->directory,leaf.string(),state_->device,state_->mount,tree,remaining);
+  if (!result.error && uint64_t(tree.identity.st_ino)!=state.native_directory) { result.error=Error(std::errc::state_not_recoverable); }
+  if (!result.error) { result.error=HostStorageProtection::BootstrapContents(*state.root); }
+  if (!result.error && FlushTreeReserved(*guard,path()/leaf,tree,ContentPermit())) { result.error=Error(std::errc::device_or_resource_busy); }
+  if (!result.error) { result.error=RevalidateFlushTree(state_->directory,tree,state_->mount); }
+  if (!result.error) { result.error=SyncFlushTree(tree,false); }
+  if (!result.error) { result.error=SyncFlushTree(tree,true); }
+  if (!result.error) { result.error=RevalidateFlushTree(state_->directory,tree,state_->mount); }
+  if (result.error) { return result; }
+  if (!state.canonical) {
+    result.error=BootstrapRename(state_->directory,state.staging.c_str(),state.target.c_str());
+    if (result.error) { return result; }
+    state.canonical=true;result.published=true;
+  }
+  // Rebase only the native capability, never reopen its authority by pathname.
+  guard.reset();
+  if (state.root->path()!=path()/state.target) {
+    auto canonical=RebaseBootstrapRoot(*state.root,state.target,result.error);
+    if (!canonical) { return result; }
+    auto protection=canonical->ProtectBootstrap(result.error);
+    if (!protection) { return result; }
+    state.protections.push_back(std::move(protection));state.root=std::move(canonical);
+  }
+  result.canonical_root=state.root;
+  if (bootstrap_test_boundary_.exchange(0)==3) { result.error=Error(std::errc::operation_canceled);return result; }
+  result.error=state.root->Validate();
+  if (!result.error && SyncStorage(state_->directory)) { result.error=NativeError(); }
+  state.durable=result.durable=!result.error;
+  return result;
+#else
+  result.error=Error(std::errc::operation_not_supported);return result;
+#endif
+}
+std::shared_ptr<HostStorageRoot> HostStorageRoot::ProtectMediaReferenceDirectory(
+    HostStorageBootstrapDirectory& capsule, std::error_code& error) const {
+  error = EnsureMediaReferenceReserve();
+  if (error) { return {}; }
+  auto& state = *capsule.state_;
+  if (state.parent.get() != this || !state.canonical || !state.durable ||
+      state.public_admitted || state.private_settled || !state.root ||
+      !state.lease || !IntentLeaseMatches(*state.lease) ||
+      state.target != ".xenia-media-v1" || state.root->path() != path()/state.target ||
+      state.root->state_->bootstrap_owner.lock() != state.owner) {
+    error = Error(std::errc::permission_denied); return {};
+  }
+  error = state.root->Validate();
+  if (error) { return {}; }
+  const auto receipt = state.root->state_->bootstrap_group;
+  if (!receipt || !HostStorageProtection::BootstrapBindingMatches(
+          *receipt, *this, *state.root, state.target, state.staging) ||
+      state.native_directory != receipt->directory) {
+    error = Error(std::errc::permission_denied); return {};
+  }
+  constexpr std::string_view owner = "XENIA-MEDIA-REFERENCES-1\n";
+  const auto marker = state.root->CaptureSnapshot("owner.v1", 128, error);
+  if (!marker || !marker->exists() || marker->bytes().size() != owner.size() ||
+      !std::equal(marker->bytes().begin(), marker->bytes().end(), owner.begin())) {
+    if (!error) { error = Error(std::errc::bad_message); }
+    return {};
+  }
+  const auto observed = state.root->ObserveIntentSnapshot(*marker);
+  error = observed.error;
+  if (!error && !observed.durable) { error = Error(std::errc::io_error); }
+  if (error) { return {}; }
+  // Protect publishes the actual flat policy before retiring only this exact
+  // registered bootstrap family. Failure retains the capsule and protections.
+  auto view = HostStorageProtection::Protect(*state.root, error, 0, receipt);
+  if (!view) { return {}; }
+  state.private_settled = true;
+  state.protections.clear();
+  // The caller retains the parent EX lease through its final durable check.
+  return view;
+}
+std::shared_ptr<HostStorageRoot> HostStorageRoot::AdmitBootstrapPublicDirectory(
+    HostStorageBootstrapDirectory& capsule,std::error_code& error,
+    const HostStorageRoot* source_projection) const {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread()) { error=Error(std::errc::operation_not_permitted);return {}; }
+  auto& state=*capsule.state_;
+  if (state.parent.get()!=this || !state.canonical || !state.durable || state.public_admitted || state.private_settled ||
+      !state.root || !state.lease || !IntentLeaseMatches(*state.lease)) {
+    error=Error(std::errc::permission_denied);return {};
+  }
+  error=state.root->Validate();if (error) { return {}; }
+  std::shared_ptr<HostStorageRoot> view;
+  const auto bound_projection=state.public_projection.lock();
+  if (source_projection) {
+    if (!bound_projection || source_projection->Projection()!=bound_projection ||
+        bound_projection->state_->source.get()!=source_projection) {
+      error=Error(std::errc::permission_denied);return {};
+    }
+    // The construction root inherits Content's namespace projection. Prepare
+    // an independent public scope, while retaining its actual native/lifetime
+    // dependency and the exact bound projection; no path-root reminting.
+    view=state.public_view;
+    if (!view) {
+      view=state.root->IndependentNamespaceView(error);if (!view) { return {}; }
+      error=view->AttachPublicProjection(*source_projection,&capsule);if (error) { return {}; }
+      state.public_view=view;
+    } else if (view->Projection()!=bound_projection || !view->PublicProjectionScope()) {
+      error=Error(std::errc::permission_denied);return {};
+    }
+  } else {
+    if (bound_projection || state.root->has_guest_projection()) {
+      error=Error(std::errc::permission_denied);return {};
+    }
+    view=state.root->Subroot({},false,error);if (!view) { return {}; }
+  }
+  if (source_projection) {
+    // Projection strongly pins its unadmitted public scope. Mount ownership
+    // belongs to a separate child: putting it on the scope itself creates
+    // projection -> scope -> guest_mount -> projection and lets retiring the
+    // published guest poison the scope's immutable native authority.
+    view=view->Subroot({},false,error);if (!view) { return {}; }
+  }
+  auto admission=HostStorageProtection::Admit(
+      std::vector<GuestHostBacking>{view->GuestBacking()},error,state.root->state_->bootstrap_group,state.root.get());
+  if (!admission) { return {}; }
+  view->state_->guest_mount=std::move(admission);state.public_admitted=true;
+  // The metadata exchange is complete; release retired protectors outside it.
+  state.protections.clear();return view;
+}
+std::vector<std::filesystem::path> HostStorageRoot::ListBootstrapRecords(std::error_code& error) const {
+  if (global_critical_region::is_held_by_current_thread()) { error=Error(std::errc::operation_not_permitted);return {}; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  if (!state_->space->NativeAuthorityFor(state_->device)) { error=Error(std::errc::operation_not_supported);return {}; }
+#endif
+  auto guard=Mutation(error);if (!guard) { return {}; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  Fd scan(openat(state_->directory,".",O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC));
+  if (scan.value<0) { error=NativeError();return {}; }
+  DIR* stream=fdopendir(scan.value);if (!stream) { error=NativeError();return {}; }scan.Release();
+  std::vector<std::filesystem::path> out;
+  while (true) {
+    errno=0;const auto* row=readdir(stream);if (!row) { if (errno) { error=NativeError(); }break; }
+    const std::string_view leaf=row->d_name;if (leaf=="." || leaf=="..") { continue; }
+    if (out.size()==64 || !BootstrapRecordLeaf(leaf)) { error=Error(std::errc::bad_message);break; }
+    Fd file(openat(state_->directory,row->d_name,O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC));
+    struct stat named,opened;
+    if (file.value<0 || fstat(file.value,&opened) || fstatat(state_->directory,row->d_name,&named,AT_SYMLINK_NOFOLLOW)) { error=NativeError();break; }
+    if (!SameNode(named,opened) || !S_ISREG(opened.st_mode) || opened.st_nlink!=1 ||
+        opened.st_uid!=geteuid() || (opened.st_mode&077) || opened.st_dev!=state_->device || opened.st_size<0 || opened.st_size>65536) {
+      error=Error(std::errc::permission_denied);break;
+    }
+    error=ConfinedMount(file.value,state_->mount);if (error) { break; }out.emplace_back(leaf);
+  }
+  closedir(stream);std::sort(out.begin(),out.end());return error?std::vector<std::filesystem::path>{}:out;
+#else
+  error=Error(std::errc::operation_not_supported);return {};
+#endif
+}
+HostStorageBootstrapRecordPublication HostStorageRoot::PublishBootstrapRecord(
+    const std::filesystem::path& leaf,std::span<const uint8_t> bytes,std::string_view nonce) const {
+  HostStorageBootstrapRecordPublication result;
+  if (global_critical_region::is_held_by_current_thread()) { result.error=Error(std::errc::operation_not_permitted);return result; }
+  if (read_only() || leaf.has_parent_path() || !BootstrapRecordLeaf(leaf.string()) ||
+      leaf.string().find(".partial-")!=std::string::npos || bytes.empty() || bytes.size()>65536 ||
+      !content_mutation_wire::ValidNonce(nonce)) { result.error=Error(std::errc::permission_denied);return result; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  if (!state_->space->NativeAuthorityFor(state_->device)) { result.error=Error(std::errc::operation_not_supported);return result; }
+#endif
+  const auto old=CaptureSnapshot(leaf,65536,result.error);if (!old) { return result; }
+  if (old->exists()) {
+    if (old->bytes().size()!=bytes.size() || !std::equal(bytes.begin(),bytes.end(),old->bytes().begin())) {
+      result.error=Error(std::errc::state_not_recoverable);return result;
+    }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+    auto guard=Mutation(result.error);if (!guard) { return result; }
+    Fd file(openat(state_->directory,leaf.c_str(),O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC));
+    struct stat opened,named;
+    if (file.value<0 || fstat(file.value,&opened) ||
+        fstatat(state_->directory,leaf.c_str(),&named,AT_SYMLINK_NOFOLLOW)) {
+      result.error=NativeError();return result;
+    }
+    if (!SameNode(opened,named) || opened.st_uid!=geteuid() || (opened.st_mode&077)) {
+      result.error=Error(std::errc::permission_denied);return result;
+    }
+    result.error=ConfinedMount(file.value,state_->mount);
+    if (!result.error) { result.error=SnapshotMatches(file.value,*old); }
+    if (!result.error && guard->Conflicts(path()/leaf,false,old->info().filesystem_id,old->info().file_id,ContentPermit())) {
+      result.error=Error(std::errc::device_or_resource_busy);
+    }
+    if (!result.error && (SyncStorage(file.value) || SyncStorage(state_->directory))) { result.error=NativeError(); }
+    result.durable=!result.error;return result;
+#else
+    result.error=Error(std::errc::operation_not_supported);return result;
+#endif
+  }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  auto guard=Mutation(result.error);if (!guard) { return result; }
+  result.error=guard->Admit(bytes.size()+kMetadataAllowance);
+  if (!result.error && bootstrap_test_boundary_.load()==4) {
+    bootstrap_test_boundary_.store(0);result.error=Error(std::errc::no_space_on_device);
+  }
+  if (result.error) { return result; }
+  // Count actual slots before creating a control temporary. A failed write
+  // preserves that slot; retries cannot grow an unbounded private inventory.
+  Fd scan(openat(state_->directory,".",O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC));
+  if (scan.value<0) { result.error=NativeError();return result; }
+  DIR* entries=fdopendir(scan.value);if (!entries) { result.error=NativeError();return result; }scan.Release();
+  size_t slots=0;
+  while (true) {
+    errno=0;const auto* row=readdir(entries);
+    if (!row) { if (errno) { result.error=NativeError(); }break; }
+    if (!strcmp(row->d_name,".") || !strcmp(row->d_name,"..")) { continue; }
+    if (++slots>=64) { result.error=Error(std::errc::no_space_on_device);break; }
+  }
+  closedir(entries);if (result.error) { return result; }
+  const auto temporary=leaf.string()+".partial-"+std::string(nonce);
+  Fd file(openat(state_->directory,temporary.c_str(),O_RDWR|O_CREAT|O_EXCL|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC,0600));
+  if (file.value<0) { result.error=NativeError();return result; }
+  const unsigned stop=bootstrap_test_boundary_.exchange(0);
+  const auto payload=stop==1?bytes.first(std::min<size_t>(17,bytes.size())):bytes;
+  FileHandleInfo info;result.error=BootstrapWrite(file.value,payload,info);if (result.error) { return result; }
+  if (stop==1 || stop==2) { result.error=Error(std::errc::operation_canceled);return result; }
+  struct stat named;if (fstatat(state_->directory,temporary.c_str(),&named,AT_SYMLINK_NOFOLLOW) ||
+      !SameSnapshotInfo(SnapshotInfo(named),info)) { result.error=Error(std::errc::state_not_recoverable);return result; }
+  result.error=BootstrapRename(state_->directory,temporary.c_str(),leaf.c_str());if (result.error) { return result; }
+  result.published=true;
+  if (fstatat(state_->directory,leaf.c_str(),&named,AT_SYMLINK_NOFOLLOW) || !SameSnapshotInfo(SnapshotInfo(named),info)) {
+    result.error=Error(std::errc::state_not_recoverable);return result;
+  }
+  if (stop==3) { result.error=Error(std::errc::operation_canceled);return result; }
+  if (SyncStorage(state_->directory)) { result.error=NativeError();return result; }
+  result.durable=true;return result;
+#else
+  result.error=Error(std::errc::operation_not_supported);return result;
+#endif
+}
 HostStorageManagedMetadata::HostStorageManagedMetadata(
     std::shared_ptr<const HostStorageRoot> root, std::filesystem::path leaf,
     int fd, FileHandleInfo info,
@@ -4082,96 +5836,166 @@ void HostStorageManagedMetadata::Close() {
 }
 std::shared_ptr<HostStorageManagedMetadata>
 HostStorageRoot::OpenManagedMetadata(const std::filesystem::path& leaf,
-                                     std::error_code& error,
-                                     ManagedMetadataOpen mode) const {
+    std::error_code& error, ManagedMetadataOpen mode,
+    std::span<const uint8_t> complete_initial, std::string_view initializer_nonce,
+    std::shared_ptr<const HostStorageIntentLease> same_source_lease) const {
   error.clear();
+  if (global_critical_region::is_held_by_current_thread()) { error=Error(std::errc::operation_not_permitted);return {}; }
 #if !XE_PLATFORM_LINUX && !XE_PLATFORM_MAC
-  error = Error(std::errc::operation_not_supported);
-  return {};
+  error = Error(std::errc::operation_not_supported); return {};
 #else
   if (leaf != ".xenia-managed-source-v1" || is_guest_private() || read_only() ||
       !state_->space->NativeAuthorityFor(state_->device)) {
-    error = Error(std::errc::permission_denied);
-    return {};
+    error = Error(std::errc::permission_denied); return {};
   }
-  // Retain normal guest-tree admission so this metadata authority cannot
-  // contain/bypass an existing or later protected private subtree.
-  // A fixed-leaf read probe is not guest admission and cannot escape through
-  // an identity factory. Full Open/OpenExisting still require GuestView.
-  std::shared_ptr<HostStorageRoot> guest_view;
-  if (mode != ManagedMetadataOpen::kProbeExisting) {
-    guest_view = GuestView(error);
-    if (!guest_view) {
+  // GuestView is deliberately deferred, so obtain the native namespace proof
+  // independently before any marker creation (including Darwin authorities).
+  static_cast<void>(IntentRootIdentity(error));if (error) { return {}; }
+  const bool pending = mode == ManagedMetadataOpen::kCreatePending ||
+                       mode == ManagedMetadataOpen::kExistingPending;
+  const bool create = mode == ManagedMetadataOpen::kCreate ||
+                      mode == ManagedMetadataOpen::kCreatePending;
+  Fd directory_admission;
+  if (pending) {
+    if (!same_source_lease || !IntentLeaseMatches(*same_source_lease)) {
+      error = Error(std::errc::permission_denied); return {};
+    }
+  } else {
+    // Hold shared directory admission until the exact canonical file flock is
+    // established. Migration holds the independent exclusive description.
+    directory_admission.value = openat(state_->directory, ".",
+        O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (directory_admission.value < 0) { error = NativeError(); return {}; }
+    if (flock(directory_admission.value, LOCK_SH | LOCK_NB)) {
+      error = errno == EWOULDBLOCK ? Error(std::errc::device_or_resource_busy) : NativeError();
       return {};
     }
-  }
-  auto guard = Mutation(error);
-  if (!guard) {
-    return {};
-  }
-  std::string actual;
-  bool exists = false;
-  error = SnapshotLeaf(state_->directory, leaf.string(), actual, exists);
-  if (!error && actual != leaf.string()) {
-    error = Error(std::errc::bad_message);
-  }
-  if (error) {
-    return {};
-  }
-  bool created = false;
-  int fd = openat(state_->directory, leaf.c_str(),
-                  O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
-  if (fd < 0 && errno == ENOENT && !exists &&
-      mode == ManagedMetadataOpen::kCreate) {
-    // Existing native metadata needs no fabricated free-space minimum. Only
-    // a genuine new file allocates here; initialization admits its bytes later.
-    error = guard->Admit(kMetadataAllowance);
+    error = ConfinedMount(directory_admission.value, state_->mount);
     if (error) { return {}; }
-    fd = openat(state_->directory, leaf.c_str(),
-                O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC,
-                0600);
-    created = fd >= 0;
   }
-  Fd owned(fd);
-  if (fd < 0) {
-    error = NativeError();
-    return {};
+  auto guard = Mutation(error); if (!guard) { return {}; }
+  if (mode == ManagedMetadataOpen::kCreate) {
+    // Deferring actual guest admission must not let a refused ordinary source
+    // leave its marker/initializer bytes over a live protected private tree.
+    // Pending bootstrap creation remains governed by its exact source EX lease.
+    error = HostStorageProtection::CheckManagedSourceCreation(*this);
+    if (error) { return {}; }
   }
-  struct stat native;
-  if (fstat(fd, &native)) {
-    error = NativeError();
-    return {};
+  std::string actual; bool exists = false;
+  error = SnapshotLeaf(state_->directory, leaf.string(), actual, exists);
+  if (!error && actual != leaf.string()) { error = Error(std::errc::bad_message); }
+  if (error) { return {}; }
+  Fd owned(openat(state_->directory, leaf.c_str(),
+      O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC));
+  bool created = false;
+  std::string temporary;
+  if (owned.value < 0 && errno == ENOENT && !exists && create) {
+    if (complete_initial.empty() || complete_initial.size() > 65536) {
+      error = Error(std::errc::invalid_argument); return {};
+    }
+    std::string nonce(initializer_nonce);
+    if (nonce.empty()) {
+      std::random_device random; constexpr char hex[] = "0123456789abcdef";
+      for (unsigned i = 0; i != 32; ++i) { nonce += hex[random() & 15]; }
+    }
+    if (!content_mutation_wire::ValidNonce(nonce)) {
+      error = Error(std::errc::invalid_argument); return {};
+    }
+    temporary = MetadataBootstrapTemporary(nonce).string();
+    error = guard->Admit(complete_initial.size() + kMetadataAllowance);
+    if (!error && bootstrap_test_boundary_.load()==4) {
+      bootstrap_test_boundary_.store(0);error=Error(std::errc::no_space_on_device);
+    }
+    if (error) { return {}; }
+    owned.value = openat(state_->directory, temporary.c_str(),
+        O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC, 0600);
+    if (owned.value < 0) { error = NativeError(); return {}; }
+    created = true;
+    if (bootstrap_test_boundary_.load() == 1) {
+      bootstrap_test_boundary_.store(0); error=Error(std::errc::operation_canceled); return {};
+    }
   }
+  if (owned.value < 0) { error = NativeError(); return {}; }
+  struct stat native, named;
+  if (fstat(owned.value, &native)) { error = NativeError(); return {}; }
   if (!S_ISREG(native.st_mode) || native.st_nlink != 1 ||
       native.st_uid != geteuid() || (native.st_mode & 077)) {
-    error = Error(std::errc::permission_denied);
-    return {};
+    error = Error(std::errc::permission_denied); return {};
   }
-  error = ConfinedMount(fd, state_->mount);
-  if (error) {
-    return {};
-  }
-  auto info = SnapshotInfo(native);
-  if (guard->Conflicts(path() / leaf, false, info.filesystem_id,
-                       info.file_id)) {
+  error = ConfinedMount(owned.value, state_->mount);
+  if (!error && guard->Conflicts(path() / leaf, false, native.st_dev, native.st_ino)) {
     error = Error(std::errc::device_or_resource_busy);
+  }
+  if (error) { return {}; }
+  if (flock(owned.value, LOCK_EX | LOCK_NB)) {
+    error = errno == EWOULDBLOCK ? Error(std::errc::device_or_resource_busy) : NativeError();
     return {};
   }
-  if (flock(fd, LOCK_EX | LOCK_NB)) {
-    error = NativeError();
-    return {};
+  if (created) {
+    size_t written = 0;
+    while (written != complete_initial.size()) {
+      const auto count = pwrite(owned.value, complete_initial.data() + written,
+          complete_initial.size() - written, off_t(written));
+      if (count < 0 && errno == EINTR) { continue; }
+      if (count <= 0) { error = count ? NativeError() : Error(std::errc::io_error); return {}; }
+      written += size_t(count);
+    }
   }
-  std::vector<uint8_t> bytes;
-  error = SnapshotRead(fd, 65536, info, bytes);
-  if (error) {
-    return {};
+  FileHandleInfo info; std::vector<uint8_t> bytes;
+  error = SnapshotRead(owned.value, 65536, info, bytes);
+  if (!error && created && (bytes.size() != complete_initial.size() ||
+      !std::equal(bytes.begin(), bytes.end(), complete_initial.begin()))) {
+    error = Error(std::errc::state_not_recoverable);
   }
+  const auto& named_leaf = created ? temporary : leaf.string();
+  if (!error && (fstatat(state_->directory, named_leaf.c_str(), &named, AT_SYMLINK_NOFOLLOW) ||
+      !SameSnapshotInfo(SnapshotInfo(named), info))) { error = Error(std::errc::state_not_recoverable); }
+  if (!error && SyncStorage(owned.value)) { error = NativeError(); }
+  if (error) { return {}; }
+  Fd pin(fcntl(owned.value, F_DUPFD_CLOEXEC, 0));
+  if (pin.value < 0) { error = NativeError(); return {}; }
   auto lease = guard->TrackOpen(path() / leaf, info, true);
-  return std::shared_ptr<HostStorageManagedMetadata>(
-      new HostStorageManagedMetadata(shared_from_this(), leaf, owned.Release(),
-                                     info, std::move(lease), created,
-                                     std::move(bytes), std::move(guest_view)));
+  if (!lease) { error = Error(std::errc::device_or_resource_busy); return {}; }
+  lease->identity_pin = std::move(pin);
+  if (created && bootstrap_test_boundary_.load() == 2) {
+    bootstrap_test_boundary_.store(0);error=Error(std::errc::operation_canceled);return {};
+  }
+  if (created) {
+#if XE_PLATFORM_LINUX && defined(SYS_renameat2)
+    if (syscall(SYS_renameat2, state_->directory, temporary.c_str(),
+        state_->directory, leaf.c_str(), 1u)) { error = NativeError(); return {}; }
+#elif XE_PLATFORM_MAC && defined(RENAME_EXCL)
+    if (renameatx_np(state_->directory, temporary.c_str(), state_->directory,
+        leaf.c_str(), RENAME_EXCL)) { error = NativeError(); return {}; }
+#else
+    error = Error(std::errc::operation_not_supported); return {};
 #endif
+  }
+  auto result = std::shared_ptr<HostStorageManagedMetadata>(
+      new HostStorageManagedMetadata(shared_from_this(), leaf, owned.Release(),
+          info, std::move(lease), created, std::move(bytes), {}));
+  if (fstatat(state_->directory, leaf.c_str(), &named, AT_SYMLINK_NOFOLLOW) ||
+      !SameSnapshotInfo(SnapshotInfo(named), info)) {
+    error = Error(std::errc::state_not_recoverable); return result;
+  }
+  if (created && bootstrap_test_boundary_.exchange(0) == 3) {
+    error=Error(std::errc::operation_canceled); return result;
+  }
+  if (SyncStorage(state_->directory)) { error = NativeError(); }
+  // No mode admits GuestView before MDI's complete wire/binding validation.
+  return result;
+#endif
+}
+std::error_code HostStorageRoot::AdmitManagedMetadata(HostStorageManagedMetadata& metadata) const {
+  if (global_critical_region::is_held_by_current_thread()) { return Error(std::errc::operation_not_permitted); }
+  if (metadata.root_.get() != this || metadata.fd_ < 0) { return Error(std::errc::permission_denied); }
+  auto error = metadata.Check();
+  if (error || metadata.guest_view_) { return error; }
+  auto view = GuestView(error);
+  if (!view) { return error; }
+  error = metadata.Check();
+  if (!error) { metadata.guest_view_ = std::move(view); }
+  return error;
 }
 std::error_code HostStorageManagedMetadata::Check() const {
 #if !XE_PLATFORM_LINUX && !XE_PLATFORM_MAC
@@ -4262,6 +6086,85 @@ HostStorageManagedMetadata::WriteResult HostStorageManagedMetadata::Initialize(
   return {{}, done, true};
 #endif
 }
+HostStorageManagedMetadata::BootstrapWriteResult
+HostStorageManagedMetadata::AppendBootstrapAtomically(std::span<const uint8_t> suffix,
+    std::shared_ptr<const HostStorageIntentLease> same_source_lease,
+    std::string_view nonce) {
+  BootstrapWriteResult result;
+  if (global_critical_region::is_held_by_current_thread()) { result.error=Error(std::errc::operation_not_permitted);return result; }
+  if (guest_view_ || !same_source_lease || !root_->IntentLeaseMatches(*same_source_lease) ||
+      suffix.empty() || bytes_.size()>65536 || suffix.size()>65536-bytes_.size() ||
+      !content_mutation_wire::ValidNonce(nonce)) {
+    result.error=Error(std::errc::permission_denied);return result;
+  }
+  result.error=Check();if (result.error) { return result; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  std::vector<uint8_t> complete(bytes_);complete.insert(complete.end(),suffix.begin(),suffix.end());
+  result.previous=HostStorageRoot::MetadataBootstrapTemporary(nonce);
+  result.previous_file=info_.file_id;
+  auto guard=root_->Mutation(result.error);if (!guard) { return result; }
+  result.error=guard->Admit(complete.size()+kMetadataAllowance);if (result.error) { return result; }
+  FileHandleInfo before;std::vector<uint8_t> before_bytes;
+  result.error=SnapshotRead(fd_,65536,before,before_bytes,&info_);
+  struct stat named;
+  if (!result.error && (before_bytes!=bytes_ ||
+      fstatat(root_->state_->directory,leaf_.c_str(),&named,AT_SYMLINK_NOFOLLOW) ||
+      !SameSnapshotInfo(SnapshotInfo(named),info_))) { result.error=Error(std::errc::state_not_recoverable); }
+  if (result.error) { return result; }
+  Fd fresh(openat(root_->state_->directory,result.previous.c_str(),
+      O_RDWR|O_CREAT|O_EXCL|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC,0600));
+  if (fresh.value<0) { result.error=NativeError();return result; }
+  if (flock(fresh.value,LOCK_EX|LOCK_NB)) { result.error=NativeError();return result; }
+  FileHandleInfo fresh_info;result.error=BootstrapWrite(fresh.value,complete,fresh_info);
+  if (result.error) { return result; }
+  if (fstatat(root_->state_->directory,result.previous.c_str(),&named,AT_SYMLINK_NOFOLLOW) ||
+      !SameSnapshotInfo(SnapshotInfo(named),fresh_info)) { result.error=Error(std::errc::state_not_recoverable);return result; }
+  result.error=ConfinedMount(fresh.value,root_->state_->mount);if (result.error) { return result; }
+  if (guard->Conflicts(root_->path()/leaf_,false,fresh_info.filesystem_id,fresh_info.file_id,lease_)) {
+    result.error=Error(std::errc::device_or_resource_busy);return result;
+  }
+  Fd pin(fcntl(fresh.value,F_DUPFD_CLOEXEC,0));if (pin.value<0) { result.error=NativeError();return result; }
+  auto fresh_lease=guard->TrackOpen(root_->path()/leaf_,fresh_info,true);
+  if (!fresh_lease) { result.error=Error(std::errc::device_or_resource_busy);return result; }
+  fresh_lease->identity_pin=std::move(pin);
+  result.error=BootstrapRename(root_->state_->directory,result.previous.c_str(),leaf_.c_str(),true);
+  if (result.error) { return result; }
+  result.published=true;
+  struct stat previous,current;
+  const bool previous_named=!fstatat(root_->state_->directory,result.previous.c_str(),&previous,AT_SYMLINK_NOFOLLOW);
+  const bool current_named=!fstatat(root_->state_->directory,leaf_.c_str(),&current,AT_SYMLINK_NOFOLLOW);
+  FileHandleInfo reread;std::vector<uint8_t> old_bytes;
+  auto mismatch=SnapshotRead(fd_,65536,reread,old_bytes,&info_);
+  if (mismatch || !previous_named || !current_named ||
+      !SameSnapshotInfo(SnapshotInfo(previous),info_) || old_bytes!=bytes_ ||
+      !SameSnapshotInfo(SnapshotInfo(current),fresh_info)) {
+    // Exchange preserved the raced old target rather than unlinking it. Only
+    // an exact still-current pair can be exchanged back; no guessed rollback.
+    if (previous_named && current_named && SameSnapshotInfo(SnapshotInfo(current),fresh_info)) {
+      const auto rollback=BootstrapRename(root_->state_->directory,result.previous.c_str(),leaf_.c_str(),true);
+      if (!rollback) {
+        struct stat restored;
+        if (!fstatat(root_->state_->directory,leaf_.c_str(),&restored,AT_SYMLINK_NOFOLLOW) &&
+            SameNode(restored,previous)) { result.published=false; }
+      }
+    }
+    result.error=Error(std::errc::state_not_recoverable);return result;
+  }
+  // Keep old control inode and complete wire at previous; no unlink or prefix
+  // rewrite. The new descriptor was already locked/tracked before exchange.
+  guard->Moved(lease_,root_->path()/result.previous);
+  const int old_fd=fd_;fd_=fresh.Release();info_=fresh_info;
+  auto previous_lease=std::move(lease_);lease_=std::move(fresh_lease);
+  bytes_.swap(complete);result.bytes=suffix.size();close(old_fd);
+  if (root_->bootstrap_test_boundary_.exchange(0)==3) {
+    result.error=Error(std::errc::operation_canceled);return result;
+  }
+  if (SyncStorage(root_->state_->directory)) { result.error=NativeError();return result; }
+  result.durable=true;return result;
+#else
+  result.error=Error(std::errc::operation_not_supported);return result;
+#endif
+}
 std::error_code HostStorageManagedMetadata::Synchronize() const {
   auto error = Check();
   if (error) { return error; }
@@ -4285,6 +6188,10 @@ HostStorageManagedMetadata::ReserveFormatSource(std::error_code& error) const {
   if (!guard) { return {}; }
   if (guard->Conflicts(root_->path(), true, 0, 0, lease_)) {
     error = Error(std::errc::device_or_resource_busy); return {};
+  }
+  if (const auto projection=root_->Projection()) {
+    error=HostStorageProtection::CheckFormatGuests(*projection);
+    if (error) {return {};}
   }
   // NEW independent description, never an upgrade of an MVA lease.
   Fd description(openat(root_->state_->directory, ".",
@@ -4364,6 +6271,46 @@ HostStorageManagedMetadata::WriteResult HostStorageManagedMetadata::Append(
   }
   if (!result.error && SyncStorage(fd_)) { result.error = NativeError(); }
   result.durable = !result.error && result.bytes == record.size();
+#else
+  result.error = Error(std::errc::operation_not_supported);
+#endif
+  return result;
+}
+HostStorageManagedMetadata::FormatResult
+HostStorageManagedMetadata::PrepareFormatRecoveryGeneration(
+    std::shared_ptr<const HostStorageIntentLease> reservation) {
+  FormatResult result;
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  result.error = Check();
+  if (result.error) { return result; }
+  if (!reservation || !root_->IntentLeaseMatches(*reservation) ||
+      !root_->format_eligible()) {
+    result.error = Error(std::errc::permission_denied); return result;
+  }
+  const auto old_projection = root_->Projection();
+  if (!old_projection) { result.error = Error(std::errc::permission_denied); return result; }
+  result.error = HostStorageProtection::ProjectionCurrent(*old_projection);
+  if (result.error) { return result; }
+  auto guard = root_->Mutation(result.error);
+  if (!guard) { return result; }
+  result.fresh_source = root_->CloneNativeLineage(result.error);
+  if (!result.fresh_source) { return result; }
+  auto fresh = std::const_pointer_cast<HostStorageRoot>(result.fresh_source);
+  fresh->SetFormatEligibility(root_->format_eligible());
+  std::vector<std::shared_ptr<const HostStorageRoot>> private_roots, namespaces;
+  for (const auto& e : old_projection->state_->exclusions) {
+    (e.private_tree ? private_roots : namespaces).push_back(e.root);
+  }
+  result.fresh_projection = fresh->InstallFormatProjection(old_projection,std::move(private_roots),
+      std::move(namespaces), root_->format_eligible(), result.error);
+  if (!result.fresh_projection) { return result; }
+  result.fresh_source_lease = fresh->RebindFormatLease(*reservation, result.error);
+  if (!result.fresh_source_lease) { return result; }
+  // The caller already authenticated the complete epoch/Handoff. Retire only
+  // this inspected generation; no user content or marker byte changes here.
+  root_->state_->retired.store(true, std::memory_order_release);
+  old_projection->state_->format_drained.store(true,std::memory_order_release);
+  Close();
 #else
   result.error = Error(std::errc::operation_not_supported);
 #endif
@@ -4494,9 +6441,7 @@ HostStorageManagedMetadata::FormatResult HostStorageManagedMetadata::Format(
   if (result.error) {
     return result;
   }
-  result.fresh_source =
-      HostStorageRoot::Open(root_->path(), false, result.error,
-                            0, root_->state_->space);
+  result.fresh_source = root_->CloneNativeLineage(result.error);
   if (result.error || !result.fresh_source) {
     return result;
   }
@@ -4506,15 +6451,19 @@ HostStorageManagedMetadata::FormatResult HostStorageManagedMetadata::Format(
     result.error = Error(std::errc::state_not_recoverable);
     return result;
   }
+  std::const_pointer_cast<HostStorageRoot>(result.fresh_source)->SetFormatEligibility(
+      root_->format_eligible());
   if (const auto old_projection = root_->Projection()) {
     std::vector<std::shared_ptr<const HostStorageRoot>> private_roots, namespaces;
     for (const auto& e : old_projection->state_->exclusions) {
       (e.private_tree ? private_roots : namespaces).push_back(e.root);
     }
-    result.fresh_projection =
-        std::const_pointer_cast<HostStorageRoot>(result.fresh_source)->InstallProjection(
-            std::move(private_roots), std::move(namespaces),
-            root_->format_eligible(), result.error);
+    auto fresh = std::const_pointer_cast<HostStorageRoot>(result.fresh_source);
+    result.fresh_projection = reservation
+        ? fresh->InstallFormatProjection(old_projection,std::move(private_roots), std::move(namespaces),
+                                        root_->format_eligible(), result.error)
+        : fresh->InstallProjection(std::move(private_roots), std::move(namespaces),
+                                  root_->format_eligible(), result.error);
     if (!result.fresh_projection) { return result; }
   }
   if (reservation) {
@@ -4554,6 +6503,9 @@ HostStorageManagedMetadata::FormatResult HostStorageManagedMetadata::Format(
   // it uses already checked native pins under the same actual admission owner.
   old_cancellation.store(true, std::memory_order_release);
   root_->state_->retired.store(true, std::memory_order_release);
+  if (const auto old_projection=root_->Projection()) {
+    old_projection->state_->format_drained.store(true,std::memory_order_release);
+  }
   if (!already_pending) {
     result.error = append(pending);
     result.epoch_published = bytes_.size() == current.size() + pending.size();
@@ -4596,8 +6548,13 @@ HostStorageRoot::ReplaceResult
 HostStorageRoot::CompareAndDeleteSnapshotInternal(
     const HostStorageSnapshotToken& expected,
     std::shared_ptr<const HostStorageSnapshotToken> recovery,
-    std::error_code post_flush_error) const {
-  if (is_guest_private() || expected.root_.get() != this ||
+    std::error_code post_flush_error, PrivateSnapshotPurpose purpose) const {
+  if (purpose!=PrivateSnapshotPurpose::kOrdinary &&
+      !IsPrivateSnapshotTarget(expected.relative(), purpose)) {
+    return {Error(std::errc::permission_denied)};
+  }
+  if ((is_guest_private() && purpose==PrivateSnapshotPurpose::kOrdinary) ||
+      expected.root_.get() != this ||
       !expected.exists() || !Relative(expected.relative_) ||
       expected.relative_.has_parent_path() || !recovery ||
       !recovery->exists() || !recovery->root()->is_recovery_private() ||
@@ -5297,8 +7254,12 @@ HostStorageRoot::ReplaceResult HostStorageRoot::ReplaceFile(
     return {Error(std::errc::invalid_argument), false};
   }
 #if !XE_PLATFORM_WIN32
-  if (is_guest_private() && (backup_root.state_->device != state_->device ||
-                             backup_root.state_->inode != state_->inode)) {
+  const bool private_snapshot = checked &&
+      checked->purpose!=PrivateSnapshotPurpose::kOrdinary &&
+      IsPrivateSnapshotTarget(checked->expected.relative(),checked->purpose);
+  if (is_guest_private() && !private_snapshot &&
+      (backup_root.state_->device != state_->device ||
+       backup_root.state_->inode != state_->inode)) {
     return {Error(std::errc::permission_denied), false};
   }
 #endif
@@ -6026,6 +7987,173 @@ std::vector<std::filesystem::path> HostStorageRoot::ListContentMutationFiles(
   error = Error(std::errc::operation_not_supported); return {};
 #endif
 }
+std::error_code HostStorageRoot::AppendContentRecord(
+    const std::filesystem::path& canonical, std::span<const uint8_t> bytes,
+    std::string_view temporary_nonce, unsigned stop_boundary) const {
+  if (!is_content_mutation_private() || canonical.has_parent_path() ||
+      !ContentMutationLeaf(canonical.string()) || canonical == "owner.v1" ||
+      canonical.string().find(".partial-") != std::string::npos ||
+      !content_mutation_wire::ValidNonce(temporary_nonce) || bytes.empty() ||
+      bytes.size() > std::max(content_mutation_wire::kMaximumRecordBytes,
+                             content_package_mutation_wire::kMaximumRecordBytes)) {
+    return Error(std::errc::permission_denied);
+  }
+  std::error_code error;
+  const auto old = CaptureSnapshot(canonical, bytes.size(), error);
+  if (!old) { return error; }
+  if (old->exists()) {
+    if (old->bytes().size() != bytes.size() || !std::equal(bytes.begin(), bytes.end(), old->bytes().begin())) {
+      return Error(std::errc::state_not_recoverable);
+    }
+    const auto observed = ObserveIntentSnapshot(*old);
+    return observed.error ? observed.error : !observed.durable ? Error(std::errc::io_error) : std::error_code{};
+  }
+  const auto temporary = canonical.string() + ".partial-" + std::string(temporary_nonce);
+  const auto payload = stop_boundary == 3 ? bytes.first(std::min<size_t>(17,bytes.size())) : bytes;
+  const auto written = WriteNewFile(temporary, payload);
+  if (written.error || written.bytes != payload.size()) {
+    return written.error ? written.error : Error(std::errc::io_error);
+  }
+  if (stop_boundary == 1 || stop_boundary == 3) { return Error(std::errc::operation_canceled); }
+  auto guard = Mutation(error);
+  if (!guard) { return error; }
+  error = guard->Admit(kMetadataAllowance);
+  if (error) { return error; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  Fd file(openat(state_->directory, temporary.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+  if (file.value < 0) { return NativeError(); }
+  struct stat opened, named;
+  if (fstat(file.value, &opened) ||
+      fstatat(state_->directory, temporary.c_str(), &named, AT_SYMLINK_NOFOLLOW)) { return NativeError(); }
+  if (!SameNode(opened,named) || !S_ISREG(opened.st_mode) || opened.st_nlink != 1 ||
+      uint64_t(opened.st_dev) != state_->device || uint64_t(opened.st_size) != bytes.size()) {
+    return Error(std::errc::state_not_recoverable);
+  }
+  error = ConfinedMount(file.value, state_->mount);
+  if (error) { return error; }
+  std::array<uint8_t, 65536> buffer;
+  for (size_t offset = 0; offset != bytes.size();) {
+    const size_t count = std::min(buffer.size(), bytes.size()-offset);
+    const auto read = pread(file.value, buffer.data(), count, off_t(offset));
+    if (read < 0) { if (errno == EINTR) { continue; } return NativeError(); }
+    if (!read || !std::equal(buffer.begin(), buffer.begin()+read, bytes.begin()+offset)) {
+      return Error(std::errc::state_not_recoverable);
+    }
+    offset += size_t(read);
+  }
+  if (fstat(file.value,&named) || !SameFlushTreeStat(opened,named)) { return Error(std::errc::state_not_recoverable); }
+  if (SyncStorage(file.value)) { return NativeError(); }
+  if (fstatat(state_->directory,temporary.c_str(),&named,AT_SYMLINK_NOFOLLOW) ||
+      !SameFlushTreeStat(opened,named)) { return Error(std::errc::state_not_recoverable); }
+#if XE_PLATFORM_LINUX && defined(SYS_renameat2)
+  if (syscall(SYS_renameat2,state_->directory,temporary.c_str(),state_->directory,canonical.c_str(),1u)) { return NativeError(); }
+#elif XE_PLATFORM_MAC && defined(RENAME_EXCL)
+  if (renameatx_np(state_->directory,temporary.c_str(),state_->directory,canonical.c_str(),RENAME_EXCL)) { return NativeError(); }
+#else
+  return Error(std::errc::operation_not_supported);
+#endif
+  if (fstatat(state_->directory,canonical.c_str(),&named,AT_SYMLINK_NOFOLLOW) ||
+      !SameNode(opened,named)) { return Error(std::errc::state_not_recoverable); }
+  if (stop_boundary == 2) { return Error(std::errc::operation_canceled); }
+  return SyncStorage(state_->directory) ? NativeError() : std::error_code{};
+#else
+  return Error(std::errc::operation_not_supported);
+#endif
+}
+std::error_code HostStorageRoot::CheckContentPreparationPeer(const HostStorageRoot& other) const {
+  auto error = Validate();
+  if (!error) { error = other.Validate(); }
+  if (error) { return error; }
+  if (state_->space != other.state_->space) { return Error(std::errc::cross_device_link); }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  if (state_->device != other.state_->device || state_->mount.id != other.state_->mount.id) {
+    return Error(std::errc::cross_device_link);
+  }
+#else
+  return Error(std::errc::operation_not_supported);
+#endif
+  return {};
+}
+std::optional<FileHandleInfo> HostStorageRoot::ObservePreparationArtifact(
+    const std::filesystem::path& relative, std::error_code& error) const {
+  error.clear();
+  if (!Relative(relative) || is_guest_private() || read_only()) {
+    error = Error(std::errc::permission_denied); return {};
+  }
+  auto guard = Mutation(error); if (!guard) { return {}; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  std::string leaf; auto parent = Parent(state_->directory,relative,leaf,error);
+  if (parent.value < 0) { return {}; }
+  FlushTreeNode tree; size_t remaining = 65536;
+  error = PrepareFlushTree(parent.value,leaf,state_->device,state_->mount,tree,remaining);
+  if (error == std::errc::no_such_file_or_directory) { error.clear(); return {}; }
+  if (!error && FlushTreeReserved(*guard,path()/relative,tree,ContentPermit())) {
+    error = Error(std::errc::device_or_resource_busy);
+  }
+  if (error) { return {}; }
+  return SnapshotInfo(tree.identity);
+#else
+  error = Error(std::errc::operation_not_supported); return {};
+#endif
+}
+std::error_code HostStorageRoot::PreservePreparationArtifact(
+    const std::filesystem::path& relative, uint64_t observed_file, bool directory,
+    const HostStorageRoot& staging, const std::filesystem::path& destination) const {
+  if (!observed_file || !Relative(relative) || !Relative(destination) || destination.has_parent_path() ||
+      !destination.string().starts_with("preserved-") || is_guest_private() || staging.is_guest_private() ||
+      read_only() || staging.read_only() || state_->space != staging.state_->space) {
+    return Error(std::errc::permission_denied);
+  }
+  auto error = staging.Validate(); if (error) { return error; }
+  auto guard = Mutation(error); if (!guard) { return error; }
+  // Preservation consumes no payload copy, but real namespace growth still
+  // uses the same floor-aware authority. It cannot invent reclaimed bytes.
+  error = guard->Admit(kMetadataAllowance); if (error) { return error; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  if (state_->device != staging.state_->device || state_->mount.id != staging.state_->mount.id) {
+    return Error(std::errc::cross_device_link);
+  }
+  std::string leaf; auto parent = Parent(state_->directory,relative,leaf,error);
+  if (parent.value < 0) { return error; }
+  struct stat source{}, target{};
+  const bool source_exists = !fstatat(parent.value,leaf.c_str(),&source,AT_SYMLINK_NOFOLLOW);
+  if (!source_exists && errno != ENOENT) { return NativeError(); }
+  const bool target_exists = !fstatat(staging.state_->directory,destination.c_str(),&target,AT_SYMLINK_NOFOLLOW);
+  if (!target_exists && errno != ENOENT) { return NativeError(); }
+  auto matches = [&](const struct stat& info) {
+    return uint64_t(info.st_dev) == state_->device && uint64_t(info.st_ino) == observed_file &&
+        (directory ? S_ISDIR(info.st_mode) : S_ISREG(info.st_mode));
+  };
+  if ((source_exists && target_exists) || (!source_exists && (!target_exists || !matches(target))) ||
+      (source_exists && !matches(source))) { return Error(std::errc::state_not_recoverable); }
+  const int actual_parent = source_exists ? parent.value : staging.state_->directory;
+  const std::string actual_leaf = source_exists ? leaf : destination.string();
+  FlushTreeNode tree; size_t remaining = 65536;
+  error = PrepareFlushTree(actual_parent,actual_leaf,state_->device,state_->mount,tree,remaining);
+  if (!error && !matches(tree.identity)) { error = Error(std::errc::state_not_recoverable); }
+  if (!error && FlushTreeReserved(*guard,(source_exists ? path()/relative : staging.path()/destination),
+                                  tree,ContentPermit())) { error = Error(std::errc::device_or_resource_busy); }
+  if (!error) { error = RevalidateFlushTree(actual_parent,tree,state_->mount); }
+  if (!error) { error = SyncFlushTree(tree,false); }
+  if (!error) { error = SyncFlushTree(tree,true); }
+  if (error) { return error; }
+  if (source_exists) {
+#if XE_PLATFORM_LINUX && defined(SYS_renameat2)
+    if (syscall(SYS_renameat2,parent.value,leaf.c_str(),staging.state_->directory,destination.c_str(),1u)) { return NativeError(); }
+#elif XE_PLATFORM_MAC && defined(RENAME_EXCL)
+    if (renameatx_np(parent.value,leaf.c_str(),staging.state_->directory,destination.c_str(),RENAME_EXCL)) { return NativeError(); }
+#else
+    return Error(std::errc::operation_not_supported);
+#endif
+  }
+  if (fstatat(staging.state_->directory,destination.c_str(),&target,AT_SYMLINK_NOFOLLOW) ||
+      !matches(target)) { return Error(std::errc::state_not_recoverable); }
+  if (SyncStorage(parent.value) || SyncStorage(staging.state_->directory)) { return NativeError(); }
+  return {};
+#else
+  return Error(std::errc::operation_not_supported);
+#endif
+}
 std::vector<std::pair<std::filesystem::path, uint64_t>>
 HostStorageRoot::ListContentStageDirectories(std::error_code& error) const {
   auto guard = Mutation(error);
@@ -6042,21 +8170,28 @@ HostStorageRoot::ListContentStageDirectories(std::error_code& error) const {
     if (!row) { if (errno) { error = NativeError(); } break; }
     std::string_view leaf(row->d_name);
     if (leaf == "." || leaf == "..") { continue; }
-    if (out.size() == 8192 || leaf.size() != 44 || !leaf.starts_with("package-") ||
+    const bool preserved = leaf.size() == 44 && leaf.starts_with("preserved-") &&
+        (leaf.ends_with("-d") || leaf.ends_with("-h")) &&
+        std::all_of(leaf.begin()+10,leaf.begin()+42,[](char c) {
+          return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+        });
+    if (out.size() == 8192 || (!preserved && (leaf.size() != 44 || !leaf.starts_with("package-") ||
         !leaf.ends_with(".tmp") || !std::all_of(leaf.begin()+8, leaf.begin()+40,
-          [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); })) {
+          [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); })))) {
       error = Error(std::errc::state_not_recoverable); break;
     }
     struct stat info;
     if (fstatat(dirfd(stream), row->d_name, &info, AT_SYMLINK_NOFOLLOW)) {
       error = NativeError(); break;
     }
-    if (!S_ISDIR(info.st_mode) || uint64_t(info.st_dev) != state_->device ||
-        info.st_uid != geteuid() || (info.st_mode & 077)) {
+    const bool expected_directory = !preserved || leaf.ends_with("-d");
+    if ((expected_directory ? !S_ISDIR(info.st_mode) : (!S_ISREG(info.st_mode) || info.st_nlink != 1)) ||
+        uint64_t(info.st_dev) != state_->device ||
+        (!preserved && (info.st_uid != geteuid() || (info.st_mode & 077)))) {
       error = Error(std::errc::permission_denied); break;
     }
     Fd actual(openat(dirfd(stream), row->d_name,
-        O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+        O_RDONLY | (expected_directory ? O_DIRECTORY : 0) | O_NOFOLLOW | O_CLOEXEC));
     struct stat pinned;
     if (actual.value < 0 || fstat(actual.value, &pinned)) { error = NativeError(); break; }
     if (!SameNode(info, pinned)) { error = Error(std::errc::state_not_recoverable); break; }
@@ -6464,6 +8599,35 @@ bool HostStorageContentTree::admission_retired() const {
 const std::shared_ptr<const ManagedDeviceIdentity>& HostStorageContentTree::identity() const {
   return state_->identity;
 }
+namespace {
+std::array<uint8_t, 32> DigestOpenedContentFile(FileHandle& file, uint64_t length,
+                                               std::error_code& error) {
+  std::array<uint8_t, 32> digest{};
+  if (length > content_mutation_wire::kMaximumStreamBytes || length > SIZE_MAX) {
+    error = Error(std::errc::value_too_large); return digest;
+  }
+  struct Sha {
+    mbedtls_sha256_context value;
+    Sha() { mbedtls_sha256_init(&value); }
+    ~Sha() { mbedtls_sha256_free(&value); }
+  } sha;
+  if (mbedtls_sha256_starts(&sha.value, 0)) { error = Error(std::errc::io_error); return digest; }
+  std::vector<uint8_t> buffer(1u << 20);
+  for (uint64_t offset = 0; offset != length;) {
+    const auto count = size_t(std::min<uint64_t>(buffer.size(), length - offset));
+    const auto read = file.ReadResult(size_t(offset), std::span(buffer).first(count));
+    if (read.error || read.bytes != count) {
+      error = read.error ? read.error : Error(std::errc::io_error); return digest;
+    }
+    if (mbedtls_sha256_update(&sha.value, buffer.data(), count)) {
+      error = Error(std::errc::io_error); return digest;
+    }
+    offset += count;
+  }
+  if (mbedtls_sha256_finish(&sha.value, digest.data())) { error = Error(std::errc::io_error); }
+  return digest;
+}
+}  // namespace
 std::vector<ContentPackageInitialEntry> HostStorageRoot::CaptureInitialContentTree(
     const std::filesystem::path& relative, std::error_code& error) const {
   auto captured=CaptureContentTree(relative,error);
@@ -6475,16 +8639,17 @@ std::vector<ContentPackageInitialEntry> HostStorageRoot::CaptureInitialContentTr
   for (const auto& entry:captured->entries()) {
     ContentPackageInitialEntry row; row.entry=entry;
     if (!entry.directory) {
-      if (entry.bytes>content_mutation_wire::kMaximumInitialBytes-total) {
+      if (entry.bytes>content_mutation_wire::kMaximumStreamBytes-total) {
         error=Error(std::errc::value_too_large); return {};
       }
       total+=entry.bytes;
-      auto snapshot=directory->CaptureSnapshot(entry.relative,entry.bytes,error);
-      if (!snapshot || !snapshot->exists() || snapshot->info().file_id!=entry.file ||
-          snapshot->bytes().size()!=entry.bytes) {
-        if (!error) { error=Error(std::errc::state_not_recoverable); } return {};
+      auto file = directory->OpenFile(entry.relative, FileAccess::kFileReadData, error);
+      const auto info = file ? file->QueryInfo(error) : std::nullopt;
+      if (!file || !info || info->file_id != entry.file || info->size != entry.bytes ||
+          !info->regular || info->links != 1) {
+        if (!error) { error = Error(std::errc::state_not_recoverable); } return {};
       }
-      row.digest=content_mutation_wire::Digest(snapshot->bytes(),error);
+      row.digest = DigestOpenedContentFile(*file, entry.bytes, error);
       if (error) { return {}; }
     }
     result.push_back(std::move(row));
@@ -6493,6 +8658,90 @@ std::vector<ContentPackageInitialEntry> HostStorageRoot::CaptureInitialContentTr
   error=observed.error;
   return !error && observed.matched && observed.durable ? result
       : std::vector<ContentPackageInitialEntry>{};
+}
+std::error_code HostStorageRoot::DiscardStreamContentDirectory(
+    const std::filesystem::path& relative, uint64_t expected_directory,
+    std::span<const ContentPackageInitialEntry> admitted) const {
+  if (!Relative(relative) || admitted.empty() || !expected_directory ||
+      admitted.front().entry.file != expected_directory) { return Error(std::errc::invalid_argument); }
+  std::error_code error; auto guard = Mutation(error);
+  if (!guard) { return error; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  std::string leaf; auto parent = Parent(state_->directory, relative, leaf, error);
+  if (parent.value < 0) { return error; }
+  struct stat named;
+  if (fstatat(parent.value, leaf.c_str(), &named, AT_SYMLINK_NOFOLLOW)) {
+    if (errno == ENOENT) { return SyncStorage(parent.value) ? NativeError() : std::error_code{}; }
+    return NativeError();
+  }
+  if (!S_ISDIR(named.st_mode) || uint64_t(named.st_ino) != expected_directory) {
+    return Error(std::errc::state_not_recoverable);
+  }
+  RemovalNode tree; RemovalBudget budget;
+  error = PreflightRemoval(parent.value, leaf, true, state_->device, state_->mount, tree, &budget);
+  if (error) { return error; }
+  std::map<std::filesystem::path, const ContentPackageTreeEntry*> expected;
+  for (const auto& row : admitted) { expected.emplace(row.entry.relative, &row.entry); }
+  auto check = [&](auto&& self, const RemovalNode& node,
+                   const std::filesystem::path& path) -> bool {
+    const auto found = expected.find(path);
+    if (found == expected.end()) { return false; }
+    const auto& row = *found->second;
+    if (row.file != uint64_t(node.identity.st_ino) ||
+        row.mode != uint32_t(node.identity.st_mode) ||
+        row.directory != bool(S_ISDIR(node.identity.st_mode)) ||
+        (!row.directory && (!S_ISREG(node.identity.st_mode) || node.identity.st_nlink != 1 ||
+                            uint64_t(node.identity.st_size) > row.bytes))) { return false; }
+    for (const auto& child : node.children) {
+      if (!self(self, child, path / child.name)) { return false; }
+    }
+    return true;
+  };
+  // Missing members can be prior successful rollback steps; any extra or
+  // replaced native inode is a third state and remains untouched.
+  if (!check(check, tree, {}) || RemovalLeaseConflict(*guard, path() / relative, tree, ContentPermit())) {
+    return Error(std::errc::state_not_recoverable);
+  }
+  error = RemovePrepared(parent.value, tree);
+  if (!error && SyncStorage(parent.value)) { error = NativeError(); }
+  return error;
+#else
+  return Error(std::errc::operation_not_supported);
+#endif
+}
+std::error_code HostStorageRoot::DiscardStreamHeaderStage(
+    const std::filesystem::path& relative, uint64_t expected_file,
+    std::span<const uint8_t> expected_bytes) const {
+  if (!Relative(relative) || !expected_file) { return Error(std::errc::invalid_argument); }
+  std::error_code error; auto guard = Mutation(error);
+  if (!guard) { return error; }
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+  std::string leaf; auto parent = Parent(state_->directory, relative, leaf, error);
+  if (parent.value < 0) { return error; }
+  Fd opened(openat(parent.value, leaf.c_str(), O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC));
+  if (opened.value < 0) {
+    if (errno == ENOENT) { return SyncStorage(parent.value) ? NativeError() : std::error_code{}; }
+    return NativeError();
+  }
+  FileHandleInfo info; std::vector<uint8_t> bytes;
+  error = ConfinedMount(opened.value, state_->mount);
+  if (!error) { error = SnapshotRead(opened.value, content_mutation_wire::kMaximumMetadataBytes, info, bytes); }
+  if (error) { return error; }
+  if (info.file_id != expected_file || bytes.size() != expected_bytes.size() ||
+      !std::equal(bytes.begin(), bytes.end(), expected_bytes.begin()) ||
+      guard->Conflicts(path() / relative, false, info.filesystem_id, info.file_id, ContentPermit())) {
+    return Error(std::errc::state_not_recoverable);
+  }
+  struct stat named;
+  if (fstatat(parent.value, leaf.c_str(), &named, AT_SYMLINK_NOFOLLOW)) { return NativeError(); }
+  if (uint64_t(named.st_ino) != info.file_id || !S_ISREG(named.st_mode) || named.st_nlink != 1) {
+    return Error(std::errc::state_not_recoverable);
+  }
+  if (unlinkat(parent.value, leaf.c_str(), 0) || SyncStorage(parent.value)) { return NativeError(); }
+  return {};
+#else
+  return Error(std::errc::operation_not_supported);
+#endif
 }
 HostStorageDurableObservation HostStorageRoot::ObserveInitialContentDirectory(
     const std::filesystem::path& relative,uint64_t expected_directory,
@@ -6671,7 +8920,7 @@ std::error_code CheckInitialContentTree(const RemovalNode& root,
   uint64_t bytes=0;
   for (const auto& row:initial) {
     if (!row.entry.directory) {
-      if (row.entry.bytes>content_mutation_wire::kMaximumInitialBytes-bytes) {
+      if (row.entry.bytes>content_mutation_wire::kMaximumStreamBytes-bytes) {
         return Error(std::errc::value_too_large);
       }
       bytes+=row.entry.bytes;
@@ -6699,17 +8948,11 @@ std::error_code CheckInitialContentTree(const RemovalNode& root,
     auto mount_error=MountForFd(node.directory.value,captured_mount);
     if (!mount_error) { mount_error=ConfinedMount(actual.value,captured_mount); }
     if (mount_error) { return mount_error; }
-    std::vector<uint8_t> data(size_t(found->second->entry.bytes));
-    size_t done=0;
-    while (done<data.size()) {
-      const auto count=pread(actual.value,data.data()+done,
-          std::min<size_t>(data.size()-done,1u<<20),off_t(done));
-      if (count<0 && errno==EINTR) { continue; }
-      if (count<=0) { return count<0 ? NativeError() : Error(std::errc::io_error); }
-      done+=size_t(count);
-    }
+    const int copied = dup(actual.value);
+    if (copied < 0) { return NativeError(); }
+    auto reader = FileHandle::AdoptNative(copied, false);
     std::error_code error;
-    const auto digest=content_mutation_wire::Digest(data,error);
+    const auto digest = DigestOpenedContentFile(*reader, found->second->entry.bytes, error);
     if (error) { return error; }
     if (fstat(actual.value,&after)) { return NativeError(); }
     if (digest!=found->second->digest || !SameFlushTreeStat(before,after)) {

@@ -14,6 +14,8 @@
 #include <array>
 #include <atomic>
 #include <charconv>
+#include <cstring>
+#include <string_view>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -23,6 +25,7 @@
 #include "third_party/utfcpp/source/utf8.h"
 #include "xenia/app/emulator_window.h"
 #include "xenia/base/mutex.h"
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/base/png_utils.h"
 #include "xenia/base/string.h"
 #include "xenia/base/system.h"
@@ -36,6 +39,7 @@
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/content_manager.h"
 #include "xenia/kernel/xam/host_ui_fallback.h"
+#include "xenia/kernel/xam/profile_manager.h"
 #include "xenia/kernel/xam/xam_content_device.h"
 #include "xenia/kernel/xam/xam_keyboard.h"
 #include "xenia/kernel/xam/xam_private.h"
@@ -84,143 +88,163 @@ namespace xam {
 //
 // We deliberately delay the XN_SYS_UI = false notification to give games time
 // to create a listener (if they're insane enough do this).
-template <typename T>
-X_RESULT xeXamDispatchDialog(T* dialog,
-                             std::function<X_RESULT(T*)> close_callback,
-                             uint32_t overlapped) {
-  auto pre = []() {
-    kernel_state()->BroadcastNotification(kXNotificationSystemUI, true);
-  };
-  auto run = [dialog, close_callback]() -> X_RESULT {
-    X_RESULT result;
-    dialog->set_close_callback([&dialog, &result, &close_callback]() {
-      result = close_callback(dialog);
-    });
-    xe::threading::Fence fence;
-    xe::ui::WindowedAppContext& app_context =
-        kernel_state()->emulator()->display_window()->app_context();
-    if (app_context.CallInUIThreadSynchronous(
-            [&dialog, &fence]() { dialog->Then(&fence); })) {
-      GuestScheduler::WaitOnFence(fence);
-      kernel_state()->xam_state()->is_xam_dialog_present_.store(false);
-    } else {
-      delete dialog;
-    }
-    // dialog should be deleted at this point!
-    return result;
-  };
-  auto post = []() {
-    std::jthread t([] {
-      xe::threading::Sleep(kUIDelayMillis);
-      kernel_state()->BroadcastNotification(kXNotificationSystemUI, false);
-    });
-    t.detach();
-  };
-  if (!overlapped) {
-    pre();
-    auto result = run();
-    post();
-    return result;
-  } else {
-    kernel_state()->CompleteOverlappedDeferred(run, overlapped, pre, post);
-    return X_ERROR_IO_PENDING;
-  }
-}
+using HostDialogResult = HostUiFallbackCompletion::Result;
+// Synchronous diagnostic output only. Never captured by queued host work.
+struct NativeSigninUiDiagnostic { uint32_t route=0,stage=0,native_owned=0; };
+// Original selected lease serializes this flag claim. Transfer exactly once
+// before TryCreate (which already owns all success/failure/OOM flag cleanup).
+struct NativeSigninHostFlagGuard {
+  XamState* state=nullptr;bool owned=false;
+  ~NativeSigninHostFlagGuard(){if(owned)state->is_xam_dialog_present_.store(false);}
+  void Release() noexcept {owned=false;}
+};
 
+// Called on the original export caller. Reserve input BEFORE queuing UI and
+// retain XamState only in Kernel-dispatch work, never in a frontend closure.
 template <typename T>
-X_RESULT xeXamDispatchDialogEx(
-    T* dialog, std::function<X_RESULT(T*, uint32_t&, uint32_t&)> close_callback,
-    uint32_t overlapped) {
-  auto pre = []() {
-    kernel_state()->BroadcastNotification(kXNotificationSystemUI, true);
-  };
-  auto run = [dialog, close_callback](uint32_t& extended_error,
-                                      uint32_t& length) -> X_RESULT {
-    auto display_window = kernel_state()->emulator()->display_window();
-    X_RESULT result;
-    dialog->set_close_callback(
-        [&dialog, &result, &extended_error, &length, &close_callback]() {
-          result = close_callback(dialog, extended_error, length);
+X_RESULT xeXamDispatchDialog(
+    std::function<T*(HostUiFallbackAccess&)> factory,
+    std::function<HostDialogResult(T*)> snapshot,
+    std::function<X_RESULT(const HostDialogResult&)> publish,
+    uint32_t overlapped = 0, bool asynchronous = false,
+    KernelState* original = nullptr,
+    std::shared_ptr<NativeUiBackendRoute::HostLease> admitted = {},
+    NativeSigninUiDiagnostic* diagnostic = nullptr,
+    bool selected_native_host = false, NativeSigninHostFlagGuard* host_flag = nullptr) {
+  auto* state = original ? original : kernel_state();
+  auto* emulator = state->emulator();
+  auto* window = emulator->display_window();
+  if (!window || !emulator->imgui_drawer() || !emulator->input_system()) {
+    if (admitted) {
+      if(host_flag)host_flag->Release();
+      if(selected_native_host)admitted->FinishHostOperation();
+      else admitted->FinishHostOnly();
+      state->xam_state()->is_xam_dialog_present_.store(false);
+    }
+    if(diagnostic)diagnostic->stage=5;
+    return X_ERROR_NOT_READY;
+  }
+  auto lease = admitted ? std::move(admitted) : state->AcquireLegacyHostUi();
+  if (!lease) { if(diagnostic)diagnostic->stage=6; return X_ERROR_ACCESS_DENIED; }
+  // The opaque selected lease owns the Kernel ingress. Its one completion
+  // guard transfers to dispatch, never to a queued frontend factory.
+  auto selected_completion=selected_native_host
+      ?std::make_shared<HostUiFallbackOperationCompletion>(lease):nullptr;
+  if(host_flag)host_flag->Release();
+  auto reservation = HostUiFallbackReservation::TryCreate(
+      state->xam_state(), emulator->input_system(), !selected_native_host);
+  if (!reservation || !reservation->input_gap()) { if(diagnostic)diagnostic->stage=7; return X_ERROR_NOT_READY; }
+  if(diagnostic)diagnostic->stage=8;
+  auto completion = std::make_shared<HostUiFallbackCompletion>();
+  const auto access = state->host_ui_access();
+  // The pure CPU input gap remains owned by dispatch through publication.
+  QueueHostUiFallback(
+      window->app_context(), lease, completion,
+      [lease, access, factory = std::move(factory), snapshot = std::move(snapshot)](
+          const std::shared_ptr<HostUiFallbackCompletion>& completed) mutable {
+        auto owner = access.lock();
+        if (!owner) { completed->Finish({}); return; }
+        T* dialog = factory(*owner);  // QueueHostUiFallback already entered.
+        if (!dialog) { completed->Finish({}); return; }
+        dialog->SetHostLease(lease);
+        dialog->set_close_callback([dialog, completed, snapshot = std::move(snapshot)] {
+          completed->Finish(snapshot(dialog));
         });
-    xe::threading::Fence fence;
-    if (display_window->app_context().CallInUIThreadSynchronous(
-            [&dialog, &fence]() { dialog->Then(&fence); })) {
-      GuestScheduler::WaitOnFence(fence);
-      kernel_state()->xam_state()->is_xam_dialog_present_.store(false);
-    } else {
-      delete dialog;
+        completed->admitted.store(true);
+      });
+  state->BroadcastNotification(kXNotificationSystemUI, true);
+  auto run = [lease, reservation, completion, selected_native_host,
+              selected_completion=std::move(selected_completion),
+              publish = std::move(publish)]() mutable {
+    // Destroy after Entry/result scopes and reservation release but BEFORE
+    // dispatch publishes a guest completion; old post/factory refs are inert.
+    auto finished=std::move(selected_completion);
+    GuestScheduler::WaitOnFence(completion->closed);
+    X_RESULT result = X_ERROR_CANCELLED;
+    {
+      auto entered = lease->TryEnter();
+      const auto value = completion->result();
+      if (entered && value.result == xe::ui::TextEntryResult::kAccepted) {
+        result = publish ? publish(value) : value.status;
+      }
     }
-    // dialog should be deleted at this point!
+    if(!selected_native_host)lease->FinishHostOnly();
+    reservation->Release();
     return result;
   };
-  auto post = []() {
+  auto post = [state] {
+    // Kernel dispatch owns this delay and raw state. No detached thread can
+    // outlive the Kernel or post a stale notification into its replacement.
     xe::threading::Sleep(kUIDelayMillis);
-    kernel_state()->BroadcastNotification(kXNotificationSystemUI, false);
+    if (!state->xam_state()->IsUIActive()) {
+      state->BroadcastNotification(kXNotificationSystemUI, false);
+    }
   };
-  if (!overlapped) {
-    pre();
-    uint32_t extended_error, length;
-    auto result = run(extended_error, length);
-    post();
-    // TODO(gibbed): do something with extended_error/length?
-    return result;
-  } else {
-    kernel_state()->CompleteOverlappedDeferredEx(run, overlapped, pre, post);
+  if (overlapped) {
+    state->CompleteOverlappedDeferred(std::move(run), overlapped, nullptr,
+                                       std::move(post));
     return X_ERROR_IO_PENDING;
   }
+  if (asynchronous) {
+    if (!state->QueueHostUiWork([run = std::move(run), post = std::move(post)]() mutable {
+          run(); post();
+        })) {
+      lease->Cancel();
+      if(diagnostic)diagnostic->stage=9;
+      return X_ERROR_NOT_READY;
+    }
+    return X_ERROR_SUCCESS;
+  }
+  const auto result = run();
+  post();
+  return result;
 }
 
-X_RESULT xeXamDispatchWithoutDialog(std::function<X_RESULT()> run_callback,
+static HostDialogResult SnapshotMessageBox(MessageBoxDialog* dialog) {
+  HostDialogResult value;
+  value.result = dialog->accepted() ? xe::ui::TextEntryResult::kAccepted
+                                    : xe::ui::TextEntryResult::kCanceled;
+  value.button = dialog->chosen_button();
+  return value;
+}
+
+X_RESULT xeXamDispatchWithoutDialog(std::function<X_RESULT()> callback,
                                     uint32_t overlapped) {
-  auto pre = []() {
-    kernel_state()->BroadcastNotification(kXNotificationSystemUI, true);
+  auto* state = kernel_state();
+  auto lease = state->AcquireLegacyHostUi();
+  if (!lease) { return X_ERROR_ACCESS_DENIED; }
+  auto reservation = HostUiFallbackReservation::TryCreate(
+      state->xam_state(), state->emulator()->input_system(), true);
+  if (!reservation || !reservation->input_gap()) { return X_ERROR_NOT_READY; }
+  auto run = [lease, reservation, callback = std::move(callback)]() -> X_RESULT {
+    X_RESULT result = X_ERROR_CANCELLED;
+    if (auto entered = lease->TryEnter()) { result = callback(); }
+    lease->FinishHostOnly();
+    reservation->Release();
+    return result;
+  };
+  auto pre = [state] {
+    state->BroadcastNotification(kXNotificationSystemUI, true);
     xe::threading::Sleep(std::chrono::milliseconds(25));
   };
-  auto post = []() {
-    std::jthread t([]() {
-      xe::threading::Sleep(kUIDelayMillis);
-      kernel_state()->BroadcastNotification(kXNotificationSystemUI, false);
-    });
-
-    t.detach();
+  auto post = [state] {
+    xe::threading::Sleep(kUIDelayMillis);
+    if (!state->xam_state()->IsUIActive()) {
+      state->BroadcastNotification(kXNotificationSystemUI, false);
+    }
   };
-  if (!overlapped) {
-    pre();
-    auto result = run_callback();
-    post();
-    return result;
-  } else {
-    kernel_state()->CompleteOverlappedDeferred(run_callback, overlapped, pre,
-                                               post);
+  if (overlapped) {
+    state->CompleteOverlappedDeferred(std::move(run), overlapped,
+                                       std::move(pre), std::move(post));
     return X_ERROR_IO_PENDING;
   }
+  pre();
+  const auto result = run();
+  post();
+  return result;
 }
 
-template <typename T>
-X_RESULT xeXamDispatchDialogAsync(T* dialog,
-                                  std::function<void(T*)> close_callback) {
-  kernel_state()->BroadcastNotification(kXNotificationSystemUI, true);
-  // Important to pass captured vars by value here since we return from this
-  // without waiting for the dialog to close so the original local vars will be
-  // destroyed.
-  dialog->set_close_callback([dialog, close_callback]() {
-    close_callback(dialog);
-
-    kernel_state()->xam_state()->is_xam_dialog_present_.store(false);
-
-    auto run = []() -> void {
-      xe::threading::Sleep(kUIDelayMillis);
-      kernel_state()->BroadcastNotification(kXNotificationSystemUI, false);
-    };
-
-    std::thread thread(run);
-    thread.detach();
-  });
-
-  return X_ERROR_SUCCESS;
-}
-
-void MessageBoxDialog::OnDraw(ImGuiIO& io) {
+void MessageBoxDialog::OnDrawDialog(ImGuiIO& io) {
   if (!has_opened_) {
     ImGui::OpenPopup(title_.c_str());
     has_opened_ = true;
@@ -240,6 +264,8 @@ void MessageBoxDialog::OnDraw(ImGuiIO& io) {
       chosen_button_ = default_button_;
       ImGui::CloseCurrentPopup();
       Close();
+      ImGui::EndPopup();
+      return;
     }
 
     if (description_.size()) {
@@ -250,6 +276,7 @@ void MessageBoxDialog::OnDraw(ImGuiIO& io) {
     for (size_t i = 0; i < buttons_.size(); ++i) {
       if (ImGui::Button(buttons_[i].c_str())) {
         chosen_button_ = static_cast<uint32_t>(i);
+        accepted_ = true;
         ImGui::CloseCurrentPopup();
         Close();
       }
@@ -335,8 +362,8 @@ static dword_result_t XamShowMessageBoxUi(
     if (!xam->is_xam_dialog_present_.compare_exchange_strong(expected, true)) {
       return X_ERROR_ACCESS_DENIED;
     }
-    auto reservation = std::make_shared<HostUiFallbackReservation>(xam, input);
-    if (!reservation->input_gap()) {
+    auto reservation = HostUiFallbackReservation::TryCreate(xam, input);
+    if (!reservation || !reservation->input_gap()) {
       return X_ERROR_NOT_READY;
     }
     auto completion = std::make_shared<HostUiFallbackCompletion>();
@@ -350,6 +377,7 @@ static dword_result_t XamShowMessageBoxUi(
                 input, title, text, buttons, active = uint32_t(active_button),
                 result_address](uint32_t& extended,
                                 uint32_t& length) -> X_RESULT {
+      HostUiFallbackOperationCompletion operation_completion(host_route);
       const auto gap = reservation->input_gap();
       QueueHostUiFallback(
           window->app_context(), host_route, completion,
@@ -359,9 +387,7 @@ static dword_result_t XamShowMessageBoxUi(
                 drawer, input, title, text, buttons, active);
             dialog->set_close_callback(
                 [raw = dialog.get(), completed, host_route] {
-                  completed->Finish({xe::ui::TextEntryResult::kAccepted,
-                                     {},
-                                     raw->chosen_button()});
+                  completed->Finish(SnapshotMessageBox(raw));
                 });
             completed->admitted.store(true);
             if (gap) {
@@ -374,7 +400,8 @@ static dword_result_t XamShowMessageBoxUi(
       reservation->Release();
       extended = X_ERROR_CANCELLED;
       length = 0;
-      if (value.result != xe::ui::TextEntryResult::kAccepted) {
+      auto entered = host_route->TryEnter();
+      if (!entered || value.result != xe::ui::TextEntryResult::kAccepted) {
         return X_ERROR_CANCELLED;
       }
       auto memory_lock = global_critical_region::AcquireDirect();
@@ -390,9 +417,11 @@ static dword_result_t XamShowMessageBoxUi(
       extended = X_ERROR_SUCCESS;
       return X_ERROR_SUCCESS;
     };
-    auto post = [state, host_route] {
+    auto post = [state] {
       xe::threading::Sleep(kUIDelayMillis);
-      state->BroadcastNotification(kXNotificationSystemUI, false);
+      if (!state->xam_state()->IsUIActive()) {
+        state->BroadcastNotification(kXNotificationSystemUI, false);
+      }
     };
     if (overlapped) {
       state->CompleteOverlappedDeferredEx(std::move(run),
@@ -407,37 +436,44 @@ static dword_result_t XamShowMessageBoxUi(
     return result;
   }
 
-  kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
-
-  const Emulator* emulator = kernel_state()->emulator();
-  xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
-  xe::hid::InputSystem* input_system = emulator->input_system();
-
-  if (flags & XMBox_PASSCODEMODE || flags & XMBox_VERIFYPASSCODEMODE) {
-    auto close = [result_ptr,
-                  active_button](ui::ProfilePasscodeUI* dialog) -> X_RESULT {
-      if (dialog->SelectedSignedIn()) {
-        // Logged in
-        return X_ERROR_SUCCESS;
-      } else {
-        return X_ERROR_FUNCTION_FAILED;
-      }
-    };
-
+  auto* drawer = kernel_state()->emulator()->imgui_drawer();
+  auto* input = kernel_state()->emulator()->input_system();
+  if (flags & (XMBox_PASSCODEMODE | XMBox_VERIFYPASSCODEMODE)) {
     result = xeXamDispatchDialog<ui::ProfilePasscodeUI>(
-        new ui::ProfilePasscodeUI(imgui_drawer, title, text, result_ptr), close,
-        overlapped);
+        [drawer, title, text](HostUiFallbackAccess&) {
+          return new ui::ProfilePasscodeUI(drawer, title, text);
+        }, [](ui::ProfilePasscodeUI* dialog) {
+          HostDialogResult value;
+          if (dialog->SelectedSignedIn()) {
+            value.result = xe::ui::TextEntryResult::kAccepted;
+            value.passcode = dialog->passcode();
+          }
+          return value;
+        }, [state = kernel_state(), result_ptr](const HostDialogResult& value) {
+          auto memory_lock = global_critical_region::AcquireDirect();
+          if (!result_ptr || state->memory()->QueryRangeAccess(
+                  result_ptr.guest_address(), sizeof(MESSAGEBOX_RESULT)) !=
+                  memory::PageAccess::kReadWrite) { return X_ERROR_INVALID_PARAMETER; }
+          result_ptr.Zero();
+          for (size_t i = 0; i < value.passcode.size(); ++i) {
+            result_ptr->Passcode[i] = value.passcode[i];
+          }
+          return X_ERROR_SUCCESS;
+        }, overlapped);
   } else {
-    auto close = [result_ptr](MessageBoxDialog* dialog) -> X_RESULT {
-      result_ptr->ButtonPressed = dialog->chosen_button();
-      kernel_state()->xam_state()->is_xam_dialog_present_.store(false);
-      return X_ERROR_SUCCESS;
-    };
-
     result = xeXamDispatchDialog<MessageBoxDialog>(
-        new MessageBoxDialog(imgui_drawer, input_system, title, text, buttons,
-                             static_cast<uint32_t>(active_button)),
-        close, overlapped);
+        [drawer, input, title, text, buttons, active = uint32_t(active_button)](
+            HostUiFallbackAccess&) {
+          return new MessageBoxDialog(drawer, input, title, text, buttons, active);
+        }, SnapshotMessageBox,
+        [state = kernel_state(), result_ptr](const HostDialogResult& value) {
+          auto memory_lock = global_critical_region::AcquireDirect();
+          if (!result_ptr || state->memory()->QueryRangeAccess(
+                  result_ptr.guest_address(), sizeof(MESSAGEBOX_RESULT)) !=
+                  memory::PageAccess::kReadWrite) { return X_ERROR_INVALID_PARAMETER; }
+          result_ptr->ButtonPressed = value.button;
+          return X_ERROR_SUCCESS;
+        }, overlapped);
   }
 
   return result;
@@ -583,21 +619,85 @@ dword_result_t XamShowDeviceSelectorUI_entry(
     qword_t total_requested, lpdword_t device_id_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped) {
   auto* state = kernel_state();
+  // Diagnostic metadata only. Dedicated request quota cannot be consumed by
+  // input polling; the first exhausted request reports that later calls are unknown.
+  static std::atomic<uint64_t> diagnostic_requests{0};
+  const uint64_t diagnostic_id = cvars::native_system_ui_trace
+      ? diagnostic_requests.fetch_add(1, std::memory_order_relaxed) : UINT64_MAX;
+  auto raw_trace = [id = diagnostic_id, user = uint32_t(user_index),
+                    type = uint32_t(content_type), flags = uint32_t(content_flags),
+                    required = uint64_t(total_requested),
+                    output = device_id_ptr.guest_address(),
+                    overlap = overlapped.guest_address()](
+      const char* stage, uint32_t selected, X_RESULT result,
+      uint32_t choice = UINT32_MAX, uint32_t overlap_access = UINT32_MAX,
+      uint32_t output_access = UINT32_MAX) noexcept {
+    if (id > 16) return;
+    try {
+      if (id == 16) {
+        if (!std::strcmp(stage, "entry"))
+          XELOGI("StorageDiagnostic selector budget_exhausted limit=16 later_requests=unknown");
+        return;
+      }
+      XELOGI("StorageDiagnostic selector id={} stage={} user={} type={} flags={:08X} "
+             "required={:016X} output={:08X} overlap={:08X} choice={} device={} "
+             "result={:08X} result_known={} overlap_access={} output_access={} unchecked={}",
+             id, stage, user, type, flags, required, output, overlap, choice,
+             selected, result, result != UINT32_MAX, overlap_access, output_access, UINT32_MAX);
+    } catch (...) {}  // Diagnostics never alter guest admission or completion.
+  };
+  raw_trace("entry", 0, UINT32_MAX);
+  if (diagnostic_id < 16) {
+    try {
+      auto* caller = XThread::IsInThread() ? XThread::GetCurrentThread() : nullptr;
+      const auto execution = state->emulator()->title_execution_state().snapshot();
+      XELOGI("StorageDiagnostic selector_caller id={} thread={} process={} generation={}",
+             diagnostic_id, caller ? caller->thread_id() : 0,
+             caller ? uint32_t(caller->native_frame_thread_identity().process_type) : UINT32_MAX,
+             execution.generation);
+      // Short in-memory ownership only; no Account/GPD/host file reads.
+      // Capture refusal includes busy; captured=false is not proof of absence.
+      for (uint8_t slot = 0; slot != XUserMaxUserCount; ++slot) {
+        const auto profile = state->xam_state()->profile_manager()->CaptureProfile(slot);
+        XELOGI("StorageDiagnostic selector_profile id={} slot={} captured={} xuid={:016X} signin={}",
+               diagnostic_id, slot, bool(profile), profile ? profile->xuid() : 0,
+               profile ? profile->signin_state() : UINT32_MAX);
+      }
+    } catch (...) {}
+  }
   if (!overlapped) {
+    raw_trace("reject_null_overlap", 0, X_ERROR_INVALID_PARAMETER);
     return X_ERROR_INVALID_PARAMETER;
   }
-  if (state->memory()->QueryRangeAccess(overlapped.guest_address(),
-                                        sizeof(XAM_OVERLAPPED)) !=
-      memory::PageAccess::kReadWrite) {
+  const auto overlap_access = state->memory()->QueryRangeAccess(
+      overlapped.guest_address(), sizeof(XAM_OVERLAPPED));
+  if (overlap_access != memory::PageAccess::kReadWrite) {
+    raw_trace("reject_overlap_access", 0, X_ERROR_INVALID_PARAMETER,
+              UINT32_MAX, uint32_t(overlap_access));
     return X_ERROR_INVALID_PARAMETER;
   }
-  if ((user_index >= XUserMaxUserCount && user_index != XUserIndexAny) ||
-      (content_flags & 0x83F00008) != 0 || !device_id_ptr ||
-      state->memory()->QueryRangeAccess(device_id_ptr.guest_address(), 4) !=
-          memory::PageAccess::kReadWrite) {
+  const bool invalid_user = user_index >= XUserMaxUserCount && user_index != XUserIndexAny;
+  const bool invalid_flags = (content_flags & 0x83F00008) != 0;
+  // Preserve the old short-circuit: no output range query for already-invalid arguments.
+  const bool output_checked = !invalid_user && !invalid_flags && bool(device_id_ptr);
+  const auto output_access = output_checked
+      ? state->memory()->QueryRangeAccess(device_id_ptr.guest_address(), 4)
+      : memory::PageAccess::kNoAccess;
+  if (invalid_user || invalid_flags || !device_id_ptr ||
+      output_access != memory::PageAccess::kReadWrite) {
+    raw_trace(invalid_user ? "reject_user" : invalid_flags ? "reject_flags"
+              : !device_id_ptr ? "reject_null_output" : "reject_output_access",
+              0, X_ERROR_INVALID_PARAMETER, UINT32_MAX, uint32_t(overlap_access),
+              output_checked ? uint32_t(output_access) : UINT32_MAX);
     XOverlappedSetExtendedError(overlapped, X_ERROR_INVALID_PARAMETER);
     return X_ERROR_INVALID_PARAMETER;
   }
+  auto trace = [raw_trace, overlap_access, output_access](
+      const char* stage, uint32_t selected, X_RESULT result,
+      uint32_t choice = UINT32_MAX) noexcept {
+    raw_trace(stage, selected, result, choice,
+              uint32_t(overlap_access), uint32_t(output_access));
+  };
 
   const auto devices = ListStorageDevices(state);
   const uint64_t required = total_requested;
@@ -605,20 +705,24 @@ dword_result_t XamShowDeviceSelectorUI_entry(
   // a healthy HDD does not depend on the Guide's profile/provider readiness.
   // The output is never read as a preference: it may be uninitialized storage.
   const auto choice = SelectStorageDevice(devices, content_flags, required, 1);
-  static std::atomic<uint64_t> selector_trace_count{0};
-  const uint64_t trace_id = selector_trace_count.fetch_add(1);
-  auto trace = [trace_id, user = uint32_t(user_index),
-                type = uint32_t(content_type), flags = uint32_t(content_flags),
-                required, kind = choice.kind](const char* path,
-                                             uint32_t selected, X_RESULT result) {
-    if (trace_id < 128) {
-      XELOGI("Device selector {}: user={} type={} flags={:08X} required={:016X} "
-             "path={} choice={} device={} result={:08X}",
-             trace_id, user, type, flags, required, path, uint32_t(kind),
-             selected, result);
-    }
-  };
-  trace("admit", choice.device_id, X_ERROR_IO_PENDING);
+  trace("admit", choice.device_id, UINT32_MAX, uint32_t(choice.kind));
+  if (diagnostic_id < 16) {
+    try {
+      for (size_t row = 0; row != std::min<size_t>(devices.size(), 8); ++row) {
+        const auto& device = devices[row];
+        const auto proof = device.managed_format_proof;
+        const std::string_view source = proof ? std::string_view(proof->source_id()) : std::string_view{};
+        XELOGI("StorageDiagnostic selector_device id={} row={} device={} type={} available={} "
+               "readonly={} total={} free={} required={} suitable={} source_known={} source={:.64} source_generation={}",
+               diagnostic_id, row, device.device_id, uint32_t(device.device_type),
+               device.available, device.read_only, device.total_bytes, device.free_bytes,
+               required, CanStoreOnDevice(device, required), bool(proof), source,
+               proof ? proof->generation() : 0);
+      }
+      if (devices.size() > 8)
+        XELOGI("StorageDiagnostic selector_device id={} row_budget_exhausted total={} shown=8", diagnostic_id, devices.size());
+    } catch (...) {}
+  }
   std::shared_ptr<NativeUiBackendRoute::HostLease> host_route;
   if (choice.kind == StorageSelectionKind::kPrompt) {
     // Native2CB forwards the full uint64 r6 unchanged. A dword pair would
@@ -630,6 +734,7 @@ dword_result_t XamShowDeviceSelectorUI_entry(
     const auto native =
         NativeSystemUiService::TryInvokePublicRegistersOnOriginalCaller(
             state, NativeSystemUiPublicCall::kShowDeviceSelector, arguments);
+    trace("native_disposition", choice.device_id, native.value, uint32_t(native.disposition));
     if (native.handled()) {
       trace("native_prompt", choice.device_id, native.value);
       return native.value;
@@ -637,30 +742,44 @@ dword_result_t XamShowDeviceSelectorUI_entry(
     host_route = native.host_fallback;
   }
   const uint32_t output = device_id_ptr.guest_address();
-  auto publish = [state, output, required,
+  auto publish = [state, output, required, trace, diagnostic_id,
                   host_route](uint32_t device_id) -> X_RESULT {
     // Drain must observe publication as one operation of the selected UI
     // cohort, rather than racing a cancelled() snapshot and guest output.
     auto entered = host_route ? host_route->TryEnter() : nullptr;
     if (host_route && !entered) {
+      trace("publish_host_retired", device_id, X_ERROR_CANCELLED);
       return X_ERROR_CANCELLED;
     }
     const auto current = GetStorageDeviceInfo(state, device_id);
+    if (diagnostic_id < 16) {
+      try {
+        XELOGI("StorageDiagnostic selector_publish_device id={} device={} known={} available={} readonly={} total={} free={} required={}",
+               diagnostic_id, device_id, bool(current), current && current->available,
+               !current || current->read_only, current ? current->total_bytes : 0,
+               current ? current->free_bytes : 0, required);
+      } catch (...) {}
+    }
     if (!current || !current->available) {
+      trace("publish_disconnected", device_id, X_ERROR_DEVICE_NOT_CONNECTED);
       return X_ERROR_DEVICE_NOT_CONNECTED;
     }
     if (current->read_only) {
+      trace("publish_readonly", device_id, X_ERROR_ACCESS_DENIED);
       return X_ERROR_ACCESS_DENIED;
     }
     if (!CanStoreOnDevice(*current, required)) {
+      trace("publish_disk_full", device_id, X_RESULT_FROM_WIN32(0x70));
       return X_RESULT_FROM_WIN32(0x70);  // ERROR_DISK_FULL.
     }
     auto memory_lock = global_critical_region::AcquireDirect();
     if (state->memory()->QueryRangeAccess(output, 4) !=
         memory::PageAccess::kReadWrite) {
+      trace("publish_output_access", device_id, X_ERROR_INVALID_PARAMETER);
       return X_ERROR_INVALID_PARAMETER;
     }
     *state->memory()->TranslateVirtual<xe::be<uint32_t>*>(output) = device_id;
+    trace("publish_success", device_id, X_ERROR_SUCCESS);
     return X_ERROR_SUCCESS;
   };
   if (choice.kind != StorageSelectionKind::kPrompt) {
@@ -721,6 +840,7 @@ dword_result_t XamShowDeviceSelectorUI_entry(
           return result;
         },
         overlap_address);
+    trace("return_automatic_pending", choice.device_id, X_ERROR_IO_PENDING);
     return X_ERROR_IO_PENDING;
   }
   if (state->xam_state()->IsUIActive()) {
@@ -750,10 +870,12 @@ dword_result_t XamShowDeviceSelectorUI_entry(
     auto* xam = state->xam_state();
     bool expected = false;
     if (!xam->is_xam_dialog_present_.compare_exchange_strong(expected, true)) {
+      trace("host_dialog_busy", 0, X_ERROR_ACCESS_DENIED);
       return X_ERROR_ACCESS_DENIED;
     }
-    auto reservation = std::make_shared<HostUiFallbackReservation>(xam, input);
-    if (!reservation->input_gap()) {
+    auto reservation = HostUiFallbackReservation::TryCreate(xam, input);
+    if (!reservation || !reservation->input_gap()) {
+      trace("host_reservation_denied", 0, X_ERROR_NOT_READY);
       return X_ERROR_NOT_READY;
     }
     auto completion = std::make_shared<HostUiFallbackCompletion>();
@@ -764,7 +886,8 @@ dword_result_t XamShowDeviceSelectorUI_entry(
     };
     auto run = [reservation, host_route, completion, window, drawer, input,
                 devices, buttons, description,
-                publish](uint32_t& extended, uint32_t& length) {
+                publish, trace](uint32_t& extended, uint32_t& length) {
+      HostUiFallbackOperationCompletion operation_completion(host_route);
       const auto gap = reservation->input_gap();
       QueueHostUiFallback(
           window->app_context(), host_route, completion,
@@ -775,9 +898,7 @@ dword_result_t XamShowDeviceSelectorUI_entry(
                 0);
             dialog->set_close_callback(
                 [raw = dialog.get(), completed, host_route] {
-                  completed->Finish({xe::ui::TextEntryResult::kAccepted,
-                                     {},
-                                     raw->chosen_button()});
+                  completed->Finish(SnapshotMessageBox(raw));
                 });
             completed->admitted.store(true);
             if (gap) {
@@ -794,32 +915,40 @@ dword_result_t XamShowDeviceSelectorUI_entry(
           value.button < devices.size()) {
         result = publish(devices[value.button].device_id);
       }
+      trace("host_prompt_result", value.button, result);
       extended = X_HRESULT_FROM_WIN32(result);
       length = 0;
       return result;
     };
-    auto post = [state, host_route] {
+    auto post = [state] {
       xe::threading::Sleep(kUIDelayMillis);
-      state->BroadcastNotification(kXNotificationSystemUI, false);
+      if (!state->xam_state()->IsUIActive()) {
+        state->BroadcastNotification(kXNotificationSystemUI, false);
+      }
     };
     state->CompleteOverlappedDeferredEx(std::move(run),
                                         overlapped.guest_address(),
                                         std::move(pre), std::move(post));
+    trace("return_host_pending", 0, X_ERROR_IO_PENDING);
     return X_ERROR_IO_PENDING;
   }
 
   // Native-disabled compatibility path retains the existing host dialog. Its
   // selected device is an owned value and is re-observed before output writes.
-  state->xam_state()->is_xam_dialog_present_.store(true);
-  auto close = [devices, publish](MessageBoxDialog* dialog) -> X_RESULT {
-    const uint32_t button = dialog->chosen_button();
-    return button < devices.size() ? publish(devices[button].device_id)
-                                   : X_ERROR_CANCELLED;
-  };
-  return xeXamDispatchDialog<MessageBoxDialog>(
-      new MessageBoxDialog(drawer, input, "Select storage device", description,
-                           buttons, 0),
-      close, overlapped);
+  const auto dialog_result = xeXamDispatchDialog<MessageBoxDialog>(
+      [drawer, input, description, buttons](HostUiFallbackAccess&) {
+        return new MessageBoxDialog(drawer, input, "Select storage device",
+                                    description, buttons, 0);
+      }, SnapshotMessageBox,
+      [devices, publish, trace](const HostDialogResult& value) -> X_RESULT {
+        const auto result = value.button < devices.size()
+                   ? publish(devices[value.button].device_id)
+                   : X_ERROR_CANCELLED;
+        trace("legacy_prompt_result", value.button, result);
+        return result;
+      }, overlapped);
+  trace("return_legacy_prompt", 0, dialog_result);
+  return dialog_result;
 }
 DECLARE_XAM_EXPORT1(XamShowDeviceSelectorUI, kUI, kImplemented);
 
@@ -852,9 +981,11 @@ void XamShowDirtyDiscErrorUI_entry(dword_t user_index,
   xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
   xe::hid::InputSystem* input_system = emulator->input_system();
   xeXamDispatchDialog<MessageBoxDialog>(
-      new MessageBoxDialog(imgui_drawer, input_system, kDiscReadErrorTitle,
-                           kDiscReadErrorDescription, {"OK"}, 0),
-      [](MessageBoxDialog*) -> X_RESULT { return X_ERROR_SUCCESS; }, 0);
+      [imgui_drawer, input_system](HostUiFallbackAccess&) {
+        return new MessageBoxDialog(imgui_drawer, input_system,
+                                    kDiscReadErrorTitle,
+                                    kDiscReadErrorDescription, {"OK"}, 0);
+      }, SnapshotMessageBox, {}, 0);
   // Does not return.
   kernel_state()->ExitToDashboard();
 }
@@ -871,9 +1002,11 @@ dword_result_t XamShowNuiDirtyDiscErrorUI_entry(dword_t tracking_id) {
   xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
   xe::hid::InputSystem* input_system = emulator->input_system();
   xeXamDispatchDialog<MessageBoxDialog>(
-      new MessageBoxDialog(imgui_drawer, input_system, kDiscReadErrorTitle,
-                           kDiscReadErrorDescription, {"OK"}, 0),
-      [](MessageBoxDialog*) -> X_RESULT { return X_ERROR_SUCCESS; }, 0);
+      [imgui_drawer, input_system](HostUiFallbackAccess&) {
+        return new MessageBoxDialog(imgui_drawer, input_system,
+                                    kDiscReadErrorTitle,
+                                    kDiscReadErrorDescription, {"OK"}, 0);
+      }, SnapshotMessageBox, {}, 0);
   return X_ERROR_SUCCESS;
 }
 DECLARE_XAM_EXPORT1(XamShowNuiDirtyDiscErrorUI, kUI, kStub);
@@ -915,22 +1048,21 @@ dword_result_t XamShowMarketplaceUIEx_entry(dword_t user_index, dword_t ui_type,
     return X_ERROR_ACCESS_DENIED;
   }
 
-  kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
-
   bool is_xbla_unlock_offer =
       (offer_id == ((uint64_t(kernel_state()->title_id()) << 32) | 1ull));
 
-  auto close = [ui_type,
-                is_xbla_unlock_offer](MessageBoxDialog* dialog) -> void {
+  auto close = [state = kernel_state(), ui_type, is_xbla_unlock_offer](
+                   const HostDialogResult& value) -> X_RESULT {
     if (ui_type == 1 && is_xbla_unlock_offer) {
-      uint32_t button = dialog->chosen_button();
+      uint32_t button = value.button;
       if (button == 0) {
         cvars::license_mask = 1;
 
-        kernel_state()->BroadcastNotification(
+        state->BroadcastNotification(
             kXNotificationLiveContentInstalled, 0);
       }
     }
+    return X_ERROR_SUCCESS;
   };
 
   std::string title = "Xbox Marketplace";
@@ -1024,9 +1156,11 @@ dword_result_t XamShowMarketplaceUIEx_entry(dword_t user_index, dword_t ui_type,
   const Emulator* emulator = kernel_state()->emulator();
   xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
   xe::hid::InputSystem* input_system = emulator->input_system();
-  return xeXamDispatchDialogAsync<MessageBoxDialog>(
-      new MessageBoxDialog(imgui_drawer, input_system, title, desc, buttons, 0),
-      close);
+  return xeXamDispatchDialog<MessageBoxDialog>(
+      [imgui_drawer, input_system, title, desc, buttons](HostUiFallbackAccess&) {
+        return new MessageBoxDialog(imgui_drawer, input_system, title, desc,
+                                    buttons, 0);
+      }, SnapshotMessageBox, close, 0, true);
 }
 DECLARE_XAM_EXPORT1(XamShowMarketplaceUIEx, kUI, kSketchy);
 
@@ -1059,10 +1193,13 @@ dword_result_t XamShowMarketplaceDownloadItemsUI_entry(
     return X_ERROR_ACCESS_DENIED;
   }
 
-  kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
 
-  auto close = [hresult_ptr](MessageBoxDialog* dialog) -> X_RESULT {
+  auto close = [state = kernel_state(), hresult_ptr](
+                   const HostDialogResult&) -> X_RESULT {
+    auto memory_lock = global_critical_region::AcquireDirect();
     if (hresult_ptr) {
+      if (state->memory()->QueryRangeAccess(hresult_ptr.guest_address(), 4) !=
+          memory::PageAccess::kReadWrite) { return X_ERROR_INVALID_PARAMETER; }
       // TODO
       *hresult_ptr = X_E_SUCCESS;
     }
@@ -1100,8 +1237,10 @@ dword_result_t XamShowMarketplaceDownloadItemsUI_entry(
   xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
   xe::hid::InputSystem* input_system = emulator->input_system();
   return xeXamDispatchDialog<MessageBoxDialog>(
-      new MessageBoxDialog(imgui_drawer, input_system, title, desc, buttons, 0),
-      close, overlapped);
+      [imgui_drawer, input_system, title, desc, buttons](HostUiFallbackAccess&) {
+        return new MessageBoxDialog(imgui_drawer, input_system, title, desc,
+                                    buttons, 0);
+      }, SnapshotMessageBox, close, overlapped);
 }
 DECLARE_XAM_EXPORT1(XamShowMarketplaceDownloadItemsUI, kUI, kSketchy);
 
@@ -1264,89 +1403,189 @@ bool xeDrawProfileContent(xe::ui::ImGuiDrawer* imgui_drawer,
 }
 
 X_RESULT xeXamShowSigninUI(uint32_t user_index, uint32_t users_needed,
-                           uint32_t flags) {
-  // Mask values vary. Probably matching user types? Local/remote?
-  // Games seem to sit and loop until we trigger sign in notification.
-  if (users_needed != 1 && users_needed != 2 && users_needed != 4) {
+                           uint32_t flags, uint32_t overlapped = 0,
+                           NativeSigninUiDiagnostic* diagnostic = nullptr,
+                           std::shared_ptr<NativeUiBackendRoute::HostLease> admitted = {}) {
+  if ((users_needed != 1 && users_needed != 2 && users_needed != 4) ||
+      (user_index >= XUserMaxUserCount && user_index != XUserIndexAny)) {
+    if(diagnostic)diagnostic->stage=1;
     return X_ERROR_INVALID_PARAMETER;
   }
-
-  if (kernel_state()->xam_state()->IsUIActive()) {
-    return X_ERROR_ACCESS_DENIED;
+  auto* state = kernel_state();
+  auto* input = state->emulator()->input_system();
+  if (!input) { if(diagnostic)diagnostic->stage=2; return X_ERROR_NOT_READY; }
+  if(diagnostic)diagnostic->native_owned=input->IsNativeInputOwned();
+  NativeSigninHostFlagGuard host_flag{state->xam_state(),false};
+  const bool selected_native_host=bool(admitted);
+  auto original_host_entry=admitted?admitted->TryEnter():nullptr;
+  if(selected_native_host){
+    if(!original_host_entry)return X_ERROR_CANCELLED;
+    bool expected=false;
+    if(!state->xam_state()->is_xam_dialog_present_.compare_exchange_strong(expected,true))
+      return X_ERROR_ACCESS_DENIED;
+    host_flag.owned=true;
   }
-
-  // The dashboard signs in the profile chosen on its own sign-in screen with
-  // XamUserLogonEx, then asks for the sign-in to be completed for that slot.
-  // There's no profile to pick then, so complete it without the picker, and
-  // announce the sign-in again as the console's sign-in UI does when it ends.
+  uint32_t controller;
+  {
+    auto lock = input->lock();
+    controller = user_index < XUserMaxUserCount
+                     ? user_index : input->GetLastUsedSlot();
+  }
+  if (controller >= XUserMaxUserCount) { controller = 0; }
   if ((flags & static_cast<uint32_t>(SigninUiFlags::CompleteSignIn)) &&
       user_index < XUserMaxUserCount &&
-      kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
-    // The dashboard waits for the UI to show and then close.
-    kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
-    kernel_state()->BroadcastNotification(kXNotificationSystemUI, true);
-    std::thread([]() {
+      state->xam_state()->IsUserSignedIn(user_index)) {
+    if(diagnostic)diagnostic->route=1;
+    auto lease = admitted?std::move(admitted):state->AcquireLegacyHostUi();
+    if (!lease) { if(diagnostic)diagnostic->stage=3; return X_ERROR_ACCESS_DENIED; }
+    auto selected_completion=selected_native_host
+        ?std::make_shared<HostUiFallbackOperationCompletion>(lease):nullptr;
+    host_flag.Release();
+    auto reservation = HostUiFallbackReservation::TryCreate(
+        state->xam_state(), input, !selected_native_host);
+    if (!reservation || !reservation->input_gap()) { if(diagnostic)diagnostic->stage=4; return X_ERROR_NOT_READY; }
+    if(diagnostic)diagnostic->stage=8;
+    state->BroadcastNotification(kXNotificationSystemUI, true);
+    auto run = [state, lease, reservation, selected_native_host,
+                selected_completion=std::move(selected_completion)]() mutable -> X_RESULT {
+      auto finished=std::move(selected_completion);
       xe::threading::Sleep(kUIDelayMillis);
-      // Like every sign-in notification, with the mask of all signed in slots.
-      uint32_t signed_in_mask = 0;
-      for (uint32_t i = 0; i < XUserMaxUserCount; i++) {
-        if (kernel_state()->xam_state()->IsUserSignedIn(i)) {
-          signed_in_mask |= 1u << i;
+      X_RESULT result = X_ERROR_CANCELLED;
+      if (auto entered = lease->TryEnter()) {
+        uint32_t mask = 0;
+        for (uint32_t slot = 0; slot < XUserMaxUserCount; ++slot) {
+          if (state->xam_state()->IsUserSignedIn(slot)) { mask |= 1u << slot; }
         }
+        state->BroadcastNotification(kXNotificationSystemSignInChanged, mask);
+        result = X_ERROR_SUCCESS;
       }
-      kernel_state()->BroadcastNotification(kXNotificationSystemSignInChanged,
-                                            signed_in_mask);
-      kernel_state()->xam_state()->is_xam_dialog_present_.store(false);
-      kernel_state()->BroadcastNotification(kXNotificationSystemUI, false);
-    }).detach();
+      if(!selected_native_host)lease->FinishHostOnly();
+      reservation->Release();
+      if (result == X_ERROR_SUCCESS) {
+        state->BroadcastNotification(kXNotificationSystemUI, false);
+      }
+      return result;
+    };
+    if (overlapped) {
+      state->CompleteOverlappedDeferred(std::move(run), overlapped);
+      return X_ERROR_IO_PENDING;
+    }
+    if (!state->QueueHostUiWork([run = std::move(run)]() mutable { run(); })) {
+      lease->Cancel();
+      if(diagnostic)diagnostic->stage=9;
+      return X_ERROR_NOT_READY;
+    }
     return X_ERROR_SUCCESS;
   }
-
-  kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
-
-  auto close = [](ui::SigninUI* dialog) -> void {};
-
-  const Emulator* emulator = kernel_state()->emulator();
-  xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
-  return xeXamDispatchDialogAsync<ui::SigninUI>(
-      new ui::SigninUI(
-          imgui_drawer, kernel_state()->xam_state()->profile_manager(),
-          emulator->input_system()->GetLastUsedSlot(), users_needed),
-      close);
+  if(diagnostic)diagnostic->route=2;
+  auto* drawer = state->emulator()->imgui_drawer();
+  return xeXamDispatchDialog<ui::SigninUI>(
+      [drawer, controller, users_needed](HostUiFallbackAccess& access) {
+        return new ui::SigninUI(drawer,
+            access.kernel()->xam_state()->profile_manager(), controller,
+            users_needed);
+      }, [](ui::SigninUI* dialog) {
+        HostDialogResult value;
+        if (dialog->accepted()) {
+          value.result = xe::ui::TextEntryResult::kAccepted;
+        }
+        return value;
+      }, {}, overlapped, true, nullptr, std::move(admitted), diagnostic, selected_native_host, &host_flag);
 }
 
-X_RESULT xeXamShowCreateProfileUIEx(uint32_t user_index, dword_t flag,
-                                    char* unkn2_ptr) {
-  Emulator* emulator = kernel_state()->emulator();
-  xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
-
-  if (kernel_state()->xam_state()->IsUIActive()) {
-    return X_ERROR_ACCESS_DENIED;
+static X_RESULT ShowCreateProfileOnOriginalKernel(
+    KernelState* state, uint32_t user_index,
+    std::shared_ptr<NativeUiBackendRoute::HostLease> admitted = {}) {
+  if (user_index >= XUserMaxUserCount && user_index != XUserIndexAny) {
+    return X_ERROR_INVALID_PARAMETER;
   }
-
-  kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
-
-  auto close = [](ui::CreateProfileUI* dialog) -> void {};
-
-  return xeXamDispatchDialogAsync<ui::CreateProfileUI>(
-      new ui::CreateProfileUI(imgui_drawer, emulator), close);
+  auto* drawer = state->emulator()->imgui_drawer();
+  auto* input = state->emulator()->input_system();
+  if (!input) {
+    if (admitted) {
+      admitted->FinishHostOnly();
+      state->xam_state()->is_xam_dialog_present_.store(false);
+    }
+    return X_ERROR_NOT_READY;
+  }
+  uint32_t controller;
+  {
+    auto lock = input->lock();
+    controller = user_index < XUserMaxUserCount
+                     ? user_index : input->GetLastUsedSlot();
+  }
+  if (controller >= XUserMaxUserCount) { controller = 0; }
+  return xeXamDispatchDialog<ui::CreateProfileUI>(
+      [drawer, controller](HostUiFallbackAccess& access) {
+        return new ui::CreateProfileUI(drawer, access.kernel(), controller);
+      }, [](ui::CreateProfileUI*) {
+        HostDialogResult value;
+        value.result = xe::ui::TextEntryResult::kAccepted;
+        return value;
+      }, {}, 0, true, state, std::move(admitted));
+}
+X_RESULT xeXamShowCreateProfileUIEx(uint32_t user_index, uint32_t flag,
+                                    char* unknown) {
+  return ShowCreateProfileOnOriginalKernel(kernel_state(), user_index);
+}
+X_RESULT xeXamShowHostCreateProfileUI(Emulator* emulator, uint32_t user_index) {
+  if (!emulator ||
+      (user_index >= XUserMaxUserCount && user_index != XUserIndexAny)) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+  KernelState* original = nullptr;
+  std::shared_ptr<NativeUiBackendRoute::HostLease> lease;
+  std::unique_ptr<NativeUiBackendRoute::HostLease::Entry> entered;
+  const auto result = emulator->WithHostRuntime([&](KernelState& runtime) {
+    lease = runtime.AcquireLegacyHostUi();
+    if (!lease) { return X_ERROR_ACCESS_DENIED; }
+    entered = lease->TryEnter();
+    if (!entered) {
+      runtime.xam_state()->is_xam_dialog_present_.store(false);
+      return X_ERROR_CANCELLED;
+    }
+    original = &runtime;
+    return X_ERROR_SUCCESS;
+  });
+  if (result != X_ERROR_SUCCESS) { return result; }
+  // The runtime mutex has been released. This same-thread/LIFO Entry pins the
+  // captured exact Kernel through UI queue + Kernel work publication. Stop may
+  // cancel it, but cannot reclaim the Kernel while this Entry is still active.
+  // No global/current-Kernel lookup can remint an old host dialog's request.
+  if (lease->cancelled()) {
+    original->xam_state()->is_xam_dialog_present_.store(false);
+    return X_ERROR_CANCELLED;
+  }
+  return ShowCreateProfileOnOriginalKernel(original, user_index, std::move(lease));
 }
 
 dword_result_t XamShowSigninUI_entry(dword_t users_needed, dword_t flags) {
-  return xeXamShowSigninUI(XUserIndexAny, users_needed, flags);
+  NativeSigninUiDiagnostic diagnostic;
+  const std::array<uint32_t,2> arguments{users_needed,flags};
+  const auto native=NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(),NativeSystemUiPublicCall::kShowSignin,arguments);
+  X_RESULT result;
+  if(native.handled()){
+    result=native.value;diagnostic.route=3;diagnostic.stage=100+uint32_t(native.disposition);
+    const auto* input=kernel_state()->emulator()->input_system();
+    diagnostic.native_owned=input && input->IsNativeInputOwned();
+  }else{
+    result=xeXamShowSigninUI(XUserIndexAny,users_needed,flags,0,&diagnostic,native.host_fallback);
+    // Record selected fallback separately from inactive ordinary legacy UI.
+    if(native.host_fallback)diagnostic.route+=4;
+  }
+  kernel_state()->xam_state()->profile_manager()->RecordNativeSigninUi(
+      XUserIndexAny,users_needed,flags,0,result,diagnostic.route,
+      diagnostic.stage,diagnostic.native_owned);
+  return result;
 }
 DECLARE_XAM_EXPORT1(XamShowSigninUI, kUserProfiles, kImplemented);
 
 dword_result_t XamShowSigninUIEx_entry(
     dword_t users_needed, dword_t flags,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
-  X_RESULT result = xeXamShowSigninUI(XUserIndexAny, users_needed, flags);
-  if (overlapped_ptr) {
-    kernel_state()->CompleteOverlappedImmediate(overlapped_ptr, result);
-    return X_ERROR_IO_PENDING;
-  } else {
-    return result;
-  }
+  return xeXamShowSigninUI(XUserIndexAny, users_needed, flags,
+                            overlapped_ptr.guest_address());
 }
 DECLARE_XAM_EXPORT1(XamShowSigninUIEx, kUserProfiles, kSketchy);
 
@@ -1365,7 +1604,11 @@ DECLARE_XAM_EXPORT1(XamShowNuiSigninUI, kUserProfiles, kSketchy);
 
 dword_result_t XamShowSigninUIp_entry(dword_t user_index, dword_t users_needed,
                                       dword_t flags) {
-  return xeXamShowSigninUI(user_index, users_needed, flags);
+  const std::array<uint32_t,3> arguments{user_index,users_needed,flags};
+  const auto native=NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(),NativeSystemUiPublicCall::kShowSigninWithUser,arguments);
+  if(native.handled())return native.value;
+  return xeXamShowSigninUI(user_index,users_needed,flags,0,nullptr,native.host_fallback);
 }
 DECLARE_XAM_EXPORT1(XamShowSigninUIp, kUserProfiles, kImplemented);
 
@@ -1404,11 +1647,19 @@ dword_result_t XamShowAchievementsUI_entry(dword_t user_index,
   xe::hid::InputSystem* input_system =
       kernel_state()->emulator()->input_system();
 
-  auto close = [](ui::GameAchievementsUI* dialog) -> void {};
-  return xeXamDispatchDialogAsync<ui::GameAchievementsUI>(
-      new ui::GameAchievementsUI(imgui_drawer, input_system, &info.value(),
-                                 user),
-      close);
+  const auto title_info = info.value();
+  const uint64_t xuid = user->xuid();
+  return xeXamDispatchDialog<ui::GameAchievementsUI>(
+      [imgui_drawer, input_system, title_info, xuid](HostUiFallbackAccess& access) {
+        auto* user = access.kernel()->xam_state()->GetUserProfile(xuid);
+        return user ? new ui::GameAchievementsUI(
+                          imgui_drawer, input_system, &title_info, user)
+                    : nullptr;
+      }, [](ui::GameAchievementsUI*) {
+        HostDialogResult value;
+        value.result = xe::ui::TextEntryResult::kAccepted;
+        return value;
+      }, {}, 0, true);
 }
 DECLARE_XAM_EXPORT1(XamShowAchievementsUI, kUserProfiles, kImplemented);
 
@@ -1421,11 +1672,16 @@ dword_result_t XamShowGamerCardUI_entry(dword_t user_index) {
   xe::ui::ImGuiDrawer* imgui_drawer =
       kernel_state()->emulator()->imgui_drawer();
 
-  auto close = [](ui::GamercardUI* dialog) -> void {};
-  return xeXamDispatchDialogAsync<ui::GamercardUI>(
-      new ui::GamercardUI(kernel_state()->emulator()->display_window(),
-                          imgui_drawer, kernel_state(), user->xuid()),
-      close);
+  auto* window = kernel_state()->emulator()->display_window();
+  const uint64_t xuid = user->xuid();
+  return xeXamDispatchDialog<ui::GamercardUI>(
+      [window, imgui_drawer, xuid](HostUiFallbackAccess& access) {
+        return new ui::GamercardUI(window, imgui_drawer, access.kernel(), xuid);
+      }, [](ui::GamercardUI*) {
+        HostDialogResult value;
+        value.result = xe::ui::TextEntryResult::kAccepted;
+        return value;
+      }, {}, 0, true);
 }
 DECLARE_XAM_EXPORT1(XamShowGamerCardUI, kUserProfiles, kImplemented);
 
@@ -1438,11 +1694,16 @@ dword_result_t XamShowEditProfileUI_entry(dword_t user_index) {
   xe::ui::ImGuiDrawer* imgui_drawer =
       kernel_state()->emulator()->imgui_drawer();
 
-  auto close = [](ui::GamercardUI* dialog) -> void {};
-  return xeXamDispatchDialogAsync<ui::GamercardUI>(
-      new ui::GamercardUI(kernel_state()->emulator()->display_window(),
-                          imgui_drawer, kernel_state(), user->xuid()),
-      close);
+  auto* window = kernel_state()->emulator()->display_window();
+  const uint64_t xuid = user->xuid();
+  return xeXamDispatchDialog<ui::GamercardUI>(
+      [window, imgui_drawer, xuid](HostUiFallbackAccess& access) {
+        return new ui::GamercardUI(window, imgui_drawer, access.kernel(), xuid);
+      }, [](ui::GamercardUI*) {
+        HostDialogResult value;
+        value.result = xe::ui::TextEntryResult::kAccepted;
+        return value;
+      }, {}, 0, true);
 }
 DECLARE_XAM_EXPORT1(XamShowEditProfileUI, kUserProfiles, kImplemented);
 
@@ -1474,18 +1735,22 @@ bool xeXamChooseIndieGame(std::string* file_name, uint32_t* device_id,
                        "Tools > Install Content, then try again."
                      : std::string();
   std::filesystem::path chosen;
-  auto close = [&chosen](ui::DiscSwapUI* dialog) -> X_RESULT {
-    if (dialog->result() == ui::DiscSwapResult::kSelected) {
-      chosen = dialog->selected_path();
-    }
-    return X_ERROR_SUCCESS;
-  };
-  kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
   xeXamDispatchDialog<ui::DiscSwapUI>(
-      new ui::DiscSwapUI(emulator->imgui_drawer(), emulator->input_system(),
-                         message, items, none_installed, "Indie Games",
-                         "Select a game to play:", /*allow_browse=*/false),
-      close, /*overlapped=*/0);
+      [drawer = emulator->imgui_drawer(), input = emulator->input_system(),
+       message, items, none_installed](HostUiFallbackAccess&) {
+        return new ui::DiscSwapUI(drawer, input, message, items, none_installed,
+                                  "Indie Games", "Select a game to play:", false);
+      }, [](ui::DiscSwapUI* dialog) {
+        HostDialogResult value;
+        if (dialog->result() == ui::DiscSwapResult::kSelected) {
+          value.result = xe::ui::TextEntryResult::kAccepted;
+          value.path = dialog->selected_path();
+        }
+        return value;
+      }, [&chosen](const HostDialogResult& value) {
+        chosen = value.path;
+        return X_ERROR_SUCCESS;
+      });
 
   for (size_t i = 0; i < games.size(); ++i) {
     if (!chosen.empty() && items[i].path == chosen) {
@@ -1524,24 +1789,14 @@ dword_result_t XamShowNuiTroubleshooterUI_entry(dword_t user_index,
      XamShowNuiTroubleshooterUI(0xff,0,0) if param = -0x7ff8fffe
   */
 
-  const Emulator* emulator = kernel_state()->emulator();
-  xe::ui::Window* display_window = emulator->display_window();
-  xe::ui::ImGuiDrawer* imgui_drawer = emulator->imgui_drawer();
-  if (display_window && imgui_drawer) {
-    xe::threading::Fence fence;
-    if (display_window->app_context().CallInUIThreadSynchronous([&]() {
-          xe::ui::ImGuiDialog::ShowMessageBox(
-              imgui_drawer, "NUI Troubleshooter",
-              "The game has indicated there is a problem with NUI (Kinect).")
-              ->Then(&fence);
-        })) {
-      kernel_state()->xam_state()->is_xam_dialog_present_.store(true);
-      GuestScheduler::WaitOnFence(fence);
-      kernel_state()->xam_state()->is_xam_dialog_present_.store(false);
-    }
-  }
-
-  return X_ERROR_SUCCESS;
+  auto* drawer = kernel_state()->emulator()->imgui_drawer();
+  auto* input = kernel_state()->emulator()->input_system();
+  return xeXamDispatchDialog<MessageBoxDialog>(
+      [drawer, input](HostUiFallbackAccess&) {
+        return new MessageBoxDialog(drawer, input, "NUI Troubleshooter",
+            "The game has indicated there is a problem with NUI (Kinect).",
+            {"OK"}, 0);
+      }, SnapshotMessageBox, {});
 }
 DECLARE_XAM_EXPORT1(XamShowNuiTroubleshooterUI, kNone, kStub);
 

@@ -10,6 +10,7 @@
 #ifndef XENIA_KERNEL_XAM_UI_PASSCODE_UI_H_
 #define XENIA_KERNEL_XAM_UI_PASSCODE_UI_H_
 
+#include <array>
 #include "xenia/kernel/xam/xam_ui.h"
 
 namespace xe {
@@ -20,11 +21,11 @@ namespace ui {
 class ProfilePasscodeUI final : public XamDialog {
  public:
   ProfilePasscodeUI(xe::ui::ImGuiDrawer* imgui_drawer, std::string_view title,
-                    std::string_view description,
-                    MESSAGEBOX_RESULT* result_ptr);
+                    std::string_view description);
   ~ProfilePasscodeUI() = default;
 
   bool SelectedSignedIn() const { return selected_signed_in_; }
+  const auto& passcode() const { return passcode_; }
 
  private:
   const char* labelled_keys_[11] = {"None", "X",  "Y",    "RB",   "LB",   "LT",
@@ -43,7 +44,7 @@ class ProfilePasscodeUI final : public XamDialog {
       {"Left", DPAD_LEFT_PASSCODE},
       {"Right", DPAD_RIGHT_PASSCODE}};
 
-  void OnDraw(ImGuiIO& io) override;
+  void OnDrawDialog(ImGuiIO& io) override;
 
   void DrawPasscodeField(uint8_t key_id);
 
@@ -54,7 +55,7 @@ class ProfilePasscodeUI final : public XamDialog {
 
   static constexpr uint8_t passcode_length = sizeof(X_XAMACCOUNTINFO::passcode);
   int key_indexes_[passcode_length] = {0, 0, 0, 0};
-  MESSAGEBOX_RESULT* result_ptr_;
+  std::array<uint16_t, 4> passcode_{};
 };
 
 }  // namespace ui

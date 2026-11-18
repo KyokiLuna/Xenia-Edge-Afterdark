@@ -9,11 +9,19 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <span>
+#include <string_view>
 #include <string>
 #include "xenia/base/host_storage.h"
 namespace xe::filesystem {
 struct ManagedDeviceFormatReceipt;
 class ManagedDeviceIdentityTestAccess;
+class ManagedStorageBootstrap;
+class CacheStorageOwner;
+class CacheFormatHandoff;
+class ManagedBootstrapCreationPermit;
+struct ManagedBootstrapReference;
+struct ManagedBootstrapSourceDescription;
 // Opaque source-owned persistent identity. UUID and epoch are restart identity;
 // st_dev, mount IDs, owned root and registry generation remain live admission
 // pins. No factory creates a directory, adopts unknown metadata, or rebinds a
@@ -49,6 +57,9 @@ class ManagedDeviceIdentity final {
   uint64_t directory_file_id() const { return directory_file_id_; }
   const std::filesystem::path& configured_location() const { return location_; }
   bool pending_format() const { return pending_format_; }
+  bool binding_required() const {
+    return binding_required_.load(std::memory_order_acquire);
+  }
   // Cached cancellation only, safe under final model/GCRC guards. It does not
   // perform path/filesystem observation or claim independent live currentness.
   bool retiring() const { return retired_.load(std::memory_order_acquire); }
@@ -72,6 +83,13 @@ class ManagedDeviceIdentity final {
   friend class ManagedVolumeAuthorityTestAccess;
   friend class ManagedVolumeAuthority;
   friend class ManagedVolumeFormatHandoff;
+  friend class ManagedStorageBootstrap;
+  friend class ManagedBootstrapCreationPermit;
+  friend class ManagedFormatGuestAdmissionPermit;
+  friend class ProfileIntentOwner;
+  friend class ContentMutationOwner;
+  friend class CacheStorageOwner;
+  friend class CacheFormatHandoff;
   // Private producer capability. Only the managed-volume factory may validate
   // binding/root provenance and enter this coupled on-disk handoff.
   struct Handoff {
@@ -79,6 +97,8 @@ class ManagedDeviceIdentity final {
     std::shared_ptr<const HostStorageIntentLease> source_lease;
     std::shared_ptr<const HostStorageRoot> recovery_source;
     std::shared_ptr<const HostStorageGuestProjection> projection;
+    std::shared_ptr<const HostStorageRoot> observation_source;
+    std::shared_ptr<const HostStorageGuestProjection> observation_projection;
     Uuid nonce{};
     std::array<uint8_t, 32> binding{};
     uint64_t old_epoch = 0, phase = 0;
@@ -90,6 +110,7 @@ class ManagedDeviceIdentity final {
       std::array<uint8_t, 32> binding,
       const std::atomic<bool>* cancellation = nullptr,
       const std::atomic<bool>* external_cancellation = nullptr);
+  static std::error_code CheckCompletedHandoff(const Handoff&);
   static std::unique_ptr<Handoff> InspectHandoff(
       std::shared_ptr<const ManagedDeviceIdentity>,
       std::array<uint8_t, 32> binding);
@@ -98,7 +119,33 @@ class ManagedDeviceIdentity final {
   static std::error_code AdvanceHandoff(Handoff&, bool committed);
   static std::shared_ptr<const ManagedDeviceIdentity> OpenInternal(
       std::shared_ptr<const HostStorageRoot>, std::string, uint32_t,
-      std::error_code&, bool create, bool admit_guest);
+      std::error_code&, bool create, bool admit_guest,
+      std::shared_ptr<const HostStorageIntentLease> same_source_lease = {},
+      std::shared_ptr<ManagedStorageBootstrap> bootstrap = {},
+      std::span<const uint8_t> complete_initial = {},
+      std::string_view initializer_nonce = {},
+      const CacheStorageOwner* cache_initializer = nullptr);
+  static std::vector<uint8_t> PrepareBootstrapPrefix(
+      const HostStorageRoot&, std::string_view, uint32_t, std::error_code&);
+  static ManagedBootstrapSourceDescription DescribeBootstrapWire(
+      std::span<const uint8_t>, std::error_code&);
+  static std::vector<uint8_t> BootstrapSuffix(
+      std::span<const uint8_t> prefix, const ManagedBootstrapReference&,
+      std::error_code&);
+  std::vector<uint8_t> BootstrapWire(std::error_code&) const;
+  ManagedBootstrapSourceDescription DescribeBootstrapCurrent(std::error_code&) const;
+  struct BootstrapAppendReceipt {
+    std::error_code error;
+    bool published = false, durable = false;
+    std::filesystem::path previous;
+    uint64_t previous_file = 0;
+  };
+  BootstrapAppendReceipt AppendBootstrapReference(
+      const ManagedBootstrapReference&,
+      std::shared_ptr<const HostStorageIntentLease>, std::string_view) const;
+  std::error_code AdmitBootstrapIdentity() const;
+  std::error_code CheckBootstrapCurrent(
+      const ManagedBootstrapCreationPermit&) const;
   static ManagedDeviceFormatReceipt FormatInternal(
       std::shared_ptr<const ManagedDeviceIdentity>, std::error_code);
   struct State;
@@ -114,6 +161,7 @@ class ManagedDeviceIdentity final {
   const bool pending_format_;
   const std::shared_ptr<State> state_;
   mutable std::atomic<bool> retired_{false};
+  mutable std::atomic<bool> binding_required_{false};
 };
 struct ManagedDeviceFormatReceipt {
   std::error_code error;

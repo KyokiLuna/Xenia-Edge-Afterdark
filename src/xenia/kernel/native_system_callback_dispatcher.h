@@ -17,6 +17,7 @@
 namespace xe::kernel {
 class KernelState;
 class NativeImportDomain;
+class NativeSystemUiService;
 
 // Transport for verified kernel-driver callbacks, not a replacement XAM task
 // scheduler. The callback must permit an ordinary SYSTEM context: this worker
@@ -49,9 +50,12 @@ class NativeSystemCallbackDispatcher {
   bool IsCurrentWorker() const;
   void BeginStop();
   // Call while native providers/tasks/module memory are still alive, after
-  // driver ingress closes. False for self-join; callers must defer destruction.
+  // driver ingress closes. Joins the actual OS host handle and producer tails,
+  // never only the guest KTHREAD signal. Timeout/self-join returns false.
   bool DrainAndJoin();
-  const std::shared_ptr<NativeImportDomain>& domain() const;
+  // Owned snapshot; null after factual stopped retirement. Never expose a
+  // reference racing in-place revocation of this dispatcher's native holders.
+  std::shared_ptr<NativeImportDomain> domain() const;
 
   // Kernel lifecycle boundary. Entries are weak and keyed by the actual Kernel;
   // no global service takes ownership of a Kernel or a native graph.
@@ -59,6 +63,8 @@ class NativeSystemCallbackDispatcher {
   static bool DrainAndJoinForKernel(KernelState* kernel);
 
  private:
+  friend class NativeSystemUiService;
+  bool RetireAfterActualKernelStop() noexcept;
   struct State;
   explicit NativeSystemCallbackDispatcher(std::shared_ptr<State> state);
   std::shared_ptr<State> state_;

@@ -65,6 +65,7 @@ class UiInputReservation final {
     const uint64_t generation;
     std::atomic<uint32_t> count{0};
     std::atomic<uint32_t> edges{0};
+    std::atomic<bool> release_pending{false};
   };
   explicit UiInputReservation(std::shared_ptr<State>);
   std::shared_ptr<State> state_;
@@ -139,6 +140,7 @@ class InputSystem {
   void ApplyNativeHostModalSuppression(uint32_t slot, X_INPUT_STATE* state);
   void EndNativeInputTransport(uint64_t generation);
   bool SetNativeInputOwner(uint64_t generation, bool owns_input);
+  bool IsNativeInputOwned() const { return native_input_owner_.load(); }
   X_RESULT GetNativeTextKeystroke(uint64_t generation, uint32_t user_index,
                                   X_INPUT_KEYSTROKE* output);
   bool HasNativeTextInput(uint64_t generation) const;
@@ -152,10 +154,17 @@ class InputSystem {
   void RemoveUIInputBlocker();
   bool IsUIInputBlocked() const {
     const auto state = host_ui_input_reservations_.load();
+    const auto host_only = host_only_ui_input_.load();
     return ui_input_blockers_.load() > 0 ||
+           (host_only && host_only->count.load() > 0) ||
            (state && state->generation == native_input_generation_.load() &&
             state->count.load() > 0);
   }
+  // Caller holds lock(). Begin once for each actual Kernel (also when native
+  // UI is disabled). Tokens contain only CPU state; an old epoch never changes
+  // the replacement Kernel's blockers or held-button quarantine.
+  void BeginHostUiInputEpoch();
+  std::shared_ptr<UiInputReservation> ReserveHostUiInput();
   // Caller holds lock(). Only the current real native transport generation.
   std::shared_ptr<UiInputReservation> ReserveHostUiInput(uint64_t generation);
 
@@ -240,11 +249,15 @@ class InputSystem {
 
   uint32_t UiInputBlockingEdges() const {
     const auto state = host_ui_input_reservations_.load();
+    const auto host_only = host_only_ui_input_.load();
     return ui_input_blocking_edges_.load() +
+           (host_only ? host_only->edges.load() : 0) +
            (state && state->generation == native_input_generation_.load()
                 ? state->edges.load()
                 : 0);
   }
+  void CaptureUiHeldButtons();
+  void ObserveHostUiRelease();
   void UpdateUsedSlot(InputDriver* driver, uint8_t slot, bool connected);
   static void MergeState(X_INPUT_STATE* state, const X_INPUT_STATE& other);
   static void MergeCapabilities(X_INPUT_CAPABILITIES* caps,
@@ -294,6 +307,7 @@ class InputSystem {
   std::atomic<int> ui_input_blockers_{0};
   std::atomic<std::shared_ptr<UiInputReservation::State>>
       host_ui_input_reservations_;
+  std::atomic<std::shared_ptr<UiInputReservation::State>> host_only_ui_input_;
   // Times blocking started or ended, added to packet numbers so a game sees a
   // new state at both edges. Bumped after the count changes so the last read
   // of each phase has a new number.

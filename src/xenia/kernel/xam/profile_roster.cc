@@ -1,0 +1,1247 @@
+/** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
+#include "xenia/kernel/xam/profile_roster.h"
+
+#include <atomic>
+#include <algorithm>
+#include <new>
+#include <cstring>
+#include "xenia/base/assert.h"
+#include "xenia/vfs/devices/host_path_device.h"
+#include <limits>
+#include <set>
+#include <utility>
+#include "xenia/base/logging.h"
+#include "xenia/base/native_system_ui_trace.h"
+#include "xenia/cpu/thread_state.h"
+#include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
+#include "xenia/kernel/xam/content_manager.h"
+#include "xenia/kernel/xam/profile_manager.h"
+#include "xenia/kernel/xam/user_tracker.h"
+#include "xenia/kernel/xthread.h"
+
+namespace xe::kernel::xam {
+namespace {
+std::error_code Busy() { return std::make_error_code(std::errc::device_or_resource_busy); }
+std::error_code Stale() { return std::make_error_code(std::errc::operation_canceled); }
+XThread* ActualRosterThread() noexcept {
+  auto* thread = XThread::GetCurrentFiberThread();
+  return thread ? thread : (XThread::IsInThread() ? XThread::GetCurrentThread() : nullptr);
+}
+}
+// Preallocated diagnostics carry no resource owner. A reader never waits for
+// state1 and never reads its payload; release2 publishes a complete first cut.
+template <typename T> struct NativeProfileDiagnosticCell {
+  std::atomic<uint32_t> state{0}; T payload{};
+  void Record(const T& value) noexcept {
+    uint32_t empty=0;
+    if(!state.compare_exchange_strong(empty,1,std::memory_order_relaxed))return;
+    payload=value;state.store(2,std::memory_order_release);
+  }
+  bool Copy(T& out,uint32_t* observed=nullptr) const noexcept {
+    const auto complete=state.load(std::memory_order_acquire);if(observed)*observed=complete;
+    if(complete!=2)return false;
+    out=payload;return true;
+  }
+};
+struct NativeProfileProjection {
+  uint32_t slot=0,reason=0,available=0,ordinary=0,scoped=0,following=0;
+  uint32_t thread=0,pcr=0,process=0,profile_present=0;
+  uint64_t lr=0,sp=0,current_epoch=0,selected_epoch=0,selected_xuid=0;
+  uint64_t intent=0,operation=0;uint32_t phase=0;
+};
+struct NativeProfileQuery {
+  uint32_t ordinal=0,slot=0,status=0,flags=0,thread=0,pcr=0,ordinary=0,open=0;
+  uint64_t value=0,lr=0,sp=0;
+};
+struct NativeSigninUiObservation {
+  NativeProfileQuery caller;
+  uint32_t user=0,users=0,flags=0,overlap=0,result=0,route=0,stage=0,native_owned=0;
+};
+struct HostRoster::State {
+  std::array<ProfileRosterSlot, 4> slots;
+  uint64_t epoch = 1;
+};
+// Only this actual PM owns native row resources. Public snapshots, cells,
+// intents and tickets can retain this metadata after Close, but Close drains
+// entered scopes and detaches every native owner before PM destruction.
+struct ProfileRosterAuthority {
+  struct Row {
+    std::shared_ptr<UserProfile> profile;
+    std::shared_ptr<ProfileGpdModelAuthority> model;
+    std::shared_ptr<ProfileAccountIdentity> identity;
+    std::shared_ptr<const ProfileAccountSnapshot> account;
+    std::shared_ptr<ProfileStorageLease> storage;
+  };
+  struct Envelope {
+    std::shared_ptr<const HostRoster> roster;
+    std::array<Row, 4> rows;
+  };
+  struct Operation;
+  ProfileManager* owner = nullptr; // usable only under the existing PM gate
+  KernelState* kernel = nullptr;  // comparison only in metadata admissions
+  std::shared_ptr<ProfileAccountCommitGate> gate;
+  std::atomic<bool> open{true}, ordinary{true};
+  std::atomic<uint64_t> scopes{0};
+  std::atomic<bool> diagnostic_enabled{false};
+  std::array<NativeProfileDiagnosticCell<NativeProfileProjection>,4> first_projection;
+  // Valid slots0..3 plus one invalid-slot bucket, independently per ordinal.
+  std::array<std::array<NativeProfileDiagnosticCell<NativeProfileQuery>,5>,2> first_query;
+  NativeProfileDiagnosticCell<NativeSigninUiObservation> first_signin_ui;
+  // Live host observations are atomic scalars published at ORIGINAL mutation
+  // cuts. A diagnostic host reader must never contend with TITLE try-locks.
+  std::atomic<uint32_t> diagnostic_available{0},diagnostic_phase{0};
+  std::atomic<bool> diagnostic_pending{false};
+  std::atomic<uint64_t> diagnostic_current_epoch{0},diagnostic_selected_epoch{0};
+  std::atomic<uint64_t> diagnostic_intent{0},diagnostic_operation{0};
+  std::array<std::atomic<uint64_t>,4> diagnostic_current_xuid{},diagnostic_selected_xuid{};
+  void DiagnosticCurrent(const Envelope* e) noexcept {
+    diagnostic_current_epoch.store(e?e->roster->epoch():0,std::memory_order_release);
+    for(size_t i=0;i<4;++i)diagnostic_current_xuid[i].store(e?e->roster->slots()[i].xuid:0,std::memory_order_release);
+    diagnostic_available.fetch_or(1,std::memory_order_release);
+  }
+  void DiagnosticSelected(const Envelope* e) noexcept {
+    diagnostic_selected_epoch.store(e?e->roster->epoch():0,std::memory_order_release);
+    for(size_t i=0;i<4;++i)diagnostic_selected_xuid[i].store(e?e->roster->slots()[i].xuid:0,std::memory_order_release);
+    diagnostic_available.fetch_or(2,std::memory_order_release);
+  }
+  std::atomic<Envelope*> selected{nullptr};
+  std::shared_ptr<Envelope> current;
+  std::shared_ptr<Operation> pending;
+  std::vector<std::shared_ptr<Envelope>> retired;
+  std::weak_ptr<::xe::kernel::NativeProfileIdentityOwner> native_owner;
+  std::shared_ptr<const ProfileRosterNativeBinding> binding;
+  uint64_t next_nonce = 1;
+  uint64_t next_operation = 1;
+  std::vector<std::weak_ptr<ProfileRosterNativeReadTicket>> tickets; // metadata only
+
+  // Enter/Leave never acquire a native/PM/model lock or release resources.
+  bool EnterScope() noexcept {
+    if (!open.load(std::memory_order_acquire)) { return false; }
+    auto n = scopes.load(std::memory_order_relaxed);
+    do {
+      if (n == UINT64_MAX) { return false; }
+    } while (!scopes.compare_exchange_weak(n, n + 1, std::memory_order_acq_rel));
+    if (open.load(std::memory_order_acquire)) { return true; }
+    scopes.fetch_sub(1, std::memory_order_acq_rel); scopes.notify_all();
+    return false;
+  }
+  void LeaveScope() noexcept {
+    scopes.fetch_sub(1, std::memory_order_acq_rel); scopes.notify_all();
+  }
+  static bool LogicalCurrent(const Envelope& e) {
+    for (const auto& row : e.rows) {
+      if (row.profile && (!row.storage || row.storage->retiring() ||
+          !row.identity || row.identity->retired() || !row.account ||
+          row.account->identity() != row.identity)) { return false; }
+    }
+    return true;
+  }
+};
+struct ProfileRosterExpected::Proof {
+  std::weak_ptr<ProfileRosterAuthority> authority;
+  const HostRoster* exact = nullptr;
+};
+struct ProfileRosterIntent::State {
+  std::weak_ptr<ProfileRosterAuthority> authority;
+  std::shared_ptr<const HostRoster> old_roster, new_roster;
+  std::array<uint8_t, 4 * 0x188> native_rows{};
+  std::atomic<ProfileRosterPhase> phase{ProfileRosterPhase::kPreparing};
+  ProfileRosterResult result;
+  uint64_t operation = 0;
+};
+struct ProfileRosterPublicationCell::State {
+  std::shared_ptr<ProfileRosterAuthority> authority; // revocable metadata
+  ProfileRosterAuthority::Envelope* old_envelope = nullptr;
+  ProfileRosterAuthority::Envelope* new_envelope = nullptr;
+  std::shared_ptr<ProfileRosterIntent::State> intent;
+  std::atomic<bool> armed{false};
+};
+struct ProfileRosterNativeBinding::State {
+  std::weak_ptr<ProfileRosterAuthority> authority;
+  uint64_t nonce = 0;
+};
+struct ProfileRosterNativeCompletion::State {
+  std::weak_ptr<ProfileRosterAuthority> authority;
+  std::shared_ptr<const ProfileRosterIntent::State> intent; // metadata; prevents stale-address reuse
+  const ProfileRosterNativeBinding* binding = nullptr;
+  uint64_t nonce = 0;
+};
+struct ProfileRosterNativeReadTicket::State {
+  std::shared_ptr<ProfileRosterAuthority> authority; // metadata after PM close
+  ProfileRosterAuthority::Envelope* fixed = nullptr;
+  ProfileRosterAuthority::Envelope* writer_old = nullptr;
+  ProfileRosterAuthority::Envelope* writer_new = nullptr;
+  const ProfileRosterNativeBinding* binding = nullptr;
+  uint64_t operation = 0;
+  bool following = false;
+  std::atomic<bool> open{true};
+};
+struct ProfileRosterNativeReadScope::State {
+  std::shared_ptr<ProfileRosterNativeReadTicket> ticket;
+  std::shared_ptr<const ProfileRosterNativeBinding> binding;
+  KernelState* kernel = nullptr;
+  XThread* thread = nullptr;
+  cpu::ThreadState* cpu = nullptr;
+  void* previous = nullptr;
+  uint32_t task = 0, root_hmodule = 0;
+  uint64_t task_birth = 0, work_generation = 0, root_generation = 0;
+  bool entered = false;
+};
+struct ProfileRosterAuthority::Operation {
+  std::shared_ptr<ProfileRosterIntent> intent;
+  std::shared_ptr<Envelope> before, after;
+  ProfileRosterDesired desired;
+  std::array<bool, 4> staged_mount{}, old_mount_released{};
+  std::atomic<bool> settling{false};
+  std::array<std::unique_ptr<ProfileAccountIdentity::RosterPause>, 8> account_pauses;
+  std::array<std::unique_ptr<ProfileGpdModelAuthority::RosterPause>, 4> model_pauses;
+  std::vector<std::weak_ptr<ProfileRosterNativeReadTicket>> tickets;
+  std::shared_ptr<ProfileRosterPublicationCell> cell;
+  // These complete map nodes are allocated before native arm. Settlement only
+  // swaps same-allocator containers; displaced native owners release later.
+  std::map<uint8_t, std::shared_ptr<UserProfile>> profiles;
+  std::map<uint64_t, std::shared_ptr<ProfileAccountIdentity>> identities;
+  std::array<decltype(identities)::node_type, 4> displaced_identities;
+  std::map<uint64_t, std::shared_ptr<const ProfileAccountSnapshot>> snapshots;
+  std::map<uint64_t, std::shared_ptr<const ProfileAccountMetadata>> metadata;
+  std::map<uint64_t, X_XAMACCOUNTINFO> accounts;
+  std::map<uint64_t, uint64_t> generations;
+  std::map<uint64_t, std::shared_ptr<ProfileGpdModelAuthority>> models;
+  bool maps_settled = false, effects_applied = false;
+};
+namespace {
+bool BeforeCurrent(const ProfileRosterAuthority::Operation& op) {
+  for (uint8_t slot = 0; slot != 4; ++slot) {
+    const auto& row = op.before->rows[slot];
+    if (!row.profile) { continue; }
+    if (op.intent->result().changed[slot] && row.storage && row.storage->retiring()) {
+      // Actual source retirement closes every storage producer. Removing that
+      // lost row needs no fabricated Account read or source reacquisition.
+      if (!row.identity || !row.identity->writes_drained()) { return false; }
+      continue;
+    }
+    if (!row.identity || row.identity->retired() || !row.storage || row.storage->retiring()) { return false; }
+  }
+  return true;
+}
+}
+namespace {
+bool NativeProfileCaller(NativeProfileQuery& d) noexcept {
+  auto* t=ActualRosterThread();
+  if(!t || t->native_frame_thread_identity().process_type!=X_PROCTYPE_TITLE)return false;
+  d.thread=t->thread_id();d.pcr=t->pcr_ptr();
+  if(const auto* c=t->thread_state()->context()){d.lr=c->lr;d.sp=c->r[1];}
+  return true;
+}
+uint32_t NativeProfileBoundary(const char* b) noexcept {
+  return b && !std::strcmp(b,"ForegroundReady")?3:b && !std::strcmp(b,"Bootstrap")?1:2;
+}
+}
+void ProfileManager::RecordNativeProfileQuery(uint32_t ordinal,uint32_t slot,
+    uint32_t status,uint64_t value,uint32_t flags) const noexcept {
+  auto* a=roster_authority_.get();
+  if(!a || !a->diagnostic_enabled.load(std::memory_order_acquire))return;
+  NativeProfileQuery d;d.ordinal=ordinal;d.slot=slot;d.status=status;d.value=value;d.flags=flags;
+  if(!NativeProfileCaller(d))return;
+  d.ordinary=a->ordinary.load(std::memory_order_acquire);d.open=a->open.load(std::memory_order_acquire);
+  if(ordinal==0x210 || ordinal==0x20A)a->first_query[ordinal==0x210?0:1][slot<4?slot:4].Record(d);
+}
+void ProfileManager::RecordNativeSigninUi(uint32_t user,uint32_t users,uint32_t flags,
+    uint32_t overlap,uint32_t result,uint32_t route,uint32_t stage,uint32_t native_owned) const noexcept {
+  auto* a=roster_authority_.get();
+  if(!a || !a->diagnostic_enabled.load(std::memory_order_acquire))return;
+  NativeSigninUiObservation d;
+  if(!NativeProfileCaller(d.caller))return;
+  d.user=user;d.users=users;d.flags=flags;d.overlap=overlap;d.result=result;
+  d.route=route;d.stage=stage;d.native_owned=native_owned;
+  d.caller.ordinary=a->ordinary.load(std::memory_order_acquire);
+  d.caller.open=a->open.load(std::memory_order_acquire);a->first_signin_ui.Record(d);
+}
+void ProfileManager::ReportNativeProfileDiagnostics(const char* boundary) const noexcept {
+  if(XThread::GetCurrentFiberThread() || global_critical_region::is_held_by_current_thread())return;
+  try {
+    const auto a=roster_authority_;
+    if(!a || !a->diagnostic_enabled.load(std::memory_order_acquire))return;
+    const uint64_t current=a->diagnostic_current_epoch.load(std::memory_order_acquire),
+        selected=a->diagnostic_selected_epoch.load(std::memory_order_acquire),
+        intent=a->diagnostic_intent.load(std::memory_order_acquire),
+        operation=a->diagnostic_operation.load(std::memory_order_acquire);
+    const uint32_t phase=a->diagnostic_phase.load(std::memory_order_acquire),
+        available=a->diagnostic_available.load(std::memory_order_acquire);
+    const bool pending=a->diagnostic_pending.load(std::memory_order_acquire);
+    std::array<uint64_t,4> current_xuid{},selected_xuid{};
+    const bool ordinary=a->ordinary.load(std::memory_order_acquire),open=a->open.load(std::memory_order_acquire);
+    for(size_t i=0;i<4;++i){
+      current_xuid[i]=a->diagnostic_current_xuid[i].load(std::memory_order_acquire);
+      selected_xuid[i]=a->diagnostic_selected_xuid[i].load(std::memory_order_acquire);
+    }
+    NativeSigninUiObservation ui;uint32_t uis=0;const bool uia=a->first_signin_ui.Copy(ui,&uis);
+    const uint32_t cut=NativeProfileBoundary(boundary);
+    static NativeSystemUiTraceLimiter state_trace,ui_trace;
+    static std::array<NativeSystemUiTraceLimiter,4> projection_trace;
+    static std::array<std::array<NativeSystemUiTraceLimiter,5>,2> query_trace;
+    state_trace.EmitTransition((uint64_t(ordinary)<<63)^selected^intent^(uint64_t(phase)<<48),"profile","native_projection_state",
+      {{"boundary",cut},{"available",available},{"open",open},{"ordinary",ordinary},{"current_epoch",current},{"selected_epoch",selected},
+       {"intent",intent},{"operation",operation},{"phase",phase},{"pending",pending}},
+      {{"current0",current_xuid[0]},{"current1",current_xuid[1]},{"current2",current_xuid[2]},{"current3",current_xuid[3]},
+       {"selected0",selected_xuid[0]},{"selected1",selected_xuid[1]},{"selected2",selected_xuid[2]},{"selected3",selected_xuid[3]}});
+    for(size_t slot=0;slot<4;++slot){
+    NativeProfileProjection p;uint32_t ps=0;const bool pa=a->first_projection[slot].Copy(p,&ps);
+    projection_trace[slot].EmitTransition(pa,"profile","first_title_projection",
+      {{"boundary",cut},{"complete",pa},{"capture_state",ps},{"available",p.available},{"reason",p.reason},{"bucket",slot},{"slot",p.slot},{"thread",p.thread},{"pcr",p.pcr},
+       {"lr",p.lr},{"sp",p.sp},{"ordinary",p.ordinary},{"scoped",p.scoped},{"following",p.following},{"profile_present",p.profile_present}},
+      {{"current_epoch",p.current_epoch},{"selected_epoch",p.selected_epoch},{"selected_xuid",p.selected_xuid},{"intent",p.intent},{"operation",p.operation},{"phase",p.phase}});
+    }
+    for(size_t index=0;index<2;++index)for(size_t slot=0;slot<5;++slot){
+      NativeProfileQuery q;const auto& cell=a->first_query[index][slot];uint32_t qs=0;const bool complete=cell.Copy(q,&qs);
+      query_trace[index][slot].EmitTransition(complete,"profile","first_title_query",
+      {{"boundary",cut},{"complete",complete},{"capture_state",qs},{"ordinal",index?0x20Au:0x210u},{"bucket",slot},{"slot",q.slot},
+       {"status",q.status},{"value",q.value},{"flags",q.flags},{"thread",q.thread},{"pcr",q.pcr},
+       {"lr",q.lr},{"sp",q.sp},{"ordinary",q.ordinary},{"open",q.open}});
+    }
+    ui_trace.EmitTransition(uia,"profile","first_title_signin_ui",
+      {{"boundary",cut},{"complete",uia},{"capture_state",uis},{"user",ui.user},{"users",ui.users},{"flags",ui.flags},{"overlap",ui.overlap},{"result",ui.result},
+       {"route",ui.route},{"stage",ui.stage},{"native_owned",ui.native_owned},{"thread",ui.caller.thread},{"pcr",ui.caller.pcr},
+       {"lr",ui.caller.lr},{"sp",ui.caller.sp},{"ordinary",ui.caller.ordinary},{"open",ui.caller.open}});
+  }catch(...){/* Advisory only. No admission, result, or lifetime changes. */}
+}
+HostRoster::HostRoster(std::shared_ptr<const State> s) : state_(std::move(s)) {}
+const std::array<ProfileRosterSlot, 4>& HostRoster::slots() const { return state_->slots; }
+uint64_t HostRoster::epoch() const { return state_->epoch; }
+ProfileRosterIntent::ProfileRosterIntent(std::shared_ptr<State> s) : state_(std::move(s)) {}
+std::shared_ptr<const HostRoster> ProfileRosterIntent::old_roster() const { return state_->old_roster; }
+std::shared_ptr<const HostRoster> ProfileRosterIntent::prepared_roster() const { return state_->new_roster; }
+ProfileRosterResult ProfileRosterIntent::result() const {
+  auto out = state_->result;
+  out.phase = state_->phase.load(std::memory_order_acquire);
+  return out;
+}
+const std::array<uint8_t, 4 * 0x188>& ProfileRosterIntent::NativeRowsForPrepared() const {
+  return state_->native_rows;
+}
+ProfileRosterPublicationCell::ProfileRosterPublicationCell(std::shared_ptr<State> s)
+    : state_(std::move(s)) {}
+bool ProfileRosterPublicationCell::PublishFromNative() noexcept {
+  auto* s = state_.get();
+  if (!s || !s->armed.load(std::memory_order_acquire) ||
+      !s->authority->open.load(std::memory_order_acquire)) { return false; }
+  // Exact actual native issuer/frame/Task validation precedes this call. No
+  // resource owner is copied/destroyed at this guest publication instruction.
+  auto expected = s->old_envelope;
+  if (!s->authority->selected.compare_exchange_strong(expected, s->new_envelope,
+          std::memory_order_release, std::memory_order_relaxed)) { return false; }
+  s->armed.store(false, std::memory_order_release);
+  s->intent->phase.store(ProfileRosterPhase::kPublished, std::memory_order_release);
+  s->authority->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kPublished),std::memory_order_release);
+  s->authority->DiagnosticSelected(s->new_envelope);
+  return true;
+}
+ProfileRosterNativeBinding::ProfileRosterNativeBinding(std::shared_ptr<State> s)
+    : state_(std::move(s)) {}
+uint64_t ProfileRosterNativeBinding::nonce() const noexcept { return state_->nonce; }
+ProfileRosterNativeCompletion::ProfileRosterNativeCompletion(std::shared_ptr<const State> s)
+    : state_(std::move(s)) {}
+std::shared_ptr<const ProfileRosterNativeCompletion> ProfileRosterNativeCompletion::ForJoined(
+    const std::shared_ptr<ProfileRosterIntent>& intent,
+    const std::shared_ptr<const ProfileRosterNativeBinding>& binding, uint64_t nonce) {
+  if (!intent || !binding || !nonce || binding->nonce() != nonce ||
+      intent->state_->phase.load(std::memory_order_acquire) != ProfileRosterPhase::kPublished) { return {}; }
+  const auto authority = intent->state_->authority.lock();
+  if (!authority || !authority->open.load(std::memory_order_acquire) ||
+      authority->binding != binding || binding->state_->authority.lock() != authority) { return {}; }
+  auto s = std::make_shared<State>();
+  s->authority = authority; s->intent = intent->state_;
+  s->binding = binding.get(); s->nonce = nonce;
+  return std::shared_ptr<const ProfileRosterNativeCompletion>(new ProfileRosterNativeCompletion(std::move(s)));
+}
+ProfileRosterNativeReadTicket::ProfileRosterNativeReadTicket(std::shared_ptr<State> s)
+    : state_(std::move(s)) {}
+std::shared_ptr<ProfileRosterNativeReadTicket> ProfileRosterIntent::NativeReadTicket(
+    bool following, const ProfileRosterNativeBinding& binding, std::error_code* error) {
+  if (error) { error->clear(); }
+  const auto fail = [&](std::errc reason) -> std::shared_ptr<ProfileRosterNativeReadTicket> {
+    if (error) { *error = std::make_error_code(reason); }
+    return {};
+  };
+  const auto authority = state_->authority.lock();
+  if (!authority || !authority->open.load(std::memory_order_acquire)) { return fail(std::errc::operation_canceled); }
+  auto entered = authority->gate->Acquire();
+  if (!entered) { return fail(std::errc::operation_canceled); }
+  std::unique_lock lock(entered->owner().profile_mount_mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) { return fail(std::errc::device_or_resource_busy); }
+  if (!authority->pending ||
+      authority->pending->intent.get() != this || authority->binding.get() != &binding ||
+      state_->phase.load(std::memory_order_acquire) != ProfileRosterPhase::kPrepared) { return fail(std::errc::operation_canceled); }
+  auto s = std::make_shared<ProfileRosterNativeReadTicket::State>();
+  s->authority = authority; s->binding = &binding;
+  s->operation = state_->operation; s->following = following;
+  s->fixed = authority->pending->before.get();
+  s->writer_old = s->fixed; s->writer_new = authority->pending->after.get();
+  auto ticket = std::shared_ptr<ProfileRosterNativeReadTicket>(new ProfileRosterNativeReadTicket(std::move(s)));
+  if (authority->tickets.size() >= 4096) { return fail(std::errc::no_buffer_space); }
+  authority->tickets.push_back(ticket);
+  authority->pending->tickets.push_back(ticket);
+  return ticket;
+}
+ProfileRosterNativeReadScope::ProfileRosterNativeReadScope(std::unique_ptr<State> s)
+    : state_(std::move(s)) {}
+ProfileRosterNativeReadScope::~ProfileRosterNativeReadScope() {
+  // An entered wrong-thread scope must be retained by its native work owner;
+  // destructing it would leave an actual ThreadState pointing at dead memory.
+  assert_true(!state_->entered);
+}
+std::unique_ptr<ProfileRosterNativeReadScope> ProfileRosterNativeReadScope::Prepare(
+    std::shared_ptr<ProfileRosterNativeReadTicket> ticket,
+    std::shared_ptr<const ProfileRosterNativeBinding> binding) {
+  if (!ticket || !binding || ticket->state_->binding != binding.get() ||
+      !ticket->state_->open.load(std::memory_order_acquire) ||
+      !ticket->state_->authority->open.load(std::memory_order_acquire)) { return {}; }
+  auto s = std::make_unique<State>(); s->ticket = std::move(ticket); s->binding = std::move(binding);
+  return std::unique_ptr<ProfileRosterNativeReadScope>(new ProfileRosterNativeReadScope(std::move(s)));
+}
+bool ProfileRosterNativeReadScope::Enter(KernelState* kernel, XThread* thread,
+    cpu::ThreadState* cpu, uint32_t task, uint64_t birth, uint64_t work,
+    uint32_t root, uint64_t root_generation) noexcept {
+  auto& s = *state_;
+  auto& t = *s.ticket->state_;
+  if (s.entered || !kernel || !thread || !cpu || !task || !birth || !work ||
+      !root || !root_generation || ActualRosterThread() != thread ||
+      thread->kernel_state() != kernel || thread->thread_state() != cpu ||
+      t.authority->kernel != kernel || !t.open.load(std::memory_order_acquire) ||
+      !t.authority->EnterScope()) { return false; }
+  if (!t.open.load(std::memory_order_acquire)) { t.authority->LeaveScope(); return false; }
+  s.previous = cpu->native_profile_roster_read_.load(std::memory_order_acquire);
+  // Nested actual work can borrow only a scope from this same exact issuer.
+  if (s.previous) {
+    auto* parent = static_cast<ProfileRosterNativeReadScope*>(s.previous);
+    if (!parent->state_->entered || parent->state_->kernel != kernel ||
+        parent->state_->binding != s.binding || parent->state_->cpu != cpu) {
+      t.authority->LeaveScope(); return false;
+    }
+  }
+  s.kernel = kernel; s.thread = thread; s.cpu = cpu; s.task = task;
+  s.task_birth = birth; s.work_generation = work; s.root_hmodule = root;
+  s.root_generation = root_generation; s.entered = true;
+  cpu->native_profile_roster_read_.store(this, std::memory_order_release);
+  return true;
+}
+bool ProfileRosterNativeReadScope::Leave() noexcept {
+  auto& s = *state_;
+  if (!s.entered || ActualRosterThread() != s.thread ||
+      s.thread->thread_state() != s.cpu ||
+      s.cpu->native_profile_roster_read_.load(std::memory_order_acquire) != this) { return false; }
+  s.cpu->native_profile_roster_read_.store(s.previous, std::memory_order_release);
+  s.entered = false;
+  s.ticket->state_->authority->LeaveScope();
+  return true;
+}
+bool ProfileRosterNativeReadScope::DetachAtActualKernelStop() noexcept {
+  auto& s = *state_;
+  if (!s.entered) { return true; }
+  if (!s.cpu || !s.thread || s.thread->thread_state() != s.cpu) { return false; }
+  void* expected = this;
+  if (!s.cpu->native_profile_roster_read_.compare_exchange_strong(
+          expected, s.previous, std::memory_order_acq_rel)) { return false; }
+  s.entered = false;
+  s.ticket->state_->authority->LeaveScope();
+  return true;
+}
+const ProfileRosterNativeReadScope* ProfileRosterNativeReadScope::FromActualThread(
+    KernelState* kernel, cpu::ThreadState* cpu) noexcept {
+  if (!kernel || !cpu) { return nullptr; }
+  auto* thread = ActualRosterThread();
+  if (!thread || thread->kernel_state() != kernel || thread->thread_state() != cpu) { return nullptr; }
+  const auto* scope = static_cast<const ProfileRosterNativeReadScope*>(
+      cpu->native_profile_roster_read_.load(std::memory_order_acquire));
+  return scope && scope->state_->entered && scope->state_->kernel == kernel &&
+      scope->state_->cpu == cpu && scope->state_->thread == thread &&
+      scope->state_->ticket->state_->authority->open.load(std::memory_order_acquire)
+      ? scope : nullptr;
+}
+
+void ProfileManager::InitializeRosterAuthority() {
+  auto a = std::make_shared<ProfileRosterAuthority>();
+  a->owner = this; a->kernel = kernel_state_; a->gate = account_commit_gate_;
+  a->current = std::make_shared<ProfileRosterAuthority::Envelope>();
+  a->current->roster.reset(new HostRoster(std::make_shared<HostRoster::State>()));
+  a->selected.store(a->current.get(), std::memory_order_release);
+  a->DiagnosticCurrent(a->current.get());a->DiagnosticSelected(a->current.get());
+  roster_authority_ = std::move(a);
+}
+void ProfileManager::BeginRosterStop() {
+  if (roster_authority_) { roster_authority_->open.store(false, std::memory_order_release); }
+}
+void ProfileManager::CloseRosterAuthority() {
+  const auto a = roster_authority_;
+  if (!a) { return; }
+  a->open.store(false, std::memory_order_release);
+  a->ordinary.store(false, std::memory_order_release);
+  // Native owning Service has stopped real CPU/GPU work and released entered
+  // ThreadState scopes before this PM teardown. Wait joins only real entries.
+  auto n = a->scopes.load(std::memory_order_acquire);
+  while (n) { a->scopes.wait(n, std::memory_order_acquire); n = a->scopes.load(std::memory_order_acquire); }
+  auto retire = [](const auto& envelope) {
+    if (!envelope) { return; }
+    for (const auto& row : envelope->rows) {
+      if (row.identity) { row.identity->Retire(); }
+      if (row.model) { row.model->Retire(); }
+      if (row.storage) { row.storage->Retire(); }
+    }
+  };
+  retire(a->current);
+  for (const auto& old : a->retired) { retire(old); }
+  if (a->pending) { retire(a->pending->before); retire(a->pending->after); }
+  auto pending = std::move(a->pending);
+  a->selected.store(nullptr, std::memory_order_release);
+  a->DiagnosticSelected(nullptr);a->diagnostic_pending.store(false,std::memory_order_release);
+  a->native_owner.reset(); a->binding.reset();
+  for (auto& weak : a->tickets) {
+    if (auto ticket = weak.lock()) { ticket->state_->open.store(false, std::memory_order_release); }
+  }
+  a->tickets.clear();
+  if (pending) {
+    if (pending->cell) { pending->cell->state_->armed.store(false, std::memory_order_release); }
+    for (auto& weak : pending->tickets) {
+      if (auto t = weak.lock()) { t->state_->open.store(false, std::memory_order_release); }
+    }
+    pending->intent->state_->phase.store(ProfileRosterPhase::kUncertain, std::memory_order_release);
+    a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kUncertain),std::memory_order_release);
+    for (auto& p : pending->account_pauses) { if (p) { p->ReleaseKnownOutcome(); } }
+    for (auto& p : pending->model_pauses) { if (p) { p->ReleaseKnownOutcome(); } }
+  }
+  // Destruction is outside metadata/namespace/native locks, including for a
+  // previously uncertain operation. Escaped handles retain metadata only.
+  a->retired.clear(); a->current.reset(); pending.reset(); a->owner = nullptr;
+}
+ProfileRosterExpected ProfileManager::CaptureRosterExpected(std::error_code& error) const {
+  error.clear(); ProfileRosterExpected out;
+  std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+  const auto a = roster_authority_;
+  if (!lock.owns_lock()) { error = Busy(); return out; }
+  if (!a || !a->open.load(std::memory_order_acquire) || a->pending ||
+      !a->ordinary.load(std::memory_order_acquire)) { error = Stale(); return out; }
+  out.roster = a->current->roster;
+  auto proof = std::make_shared<ProfileRosterExpected::Proof>();
+  proof->authority = a; proof->exact = out.roster.get(); out.proof_ = std::move(proof);
+  return out;
+}
+std::shared_ptr<const HostRoster> ProfileManager::CaptureSelectedRoster(
+    NativeProfileProjection* diagnostic) const {
+  const auto a = roster_authority_;
+  if (!a || !a->open.load(std::memory_order_acquire)) { if(diagnostic)diagnostic->reason=1; return {}; }
+  std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) { if(diagnostic)diagnostic->reason=2; return {}; }
+  if(diagnostic){
+    diagnostic->available|=1;
+    diagnostic->current_epoch=a->current?a->current->roster->epoch():0;
+    if(a->pending){diagnostic->intent=reinterpret_cast<uintptr_t>(a->pending->intent.get());
+      diagnostic->operation=a->pending->intent->state_->operation;
+      diagnostic->phase=uint32_t(a->pending->intent->state_->phase.load(std::memory_order_acquire));}
+  }
+  ProfileRosterAuthority::Envelope* e = nullptr;
+  auto* actual = ActualRosterThread();
+  const auto* scope = actual ? ProfileRosterNativeReadScope::FromActualThread(kernel_state_, actual->thread_state()) : nullptr;
+  if(diagnostic && actual){
+    diagnostic->available|=2;diagnostic->thread=actual->thread_id();diagnostic->pcr=actual->pcr_ptr();
+    diagnostic->process=actual->native_frame_thread_identity().process_type;
+    if(const auto* c=actual->thread_state()->context()){diagnostic->lr=c->lr;diagnostic->sp=c->r[1];}
+  }
+  if (scope && scope->state_->ticket->state_->authority == a) {
+    const auto& t = *scope->state_->ticket->state_;
+    if(diagnostic){diagnostic->scoped=1;diagnostic->following=t.following;}
+    e = t.following ? a->selected.load(std::memory_order_acquire) : t.fixed;
+    if (t.following && e != t.writer_old && e != t.writer_new) { if(diagnostic)diagnostic->reason=3; return {}; }
+  } else {
+    const bool ordinary=a->ordinary.load(std::memory_order_acquire);
+    if(diagnostic){diagnostic->ordinary=ordinary;diagnostic->available|=16;}
+    if(ordinary)e = a->selected.load(std::memory_order_acquire);
+  }
+  if(diagnostic){
+    diagnostic->reason=e?0:4;
+    if(e){diagnostic->available|=4;diagnostic->selected_epoch=e->roster->epoch();
+      if(diagnostic->slot<4)diagnostic->selected_xuid=e->roster->slots()[diagnostic->slot].xuid;}
+  }
+  return e ? e->roster : nullptr;
+}
+// These owned captures are one projection of the same actual selected roster.
+// The pending/current envelopes remain preheld by the owning PM until native
+// work has joined; no container mutation happens at the native selector.
+std::shared_ptr<UserProfile> ProfileManager::CaptureRosterProfile(uint8_t slot) const {
+  const auto a = roster_authority_; if (!a || slot >= 4) { return {}; }
+  NativeProfileProjection diagnostic;diagnostic.slot=slot;
+  // Actual caller scalars are available even if either original try-lock fails.
+  NativeProfileQuery caller;
+  if(NativeProfileCaller(caller)){
+    diagnostic.available|=2;diagnostic.process=X_PROCTYPE_TITLE;
+    diagnostic.thread=caller.thread;diagnostic.pcr=caller.pcr;diagnostic.lr=caller.lr;diagnostic.sp=caller.sp;
+  }
+  const auto record=[&]{
+    if(a->diagnostic_enabled.load(std::memory_order_acquire) && diagnostic.process==X_PROCTYPE_TITLE)
+      a->first_projection[slot].Record(diagnostic);
+  };
+  const auto roster = CaptureSelectedRoster(&diagnostic); if (!roster) { record(); return {}; }
+  std::unique_lock lock(profile_mount_mutex_, std::try_to_lock); if (!lock.owns_lock()) { diagnostic.reason=5;record();return {}; }
+  const ProfileRosterAuthority::Envelope* e = nullptr;
+  if (a->current && a->current->roster == roster) { e = a->current.get(); }
+  if (a->pending) {
+    if (a->pending->before->roster == roster) { e = a->pending->before.get(); }
+    if (a->pending->after->roster == roster) { e = a->pending->after.get(); }
+  }
+  for (const auto& old : a->retired) { if (old->roster == roster) { e = old.get(); } }
+  diagnostic.available|=8;diagnostic.profile_present=e && bool(e->rows[slot].profile);
+  if(!diagnostic.profile_present)diagnostic.reason=6;
+  record();
+  return e ? e->rows[slot].profile : nullptr;
+}
+std::shared_ptr<ProfileGpdModelAuthority> ProfileManager::CaptureRosterModel(uint64_t xuid) const {
+  const auto a = roster_authority_; const auto roster = CaptureSelectedRoster(); if (!a || !roster) { return {}; }
+  std::unique_lock lock(profile_mount_mutex_, std::try_to_lock); if (!lock.owns_lock()) { return {}; }
+  auto find = [&](const auto& e) -> std::shared_ptr<ProfileGpdModelAuthority> {
+    if (e && e->roster == roster) { for (const auto& row : e->rows) { if (row.profile && row.profile->xuid() == xuid) { return row.model; } } }
+    return {};
+  };
+  if (auto v = find(a->current)) { return v; }
+  if (a->pending) { if (auto v = find(a->pending->before)) { return v; } if (auto v = find(a->pending->after)) { return v; } }
+  for (const auto& e : a->retired) { if (auto v = find(e)) { return v; } } return {};
+}
+std::shared_ptr<const ProfileAccountSnapshot> ProfileManager::CaptureRosterAccount(uint64_t xuid) const {
+  const auto a = roster_authority_; const auto roster = CaptureSelectedRoster(); if (!a || !roster) { return {}; }
+  std::unique_lock lock(profile_mount_mutex_, std::try_to_lock); if (!lock.owns_lock()) { return {}; }
+  auto find = [&](const auto& e) -> std::shared_ptr<const ProfileAccountSnapshot> {
+    if (e && e->roster == roster) { for (const auto& row : e->rows) { if (row.profile && row.profile->xuid() == xuid) { return row.account; } } } return {};
+  };
+  if (auto v = find(a->current)) { return v; }
+  if (a->pending) { if (auto v = find(a->pending->before)) { return v; } if (auto v = find(a->pending->after)) { return v; } }
+  for (const auto& e : a->retired) { if (auto v = find(e)) { return v; } } return {};
+}
+std::shared_ptr<ProfileAccountIdentity> ProfileManager::CaptureRosterIdentity(uint64_t xuid) const {
+  const auto account = CaptureRosterAccount(xuid); return account ? account->identity() : nullptr;
+}
+
+std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRoster(
+    const ProfileRosterDesired& desired, const ProfileRosterExpected& expected,
+    std::error_code& error) {
+  return PrepareRosterAttempt(desired, expected, error, nullptr);
+}
+std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
+    const ProfileRosterDesired& desired, const ProfileRosterExpected& expected,
+    std::error_code& error, std::shared_ptr<ProfileRosterIntent>* retained_attempt,
+    const ProfileDeletionReservation* deletion) {
+  if (retained_attempt) { retained_attempt->reset(); }
+  error.clear();
+  if (xe::global_critical_region::is_held_by_current_thread()) { error = Busy(); return {}; }
+  auto use = account_commit_gate_->Acquire();
+  if (!use) { error = Stale(); return {}; }
+  const auto a = roster_authority_;
+  std::vector<std::shared_ptr<ProfileRosterAuthority::Envelope>> reap;
+  std::shared_ptr<ProfileRosterIntent> intent;
+  try {
+  auto operation = std::make_shared<ProfileRosterAuthority::Operation>();
+  auto state = std::make_shared<ProfileRosterIntent::State>();
+  auto next = std::make_shared<ProfileRosterAuthority::Envelope>();
+  auto metadata = std::make_shared<HostRoster::State>();
+  intent = std::shared_ptr<ProfileRosterIntent>(new ProfileRosterIntent(state));
+  operation->intent = intent; operation->desired = desired; operation->after = next;
+  std::set<uint64_t> unique;
+  for (const auto xuid : desired.xuids) {
+    if (xuid && !unique.insert(xuid).second) { error = std::make_error_code(std::errc::invalid_argument); return {}; }
+  }
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { error = Busy(); return {}; }
+    bool deleting = false;
+    if (deletion && deletion->owner == this && deletion->xuid &&
+        deletion->metadata && deletion->source && expected.roster) {
+      const auto entry = retiring_profiles_.find(deletion->xuid);
+      const auto known = account_metadata_.find(deletion->xuid);
+      const auto& source = *deletion->source;
+      deleting = retiring_profiles_.size() == 1 && entry != retiring_profiles_.end() &&
+          std::addressof(*entry) == deletion->retirement &&
+          known != account_metadata_.end() && known->second == deletion->metadata &&
+          accounts_.contains(deletion->xuid) &&
+          !profile_discovery_conflicts_.contains(deletion->xuid) &&
+          source.available && source.profile_writable && source.storage &&
+          source.managed_identity && !source.storage->retiring() &&
+          !source.managed_identity->retiring() &&
+          deletion->metadata->xuid() == deletion->xuid &&
+          deletion->metadata->source_id() == source.source.id &&
+          deletion->metadata->device_id() == source.source.device_id &&
+          deletion->metadata->source_generation() == source.generation &&
+          deletion->metadata->source_root() == source.managed_identity->source()->path();
+      bool removed = false;
+      for (uint8_t slot = 0; slot != 4; ++slot) {
+        const auto old_xuid = expected.roster->slots()[slot].xuid;
+        removed |= old_xuid == deletion->xuid;
+        deleting &= !desired.origins[slot] && desired.xuids[slot] ==
+            (old_xuid == deletion->xuid ? 0 : old_xuid);
+      }
+      deleting &= removed;
+    }
+    if ((deletion && !deleting) || !a || !a->open.load(std::memory_order_acquire) || a->pending ||
+        !a->ordinary.load(std::memory_order_acquire) || !expected.proof_ ||
+        expected.proof_->authority.lock() != a || !expected.roster ||
+        expected.roster != a->current->roster || expected.proof_->exact != expected.roster.get() ||
+        preparing_slots_.any() || (!retiring_profiles_.empty() && !deleting) || !a->next_operation) {
+      error = Stale(); return {};
+    }
+    // Only expired/revoked old tickets can be discarded. Real entered scopes
+    // hold their native resources until Leave/actual native rundown.
+    std::erase_if(a->tickets, [](const auto& weak) { return weak.expired(); });
+    if (!a->scopes.load(std::memory_order_acquire)) { reap.swap(a->retired); }
+    operation->before = a->current;
+    state->authority = a; state->operation = a->next_operation++;
+    state->old_roster = expected.roster; state->result.before_epoch = expected.roster->epoch();
+    metadata->epoch = expected.roster->epoch();
+    bool changed = false;
+    for (uint8_t slot = 0; slot != 4; ++slot) {
+      const auto& old = expected.roster->slots()[slot];
+      bool same = old.xuid == desired.xuids[slot];
+      if (same && desired.origins[slot] && desired.xuids[slot]) {
+        const auto& origin = *desired.origins[slot];
+        same = old.device_id == origin.device_id && old.source_id == origin.source_id &&
+               old.source_generation == origin.source_generation;
+      }
+      state->result.changed[slot] = !same; changed |= !same;
+      if (same) { next->rows[slot] = operation->before->rows[slot]; metadata->slots[slot] = old; }
+      if (!same && desired.xuids[slot]) {
+        if (!next_profile_sign_in_generation_ || next_profile_sign_in_generation_ == UINT64_MAX) {
+          error = std::make_error_code(std::errc::value_too_large); return {};
+        }
+        metadata->slots[slot].xuid = desired.xuids[slot];
+        metadata->slots[slot].sign_in_generation = next_profile_sign_in_generation_++;
+      }
+    }
+    if (changed) {
+      if (metadata->epoch == UINT64_MAX) { error = std::make_error_code(std::errc::value_too_large); return {}; }
+      ++metadata->epoch;
+    }
+    state->result.after_epoch = metadata->epoch;
+    next->roster.reset(new HostRoster(metadata)); state->new_roster = next->roster;
+    // Allocate all destination-map nodes before native arm. These maps also
+    // retain genuine signed-out cached metadata without synthesizing Accounts.
+    // Only selected-row nodes are prepared. Unrelated signed-out inventory
+    // and Account writers remain independent and cannot be rolled back by a
+    // whole-map copy made before native execution.
+    retired_gpd_models_.reserve(retired_gpd_models_.size() + 4);
+    a->retired.reserve(a->retired.size() + 1); // no allocation after publication
+    a->pending = operation;
+    if (retained_attempt) { *retained_attempt = intent; }
+    a->diagnostic_intent.store(reinterpret_cast<uintptr_t>(intent.get()),std::memory_order_release);
+    a->diagnostic_operation.store(state->operation,std::memory_order_release);
+    a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kPreparing),std::memory_order_release);
+    a->diagnostic_pending.store(true,std::memory_order_release);
+    a->diagnostic_available.fetch_or(4,std::memory_order_release);
+    for (uint8_t slot = 0; slot != 4; ++slot) {
+      if (state->result.changed[slot]) { preparing_slots_.set(slot); }
+      if (desired.xuids[slot]) { preparing_profiles_.insert(desired.xuids[slot]); }
+    }
+  }
+  reap.clear(); // native owners released after leaving the PM metadata lock
+  auto fail = [&](std::error_code reason) -> std::shared_ptr<ProfileRosterIntent> {
+    // The pending metadata may already be observed by host cleanup retries.
+    // Keep it immutable; this failed Prepare returns its real reason directly.
+    error = reason ? reason : Stale();
+    CancelRoster(intent); // genuine cleanup, retaining canceling if real busy
+    return {};
+  };
+  auto fail_locked = [&](std::unique_lock<std::recursive_mutex>& lock, std::error_code reason) {
+    if (lock.owns_lock()) { lock.unlock(); }
+    return fail(reason);
+  };
+  // Existing old roster stays valid while affected writers are reversibly
+  // excluded. No Logout, model retirement or epoch publication occurs here.
+  for (uint8_t slot = 0; slot != 4; ++slot) {
+    const auto& old = operation->before->rows[slot];
+    if (state->result.changed[slot] && old.storage && old.storage->retiring()) {
+      if (!old.identity || !old.identity->writes_drained()) { return fail(Busy()); }
+      continue; // actual removal already denied storage writes; never reopen it
+    }
+    if (old.identity) {
+      operation->account_pauses[slot] = old.identity->PauseForRoster(error);
+      if (!operation->account_pauses[slot]) { return fail(error); }
+    }
+    if (state->result.changed[slot] && old.model) {
+      operation->model_pauses[slot] = old.model->PauseForRoster(error);
+      if (!operation->model_pauses[slot]) { return fail(error); }
+    }
+  }
+  for (uint8_t slot = 0; slot != 4; ++slot) {
+    auto& row = next->rows[slot];
+    const uint64_t xuid = desired.xuids[slot];
+    if (!xuid) { continue; }
+    if (state->result.changed[slot]) {
+      std::string source_id;
+      if (desired.origins[slot]) { source_id = desired.origins[slot]->source_id; }
+      if (source_id.empty()) {
+        std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+        if (!lock.owns_lock()) { return fail_locked(lock, Busy()); }
+        const auto known = account_metadata_.find(xuid);
+        if (known == account_metadata_.end() || known->second->source_id().empty() ||
+            profile_discovery_conflicts_.contains(xuid)) {
+          return fail_locked(lock, std::make_error_code(std::errc::no_such_file_or_directory));
+        }
+        source_id = known->second->source_id();
+      }
+      const auto source = content_manager_.sources().Source(source_id);
+      if (!source || !source->available || !source->profile_writable || !source->storage ||
+          source->storage->retiring() || !source->managed_identity || source->managed_identity->retiring()) {
+        return fail(std::make_error_code(std::errc::no_such_device));
+      }
+      if (desired.origins[slot]) {
+        const auto& wanted = *desired.origins[slot];
+        if (source->source.device_id != wanted.device_id || source->generation != wanted.source_generation) {
+          return fail(Stale());
+        }
+      }
+      // An unsigned old Account writer is not a signed-in slot. Preserve the
+      // accepted retirement behavior and refuse until that real writer drains.
+      {
+        std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+        if (!lock.owns_lock()) { return fail_locked(lock, Busy()); }
+        const auto old = account_identities_.find(xuid);
+        if (old != account_identities_.end() && old->second->slot() == 0xFF) {
+          old->second->Retire();
+          if (!old->second->writes_drained()) { return fail_locked(lock, Busy()); }
+        }
+        for (const auto& retired : retired_account_identities_) {
+          if ((retired->storage()->xuid() == xuid || retired->slot() == slot) &&
+              !retired->writes_drained()) { return fail_locked(lock, Busy()); }
+        }
+      }
+      if (!MountProfileInternal(xuid, {}, {}, &*source)) { return fail(Busy()); }
+      operation->staged_mount[slot] = true;
+      row.storage = AcquireProfileStorageLease(xuid, error);
+      if (!row.storage || row.storage->source_id() != source_id ||
+          row.storage->source_generation() != source->generation ||
+          row.storage->device_id() != source->source.device_id) { return fail(error); }
+      const auto generation = metadata->slots[slot].sign_in_generation;
+      row.model = ProfileGpdModelAuthority::Create(xuid, slot, generation, row.storage, error);
+      const auto owner = content_manager_.ProfileIntents(source_id);
+      if (!row.model || !owner || (error = LoadGpdModel(row.model, row.storage, owner))) { return fail(error); }
+      row.identity = ProfileAccountIdentity::Capture(row.storage, slot, generation, error);
+      if (!row.identity) { return fail(error); }
+      operation->account_pauses[4 + slot] = row.identity->PauseForRoster(error);
+      if (!operation->account_pauses[4 + slot]) { return fail(error); }
+      metadata->slots[slot].source_id = source_id;
+      metadata->slots[slot].source_generation = source->generation;
+      metadata->slots[slot].device_id = source->source.device_id;
+    }
+    // Even unchanged/no-op rows must encode CURRENT durable paused Account,
+    // never a previously cached name or an invented native cache row.
+    row.account = ProfileAccountSnapshot::Load(row.identity, error);
+    if (!row.account) { return fail(error); }
+    auto bytes = std::span<uint8_t>(state->native_rows).subspan(slot * 0x188, 0x188);
+    if ((error = NativeLogonAccountInputs::EncodeRow(*row.account, bytes))) { return fail(error); }
+    if (desired.origins[slot] && desired.origins[slot]->original_account_row &&
+        !std::equal(bytes.begin(), bytes.end(), desired.origins[slot]->original_account_row->begin())) {
+      return fail(Stale());
+    }
+    auto cache = row.storage->device()->PrepareSnapshotCache({row.account->token()}, error);
+    if (!cache) { return fail(error); }
+    {
+      auto checked = row.storage->view()->ValidateSnapshotBatch({row.account->token()}, error);
+      if (checked) {
+        std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(std::move(checked));
+        auto commit = row.storage->device()->TryCommitSnapshotCache(cache, batch, error);
+        if (commit) { commit->Apply(); } // exact bytes, not roster publication
+        else if (!error) { error = Stale(); }
+      } else if (!error) { error = Stale(); }
+    }
+    if (error) { return fail(error); } // all native guards released before cleanup
+    const auto old_account = row.profile ? row.profile->account_info_.load(std::memory_order_acquire) : nullptr;
+    if (!old_account || std::memcmp(old_account.get(), &row.account->account(), sizeof(X_XAMACCOUNTINFO))) {
+      auto prepared_profile = std::make_shared<UserProfile>(xuid, &row.account->account(), row.model);
+      if (row.profile) {
+        // Ordinary Account data refresh is not a sign-in epoch. Preserve real
+        // transient properties and cached images while replacing only the
+        // detached Account projection before it can become selected.
+        std::scoped_lock fields(row.profile->prop_mutex, row.profile->profile_images_mutex_);
+        prepared_profile->properties_ = row.profile->properties_;
+        prepared_profile->profile_images_ = row.profile->profile_images_;
+      }
+      row.profile = std::move(prepared_profile);
+    }
+    operation->profiles.emplace(slot, row.profile);
+    operation->models.emplace(xuid, row.model);
+    operation->generations.emplace(xuid, metadata->slots[slot].sign_in_generation);
+    operation->identities.insert_or_assign(xuid, row.identity);
+    operation->snapshots.insert_or_assign(xuid, row.account);
+    operation->metadata.insert_or_assign(xuid, std::make_shared<const ProfileAccountMetadata>(*row.account));
+    operation->accounts.insert_or_assign(xuid, row.account->account());
+  }
+  // Drop signed-out identities/snapshots from the prepared signed-in maps;
+  // their immutable metadata/account inventory is retained independently.
+  for (const auto& row : operation->before->rows) {
+    if (row.profile && !operation->models.contains(row.profile->xuid())) {
+      operation->identities.erase(row.profile->xuid());
+      operation->snapshots.erase(row.profile->xuid());
+    }
+  }
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { return fail_locked(lock, Busy()); }
+    if (a->pending != operation || !a->open.load(std::memory_order_acquire) ||
+        a->current->roster != expected.roster || !BeforeCurrent(*operation) ||
+        !ProfileRosterAuthority::LogicalCurrent(*next)) { return fail_locked(lock, Stale()); }
+    state->phase.store(ProfileRosterPhase::kPrepared, std::memory_order_release);
+    a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kPrepared),std::memory_order_release);
+  }
+  return intent;
+  } catch (const std::bad_alloc&) {
+    error = std::make_error_code(std::errc::not_enough_memory);
+  } catch (...) {
+    error = std::make_error_code(std::errc::invalid_argument);
+  }
+  if (intent) { CancelRoster(intent); }
+  return {};
+}
+
+ProfileRosterResult ProfileManager::CancelRoster(const std::shared_ptr<ProfileRosterIntent>& intent) {
+  if (!intent) { ProfileRosterResult r; r.error = std::make_error_code(std::errc::invalid_argument); return r; }
+  auto use = account_commit_gate_->Acquire();
+  if (!use) { auto r = intent->result(); r.error = Stale(); return r; }
+  const auto a = roster_authority_;
+  std::shared_ptr<ProfileRosterAuthority::Operation> op;
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { auto r = intent->result(); r.error = Busy(); return r; }
+    if (!a || intent->state_->authority.lock() != a || !a->pending || a->pending->intent != intent) { return intent->result(); }
+    op = a->pending;
+    auto phase = intent->state_->phase.load(std::memory_order_acquire);
+    if (phase == ProfileRosterPhase::kNativeEntered || phase == ProfileRosterPhase::kPublished ||
+        phase == ProfileRosterPhase::kFinalizing || phase == ProfileRosterPhase::kUncertain) {
+      auto r = intent->result(); r.error = Busy(); return r; // native owns outcome
+    }
+    intent->state_->phase.store(ProfileRosterPhase::kCanceling, std::memory_order_release);
+    a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kCanceling),std::memory_order_release);
+  }
+  bool idle = false;
+  if (!op->settling.compare_exchange_strong(idle, true, std::memory_order_acq_rel)) {
+    auto r = intent->result(); r.error = Busy(); return r;
+  }
+  auto release = [&op](void*) { op->settling.store(false, std::memory_order_release); };
+  std::unique_ptr<void, decltype(release)> serialized(reinterpret_cast<void*>(1), release);
+  bool busy = false;
+  for (uint8_t slot = 0; slot != 4; ++slot) {
+    if (!op->staged_mount[slot]) { continue; }
+    if (!DismountProfile(op->after->rows[slot].profile ? op->after->rows[slot].profile->xuid()
+            : op->after->roster->slots()[slot].xuid)) { busy = true; }
+    else { op->staged_mount[slot] = false; }
+  }
+  if (busy) { auto r = intent->result(); r.error = Busy(); return r; }
+  for (auto& pause : op->account_pauses) { pause.reset(); }
+  for (auto& pause : op->model_pauses) { pause.reset(); }
+  {
+    std::lock_guard lock(profile_mount_mutex_);
+    if (a->pending != op) { auto r = intent->result(); r.error = Stale(); return r; }
+    for (uint8_t slot = 0; slot != 4; ++slot) { preparing_slots_.reset(slot); preparing_generations_[slot] = 0; }
+    for (auto xuid : op->desired.xuids) { preparing_profiles_.erase(xuid); }
+    for (auto& weak : op->tickets) {
+      if (auto ticket = weak.lock()) { ticket->state_->open.store(false, std::memory_order_release); }
+    }
+    a->pending.reset(); intent->state_->phase.store(ProfileRosterPhase::kCanceled, std::memory_order_release);
+    a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kCanceled),std::memory_order_release);
+    a->diagnostic_pending.store(false,std::memory_order_release);
+  }
+  return intent->result(); // op/native owners release outside metadata locks
+}
+
+ProfileRosterResult ProfileManager::CommitHostRoster(const std::shared_ptr<ProfileRosterIntent>& intent) {
+  if (!intent) { ProfileRosterResult r; r.error = std::make_error_code(std::errc::invalid_argument); return r; }
+  auto use = account_commit_gate_->Acquire();
+  if (!use) { auto r = intent->result(); r.error = Stale(); return r; }
+  const auto a = roster_authority_;
+  std::shared_ptr<ProfileRosterAuthority::Operation> op;
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { auto r = intent->result(); r.error = Busy(); return r; }
+    if (!a || !a->open.load(std::memory_order_acquire) || !a->pending ||
+        a->pending->intent != intent || a->binding ||
+        intent->state_->phase.load(std::memory_order_acquire) != ProfileRosterPhase::kPrepared) {
+      auto r = intent->result(); r.error = Stale(); return r;
+    }
+    op = a->pending;
+  }
+  for (const auto& row : op->after->rows) {
+    if (!row.account) { continue; }
+    std::error_code error = row.account->CheckAvailable();
+    auto checked = !error ? row.storage->view()->ValidateSnapshotBatch({row.account->token()}, error) : nullptr;
+    if (!checked) { auto r = intent->result(); r.error = error ? error : Stale(); return r; }
+  }
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock() || a->pending != op || a->binding ||
+        !BeforeCurrent(*op) ||
+        !ProfileRosterAuthority::LogicalCurrent(*op->after) ||
+        intent->state_->phase.load(std::memory_order_acquire) != ProfileRosterPhase::kPrepared) {
+      auto r = intent->result(); r.error = Busy(); return r;
+    }
+    a->selected.store(op->after.get(), std::memory_order_release);
+    a->DiagnosticSelected(op->after.get());
+    intent->state_->phase.store(ProfileRosterPhase::kPublished, std::memory_order_release);
+    a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kPublished),std::memory_order_release);
+  }
+  return SettleRoster(intent, false);
+}
+ProfileRosterResult ProfileManager::AdoptRoster(const ProfileRosterDesired& desired,
+    const ProfileRosterExpected& expected) {
+  return AdoptRosterInternal(desired, expected, nullptr);
+}
+ProfileRosterResult ProfileManager::AdoptRosterInternal(const ProfileRosterDesired& desired,
+    const ProfileRosterExpected& expected, const ProfileDeletionReservation* deletion) {
+  std::error_code error;
+  auto intent = PrepareRosterAttempt(desired, expected, error, nullptr, deletion);
+  if (!intent) { ProfileRosterResult r; r.error = error; return r; }
+  std::shared_ptr<::xe::kernel::NativeProfileIdentityOwner> owner;
+  bool claimed = false;
+  {
+    std::lock_guard lock(profile_mount_mutex_);
+    claimed = bool(roster_authority_->binding);
+    owner = roster_authority_->native_owner.lock();
+  }
+  if (!claimed) { return CommitHostRoster(intent); }
+  if (!owner) { auto result = CancelRoster(intent); result.error = Busy(); return result; }
+  return owner->SubmitPrepared(intent); // no PM/native/FS lock across dispatch
+}
+
+std::shared_ptr<const ProfileRosterNativeBinding> ProfileManager::ClaimNativeRosterFactory() {
+  std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+  const auto a = roster_authority_;
+  if (!lock.owns_lock() || !a || !a->open.load(std::memory_order_acquire) || a->binding || a->pending || !a->next_nonce) { return {}; }
+  auto s = std::make_shared<ProfileRosterNativeBinding::State>(); s->authority = a; s->nonce = a->next_nonce++;
+  auto binding = std::shared_ptr<const ProfileRosterNativeBinding>(new ProfileRosterNativeBinding(std::move(s)));
+  a->binding = binding; a->diagnostic_enabled.store(true,std::memory_order_release); return binding;
+}
+bool ProfileManager::InstallNativeRosterOwner(const std::shared_ptr<const ProfileRosterNativeBinding>& binding,
+    std::weak_ptr<::xe::kernel::NativeProfileIdentityOwner> owner) {
+  std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+  const auto a = roster_authority_;
+  if (!lock.owns_lock() || !a || !a->open.load(std::memory_order_acquire) ||
+      !binding || a->binding != binding || owner.expired() || !a->native_owner.expired()) { return false; }
+  a->native_owner = std::move(owner); return true;
+}
+std::shared_ptr<ProfileRosterNativeReadTicket> ProfileManager::CaptureCurrentNativeReadTicket(
+    const std::shared_ptr<const ProfileRosterNativeBinding>& binding, std::error_code& error) {
+  error.clear(); std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+  const auto a = roster_authority_;
+  if (!lock.owns_lock()) { error = Busy(); return {}; }
+  if (!a || !a->open.load(std::memory_order_acquire) || a->binding != binding ||
+      !binding || a->pending || !ProfileRosterAuthority::LogicalCurrent(*a->current)) { error = Stale(); return {}; }
+  auto s = std::make_shared<ProfileRosterNativeReadTicket::State>();
+  s->authority = a; s->binding = binding.get(); s->fixed = a->current.get();
+  if (a->tickets.size() >= 4096) { error = Busy(); return {}; }
+  auto ticket = std::shared_ptr<ProfileRosterNativeReadTicket>(new ProfileRosterNativeReadTicket(std::move(s)));
+  a->tickets.push_back(ticket);
+  return ticket;
+}
+std::shared_ptr<ProfileRosterPublicationCell> ProfileManager::EnterNativeRoster(
+    const std::shared_ptr<ProfileRosterIntent>& intent,
+    const std::shared_ptr<const ProfileRosterNativeBinding>& binding, std::error_code& error) {
+  error.clear();
+  if (!intent || !binding || xe::global_critical_region::is_held_by_current_thread()) { error = Busy(); return {}; }
+  const auto a = roster_authority_;
+  std::shared_ptr<ProfileRosterAuthority::Operation> op;
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { error = Busy(); return {}; }
+    if (!a || !a->open.load(std::memory_order_acquire) || a->binding != binding ||
+        !a->pending || a->pending->intent != intent ||
+        intent->state_->phase.load(std::memory_order_acquire) != ProfileRosterPhase::kPrepared) { error = Stale(); return {}; }
+    op = a->pending;
+  }
+  for (const auto& row : op->after->rows) {
+    if (!row.account) { continue; }
+    error = row.account->CheckAvailable();
+    auto checked = !error ? row.storage->view()->ValidateSnapshotBatch({row.account->token()}, error) : nullptr;
+    if (!checked) { if (!error) { error = Stale(); } return {}; }
+  }
+  auto s = std::make_shared<ProfileRosterPublicationCell::State>();
+  s->authority = a; s->old_envelope = op->before.get(); s->new_envelope = op->after.get(); s->intent = intent->state_;
+  auto cell = std::shared_ptr<ProfileRosterPublicationCell>(new ProfileRosterPublicationCell(s));
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock() || a->pending != op || !a->open.load(std::memory_order_acquire) ||
+        a->binding != binding || a->selected.load(std::memory_order_acquire) != op->before.get() ||
+        !BeforeCurrent(*op) || !ProfileRosterAuthority::LogicalCurrent(*op->after) ||
+        intent->state_->phase.load(std::memory_order_acquire) != ProfileRosterPhase::kPrepared) {
+      error = Stale(); return {};
+    }
+    for (auto& p : op->account_pauses) { if (p) { p->SealForNativeEntry(); } }
+    for (auto& p : op->model_pauses) { if (p) { p->SealForNativeEntry(); } }
+    a->ordinary.store(false, std::memory_order_release);
+    op->cell = cell; s->armed.store(true, std::memory_order_release);
+    intent->state_->phase.store(ProfileRosterPhase::kNativeEntered, std::memory_order_release);
+    a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kNativeEntered),std::memory_order_release);
+  }
+  return cell;
+}
+ProfileRosterResult ProfileManager::FinalizeNativeRoster(
+    const std::shared_ptr<ProfileRosterIntent>& intent, const ProfileRosterNativeCompletion& joined) {
+  const auto a = roster_authority_;
+  if (!intent || !joined.state_ || !a || joined.state_->authority.lock() != a ||
+      joined.state_->intent != intent->state_ || !a->binding ||
+      joined.state_->binding != a->binding.get() || joined.state_->nonce != a->binding->nonce()) {
+    ProfileRosterResult r; r.error = Stale(); return r;
+  }
+  return SettleRoster(intent, true);
+}
+
+ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRosterIntent>& intent,
+                                               bool native_joined) {
+  auto use = account_commit_gate_->Acquire();
+  if (!use) { auto r = intent->result(); r.error = Stale(); return r; }
+  const auto a = roster_authority_;
+  std::shared_ptr<ProfileRosterAuthority::Operation> op;
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { auto r = intent->result(); r.error = Busy(); return r; }
+    const auto phase = intent->state_->phase.load(std::memory_order_acquire);
+    if (!a || !a->open.load(std::memory_order_acquire) || !a->pending ||
+        a->pending->intent != intent || (a->binding && !native_joined) ||
+        (phase != ProfileRosterPhase::kPublished && phase != ProfileRosterPhase::kFinalizing)) {
+      auto r = intent->result(); r.error = Stale(); return r;
+    }
+    op = a->pending;
+    bool idle = false;
+    if (!op->settling.compare_exchange_strong(idle, true, std::memory_order_acq_rel)) {
+      auto r = intent->result(); r.error = Busy(); return r;
+    }
+    if (a->selected.load(std::memory_order_acquire) != op->after.get() ||
+        !ProfileRosterAuthority::LogicalCurrent(*op->after)) {
+      op->settling.store(false, std::memory_order_release);
+      intent->state_->phase.store(ProfileRosterPhase::kUncertain, std::memory_order_release);
+      a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kUncertain),std::memory_order_release);
+      auto r = intent->result(); r.error = Stale(); return r;
+    }
+    intent->state_->phase.store(ProfileRosterPhase::kFinalizing, std::memory_order_release);
+    a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kFinalizing),std::memory_order_release);
+    if (!op->maps_settled) {
+      logged_profiles_.swap(op->profiles);
+      account_snapshots_.swap(op->snapshots);
+      profile_sign_in_generations_.swap(op->generations);
+      gpd_models_.swap(op->models);
+      auto publish_nodes = [](auto& current, auto& prepared) {
+        for (auto it = prepared.begin(); it != prepared.end();) {
+          auto next = std::next(it);
+          const auto found = current.find(it->first);
+          if (found == current.end()) { current.insert(prepared.extract(it)); }
+          else { std::swap(found->second, it->second); }
+          it = next;
+        }
+      };
+      publish_nodes(account_identities_, op->identities);
+      publish_nodes(account_metadata_, op->metadata);
+      publish_nodes(accounts_, op->accounts);
+      for (uint8_t slot = 0; slot != 4; ++slot) {
+        const auto old_xuid = op->before->roster->slots()[slot].xuid;
+        if (old_xuid && !gpd_models_.contains(old_xuid)) {
+          op->displaced_identities[slot] = account_identities_.extract(old_xuid);
+        }
+      }
+      account_publication_->Advance(); op->maps_settled = true;
+      for (uint8_t slot = 0; slot != 4; ++slot) {
+        const auto& old = op->before->rows[slot];
+        if (intent->state_->result.changed[slot]) {
+          if (old.identity) { old.identity->Retire(); }
+          if (old.model) { retired_gpd_models_.push_back(old.model); old.model->Retire(); }
+        }
+      }
+      a->current = op->after;
+      a->DiagnosticCurrent(op->after.get());
+      a->ordinary.store(true, std::memory_order_release); // actual native join already proven
+    }
+  }
+  auto release = [&op](void*) { op->settling.store(false, std::memory_order_release); };
+  std::unique_ptr<void, decltype(release)> serialized(reinterpret_cast<void*>(1), release);
+  // Host effects and all resource release happen on the host lane, never at
+  // native publisher or while holding PM/GCRC/native storage locks.
+  if (!op->effects_applied) {
+    for (uint8_t slot = 0; slot != 4; ++slot) {
+      if (!intent->state_->result.changed[slot]) { continue; }
+      const auto old = op->before->roster->slots()[slot].xuid;
+      if (old) { user_tracker_->RemoveUser(old); }
+    }
+    // Complete every removal before any addition: an A/B slot swap must not
+    // remove B after the preceding slot already attempted to add that UID.
+    for (uint8_t slot = 0; slot != 4; ++slot) {
+      if (!intent->state_->result.changed[slot]) { continue; }
+      const auto now = op->after->roster->slots()[slot].xuid;
+      if (now) { user_tracker_->AddUser(now); }
+    }
+    if (op->desired.remember_slots) { UpdateConfig(0, 0); }
+    if (!native_joined && op->desired.notify_host_compatibility &&
+        std::any_of(intent->state_->result.changed.begin(), intent->state_->result.changed.end(), [](bool b) { return b; })) {
+      uint32_t used = 0;
+      for (uint8_t slot = 0; slot != 4; ++slot) { if (op->after->roster->slots()[slot].xuid) { used |= uint32_t(1) << slot; } }
+      // Retains existing host compatibility policy only; not a newly recovered
+      // 17559 payload encoder. Native original path sends its own actual event.
+      kernel_state_->BroadcastNotification(kXNotificationSystemSignInChanged, used);
+    }
+    op->effects_applied = true;
+  }
+  for (auto& p : op->account_pauses) { if (p) { p->ReleaseKnownOutcome(); p.reset(); } }
+  for (auto& p : op->model_pauses) { if (p) { p->ReleaseKnownOutcome(); p.reset(); } }
+  bool busy = false;
+  for (uint8_t slot = 0; slot != 4; ++slot) {
+    const auto& old = op->before->rows[slot];
+    if (intent->state_->result.changed[slot] && old.profile && !op->old_mount_released[slot]) {
+      // Old mount reference is the old roster's actual reference, not the new
+      // staged reference. Busy keeps Finalizing; no replay of original224.
+      if (!DismountProfile(old.profile->xuid())) { busy = true; }
+      else { op->old_mount_released[slot] = true; }
+    }
+  }
+  if (busy) { auto r = intent->result(); r.error = Busy(); return r; }
+  {
+    std::lock_guard lock(profile_mount_mutex_);
+    if (a->pending != op) { auto r = intent->result(); r.error = Stale(); return r; }
+    for (auto& weak : a->tickets) {
+      if (auto ticket = weak.lock(); ticket &&
+          (ticket->state_->fixed == op->before.get() || ticket->state_->operation == intent->state_->operation)) {
+        ticket->state_->open.store(false, std::memory_order_release);
+      }
+    }
+    for (uint8_t slot = 0; slot != 4; ++slot) { preparing_slots_.reset(slot); preparing_generations_[slot] = 0; }
+    for (const auto xuid : op->desired.xuids) { preparing_profiles_.erase(xuid); }
+    // Active actual read scopes may still finish this host finalization call.
+    // Retain old resources until a later host reaping opportunity/PM stop.
+    a->retired.push_back(op->before);
+    a->pending.reset(); a->ordinary.store(true, std::memory_order_release);
+    a->diagnostic_pending.store(false,std::memory_order_release);
+    intent->state_->phase.store(ProfileRosterPhase::kCommitted, std::memory_order_release);
+    a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kCommitted),std::memory_order_release);
+  }
+  return intent->result();
+}
+std::shared_ptr<const ProfileAccountSnapshot> ProfileManager::RefreshRosterAccount(
+    const std::shared_ptr<const ProfileAccountSnapshot>& snapshot) {
+  // Called only inside actual PublishAccountCache's existing metadata lock,
+  // after genuine durable input validation. Ordinary data does not advance a
+  // roster epoch. Return the displaced owner for release after native guards.
+  const auto a = roster_authority_;
+  if (!a || !a->current || !snapshot) { return {}; }
+  for (auto& row : a->current->rows) {
+    if (row.identity == snapshot->identity()) {
+      auto old = std::move(row.account); row.account = snapshot; return old;
+    }
+  }
+  return {};
+}
+void ProfileManager::RetryRosterSettlement() {
+  if (xe::global_critical_region::is_held_by_current_thread()) { return; }
+  std::shared_ptr<ProfileRosterIntent> intent;
+  bool native = false;
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock() || !roster_authority_ || !roster_authority_->pending) { return; }
+    intent = roster_authority_->pending->intent;
+    native = bool(roster_authority_->binding);
+  }
+  const auto phase = intent->result().phase;
+  // Native settlement remains with its actual completed native owner. Host
+  // cleanup may retry genuine busy dismounts without re-publishing anything.
+  if (!native && phase == ProfileRosterPhase::kFinalizing) { SettleRoster(intent, false); }
+  else if (phase == ProfileRosterPhase::kCanceling) { CancelRoster(intent); }
+}
+} // namespace xe::kernel::xam

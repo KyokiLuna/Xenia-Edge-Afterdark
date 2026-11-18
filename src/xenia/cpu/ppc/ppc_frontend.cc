@@ -8,6 +8,8 @@
  */
 
 #include "xenia/cpu/ppc/ppc_frontend.h"
+#include "xenia/kernel/native_avatar_service.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 
 #include "xenia/base/atomic.h"
 #include "xenia/base/logging.h"
@@ -141,6 +143,17 @@ void SyscallHandler(PPCContext* ppc_context, void* arg0, void* arg1) {
   }
 }
 
+static void NativeAvatarCompletionPublication(PPCContext* c,void*,void*){
+  xe::kernel::NativeAvatarService::BeforeCompletionPublication(c);
+  xe::kernel::NativeProfileIdentityOwner::BeforeCompletionPublication(c);
+}
+static void NativeIdentityRenderIterationEnd(PPCContext* c,void*,void*){
+  xe::kernel::NativeProfileIdentityOwner::ObserveRenderIterationEnd(c);
+}
+static void NativeIdentityTaskDiagnostic(PPCContext* c,void* site,void*) {
+  xe::kernel::NativeProfileIdentityOwner::ObserveTaskDiagnosticInstruction(
+      c,static_cast<uint32_t>(reinterpret_cast<uintptr_t>(site)));
+}
 bool PPCFrontend::Initialize() {
   void* arg0 = reinterpret_cast<void*>(&xe::global_critical_region::mutex());
   void* arg1 = reinterpret_cast<void*>(&builtins_.global_lock_count);
@@ -154,6 +167,16 @@ bool PPCFrontend::Initialize() {
       "SyscallHandler", SyscallHandler, nullptr, nullptr);
   builtins_.log_lr_handler =
       processor_->DefineBuiltin("LogLr", LogLrHandler, nullptr, nullptr);
+  builtins_.native_avatar_completion_publication=processor_->DefineBuiltin(
+      "NativeAvatarCompletionPublication",NativeAvatarCompletionPublication,nullptr,nullptr);
+  builtins_.native_identity_render_iteration_end=processor_->DefineBuiltin(
+      "NativeIdentityRenderIterationEnd",NativeIdentityRenderIterationEnd,nullptr,nullptr);
+  constexpr const char* names[12]={
+    "NativeTaskOperand0","NativeTaskOperand1","NativeTaskOperand2","NativeTaskOperand3",
+    "NativeTaskOperand4","NativeTaskOperand5","NativeTaskOperand6","NativeTaskOperand7",
+    "NativeTaskOperand8","NativeTaskOperand9","NativeTaskOperand10","NativeTaskOperand11"};
+  for(uintptr_t i=0;i<12;++i)builtins_.native_identity_task_diagnostic[i]=processor_->DefineBuiltin(
+      names[i],NativeIdentityTaskDiagnostic,reinterpret_cast<void*>(i),nullptr);
   return true;
 }
 

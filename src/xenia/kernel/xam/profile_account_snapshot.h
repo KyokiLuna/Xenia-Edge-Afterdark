@@ -6,11 +6,15 @@
 #include <bitset>
 #include <memory>
 #include <span>
+#include <string>
+#include <filesystem>
 #include <vector>
 #include "xenia/base/snapshot_publisher.h"
 #include "xenia/kernel/xam/profile_gpd_publication.h"
 #include "xenia/kernel/xam/xam.h"
 namespace xe::kernel::xam {
+class ProfileManager;
+class ProfileRosterIntent;
 // An immutable ownership record. Retirement is one-way and independent of GPD
 // model revisions. The manager retains the exact record for a signed-in slot.
 class ProfileAccountIdentity final
@@ -28,7 +32,25 @@ class ProfileAccountIdentity final
     writes_.fetch_or(kClosed, std::memory_order_acq_rel);
     retired_.store(true, std::memory_order_release);
   }
-  bool writes_drained() const { return !(writes_.load(std::memory_order_acquire) & ~kClosed); }
+  bool writes_drained() const { return !(writes_.load(std::memory_order_acquire) & kCountMask); }
+  // Reversible exclusion of real affected writers, not allocation/native
+  // readiness. Only zero actual writers can enter this short pause.
+  class RosterPause final {
+   public:
+    ~RosterPause();
+    RosterPause(const RosterPause&) = delete;
+   private:
+    friend class ProfileAccountIdentity;
+    friend class ProfileManager;
+    friend class ProfileRosterIntent;
+    explicit RosterPause(std::shared_ptr<ProfileAccountIdentity> owner)
+        : owner_(std::move(owner)) {}
+    void SealForNativeEntry() { sealed_ = true; }
+    void ReleaseKnownOutcome();
+    std::shared_ptr<ProfileAccountIdentity> owner_;
+    bool sealed_ = false;
+  };
+  std::unique_ptr<RosterPause> PauseForRoster(std::error_code&);
   class Write final {
    public:
     ~Write();
@@ -48,6 +70,8 @@ class ProfileAccountIdentity final
   const uint8_t slot_;
   const uint64_t generation_;
   static constexpr uint64_t kClosed = uint64_t(1) << 63;
+  static constexpr uint64_t kPaused = uint64_t(1) << 62;
+  static constexpr uint64_t kCountMask = kPaused - 1;
   std::atomic<uint64_t> writes_{0};
   std::atomic<uint64_t> write_serial_{1};
   std::atomic<bool> retired_{false};
@@ -90,14 +114,23 @@ class ProfileAccountMetadata final {
   explicit ProfileAccountMetadata(const ProfileAccountSnapshot& snapshot)
       : account_(snapshot.account()),
         xuid_(snapshot.identity()->storage()->xuid()),
-        device_(snapshot.identity()->storage()->device_id()) {}
+        device_(snapshot.identity()->storage()->device_id()),
+        source_id_(snapshot.identity()->storage()->source_id()),
+        source_generation_(snapshot.identity()->storage()->source_generation()),
+        source_root_(snapshot.identity()->storage()->source()->path()) {}
   const X_XAMACCOUNTINFO& account() const { return account_; }
   uint64_t xuid() const { return xuid_; }
   uint32_t device_id() const { return device_; }
+  const std::string& source_id() const { return source_id_; }
+  uint64_t source_generation() const { return source_generation_; }
+  const std::filesystem::path& source_root() const { return source_root_; }
  private:
   const X_XAMACCOUNTINFO account_;
   const uint64_t xuid_;
   const uint32_t device_;
+  const std::string source_id_;
+  const uint64_t source_generation_;
+  const std::filesystem::path source_root_;
 };
 struct ProfileAccountAttempt {
   std::error_code error;

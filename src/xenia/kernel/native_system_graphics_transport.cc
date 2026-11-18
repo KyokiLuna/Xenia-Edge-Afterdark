@@ -8,6 +8,7 @@
  */
 #include "xenia/kernel/native_system_graphics_transport.h"
 #include "xenia/kernel/native_notification_presentation.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 
 #include <algorithm>
 #include <array>
@@ -405,11 +406,21 @@ struct NativeSystemGraphicsTransport::State {
     std::weak_ptr<State> state_;
     ui::NativeUiPlaneOwner owner_;
   };
+  class IdentityImageEpoch final : public ui::NativeUiPlaneImageEpoch {
+   public:
+    explicit IdentityImageEpoch(std::shared_ptr<const gpu::NativeFramePresentationGuard> guard)
+        :guard_(std::move(guard)){}
+    bool IsLive() const noexcept override {return guard_ && guard_->IsLive();}
+    bool IsRevoked() const noexcept override {return !guard_ || guard_->IsRevoked();}
+   private:
+    const std::shared_ptr<const gpu::NativeFramePresentationGuard> guard_;
+  };
   class NonmodalEpoch final : public ui::NativeUiPlaneImageEpoch {
    public:
     NonmodalEpoch(std::weak_ptr<State> state,
-                  const NativeNonmodalFrameWitness& e, uint64_t backend)
-        : state_(std::move(state)),
+                  const NativeNonmodalFrameWitness& e, uint64_t backend,
+                  std::shared_ptr<const gpu::NativeFramePresentationGuard> guard = {})
+        : state_(std::move(state)),guard_(std::move(guard)),
           owner_(e.owner()),
           backend_(backend),
           foreground_(e.foreground_generation()),
@@ -418,11 +429,12 @@ struct NativeSystemGraphicsTransport::State {
           modal_foreground_(e.modal_foreground_generation()) {}
     bool IsLive() const noexcept override;
     bool IsRevoked() const noexcept override {
-      return revoked_.load(std::memory_order_acquire);
+      return revoked_.load(std::memory_order_acquire) || (guard_ && guard_->IsRevoked());
     }
     void Revoke() noexcept { revoked_.store(true, std::memory_order_release); }
-    bool Matches(const NativeNonmodalFrameWitness& e, uint64_t backend) const {
-      return !IsRevoked() && owner_ == e.owner() && backend_ == backend &&
+    bool Matches(const NativeNonmodalFrameWitness& e, uint64_t backend,
+                 const std::shared_ptr<const gpu::NativeFramePresentationGuard>& guard) const {
+      return guard_==guard && !IsRevoked() && owner_ == e.owner() && backend_ == backend &&
              foreground_ == e.foreground_generation() &&
              modal_known_ == e.modal_visibility_known() &&
              modal_sequence_ == e.modal_visibility_sequence() &&
@@ -432,6 +444,7 @@ struct NativeSystemGraphicsTransport::State {
 
    private:
     std::weak_ptr<State> state_;
+    const std::shared_ptr<const gpu::NativeFramePresentationGuard> guard_;
     const memory::PhysicalAllocationOwner owner_;
     const uint64_t backend_, foreground_;
     const bool modal_known_;
@@ -464,6 +477,7 @@ struct NativeSystemGraphicsTransport::State {
   std::optional<NativeNonmodalFrameWitness> source_nonmodal;
   std::shared_ptr<NonmodalEpoch> nonmodal_epoch;
   std::shared_ptr<const ui::NativeUiPlaneImagePermission> nonmodal_permission;
+  std::shared_ptr<const ui::NativeUiPlaneImagePermission> identity_permission;
   uint64_t nonmodal_revision = 0;
   // Last real completed Source requested registers, not physical scanout.
   std::optional<gpu::NativeOverlayState> overlay_requested;
@@ -484,6 +498,9 @@ struct NativeSystemGraphicsTransport::State {
   std::shared_ptr<const NativeSystemCompletedFrameRecord> record;
   gpu::NativeFrameExecutionResult result;
   std::shared_ptr<const ui::NativeUiPlaneAuthority> plane;
+  // Deny-only history: set BEFORE every real presenter Bind attempt and never
+  // cleared by Withdraw, a lost foreground, or a failed replacement bind.
+  bool plane_bind_attempted=false;
   std::vector<std::shared_ptr<TaskReference>> task_references;
   size_t active_calls = 0;
   bool result_returned = false, attached = false, attempted = false,
@@ -708,6 +725,7 @@ struct NativeSystemGraphicsTransport::State {
 bool NativeSystemGraphicsTransport::State::NonmodalEpoch::IsLive()
     const noexcept {
   try {
+    if(guard_ && !guard_->IsLive())return false;
     if (IsRevoked()) {
       return false;
     }
@@ -1451,6 +1469,8 @@ NativeSystemGraphicsTransport::QueryResult NativeSystemGraphicsTransport::Query(
   if (!PollOnNativeTask(*thread, lr)) {
     TRACE_TRANSPORT(op->context, "query_retirement_busy",
                     {"return_address", lr}, {"thread_id", thread->thread_id()});
+    const auto iteration=NativeProfileIdentityOwner::AdmitNativeFrameIteration(*thread,lr,false);
+    if(iteration.managed && !iteration.admitted)return reject(Counter::kQueryContext);
     return HandledQuery(0);
   }
   auto* graphics = op->context.kernel->emulator()->graphics_system();
@@ -1555,6 +1575,8 @@ NativeSystemGraphicsTransport::QueryResult NativeSystemGraphicsTransport::Query(
   }
   const auto nonmodal = state_->nonmodal;
   lock.unlock();
+  const auto iteration=NativeProfileIdentityOwner::AdmitNativeFrameIteration(*thread,lr,true);
+  if(iteration.managed && !iteration.admitted)return reject(Counter::kQueryContext);
   if (available && nonmodal) {
     nonmodal->ObserveSuccessfulNativeFrameQuery(
         *thread->thread_state()->context());
@@ -1875,7 +1897,11 @@ NativeSystemGraphicsTransport::HookResult NativeSystemGraphicsTransport::Set(
     std::lock_guard lock(state_->mutex);
     plane = state_->plane;
   }
-  if (plane && !plane->IsLive()) {
+  // Preserve the registered sampling cohort through owned identity drainage.
+  // IsLive still denies new paints during TitleStopping, but withdrawing its
+  // authority is not completion of previously admitted UI sampling.
+  const bool identity_owned=bool(NativeProfileIdentityOwner::Lookup(op->context.kernel));
+  if (plane && !plane->IsLive() && !identity_owned) {
     if (graphics && graphics->presenter()) {
       graphics->presenter()->WithdrawNativeUiPlaneAuthority(plane);
     }
@@ -1897,6 +1923,9 @@ NativeSystemGraphicsTransport::HookResult NativeSystemGraphicsTransport::Set(
     if (owner.valid()) {
       auto authority = std::make_shared<State::PlaneAuthority>(state_, owner);
       auto* graphics = op->context.kernel->emulator()->graphics_system();
+      if(graphics && graphics->presenter()){
+        std::lock_guard lock(state_->mutex);state_->plane_bind_attempted=true;
+      }
       if (graphics && graphics->presenter() &&
           graphics->presenter()->BindNativeUiPlaneAuthority(authority)) {
         std::lock_guard lock(state_->mutex);
@@ -1911,6 +1940,9 @@ NativeSystemGraphicsTransport::HookResult NativeSystemGraphicsTransport::Set(
     // nonmodal output have separate publication conditions below.
     // Source/fence validity does not depend on optional display publication.
   }
+  const auto identity_frame=NativeProfileIdentityOwner::CaptureNativeFrameGuard(*thread);
+  if(identity_frame.managed && !identity_frame.admitted)
+    return reject(Counter::kSetOtherRejected,37);
   auto update = session->BeginUpdate(thread->native_frame_thread_identity());
   if (!update) {
     invocation.Complete(false);
@@ -1918,6 +1950,7 @@ NativeSystemGraphicsTransport::HookResult NativeSystemGraphicsTransport::Set(
   }
   auto completed = std::shared_ptr<NativeSystemCompletedFrameRecord>(
       new NativeSystemCompletedFrameRecord());
+  completed->presentation_guard=identity_frame.guard;
   completed->delegation = delegation;
   completed->title_input = std::move(title_input);
   completed->input_provenance =
@@ -2593,23 +2626,30 @@ bool NativeSystemGraphicsTransport::PollOnNativeTask(XThread& thread,
     state_->Reject(Blocker::kBackendFailure, true);
     return false;
   }
-  const bool control = request->plan()->is_overlay_control();
-  const auto requested_overlay =
-      control
-          ? std::optional(request->plan()->native_overlay_program()->Apply({}))
-      : request->output_layout() ? request->output_layout()->overlay_state
-                                 : std::nullopt;
+  if(request->presentation_guard() && request->output_layout() &&
+     result.status==gpu::NativeFrameExecutionResult::Status::kSubmitted &&
+     result.title_state_restored){
+    auto epoch=std::make_shared<State::IdentityImageEpoch>(request->presentation_guard());
+    auto permission=std::make_shared<const ui::NativeUiPlaneImagePermission>(
+        request->identity(),std::move(epoch),request->output_layout()->overlay_presentation);
+    {std::lock_guard lock(state_->mutex);
+     if(state_->request==request && !state_->poisoned)state_->identity_permission=std::move(permission);}
+  }
+  std::optional<gpu::NativeOverlayState> prior_overlay;
+  {std::lock_guard lock(state_->mutex);prior_overlay=state_->overlay_requested;}
+  // Actual completed register lineage is independent of pixel visibility.
+  // Hidden refresh still advances physical control/draw state for the next
+  // record. Full current-owner checks stay outside State/backend locks; only
+  // this exact pending request may commit the derived result below.
+  const auto requested_overlay=gpu::DeriveCompletedNativeOverlayState(
+      *request,result,std::move(prior_overlay));
   bool overlay_hide = false;
-  if (requested_overlay && request->IsPresentationOwnerLive()) {
+  if (requested_overlay) {
     const auto& requested = *requested_overlay;
     std::lock_guard lock(state_->mutex);
     if (!state_->status.stopping && !state_->status.retired &&
         !state_->poisoned && state_->request == request && requested.valid()) {
-      state_->overlay_requested =
-          control ? request->plan()->native_overlay_program()->Apply(
-                        state_->overlay_requested.value_or(
-                            gpu::NativeOverlayState{}))
-                  : requested;
+      state_->overlay_requested = requested;
       if (request->plan()->title_input()) {
         state_->overlay_requested_foreground =
             request->plan()->title_input()->identity().foreground_generation;
@@ -2642,7 +2682,7 @@ bool NativeSystemGraphicsTransport::PollOnNativeTask(XThread& thread,
       overlay_hide = true;
     }
   }
-  if (overlay_hide) {
+  if (overlay_hide || request->presentation_guard()) {
     PublishPlaneVisibility();
   }
   {
@@ -3044,6 +3084,58 @@ NativeSystemGraphicsTransport::snapshot() const {
   result.completion = state_->result.completion.status();
   return result;
 }
+bool NativeSystemGraphicsTransport::DrainIdentityFramePaint(
+    XThread& bootstrap,const std::shared_ptr<const gpu::NativeFramePresentationGuard>& guard,
+    gpu::NativeFramePaintDrainObservation* observation) noexcept try {
+  using Stage=gpu::NativeFramePaintDrainObservation::Stage;
+  if(observation)observation->Begin(Stage::kTransportAdmission);
+  const auto observed=[&](Stage stage,uint32_t bit,bool value) noexcept {
+    return observation?observation->Observe(stage,bit,value):value;
+  };
+  const auto finish=[&](bool value) noexcept {
+    if(observation){
+      if(observation->Begun(Stage::kTransportHandoff))observation->Finish(Stage::kTransportHandoff,value);
+      observation->Finish(Stage::kTransportAdmission,value);
+    }
+    return value;
+  };
+  auto op=state_->Acquire(state_);
+  if(observed(Stage::kTransportAdmission,0,!op) || observed(Stage::kTransportAdmission,1,!guard) ||
+     observed(Stage::kTransportAdmission,2,!guard->IsRevoked()) || observed(Stage::kTransportAdmission,3,!XThread::IsInThread(&bootstrap)) ||
+     observed(Stage::kTransportAdmission,4,bootstrap.kernel_state()!=op->context.kernel) ||
+     observed(Stage::kTransportAdmission,5,bootstrap.thread_id()!=op->context.allocation->bootstrap_thread_id()) ||
+     observed(Stage::kTransportAdmission,6,bootstrap.native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM) ||
+     observed(Stage::kTransportAdmission,7,global_critical_region::is_held_by_current_thread()))return finish(false);
+  std::shared_ptr<const ui::NativeUiPlaneAuthority> plane;
+  bool never_bound=false;
+  if(observation)observation->Begin(Stage::kTransportState);
+  {
+    std::lock_guard lock(state_->mutex);
+    const auto state_result=[&](bool value) noexcept {
+      if(observation)observation->Finish(Stage::kTransportState,value);return value;
+    };
+    if(state_result(observed(Stage::kTransportState,15,
+       observed(Stage::kTransportState,0,state_->poisoned) || observed(Stage::kTransportState,1,state_->status.mode!=Mode::kProduction) ||
+       observed(Stage::kTransportState,2,state_->status.retired) || observed(Stage::kTransportState,3,state_->status.stopping) ||
+       observed(Stage::kTransportState,4,bool(state_->request)) || observed(Stage::kTransportState,5,bool(state_->source)) ||
+       observed(Stage::kTransportState,6,state_->status.callback_pending))))return finish(false);
+    plane=state_->plane;never_bound=!state_->plane_bind_attempted;
+  }
+  // Null may follow Withdraw, which never waits for sampling. Only this
+  // continuous private never-attempted fact proves no sampling publication
+  // was ever admitted by this production transport. Prior lost cohorts need
+  // their real exact-authority/timeline proof, otherwise remain refused.
+  if(observation)observation->Begin(Stage::kTransportHandoff);
+  if(observed(Stage::kTransportHandoff,0,!plane))return finish(observed(Stage::kTransportHandoff,1,never_bound));
+  auto* graphics=op->context.kernel->emulator()->graphics_system();
+  auto* presenter=observed(Stage::kTransportHandoff,2,bool(graphics))?graphics->presenter():nullptr;
+  return finish(observed(Stage::kTransportHandoff,3,bool(presenter)) &&
+      observed(Stage::kTransportHandoff,4,presenter->DrainNativeUiPlanePaintForGuard(plane,guard,observation)));
+}catch(...){
+  if(observation)observation->Finish(gpu::NativeFramePaintDrainObservation::Stage::kTransportAdmission,false);
+  return false;
+}
+
 void NativeSystemGraphicsTransport::PublishPlaneVisibility() noexcept {
   try {
     auto op = state_->Acquire(state_);
@@ -3054,6 +3146,7 @@ void NativeSystemGraphicsTransport::PublishPlaneVisibility() noexcept {
     std::shared_ptr<const ui::NativeUiPlaneImagePermission> permission;
     uint64_t revision = 0;
     bool visible = false;
+    const bool identity_managed=bool(NativeProfileIdentityOwner::Lookup(op->context.kernel));
     {
       std::lock_guard lock(state_->mutex);
       plane = state_->plane;
@@ -3072,6 +3165,12 @@ void NativeSystemGraphicsTransport::PublishPlaneVisibility() noexcept {
       const uint64_t foreground = plane->owner().foreground_generation;
       visible = state_->visibility_known && state_->visibility_value &&
                 state_->visibility_foreground == foreground;
+      if(visible && identity_managed){
+        // Modal Guide content obeys the SAME exact Source/image identity.
+        // Missing/fresh-pending permission cannot fall back to an old surface.
+        permission=state_->identity_permission;
+        visible=permission && !permission->IsRevoked();
+      }
       if (!visible && state_->nonmodal_epoch &&
           state_->nonmodal_epoch->foreground() == foreground &&
           state_->nonmodal_permission) {
@@ -3178,12 +3277,12 @@ void NativeSystemGraphicsTransport::OnNativeNonmodalFrame(
       state_->nonmodal_revision = event.revision();
       if (show_draw) {
         if (!state_->nonmodal_epoch ||
-            !state_->nonmodal_epoch->Matches(event, request->backend_epoch())) {
+            !state_->nonmodal_epoch->Matches(event, request->backend_epoch(),request->presentation_guard())) {
           if (state_->nonmodal_epoch) {
             state_->nonmodal_epoch->Revoke();
           }
           state_->nonmodal_epoch = std::make_shared<State::NonmodalEpoch>(
-              state_, event, request->backend_epoch());
+              state_, event, request->backend_epoch(),request->presentation_guard());
         }
         state_->nonmodal_permission =
             std::make_shared<const ui::NativeUiPlaneImagePermission>(

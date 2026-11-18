@@ -16,13 +16,10 @@ namespace ui {
 
 ProfilePasscodeUI::ProfilePasscodeUI(xe::ui::ImGuiDrawer* imgui_drawer,
                                      std::string_view title,
-                                     std::string_view description,
-                                     MESSAGEBOX_RESULT* result_ptr)
+                                     std::string_view description)
     : XamDialog(imgui_drawer),
       title_(title),
-      description_(description),
-      result_ptr_(result_ptr) {
-  std::memset(result_ptr, 0, sizeof(MESSAGEBOX_RESULT));
+      description_(description) {
 
   if (title_.empty()) {
     title_ = "Enter Pass Code";
@@ -53,7 +50,7 @@ void ProfilePasscodeUI::DrawPasscodeField(uint8_t key_id) {
   }
 }
 
-void ProfilePasscodeUI::OnDraw(ImGuiIO& io) {
+void ProfilePasscodeUI::OnDrawDialog(ImGuiIO& io) {
   if (!has_opened_) {
     ImGui::OpenPopup(title_.c_str());
     has_opened_ = true;
@@ -61,14 +58,18 @@ void ProfilePasscodeUI::OnDraw(ImGuiIO& io) {
 
   if (ImGui::BeginPopupModal(title_.c_str(), nullptr,
                              ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ShouldCloseFromGamepad()) {
+      ImGui::CloseCurrentPopup();
+      Close();
+      ImGui::EndPopup();
+      return;
+    }
     if (description_.size()) {
       ImGui::Text("%s", description_.c_str());
     }
 
     for (uint8_t i = 0; i < passcode_length; i++) {
       DrawPasscodeField(i);
-      // result_ptr_->Passcode[i] =
-      // keys_map_.at(labelled_keys_[key_indexes_[i]]);
     }
 
     ImGui::NewLine();
@@ -76,23 +77,25 @@ void ProfilePasscodeUI::OnDraw(ImGuiIO& io) {
     // We write each key on close to prevent simultaneous dialogs.
     if (ImGui::Button("Sign In")) {
       for (uint8_t i = 0; i < passcode_length; i++) {
-        result_ptr_->Passcode[i] =
+        passcode_[i] =
             keys_map_.at(labelled_keys_[key_indexes_[i]]);
       }
 
       selected_signed_in_ = true;
-
+      ImGui::CloseCurrentPopup();
       Close();
     }
 
     ImGui::SameLine();
 
     if (ImGui::Button("Cancel")) {
+      ImGui::CloseCurrentPopup();
       Close();
     }
+    ImGui::EndPopup();
+  } else {
+    Close();
   }
-
-  ImGui::EndPopup();
 }
 
 }  // namespace ui

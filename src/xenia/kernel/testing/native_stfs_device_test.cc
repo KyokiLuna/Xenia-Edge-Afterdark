@@ -10,6 +10,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -22,6 +23,8 @@
 #include "xenia/base/math.h"
 #include "xenia/emulator.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/xam/app_manager.h"
+#include "xenia/kernel/xam/content_manager.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xfile.h"
@@ -37,6 +40,16 @@ DECLARE_string(logged_profile_slot_0_xuid);
 DECLARE_string(logged_profile_slot_1_xuid);
 DECLARE_string(logged_profile_slot_2_xuid);
 DECLARE_string(logged_profile_slot_3_xuid);
+
+namespace xe::kernel {
+class NativeStfsDeviceTestAccess final {
+ public:
+  static X_STATUS WithdrawBeforeCommit(KernelState& kernel, uint32_t packet,
+      std::unique_ptr<vfs::Device>* replacement = nullptr) {
+    return XStfsDevice::CreateInternal(kernel, packet, 0x58, true, replacement);
+  }
+};
+}
 
 namespace xe::kernel::test {
 namespace {
@@ -117,7 +130,9 @@ std::vector<uint8_t> Package(bool single_hash) {
 class Fixture {
  public:
   Fixture(bool readonly = true, bool single_hash = true,
-          bool nested_package = false) {
+          bool nested_package = false,
+          filesystem::ConsoleStorageType source_type = filesystem::ConsoleStorageType::Invalid,
+          bool content_subroot = false, bool managed_folder = false) {
     REQUIRE(KernelState::shared() == nullptr);
     for (const auto& name : {"content", "cache", "packages"}) {
       REQUIRE(std::filesystem::create_directory(scratch.path / name));
@@ -144,19 +159,58 @@ class Fixture {
                 bytes.begin() + base + (hashes + 1) * 0x1000);
     }
     {
-      std::ofstream out(scratch.path / "packages" / "package", std::ios::binary);
+      auto input = scratch.path / "packages";
+      if (content_subroot) { REQUIRE(std::filesystem::create_directory(input / "Content")); input /= "Content"; }
+      source_path = content_subroot ? "\\Device\\PirsSource\\Content\\package"
+                                    : "\\Device\\PirsSource\\package";
+      std::ofstream out(input / "package", std::ios::binary);
       out.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
       REQUIRE(out.good());
+    }
+    if (managed_folder) {
+      // HostPathDevice captures its tree at Initialize. Seed the actual
+      // directory/files before source registration/mounting, not afterward.
+      const auto root = scratch.path / "packages" / "managed";
+      REQUIRE(std::filesystem::create_directory(root));
+      {
+        std::ofstream out(root / "package", std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        REQUIRE(out.good());
+      }
+      {
+        const std::array<uint8_t, 4> seed{0x10, 0x20, 0x30, 0x40};
+        std::ofstream out(root / "value.bin", std::ios::binary);
+        out.write(reinterpret_cast<const char*>(seed.data()), seed.size());
+        REQUIRE(out.good());
+      }
     }
     emulator = std::make_unique<Emulator>("", scratch.path,
         scratch.path / "content", scratch.path / "cache");
     REQUIRE(emulator->Setup(nullptr, nullptr, false, {}, {}, {}) ==
             X_STATUS_SUCCESS);
+    std::shared_ptr<filesystem::HostStorageRoot> storage;
+    std::shared_ptr<const filesystem::ConsoleStorageVolume> volume;
+    if (source_type == filesystem::ConsoleStorageType::HDD || source_type == filesystem::ConsoleStorageType::USBMASS) {
+      const auto type = source_type == filesystem::ConsoleStorageType::HDD
+          ? xam::DeviceType::HDD : xam::DeviceType::USBMASS;
+      REQUIRE(kernel().content_manager()->RegisterManagedSource(
+          {"native-wire", 3, type, xam::ContentSourceKind::kManaged, scratch.path / "packages",
+           "\\Device\\PirsSource", u"Native wire", false, 0, "\\Device\\PirsVolume", {}, scratch.path}));
+      const auto selected = kernel().content_manager()->sources().Source("native-wire");
+      REQUIRE(selected); REQUIRE(selected->available); REQUIRE(selected->storage_volume);
+      std::error_code error; storage = selected->storage->Subroot({}, readonly, error);
+      REQUIRE(storage); REQUIRE_FALSE(error); volume = selected->storage_volume;
+    } else if (source_type == filesystem::ConsoleStorageType::ODD) {
+      volume = filesystem::ConsoleStorageVolume::OpticalMedia();
+    } else if (source_type == filesystem::ConsoleStorageType::System) {
+      volume = filesystem::ConsoleStorageVolume::InstalledSystem();
+    }
     auto source = std::make_unique<vfs::HostPathDevice>(
-        "\\Device\\PirsSource", scratch.path / "packages", readonly);
+        "\\Device\\PirsSource", scratch.path / "packages", readonly, false, "FATX", storage);
+    if (volume) { REQUIRE(source->SetStorageVolume(volume)); }
     REQUIRE(source->Initialize());
     REQUIRE(fs().RegisterDevice(std::move(source)));
-    auto* entry = fs().ResolvePath("\\Device\\PirsSource\\package");
+    auto* entry = fs().ResolvePath(source_path);
     REQUIRE(entry);
     vfs::File* raw = nullptr;
     uint32_t access = filesystem::FileAccess::kFileReadData;
@@ -243,6 +297,103 @@ class Fixture {
   X_HANDLE backing_handle = 0;
   uint32_t allocation = 0;
   std::weak_ptr<const filesystem::HostStorageFileLease> source_lease;
+  std::string source_path;
+};
+
+// Wrap the actual readonly fixture file. Failures keep its real bytes,
+// parent/device/source lease and Destroy lifetime; no successful read or mount
+// is synthesized. This exercises ContentManager's ordinary borrowed VFS lane.
+struct HeaderReadFault {
+  X_STATUS status = X_STATUS_SUCCESS;
+  bool short_read = false;
+  size_t reads = 0, opened = 0, closed = 0;
+  size_t registration_backings = 0;
+  bool invalid_registration_backing = false;
+  std::function<void()> before_registration_backings;
+};
+class HeaderReadFile final : public vfs::File {
+ public:
+  HeaderReadFile(uint32_t access, vfs::Entry* entry, vfs::File* inner,
+                 std::shared_ptr<HeaderReadFault> fault)
+      : File(access, entry), inner_(inner), fault_(std::move(fault)) {
+    ++fault_->opened;
+  }
+  ~HeaderReadFile() override { ++fault_->closed; }
+  void Destroy() override { delete this; }
+  X_STATUS ReadSync(std::span<uint8_t> bytes, size_t offset,
+                    size_t* transferred) override {
+    ++fault_->reads;
+    size_t count = bytes.size();
+    if (fault_->short_read && count) { --count; }
+    if (fault_->status != X_STATUS_SUCCESS) { count = std::min(count, size_t(8)); }
+    const auto status = inner_->ReadSync(bytes.first(count), offset, transferred);
+    return status == X_STATUS_SUCCESS ? fault_->status : status;
+  }
+  X_STATUS WriteSync(std::span<const uint8_t>, size_t,
+                     size_t* transferred) override {
+    *transferred = 0; return X_STATUS_ACCESS_DENIED;
+  }
+ private:
+  struct DestroyFile { void operator()(vfs::File* file) const { file->Destroy(); } };
+  std::unique_ptr<vfs::File, DestroyFile> inner_;
+  std::shared_ptr<HeaderReadFault> fault_;
+};
+class HeaderReadEntry final : public vfs::Entry {
+ public:
+  HeaderReadEntry(vfs::Device* device, vfs::Entry* inner,
+                  std::shared_ptr<HeaderReadFault> fault)
+      : Entry(device, nullptr, "package"), inner_(inner), fault_(std::move(fault)) {
+    attributes_ = inner->attributes(); size_ = inner->size();
+  }
+  X_STATUS Open(uint32_t access, vfs::File** output) override {
+    vfs::File* file = nullptr;
+    const auto status = inner_->Open(access, &file);
+    if (status != X_STATUS_SUCCESS) { return status; }
+    *output = new HeaderReadFile(access, this, file, fault_);
+    return X_STATUS_SUCCESS;
+  }
+ protected:
+  bool DeleteEntryInternal(vfs::Entry*) override { return false; }
+ private:
+  vfs::Entry* inner_;
+  std::shared_ptr<HeaderReadFault> fault_;
+};
+class HeaderReadDevice final : public vfs::HostPathDevice {
+ public:
+  HeaderReadDevice(const std::filesystem::path& path,
+                    std::shared_ptr<filesystem::HostStorageRoot> storage,
+                    std::shared_ptr<vfs::Device> parent,
+                    std::shared_ptr<HeaderReadFault> fault)
+      : HostPathDevice("\\Device\\HeaderRead", path, true, false, "FATX",
+                       std::move(storage)),
+        parent_(std::move(parent)), fault_(std::move(fault)) {}
+  bool Initialize() override {
+    if (!HostPathDevice::Initialize()) { return false; }
+    auto* inner = HostPathDevice::ResolvePath("package");
+    if (!inner) { return false; }
+    entry_ = std::make_unique<HeaderReadEntry>(this, inner, fault_);
+    return true;
+  }
+  vfs::Entry* ResolvePath(std::string_view path) override {
+    return path == "\\package" || path == "package"
+               ? entry_.get() : HostPathDevice::ResolvePath(path);
+  }
+  std::shared_ptr<vfs::Device> RetainedBackingParent() const override { return parent_; }
+  std::optional<std::vector<filesystem::GuestHostBacking>> GuestBackings() const override {
+    ++fault_->registration_backings;
+    // Called by genuine common preparation after parser initialization. The
+    // initial source mount is admitted normally before either fault is armed.
+    auto before = std::move(fault_->before_registration_backings);
+    if (before) { before(); }
+    if (fault_->invalid_registration_backing) {
+      return std::vector<filesystem::GuestHostBacking>{{{}, false}};
+    }
+    return HostPathDevice::GuestBackings();
+  }
+ private:
+  const std::shared_ptr<vfs::Device> parent_;
+  const std::shared_ptr<HeaderReadFault> fault_;
+  std::unique_ptr<HeaderReadEntry> entry_;
 };
 
 class OpaqueProbe final : public XObject {
@@ -469,6 +620,8 @@ TEST_CASE("Native PIRS normal Kernel shutdown drains owned files and bodies",
       "\\Device\\NestedPirs", member);
   REQUIRE(nested); REQUIRE(nested->Initialize());
   REQUIRE(f.fs().RegisterDevice(std::move(nested)));
+  REQUIRE(f.fs().AcquireDevice("\\Device\\NestedPirs")->mount_parent() ==
+          f.fs().AcquireDevice("\\Device\\NativePirs0"));
   REQUIRE(f.fs().ResolvePath("\\Device\\NestedPirs\\payload"));
   vfs::File* raw = nullptr;
   REQUIRE(member->Open(filesystem::FileAccess::kFileReadData, &raw) ==
@@ -512,5 +665,574 @@ TEST_CASE("Opaque native allocation preserves the shared Kernel device type",
   // through this same borrowed-type path, before freeing global Memory.
   REQUIRE(f.Create() == X_STATUS_SUCCESS);
   CHECK(f.TypeBytes() == before);
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+namespace {
+struct MemberFile {
+  vfs::File* file = nullptr;
+  explicit MemberFile(vfs::Entry* entry,
+      uint32_t access = filesystem::FileAccess::kFileReadData) {
+    REQUIRE(entry); REQUIRE(entry->Open(access, &file) == X_STATUS_SUCCESS);
+    REQUIRE(file);
+  }
+  ~MemberFile() { Reset(); }
+  void Reset() { if (file) { file->Destroy(); file = nullptr; } }
+};
+struct KernelMember {
+  object_ref<XFile> file;
+  KernelMember(Fixture& f, vfs::Entry* entry) {
+    REQUIRE(entry); vfs::File* raw = nullptr;
+    REQUIRE(entry->Open(filesystem::FileAccess::kFileReadData, &raw) == X_STATUS_SUCCESS);
+    REQUIRE(raw); file = object_ref<XFile>(new XFile(&f.kernel(), raw, true, false, true));
+  }
+  ~KernelMember() { Reset(); }
+  void Reset() { if (file) { file->ReleaseHandle(); file.reset(); } }
+};
+void InnerPacket(Fixture& f, KernelMember& input, const std::string& name) {
+  auto header = vfs::XContentContainerDevice::ReadContainerHeader(input.file->file());
+  REQUIRE(header); REQUIRE(name.size() <= 255);
+  std::memset(f.memory().TranslateVirtual(f.allocation + 0x200), 0, 256);
+  std::memcpy(f.memory().TranslateVirtual(f.allocation + 0x200), name.data(), name.size());
+  f.Store16(0, uint16_t(name.size())); f.Store16(2, uint16_t(name.size()));
+  const auto rounded = (uint64_t(header->content_header.header_size) + 0xFFF) & ~uint64_t(0xFFF);
+  const uint64_t bytes = header->content_metadata.content_size;
+  f.Store64(8, rounded); f.Store64(0x10, ((bytes ? bytes : 0xFFFFF000ull) + 0xFFFFF) & ~uint64_t(0xFFFFF));
+  f.Store32(0x18, input.file->handle());
+  std::memcpy(f.memory().TranslateVirtual(f.packet() + 0x1C), &header->content_metadata.volume_descriptor.stfs, 36);
+  f.Store32(0x44, uint32_t(rounded + 0x192));
+  f.memory().TranslateVirtual<uint8_t*>(f.packet())[0x52] = bytes != 0;
+  f.Store32(0x48, 0xA1A2A3A4); f.Store32(0x4C, 0xB1B2B3B4);
+}
+void ReadPayload(MemberFile& file) {
+  std::array<uint8_t, 16> bytes{}; size_t count = 0;
+  REQUIRE(file.file->ReadSync(bytes, 0, &count) == X_STATUS_SUCCESS);
+  REQUIRE(count == bytes.size());
+  for (size_t i = 0; i != bytes.size(); ++i) { REQUIRE(bytes[i] == i); }
+}
+void QueryTypes(Fixture& f, const std::string& path, uint32_t raw, uint32_t logical) {
+  KernelMember member(f, f.fs().ResolvePath(path + "\\payload"));
+  std::memset(f.memory().TranslateVirtual(f.allocation + 0x6FC), 0xA5, 20);
+  std::memset(f.memory().TranslateVirtual(f.allocation + 0x73C), 0xA5, 16);
+  REQUIRE(f.Call(0xEF, {member.file->handle(), f.allocation + 0x740,
+      f.allocation + 0x700, 8, 4}) == X_STATUS_SUCCESS);
+  REQUIRE(f.Load32(0x700) == raw); REQUIRE(f.Load32(0x704) == 0);
+  REQUIRE(f.Load32(0x740) == X_STATUS_SUCCESS); REQUIRE(f.Load32(0x744) == 8);
+  REQUIRE(f.Load32(0x6FC) == 0xA5A5A5A5); REQUIRE(f.Load32(0x708) == 0xA5A5A5A5);
+  REQUIRE(f.Load32(0x73C) == 0xA5A5A5A5); REQUIRE(f.Load32(0x748) == 0xA5A5A5A5);
+  REQUIRE(f.fs().RegisterSymbolicLink("NativeVolume:", path));
+  std::memset(f.memory().TranslateVirtual(f.allocation + 0x500), 0, 0x4C);
+  const std::string root = "NativeVolume";
+  std::memcpy(f.memory().TranslateVirtual(f.allocation + 0x500), root.data(), root.size());
+  f.Store32(0x540, 1); f.Store32(0x544, f.allocation + 0x600);
+  f.Store32(0x600, 0xA5A5A5A5);
+  const auto result = f.kernel().app_manager()->DispatchMessageSync(0xFE, 0x20021, f.allocation + 0x500, 0x4C);
+  REQUIRE(result == (logical ? X_E_SUCCESS : X_E_INVALIDARG));
+  REQUIRE(f.Load32(0x600) == (logical ? logical : 0xA5A5A5A5));
+  REQUIRE(f.fs().UnregisterSymbolicLink("NativeVolume:"));
+}
+}
+TEST_CASE("Native PIRS inherits exact HDD USB optical and explicitly unknown parent volumes",
+          "[kernel][stfs][native][volume][abi]") {
+  const auto type = GENERATE(filesystem::ConsoleStorageType::HDD,
+      filesystem::ConsoleStorageType::USBMASS, filesystem::ConsoleStorageType::ODD,
+      filesystem::ConsoleStorageType::Invalid);
+  Fixture f(true, true, false, type);
+  f.kernel().deployment_type_ = XDeploymentType::kOpticalDisc;
+  REQUIRE(f.Create() == X_STATUS_SUCCESS);
+  const auto parent = f.fs().AcquireDevice("\\Device\\PirsSource");
+  const auto child = f.fs().AcquireDevice("\\Device\\NativePirs0");
+  REQUIRE(parent); REQUIRE(child); REQUIRE(child->mount_parent() == parent);
+  REQUIRE(child->storage_volume() == parent->storage_volume());
+  const uint32_t raw = type == filesystem::ConsoleStorageType::HDD ? 7 :
+      type == filesystem::ConsoleStorageType::USBMASS ? 0x2D :
+      type == filesystem::ConsoleStorageType::ODD ? 2 : 0x22;
+  QueryTypes(f, "\\Device\\NativePirs0", raw, uint32_t(type));
+}
+TEST_CASE("Native PIRS preparation refuses withdrawn or same-name replaced exact parents",
+          "[kernel][stfs][native][ownership][prepare]") {
+  Fixture f;
+  std::unique_ptr<vfs::Device> replacement;
+  SECTION("Exact parent withdrawn before common commit") {}
+  SECTION("Different parent reuses the original mount name before commit") {
+    auto device = std::make_unique<vfs::HostPathDevice>("\\Device\\PirsSource", f.scratch.path / "packages", true);
+    REQUIRE(device->Initialize()); replacement = std::move(device);
+  }
+  const bool replacing = bool(replacement);
+  REQUIRE(NativeStfsDeviceTestAccess::WithdrawBeforeCommit(f.kernel(), f.packet(),
+      replacing ? &replacement : nullptr) == XStfsDevice::kDisconnected);
+  REQUIRE(f.Load32(0x48) == 0xA1A2A3A4); REQUIRE(f.Load32(0x4C) == 0xB1B2B3B4);
+  REQUIRE_FALSE(f.fs().ResolvePath("\\Device\\NativePirs0\\payload"));
+  if (replacing) { REQUIRE(f.fs().ResolvePath("\\Device\\PirsSource\\package")); }
+  f.backing.reset();
+}
+TEST_CASE("Parent withdrawal retires native bodies without making bodies own escaped reader lifetime",
+          "[kernel][stfs][native][ownership][parent]") {
+  Fixture f; REQUIRE(f.Create() == X_STATUS_SUCCESS);
+  auto body = XStfsDevice::Lookup(f.kernel(), f.Load32(0x48)); REQUIRE(body);
+  auto parent = f.fs().AcquireDevice("\\Device\\PirsSource"); REQUIRE(parent);
+  std::weak_ptr<vfs::Device> child = f.fs().AcquireDevice("\\Device\\NativePirs0");
+  std::unique_ptr<MemberFile> held;
+  SECTION("ABI body alone is a weak observer") {}
+  SECTION("Actual open File retains a safe Entry while source reads retire") {
+    held = std::make_unique<MemberFile>(f.fs().ResolvePath("\\Device\\NativePirs0\\payload"));
+  }
+  f.CloseBacking();
+  REQUIRE(f.kernel().RetireMountedDeviceTree(parent) == X_STATUS_SUCCESS);
+  REQUIRE(body->retired()); REQUIRE(body->Control(3) == XStfsDevice::kDisconnected);
+  REQUIRE_FALSE(f.fs().ResolvePath("\\Device\\NativePirs0\\payload"));
+  if (held) {
+    REQUIRE_FALSE(child.expired()); REQUIRE_FALSE(body->backing_drained());
+    REQUIRE(held->file->entry()->device() == child.lock().get());
+    vfs::File* refused = nullptr;
+    REQUIRE(held->file->entry()->Open(filesystem::FileAccess::kFileReadData, &refused) == XStfsDevice::kDisconnected);
+    REQUIRE_FALSE(refused);
+    std::array<uint8_t, 16> bytes{}; bytes.fill(0xCC); size_t count = 99;
+    REQUIRE(held->file->ReadSync(bytes, 0, &count) == XStfsDevice::kDisconnected);
+    REQUIRE(count == 0); REQUIRE(bytes.front() == 0xCC); held.reset();
+  }
+  REQUIRE(child.expired()); REQUIRE(body->backing_drained()); REQUIRE(f.source_lease.expired());
+  REQUIRE(f.Call(0x3B, {body->guest_object()}) == X_STATUS_SUCCESS);
+  REQUIRE(f.Call(0x3B, {body->guest_object()}) == XStfsDevice::kDisconnected);
+}
+TEST_CASE("Mixed native and HLE PIRS descendants use one common withdrawal closure",
+          "[kernel][stfs][native][ownership][mixed]") {
+  Fixture f(true, true, true, filesystem::ConsoleStorageType::HDD);
+  auto* content = f.kernel().content_manager();
+  object_ref<XStfsDevice> body;
+  std::unique_ptr<KernelMember> input;
+  std::unique_ptr<MemberFile> held;
+  bool hle_parent = false;
+  SECTION("Native parent with actual HLE entry-backed child") {
+    REQUIRE(f.Create() == X_STATUS_SUCCESS); body = XStfsDevice::Lookup(f.kernel(), f.Load32(0x48));
+    REQUIRE(content->OpenContentFile("HleChild", "\\Device\\NativePirs0\\payload") == X_ERROR_SUCCESS);
+    auto child = f.fs().AcquirePathDevice("HleChild:"); REQUIRE(child);
+    REQUIRE(child->mount_parent() == f.fs().AcquireDevice("\\Device\\NativePirs0"));
+    held = std::make_unique<MemberFile>(f.fs().ResolvePath("HleChild:\\payload"));
+  }
+  SECTION("HLE parent with actual native child") {
+    hle_parent = true;
+    REQUIRE(content->OpenContentFile("HleParent", f.source_path) == X_ERROR_SUCCESS);
+    input = std::make_unique<KernelMember>(f, f.fs().ResolvePath("HleParent:\\payload"));
+    InnerPacket(f, *input, "\\Device\\NativePirs0"); REQUIRE(f.Create() == X_STATUS_SUCCESS);
+    body = XStfsDevice::Lookup(f.kernel(), f.Load32(0x48));
+    REQUIRE(f.fs().AcquireDevice("\\Device\\NativePirs0")->mount_parent() == f.fs().AcquirePathDevice("HleParent:"));
+    held = std::make_unique<MemberFile>(f.fs().ResolvePath("\\Device\\NativePirs0\\payload"));
+  }
+  REQUIRE(body); ReadPayload(*held); f.CloseBacking();
+  auto* entry = held->file->entry();
+  if (hle_parent) { REQUIRE(content->CloseContent("HleParent") == X_ERROR_SUCCESS); }
+  else { REQUIRE(f.Call(0x3B, {body->guest_object()}) == X_STATUS_SUCCESS); }
+  REQUIRE(body->retired()); REQUIRE_FALSE(content->IsRootTaken(hle_parent ? "HleParent" : "HleChild"));
+  REQUIRE_FALSE(f.fs().ResolvePath(hle_parent ? "\\Device\\NativePirs0\\payload" : "HleChild:\\payload"));
+  REQUIRE(held->file->entry() == entry);
+  // Explicit namespace removal retains the established immutable-reader
+  // outcome while its actual host source is still live.
+  ReadPayload(*held); held.reset(); input.reset(); REQUIRE(body->backing_drained());
+}
+TEST_CASE("Bootstrap installed-source selection certifies a distinct descriptor and native descendant",
+          "[kernel][stfs][native][ownership][installed-source]") {
+  const bool unrelated_same_class = GENERATE(false, true);
+  Fixture f(true, true, true, filesystem::ConsoleStorageType::System, true);
+  auto parent = f.fs().AcquireDevice("\\Device\\PirsSource"); REQUIRE(parent);
+  auto* host = dynamic_cast<vfs::HostPathDevice*>(parent.get()); REQUIRE(host);
+  std::error_code error; auto root = host->storage()->Subroot("Content", true, error);
+  REQUIRE(root); REQUIRE_FALSE(error);
+  if (unrelated_same_class) {
+    REQUIRE(std::filesystem::create_directory(f.scratch.path / "foreign"));
+    root = filesystem::HostStorageRoot::Open(f.scratch.path / "foreign", true, error, 0);
+    REQUIRE(root); REQUIRE_FALSE(error);
+  }
+  auto* content = f.kernel().content_manager();
+  REQUIRE(content->sources().RegisterReadOnly(
+      {"installed-native-test", 1, xam::DeviceType::HDD, xam::ContentSourceKind::kInstalledSystem,
+       root->path(), "\\Device\\PirsSource\\Content", u"Installed", true, 0}, root, 37));
+  auto source = content->sources().Source("installed-native-test"); REQUIRE(source); REQUIRE(source->available);
+  REQUIRE(source->storage_volume != parent->storage_volume());
+  if (unrelated_same_class) {
+    REQUIRE(content->OpenContentFile("InstalledPack", f.source_path, &*source) != X_ERROR_SUCCESS);
+    REQUIRE_FALSE(content->IsRootTaken("InstalledPack"));
+    REQUIRE_FALSE(f.fs().AcquirePathDevice("InstalledPack:"));
+    return;
+  }
+  REQUIRE(content->OpenContentFile("InstalledPack", f.source_path, &*source) == X_ERROR_SUCCESS);
+  auto selected = f.fs().AcquirePathDevice("InstalledPack:"); REQUIRE(selected);
+  REQUIRE(selected->mount_parent() == parent); REQUIRE(selected->storage_volume() == source->storage_volume);
+  KernelMember inner(f, f.fs().ResolvePath("InstalledPack:\\payload"));
+  InnerPacket(f, inner, "\\Device\\NativePirs0"); REQUIRE(f.Create() == X_STATUS_SUCCESS);
+  auto native = f.fs().AcquireDevice("\\Device\\NativePirs0"); REQUIRE(native);
+  REQUIRE(native->mount_parent() == selected); REQUIRE(native->storage_volume() == source->storage_volume);
+  QueryTypes(f, "\\Device\\NativePirs0", 7, 1);
+  REQUIRE(f.kernel().RetireMountedDeviceTree(parent) == X_STATUS_SUCCESS);
+  REQUIRE_FALSE(content->IsRootTaken("InstalledPack"));
+  REQUIRE_FALSE(f.fs().ResolvePath("\\Device\\NativePirs0\\payload"));
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Native PIRS descendants retire through the same graph while retained immutable reads stay valid",
+          "[kernel][stfs][native][ownership][nested]") {
+  const bool withdraw_source = GENERATE(false, true);
+  Fixture f(true, true, true); REQUIRE(f.Create() == X_STATUS_SUCCESS);
+  auto outer = XStfsDevice::Lookup(f.kernel(), f.Load32(0x48)); REQUIRE(outer);
+  KernelMember input(f, f.fs().ResolvePath("\\Device\\NativePirs0\\payload"));
+  InnerPacket(f, input, "\\Device\\NativePirs1"); REQUIRE(f.Create() == X_STATUS_SUCCESS);
+  auto inner = XStfsDevice::Lookup(f.kernel(), f.Load32(0x48)); REQUIRE(inner);
+  REQUIRE(f.fs().AcquireDevice("\\Device\\NativePirs1")->mount_parent() ==
+          f.fs().AcquireDevice("\\Device\\NativePirs0"));
+  MemberFile held(f.fs().ResolvePath("\\Device\\NativePirs1\\payload"));
+  auto* entry = held.file->entry(); ReadPayload(held); f.CloseBacking();
+  if (withdraw_source) {
+    const auto source = f.fs().AcquireDevice("\\Device\\PirsSource"); REQUIRE(source);
+    REQUIRE(f.kernel().RetireMountedDeviceTree(source) == X_STATUS_SUCCESS);
+  } else { REQUIRE(f.Call(0x3B, {outer->guest_object()}) == X_STATUS_SUCCESS); }
+  REQUIRE(outer->retired()); REQUIRE(inner->retired());
+  REQUIRE_FALSE(f.fs().ResolvePath("\\Device\\NativePirs0\\payload"));
+  REQUIRE_FALSE(f.fs().ResolvePath("\\Device\\NativePirs1\\payload"));
+  REQUIRE(held.file->entry() == entry);
+  if (withdraw_source) {
+    std::array<uint8_t, 16> bytes{}; bytes.fill(0xCC); size_t count = 99;
+    REQUIRE(held.file->ReadSync(bytes, 0, &count) == XStfsDevice::kDisconnected);
+    REQUIRE(count == 0); REQUIRE(bytes.front() == 0xCC);
+  } else { ReadPayload(held); }
+  vfs::File* refused = nullptr;
+  REQUIRE(entry->Open(filesystem::FileAccess::kFileReadData, &refused) == XStfsDevice::kDisconnected);
+  REQUIRE_FALSE(refused); held.Reset(); input.Reset();
+  REQUIRE(outer->backing_drained()); REQUIRE(inner->backing_drained());
+  REQUIRE(f.Call(0x3B, {inner->guest_object()}) == X_STATUS_SUCCESS);
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+namespace {
+std::filesystem::path MutableFixtureFolder(Fixture& f) {
+  const auto root = f.scratch.path / "packages" / "managed";
+  REQUIRE(std::filesystem::is_directory(root));
+  REQUIRE(f.fs().ResolvePath("\\Device\\PirsSource\\managed"));
+  REQUIRE(f.fs().ResolvePath("\\Device\\PirsSource\\managed\\package"));
+  REQUIRE(f.fs().ResolvePath("\\Device\\PirsSource\\managed\\value.bin"));
+  f.CloseBacking();
+  return root;
+}
+}
+TEST_CASE("Ordinary HLE close keeps a real raw HostPath writer and closing root alive until retry",
+          "[kernel][stfs][native][ownership][hostpath][busy]") {
+  Fixture f(false, true, false, filesystem::ConsoleStorageType::HDD,
+            false, true);
+  const auto folder = MutableFixtureFolder(f);
+  auto* content = f.kernel().content_manager();
+  REQUIRE(content->OpenContentFile("MutableRoot", "\\Device\\PirsSource\\managed") == X_ERROR_SUCCESS);
+  const auto device = f.fs().AcquirePathDevice("MutableRoot:"); REQUIRE(device);
+  auto* host = dynamic_cast<vfs::HostPathDevice*>(device.get()); REQUIRE(host);
+  REQUIRE_FALSE(host->is_read_only());
+  auto* entry = f.fs().ResolvePath("MutableRoot:\\value.bin"); REQUIRE(entry);
+  MemberFile writer(entry, filesystem::FileAccess::kFileReadData |
+                           filesystem::FileAccess::kFileWriteData);
+  // This is a genuine VFS File, intentionally outside the Kernel object table.
+  const std::array<uint8_t, 4> changed{1, 3, 5, 7}; size_t count = 99;
+  REQUIRE(writer.file->WriteSync(changed, 0, &count) == X_STATUS_SUCCESS);
+  REQUIRE(count == changed.size());
+  REQUIRE(content->CloseContent("MutableRoot") == X_ERROR_SHARING_VIOLATION);
+  REQUIRE(content->IsRootTaken("MutableRoot"));
+  REQUIRE(device->namespace_retiring()); REQUIRE_FALSE(host->storage()->retiring());
+  REQUIRE(f.fs().AcquireDevice(device->mount_path()) == device);
+  REQUIRE_FALSE(f.fs().ResolvePath("MutableRoot:\\value.bin"));
+  REQUIRE(content->OpenContentFile("mutableroot", "\\Device\\PirsSource\\managed") == X_ERROR_ALREADY_EXISTS);
+  vfs::File* refused = nullptr;
+  REQUIRE(entry->Open(filesystem::FileAccess::kFileReadData, &refused) == XStfsDevice::kDisconnected);
+  REQUIRE_FALSE(refused);
+  const std::array<uint8_t, 4> final{2, 4, 6, 8}; count = 99;
+  REQUIRE(writer.file->WriteSync(final, 0, &count) == X_STATUS_SUCCESS);
+  REQUIRE(count == final.size()); REQUIRE(writer.file->Flush() == X_STATUS_SUCCESS);
+  std::array<uint8_t, 4> read{}; count = 0;
+  REQUIRE(writer.file->ReadSync(read, 0, &count) == X_STATUS_SUCCESS);
+  REQUIRE(count == read.size()); REQUIRE(read == final);
+  writer.Reset();
+  REQUIRE(content->CloseContent("MutableRoot") == X_ERROR_SUCCESS);
+  REQUIRE_FALSE(content->IsRootTaken("MutableRoot"));
+  REQUIRE_FALSE(f.fs().IsSymbolicLinkRegistered("MutableRoot:"));
+  REQUIRE_FALSE(f.fs().AcquireDevice(device->mount_path()));
+  REQUIRE(host->storage()->retiring());
+  std::ifstream original(folder / "value.bin", std::ios::binary);
+  original.read(reinterpret_cast<char*>(read.data()), read.size());
+  REQUIRE(original.good()); REQUIRE(read == final);
+  REQUIRE(content->OpenContentFile("MutableRoot", "\\Device\\PirsSource\\managed") == X_ERROR_SUCCESS);
+  const auto replacement = f.fs().AcquirePathDevice("MutableRoot:"); REQUIRE(replacement);
+  REQUIRE(replacement != device);
+  REQUIRE(content->CloseContent("MutableRoot", device.get()) == X_ERROR_INVALID_HANDLE);
+  REQUIRE(f.fs().AcquirePathDevice("MutableRoot:") == replacement);
+  REQUIRE(content->CloseContent("MutableRoot", replacement.get()) == X_ERROR_SUCCESS);
+}
+
+TEST_CASE("HLE HostPath close releases internal native-chain readers before testing a real escaped ancestor lease",
+          "[kernel][stfs][native][ownership][hostpath][nested][busy]") {
+  const bool escape_reader = GENERATE(false, true);
+  Fixture f(false, true, true, filesystem::ConsoleStorageType::HDD,
+            false, true);
+  MutableFixtureFolder(f);
+  auto* content = f.kernel().content_manager();
+  REQUIRE(content->OpenContentFile("MutableParent", "\\Device\\PirsSource\\managed") == X_ERROR_SUCCESS);
+  const auto parent = f.fs().AcquirePathDevice("MutableParent:"); REQUIRE(parent);
+  auto* host = dynamic_cast<vfs::HostPathDevice*>(parent.get()); REQUIRE(host);
+  KernelMember input(f, f.fs().ResolvePath("MutableParent:\\package"));
+  InnerPacket(f, input, "\\Device\\NativePirs0"); REQUIRE(f.Create() == X_STATUS_SUCCESS);
+  auto outer = XStfsDevice::Lookup(f.kernel(), f.Load32(0x48)); REQUIRE(outer);
+  KernelMember nested(f, f.fs().ResolvePath("\\Device\\NativePirs0\\payload"));
+  InnerPacket(f, nested, "\\Device\\NativePirs1"); REQUIRE(f.Create() == X_STATUS_SUCCESS);
+  auto inner = XStfsDevice::Lookup(f.kernel(), f.Load32(0x48)); REQUIRE(inner);
+  std::unique_ptr<MemberFile> held;
+  if (escape_reader) {
+    held = std::make_unique<MemberFile>(f.fs().ResolvePath("\\Device\\NativePirs1\\payload"));
+    ReadPayload(*held);
+  }
+  input.Reset(); nested.Reset();
+  const auto result = content->CloseContent("MutableParent");
+  REQUIRE(result == (escape_reader ? X_ERROR_SHARING_VIOLATION : X_ERROR_SUCCESS));
+  REQUIRE(outer->retired()); REQUIRE(inner->retired());
+  REQUIRE_FALSE(f.fs().ResolvePath("\\Device\\NativePirs0\\payload"));
+  REQUIRE_FALSE(f.fs().ResolvePath("\\Device\\NativePirs1\\payload"));
+  if (held) {
+    REQUIRE(content->IsRootTaken("MutableParent"));
+    REQUIRE_FALSE(host->storage()->retiring()); REQUIRE(host->has_open_files());
+    REQUIRE(f.fs().AcquireDevice(parent->mount_path()) == parent);
+    ReadPayload(*held); // Namespace close did not retire the live ancestor.
+    held.reset();
+    REQUIRE(content->CloseContent("MutableParent") == X_ERROR_SUCCESS);
+  }
+  REQUIRE_FALSE(content->IsRootTaken("MutableParent"));
+  REQUIRE_FALSE(f.fs().AcquireDevice(parent->mount_path()));
+  REQUIRE(host->storage()->retiring());
+  REQUIRE(outer->backing_drained()); REQUIRE(inner->backing_drained());
+  REQUIRE(f.Call(0x3B, {outer->guest_object()}) == X_STATUS_SUCCESS);
+  REQUIRE(f.Call(0x3B, {inner->guest_object()}) == X_STATUS_SUCCESS);
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("A common retirement batch owns exact nodes until finish and never consumes a later replacement",
+          "[kernel][stfs][native][ownership][retirement]") {
+  Fixture f; REQUIRE(f.Create() == X_STATUS_SUCCESS);
+  auto body = XStfsDevice::Lookup(f.kernel(), f.Load32(0x48)); REQUIRE(body);
+  auto node = f.fs().AcquireDevice("\\Device\\NativePirs0"); REQUIRE(node);
+  X_STATUS status = X_STATUS_SUCCESS;
+  auto first = f.fs().PrepareDeviceRetirement(node, true, status);
+  REQUIRE(first); REQUIRE(status == X_STATUS_SUCCESS);
+  REQUIRE(f.fs().CommitDeviceRetirement(*first) == X_STATUS_SUCCESS);
+  auto competing = f.fs().PrepareDeviceRetirement(node, true, status);
+  REQUIRE(competing); REQUIRE(status == X_STATUS_SUCCESS);
+  REQUIRE(f.fs().CommitDeviceRetirement(*competing) == X_STATUS(0xC0000043));
+  std::shared_ptr<vfs::Device> withdrawn;
+  REQUIRE(f.fs().FinishDeviceRetirement(*competing, 0, withdrawn) == X_STATUS_INVALID_HANDLE);
+  REQUIRE_FALSE(withdrawn);
+  REQUIRE(f.fs().FinishDeviceRetirement(*first, 0, withdrawn) == X_STATUS_SUCCESS);
+  REQUIRE(withdrawn == node); REQUIRE_FALSE(f.fs().AcquireDevice(node->mount_path()));
+  withdrawn->Retire(); withdrawn.reset();
+  auto replacement = std::make_unique<vfs::HostPathDevice>(
+      "\\Device\\NativePirs0", f.scratch.path / "packages", true);
+  REQUIRE(replacement->Initialize()); REQUIRE(f.fs().RegisterDevice(std::move(replacement)));
+  const auto current = f.fs().AcquireDevice("\\Device\\NativePirs0"); REQUIRE(current);
+  REQUIRE(current != node);
+  REQUIRE(f.fs().FinishDeviceRetirement(*first, 0, withdrawn) == X_STATUS_INVALID_HANDLE);
+  REQUIRE_FALSE(withdrawn); REQUIRE(f.fs().AcquireDevice("\\Device\\NativePirs0") == current);
+  // The body's first explicit acknowledgement addresses its old exact node.
+  // It may be busy while the first batch is still live; retry after it ends.
+  first.reset(); competing.reset();
+  REQUIRE(f.Call(0x3B, {body->guest_object()}) == X_STATUS_SUCCESS);
+  REQUIRE(f.fs().AcquireDevice("\\Device\\NativePirs0") == current);
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Borrowed content preserves attempted header I/O failures and releases its failed root",
+          "[kernel][stfs][content][borrowed-header]") {
+  const bool short_read = GENERATE(false, true);
+  Fixture f(true, true, false, filesystem::ConsoleStorageType::System);
+  auto parent = f.fs().AcquireDevice("\\Device\\PirsSource"); REQUIRE(parent);
+  auto* host = dynamic_cast<vfs::HostPathDevice*>(parent.get()); REQUIRE(host);
+  auto fault = std::make_shared<HeaderReadFault>();
+  fault->short_read = short_read;
+  fault->status = short_read ? X_STATUS_SUCCESS : X_STATUS_ACCESS_DENIED;
+  auto device = std::make_unique<HeaderReadDevice>(
+      f.scratch.path / "packages", host->storage(), parent, fault);
+  REQUIRE(device->SetStorageVolume(parent->storage_volume()));
+  REQUIRE(device->Initialize()); REQUIRE(f.fs().RegisterDevice(std::move(device)));
+  auto source = f.fs().AcquireDevice("\\Device\\HeaderRead"); REQUIRE(source);
+  auto* content = f.kernel().content_manager();
+  std::shared_ptr<vfs::Device> opened;
+  xam::BorrowedContentMountDiagnostic diagnostic;
+  // STATUS_UNSUCCESSFUL from an unexpected successful short read maps to
+  // ERROR_GEN_FAILURE(31); a real denied backend maps to ACCESS_DENIED(5).
+  const auto expected = short_read ? X_RESULT(31) : X_ERROR_ACCESS_DENIED;
+  REQUIRE(content->OpenContentFile("HeaderRetry", "\\Device\\HeaderRead\\package",
+                                  nullptr, 0, &opened, &diagnostic) == expected);
+  CHECK(diagnostic.failure_stage==xam::BorrowedContentMountDiagnostic::kCaptureHeader);
+  CHECK(diagnostic.failure_result==expected); CHECK(diagnostic.result==expected);
+  CHECK((diagnostic.available&128)!=0);
+  CHECK(diagnostic.native_status==(short_read?X_STATUS_UNSUCCESSFUL:X_STATUS_ACCESS_DENIED));
+  CHECK_FALSE(opened);
+  CHECK(fault->reads == 1); CHECK(fault->opened == 1); CHECK(fault->closed == 1);
+  CHECK_FALSE(content->IsRootTaken("HeaderRetry"));
+  CHECK_FALSE(f.fs().AcquirePathDevice("HeaderRetry:"));
+  CHECK(f.fs().AcquireDevice("\\Device\\HeaderRead") == source);
+  CHECK(source->mount_parent() == parent);
+
+  // Recovery uses the same retained native fixture bytes, not a valid-content
+  // substitute or a forced mount. The failed root claim must have been released.
+  fault->short_read = false; fault->status = X_STATUS_SUCCESS;
+  xam::BorrowedContentMountDiagnostic retry;
+  REQUIRE(content->OpenContentFile("HeaderRetry", "\\Device\\HeaderRead\\package",
+                                  nullptr, 0, &opened, &retry) == X_ERROR_SUCCESS);
+  REQUIRE(opened); CHECK(opened->mount_parent() == source);
+  CHECK(retry.failure_stage==0); CHECK(retry.result==X_ERROR_SUCCESS);
+  CHECK(retry.stage==xam::BorrowedContentMountDiagnostic::kCommit);
+  CHECK(diagnostic.failure_result==expected);
+  auto* entry = f.fs().ResolvePath("HeaderRetry:\\payload"); REQUIRE(entry);
+  vfs::File* file = nullptr;
+  REQUIRE(entry->Open(vfs::FileAccess::kFileReadData, &file) == X_STATUS_SUCCESS);
+  const auto destroy = [](vfs::File* value) { value->Destroy(); };
+  std::unique_ptr<vfs::File, decltype(destroy)> owned(file, destroy);
+  std::array<uint8_t, 16> bytes{}; size_t transferred = 0;
+  REQUIRE(owned->ReadSync(bytes, 0, &transferred) == X_STATUS_SUCCESS);
+  REQUIRE(transferred == bytes.size());
+  for (size_t i = 0; i != bytes.size(); ++i) { CHECK(bytes[i] == i); }
+  owned.reset(); opened.reset();
+  REQUIRE(content->CloseContent("HeaderRetry") == X_ERROR_SUCCESS);
+  CHECK(fault->opened == fault->closed);
+}
+
+TEST_CASE("Borrowed content still rejects a short or malformed actual header without publication",
+          "[kernel][stfs][content][borrowed-header]") {
+  const bool truncated = GENERATE(false, true);
+  Fixture f(true, true, false, filesystem::ConsoleStorageType::System);
+  auto bytes = f.bytes;
+  if (truncated) { bytes.resize(8); }
+  else { std::fill_n(bytes.begin(), 4, uint8_t(0)); }
+  {
+    // Only this test's scratch package is changed. CaptureBorrowedPackage opens
+    // a fresh retained handle and observes the actual current size/header.
+    std::ofstream out(f.scratch.path / "packages" / "package", std::ios::binary);
+    out.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    REQUIRE(out.good());
+  }
+  auto* content = f.kernel().content_manager();
+  std::shared_ptr<vfs::Device> opened;
+  REQUIRE(content->OpenContentFile("BadHeader", f.source_path, nullptr, 0,
+                                  &opened) == X_ERROR_FILE_CORRUPT);
+  CHECK_FALSE(opened); CHECK_FALSE(content->IsRootTaken("BadHeader"));
+  CHECK_FALSE(f.fs().AcquirePathDevice("BadHeader:"));
+  CHECK(f.fs().AcquireDevice("\\Device\\PirsSource"));
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Borrowed mount preserves a real registration error without consuming its source or root",
+          "[kernel][stfs][content][borrowed-prepare]") {
+  Fixture f(true, true, false, filesystem::ConsoleStorageType::System);
+  auto parent = f.fs().AcquireDevice("\\Device\\PirsSource"); REQUIRE(parent);
+  auto* host = dynamic_cast<vfs::HostPathDevice*>(parent.get()); REQUIRE(host);
+  auto fault = std::make_shared<HeaderReadFault>();
+  auto device = std::make_unique<HeaderReadDevice>(
+      f.scratch.path / "packages", host->storage(), parent, fault);
+  REQUIRE(device->SetStorageVolume(parent->storage_volume()));
+  REQUIRE(device->Initialize()); REQUIRE(f.fs().RegisterDevice(std::move(device)));
+  auto source = f.fs().AcquireDevice("\\Device\\HeaderRead"); REQUIRE(source);
+  const auto admitted = fault->registration_backings;
+  fault->invalid_registration_backing = true;
+  auto* content = f.kernel().content_manager();
+  std::shared_ptr<vfs::Device> opened;
+  xam::BorrowedContentMountDiagnostic diagnostic;
+  // Header and STFS parsing use actual valid file bytes. The real common
+  // guest-storage admission rejects the invalid empty backing path afterward.
+  REQUIRE(content->OpenContentFile("PrepareRetry", "\\Device\\HeaderRead\\package",
+                                  nullptr, 0, &opened, &diagnostic) == X_ERROR_INVALID_PARAMETER);
+  CHECK(diagnostic.failure_stage==xam::BorrowedContentMountDiagnostic::kRegistration);
+  CHECK(diagnostic.failure_result==X_ERROR_INVALID_PARAMETER);
+  CHECK(diagnostic.storage.operation==4); CHECK(diagnostic.storage.reason==3);
+  CHECK(diagnostic.storage.error_category==1);
+  CHECK(diagnostic.storage.error_value==int(std::errc::invalid_argument));
+  // VFS/Content wrapping the same real failure must retain the inner cut.
+  const auto first_line=diagnostic.storage.line; CHECK(first_line!=0);
+  CHECK(fault->registration_backings == admitted + 1);
+  CHECK(fault->reads > 1); CHECK(fault->opened == fault->closed);
+  CHECK_FALSE(opened); CHECK_FALSE(content->IsRootTaken("PrepareRetry"));
+  CHECK_FALSE(f.fs().AcquirePathDevice("PrepareRetry:"));
+  CHECK(f.fs().AcquireDevice("\\Device\\HeaderRead") == source);
+  CHECK_FALSE(source->namespace_retiring());
+  CHECK(source->mount_parent() == parent);
+  fault->invalid_registration_backing = false;
+  xam::BorrowedContentMountDiagnostic retry;
+  REQUIRE(content->OpenContentFile("PrepareRetry", "\\Device\\HeaderRead\\package",
+                                  nullptr, 0, &opened, &retry) == X_ERROR_SUCCESS);
+  REQUIRE(opened); CHECK(opened->mount_parent() == source);
+  CHECK(retry.failure_stage==0); CHECK(retry.storage.line==0);
+  CHECK(diagnostic.storage.line==first_line); CHECK(diagnostic.storage.reason==3);
+  opened.reset(); REQUIRE(content->CloseContent("PrepareRetry") == X_ERROR_SUCCESS);
+  CHECK(fault->opened == fault->closed);
+}
+
+TEST_CASE("Borrowed preparation cannot publish a replaced source and retries only the fresh exact generation",
+          "[kernel][stfs][content][borrowed-prepare][installed-source]") {
+  Fixture f(true, true, false, filesystem::ConsoleStorageType::System);
+  auto original = f.fs().AcquireDevice("\\Device\\PirsSource"); REQUIRE(original);
+  auto* host = dynamic_cast<vfs::HostPathDevice*>(original.get()); REQUIRE(host);
+  std::error_code error;
+  auto authority = host->storage()->Subroot({}, true, error);
+  REQUIRE(authority); REQUIRE_FALSE(error);
+  const xam::ContentSource descriptor{
+      "prepare-source", 1, xam::DeviceType::HDD, xam::ContentSourceKind::kInstalledSystem,
+      authority->path(), "\\Device\\PrepareSource", u"Prepare source", true, 0};
+  auto* content = f.kernel().content_manager();
+  REQUIRE(content->sources().RegisterReadOnly(descriptor, authority, 37));
+  const auto selected = content->sources().Source(descriptor.id); REQUIRE(selected);
+  auto native = std::make_unique<vfs::HostPathDevice>(descriptor.guest_root,
+      selected->storage->path(), true, false, "FATX", selected->storage);
+  REQUIRE(native->SetStorageVolume(selected->storage_volume));
+  REQUIRE(native->Initialize()); REQUIRE(f.fs().RegisterDevice(std::move(native)));
+  auto parent = f.fs().AcquireDevice(descriptor.guest_root); REQUIRE(parent);
+  auto fault = std::make_shared<HeaderReadFault>();
+  auto device = std::make_unique<HeaderReadDevice>(selected->storage->path(),
+      selected->storage, parent, fault);
+  REQUIRE(device->SetStorageVolume(selected->storage_volume));
+  REQUIRE(device->Initialize()); REQUIRE(f.fs().RegisterDevice(std::move(device)));
+  const auto before = fault->registration_backings;
+  bool replaced = false;
+  std::optional<xam::ContentSourceState> current;
+  fault->before_registration_backings = [&] {
+    // No CHECK/REQUIRE may throw through an offloaded host closure. The
+    // original RunBlockingIo join publishes these real registration results.
+    std::error_code replacement_error;
+    auto next = host->storage()->Subroot({}, true, replacement_error);
+    if (next && !replacement_error) {
+      replaced = content->sources().RegisterReadOnly(descriptor, next, 38);
+      if (replaced) { current = content->sources().Source(descriptor.id); }
+    }
+  };
+  std::shared_ptr<vfs::Device> opened;
+  const auto status = content->OpenContentFile("SourceRetry", "\\Device\\HeaderRead\\package",
+                                              &*selected, 0, &opened);
+  REQUIRE(replaced); REQUIRE(current); REQUIRE(current->available);
+  CHECK(fault->registration_backings == before + 1);
+  CHECK(current->generation != selected->generation);
+  CHECK_FALSE(content->sources().CaptureStorageVolume(*selected));
+  CHECK(status == X_ERROR_DEVICE_NOT_CONNECTED);
+  CHECK_FALSE(opened); CHECK_FALSE(content->IsRootTaken("SourceRetry"));
+  CHECK_FALSE(f.fs().AcquirePathDevice("SourceRetry:"));
+  CHECK(fault->opened == fault->closed);
+  // Retire only the actual old graph before publishing its fresh same-name
+  // VFS source. An old mount/volume is never retagged as the new generation.
+  REQUIRE(f.kernel().RetireMountedDeviceTree(parent) == X_STATUS_SUCCESS);
+  REQUIRE_FALSE(f.fs().AcquireDevice(descriptor.guest_root));
+  auto replacement = std::make_unique<vfs::HostPathDevice>(descriptor.guest_root,
+      current->storage->path(), true, false, "FATX", current->storage);
+  REQUIRE(replacement->SetStorageVolume(current->storage_volume));
+  REQUIRE(replacement->Initialize()); REQUIRE(f.fs().RegisterDevice(std::move(replacement)));
+  auto actual = f.fs().AcquireDevice(descriptor.guest_root); REQUIRE(actual); REQUIRE(actual != parent);
+  REQUIRE(content->OpenContentFile("SourceRetry", "\\Device\\PrepareSource\\package",
+                                  &*current, 0, &opened) == X_ERROR_SUCCESS);
+  REQUIRE(opened); CHECK(opened->mount_parent() == actual);
+  CHECK(opened->storage_volume() == current->storage_volume);
+  opened.reset(); REQUIRE(content->CloseContent("SourceRetry") == X_ERROR_SUCCESS);
+  CHECK(f.fs().AcquireDevice(descriptor.guest_root) == actual);
 }
 }  // namespace xe::kernel::test

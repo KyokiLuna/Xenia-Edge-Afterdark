@@ -119,3 +119,18 @@ The native query obtains device information from the retained mounted package
 file rather than title deployment. This static evidence is retained under
 `evidence/hdd-gate/root-volume-query-native-namespace-contract-v1/`; common
 backend and native runtime acceptance remain open.
+
+The same authenticated 17559 call at `816830FC` uses
+`NtQueryVolumeInformationFile` class **4** (`XFileFsDeviceInformation`) with an
+**eight-byte** result: `816830E8` loads `r7=4`, and `816830EC` loads `r6=8`.
+The image SHA-256 is
+`f9e44cd6f4b04875ddc5a3b8fd519785ba2b0488b1c4622f818b740ba4064313`.
+The corrected evidence is retained under
+`evidence/hdd-gate/root-volume-query-native-namespace-contract-v2/`; it
+supersedes the earlier prose that transposed the class and length.
+
+Both the native kernel query and builtin FE dispatch consume the exact retained
+device's volume descriptor. The recovered native decoder maps physical type
+`7` to HDD, `2` to optical, `0x2D` to USB and `0x45` to transfer storage. An
+unannotated device remains unknown. This static contract does not establish
+successful installation, native selector readiness or avatar rendering.

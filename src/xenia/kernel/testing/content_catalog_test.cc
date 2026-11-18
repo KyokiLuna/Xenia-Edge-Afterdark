@@ -6,7 +6,12 @@
  */
 
 #include "xenia/kernel/xam/content_manager.h"
+#include "xenia/app/title_metadata_cache.h"
+#include "xenia/base/cvar.h"
+#include "xenia/kernel/xam/tile_service.h"
 #include "xenia/base/content_mutation_owner.h"
+#include "xenia/base/math.h"
+#include <thread>
 #include "xenia/emulator.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/testing/isolated_kernel_runtime_settings.h"
@@ -17,6 +22,7 @@
 #include <cstring>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -29,6 +35,8 @@
 #include "xenia/base/byte_order.h"
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/devices/xcontent_container_device.h"
+
+DECLARE_int32(license_mask);
 
 namespace xe::kernel::test {
 class NativeManagedFormatFrontdoorTestAccess {
@@ -163,6 +171,67 @@ std::string ReadText(const std::filesystem::path& path) {
 }
 
 }  // namespace
+
+// Opt-in integration coverage for the real package produced by the isolated
+// Ghosts installation scenario. The supplied content is never copied into the
+// repository or opened with managed/write authority. A missing fixture is a
+// failed explicit invocation, rather than a silently passing acceptance case.
+TEST_CASE("Installed Ghosts DLC survives readonly catalog reconstruction",
+          "[.][kernel][content][catalog][genuine_ghosts_catalog]") {
+  const char* configured_root = std::getenv("XENIA_TEST_GHOSTS_CONTENT_ROOT");
+  REQUIRE(configured_root != nullptr);
+  const std::filesystem::path root(configured_root);
+  REQUIRE(root.is_absolute());
+  constexpr uint32_t kTitle = 0x415608FC;
+  constexpr char kPackage[] = "8C7CB7BEC20F69AFB35D9D2461CD7C528BD1714141";
+  const auto expected = root / "0000000000000000" / "415608FC" /
+                        "00000002" / kPackage;
+  REQUIRE(std::filesystem::is_regular_file(expected));
+  REQUIRE(std::filesystem::file_size(expected) == uint64_t{2099101696});
+  const auto before_write_time = std::filesystem::last_write_time(expected);
+
+  const auto capture = [&](ContentManager& catalog) {
+    const auto titles = catalog.ListContentTitleIds(1, 0);
+    REQUIRE(std::find(titles.begin(), titles.end(), kTitle) != titles.end());
+    const auto types = catalog.ListContentTypes(1, 0, kTitle);
+    REQUIRE(std::find(types.begin(), types.end(), XContentType::kMarketplaceContent) !=
+            types.end());
+    const auto rows = catalog.ListContent(1, 0, kTitle,
+                                          XContentType::kMarketplaceContent);
+    const auto row = std::find_if(rows.begin(), rows.end(), [&](const auto& item) {
+      return item.file_name() == kPackage;
+    });
+    REQUIRE(row != rows.end());
+    REQUIRE(row->device_id.get() == 1);
+    REQUIRE(row->xuid.get() == 0);
+    REQUIRE(row->title_id.get() == kTitle);
+    REQUIRE(row->content_type.get() == XContentType::kMarketplaceContent);
+    ContentCatalogLocation location;
+    REQUIRE(catalog.CaptureContentLocation(0, *row, location) == X_ERROR_SUCCESS);
+    REQUIRE(location.package_path == expected);
+    REQUIRE(location.read_only);
+    REQUIRE_FALSE(location.directory);
+    REQUIRE(catalog.IsContentLocationCurrent(location));
+    return location;
+  };
+
+  ContentCatalogLocation old_row;
+  {
+    ContentManager catalog(ContentManager::ReadOnlyCatalogTag{}, root);
+    REQUIRE_FALSE(catalog.managed_sources_ready());
+    old_row = capture(catalog);
+  }
+  {
+    ContentManager reconstructed(ContentManager::ReadOnlyCatalogTag{}, root);
+    REQUIRE_FALSE(reconstructed.IsContentLocationCurrent(old_row));
+    const auto current = capture(reconstructed);
+    REQUIRE(current.descriptor == old_row.descriptor);
+    REQUIRE(current.source_id == old_row.source_id);
+    REQUIRE(current.attributes.size == old_row.attributes.size);
+  }
+  REQUIRE(std::filesystem::last_write_time(expected) == before_write_time);
+  REQUIRE(std::filesystem::file_size(expected) == uint64_t{2099101696});
+}
 
 TEST_CASE("Installed system packages share discovery without user copies",
           "[content][catalog]") {
@@ -2195,5 +2264,469 @@ TEST_CASE("A caller held package File keeps its Entry alive through quiescent co
   uint32_t license = 0;
   REQUIRE(runtime.content().OpenContent("Reload", 1, save, license) == X_ERROR_SUCCESS);
   ReadRestartPayload(runtime, "Reload", payload);
+}
+}  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+
+TEST_CASE("Retained catalog rows release source flocks and reject a new registry lifetime",
+          "[kernel][content][catalog][restart][lifetime]") {
+  ContentRestartRuntime runtime;
+  const auto save = runtime.Save("retained-row");
+  REQUIRE(runtime.content().CreateContent("RowSave", 1, save) == X_ERROR_SUCCESS);
+  const std::array<uint8_t, 4> payload{0x52, 0, 0x80, 0xFF};
+  WriteRestartPayload(runtime, "RowSave", payload);
+  ContentCatalogLocation old_row;
+  REQUIRE(runtime.content().CaptureContentLocation(1, save, old_row) == X_ERROR_SUCCESS);
+  REQUIRE(runtime.content().IsContentLocationCurrent(old_row));
+  REQUIRE(old_row.attributes.size == payload.size());
+  const std::weak_ptr<const filesystem::ManagedVolumeAuthority> old_volume =
+      runtime.content().Volume("hdd");
+  REQUIRE_FALSE(old_volume.expired());
+
+  // The row stays alive while the real manager, VFS and open package retire.
+  // A UI snapshot must not keep the old MVA/flock and block the next Setup.
+  runtime.emulator->Shutdown();
+  REQUIRE(KernelState::shared() == nullptr);
+  REQUIRE(old_volume.expired());
+  runtime.Setup();
+  REQUIRE_FALSE(runtime.content().IsContentLocationCurrent(old_row));
+  ContentCatalogLocation fresh_row;
+  REQUIRE(runtime.content().CaptureContentLocation(1, save, fresh_row) == X_ERROR_SUCCESS);
+  REQUIRE(runtime.content().IsContentLocationCurrent(fresh_row));
+  REQUIRE(fresh_row.source_id == old_row.source_id);
+  REQUIRE(fresh_row.device_id == old_row.device_id);
+  REQUIRE(fresh_row.package_path == old_row.package_path);
+  REQUIRE(fresh_row.descriptor == old_row.descriptor);
+  // Even a copied generation field cannot remint the old weak identity.
+  old_row.source_generation = fresh_row.source_generation;
+  REQUIRE_FALSE(runtime.content().IsContentLocationCurrent(old_row));
+  uint32_t license = 0;
+  REQUIRE(runtime.content().OpenContent("ReloadRow", 1, save, license) == X_ERROR_SUCCESS);
+  ReadRestartPayload(runtime, "ReloadRow", payload);
+}
+
+TEST_CASE("Host catalog rows retain exact devices and overlays without changing guest device zero",
+          "[kernel][content][catalog][storage][devices]") {
+  ContentRestartRuntime runtime;
+  const auto usb_root = runtime.scratch.root / "usb";
+  REQUIRE(std::filesystem::create_directory(usb_root));
+  REQUIRE(runtime.content().RegisterManagedSource(
+      {"usb", 3, DeviceType::USBMASS, ContentSourceKind::kManaged,
+       usb_root, "\\USBContent", u"USB", false, 0, "\\USB", {}, runtime.scratch.root}));
+  REQUIRE(runtime.content().sources().Register(
+      {"installed-row", 1, DeviceType::HDD, ContentSourceKind::kInstalledSystem,
+       runtime.scratch.root / "system", "\\InstalledRows", u"System files", true, 0}));
+  auto hdd = runtime.Save("same-leaf");
+  auto usb = hdd; usb.device_id = 3;
+  REQUIRE(runtime.content().CreateContent("HddRow", 1, hdd) == X_ERROR_SUCCESS);
+  REQUIRE(runtime.content().CreateContent("UsbRow", 1, usb) == X_ERROR_SUCCESS);
+  const std::array<uint8_t, 3> hdd_bytes{1, 2, 3};
+  const std::array<uint8_t, 5> usb_bytes{9, 8, 7, 6, 5};
+  WriteRestartPayload(runtime, "HddRow", hdd_bytes);
+  WriteRestartPayload(runtime, "UsbRow", usb_bytes);
+  const auto relative = std::filesystem::path("0000000000000001/12345678/00000001");
+  const auto duplicate = runtime.scratch.root / "system" / relative / "same-leaf";
+  const auto only_system = runtime.scratch.root / "system" / relative / "system-only";
+  REQUIRE(std::filesystem::create_directories(duplicate));
+  REQUIRE(std::filesystem::create_directories(only_system));
+  { std::ofstream(duplicate / "marker.bin", std::ios::binary) << "overlay duplicate"; }
+  { std::ofstream(only_system / "marker.bin", std::ios::binary) << "system"; }
+  const auto ids = runtime.content().sources().DeviceIds();
+  REQUIRE((ids == std::vector<uint32_t>{1, 3}));
+  const auto hdd_list = runtime.content().ListContent(1, 1, 0x12345678, XContentType::kSavedGame);
+  const auto usb_list = runtime.content().ListContent(3, 1, 0x12345678, XContentType::kSavedGame);
+  REQUIRE(hdd_list.size() == 2);
+  REQUIRE(usb_list.size() == 1);
+  REQUIRE(runtime.content().ListContent(0, 1, 0x12345678, XContentType::kSavedGame).empty());
+  REQUIRE(runtime.content().ListContentTitleIds(0, 1).empty());
+
+  ContentCatalogLocation hdd_row, usb_row, system_row;
+  REQUIRE(runtime.content().CaptureContentLocation(1, hdd, hdd_row) == X_ERROR_SUCCESS);
+  REQUIRE(runtime.content().CaptureContentLocation(1, usb, usb_row) == X_ERROR_SUCCESS);
+  auto system = hdd; system.set_file_name("system-only");
+  REQUIRE(runtime.content().CaptureContentLocation(1, system, system_row) == X_ERROR_SUCCESS);
+  REQUIRE(hdd_row.source_id == "hdd"); REQUIRE(hdd_row.device_id == 1);
+  REQUIRE(usb_row.source_id == "usb"); REQUIRE(usb_row.device_id == 3);
+  REQUIRE(system_row.source_id == "installed-row"); REQUIRE(system_row.device_id == 1);
+  REQUIRE(hdd_row.package_path == runtime.scratch.root / "content" / relative / "same-leaf");
+  REQUIRE(usb_row.package_path == usb_root / relative / "same-leaf");
+  REQUIRE(system_row.package_path == only_system);
+  REQUIRE(hdd_row.attributes.size == hdd_bytes.size());
+  REQUIRE(usb_row.attributes.size == usb_bytes.size());
+  REQUIRE(system_row.attributes.size == 6);
+  REQUIRE_FALSE(hdd_row.read_only); REQUIRE_FALSE(usb_row.read_only);
+  REQUIRE(system_row.read_only); REQUIRE(system_row.directory);
+  REQUIRE(runtime.content().IsContentLocationCurrent(hdd_row));
+  REQUIRE(runtime.content().IsContentLocationCurrent(usb_row));
+  REQUIRE(runtime.content().IsContentLocationCurrent(system_row));
+  // The overlay remains a reference; it was never copied into managed Content.
+  REQUIRE_FALSE(std::filesystem::exists(runtime.scratch.root / "content" / relative / "system-only"));
+}
+
+}  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+namespace {
+std::filesystem::path WriteHostImportPackage(ContentRestartRuntime& runtime,
+    std::string_view leaf, std::span<const uint8_t> payload,
+    XContentType type = XContentType::kMarketplaceContent, uint32_t version = 0,
+    bool malformed_name = false) {
+  constexpr size_t block = 0x1000;
+  auto header = std::make_unique<vfs::XContentContainerHeader>();
+  header->content_header.magic = vfs::XContentPackageType::kPirs;
+  header->content_header.header_size = sizeof(*header);
+  auto& metadata = header->content_metadata;
+  metadata.volume_type = vfs::XContentVolumeType::kStfs;
+  metadata.content_type = type;
+  metadata.execution_info.version_value = version;
+  metadata.execution_info.title_id = 0x12345678;
+  metadata.profile_id = 0;
+  metadata.set_display_name(XLanguage::kEnglish, u"Owned host import");
+  if (malformed_name) {
+    metadata.set_display_name(
+        XLanguage::kEnglish, std::u16string(1, char16_t(0xD800)));
+  }
+  auto& volume = metadata.volume_descriptor.stfs;
+  volume.descriptor_length = sizeof(vfs::StfsVolumeDescriptor);
+  volume.flags.bits.read_only_format = true;
+  volume.file_table_block_count = 1;
+  volume.set_file_table_block_number(0);
+  const auto blocks = uint32_t((payload.size() + block - 1) / block);
+  vfs::StfsHashTable hash{};
+  vfs::StfsDirectoryBlock directory{};
+  REQUIRE(blocks + 1 < std::size(hash.entries));
+  volume.total_block_count = blocks + 1;
+  for (uint32_t i = 0; i != blocks + 1; ++i) {
+    hash.entries[i].set_level0_next_block(0xFFFFFF);
+  }
+  auto& entry = directory.entries[0];
+  constexpr std::string_view member = "payload.bin";
+  std::memcpy(entry.name, member.data(), member.size());
+  entry.flags.name_length = uint8_t(member.size());
+  entry.flags.contiguous = true;
+  entry.set_valid_data_blocks(blocks);
+  entry.set_allocated_data_blocks(blocks);
+  entry.set_start_block_number(1);
+  entry.directory_index = 0xFFFF;
+  entry.length = uint32_t(payload.size());
+  const auto base = xe::round_up(sizeof(*header), block);
+  std::vector<uint8_t> bytes(base + (blocks + 2) * block);
+  std::memcpy(bytes.data(), header.get(), sizeof(*header));
+  std::memcpy(bytes.data() + base, &hash, sizeof(hash));
+  std::memcpy(bytes.data() + base + block, &directory, sizeof(directory));
+  std::memcpy(bytes.data() + base + 2 * block, payload.data(), payload.size());
+  const auto path = runtime.scratch.root / xe::to_path(leaf);
+  std::ofstream output(path, std::ios::binary);
+  REQUIRE(output);
+  output.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+  REQUIRE(output.good());
+  output.close();
+  return path;
+}
+XCONTENT_AGGREGATE_DATA HostImportDescriptor(std::string_view leaf,
+                                            uint32_t device = 1) {
+  XCONTENT_AGGREGATE_DATA data{};
+  data.device_id = device;
+  data.title_id = 0x12345678;
+  data.content_type = XContentType::kMarketplaceContent;
+  data.xuid = 0;
+  data.set_file_name(leaf);
+  return data;
+}
+}  // namespace
+
+TEST_CASE("Host runtime capture excludes teardown and refuses same-thread replacement",
+          "[kernel][content][catalog][host_runtime][lifetime]") {
+  ContentRestartRuntime runtime;
+  auto* original = runtime.emulator->kernel_state();
+  bool visited = false;
+  REQUIRE(runtime.emulator->WithContentCatalog([&](ContentManager& content) {
+    visited = true;
+    REQUIRE(&content == original->content_manager());
+    runtime.emulator->Shutdown();
+    REQUIRE(runtime.emulator->kernel_state() == original);
+    REQUIRE(runtime.emulator->Setup(nullptr, nullptr, false, {}, {}, {}) ==
+            X_STATUS_UNSUCCESSFUL);
+    std::error_code error;
+    REQUIRE_FALSE(runtime.emulator->TryBeginHostContentImport(error));
+    REQUIRE(error == std::errc::device_or_resource_busy);
+    return X_ERROR_SUCCESS;
+  }) == X_ERROR_SUCCESS);
+  REQUIRE(visited);
+  std::mutex mutex;
+  std::condition_variable changed;
+  bool started = false, finished = false;
+  std::thread shutdown;
+  REQUIRE(runtime.emulator->WithHostRuntime([&](KernelState& captured) {
+    REQUIRE(&captured == original);
+    shutdown = std::thread([&] {
+      {
+        std::lock_guard lock(mutex);
+        started = true;
+        changed.notify_all();
+      }
+      runtime.emulator->Shutdown();
+      {
+        std::lock_guard lock(mutex);
+        finished = true;
+        changed.notify_all();
+      }
+    });
+    std::unique_lock lock(mutex);
+    REQUIRE(changed.wait_for(lock, std::chrono::seconds(5),
+                            [&] { return started; }));
+    REQUIRE_FALSE(finished);
+    REQUIRE(captured.content_manager()->managed_sources_ready());
+    return X_ERROR_SUCCESS;
+  }) == X_ERROR_SUCCESS);
+  shutdown.join();
+  REQUIRE(finished);
+  REQUIRE(KernelState::shared() == nullptr);
+  runtime.Setup();
+}
+
+TEST_CASE("Idle host import admission owns prepared input and releases old source on shutdown",
+          "[kernel][content][host_import][restart][lifetime]") {
+  ContentRestartRuntime runtime;
+  const std::array<uint8_t, 5> payload{0x53, 0, 0x80, 0xFF, 0x21};
+  const auto path = WriteHostImportPackage(runtime, "held-import", payload);
+  std::error_code error;
+  auto operation = runtime.emulator->TryBeginHostContentImport(error);
+  REQUIRE(operation);
+  REQUIRE_FALSE(error);
+  REQUIRE_FALSE(runtime.emulator->TryBeginTitleLaunch());
+  auto* original = runtime.emulator->kernel_state();
+  Emulator::ContentInstallEntry entry(path);
+  REQUIRE(operation->Prepare(path, entry) == X_STATUS_SUCCESS);
+  REQUIRE(entry.import_job_id_ != 0);
+  const std::weak_ptr<const filesystem::ManagedVolumeAuthority> old_volume =
+      runtime.content().Volume("hdd");
+  runtime.emulator->ResetTitle();
+  REQUIRE(runtime.emulator->kernel_state() == original);
+  runtime.emulator->Shutdown();
+  REQUIRE(KernelState::shared() == nullptr);
+  REQUIRE(old_volume.expired());
+  runtime.Setup();
+  REQUIRE(XFAILED(operation->Install(entry)));
+  REQUIRE_FALSE(runtime.content().ContentExists(
+      0, HostImportDescriptor("held-import")));
+  operation.reset();
+  auto fresh = runtime.emulator->TryBeginHostContentImport(error);
+  REQUIRE(fresh);
+  REQUIRE_FALSE(error);
+}
+
+TEST_CASE("Host import validates original header destination and commits retained input once",
+          "[kernel][content][host_import][transaction][persistence]") {
+  ContentRestartRuntime runtime;
+  const std::array<uint8_t, 5> payload{1, 0, 0x80, 0xFF, 7};
+  const auto input = WriteHostImportPackage(runtime, "actual-import", payload);
+  const auto source_bytes = std::filesystem::file_size(input);
+  std::error_code error;
+  auto operation = runtime.emulator->TryBeginHostContentImport(error);
+  REQUIRE(operation);
+  Emulator::ContentImportTarget target;
+  target.title_id = 0x12345678;
+  target.owner_xuid = 0;
+  target.content_types = {XContentType::kMarketplaceContent};
+  SECTION("Wrong owner and cancellation preserve both original input and destination") {
+    auto wrong = target;
+    wrong.owner_xuid = 1;
+    Emulator::ContentInstallEntry rejected(input);
+    REQUIRE(XFAILED(operation->Prepare(input, rejected, wrong)));
+    REQUIRE_FALSE(runtime.content().ContentExists(
+        0, HostImportDescriptor("actual-import")));
+    Emulator::ContentInstallEntry canceled(input);
+    REQUIRE(operation->Prepare(input, canceled, target) == X_STATUS_SUCCESS);
+    canceled.cancelled_.store(true);
+    REQUIRE(XFAILED(operation->Install(canceled)));
+    REQUIRE_FALSE(runtime.content().ContentExists(
+        0, HostImportDescriptor("actual-import")));
+    REQUIRE(std::filesystem::file_size(input) == source_bytes);
+  }
+  SECTION("Malformed UTF16 presentation cannot publish a half-prepared UI job") {
+    const auto malformed = WriteHostImportPackage(
+        runtime, "malformed-name", payload, XContentType::kMarketplaceContent,
+        0, true);
+    Emulator::ContentInstallEntry rejected(malformed);
+    REQUIRE(XFAILED(operation->Prepare(malformed, rejected, target)));
+    REQUIRE(rejected.import_job_id_ == 0);
+    REQUIRE(rejected.installation_state_ == Emulator::InstallState::failed);
+    REQUIRE_FALSE(runtime.content().ContentExists(
+        0, HostImportDescriptor("malformed-name")));
+    REQUIRE(std::filesystem::exists(malformed));
+    Emulator::ContentInstallEntry valid(input);
+    REQUIRE(operation->Prepare(input, valid, target) == X_STATUS_SUCCESS);
+    REQUIRE(valid.import_job_id_ != 0);
+  }
+  SECTION("Installer version filter preserves the previous nonzero-only compatibility policy") {
+    const auto update = WriteHostImportPackage(
+        runtime, "versioned-update", payload, XContentType::kInstaller, 10);
+    auto update_target = target;
+    update_target.content_types = {XContentType::kInstaller};
+    update_target.expected_title_version = 11;
+    Emulator::ContentInstallEntry wrong(update);
+    REQUIRE(XFAILED(operation->Prepare(update, wrong, update_target)));
+    update_target.expected_title_version = 10;
+    Emulator::ContentInstallEntry matching(update);
+    REQUIRE(operation->Prepare(update, matching, update_target) == X_STATUS_SUCCESS);
+    const auto unknown = WriteHostImportPackage(
+        runtime, "unknown-version-update", payload, XContentType::kInstaller, 0);
+    update_target.expected_title_version = 11;
+    Emulator::ContentInstallEntry unspecified(unknown);
+    REQUIRE(operation->Prepare(unknown, unspecified, update_target) == X_STATUS_SUCCESS);
+  }
+  SECTION("Prepared input survives pathname change and committed destination refuses replacement") {
+    Emulator::ContentInstallEntry entry(input);
+    REQUIRE(operation->Prepare(input, entry, target) == X_STATUS_SUCCESS);
+    const auto destination = entry.data_installation_path_;
+    REQUIRE(destination.is_absolute());
+    const auto moved = input.parent_path() / "renamed-after-admission";
+    std::filesystem::rename(input, moved);
+    REQUIRE(operation->Install(entry) == X_STATUS_SUCCESS);
+    REQUIRE(entry.installation_state_ == Emulator::InstallState::installed);
+    REQUIRE(entry.currently_installed_size_.load() == payload.size());
+    REQUIRE(ReadText(destination / "payload.bin") ==
+            std::string(payload.begin(), payload.end()));
+    REQUIRE(XFAILED(operation->Install(entry)));
+    // Restore only the fixture input name to test the same actual target.
+    std::filesystem::rename(moved, input);
+    Emulator::ContentInstallEntry duplicate(input);
+    REQUIRE(XFAILED(operation->Prepare(input, duplicate, target)));
+    REQUIRE(ReadText(destination / "payload.bin") ==
+            std::string(payload.begin(), payload.end()));
+    operation.reset();
+    runtime.emulator->Shutdown();
+    runtime.Setup();
+    const auto data = HostImportDescriptor("actual-import");
+    REQUIRE(runtime.content().ContentExists(0, data));
+    ContentCatalogLocation row;
+    REQUIRE(runtime.content().CaptureContentLocation(0, data, row) == X_ERROR_SUCCESS);
+    REQUIRE(row.attributes.size == payload.size());
+    REQUIRE(row.package_path == destination);
+  }
+}
+
+// Explicit research integration only: supplied packages stay in place. The
+// manifest supplies expected identities, never a simulated metadata producer.
+TEST_CASE("Supplied apps and games retain intrinsic metadata art and license semantics offline",
+          "[.][kernel][content][catalog][genuine_library_metadata]") {
+  const auto* supplied = std::getenv("XENIA_TEST_LIBRARY_FIXTURES");
+  REQUIRE(supplied);
+  REQUIRE(*supplied);
+  const auto manifest_path = xe::to_path(supplied);
+  REQUIRE(std::filesystem::is_regular_file(manifest_path));
+  REQUIRE(std::filesystem::file_size(manifest_path) <= 32 * 1024);
+  const auto manifest = toml::parse_file(xe::path_to_utf8(manifest_path));
+  REQUIRE(manifest["schema"].value_or(0) == 1);
+  const auto* fixtures = manifest["fixture"].as_array();
+  REQUIRE(fixtures);
+  REQUIRE_FALSE(fixtures->empty());
+  REQUIRE(fixtures->size() <= 16);
+  CatalogScratch scratch;
+  const int32_t active_license = cvars::license_mask;
+  size_t checked = 0;
+  for (const auto& fixture_node : *fixtures) {
+    const auto* fixture_table = fixture_node.as_table();
+    REQUIRE(fixture_table);
+    const auto& fixture = *fixture_table;
+    const auto path_text = fixture["path"].value<std::string>();
+    const auto title = fixture["title_id"].value<uint32_t>();
+    const auto media = fixture["media_id"].value<uint32_t>();
+    const auto version = fixture["version"].value<uint32_t>();
+    const auto type = fixture["content_type"].value<uint32_t>();
+    const auto package_mask = fixture["package_mask"].value<uint32_t>();
+    const auto kind = fixture["kind"].value<std::string>();
+    CAPTURE(fixture["name"].value_or(std::string{}));
+    REQUIRE(path_text);
+    REQUIRE(title);
+    REQUIRE(media);
+    REQUIRE(version);
+    REQUIRE(type);
+    REQUIRE(package_mask);
+    REQUIRE(kind);
+    REQUIRE((*kind == "game" || *kind == "application"));
+    const auto path = xe::to_path(*path_text);
+    REQUIRE(path.is_absolute());
+    const auto before = app::FingerprintPhysicalTitle(path);
+    REQUIRE(before);
+    const auto metadata = app::ReadCachedPhysicalTitle(scratch.root / "cache", path);
+    REQUIRE(metadata);
+    REQUIRE_FALSE(metadata->from_cache);
+    REQUIRE(metadata->info.title_id == *title);
+    REQUIRE(metadata->info.media_id == *media);
+    REQUIRE(metadata->info.version == *version);
+    REQUIRE(uint32_t(metadata->info.content_type) == *type);
+    REQUIRE(metadata->info.package_license_mask == *package_mask);
+    if (const auto category = fixture["native_category"].value<uint32_t>()) {
+      REQUIRE(metadata->info.native_category == *category);
+    }
+    REQUIRE_FALSE(metadata->info.icon.empty());
+    REQUIRE_FALSE(metadata->icon_path.empty());
+    REQUIRE(xe::filesystem::ReadAllBytes(metadata->icon_path) == metadata->info.icon);
+    const auto image = TileService::PrepareTexture(
+        TileService::FromOwnedPng(metadata->info.icon), 4096, 1024);
+    REQUIRE(image.status == X_E_SUCCESS);
+    REQUIRE(image.width > 0);
+    REQUIRE(image.height > 0);
+    REQUIRE(image.rgba.size() == size_t(image.width) * image.height * 4);
+    app::LibraryEntry entry;
+    entry.title_id = *title;
+    entry.version = *version;
+    entry.name = "Supplied fixture";  // Display text cannot classify the title.
+    entry.content_type = metadata->info.content_type;
+    entry.package_license_mask = metadata->info.package_license_mask;
+    entry.title_resources_status = metadata->info.title_resources_status;
+    entry.title_resources = metadata->info.title_resources;
+    entry.metadata_revision = app::kLibraryMetadataRevision;
+    entry.paths.push_back({path, true, *media, metadata->info.disc_number});
+    for (const uint32_t mask : {0u, 1u}) {
+      const auto expected = fixture[mask ? "entitlement1" : "entitlement0"]
+                                .value<std::string>();
+      REQUIRE(expected);
+      const auto resolved = app::ResolveCatalogVariant(entry, entry.paths[0], &*metadata, mask);
+      REQUIRE(resolved.available);
+      REQUIRE(resolved.metadata_valid);
+      REQUIRE(resolved.title_id == *title);
+      REQUIRE(resolved.media_id == *media);
+      REQUIRE(resolved.version == *version);
+      REQUIRE(resolved.path == path);
+      REQUIRE(uint32_t(resolved.content_type) == *type);
+      REQUIRE(resolved.presentation.kind == (*kind == "application"
+          ? vfs::TitleSemanticKind::kApplication : vfs::TitleSemanticKind::kGame));
+      const auto entitlement = *expected == "full" ? vfs::TitleEntitlement::kFull
+          : *expected == "trial" ? vfs::TitleEntitlement::kTrial
+          : vfs::TitleEntitlement::kUnknown;
+      REQUIRE((*expected == "full" || *expected == "trial" || *expected == "unknown"));
+      REQUIRE(resolved.presentation.entitlement == entitlement);
+      REQUIRE(resolved.presentation.effective_license_mask == (*package_mask | mask));
+      REQUIRE(cvars::license_mask == active_license);
+    }
+    app::GameLibrary library(scratch.root / "library");
+    library.Load();
+    REQUIRE(library.AddDisc(*title, "Supplied fixture", path));
+    REQUIRE(xe::filesystem::ReadAllBytes(library.IconPath(entry.key())) ==
+            metadata->info.icon);
+    app::GameLibrary restarted(scratch.root / "library");
+    restarted.Load();
+    const auto* restored = restarted.Find(entry.key());
+    REQUIRE(restored);
+    REQUIRE(restored->paths.size() == 1);
+    REQUIRE(restored->paths[0].path == path);
+    REQUIRE(restored->paths[0].media_id == *media);
+    REQUIRE(restored->content_type == metadata->info.content_type);
+    const auto cached = app::ReadCachedPhysicalTitle(scratch.root / "cache", path);
+    REQUIRE(cached);
+    REQUIRE(cached->from_cache);
+    REQUIRE(cached->fingerprint == *before);
+    REQUIRE(cached->info.icon == metadata->info.icon);
+    REQUIRE(app::FingerprintPhysicalTitle(path) == before);
+    REQUIRE(cvars::license_mask == active_license);
+    ++checked;
+  }
+  REQUIRE(checked == fixtures->size());
+  // This is offline metadata/cache/host-index coverage. Native browsing, family
+  // chooser UI, title execution and actual avatar/media playback are separate.
 }
 }  // namespace xe::kernel::xam::test

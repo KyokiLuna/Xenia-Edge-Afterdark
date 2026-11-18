@@ -28,8 +28,30 @@ class NativeUiBackendRoute final {
     bool operator==(const Cohort&) const = default;
     bool valid() const;
   };
+  // An opaque CPU epoch owned by one actual Kernel. It carries no native
+  // root, module, readiness or execution authority. A replacement Kernel owns
+  // a different epoch even when the guest title ID and paths are identical.
+  struct HostOnlyEpoch final {};
   enum class Input { kUnknown, kProvenNoInitialSwap, kReady };
   enum class Decision { kDenied, kNative, kHost };
+
+  // A CPU admission receipt only: the actual prepared native route still
+  // supplies all native readiness/cohort/execution proof. Held across the
+  // creating call, then transferred to an actual native visibility observation
+  // or the already-selected host fallback lease, never guessed from a timer.
+  class NativeCreationLease final {
+   public:
+    ~NativeCreationLease();
+    void MarkExecutionAttempt() noexcept;
+    void Finish(bool queued) noexcept;
+   private:
+    friend class NativeUiBackendRoute;
+    NativeCreationLease(std::shared_ptr<State>, uint64_t revision);
+    std::shared_ptr<State> state_;
+    const uint64_t visibility_revision_;
+    bool finished_ = true;
+    bool execution_attempted_ = false;
+  };
 
   // This object and callbacks capture no Kernel/provider strong holders.
   // A weak notification callback enters the existing Transport operation and
@@ -57,12 +79,24 @@ class NativeUiBackendRoute final {
     ~HostLease();
     const Cohort& cohort() const { return cohort_; }
     uint64_t serial() const { return serial_; }
-    // Local same-thread/LIFO scope only; it must not escape or move threads.
+    // Same-thread/LIFO scope only; never capture in a queued callback or move
+    // across threads. The original host caller may retain Entry across a short
+    // runtime-capture callback return while publishing its owned UI operation.
     std::unique_ptr<Entry> TryEnter();
     bool cancelled() const;
     // One operation's pure CPU waiter. May be called immediately if stop won.
     void SetCancellation(std::function<void()>);
     void Cancel() noexcept;
+    // End only an explicitly host-only operation. Late old-dialog callbacks
+    // become inert; the delayed SYS_UI notification does not retain admission.
+    void FinishHostOnly() noexcept;
+    // Actual modal/result completion for either selected host lane. Existing
+    // visibility=false publication must happen before this call. Retire only
+    // this exact host slot, make delayed old references inert, then finish the
+    // transferred Kernel ingress outside this route's mutex. Never changes a
+    // native cohort, native seal/readiness or actual native visibility.
+    void FinishHostOperation() noexcept;
+    void RetainHostIngress(std::shared_ptr<NativeCreationLease>);
     // Existing physical Xenia overlay notification, not native SYSUI9.
     void SetVisible(bool) noexcept;
 
@@ -74,6 +108,7 @@ class NativeUiBackendRoute final {
     uint64_t serial_ = 0;
     bool cancelled_ = false;
     std::function<void()> cancel_;
+    std::shared_ptr<NativeCreationLease> host_ingress_;
   };
   struct Admission {
     Decision decision = Decision::kDenied;
@@ -81,6 +116,13 @@ class NativeUiBackendRoute final {
   };
   explicit NativeUiBackendRoute(std::function<void(bool)> visibility = {});
   Admission Admit(const Cohort&, Input, bool allow_host);
+  Admission AdmitHostOnly(const std::shared_ptr<const HostOnlyEpoch>&,
+                          uint64_t title_generation);
+  std::shared_ptr<NativeCreationLease> ReserveNativeCreation(
+      const std::shared_ptr<const HostOnlyEpoch>&);
+  // Only the actual Kernel native SYS_UI observer supplies this publication.
+  // Generic host BroadcastNotification must never call it.
+  void ObserveNativeUiVisibility(bool visible) noexcept;
   // Retain at input-call ENTRY through actual PPC and filtering. A modal that
   // closes during that call must not leak its final cached transition.
   std::shared_ptr<HostLease> CurrentHost(const Cohort&) const;

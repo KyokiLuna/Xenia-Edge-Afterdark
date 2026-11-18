@@ -2,6 +2,7 @@
 #include "xenia/base/testing/snapshot_fixture.h"
 #include <cstdio>
 #include <fstream>
+#include <map>
 #if XE_PLATFORM_LINUX
 namespace xe::filesystem::test {
 TEST_CASE("Snapshot publication preserves exact old bytes in a private copy",
@@ -363,4 +364,121 @@ TEST_CASE("Only an actual published token authorizes snapshot durability retry",
   REQUIRE(unavailable.current == write.current);
 }
 }  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX
+namespace xe::filesystem {
+class SnapshotRecoveryOwnerTestAccess final {
+ public:
+  static auto Cut(std::shared_ptr<const HostStorageRoot> parent,unsigned boundary) {
+    return SnapshotRecoveryOwner::OpenInternal(std::move(parent),true,boundary);
+  }
+  static auto CompleteLive(std::shared_ptr<const HostStorageRoot> parent,
+                           const SnapshotRecoveryOwner& initializer) {
+    return SnapshotRecoveryOwner::OpenInternal(
+        std::move(parent),false,0,initializer.bootstrap_.get());
+  }
+};
+}
+namespace xe::filesystem::test {
+TEST_CASE("First recovery owner publishes only complete protected directories",
+          "[snapshot_publication][bootstrap][recovery][native]") {
+  const unsigned boundary=GENERATE(1u,2u,3u);
+  SnapshotScratch scratch;auto parent=scratch.Root();
+  auto stopped=SnapshotRecoveryOwnerTestAccess::Cut(parent,boundary);
+  REQUIRE(stopped);REQUIRE(stopped->error()==std::errc::operation_canceled);
+  const auto canonical=scratch.path/SnapshotRecoveryOwner::kDirectory;
+  REQUIRE(std::filesystem::exists(canonical)==(boundary==3));
+  if (boundary==3) {
+    REQUIRE(stopped->created());REQUIRE(stopped->root());
+    std::error_code error;REQUIRE_FALSE(stopped->root()->GuestView(error));REQUIRE(error);
+    stopped.reset();auto reopened=SnapshotRecoveryOwner::OpenExisting(parent);
+    REQUIRE_FALSE(reopened->error());REQUIRE(reopened->root());REQUIRE_FALSE(reopened->created());
+  } else {
+    REQUIRE_FALSE(stopped->created());REQUIRE_FALSE(stopped->root());stopped.reset();
+    std::map<std::filesystem::path,uintmax_t> original;
+    for (const auto& entry:std::filesystem::recursive_directory_iterator(scratch.path)) {
+      if (entry.is_regular_file()) { original.emplace(entry.path(),entry.file_size()); }
+    }
+    auto recreated=SnapshotRecoveryOwner::Open(parent);
+    REQUIRE_FALSE(recreated->error());REQUIRE(recreated->created());
+    for (const auto& [path,size]:original) { REQUIRE(std::filesystem::file_size(path)==size); }
+  }
+}
+TEST_CASE("A live recovery capsule refines only through its exact private owner handoff",
+          "[snapshot_publication][bootstrap][recovery][live_handoff]") {
+  SnapshotScratch scratch, foreign_scratch;
+  auto parent=scratch.Root();
+  auto foreign=foreign_scratch.Root();
+  auto stopped=SnapshotRecoveryOwnerTestAccess::Cut(parent,4);
+  REQUIRE(stopped);
+  REQUIRE(stopped->error()==std::errc::operation_canceled);
+  REQUIRE(stopped->created());
+  REQUIRE_FALSE(stopped->root());
+  const auto marker=scratch.path/SnapshotRecoveryOwner::kDirectory/SnapshotRecoveryOwner::kMarker;
+  struct stat before{};
+  REQUIRE(stat(marker.c_str(),&before)==0);
+  REQUIRE(S_ISREG(before.st_mode));
+  std::ifstream input(marker,std::ios::binary);
+  const std::vector<uint8_t> original{std::istreambuf_iterator<char>(input),
+                                      std::istreambuf_iterator<char>()};
+  REQUIRE_FALSE(original.empty());
+  // Ordinary factories cannot take another still-live initializer's receipt.
+  const auto ordinary=SnapshotRecoveryOwner::OpenExisting(parent);
+  REQUIRE(ordinary);
+  REQUIRE(ordinary->error());
+  const auto refused=SnapshotRecoveryOwnerTestAccess::CompleteLive(foreign,*stopped);
+  REQUIRE(refused);
+  REQUIRE(refused->error()==std::errc::permission_denied);
+  REQUIRE_FALSE(refused->root());
+  REQUIRE_FALSE(std::filesystem::exists(foreign_scratch.path/SnapshotRecoveryOwner::kDirectory));
+  auto owner=SnapshotRecoveryOwnerTestAccess::CompleteLive(parent,*stopped);
+  REQUIRE(owner);
+  REQUIRE_FALSE(owner->error());
+  REQUIRE(owner->root());
+  REQUIRE_FALSE(owner->created());
+  struct stat after{};
+  REQUIRE(stat(marker.c_str(),&after)==0);
+  REQUIRE(after.st_dev==before.st_dev);
+  REQUIRE(after.st_ino==before.st_ino);
+  std::error_code error;
+  std::vector<uint8_t> bytes;
+  REQUIRE_FALSE(owner->root()->ReadFile(SnapshotRecoveryOwner::kMarker,256,bytes));
+  REQUIRE(bytes==original);
+  auto raw=parent->Subroot(SnapshotRecoveryOwner::kDirectory,false,error);
+  REQUIRE(raw);
+  REQUIRE_FALSE(error);
+  REQUIRE_FALSE(raw->GuestView(error));
+  REQUIRE(error==std::errc::permission_denied);
+  stopped.reset();
+  const auto reopened=SnapshotRecoveryOwner::OpenExisting(parent);
+  REQUIRE(reopened);
+  REQUIRE_FALSE(reopened->error());
+  REQUIRE(reopened->root());
+}
+TEST_CASE("Complete recovery reopen reclaims its exact retained bootstrap receipt before typed refinement",
+          "[snapshot_publication][bootstrap][recovery][retained_guest]") {
+  SnapshotScratch scratch, unrelated_scratch;
+  auto parent=scratch.Root();auto unrelated=unrelated_scratch.Root();
+  std::error_code error;auto unrelated_guest=unrelated->GuestView(error);
+  REQUIRE(unrelated_guest);REQUIRE_FALSE(error);
+  auto stopped=SnapshotRecoveryOwnerTestAccess::Cut(parent,4);
+  REQUIRE(stopped);REQUIRE(stopped->error()==std::errc::operation_canceled);
+  REQUIRE(stopped->created());REQUIRE_FALSE(stopped->root());
+  REQUIRE(std::filesystem::exists(scratch.path/SnapshotRecoveryOwner::kDirectory/SnapshotRecoveryOwner::kMarker));
+  stopped.reset();  // unrelated guest retains the original stage/canonical roots
+  auto reopened=SnapshotRecoveryOwner::OpenExisting(parent);
+  REQUIRE(reopened);REQUIRE_FALSE(reopened->error());REQUIRE(reopened->root());REQUIRE_FALSE(reopened->created());
+  auto raw=parent->Subroot(SnapshotRecoveryOwner::kDirectory,false,error);REQUIRE(raw);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(raw->GuestView(error));REQUIRE(error==std::errc::permission_denied);
+  // Once refined, an ordinary typed reopen reuses the same policy without
+  // requiring another capsule or weakening private guest exclusion.
+  auto second=SnapshotRecoveryOwner::OpenExisting(parent);
+  REQUIRE(second);REQUIRE_FALSE(second->error());REQUIRE(second->root());
+  const std::array<uint8_t,2> ordinary{7,9};
+  REQUIRE_FALSE(unrelated_guest->WriteNewFile("ordinary.data",ordinary).error);
+  REQUIRE_FALSE(raw->GuestView(error));REQUIRE(error==std::errc::permission_denied);
+}
+
+}
 #endif

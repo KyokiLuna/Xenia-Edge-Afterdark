@@ -259,8 +259,8 @@ void ProfileConfigDialog::OnDraw(ImGuiIO& io) {
   ImGui::Spacing();
 
   if (ImGui::Button("Create Profile")) {
-    new kernel::xam::ui::CreateProfileUI(emulator_window_->imgui_drawer(),
-                                         emulator_window_->emulator());
+    kernel::xam::xeXamShowHostCreateProfileUI(
+        emulator_window_->emulator(), XUserIndexAny);
   }
 
   ImGui::PopStyleVar(1);

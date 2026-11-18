@@ -111,9 +111,10 @@ void TitleListUI::DrawTitleEntry(ImGuiIO& io, TitleInfo& entry) {
                         ImGuiSelectableFlags_SpanAllColumns,
                         end_draw_position)) {
     selected_title_ = entry.id;
-    new GameAchievementsUI(imgui_drawer(),
-                           kernel_state()->emulator()->input_system(), &entry,
-                           profile_);
+    auto* dialog = new GameAchievementsUI(
+        imgui_drawer(), kernel_state()->emulator()->input_system(), &entry,
+        profile_);
+    dialog->SetHostLease(host_lease());
   }
 
   if (ImGui::BeginPopupContextItem(
@@ -190,7 +191,7 @@ void TitleListUI::DrawTitleEntry(ImGuiIO& io, TitleInfo& entry) {
   }
 }
 
-void TitleListUI::OnDraw(ImGuiIO& io) {
+void TitleListUI::OnDrawDialog(ImGuiIO& io) {
   ImGui::SetNextWindowPos(drawing_position_, ImGuiCond_FirstUseEver);
   const auto xenia_window_size = ImGui::GetMainViewport()->Size;
 

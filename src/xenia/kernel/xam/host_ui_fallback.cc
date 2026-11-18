@@ -13,11 +13,27 @@
 #include "xenia/ui/windowed_app_context.h"
 namespace xe::kernel::xam {
 HostUiFallbackReservation::HostUiFallbackReservation(XamState* xam,
-                                                     hid::InputSystem* input)
+                                                     hid::InputSystem* input,
+                                                     bool host_only)
     : xam_(xam) {
   if (input) {
     auto lock = input->lock();
-    input_gap_ = input->ReserveHostUiInput(input->native_input_generation());
+    input_gap_ = host_only
+                     ? input->ReserveHostUiInput()
+                     : input->ReserveHostUiInput(input->native_input_generation());
+  }
+}
+std::shared_ptr<HostUiFallbackReservation> HostUiFallbackReservation::TryCreate(
+    XamState* xam, hid::InputSystem* input, bool host_only) noexcept {
+  try {
+    auto value = std::make_shared<HostUiFallbackReservation>(xam, input, host_only);
+    if (!value->input_gap()) { value->Release(); }
+    return value;
+  } catch (...) {
+    // The caller claimed this exact operation's flag; construction never
+    // published UI or handed a raw reservation to a queued factory.
+    xam->is_xam_dialog_present_.store(false);
+    return {};
   }
 }
 HostUiFallbackReservation::~HostUiFallbackReservation() { Release(); }
@@ -43,6 +59,12 @@ void HostUiFallbackCompletion::Finish(Result value) {
 HostUiFallbackCompletion::Result HostUiFallbackCompletion::result() const {
   std::lock_guard lock(mutex_);
   return result_;
+}
+HostUiFallbackOperationCompletion::~HostUiFallbackOperationCompletion() {
+  if (lease_) {
+    lease_->SetVisible(false);
+    lease_->FinishHostOperation();
+  }
 }
 bool QueueHostUiFallback(
     xe::ui::WindowedAppContext& app,

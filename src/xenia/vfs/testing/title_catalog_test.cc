@@ -16,6 +16,8 @@
 
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/base/filesystem.h"
+#include "xenia/base/host_metadata_writer.h"
+#include "xenia/base/platform.h"
 #include "xenia/base/math.h"
 #include "xenia/kernel/util/xex2_info.h"
 #include "xenia/vfs/devices/stfs_xbox.h"
@@ -327,7 +329,10 @@ TEST_CASE("Fingerprints invalidate changed same-size input and companion files",
        std::filesystem::directory_iterator(first->icon_path.parent_path())) {
     icons += file.path().extension() == ".png";
   }
-  REQUIRE(icons <= 2);
+  // No exact retirement/ownership record exists for arbitrary prior names.
+  // Keep all three observed generations instead of deleting files by suffix.
+  REQUIRE(icons == 3);
+  REQUIRE(xe::filesystem::ReadAllBytes(first->icon_path) == first->info.icon);
   const auto data = scratch.root / "package.data";
   REQUIRE(std::filesystem::create_directory(data));
   const auto fragment = data / "Data0000";
@@ -630,5 +635,217 @@ TEST_CASE("Native app category is scoped to its physical type and authority",
   }
   CHECK(xe::filesystem::ReadAllBytes(path) == bytes);
 }
+
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace {
+std::vector<uint8_t> ReleasePackage(uint32_t version,uint32_t media) {
+  auto bytes=Package(0,media);
+  auto* header=reinterpret_cast<vfs::XContentContainerHeader*>(bytes.data());
+  header->content_metadata.execution_info.version_value=version;
+  return bytes;
+}
+void SeedLegacy(const std::filesystem::path& root,
+                std::vector<LibraryPath> paths) {
+  GameLibrary seed(root);LibraryEntry legacy;
+  legacy.title_id=0x584111F7;legacy.name="Legacy original";
+  legacy.paths=std::move(paths);
+  REQUIRE(seed.Upsert(legacy));
+  const auto title=root/"584111F7";
+  std::filesystem::rename(title/VersionToString(0)/"game.toml",title/"game.toml");
+}
+}
+TEST_CASE("Library migration retries missing parts while preserving canonical edits and originals",
+          "[title-catalog][host_metadata][library_migration]") {
+  CatalogScratch scratch;const auto root=scratch.root/"library";
+  const auto a=scratch.root/"a";const auto b=scratch.root/"b";
+  Write(a,ReleasePackage(0x100,10));Write(b,ReleasePackage(0x200,20));
+  SeedLegacy(root,{{a,true},{b,false}});
+  const auto legacy=root/"584111F7"/"game.toml";
+  const auto original=Text(legacy);
+  const auto title=root/"584111F7";
+  {GameLibrary current(root);LibraryEntry edited;edited.title_id=0x584111F7;
+   edited.version=0x100;edited.name="User-edited canonical";edited.paths={{a,true}};
+   REQUIRE(current.Upsert(edited));}
+  const auto canonical_a=title/VersionToString(0x100)/"game.toml";
+  const auto edited_bytes=Text(canonical_a);
+  const auto blocked=title/VersionToString(0x200);std::filesystem::create_directory(blocked);
+  Write(blocked/"game.toml",{'u','n','k','n','o','w','n',0});
+  const auto unknown=xe::filesystem::ReadAllBytes(blocked/"game.toml");
+  {GameLibrary partial(root);partial.Load();
+   REQUIRE(partial.Find({0x584111F7,0x100}));
+   REQUIRE(partial.Find({0x584111F7,0x100})->name=="User-edited canonical");
+   REQUIRE_FALSE(partial.Find({0x584111F7,0x200}));
+   REQUIRE(xe::filesystem::ReadAllBytes(blocked/"game.toml")==unknown);
+   REQUIRE(Text(legacy)==original);REQUIRE(Text(canonical_a)==edited_bytes);}
+  // A real owner repairs its own test fixture; production never deletes or
+  // adopts this unknown canonical record. The next Load must resume the gap.
+  std::filesystem::rename(blocked/"game.toml",blocked/"preserved-unknown.bin");
+  {GameLibrary resumed(root);resumed.Load();
+   const auto* release=resumed.Find({0x584111F7,0x200});REQUIRE(release);
+   REQUIRE_FALSE(release->transient_legacy);
+   REQUIRE(release->paths.size()==1);REQUIRE(release->paths[0].path==b);
+   REQUIRE(Text(canonical_a)==edited_bytes);REQUIRE(Text(legacy)==original);
+   REQUIRE(xe::filesystem::ReadAllBytes(blocked/"preserved-unknown.bin")==unknown);}
+}
+TEST_CASE("Library migration keeps transient originals across real publication failure and restart",
+          "[title-catalog][host_metadata][library_migration]") {
+  CatalogScratch scratch;const auto root=scratch.root/"library";
+  const auto a=scratch.root/"a";const auto b=scratch.root/"b";
+  Write(a,ReleasePackage(0x100,10));Write(b,ReleasePackage(0x200,20));
+  SeedLegacy(root,{{a,true},{b,false}});
+  {GameLibrary current(root);LibraryEntry kept;kept.title_id=0x584111F7;
+   kept.version=0x100;kept.name="Already published";kept.paths={{a,true}};
+   REQUIRE(current.Upsert(kept));}
+  const auto title=root/"584111F7";
+  const auto original=Text(title/"game.toml");
+  const auto blocked=title/VersionToString(0x200);std::filesystem::create_directory(blocked);
+  struct Restore {
+    std::filesystem::path path;
+    ~Restore(){std::error_code error;std::filesystem::permissions(path,
+        std::filesystem::perms::owner_all,std::filesystem::perm_options::add,error);}
+  } restore{blocked};
+  std::filesystem::permissions(blocked,std::filesystem::perms::owner_read|
+      std::filesystem::perms::owner_exec,std::filesystem::perm_options::replace);
+  {GameLibrary failed(root);failed.Load();
+   const auto* release=failed.Find({0x584111F7,0x200});REQUIRE(release);
+   if(!release->transient_legacy){
+     WARN("OS privilege bypasses mode-bit write refusal; persistence path still exercised");
+     return;
+   }
+   REQUIRE_FALSE(std::filesystem::exists(blocked/"game.toml"));
+   REQUIRE(Text(title/"game.toml")==original);}
+  std::filesystem::permissions(blocked,std::filesystem::perms::owner_all,
+      std::filesystem::perm_options::add);
+  {GameLibrary retry(root);retry.Load();
+   const auto* release=retry.Find({0x584111F7,0x200});REQUIRE(release);
+   REQUIRE_FALSE(release->transient_legacy);
+   REQUIRE(retry.Find({0x584111F7,0x100})->name=="Already published");
+   REQUIRE(Text(title/"game.toml")==original);}
+}
+
+TEST_CASE("Library removal retains unreadable legacy paths without later version resurrection",
+          "[title-catalog][host_metadata][library_migration]") {
+  CatalogScratch scratch;const auto root=scratch.root/"library";
+  const auto later=scratch.root/"later";const auto unrelated=scratch.root/"unrelated";
+  SeedLegacy(root,{{later,true}});
+  const auto legacy=root/"584111F7"/"game.toml";const auto original=Text(legacy);
+  {GameLibrary library(root);library.Load();
+   const auto* fallback=library.Find({0x584111F7,0});REQUIRE(fallback);
+   REQUIRE(fallback->transient_legacy);
+   REQUIRE(library.Remove({0x584111F7,0}));REQUIRE(library.entries().empty());}
+  Write(later,ReleasePackage(0x200,20));Write(unrelated,ReleasePackage(0x300,30));
+  {GameLibrary library(root);library.Load();
+   REQUIRE_FALSE(library.FindByPath(0x584111F7,later));
+   REQUIRE(library.AddDisc(0x584111F7,"Other actual release",unrelated));}
+  {GameLibrary library(root);library.Load();
+   REQUIRE_FALSE(library.FindByPath(0x584111F7,later));
+   REQUIRE(library.Find({0x584111F7,0x300}));
+   // Explicit user re-add publishes a real new canonical record. Its physical
+   // release does not inherit the old transient version0 or stale name.
+   REQUIRE(library.AddDisc(0x584111F7,"Explicit re-add",later));}
+  {GameLibrary library(root);library.Load();
+   REQUIRE(library.Find({0x584111F7,0x200}));
+   REQUIRE(library.Find({0x584111F7,0x300}));
+   REQUIRE_FALSE(library.Find({0x584111F7,0}));
+   REQUIRE(Text(legacy)==original);}
+}
+TEST_CASE("Library remove and re-add preserve original artwork and unknown folder content",
+          "[title-catalog][host_metadata][library_migration]") {
+  CatalogScratch scratch;const auto root=scratch.root/"library";
+  GameLibrary library(root);LibraryEntry entry;
+  entry.title_id=0x584111F7;entry.version=0x100;entry.name="Original";
+  entry.paths={{scratch.root/"offline",true}};
+  REQUIRE(library.Upsert(entry));const std::vector<uint8_t> art{1,2,3,4};
+  REQUIRE(library.SetIcon(entry.key(),art));
+  const auto folder=library.IconPath(entry.key()).parent_path();
+  Write(folder/"unknown.user",{9,8,7});const auto before=Text(folder/"game.toml");
+  REQUIRE(library.Remove(entry.key()));REQUIRE(library.entries().empty());
+  REQUIRE(xe::filesystem::ReadAllBytes(folder/"icon.png")==art);
+  REQUIRE(xe::filesystem::ReadAllBytes(folder/"unknown.user")==std::vector<uint8_t>{9,8,7});
+  {GameLibrary reopened(root);reopened.Load();REQUIRE(reopened.entries().empty());
+   entry.name="Explicit new name";REQUIRE(reopened.Upsert(entry));}
+  {GameLibrary reopened(root);reopened.Load();REQUIRE(reopened.Find(entry.key()));
+   REQUIRE(reopened.Find(entry.key())->name=="Explicit new name");}
+  REQUIRE(Text(folder/"game.toml")!=before);
+  REQUIRE(xe::filesystem::ReadAllBytes(folder/"icon.png")==art);
+  REQUIRE(xe::filesystem::ReadAllBytes(folder/"unknown.user")==std::vector<uint8_t>{9,8,7});
+}
+TEST_CASE("Physical metadata publication failure keeps source and exact prior cache owners",
+          "[title-catalog][host_metadata]") {
+  CatalogScratch scratch;const auto source=scratch.root/"package";
+  const auto cache=scratch.root/"cache";Write(source,Package(1));
+  std::error_code error;auto writer=filesystem::HostMetadataWriter::Open(cache,error);
+  REQUIRE(writer);REQUIRE_FALSE(error);
+  auto first=ReadCachedPhysicalTitle(cache,source,writer);REQUIRE(first);
+  REQUIRE_FALSE(first->icon_path.empty());const auto old_icon=first->icon_path;
+  const auto old_bytes=xe::filesystem::ReadAllBytes(old_icon);
+  const auto displaced=scratch.root/"preserved-old-cache";
+  std::filesystem::rename(cache,displaced);std::filesystem::create_directory(cache);
+  Write(source,Package(3));const auto physical=xe::filesystem::ReadAllBytes(source);
+  const auto failed=ReadCachedPhysicalTitle(cache,source,writer);REQUIRE(failed);
+  REQUIRE_FALSE(failed->from_cache);REQUIRE(failed->icon_path.empty());
+  REQUIRE(failed->publication_owner==writer);
+  REQUIRE(writer->last_result().error);
+  REQUIRE(xe::filesystem::ReadAllBytes(displaced/old_icon.lexically_relative(cache))==old_bytes);
+  REQUIRE(xe::filesystem::ReadAllBytes(source)==physical);
+  auto fresh=filesystem::HostMetadataWriter::Open(cache,error);REQUIRE_FALSE(error);
+  const auto retried=ReadCachedPhysicalTitle(cache,source,fresh);REQUIRE(retried);
+  REQUIRE_FALSE(retried->icon_path.empty());
+  REQUIRE(xe::filesystem::ReadAllBytes(retried->icon_path)==retried->info.icon);
+  REQUIRE(xe::filesystem::ReadAllBytes(source)==physical);
+}
+TEST_CASE("Library model mutations retain observed canonical and removal snapshots",
+          "[title-catalog][host_metadata][library_migration]") {
+  CatalogScratch scratch;const auto root=scratch.root/"library";
+  LibraryEntry entry;entry.title_id=0x584111F7;entry.version=0x100;
+  entry.name="Originally loaded";entry.paths={{scratch.root/"offline",true}};
+  {GameLibrary seed(root);REQUIRE(seed.Upsert(entry));}
+  const auto file=root/"584111F7"/VersionToString(entry.version)/"game.toml";
+  GameLibrary older(root),newer(root);older.Load();newer.Load();
+  REQUIRE(older.Find(entry.key()));REQUIRE(newer.Find(entry.key()));
+  const auto copied_older_row = *older.Find(entry.key());
+  auto changed=*newer.Find(entry.key());changed.name="Newer canonical data";
+  REQUIRE(newer.Upsert(changed));const auto newest=Text(file);
+  REQUIRE_FALSE(older.MarkPlayed(entry.key(),time_t(123)));
+  REQUIRE_FALSE(older.Remove(entry.key()));
+  REQUIRE(Text(file)==newest);
+  REQUIRE(older.Find(entry.key())->name=="Originally loaded");
+  // An unobserved existing record also cannot be overwritten by a new model.
+  GameLibrary unobserved(root);entry.name="Blind replacement";
+  REQUIRE_FALSE(unobserved.Upsert(entry));REQUIRE(Text(file)==newest);
+  older.Load();REQUIRE(older.MarkPlayed(entry.key(),time_t(123)));
+  REQUIRE(older.Find(entry.key())->name=="Newer canonical data");
+  const auto after_refresh=Text(file);
+  REQUIRE_FALSE(older.Upsert(copied_older_row));
+  REQUIRE(Text(file)==after_refresh); // DTO copy retained its original token.
+  REQUIRE_FALSE(newer.Remove(entry.key()));
+  newer.Load();REQUIRE(newer.Remove(entry.key()));const auto removed=Text(file);
+  // A formerly loaded regular record cannot resurrect a newer tombstone.
+  REQUIRE_FALSE(older.Upsert(*older.Find(entry.key())));REQUIRE(Text(file)==removed);
+  GameLibrary readd(root),stale_readd(root);readd.Load();stale_readd.Load();
+  REQUIRE(readd.entries().empty());REQUIRE(stale_readd.entries().empty());
+  entry.name="Explicit observed re-add";REQUIRE(readd.Upsert(entry));
+  const auto readded=Text(file);entry.name="Stale tombstone replacement";
+  REQUIRE_FALSE(stale_readd.Upsert(entry));REQUIRE(Text(file)==readded);
+  GameLibrary verify(root);verify.Load();REQUIRE(verify.Find(entry.key()));
+  REQUIRE(verify.Find(entry.key())->name=="Explicit observed re-add");
+  // Two distinct native folders claiming one logical key cannot attach the
+  // first row's data to the other row's later observation.
+  std::error_code error;
+  const auto other_title=root/"584111f7";
+  if(std::filesystem::create_directory(other_title,error)) {
+    std::filesystem::create_directory(other_title/VersionToString(entry.version));
+    const auto other_file=other_title/VersionToString(entry.version)/"game.toml";
+    Write(other_file,xe::filesystem::ReadAllBytes(file));
+    const auto one=Text(file),two=Text(other_file);
+    GameLibrary ambiguous(root);ambiguous.Load();
+    REQUIRE_FALSE(ambiguous.MarkPlayed(entry.key(),time_t(456)));
+    REQUIRE(Text(file)==one);REQUIRE(Text(other_file)==two);
+  } else {
+    REQUIRE_FALSE(error); // Case-insensitive filesystem has one actual slot.
+  }
+}
+#endif
 
 } // namespace xe::app::test

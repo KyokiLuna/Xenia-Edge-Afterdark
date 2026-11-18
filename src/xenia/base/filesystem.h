@@ -142,6 +142,14 @@ class FileHandle {
     error = std::make_error_code(std::errc::operation_not_supported);
     return std::nullopt;
   }
+  // Allocation attributed by the native filesystem to THIS retained open
+  // regular file, not EOF or a remembered path. Unsupported is distinct from
+  // genuine zero (sparse/inline/compressed files may report zero).
+  virtual std::optional<uint64_t> QueryAllocatedBytes(
+      std::error_code& error) const {
+    error = std::make_error_code(std::errc::operation_not_supported);
+    return std::nullopt;
+  }
   virtual std::error_code LastError() const {
     return std::make_error_code(std::errc::io_error);
   }

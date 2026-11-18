@@ -44,9 +44,51 @@ struct Record {
   // Empty retains exact v2 empty-create wire bytes. Nonempty is v3 initial-tree
   // creation; the root and EVERY actual member are authenticated before Done.
   std::vector<ContentPackageInitialEntry> initial_tree;
+  // V4 admits bounded streamed payload without persisting any payload bytes.
+  // A stream-start record binds actual precreated inode IDs, modes and maximum
+  // member sizes. It authorizes only private rollback, never publication.
+  bool streamed = false, stream_pending = false;
+  // V5 binds create publication authority to its earlier preparation-only plan.
+  std::array<uint8_t, 32> preparation_digest{};
 };
+// Preparation names an absent package and the exact Header before state; it
+// grants no inode ownership, deletion or
+// publication authority. Its checksum is bound by later V5 create records.
+struct Preparation {
+  Identity identity;
+  std::string nonce;
+  std::filesystem::path package, target;
+  uint64_t header_bytes = 0;
+  std::array<uint8_t, 32> header_digest{};
+  // Existing orphan Header: an exact before-snapshot observation, never an
+  // instruction to move/delete the semantic Header during plan-only abort.
+  uint64_t before_file = 0, before_bytes = 0;
+  std::array<uint8_t, 32> before_digest{};
+};
+// A preservation ticket records an exact observation, never payload ownership.
+// Only a valid preparation can name a public Header stage. Legacy tickets can
+// name only their own private package-NONCE.tmp directory.
+struct Preservation {
+  Identity identity;
+  std::string nonce;
+  bool header = false;
+  uint64_t file = 0;
+  bool directory = false;
+  std::filesystem::path source;
+  std::array<uint8_t, 32> preparation_digest{};
+};
+std::vector<uint8_t> EncodePreparation(const Preparation&, std::error_code&);
+bool DecodePreparation(std::span<const uint8_t>, Preparation&, std::error_code&);
+std::vector<uint8_t> EncodePreservation(const Preservation&, std::error_code&);
+bool DecodePreservation(std::span<const uint8_t>, Preservation&, std::error_code&);
+std::filesystem::path PreparationStage(const Preparation&);
+std::filesystem::path PreservationDestination(const Preservation&);
+bool MatchesPreparation(const Preparation&, std::span<const uint8_t>,
+                        const Record&, std::error_code&);
 inline constexpr uint64_t kMaximumInitialBytes = 128ull << 20;
+inline constexpr uint64_t kMaximumStreamBytes = 64ull << 30;
 std::error_code ValidateInitialMembers(std::span<const ContentPackageInitialMember>);
+std::error_code ValidateStreamMembers(std::span<const ContentPackageStreamMember>);
 bool ValidPackage(const std::filesystem::path&);
 std::filesystem::path Target(const Record&);
 bool ValidNonce(std::string_view);

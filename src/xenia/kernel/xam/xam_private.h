@@ -11,6 +11,8 @@
 #define XENIA_KERNEL_XAM_XAM_PRIVATE_H_
 
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -19,11 +21,23 @@
 #include "xenia/xbox.h"
 
 namespace xe {
+namespace vfs { class Device; }
 namespace kernel {
 class XModule;
+class KernelState;
 namespace xam {
 
 xe::cpu::Export* RegisterExport_xam(xe::cpu::Export* export_entry);
+
+// Owned host-worker description of an explicit device-backed system target.
+// The retained device owns every returned Entry while descriptor fields copy.
+struct SystemLaunchTarget {
+  std::filesystem::path host_path;
+  std::string launch_module, package_path;
+  std::shared_ptr<vfs::Device> owner;
+};
+std::optional<SystemLaunchTarget> CaptureSystemLaunchTarget(
+    KernelState&, std::string_view guest_path);
 
 // XamLoaderLaunchTitleEx, which doesn't return.
 void LaunchTitle(std::string path, std::string_view d_drive_path,

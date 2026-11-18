@@ -87,6 +87,10 @@ TEST_CASE("File control registered ABI rejects absent handles without output",
 }  // namespace xe::kernel::xboxkrnl::test
 
 #if XE_PLATFORM_LINUX
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 DECLARE_string(cpu);
 DECLARE_bool(debug);
 DECLARE_string(system_readonly_source_root);
@@ -183,6 +187,11 @@ class FileInfoFixture {
     REQUIRE(export_);
     REQUIRE(export_->is_implemented());
     REQUIRE(export_->function_data.trampoline);
+    query_export_ = emulator->export_resolver()->GetExportByOrdinal("xboxkrnl.exe", 0xE8);
+    REQUIRE(query_export_);
+    REQUIRE(query_export_->is_implemented());
+    REQUIRE(query_export_->function_data.trampoline);
+    REQUIRE_FALSE(query_export_->tags & cpu::ExportTag::kStub);
   }
   ~FileInfoFixture() {
     if (file) {
@@ -208,6 +217,19 @@ class FileInfoFixture {
     export_->function_data.trampoline(&context);
     return uint32_t(context.r[3]);
   }
+  uint32_t Query(uint32_t handle, uint32_t iosb, uint32_t info,
+                 uint32_t length, uint32_t kind = XFileAllocationInformation) {
+    PPCContext context{};
+    context.virtual_membase = emulator->memory()->virtual_membase();
+    context.r[1] = kPage + 0x800;
+    const std::array<uint32_t, 5> args{handle, iosb, info, length, kind};
+    for (size_t i = 0; i < args.size(); ++i) {
+      // Exercise the registered PPC thunk's low-DWORD argument ABI.
+      context.r[3 + i] = 0xAABBCCDD00000000ull | args[i];
+    }
+    query_export_->function_data.trampoline(&context);
+    return uint32_t(context.r[3]);
+  }
   void CheckBytes() {
     // Same real open FD: a second writable/read lease must not be invented.
     std::array<uint8_t, 7> bytes{};
@@ -227,6 +249,7 @@ class FileInfoFixture {
   FileInfoSettings settings_;
   FileInfoScratch scratch_;
   cpu::Export* export_ = nullptr;
+  cpu::Export* query_export_ = nullptr;
  public:
   std::unique_ptr<Emulator> emulator;
   std::shared_ptr<filesystem::HostStorageRoot> storage;
@@ -311,6 +334,299 @@ TEST_CASE("Registered file information preserves validation precedence and posit
   f.CheckNoCompletion();
   f.CheckBytes();
 }
+namespace {
+// Independent native observation, never the production allocation query or
+// Entry's remembered path/EOF. This readonly FD survives pathname replacement.
+class NativeAllocationObservation final {
+ public:
+  explicit NativeAllocationObservation(const std::filesystem::path& path) {
+    fd_ = ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    REQUIRE(fd_ >= 0);
+  }
+  ~NativeAllocationObservation() { if (fd_ >= 0) ::close(fd_); }
+  NativeAllocationObservation(const NativeAllocationObservation&) = delete;
+  NativeAllocationObservation& operator=(const NativeAllocationObservation&) = delete;
+  struct stat Read() const {
+    struct stat value{};
+    REQUIRE(::fstat(fd_, &value) == 0);
+    REQUIRE(S_ISREG(value.st_mode));
+    REQUIRE(value.st_blocks >= 0);
+    return value;
+  }
+ private:
+  int fd_ = -1;
+};
+uint64_t ExpectedNativeGuestAllocation(const struct stat& native,
+                                      const FileInfoFixture& f) {
+  REQUIRE(uint64_t(native.st_blocks) <= UINT64_MAX / 512);
+  const uint64_t physical = uint64_t(native.st_blocks) * 512;
+  const uint64_t unit = uint64_t(f.file->entry()->sectors_per_allocation_unit()) *
+                        f.file->device()->bytes_per_sector();
+  REQUIRE(unit != 0);
+  REQUIRE(physical <= UINT64_MAX - (unit - 1));
+  return ((physical + unit - 1) / unit) * unit;
+}
+void CheckObservedOpenedIdentity(FileInfoFixture& f, const struct stat& native) {
+  const auto* host = dynamic_cast<const vfs::HostPathFile*>(f.file->file());
+  REQUIRE(host);
+  std::error_code error;
+  const auto info = host->QueryBackingInfo(error);
+  REQUIRE_FALSE(error);
+  REQUIRE(info);
+  CHECK(info->filesystem_id == uint64_t(native.st_dev));
+  CHECK(info->file_id == uint64_t(native.st_ino));
+  CHECK(info->size == uint64_t(native.st_size));
+}
+void CheckAllocationPacket(FileInfoFixture& f, uint64_t expected,
+                           uint32_t capacity = 8, bool iosb = true) {
+  std::memset(f.Page(), 0xA5, 0x1000);
+  std::array<uint8_t, 0x1000> wanted;
+  wanted.fill(0xA5);
+  xe::store_and_swap<uint64_t>(wanted.data() + (f.kInfo - f.kPage), expected);
+  if (iosb) {
+    xe::store_and_swap<uint32_t>(wanted.data() + (f.kIosb - f.kPage),
+                                 X_STATUS_SUCCESS);
+    xe::store_and_swap<uint32_t>(wanted.data() + (f.kIosb - f.kPage) + 4, 8);
+  }
+  const auto position = f.file->position();
+  REQUIRE(f.Query(f.file->handle(), iosb ? f.kIosb : 0, f.kInfo, capacity) ==
+          X_STATUS_SUCCESS);
+  // Whole-page guards cover bytes immediately before/after both exact spans,
+  // and capacity beyond eight must neither be zeroed nor validated as output.
+  CHECK(std::memcmp(f.Page(), wanted.data(), wanted.size()) == 0);
+  CHECK(f.file->position() == position);
+  f.CheckNoCompletion();
+}
+void WriteNativeReplacement(const std::filesystem::path& path) {
+  struct Close {
+    int fd = -1;
+    ~Close() { if (fd >= 0) ::close(fd); }
+  } owner;
+  owner.fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC |
+                                     O_NOFOLLOW, 0600);
+  REQUIRE(owner.fd >= 0);
+  std::array<uint8_t, 4096> bytes;
+  uint32_t random = 0x6D2B79F5u;
+  for (unsigned chunk = 0; chunk < 64; ++chunk) {
+    // Continuous deterministic xorshift data prevents transparent compression
+    // from making this replacement look physically identical to the tiny file.
+    for (auto& byte : bytes) {
+      random ^= random << 13;
+      random ^= random >> 17;
+      random ^= random << 5;
+      byte = uint8_t(random);
+    }
+    size_t written = 0;
+    while (written < bytes.size()) {
+      const auto result = ::write(owner.fd, bytes.data() + written,
+                                   bytes.size() - written);
+      REQUIRE(result > 0);
+      written += size_t(result);
+    }
+  }
+  REQUIRE(::fsync(owner.fd) == 0);
+}
+}  // namespace
+
+TEST_CASE("Registered allocation query reports real normal and sparse allocation",
+          "[kernel][file_control][allocation][abi][native]") {
+  FileInfoFixture f;
+  std::memset(f.Page(), 0xA5, 0x1000);
+  auto* completion = reinterpret_cast<X_FILE_COMPLETION_INFORMATION*>(
+      f.Page() + (f.kInfo - f.kPage));
+  completion->handle = f.port->handle();
+  completion->key = 0x615119;
+  REQUIRE(f.Call(f.file->handle(), f.kIosb, f.kInfo, sizeof(*completion),
+                 XFileCompletionInformation) == X_STATUS_SUCCESS);
+  REQUIRE(f.file->HasCompletionPort());
+  NativeAllocationObservation observer(f.storage->path() / "sample.bin");
+  std::array<uint8_t, 64 * 1024> normal;
+  for (size_t i = 0; i < normal.size(); ++i) {
+    normal[i] = uint8_t((i * 37) ^ (i >> 8));
+  }
+  size_t normal_written = 0;
+  REQUIRE(f.file->file()->WriteSync(normal, 0, &normal_written) == X_STATUS_SUCCESS);
+  REQUIRE(normal_written == normal.size());
+  REQUIRE(f.file->file()->Flush() == X_STATUS_SUCCESS);
+  const auto original = observer.Read();
+  REQUIRE(original.st_blocks > 0);
+  CheckObservedOpenedIdentity(f, original);
+  f.file->set_position(23);
+  CheckAllocationPacket(f, ExpectedNativeGuestAllocation(original, f), 32);
+  // Only the actual eight-byte output is accessed. A large capacity is not a
+  // request to zero or validate the entire guest address space.
+  CheckAllocationPacket(f, ExpectedNativeGuestAllocation(original, f), UINT32_MAX,
+                         false);
+
+  REQUIRE(f.file->file()->SetLength(0) == X_STATUS_SUCCESS);
+  constexpr size_t kSparseBytes = 32 * 1024 * 1024;
+  REQUIRE(f.file->file()->SetLength(kSparseBytes) == X_STATUS_SUCCESS);
+  const auto sparse = observer.Read();
+  REQUIRE(uint64_t(sparse.st_size) == kSparseBytes);
+  REQUIRE(sparse.st_blocks == 0);  // Genuine sparse fixture, not an EOF oracle.
+  CheckObservedOpenedIdentity(f, sparse);
+  CheckAllocationPacket(f, 0);
+
+  std::array<uint8_t, 4096> payload;
+  for (size_t i = 0; i < payload.size(); ++i) {
+    payload[i] = uint8_t((i * 97) ^ (i >> 3));
+  }
+  size_t written = 0;
+  REQUIRE(f.file->file()->WriteSync(payload, kSparseBytes - payload.size(),
+                                    &written) == X_STATUS_SUCCESS);
+  REQUIRE(written == payload.size());
+  REQUIRE(f.file->file()->Flush() == X_STATUS_SUCCESS);
+  const auto allocated = observer.Read();
+  REQUIRE(allocated.st_blocks > 0);
+  REQUIRE(uint64_t(allocated.st_blocks) * 512 < uint64_t(allocated.st_size));
+  CheckObservedOpenedIdentity(f, allocated);
+  CheckAllocationPacket(f, ExpectedNativeGuestAllocation(allocated, f));
+  CHECK(f.file->position() == 23);
+}
+
+TEST_CASE("Registered allocation query follows the open inode after replacement",
+          "[kernel][file_control][allocation][abi][retained]") {
+  FileInfoFixture f;
+  const auto named = f.storage->path() / "sample.bin";
+  const auto retired_name = f.storage->path() / "original-retained.bin";
+  NativeAllocationObservation observer(named);
+  const auto original = observer.Read();
+  std::error_code error;
+  std::filesystem::rename(named, retired_name, error);
+  REQUIRE_FALSE(error);
+  // This models a real external namespace replacement while the guest keeps
+  // its already-open authority. The new inode must never become its metadata.
+  WriteNativeReplacement(named);
+  NativeAllocationObservation replacement(named);
+  const auto other = replacement.Read();
+  REQUIRE(original.st_dev == other.st_dev);
+  REQUIRE(original.st_ino != other.st_ino);
+  REQUIRE(ExpectedNativeGuestAllocation(original, f) !=
+          ExpectedNativeGuestAllocation(other, f));
+  const auto still_open = observer.Read();
+  CheckObservedOpenedIdentity(f, still_open);
+  CheckAllocationPacket(f, ExpectedNativeGuestAllocation(still_open, f));
+  f.CheckBytes();
+
+  REQUIRE(std::filesystem::remove(retired_name, error));
+  REQUIRE_FALSE(error);
+  const auto unlinked = observer.Read();
+  REQUIRE(unlinked.st_nlink == 0);
+  CheckObservedOpenedIdentity(f, unlinked);
+  CheckAllocationPacket(f, ExpectedNativeGuestAllocation(unlinked, f));
+  f.CheckBytes();
+}
+
+TEST_CASE("Registered allocation query rejects invalid spans without partial output",
+          "[kernel][file_control][allocation][abi][validation]") {
+  FileInfoFixture f;
+  REQUIRE(f.emulator->memory()->QueryRangeAccess(f.kPage + 0x1000, 8) ==
+          xe::memory::PageAccess::kNoAccess);
+  const auto unchanged = [&](uint32_t handle, uint32_t iosb, uint32_t info,
+                              uint32_t length, uint32_t kind,
+                              X_STATUS expected) {
+    std::memset(f.Page(), 0xA5, 0x1000);
+    std::array<uint8_t, 0x1000> before;
+    std::memcpy(before.data(), f.Page(), before.size());
+    CAPTURE(handle, iosb, info, length, kind);
+    CHECK(f.Query(handle, iosb, info, length, kind) == expected);
+    CHECK(std::memcmp(f.Page(), before.data(), before.size()) == 0);
+    CHECK(f.file->position() == 0);
+    f.CheckNoCompletion();
+    f.CheckBytes();
+  };
+  unchanged(0xDEADBEEF, f.kIosb, 0, 0, UINT32_MAX,
+            X_STATUS_INVALID_INFO_CLASS);
+  unchanged(0xDEADBEEF, f.kIosb, 0, 7, XFileAllocationInformation,
+            X_STATUS_INFO_LENGTH_MISMATCH);
+  unchanged(0xDEADBEEF, f.kIosb, 0, 8, XFileAllocationInformation,
+            X_STATUS_INVALID_HANDLE);
+  for (const uint32_t invalid_output :
+       {0u, f.kPage + 0x1000, f.kPage + 0xFFC, 0xFFFFFFFCu}) {
+    unchanged(f.file->handle(), f.kIosb, invalid_output, 8,
+              XFileAllocationInformation, X_STATUS_ACCESS_VIOLATION);
+  }
+  for (const uint32_t invalid_iosb :
+       {f.kPage + 0x1000, f.kPage + 0xFFC, 0xFFFFFFFCu}) {
+    unchanged(f.file->handle(), invalid_iosb, f.kInfo, 8,
+              XFileAllocationInformation, X_STATUS_ACCESS_VIOLATION);
+  }
+  // Conservative common GuestIo two-span policy: no aliased publication. This
+  // is not claimed as a recovered retail-kernel acceptance/rejection rule.
+  for (const uint32_t overlap : {f.kInfo, f.kInfo + 4}) {
+    unchanged(f.file->handle(), overlap, f.kInfo, 8,
+              XFileAllocationInformation, X_STATUS_INVALID_PARAMETER);
+  }
+  {
+    std::memset(f.Page(), 0xA5, 0x1000);
+    std::array<uint8_t, 0x1000> before;
+    std::memcpy(before.data(), f.Page(), before.size());
+    auto outer = global_critical_region::AcquireDirect();
+    CHECK(f.Query(f.file->handle(), f.kIosb, f.kInfo, 8) ==
+          X_STATUS_INVALID_DEVICE_REQUEST);
+    CHECK(std::memcmp(f.Page(), before.data(), before.size()) == 0);
+    CHECK(global_critical_region::is_held_by_current_thread());
+  }
+  // Host observations and wait helpers run only after the caller's lock ends.
+  f.CheckNoCompletion();
+  f.CheckBytes();
+
+  constexpr uint32_t kReadOnly = FileInfoFixture::kPage + 0x2000;
+  auto* memory = f.emulator->memory();
+  REQUIRE(memory->LookupHeap(kReadOnly)->AllocFixed(kReadOnly, 0x1000, 0x1000,
+      kMemoryAllocationReserve | kMemoryAllocationCommit,
+      kMemoryProtectRead | kMemoryProtectWrite));
+  auto* readonly_bytes = memory->TranslateVirtual(kReadOnly);
+  std::memset(readonly_bytes, 0xA5, 0x1000);
+  std::array<uint8_t, 0x1000> readonly_before;
+  std::memcpy(readonly_before.data(), readonly_bytes, readonly_before.size());
+  struct RestoreProtection {
+    Memory* memory;
+    uint32_t page;
+    ~RestoreProtection() {
+      memory->LookupHeap(page)->Protect(page, 0x1000,
+                                        kMemoryProtectRead | kMemoryProtectWrite);
+    }
+  } restore{memory, kReadOnly};
+  REQUIRE(memory->LookupHeap(kReadOnly)->Protect(kReadOnly, 0x1000,
+                                                kMemoryProtectRead));
+  unchanged(f.file->handle(), kReadOnly, f.kInfo, 8,
+            XFileAllocationInformation, X_STATUS_ACCESS_VIOLATION);
+  CHECK(std::memcmp(readonly_bytes, readonly_before.data(),
+                    readonly_before.size()) == 0);
+  unchanged(f.file->handle(), f.kIosb, kReadOnly, 8,
+            XFileAllocationInformation, X_STATUS_ACCESS_VIOLATION);
+  CHECK(std::memcmp(readonly_bytes, readonly_before.data(),
+                    readonly_before.size()) == 0);
+}
+
+TEST_CASE("Registered allocation query leaves unsupported raw backend outputs intact",
+          "[kernel][file_control][allocation][abi][unsupported]") {
+  FileInfoFixture f;
+  auto raw = std::make_unique<vfs::NullDevice>(
+      FileInfoFixture::kUnsupportedMount, std::initializer_list<std::string>{});
+  REQUIRE(raw->Initialize());
+  REQUIRE(f.emulator->file_system()->RegisterDevice(std::move(raw)));
+  auto* entry = f.emulator->file_system()->ResolvePath(f.kUnsupportedMount);
+  REQUIRE(entry);
+  vfs::File* opened = nullptr;
+  REQUIRE(entry->Open(filesystem::FileAccess::kGenericRead, &opened) ==
+          X_STATUS_SUCCESS);
+  REQUIRE(opened);
+  auto unsupported = object_ref<XFile>(new XFile(f.emulator->kernel_state(),
+      opened, false, false, true));
+  std::memset(f.Page(), 0xA5, 0x1000);
+  std::array<uint8_t, 0x1000> before;
+  std::memcpy(before.data(), f.Page(), before.size());
+  CHECK(f.Query(unsupported->handle(), f.kIosb, f.kInfo, 8) ==
+        X_STATUS_NOT_SUPPORTED);
+  CHECK(std::memcmp(f.Page(), before.data(), before.size()) == 0);
+  unsupported->ReleaseHandle();
+  unsupported.reset();
+  f.CheckNoCompletion();
+  f.CheckBytes();
+}
+
 namespace {
 struct FileQueueResults {
   std::mutex mutex;

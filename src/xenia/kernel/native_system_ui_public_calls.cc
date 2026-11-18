@@ -7,6 +7,9 @@
  ******************************************************************************
  */
 #include "xenia/kernel/native_system_ui_public_calls.h"
+#include "xenia/kernel/guest_runtime_plan.h"
+#include <string>
+#include <vector>
 namespace xe::kernel {
 namespace {
 constexpr NativeSystemUiPublicCallProfile profiles[] = {
@@ -41,6 +44,12 @@ constexpr NativeSystemUiPublicCallProfile profiles[] = {
     {NativeSystemUiPublicCall::kIsUiActive, "native-public-is-ui-active",
      0x816C7D78, 16,
      "7d6eef6ba06629576aeb7ae0989ca39a5b8a7ad4f9f5d0998a8008cdbc69584f", 0},
+    {NativeSystemUiPublicCall::kShowSignin, "native-public-show-signin-2bc",
+     0x816C3CD8, 16,
+     "590e4113a14d24bb22fb8afb722a494dc65b6d3787ad9a708d061776094c91bb", 2},
+    {NativeSystemUiPublicCall::kShowSigninWithUser, "native-public-show-signin-2be",
+     0x816C19C8, 80,
+     "ebc223b4b6327c41551102ff58d70f43159bf96ab6cc4d6acaf25f7b18edceb7", 3},
     {NativeSystemUiPublicCall::kShowGuide, "native-public-show-guide",
      0x816C3580, 12,
      "b0a1a25d253a4712bf3ffd09a735fbb990bcda72dff82c708f159868445c3afa", 1},
@@ -121,6 +130,11 @@ constexpr NativeSystemUiPublicCallProfile profiles[] = {
      "61530c9835f633f75976229959fef2d9349fcfcf9502ca3bcd338518f7462487", 6, 0,
      NativeSystemPublicFamily::kAvatarEngine,
      kOwnedSystemRuntime | kNativeTaskTransport | kNativeAvatarEngineReady},
+    {NativeSystemUiPublicCall::kAvatarLoadAnimation,
+     "native-public-avatar-load-animation", 0x81674D48, 152,
+     "79dfc783867f65459133dc1938776d496134763bb54e304a97fc95726b147a96", 4, 0,
+     NativeSystemPublicFamily::kAvatarEngine,
+     kOwnedSystemRuntime | kNativeTaskTransport | kNativeAvatarEngineReady},
     {NativeSystemUiPublicCall::kAvatarSetManifest,
      "native-public-avatar-set-manifest", 0x81674DE0, 124,
      "7bfbf817fe0b93b940533db13adc5021055a5f4afac1119e3eb17fe42f26f984", 3, 0,
@@ -174,6 +188,71 @@ const NativeSystemUiPublicCallProfile* NativeSystemUiPublicProfile(
     }
   }
   return nullptr;
+}
+NativeSigninCreationDecision DecideNativeSigninCreation(
+    const NativeSigninCreationFacts& f,bool normal_return,bool exact_withdrawal,
+    uint32_t value) noexcept {
+  // Exact authenticated 2BE calls helper1868, then only restores/returns.
+  // A normal public return therefore supplies derived continuation evidence
+  // even when an architecture's tail-restore bypassed an own-return hook.
+  // Never set the raw returned flags or manufacture a sender return value.
+  if(!normal_return || !exact_withdrawal || !f.armed || !f.entered || f.lost ||
+     (f.returned && f.helper_value!=value) ||
+     (!f.sender_entered && f.sender_returned))
+    return NativeSigninCreationDecision::kUncertain;
+  if(f.sender_entered){
+    if(value!=0 && value!=14 && value!=1627)return NativeSigninCreationDecision::kUncertain;
+    if(f.sender_returned){
+      const uint32_t adapted=int32_t(f.sender_value)>=0?0:
+          f.sender_value==0x8007000Eu?14u:1627u;
+      if(value!=adapted)return NativeSigninCreationDecision::kUncertain;
+    }
+  }else if(value!=0 && value!=5 && value!=1627)
+    return NativeSigninCreationDecision::kUncertain;
+  // Pinned adapter16C16C8 maps nonnegative sender HRESULT to public0, negative
+  // to Win32 14/1627. No sender +normal0 is the actual early no-UI path.
+  return f.sender_entered && !value?NativeSigninCreationDecision::kQueued:
+      NativeSigninCreationDecision::kNoUi;
+}
+std::optional<NativeEditorLoaderStack> CaptureNativeEditorLoaderStack(
+    uint32_t entry, uint32_t limit, uint32_t base) noexcept {
+  if (!entry || (entry & 15) || entry < 0x430 || limit >= base ||
+      entry - 0x430 < limit || entry > base) return {};
+  // Editor180 + Xdf80 + helper230; EPIX lies in the original Editor frame.
+  return NativeEditorLoaderStack{entry - 0x430, entry - 0x130,
+                                 entry - 0x370};
+}
+bool MatchesNativeEditorLoaderEdge(bool launch, uint32_t sp,
+                                   uint64_t actual_sp, uint64_t lr) noexcept {
+  return sp && !(sp & 15) && actual_sp == sp &&
+      lr == (launch ? 0x817F5758u : 0x817F5744u);
+}
+std::span<const NativeEditorLoaderCodeProfile> NativeEditorLoaderCodeProfiles() {
+  static constexpr NativeEditorLoaderCodeProfile bodies[]{
+    {"native-editor-xdf-wrapper",0x817F59F8,124,0,"25d9b9e51f50cad3ac4f991885541fd7a644f9f19b914ead38740372936fc692"},
+    {"native-editor-xdf-helper",0x817F5670,244,0,"e8c8e1d9b0a64d0de84f91f0f36a0efe2e4cee3a886aca660d92f20870e5ecc6"},
+    {"native-editor-launch-data-producer",0x8169F4A8,68,2,"1d9019e79d733d9d7a684483669495b123db530fe1998496fb00e14380e862c9"},
+    {"native-editor-launch-handoff",0x816A0D70,1224,4,"356032498b591454c18725988dc410e9eb9f4f792773bc9b51a767a8dd39be8d"},
+  };
+  return bodies;
+}
+bool NativeEditorLoaderPlanPairValid(const ValidatedGuestRuntimePlan& plan) {
+  for (const auto& body : NativeEditorLoaderCodeProfiles()) {
+    if (!body.arguments) continue;
+    const auto f=plan.catalog.find(std::string(body.identity));
+    const auto c=plan.contracts.find(std::string(body.identity));
+    if (f==plan.catalog.end() || c==plan.contracts.end() ||
+        f->second.address!=body.address ||
+        f->second.arguments!=std::vector<uint64_t>(body.arguments,0) ||
+        f->second.return_kind!=GuestRuntime::ReturnKind::kUInt32 ||
+        c->second.caller!=ValidatedGuestRuntimePlan::CallerPolicy::kSystemTaskOnly ||
+        c->second.result!=ValidatedGuestRuntimePlan::ResultPolicy::kAny ||
+        !c->second.before.empty() || !c->second.after.empty()) return false;
+    for (const auto& phase : plan.plan.phases)
+      for (const auto& init : phase.functions)
+        if (init.address==body.address) return false;
+  }
+  return true;
 }
 bool NativeSystemUiPublicArgumentsValid(NativeSystemUiPublicCall call,
                                         std::span<const uint64_t> arguments) {

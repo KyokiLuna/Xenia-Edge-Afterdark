@@ -9,6 +9,8 @@
 #include "xenia/kernel/xam/tile_service.h"
 #include "xenia/kernel/xam/tile_request.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_identity_tile_work.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/xam/xam_state.h"
 #include "xenia/kernel/xam/profile_manager.h"
@@ -438,6 +440,7 @@ struct OwnedTileRequest::State {
   X_HRESULT status = X_E_FAIL;
   std::shared_ptr<ProfileGpdModelAuthority> model;
   std::optional<ProfileGpdMutationOrigin> origin;
+  std::shared_ptr<NativeIdentityTileWork> native;
 };
 OwnedTileRequest::OwnedTileRequest(std::unique_ptr<State> state)
     : state_(std::move(state)) {}
@@ -523,6 +526,11 @@ std::shared_ptr<const OwnedTileRequest> CaptureTileRequest(KernelState& kernel,
       state->status = state->texture.status;
     }
   } else {
+    std::error_code origin_error;
+    state->native=NativeProfileIdentityOwner::CaptureTileWork(&kernel,args.type,
+        args.title,args.item,args.user,args.destination,args.size_address,
+        uint32_t(destination_span),origin_error);
+    if(origin_error){status=X_E_FAIL;return {};}
     state->raw = TileService::PrepareRaw(CaptureTilePng(kernel, args, *state), uint32_t(destination_span));
     state->status = state->raw.status;
   }
@@ -563,6 +571,7 @@ X_RESULT CompleteTileRequest(KernelState& kernel, const OwnedTileRequest& reques
     return X_ERROR_FUNCTION_FAILED;
   }
   auto status = state.status;
+  bool output_written=false;
   const auto& args = state.args;
   auto& memory = *kernel.memory();
   if (!args.texture) {
@@ -572,6 +581,7 @@ X_RESULT CompleteTileRequest(KernelState& kernel, const OwnedTileRequest& reques
       const std::array<util::GuestIoWrite, 2> writes{
           {{args.destination, state.raw.payload}, {args.size_address, required}}};
       if (XFAILED(util::WriteGuestIoBuffers(memory, writes))) { status = X_E_INVALIDARG; }
+      else {output_written=true;}
     }
   } else if (XSUCCEEDED(status)) {
     const auto& texture = state.texture;
@@ -591,6 +601,11 @@ X_RESULT CompleteTileRequest(KernelState& kernel, const OwnedTileRequest& reques
     }
   }
   extended_error = status;
+  // This reports the real existing aggregate guest write. The native owner
+  // still requires its matching provider generation, ready pointer/version,
+  // terminal overlap and whole invocation return before acknowledging data.
+  if(state.native)state.native->RecordPublication(status,state.raw.required,
+      output_written && XSUCCEEDED(status));
   return XFAILED(status) ? X_ERROR_FUNCTION_FAILED : X_ERROR_SUCCESS;
 }
 

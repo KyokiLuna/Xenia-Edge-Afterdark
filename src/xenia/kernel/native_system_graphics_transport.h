@@ -23,6 +23,8 @@
 
 namespace xe::gpu {
 class NativeFrameExecutionRequest;
+class NativeFramePresentationGuard;
+class NativeFramePaintDrainObservation;
 struct NativeFrameExecutionResult;
 }  // namespace xe::gpu
 
@@ -208,6 +210,10 @@ class NativeSystemGraphicsTransport final
   bool RetireAfterKernelStop() noexcept;
 
  private:
+  friend class NativeProfileIdentityOwner;
+  bool DrainIdentityFramePaint(XThread&,
+      const std::shared_ptr<const gpu::NativeFramePresentationGuard>&,
+      gpu::NativeFramePaintDrainObservation* = nullptr) noexcept;
   struct State;
   class Prepared;
   explicit NativeSystemGraphicsTransport(std::shared_ptr<State>);

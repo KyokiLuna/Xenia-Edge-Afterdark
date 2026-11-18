@@ -22,6 +22,7 @@
 
 namespace xe::gpu {
 class NativeFrameExecutionRequest;
+class NativeFramePresentationGuard;
 class NativeSystemTitleInput;
 }  // namespace xe::gpu
 
@@ -108,6 +109,9 @@ class NativeSystemCompletedFrameRecord {
   std::shared_ptr<const std::vector<uint8_t>> immutable_primary;
   std::shared_ptr<const memory::PhysicalRangePin> full_record_pin;
   std::shared_ptr<const gpu::NativeSystemTitleInput> title_input;
+  // Actual transport captures this from the same admitted native Query/Set.
+  // It is presentation-only; false/retired guards still retain real work.
+  std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard;
   InputProvenance input_provenance = InputProvenance::kUnspecified;
   // Required only for kActualWriterGrant; snapshot mode MUST leave it null.
   std::shared_ptr<void> all_writer_exclusion;

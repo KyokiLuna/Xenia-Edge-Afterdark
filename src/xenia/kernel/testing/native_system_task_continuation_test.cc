@@ -147,6 +147,30 @@ TEST_CASE("Normal postboot rejection consumes the role without quarantine",
   CHECK_FALSE(a.uncertain);
   CHECK_FALSE(a.Claim(Role::kPostBootDiagnostic));
 }
+TEST_CASE("Owned native service roles retain exact tickets without consuming diagnostics",
+          "[kernel][native_task_continuation][owner]") {
+  Admission a;
+  CHECK_FALSE(a.Claim(Role::kOwnedMedia));
+  CHECK_FALSE(a.Claim(Role::kOwnedProfileIdentity));
+  CompleteStartup(a);
+  for(auto role:{Role::kOwnedMedia,Role::kOwnedProfileIdentity,Role::kOwnedMedia}) {
+    REQUIRE(a.Claim(role));
+    auto owner=std::make_shared<int>(3);std::weak_ptr<int> held=owner;
+    REQUIRE(a.BindOwner(0x10010,owner));owner.reset();
+    REQUIRE_FALSE(held.expired());CHECK_FALSE(a.MatchesTicket(0x10011));
+    CHECK_FALSE(a.Claim(Role::kPostBootDiagnostic));
+    a.Finish(true,true);CHECK(held.expired());
+  }
+  REQUIRE(a.Claim(Role::kPostBootDiagnostic));
+  REQUIRE(a.BindOwner(0x10020,std::make_shared<int>(4)));a.Finish(true,true);
+  CHECK_FALSE(a.Claim(Role::kPostBootDiagnostic));CHECK_FALSE(a.Claim(Role::kStartup));
+  // Only the private typed wrapper can authorize these production roles. This
+  // actual policy test does not fabricate a native Task or service owner.
+  a.stopping=true;REQUIRE(a.Claim(Role::kOwnedMedia));
+  REQUIRE(a.BindOwner(0x10030,std::make_shared<int>(5)));a.Finish(true,true);
+  a.closed=true;CHECK_FALSE(a.Claim(Role::kOwnedMedia));
+  CHECK_FALSE(a.Claim(Role::kOwnedProfileIdentity));
+}
 TEST_CASE("Managed native IO profiles remain scoped and preserve DWORD ABI",
           "[kernel][native_managed_format][abi]") {
   for (auto call : {NativeSystemUiPublicCall::kManagedFormatStart,

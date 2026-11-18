@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -190,6 +191,11 @@ class Window {
   // platform (phase() may still return an open phase, and events may still be
   // sent after the call). Use phase() to check if closing has actually
   // happened immediately.
+  // Optional early, vetoable user request. True defers close without changing
+  // phase, focus or surface. Existing windows keep their original behavior.
+  void SetCloseRequestHandler(std::function<bool()> handler) {
+    close_request_handler_ = std::move(handler);
+  }
   void RequestClose() {
     // Don't allow external close requests during opening for state consistency
     // inside OpenImpl (if an internal close happens during OpenImpl, the
@@ -567,6 +573,7 @@ class Window {
     RequestPaintImpl();
   }
 
+  bool DeferCloseRequest();
   // Will also disconnect the surface if needed.
   void OnBeforeClose(WindowDestructionReceiver& destruction_receiver);
   void OnAfterClose();
@@ -707,6 +714,7 @@ class Window {
 
   WindowedAppContext& app_context_;
 
+  std::function<bool()> close_request_handler_;
   Phase phase_ = Phase::kClosedOpenable;
   WindowDestructionReceiver* innermost_destruction_receiver_ = nullptr;
 

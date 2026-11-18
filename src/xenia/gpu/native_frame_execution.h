@@ -10,6 +10,7 @@
 #define XENIA_GPU_NATIVE_FRAME_EXECUTION_H_
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -34,6 +35,100 @@ class NativeFrameExecutionTestAccess;
 
 namespace xe::gpu {
 class NativeFrameExecutionRequest;
+
+// Advisory, prebound scalar cells for ONE synchronous original preentry/drain
+// attempt. No pointers, owners, locks, IO, native calls or readiness live here.
+// Only the actual Bootstrap caller writes; host reporters read atomic words.
+// Reset is under that owner's metadata lock before the synchronous call chain;
+// no pointer may escape to deferred GPU recording, callbacks or an awaiter.
+class NativeFramePaintDrainObservation final {
+ public:
+  enum class Stage : uint32_t {
+    kOldPaused,kOldPaint,kPostPaint,kWakeSourceListener,kArm,kContinuation,
+    kTransportAdmission,kTransportState,kTransportHandoff,kPresenter,kPaintRetirement,
+    kPaintFence,kPaintFenceAwait,
+    kCount
+  };
+  enum class Scalar : uint32_t {kCompletionError,kCompletedSubmission,kUpcomingSubmission,kCount};
+  static constexpr uint32_t kCount=uint32_t(Stage::kCount),kScalarCount=uint32_t(Scalar::kCount),kMaximumAttempt=(1u<<29)-1;
+  void Reset(uint32_t attempt) noexcept {
+    attempt_=attempt<=kMaximumAttempt?attempt:0;
+    scalar_available_.store(0,std::memory_order_release);
+    scalar_attempt_.store(attempt_,std::memory_order_release);
+    for(uint32_t i=0;i<kCount;++i){evaluated_[i]=truth_[i]=0;begun_[i]=false;cells_[i].store(uint64_t(attempt_)<<35,std::memory_order_release);}
+  }
+  void Begin(Stage stage) noexcept {
+    const auto i=uint32_t(stage);if(i>=kCount || !attempt_)return;
+    begun_[i]=true;evaluated_[i]=truth_[i]=0;Publish(i,1,false);
+  }
+  // Receives the original expression ONCE and forwards its exact boolean.
+  bool Observe(Stage stage,uint32_t bit,bool value) noexcept {
+    const auto i=uint32_t(stage);
+    if(i<kCount && bit<16 && attempt_ && begun_[i]){
+      evaluated_[i]|=uint16_t(1u<<bit);if(value)truth_[i]|=uint16_t(1u<<bit);
+      Publish(i,1,false);
+    }
+    return value;
+  }
+  void Finish(Stage stage,bool value) noexcept {
+    const auto i=uint32_t(stage);if(i<kCount && attempt_ && begun_[i])Publish(i,2,value);
+  }
+  // An actual void call returned; this supplies NO boolean/GPU-done result.
+  void FinishVoid(Stage stage) noexcept {
+    const auto i=uint32_t(stage);if(i<kCount && attempt_ && begun_[i])Publish(i,3,false);
+  }
+  template<typename T> T Value(Scalar scalar,T value) noexcept {
+    const auto i=uint32_t(scalar);if(i<kScalarCount && attempt_){
+      scalars_[i].store(uint64_t(value),std::memory_order_relaxed);
+      scalar_available_.fetch_or(1u<<i,std::memory_order_release);
+    }
+    return value;
+  }
+  std::optional<uint64_t> ScalarSnapshot(Scalar scalar,uint32_t expected_attempt) const noexcept {
+    const auto i=uint32_t(scalar);if(i>=kScalarCount || !expected_attempt ||
+        scalar_attempt_.load(std::memory_order_acquire)!=expected_attempt ||
+        !(scalar_available_.load(std::memory_order_acquire)&(1u<<i)))return {};
+    const auto value=scalars_[i].load(std::memory_order_relaxed);
+    return scalar_attempt_.load(std::memory_order_acquire)==expected_attempt?std::optional<uint64_t>(value):std::nullopt;
+  }
+  bool Begun(Stage stage) const noexcept {
+    const auto i=uint32_t(stage);return i<kCount && begun_[i]; // writer only
+  }
+  uint64_t Snapshot(Stage stage,uint32_t expected_attempt) const noexcept {
+    const auto i=uint32_t(stage);if(i>=kCount || !expected_attempt)return 0;
+    const auto word=cells_[i].load(std::memory_order_acquire);
+    return uint32_t(word>>35)==expected_attempt?word:0;
+  }
+  static constexpr uint32_t Phase(uint64_t word){return uint32_t(word&3);}
+  static constexpr bool Result(uint64_t word){return bool(word&4);}
+  static constexpr uint32_t Evaluated(uint64_t word){return uint32_t((word>>3)&0xFFFF);}
+  static constexpr uint32_t Truth(uint64_t word){return uint32_t((word>>19)&0xFFFF);}
+ private:
+  void Publish(uint32_t i,uint32_t phase,bool result) noexcept {
+    const auto word=(uint64_t(attempt_)<<35)|(uint64_t(truth_[i])<<19)|
+        (uint64_t(evaluated_[i])<<3)|(uint64_t(result)<<2)|phase;
+    cells_[i].store(word,std::memory_order_release);
+  }
+  static_assert(std::atomic<uint64_t>::is_always_lock_free);
+  uint32_t attempt_=0;
+  std::array<uint16_t,kCount> evaluated_{},truth_{}; // actual single writer only
+  std::array<bool,kCount> begun_{};
+  std::array<std::atomic<uint64_t>,kCount> cells_{};
+  std::array<std::atomic<uint64_t>,kScalarCount> scalars_{};
+  std::atomic<uint32_t> scalar_available_{0},scalar_attempt_{0};
+};
+
+// Immutable per-Query presentation origin. Implementations own metadata only,
+// never guest/storage/code/GPU resources. Revocation is irreversible. IsLive
+// runs outside backend locks; IsRevoked is atomic-only and safe under them.
+// Null guards preserve ordinary frames. These methods grant no execution,
+// storage, submission, native-clear or completion authority.
+class NativeFramePresentationGuard {
+ public:
+  virtual ~NativeFramePresentationGuard() = default;
+  virtual bool IsLive() const noexcept = 0;
+  virtual bool IsRevoked() const noexcept = 0;
+};
 
 // Immutable storage provenance, minted only while the exact Session Source
 // operation and actual owner backing pins protect the rectangle/mapping read.
@@ -218,6 +313,14 @@ class NativeFrameExecutionRequest {
   // Preparation alone is insufficient; the retained graph must also explicitly
   // permit execution at this final check.
   bool MarkSubmissionAttempted() const;
+  const std::shared_ptr<const NativeFramePresentationGuard>& presentation_guard()
+      const {
+    return presentation_guard_;
+  }
+  // Physical completed-state lineage only. This is the exact owner/backend
+  // currentness predicate before optional pixel visibility is considered.
+  // It grants no GPU submission, source completion or presentation permission.
+  bool IsPresentationOwnerCurrent() const noexcept;
   bool IsPresentationOwnerLive() const noexcept;
   // IsAdmitted is consumed at native submission and is not readback authority.
   std::unique_ptr<NativeFrameReadbackAdmission> AcquireCompletedReadback(
@@ -234,7 +337,8 @@ class NativeFrameExecutionRequest {
       std::vector<std::shared_ptr<const memory::PhysicalRangePin>> pins,
       std::shared_ptr<NativeFrameExecutionAuthority> authority,
       std::optional<NativeFrameOutputLayout> output_layout,
-      std::shared_ptr<const NativeFrameInputSnapshot> input_snapshot);
+      std::shared_ptr<const NativeFrameInputSnapshot> input_snapshot,
+      std::shared_ptr<const NativeFramePresentationGuard> presentation_guard);
   bool ResourcesValid() const;
   const std::shared_ptr<const NativeFrameCommandPlan> plan_;
   const NativeFrameSubmissionIdentity identity_;
@@ -246,6 +350,7 @@ class NativeFrameExecutionRequest {
   const std::vector<std::shared_ptr<const memory::PhysicalRangePin>> pins_;
   const std::shared_ptr<NativeFrameExecutionAuthority> authority_;
   const std::shared_ptr<const NativeFrameInputSnapshot> input_snapshot_;
+  const std::shared_ptr<const NativeFramePresentationGuard> presentation_guard_;
 };
 
 // Backend-neutral facts only. A failure can still carry a submitted completion
@@ -291,6 +396,15 @@ struct NativeFrameExecutionResult {
 // arithmetic. The real backend ticket/owner checks remain separate.
 bool NativeFrameOperationsMatchPlan(const NativeFrameCommandPlan&,
                                     const NativeFrameExecutionResult&);
+
+// Derive physical overlay lineage from a genuinely completed exact Request.
+// Hidden sources still update physical requested state. Pixel guards are not
+// consulted and never upgraded. The owner must snapshot prior outside its
+// lock, then compare the same current Request again before publishing this
+// result; an old completed Request cannot retarget a newer stream by itself.
+std::optional<NativeOverlayState> DeriveCompletedNativeOverlayState(
+    const NativeFrameExecutionRequest&, const NativeFrameExecutionResult&,
+    std::optional<NativeOverlayState> prior);
 
 // Complete certifies the readback helper's own real fence and owned byte copy.
 // native_completion identifies the original frame, not the later readback.

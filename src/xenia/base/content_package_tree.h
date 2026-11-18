@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <span>
+#include <system_error>
 #include <vector>
 #include "xenia/base/filesystem.h"
 namespace xe::filesystem {
@@ -32,6 +34,23 @@ struct ContentPackageInitialMember {
   std::filesystem::path relative;
   std::vector<uint8_t> bytes;
   bool directory = false;
+};
+struct ContentPackageStreamMember {
+  std::filesystem::path relative;
+  uint64_t size = 0;
+  bool directory = false;
+};
+// Synchronous native-host I/O only. The producer retains the originally opened
+// package and its native fragment handles; methods must never reselect a
+// pathname or invoke guest/UI callbacks. Metadata is copied before staging.
+// This supplies bytes, never destination mutation or publication authority.
+class ContentPackageStreamSource {
+ public:
+  virtual ~ContentPackageStreamSource() = default;
+  virtual std::span<const ContentPackageStreamMember> members() const = 0;
+  virtual FileIoResult Read(size_t member, uint64_t offset,
+                           std::span<uint8_t> output) = 0;
+  virtual std::error_code CheckCurrent() const = 0;
 };
 // Authenticated prepared-tree data. Native IDs/stamps come from actual staged
 // files; digests bind complete regular bytes, directories have a zero digest.

@@ -10,6 +10,7 @@
 #include <array>
 #include "xenia/base/logging.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_media_service.h"
 #include "xenia/kernel/native_managed_format_frontdoor.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
@@ -49,6 +50,8 @@ DECLARE_XAM_EXPORT2(XamUnregisterSysApp, kNone, kImplemented, kSketchy);
 
 dword_result_t XMsgInProcessCall_entry(dword_t app, dword_t message,
                                        dword_t arg1, dword_t arg2) {
+  if(const auto media=NativeMediaService::TryMessageOnOriginalCaller(kernel_state(),0x1F4,
+      std::array<uint32_t,4>{app,message,arg1,arg2}))return *media;
   auto result = kernel_state()->app_manager()->DispatchMessageSync(app, message,
                                                                    arg1, arg2);
   if (result == X_ERROR_NOT_FOUND) {
@@ -62,6 +65,8 @@ DECLARE_XAM_EXPORT1(XMsgInProcessCall, kNone, kImplemented);
 dword_result_t XMsgSystemProcessCall_entry(dword_t app, dword_t message,
                                            dword_t buffer,
                                            dword_t buffer_length) {
+  if(const auto media=NativeMediaService::TryMessageOnOriginalCaller(kernel_state(),0x1F6,
+      std::array<uint32_t,4>{app,message,buffer,buffer_length}))return *media;
   auto result = kernel_state()->app_manager()->DispatchMessageAsync(
       app, message, buffer, buffer_length);
   if (result == X_ERROR_NOT_FOUND) {
@@ -97,6 +102,9 @@ dword_result_t XMsgStartIORequestEx_entry(
     dword_t app, dword_t message, pointer_t<XAM_OVERLAPPED> overlapped_ptr,
     dword_t buffer_ptr, dword_t buffer_length,
     pointer_t<X_TASK_ARGS> xam_task_args_ptr) {
+  if(const auto media=NativeMediaService::TryMessageOnOriginalCaller(kernel_state(),0x1FC,
+      std::array<uint32_t,6>{app,message,overlapped_ptr.guest_address(),buffer_ptr,buffer_length,
+                            xam_task_args_ptr.guest_address()}))return *media;
   if (const auto managed = NativeManagedFormatFrontdoor::TryStart(
           kernel_state(),
           std::array<uint64_t, 6>{app, message, overlapped_ptr.guest_address(),
@@ -112,6 +120,8 @@ DECLARE_XAM_EXPORT1(XMsgStartIORequestEx, kNone, kImplemented);
 dword_result_t XMsgStartIORequest_entry(
     dword_t app, dword_t message, pointer_t<XAM_OVERLAPPED> overlapped_ptr,
     dword_t buffer_ptr, dword_t buffer_length) {
+  if(const auto media=NativeMediaService::TryMessageOnOriginalCaller(kernel_state(),0x1F7,
+      std::array<uint32_t,5>{app,message,overlapped_ptr.guest_address(),buffer_ptr,buffer_length}))return *media;
   return xeXMsgStartIORequestEx(app, message, overlapped_ptr, buffer_ptr,
                                 buffer_length, nullptr);
 }

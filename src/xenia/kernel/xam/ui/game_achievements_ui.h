@@ -41,7 +41,7 @@ class GameAchievementsUI final : public XamGamepadDialog {
   void DrawTitleAchievementInfo(ImGuiIO& io,
                                 const Achievement& achievement_entry) const;
 
-  void OnDraw(ImGuiIO& io) override;
+  void OnDrawDialog(ImGuiIO& io) override;
 
  private:
   bool show_locked_info_ = false;

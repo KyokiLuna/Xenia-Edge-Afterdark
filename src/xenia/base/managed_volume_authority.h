@@ -8,6 +8,8 @@
 namespace xe::filesystem {
 class ManagedVolumeFormatHandoff;
 class ContentMutationOwner;
+class ManagedStorageBootstrap;
+class ManagedFormatGuestAdmissionPermit;
 // Retained process storage inputs, independent of KernelState or settings
 // payloads. Capture groups existing authorities; it creates no journal engine.
 // Per-device same-FS initialization remains ManagedVolumeAuthority::Open.
@@ -80,6 +82,9 @@ class ManagedVolumeAuthority final {
 
  private:
   friend class ManagedVolumeAuthorityTestAccess;
+  friend class ManagedStorageBootstrap;
+  friend class ManagedFormatGuestAdmissionPermit;
+  static std::error_code CheckFormatGuestAdmission(const ManagedFormatGuestAdmissionPermit&);
   ManagedVolumeAuthority() = default;
   static std::unique_ptr<ManagedDeviceIdentity::Handoff> PrepareFormatHandoff(
       ManagedVolumeFormatHandoff&, const std::atomic<bool>* external);
@@ -89,11 +94,23 @@ class ManagedVolumeAuthority final {
       const ManagedVolumeFormatHandoff&, std::error_code&);
   static std::shared_ptr<ManagedVolumeAuthority> BuildFormatVolume(
       ManagedVolumeFormatHandoff&, bool completed);
+  static std::shared_ptr<const ManagedVolumeAuthority> FromCompletedFormatInternal(
+      ManagedVolumeFormatHandoff&, unsigned stop_after_admission);
   static std::shared_ptr<const ManagedVolumeAuthority> OpenInternal(Options,
-                                                                   bool inspect);
+                                                                   bool inspect,
+                                                                   unsigned bootstrap_stop = 0);
+  // Complete historical B2 producer/reopen body; public Open retains its
+  // mandatory bootstrap entry policy. Private test access exercises this real
+  // producer to preserve authenticated pre-bootstrap format recovery.
+  static std::shared_ptr<const ManagedVolumeAuthority> OpenLegacyInternal(
+      Options, std::shared_ptr<HostStorageRoot> content_anchor,
+      std::shared_ptr<ManagedVolumeAuthority>, bool inspect);
+  static std::error_code ReconstructLegacyFormatInspection(
+      ManagedVolumeFormatHandoff&);
   // Declared first, destroyed last: retain initialization exclusion through
   // partial/error owner teardown and transfer the same lease into intents.
   std::shared_ptr<const HostStorageIntentLease> source_lease_;
+  std::shared_ptr<ManagedStorageBootstrap> bootstrap_;
   std::shared_ptr<HostStorageRoot> content_, private_parent_, public_root_,
       public_authority_, state_parent_, binding_root_;
   std::shared_ptr<const ManagedDeviceIdentity> identity_;

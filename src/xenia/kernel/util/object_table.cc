@@ -25,12 +25,20 @@ ObjectTable::~ObjectTable() { Reset(); }
 void ObjectTable::Reset() {
   auto global_lock = global_critical_region_.Acquire();
 
+  // Escaped stand-ins must not reopen in another Kernel/table epoch, even if
+  // an allocator later reuses the exact table/Kernel address. No guest cleanup
+  // or new authority is manufactured by invalidating this opaque birth token.
+  counted_body_birth_.reset();
+
   // Release all objects, clearing their handles first so destructors
   // don't assert on non-empty handles_.
   for (uint32_t n = 0; n < table_capacity_; n++) {
     ObjectTableEntry& entry = table_[n];
     if (entry.object) {
       entry.object->handles().clear();
+      // Denial only. Reset is not native Close/cleanup; the service's actual
+      // live-drain/stopped-Kernel boundary retains any unfinished native body.
+      entry.object->NativeMediaLastHandleDetached();
       entry.handle_ref_count = 0;
       entry.object->Release();
     }
@@ -39,6 +47,9 @@ void ObjectTable::Reset() {
     ObjectTableEntry& entry = host_table_[n];
     if (entry.object) {
       entry.object->handles().clear();
+      // Denial only. Reset is not native Close/cleanup; the service's actual
+      // live-drain/stopped-Kernel boundary retains any unfinished native body.
+      entry.object->NativeMediaLastHandleDetached();
       entry.handle_ref_count = 0;
       entry.object->Release();
     }
@@ -149,6 +160,9 @@ X_STATUS ObjectTable::AddHandle(XObject* object, X_HANDLE* out_handle,
   {
     auto global_lock = global_critical_region_.Acquire();
 
+    // The same exact owned native wrapper cannot gain a late alias after its
+    // final user handle was detached. Ordinary/CountedBody roles are unchanged.
+    if(!object->NativeMediaHandlePublicationAllowed())return X_STATUS_INVALID_HANDLE;
     // Find a free slot.
     uint32_t slot = 0;
     bool host_object = object->is_host_object() && !force_guest_handle;
@@ -168,6 +182,7 @@ X_STATUS ObjectTable::AddHandle(XObject* object, X_HANDLE* out_handle,
         handle += XObject::kHandleHostBase;
       }
       object->handles().push_back(handle);
+      object->NativeMediaHandleAdded();
 
       // Retain so long as the object is in the table.
       object->Retain();
@@ -209,6 +224,7 @@ X_STATUS ObjectTable::RetainHandle(X_HANDLE handle) {
     return X_STATUS_INVALID_HANDLE;
   }
 
+  if(!entry->object->NativeMediaHandlePublicationAllowed())return X_STATUS_INVALID_HANDLE;
   entry->handle_ref_count++;
   return X_STATUS_SUCCESS;
 }
@@ -258,6 +274,9 @@ X_STATUS ObjectTable::RemoveHandle(X_HANDLE handle) {
     if (handle_entry != object->handles().end()) {
       object->handles().erase(handle_entry);
     }
+    // Exact publication-slot revocation is monotonic even if other aliases
+    // remain or this numeric slot is later reused. Metadata/atomics only.
+    object->NativeMediaHandleDetached(handle);
 
     XELOGD("Removed handle:{:08X} for {}", handle, typeid(*object).name());
 

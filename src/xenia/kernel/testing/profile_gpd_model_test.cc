@@ -1020,5 +1020,52 @@ TEST_CASE("Native new title invalidates captured Dashboard and joins fresh "
                      actual.token->bytes().begin(),
                      actual.token->bytes().end()));
 }
+TEST_CASE("Roster preparation pauses real GPD writers while preserving read observations",
+          "[profile_gpd_model][roster_pause][persistence]") {
+  ModelFixture f;
+  auto model = f.Authority();
+  std::error_code error;
+  const auto origin = model->CaptureOrigin(error);
+  REQUIRE(origin);
+  const auto before = model->Read(error);
+  REQUIRE(before);
+  auto paused = model->PauseForRoster(error);
+  REQUIRE(paused); REQUIRE_FALSE(error);
+  xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+  const auto blocked = writer.Submit(f.Unlock());
+  CHECK(blocked.error == std::errc::device_or_resource_busy);
+  CHECK_FALSE(blocked.event);
+  CHECK(model->Read(error) == before);
+  CHECK(model->IsCurrent(*origin));
+  CHECK(model->InstallLoaded(f.Loads()) == std::errc::device_or_resource_busy);
+  CHECK_FALSE(model->PauseForRoster(error));
+  CHECK(error == std::errc::device_or_resource_busy);
+  f.UnchangedOnDisk();
+  paused.reset();
+  const auto committed = writer.Submit(f.Unlock());
+  REQUIRE_FALSE(committed.error);
+  CHECK(committed.state == xam::ProfileGpdTransactionAttempt::State::kCommitted);
+  REQUIRE(committed.event); CHECK(committed.event->Current());
+}
+TEST_CASE("Roster preparation cannot discard an actual pending GPD command",
+          "[profile_gpd_model][roster_pause][pending]") {
+  ModelFixture f;
+  auto model = f.Authority();
+  std::error_code error;
+  bool retry = false;
+  auto pending = model->Begin(f.Unlock(), retry, error);
+  REQUIRE(pending);
+  CHECK_FALSE(model->PauseForRoster(error));
+  CHECK(error == std::errc::device_or_resource_busy);
+  CHECK(model->Pending(error) == pending);
+  REQUIRE(pending->BuildPlan(error));
+  f.UnchangedOnDisk();
+  xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+  const auto actual = writer.ExecutePending(pending);
+  REQUIRE_FALSE(actual.error); REQUIRE(actual.event);
+  auto paused = model->PauseForRoster(error);
+  REQUIRE(paused); CHECK(actual.event->Current());
+  paused.reset(); CHECK(actual.event->Current());
+}
 }  // namespace xe::kernel::test
 #endif

@@ -19,6 +19,8 @@ namespace xe::kernel {
 class KernelState;
 class NativeSystemAllocationAuthority;
 class NativeManagedFormatIo;
+class NativeAvatarService;
+class NativeProfileIdentityOwner;
 class UserModule;
 class XThread;
 enum class NativeSystemUiPublicCall : uint16_t;
@@ -55,6 +57,32 @@ class GuestRuntimeCallExecutor
       XThread&, NativeSystemUiPublicCall, std::span<const uint64_t> arguments);
 
  private:
+  friend class NativeAvatarService;
+  friend class NativeProfileIdentityOwner;
+  class ProfileIdentityProviderBinding final {
+   private:
+    friend class GuestRuntimeCallExecutor;
+    friend class NativeProfileIdentityOwner;
+    explicit ProfileIdentityProviderBinding(const GuestRuntimeCallExecutor* issuer)
+        : issuer_(issuer) {}
+    const GuestRuntimeCallExecutor* const issuer_;
+  };
+  std::shared_ptr<const ProfileIdentityProviderBinding> CaptureProfileIdentityProviderBinding();
+  GuestRuntime::ExecutionResult ExecuteOwnedIdentityIngressOnOriginalCaller(
+      XThread&, uint16_t ordinal, std::span<const uint32_t>);
+  class AvatarProviderBinding final {
+   private:
+    friend class GuestRuntimeCallExecutor;
+    friend class NativeAvatarService;
+    explicit AvatarProviderBinding(const GuestRuntimeCallExecutor* issuer)
+        : issuer_(issuer) {}
+    const GuestRuntimeCallExecutor* const issuer_;
+  };
+  // Only the complete full-entry bridge transaction can mint this receipt.
+  // A Ready heap alone with another plan never creates it.
+  std::shared_ptr<const AvatarProviderBinding> CaptureAvatarProviderBinding();
+  GuestRuntime::ExecutionResult ExecuteAvatarRegistersOnOriginalCaller(
+      XThread&, NativeSystemUiPublicCall, std::span<const uint64_t>);
   friend class NativeSystemUiStartupRuntime;
   friend class NativeManagedFormatIo;
   // Private exact managed ingress only. Unlike the generic public method,

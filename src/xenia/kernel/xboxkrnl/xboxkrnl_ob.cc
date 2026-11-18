@@ -8,6 +8,8 @@
  */
 
 #include "xenia/kernel/xboxkrnl/xboxkrnl_ob.h"
+#include "xenia/kernel/native_media_service.h"
+#include "xenia/kernel/native_media_counted_object.h"
 #include "xenia/kernel/xboxkrnl/ob_symbolic_link.h"
 #include "xenia/kernel/xfile.h"
 
@@ -22,6 +24,7 @@
 #include "xenia/base/logging.h"
 #include "xenia/cpu/processor.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/kernel/xboxkrnl/ob_waitable_object.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
@@ -44,6 +47,7 @@ class XGuestObject : public XObject {
   XGuestObject(KernelState* kernel_state, uint32_t body)
       : XObject(kernel_state, Type::Undefined), body_(body) {
     auto global_lock = global_critical_region::AcquireDirect();
+    table_birth_ = kernel_state->object_table()->CaptureCountedBodyBirth();
     by_body_[body] = this;
   }
   ~XGuestObject() override {
@@ -57,6 +61,13 @@ class XGuestObject : public XObject {
 
   uint32_t body() const { return body_; }
 
+  bool IsCurrentTable(KernelState& current) const {
+    // Compare the foreign pointer without dereferencing it. The weak table
+    // token also distinguishes reset/reused instances at the same address.
+    return kernel_state() == &current &&
+        current.object_table()->CurrentCountedBodyBirth(table_birth_);
+  }
+
   static object_ref<XObject> FromBody(uint32_t body) {
     auto global_lock = global_critical_region::AcquireDirect();
     // One whose last reference just went is still mapped until its destructor
@@ -67,12 +78,18 @@ class XGuestObject : public XObject {
     }
     return object_ref<XObject>(it->second);
   }
+  static void RemoveExpectedBody(uint32_t body,const XObject* expected) {
+    auto global_lock=global_critical_region::AcquireDirect();
+    const auto found=by_body_.find(body);
+    if(found!=by_body_.end() && found->second==expected)by_body_.erase(found);
+  }
   static bool HasBody(uint32_t body) {
     auto global_lock = global_critical_region::AcquireDirect();
     return by_body_.count(body) != 0;
   }
 
  private:
+  std::weak_ptr<const uint8_t> table_birth_;
   uint32_t body_;
   static inline std::unordered_map<uint32_t, XGuestObject*> by_body_;
 };
@@ -198,13 +215,27 @@ void DereferenceCounted(uint32_t body) {
   auto type = kernel_memory()->TranslateVirtual<X_OBJECT_TYPE*>(type_ptr);
   auto processor = kernel_state()->processor();
   auto thread_state = cpu::ThreadState::Get();
+  auto identity = NativeProfileIdentityOwner::BeforeCountedDelete(
+      kernel_state(), thread_state->context(), body, allocation, type_ptr,
+      type->delete_proc, type->free_proc);
   if (type->delete_proc) {
-    uint64_t args[] = {body};
-    processor->Execute(thread_state, type->delete_proc, args, 1);
+    // Same one-DWORD register setup as Execute(args,1), with its actual bool
+    // execution result observed separately from the guest routine's r3.
+    thread_state->context()->r[3] = body;
+    const bool executed = processor->Execute(thread_state, type->delete_proc);
+    identity.DeleteReturned(executed);
   }
   if (type->free_proc) {
-    uint64_t args[] = {allocation};
-    processor->Execute(thread_state, type->free_proc, args, 1);
+    auto media=NativeMediaService::CaptureObjectFree(kernel_state(),thread_state->context(),
+        body,type_ptr,allocation,type->free_proc);
+    identity.BeforeFree();
+    if(media)media->BeforeActualFree();
+    // One actual native call supplies the same normal-return fact to both
+    // independent typed receipts; guest r3 is not an execution-success bit.
+    thread_state->context()->r[3] = allocation;
+    const bool executed = processor->Execute(thread_state, type->free_proc);
+    identity.FreeReturned(executed);
+    if(media)media->Complete(executed);
   }
 }
 
@@ -312,23 +343,41 @@ object_ref<XObject> CountedObject(uint32_t body, bool allow_wrapper,
 
 // Gives a counted object a new handle, which takes |pointer_bias| references.
 X_STATUS OpenCounted(uint32_t body, uint32_t pointer_bias, bool allow_wrapper,
-                     object_ref<XObject>* out_object, X_HANDLE* out_handle) {
+                     object_ref<XObject>* out_object, X_HANDLE* out_handle,
+                     bool* actual_new_wrapper = nullptr,
+                     NativeMediaObjectInsertion* actual_media = nullptr) {
+  // Table reset and this metadata-only birth check/insertion share the same
+  // GCRC. A foreign/stale global body wrapper is refused BEFORE AddHandle or
+  // current guest counts can change; its old Kernel is never dereferenced.
+  auto global_lock = global_critical_region::AcquireDirect();
   bool created;
   auto object = CountedObject(body, allow_wrapper, &created);
-  X_HANDLE handle = object->handle();
+  if(actual_new_wrapper)*actual_new_wrapper=created;
+  if (!object || object->kernel_state() != kernel_state()) {
+    // CountedObject(created=true) already constructed its first handle. Only
+    // the explicit existing-wrapper rejection proves no current insertion.
+    if (!created && actual_media) actual_media->ObserveNoInsertionActual(body,X_STATUS_INVALID_HANDLE);
+    return X_STATUS_INVALID_HANDLE;
+  }
+  if (const auto* stand_in = dynamic_cast<const XGuestObject*>(object.get());
+      stand_in && !stand_in->IsCurrentTable(*kernel_state())) {
+    if (!created && actual_media) actual_media->ObserveNoInsertionActual(body,X_STATUS_INVALID_HANDLE);
+    return X_STATUS_INVALID_HANDLE;
+  }
+  X_HANDLE handle = created ? object->handle() : 0;
   if (!created) {
     const X_STATUS result =
         kernel_state()->object_table()->AddHandle(object.get(), &handle, true);
     if (XFAILED(result)) {
+      // The real table refused before slot/handle/count mutation; do not infer
+      // this fact from an empty out_object after arbitrary failures.
+      if (actual_media) actual_media->ObserveNoInsertionActual(body,result);
       return result;
     }
   }
   auto header = CountedHeader(body);
-  {
-    auto global_lock = global_critical_region::AcquireDirect();
-    header->pointer_count = header->pointer_count + int32_t(pointer_bias);
-    header->handle_count = header->handle_count + 1;
-  }
+  header->pointer_count = header->pointer_count + int32_t(pointer_bias);
+  header->handle_count = header->handle_count + 1;
   *out_handle = handle;
   if (out_object) {
     *out_object = std::move(object);
@@ -337,6 +386,184 @@ X_STATUS OpenCounted(uint32_t body, uint32_t pointer_bias, bool allow_wrapper,
 }
 
 }  // namespace
+
+bool NativeMediaCountedBodyAccess::Adopt(NativeMediaObjectInsertion& receipt,
+    XObject& object,uint32_t handle,bool actual_new_wrapper) noexcept try {
+  if(!receipt.kernel_ || !receipt.creation_ || !receipt.admission_ ||
+      receipt.actual_insert_observed_ || receipt.actual_reference_held_ ||
+      receipt.actual_outcome_.load(std::memory_order_acquire)!=NativeMediaObjectInsertion::ActualOutcome::kPending ||
+      !XThread::IsInThread() || XThread::GetCurrentThread()->kernel_state()!=receipt.kernel_ ||
+      receipt.admission_->issuer_.expired() || receipt.admission_->kernel_!=receipt.kernel_ ||
+      receipt.admission_->serial_!=receipt.creation_ || receipt.bytes_!=0x14F8)return false;
+  auto& kernel=*receipt.kernel_;
+  auto global=global_critical_region::AcquireDirect();
+  const auto actual=kernel.object_table()->LookupObject<XObject>(handle,true);
+  auto* native=dynamic_cast<XGuestObject*>(&object);
+  if(!actual || actual.get()!=&object || object.kernel_state()!=&kernel ||
+      !native || native->body()!=receipt.body_ || object.allocated_guest_object())return false;
+  // Preserve actual partial insertion evidence even if later authentication
+  // fails; its real unpublished handle must be closed, never guessed/dropped.
+  receipt.actual_object_=retain_object(&object);receipt.actual_handle_=handle;
+  receipt.actual_insert_observed_=true;receipt.actual_new_wrapper_=actual_new_wrapper;
+  receipt.actual_outcome_.store(NativeMediaObjectInsertion::ActualOutcome::kInserted,std::memory_order_release);
+  // A genuinely fresh native24E allocation must bind a wrapper constructed
+  // NOW by this exact primitive/current Kernel, never stale global by_body.
+  if(!actual_new_wrapper)return false;
+  const auto mapped=XGuestObject::FromBody(receipt.body_);
+  auto& memory=*kernel.memory();
+  if(!mapped || mapped.get()!=&object || receipt.body_<sizeof(X_OBJECT_HEADER) ||
+      (uint32_t(memory.QueryRangeAccess(receipt.body_-sizeof(X_OBJECT_HEADER),sizeof(X_OBJECT_HEADER)+receipt.bytes_)) & uint32_t(memory::PageAccess::kReadWrite))!=uint32_t(memory::PageAccess::kReadWrite) ||
+      (object.native_media_admission_ && object.native_media_admission_!=receipt.admission_) ||
+      receipt.admission_->handles_closed_.load() || receipt.admission_->body_detached_.load())return false;
+  auto* header=memory.TranslateVirtual<X_OBJECT_HEADER*>(receipt.body_-sizeof(X_OBJECT_HEADER));
+  if(header->object_type_ptr!=0x81A85494 || header->pointer_count<=0 ||
+      header->pointer_count==std::numeric_limits<int32_t>::max() || header->handle_count<=0)return false;
+  if(receipt.admission_->body_ && receipt.admission_->body_!=receipt.body_)return false;
+  receipt.admission_->body_=receipt.body_;
+  receipt.admission_->publication_handle_=handle;
+  receipt.admission_->publication_live_.store(true,std::memory_order_release);
+  object.native_media_admission_=receipt.admission_;
+  // SAME actual guest object-manager primitive as ObReferenceObject. This is
+  // the extra native pointer reference; a host object_ref is not its proof.
+  ReferenceCounted(receipt.body_);receipt.actual_reference_held_=true;
+  return true;
+} catch(...) {return false;}
+bool NativeMediaCountedBodyAccess::Release(NativeMediaObjectInsertion& receipt,
+    XThread& actual) noexcept try {
+  if(global_critical_region::is_held_by_current_thread() || !XThread::IsInThread(&actual) ||
+      actual.kernel_state()!=receipt.kernel_ || actual.native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM ||
+      !receipt.actual_reference_held_ || !receipt.actual_object_ || !receipt.admission_ ||
+      receipt.actual_object_->native_media_admission_!=receipt.admission_ ||
+      receipt.admission_->body_detached_.load())return false;
+  // Release is an actual consume attempt, not a native Close/free receipt.
+  // The owner observes actual free separately and retains uncertain resources.
+  receipt.actual_reference_held_=false;
+  DereferenceCounted(receipt.body_);
+  return true;
+} catch(...) {return false;}
+uint32_t NtClose(uint32_t handle);
+bool NativeMediaCountedBodyAccess::MatchesHandle(
+    const NativeMediaObjectInsertion& receipt,uint32_t handle) noexcept try {
+  if(!receipt.kernel_ || !receipt.actual_object_ || !receipt.admission_ ||
+     receipt.admission_->body_detached_.load())return false;
+  auto global=global_critical_region::AcquireDirect();
+  const auto actual=receipt.kernel_->object_table()->LookupObject<XObject>(handle,true);
+  return actual && actual.get()==receipt.actual_object_.get() &&
+      actual->native_media_admission_==receipt.admission_;
+} catch(...) {return false;}
+bool NativeMediaCountedBodyAccess::BindSelected(NativeMediaObjectInsertion& receipt) noexcept try {
+  if(!receipt.kernel_ || !receipt.actual_reference_held_ || !receipt.actual_object_ || !receipt.admission_)return false;
+  auto global=global_critical_region::AcquireDirect();
+  if(receipt.actual_object_->native_media_admission_!=receipt.admission_ ||
+     receipt.actual_object_->handles().empty() || receipt.admission_->ingress_closed_.load() ||
+     receipt.admission_->body_detached_.load() || receipt.admission_->handles_closed_.load())return false;
+  receipt.admission_->selected_.store(true,std::memory_order_release);return true;
+} catch(...) {return false;}
+bool NativeMediaCountedBodyAccess::ProvisionalHasNoGuestOwner(
+    const NativeMediaObjectInsertion& receipt) noexcept try {
+  if(!receipt.kernel_ || !receipt.actual_reference_held_ || !receipt.actual_object_ || !receipt.admission_)return false;
+  auto global=global_critical_region::AcquireDirect();
+  if(receipt.actual_object_->native_media_admission_!=receipt.admission_ ||
+     receipt.admission_->selected_.load() || receipt.admission_->body_detached_.load() ||
+     !receipt.actual_object_->handles().empty())return false;
+  // The genuine extra reference keeps this exact authenticated native header
+  // alive. No timer/status or plausible body tag is used as a lifetime proof.
+  const auto* header=receipt.kernel_->memory()->TranslateVirtual<const X_OBJECT_HEADER*>(
+      receipt.body_-uint32_t(sizeof(X_OBJECT_HEADER)));
+  return header->object_type_ptr==0x81A85494 && header->handle_count==0 && header->pointer_count==1;
+} catch(...) {return false;}
+bool NativeMediaCountedBodyAccess::HasActualHandles(
+    const NativeMediaObjectInsertion& receipt) noexcept try {
+  auto global=global_critical_region::AcquireDirect();
+  return receipt.actual_object_ && !receipt.actual_object_->handles().empty();
+} catch(...) {return true;}
+bool NativeMediaCountedBodyAccess::CloseActualHandles(
+    NativeMediaObjectInsertion& receipt,XThread& thread) noexcept try {
+  if(global_critical_region::is_held_by_current_thread() || !XThread::IsInThread(&thread) ||
+      thread.kernel_state()!=receipt.kernel_ ||
+      thread.native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM ||
+      !receipt.actual_object_ || !receipt.admission_)return false;
+  receipt.admission_->ingress_closed_.store(true,std::memory_order_release);
+  // RetainHandle references on one slot are real opens too. Re-read only the
+  // exact original wrapper; never close a recycled numeric handle.
+  for(uint32_t attempt=0;attempt<4096;++attempt) {
+    uint32_t handle=0;
+    {auto global=global_critical_region::AcquireDirect();
+      if(receipt.actual_object_->handles().empty())return true;
+      handle=receipt.actual_object_->handles().front();
+      const auto actual=receipt.kernel_->object_table()->LookupObject<XObject>(handle,true);
+      if(actual.get()!=receipt.actual_object_.get())return false;
+    }
+    if(XFAILED(NtClose(handle)))return false;
+  }
+  return false;
+} catch(...) {return false;}
+bool NativeMediaCountedBodyAccess::RelinquishOrdinary(
+    NativeMediaObjectInsertion& receipt,XThread& thread) noexcept try {
+  if(!Release(receipt,thread))return false;
+  {auto global=global_critical_region::AcquireDirect();
+    auto* object=receipt.actual_object_.get();
+    if(!object || object->native_media_admission_!=receipt.admission_)return false;
+    if(object->handles().empty()) {
+      XGuestObject::RemoveExpectedBody(receipt.body_,object);
+      receipt.admission_->body_detached_.store(true,std::memory_order_release);
+    }
+    object->native_media_admission_.reset();
+  }
+  receipt.actual_object_.reset();
+  return true;
+} catch(...) {return false;}
+bool NativeMediaCountedBodyAccess::RetireAfterStoppedKernel(
+    NativeMediaObjectInsertion& receipt) noexcept try {
+  // Private service post-CPU-stop handoff only. This discards stopped guest
+  // ownership; it does NOT execute Dereference/Close or claim native free.
+  if(global_critical_region::is_held_by_current_thread())return false;
+  if(receipt.stopped_retired_)return true;
+  {auto global=global_critical_region::AcquireDirect();
+    auto* object=receipt.actual_object_.get();
+    if(!object) {
+      if(receipt.actual_insert_observed_ || receipt.actual_reference_held_)return false;
+      // Verified stopped Kernel: discard only this uninserted receipt's stale
+      // metadata, with no foreign map/object/Kernel action or guest cleanup.
+      receipt.kernel_=nullptr;receipt.stopped_retired_=true;return true;
+    }
+    const bool exact_role=object->native_media_admission_==receipt.admission_;
+    const bool actual_unadopted=receipt.actual_insert_observed_ && !receipt.actual_reference_held_ &&
+        !object->native_media_admission_;
+    if((!exact_role && !actual_unadopted) ||
+       (object->kernel_state_ && object->kernel_state_!=receipt.kernel_))return false;
+    XGuestObject::RemoveExpectedBody(receipt.body_,object);
+    receipt.admission_->ingress_closed_.store(true,std::memory_order_release);
+    receipt.admission_->body_detached_.store(true,std::memory_order_release);
+    object->kernel_state_=nullptr;
+    receipt.actual_reference_held_=false;receipt.kernel_=nullptr;
+  }
+  receipt.actual_object_.reset();receipt.stopped_retired_=true;return true;
+} catch(...) {return false;}
+bool NativeMediaCountedBodyAccess::WithdrawExactWrapper(
+    NativeMediaObjectInsertion& receipt) noexcept try {
+  auto global=global_critical_region::AcquireDirect();
+  auto* object=receipt.actual_object_.get();
+  if(!object || !receipt.admission_ || object->native_media_admission_!=receipt.admission_ ||
+      receipt.admission_->body_!=receipt.body_ || !receipt.admission_->handles_closed_.load() ||
+      !object->handles().empty())return false;
+  // Before actual free/reuse (or at verified stopped Kernel). This removes
+  // only the exact old wrapper; another lifetime at the same address is safe.
+  XGuestObject::RemoveExpectedBody(receipt.body_,object);
+  receipt.admission_->body_detached_.store(true,std::memory_order_release);
+  return true;
+} catch(...) {return false;}
+bool NativeMediaCountedBodyAccess::DetachKernelAfterBodyGone(
+    NativeMediaObjectInsertion& receipt) noexcept try {
+  auto global=global_critical_region::AcquireDirect();
+  auto* object=receipt.actual_object_.get();
+  if(!object || !receipt.admission_ || object->native_media_admission_!=receipt.admission_ ||
+      !receipt.admission_->body_detached_.load() || !object->handles().empty() ||
+      (object->kernel_state_ && object->kernel_state_!=receipt.kernel_))return false;
+  // Metadata only after real body-free receipt or verified stopped-Kernel
+  // proof. Escaped wrappers no longer call a destroyed Kernel from Delete.
+  object->kernel_state_=nullptr;return true;
+} catch(...) {return false;}
 
 pointer_result_t ObGetWaitableObject_entry(lpvoid_t object_ptr,
                                            const ppc_context_t& context) {
@@ -641,7 +868,12 @@ DECLARE_XBOXKRNL_EXPORT1(ObLookupAnyThreadByThreadId, kNone, kImplemented);
 
 dword_result_t ObReferenceObjectByHandle_entry(dword_t handle,
                                                dword_t object_type_ptr,
-                                               lpdword_t out_object_ptr) {
+                                               lpdword_t out_object_ptr,
+                                               const ppc_context_t& context) {
+  // Declared first: covers actual helper/resources and their destructor tails.
+  auto identity=NativeProfileIdentityOwner::BeforeListenerHandleReference(
+      kernel_state(),context.value(),handle,object_type_ptr,out_object_ptr.guest_address());
+  const X_STATUS result=[&]() -> X_STATUS {
   // chrispy: gotta preinit this to 0, kernel is expected to do that
   *out_object_ptr = 0;
 
@@ -659,6 +891,7 @@ dword_result_t ObReferenceObjectByHandle_entry(dword_t handle,
       return X_STATUS_OBJECT_TYPE_MISMATCH;
     }
     ReferenceCounted(body);
+    identity.ObserveCountedReference(body);
     if (out_object_ptr.guest_address()) {
       *out_object_ptr = body;
     }
@@ -698,6 +931,9 @@ dword_result_t ObReferenceObjectByHandle_entry(dword_t handle,
   }
 
   return X_STATUS_SUCCESS;
+  }();  // Lookup/object locals and GCRC have genuinely unwound.
+  identity.ReferenceReturned(result);
+  return result;
 }
 DECLARE_XBOXKRNL_EXPORT1(ObReferenceObjectByHandle, kNone, kImplemented);
 
@@ -714,7 +950,7 @@ dword_result_t ObReferenceObjectByName_entry(pointer_t<X_ANSI_STRING> name,
       kernel_state()->object_table()->GetObjectByName(name_str, &handle);
   if (XSUCCEEDED(result)) {
     result = ObReferenceObjectByHandle_entry(handle, object_type_ptr,
-                                             out_object_ptr);
+                                             out_object_ptr,ctx);
     // The reference is ObReferenceObjectByHandle's, not the lookup's.
     kernel_state()->object_table()->ReleaseHandle(handle);
   } else if (out_object_ptr.guest_address()) {
@@ -739,7 +975,12 @@ void xeObDereferenceObject(PPCContext* context, uint32_t native_ptr) {
     return;
   }
   if (CountedBody(native_ptr)) {
+    // Counter/holders cover the real decrement plus nested native delete/free
+    // and all helper local destruction. There is no extra guest reference.
+    auto identity=NativeProfileIdentityOwner::BeforeListenerObjectDereference(
+        kernel_state(),context,native_ptr);
     DereferenceCounted(native_ptr);
+    identity.DereferenceReturned();
     return;
   }
 
@@ -793,13 +1034,64 @@ void xeObStripDosDevicesPrefix(std::string& path) {
   }
 }
 
+void xeObCaptureFilePathForCaller(std::string& path, uint32_t root_directory) {
+  if (root_directory != 0 && root_directory != kObDosDevicesRoot) {
+    return;  // A real directory handle already owns its exact relative root.
+  }
+  // Explicit \??\ is TITLE even on a SYSTEM caller; absolute \Device\ and
+  // \System??\ keep their declared namespace. No fallback between aliases.
+  const auto first = path.find_first_of("\\/:");
+  const bool bare_dos = first != std::string::npos && first != 0 &&
+                        path[first] == ':';
+  if (bare_dos) {
+    auto* thread = XThread::GetCurrentFiberThread();
+    if (!thread && XThread::IsInThread()) {
+      thread = XThread::GetCurrentThread();
+    }
+    if (thread && thread->thread_state() &&
+        xeKeGetCurrentProcessType(thread->thread_state()->context()) ==
+            X_PROCTYPE_SYSTEM) {
+      path.insert(0, "\\System??\\");
+    }
+  }
+  xeObStripDosDevicesPrefix(path);
+}
+
+std::string_view xeObDosPathValidationView(std::string_view path,
+                                           uint32_t root_directory) noexcept {
+  if (root_directory != 0 && root_directory != kObDosDevicesRoot) {
+    return path;
+  }
+  // Match the VFS object directories, not arbitrary wildcard-bearing roots.
+  // Compare bytes: malformed ANSI must reach IsValidPath, never a UTF8 decoder.
+  const auto lower_ascii = [](uint8_t value) noexcept {
+    return value >= 'A' && value <= 'Z' ? uint8_t(value + 32) : value;
+  };
+  // A nested prefix or wildcard in the remaining payload is still validated.
+  for (std::string_view prefix : {"\\??\\", "\\DosDevices\\", "\\System??\\"}) {
+    if (path.size() < prefix.size()) {
+      continue;
+    }
+    bool matches = true;
+    for (size_t i = 0; i < prefix.size(); ++i) {
+      if (lower_ascii(uint8_t(path[i])) != lower_ascii(uint8_t(prefix[i]))) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      path.remove_prefix(prefix.size());
+      break;
+    }
+  }
+  return path;
+}
+
 std::string xeObSymbolicLinkName(const std::string_view name) {
   auto path = xe::utf8::canonicalize_guest_path(name);
   xeObStripDosDevicesPrefix(path);
 
-  if (xe::utf8::starts_with_case(path, "\\System??\\")) {
-    path.erase(0, 10);
-  }
+  // Preserve explicit SYSTEM aliases through the common VFS boundary.
   return path;
 }
 
@@ -969,9 +1261,19 @@ dword_result_t ObCreateObject_entry(
     const ppc_context_t& context) {
   uint32_t out_object_tmp = 0;
 
+  auto identity = NativeProfileIdentityOwner::BeforeCountedCreate(
+      kernel_state(), context, object_factory.guest_address(),
+      optional_attributes.guest_address(), object_size_sans_headers,
+      out_object.guest_address());
+  if (!identity.admitted()) { return X_STATUS_ACCESS_DENIED; }
+  auto media=NativeMediaService::CaptureObjectCreation(kernel_state(),context.value(),
+      object_factory.guest_address(),object_size_sans_headers,out_object.guest_address());
+
   uint32_t result =
       xeObCreateObject(object_factory, optional_attributes,
                        object_size_sans_headers, &out_object_tmp, context);
+  identity.Complete(result, out_object_tmp);
+  if(media)media->Complete(result,out_object_tmp);
   *out_object = out_object_tmp;
   return result;
 }
@@ -986,10 +1288,12 @@ dword_result_t ObInsertObject_entry(dword_t object,
   }
   // The creation reference passes to the handle and the caller gets
   // |pointer_bias| more, which it later drops with ObDereferenceObject.
+  auto media=NativeMediaService::CaptureObjectInsertion(kernel_state(),ctx.value(),
+      object,out_handle.guest_address());
   object_ref<XObject> inserted;
-  X_HANDLE handle;
+  X_HANDLE handle;bool actual_new_wrapper=false;
   const X_STATUS result =
-      OpenCounted(object, pointer_bias, true, &inserted, &handle);
+      OpenCounted(object, pointer_bias, true, &inserted, &handle,&actual_new_wrapper,media.get());
   if (XFAILED(result)) {
     return result;
   }
@@ -1014,6 +1318,7 @@ dword_result_t ObInsertObject_entry(dword_t object,
       header->hash_index = int8_t(xeObHashObjectName(&name_info->name, ctx));
     }
   }
+  if(media)media->AdoptActual(*inserted,handle,actual_new_wrapper);
   *out_handle = handle;
   return X_STATUS_SUCCESS;
 }

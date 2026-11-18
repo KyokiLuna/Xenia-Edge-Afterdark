@@ -33,13 +33,17 @@ TEST_CASE("Namespace translation selects longest whole-component alias",
   CHECK(fs.ResolvePath("game:file") ==
         fs.GetDevice("\\Device\\Outer")->ResolvePath("\\file"));
 }
-TEST_CASE("Namespace aliases share DOS prefixes and preserve direct NT names",
+TEST_CASE("DOS aliases share title roots while SYSTEM roots remain distinct",
           "[vfs][namespace]") {
   VirtualFileSystem fs;
   std::string output = "old", target = "old";
   REQUIRE(fs.RegisterSymbolicLink("\\System??\\X:", "\\Device\\Disk"));
-  CHECK_FALSE(fs.RegisterSymbolicLink("\\??\\x:", "\\Device\\Other"));
+  REQUIRE(fs.RegisterSymbolicLink("\\??\\x:", "\\Device\\Other"));
+  CHECK_FALSE(fs.RegisterSymbolicLink("\\DosDevices\\X:", "\\Device\\Collision"));
   REQUIRE(fs.TranslateSymbolicPath("\\DosDevices\\x:\\a\\..\\b", output) ==
+          X_STATUS_SUCCESS);
+  CHECK(output == "\\Device\\Other\\b");
+  REQUIRE(fs.TranslateSymbolicPath("\\System??\\x:\\a\\..\\b", output) ==
           X_STATUS_SUCCESS);
   CHECK(output == "\\Device\\Disk\\b");
   REQUIRE(fs.RegisterSymbolicLink("\\Alias", "\\Device\\Short"));
@@ -51,6 +55,7 @@ TEST_CASE("Namespace aliases share DOS prefixes and preserve direct NT names",
   CHECK(fs.ResolvePath(output) == nullptr);
   REQUIRE(fs.UnregisterSymbolicLink("\\??\\X:"));
   CHECK_FALSE(fs.IsSymbolicLinkRegistered("x:"));
+  CHECK(fs.IsSymbolicLinkRegistered("\\System??\\X:"));
 }
 TEST_CASE("Namespace loops growth and limits never publish a partial result",
           "[vfs][namespace]") {

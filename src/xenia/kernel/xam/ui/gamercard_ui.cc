@@ -227,7 +227,7 @@ void GamercardUI::LoadStringSetting(UserSettingId setting_id, char* buffer) {
 
 void GamercardUI::LoadGamercardInfo() {
   const auto account_data =
-      kernel_state()->xam_state()->profile_manager()->GetAccount(xuid_);
+      kernel_state_->xam_state()->profile_manager()->GetAccount(xuid_);
 
   std::memcpy(gamercardOriginalValues_.gamertag,
               account_data->GetGamertagString().c_str(),
@@ -258,7 +258,7 @@ void GamercardUI::LoadGamercardInfo() {
     }
 
     const auto gamer_icon =
-        kernel_state()->xam_state()->GetUserProfile(xuid_)->GetProfileIcon(
+        kernel_state_->xam_state()->GetUserProfile(xuid_)->GetProfileIcon(
             XTileType::kGamerTile);
 
     gamercardOriginalValues_.profile_icon.assign(gamer_icon.begin(),
@@ -281,8 +281,8 @@ void GamercardUI::LoadGamercardInfo() {
 }
 
 void GamercardUI::LoadSetting(UserSettingId setting_id) {
-  const auto setting = kernel_state()->xam_state()->user_tracker()->GetSetting(
-      kernel_state()->xam_state()->GetUserProfile(xuid_), kDashboardID,
+  const auto setting = kernel_state_->xam_state()->user_tracker()->GetSetting(
+      kernel_state_->xam_state()->GetUserProfile(xuid_), kDashboardID,
       static_cast<uint32_t>(setting_id));
 
   if (!setting) {
@@ -542,7 +542,7 @@ void GamercardUI::DrawGpdSettings(ImGuiIO& io) {
                       rightSideTextObjectAlignment);
 }
 
-void GamercardUI::OnDraw(ImGuiIO& io) {
+void GamercardUI::OnDrawDialog(ImGuiIO& io) {
   if (!has_opened_) {
     ImGui::OpenPopup(fmt::format("{}'s Gamercard",
                                  std::string(gamercardOriginalValues_.gamertag))
@@ -564,7 +564,10 @@ void GamercardUI::OnDraw(ImGuiIO& io) {
 
   // Handle keyboard escape or gamepad B/Back to cancel
   if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ShouldCloseFromGamepad()) {
-    dialog_open = false;
+    ImGui::CloseCurrentPopup();
+    Close();
+    ImGui::EndPopup();
+    return;
   }
 
   if (ImGui::BeginTable("###GamercardTable", 2)) {
@@ -619,7 +622,7 @@ void GamercardUI::OnDraw(ImGuiIO& io) {
 
 void GamercardUI::SaveAccountData() {
   const auto account_original =
-      *kernel_state()->xam_state()->profile_manager()->GetAccount(xuid_);
+      *kernel_state_->xam_state()->profile_manager()->GetAccount(xuid_);
   auto account = account_original;
 
   account.SetCountry(gamercardValues_.country);
@@ -633,7 +636,7 @@ void GamercardUI::SaveAccountData() {
                                         std::size(account.gamertag));
 
   if (std::memcmp(&account, &account_original, sizeof(X_XAMACCOUNTINFO)) != 0) {
-    kernel_state()->xam_state()->profile_manager()->UpdateAccount(xuid_,
+    kernel_state_->xam_state()->profile_manager()->UpdateAccount(xuid_,
                                                                   &account);
   }
 }
@@ -643,7 +646,7 @@ void GamercardUI::SaveProfileIcon() {
     return;
   }
 
-  kernel_state()->xam_state()->user_tracker()->UpdateUserIcon(
+  kernel_state_->xam_state()->user_tracker()->UpdateUserIcon(
       xuid_, {gamercardValues_.profile_icon.data(),
               gamercardValues_.profile_icon.size()});
 }
@@ -657,11 +660,11 @@ void GamercardUI::SaveSettings() {
     }
 
     UserSetting updated_setting(id, setting);
-    kernel_state()->xam_state()->user_tracker()->UpsertSetting(
+    kernel_state_->xam_state()->user_tracker()->UpsertSetting(
         xuid_, kDashboardID, &updated_setting);
   }
 
-  const uint32_t user_index = kernel_state()
+  const uint32_t user_index = kernel_state_
                                   ->xam_state()
                                   ->profile_manager()
                                   ->GetUserIndexAssignedToProfile(xuid_);

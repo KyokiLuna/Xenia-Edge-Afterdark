@@ -183,6 +183,12 @@ Memory::~Memory() {
     // Backend/device shutdown must precede Memory destruction. Surviving host
     // tokens become invalid and can later die without dereferencing Memory.
     physical_range_leases_.StopLocked();
+    for (const auto& weak : native_avatar_backing_) {
+      if (const auto held = weak.lock()) {
+        held->current_.store(false, std::memory_order_release);
+      }
+    }
+    native_avatar_backing_.clear();
   }
 
   // Uninstall the MMIO handler, as we won't be able to service more
@@ -638,6 +644,9 @@ bool Memory::ClaimUserWindow(uint8_t* user_membase) {
 
 bool Memory::Reset() {
   auto lock = global_critical_region_.Acquire();
+  if (HasNativeAvatarBackingLocked()) {
+    return false;
+  }
   if (!physical_range_leases_.ClearLocked()) {
     XELOGE("Memory reset refused: owned physical allocations are pinned");
     return false;
@@ -814,11 +823,125 @@ memory::PhysicalLeaseStatus Memory::ReleaseOwnedPhysicalAllocation(
              : Status::kAllocationFailed;
 }
 
+bool Memory::NativeAvatarPhysicalRangeLocked(
+    const BaseHeap& heap, uint32_t address, uint32_t* physical_address) const {
+  if (&heap == &heaps_.physical) {
+    *physical_address = address;
+    return true;
+  }
+  for (const auto* alias : {&heaps_.v7F000000, &heaps_.vA0000000,
+                            &heaps_.vC0000000, &heaps_.vE0000000}) {
+    if (&heap == alias) {
+      *physical_address = alias->GetPhysicalAddress(address);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Memory::HasNativeAvatarBackingLocked() const {
+  return std::any_of(native_avatar_backing_.begin(), native_avatar_backing_.end(),
+                     [](const auto& weak) { return !weak.expired(); });
+}
+
+bool Memory::HasNativeAvatarBackingLocked(const BaseHeap& heap,
+                                           uint32_t address,
+                                           uint32_t length) const {
+  if (!length) return false;
+  uint32_t physical = 0;
+  const bool is_physical =
+      NativeAvatarPhysicalRangeLocked(heap, address, &physical);
+  const auto overlaps = [](uint32_t a, uint32_t n, uint32_t b, uint32_t m) {
+    return uint64_t(a) < uint64_t(b) + m &&
+           uint64_t(b) < uint64_t(a) + n;
+  };
+  for (const auto& weak : native_avatar_backing_) {
+    const auto token = weak.lock();
+    if (!token) continue;
+    for (const auto& range : token->ranges_) {
+      if ((range.heap == &heap &&
+           overlaps(address, length, range.address, range.length)) ||
+          (is_physical && range.physical &&
+           overlaps(physical, length, range.physical_address, range.length))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+std::shared_ptr<const NativeServiceBackingLease> Memory::BorrowNativeServiceBacking(
+    std::span<const NativeServiceBackingRange> ranges) {
+  return BorrowNativeAvatarBacking(ranges);
+}
+
+std::shared_ptr<const NativeAvatarBackingLease>
+Memory::BorrowNativeAvatarBacking(
+    std::span<const NativeAvatarBackingRange> ranges) {
+  if (ranges.empty() || ranges.size() > 16) return {};
+  auto lock = global_critical_region_.Acquire();
+  std::erase_if(native_avatar_backing_,
+                [](const auto& weak) { return weak.expired(); });
+  if (native_avatar_backing_.size() >= 256) return {};
+  auto token = std::shared_ptr<NativeAvatarBackingLease>(
+      new NativeAvatarBackingLease());
+  for (const auto& requested : ranges) {
+    if (!requested.address || !requested.length ||
+        requested.length - 1 > UINT32_MAX - requested.address) return {};
+    const auto last = requested.address + requested.length - 1;
+    auto* heap = LookupHeap(requested.address);
+    if (!heap || LookupHeap(last) != heap ||
+        requested.address < heap->heap_base() ||
+        uint64_t(last) >= uint64_t(heap->heap_base()) + heap->heap_size()) {
+      return {};
+    }
+    const auto access = heap->QueryRangeAccess(requested.address, last);
+    if (access == memory::PageAccess::kNoAccess ||
+        (requested.writable && access != memory::PageAccess::kReadWrite)) {
+      return {};
+    }
+    HeapAllocationInfo first{}, final{};
+    if (!heap->QueryRegionInfo(requested.address, &first) ||
+        !heap->QueryRegionInfo(last, &final) ||
+        !(first.state & kMemoryAllocationCommit) ||
+        !(final.state & kMemoryAllocationCommit) ||
+        first.allocation_base != final.allocation_base ||
+        first.allocation_size != final.allocation_size ||
+        uint64_t(requested.address) < first.allocation_base ||
+        uint64_t(last) >= uint64_t(first.allocation_base) +
+                              first.allocation_size) return {};
+    // The actual reserved parent is observed under the same allocator lock as
+    // publication. Mutators cannot replace/decommit/reprotect these pages
+    // while the token is held, so backing cannot suffer an address-reuse ABA.
+    // This deliberately says nothing about the title's own suballocator.
+    NativeAvatarBackingLease::Range observed;
+    observed.heap = heap;
+    observed.address = requested.address;
+    observed.length = requested.length;
+    observed.physical = NativeAvatarPhysicalRangeLocked(
+        *heap, requested.address, &observed.physical_address);
+    if (observed.physical) {
+      if (observed.physical_address >= 0x20000000u ||
+          requested.length > 0x20000000u - observed.physical_address ||
+          heaps_.physical.QueryRangeAccess(
+              observed.physical_address,
+              observed.physical_address + requested.length - 1) ==
+              memory::PageAccess::kNoAccess) return {};
+    }
+    token->ranges_.push_back(observed);
+  }
+  native_avatar_backing_.push_back(token);
+  return token;
+}
+
 bool Memory::CanMutatePhysicalRangeLocked(const BaseHeap& heap,
                                           uint32_t address,
                                           uint32_t length) const {
   if (!length) {
     return true;
+  }
+  if (HasNativeAvatarBackingLocked(heap, address, length)) {
+    return false;
   }
   uint32_t physical = address;
   if (&heap != &heaps_.physical) {
@@ -2382,6 +2505,9 @@ void Memory::DumpMap() {
 
 bool Memory::Save(ByteStream* stream) {
   auto lock = global_critical_region_.Acquire();
+  if (HasNativeAvatarBackingLocked()) {
+    return false;
+  }
   if (physical_range_leases_.HasPinsLocked(0, 0x20000000)) {
     return false;
   }
@@ -2397,6 +2523,9 @@ bool Memory::Save(ByteStream* stream) {
 
 bool Memory::Restore(ByteStream* stream) {
   auto lock = global_critical_region_.Acquire();
+  if (HasNativeAvatarBackingLocked()) {
+    return false;
+  }
   if (!physical_range_leases_.ClearLocked()) {
     return false;
   }

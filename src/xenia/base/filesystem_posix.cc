@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <cstring>
+#include <limits>
 #if XE_PLATFORM_MAC
 #include <limits.h>
 #include <mach-o/dyld.h>
@@ -193,6 +194,32 @@ class PosixFileHandle : public FileHandle {
     return FileHandleInfo{uint64_t(value.st_size), uint64_t(value.st_nlink),
                           S_ISDIR(value.st_mode),  S_ISREG(value.st_mode),
                           uint64_t(value.st_dev),  uint64_t(value.st_ino)};
+  }
+  std::optional<uint64_t> QueryAllocatedBytes(
+      std::error_code& error) const override {
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+    struct stat value;
+    if (fstat(handle_, &value)) {
+      error = LastError();
+      return std::nullopt;
+    }
+    if (!S_ISREG(value.st_mode)) {
+      error = std::make_error_code(std::errc::operation_not_supported);
+      return std::nullopt;
+    }
+    // Linux/Darwin st_blocks uses 512-byte units; st_blksize is an IO hint.
+    // Preserve sparse/inline/compressed accounting rather than inventing an
+    // allocation by rounding st_size. This observation changes no reservation.
+    if (value.st_blocks < 0 ||
+        uint64_t(value.st_blocks) > std::numeric_limits<uint64_t>::max() / 512) {
+      error = std::make_error_code(std::errc::value_too_large);
+      return std::nullopt;
+    }
+    error.clear();
+    return uint64_t(value.st_blocks) * 512;
+#else
+    return FileHandle::QueryAllocatedBytes(error);
+#endif
   }
   std::error_code FlushResult() override {
     return fsync(handle_) == 0 ? std::error_code{} : LastError();

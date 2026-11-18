@@ -181,6 +181,9 @@ TEST_CASE("STFS keeps valid nested directories and payload reads",
           X_STATUS_SUCCESS);
   std::unique_ptr<File, void (*)(File *)> file(raw,
                                                [](File *f) { f->Destroy(); });
+  uint64_t allocation=0xABABABABABABABABull;
+  REQUIRE(file->QueryAllocationSize(&allocation)==X_STATUS_NOT_SUPPORTED);
+  REQUIRE(allocation==0xABABABABABABABABull);
   std::array<uint8_t, 16> bytes{};
   size_t read = 0;
   REQUIRE(file->ReadSync(bytes, 0, &read) == X_STATUS_SUCCESS);
@@ -701,19 +704,23 @@ TEST_CASE("STFS already-open VFS backing retains its retiring parent device",
   std::weak_ptr<Device> lifetime = held_parent;
   auto* package = parents.ResolvePath("Backing:\\source");
   REQUIRE(package);
+  // A retained backing from another graph cannot publish a child here.
+  VirtualFileSystem foreign;
+  auto rejected = XContentContainerDevice::CreateContentDevice("Foreign:", package);
+  REQUIRE(rejected); REQUIRE(rejected->Initialize());
+  REQUIRE_FALSE(foreign.RegisterDevice(std::move(rejected)));
+  REQUIRE(parents.AcquireDevice("Backing:") == held_parent);
   auto child = XContentContainerDevice::CreateContentDevice("Child:", package);
   REQUIRE(child);
   REQUIRE(child->package_entry() == package);
   REQUIRE(child->Initialize());
-  VirtualFileSystem children;
-  REQUIRE(children.RegisterDevice(std::move(child)));
-  auto* entry = children.ResolvePath("Child:\\payload");
+  REQUIRE(parents.RegisterDevice(std::move(child)));
+  auto* entry = parents.ResolvePath("Child:\\payload");
   REQUIRE(entry);
   File* file = nullptr;
   REQUIRE(entry->Open(FileAccess::kFileReadData, &file) == X_STATUS_SUCCESS);
   held_parent.reset();
   parents.Clear();
-  children.Clear();
   REQUIRE_FALSE(lifetime.expired());
   std::array<uint8_t, 16> output;
   output.fill(0xA5);

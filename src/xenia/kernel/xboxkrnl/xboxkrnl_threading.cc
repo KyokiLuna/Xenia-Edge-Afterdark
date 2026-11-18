@@ -24,6 +24,7 @@
 #include "xenia/cpu/processor.h"
 #include "xenia/kernel/guest_scheduler.h"
 #include "xenia/kernel/native_import_domain.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/kernel/native_system_ui_notifications.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/native_wait_snapshot.h"
@@ -1433,6 +1434,7 @@ void xeKeKfReleaseSpinLock(PPCContext* ctx, X_KSPINLOCK* lock,
 
 void KfReleaseSpinLock_entry(pointer_t<X_KSPINLOCK> lock_ptr, dword_t old_irql,
                              const ppc_context_t& ppc_ctx) {
+  NativeProfileIdentityOwner::BeforeNativeListenerUnlock(ppc_ctx);
   auto native_notification =
       NativeSystemUiNotifications::BeforeNativeListenerUnlock(kernel_state(),
                                                               ppc_ctx);

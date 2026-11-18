@@ -348,18 +348,19 @@ dword_result_t IoCreateFile_entry(lpdword_t handle_out, dword_t desired_access,
   vfs::Entry* root_entry = nullptr;
 
   const bool has_root_handle =
-      object_attrs->root_directory != 0xFFFFFFFD &&  // ObDosDevices
+      object_attrs->root_directory != kObDosDevicesRoot &&  // ObDosDevices
       object_attrs->root_directory != 0;
 
   // Compute path, possibly attrs relative.
   auto target_path = util::TranslateAnsiPath(kernel_memory(), object_name);
   // A name relative to a directory handle is never under \??\.
   if (!has_root_handle) {
-    xeObStripDosDevicesPrefix(target_path);
+    xeObCaptureFilePathForCaller(target_path, object_attrs->root_directory);
   }
 
   // Enforce that the path is ASCII.
-  if (!IsValidPath(target_path, false)) {
+  if (!IsValidPath(xeObDosPathValidationView(
+          target_path, object_attrs->root_directory), false)) {
     XELOGFS("NtCreateFile({}) = OBJECT_NAME_INVALID", target_path);
     return X_STATUS_OBJECT_NAME_INVALID;
   }
@@ -718,7 +719,7 @@ dword_result_t NtQueryFullAttributesFile_entry(
       util::TranslateAnsiStringPointer(kernel_memory(), obj_attribs->name_ptr);
 
   object_ref<XFile> root_file;
-  if (obj_attribs->root_directory != 0xFFFFFFFD &&  // ObDosDevices
+  if (obj_attribs->root_directory != kObDosDevicesRoot &&  // ObDosDevices
       obj_attribs->root_directory != 0) {
     root_file = kernel_state()->object_table()->LookupObject<XFile>(
         obj_attribs->root_directory);
@@ -730,11 +731,12 @@ dword_result_t NtQueryFullAttributesFile_entry(
   auto target_path = util::TranslateAnsiPath(kernel_memory(), object_name);
   // A name relative to a directory handle is never under \??\.
   if (!root_file) {
-    xeObStripDosDevicesPrefix(target_path);
+    xeObCaptureFilePathForCaller(target_path, obj_attribs->root_directory);
   }
 
   // Enforce that the path is ASCII.
-  if (!IsValidPath(target_path, false)) {
+  if (!IsValidPath(xeObDosPathValidationView(
+          target_path, obj_attribs->root_directory), false)) {
     return X_STATUS_OBJECT_NAME_INVALID;
   }
 
@@ -855,15 +857,20 @@ dword_result_t NtOpenSymbolicLinkObject_entry(
   auto object_name =
       util::TranslateAnsiStringPointer(kernel_memory(), object_attrs->name_ptr);
 
-  auto target_path = xeObSymbolicLinkName(
-      util::TranslateAnsiPath(kernel_memory(), object_name));
+  auto target_path = util::TranslateAnsiPath(kernel_memory(), object_name);
+  xeObCaptureFilePathForCaller(target_path, object_attrs->root_directory);
 
   // Enforce that the path is ASCII.
-  if (!IsValidPath(target_path, false)) {
+  if (!IsValidPath(xeObDosPathValidationView(
+          target_path, object_attrs->root_directory), false)) {
     return X_STATUS_OBJECT_NAME_INVALID;
   }
 
-  if (object_attrs->root_directory != 0) {
+  // Only validated ASCII reaches the checked UTF8 canonicalizer.
+  target_path = xeObSymbolicLinkName(target_path);
+
+  if (object_attrs->root_directory != 0 &&
+      object_attrs->root_directory != kObDosDevicesRoot) {
     assert_always();
   }
 

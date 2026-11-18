@@ -18,6 +18,8 @@ inline X_STATUS HostStorageError(const std::error_code& error) {
     return X_STATUS_END_OF_FILE;
   }
 #endif
+  if (error == std::errc::operation_canceled) return X_STATUS_CANCELLED;
+  if (error == std::errc::timed_out) return X_STATUS(0xC00000B5);  // IO_TIMEOUT
   if (error == std::errc::no_space_on_device) {
     return X_STATUS_DISK_FULL;
   }

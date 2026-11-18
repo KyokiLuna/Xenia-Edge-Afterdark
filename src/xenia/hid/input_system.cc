@@ -282,16 +282,20 @@ X_RESULT InputSystem::GetState(uint32_t user_index, uint32_t flags,
                                X_INPUT_STATE* out_state, bool ui_active) {
   SCOPE_profile_cpu_f("hid");
 
+  const bool blocked_at_entry = IsUIInputBlocked();
+  const uint32_t edges_at_entry = UiInputBlockingEdges();
   X_RESULT result = GetStateForUI(user_index, flags, out_state);
   if (result != X_ERROR_SUCCESS) {
     return result;
   }
+  ObserveHostUiRelease();
   out_state->packet_number = out_state->packet_number + UiInputBlockingEdges();
 
   // While UI holds the input, connected controllers read as at rest and empty
   // slots stay empty, as xam reports them. The packet number stays live here
   // since xam freezes it only for its own UI.
-  if (ui_active || IsUIInputBlocked() || native_input_owner_) {
+  if (ui_active || blocked_at_entry || IsUIInputBlocked() ||
+      edges_at_entry != UiInputBlockingEdges() || native_input_owner_) {
     uint32_t packet_number = out_state->packet_number;
     std::memset(out_state, 0, sizeof(X_INPUT_STATE));
     out_state->packet_number = packet_number;
@@ -400,7 +404,7 @@ void InputSystem::AddUIInputBlocker() {
   }
 }
 
-void InputSystem::RemoveUIInputBlocker() {
+void InputSystem::CaptureUiHeldButtons() {
   // Before removing the blocker, capture any currently pressed buttons.
   // These will be masked from game input until they are released, preventing
   // the button press that closed the UI from carrying over into the game.
@@ -415,6 +419,10 @@ void InputSystem::RemoveUIInputBlocker() {
   for (auto& driver : drivers_) {
     driver->DiscardKeystrokes();
   }
+}
+
+void InputSystem::RemoveUIInputBlocker() {
+  CaptureUiHeldButtons();
   if (ui_input_blockers_.fetch_sub(1) == 1) {
     ui_input_blocking_edges_.fetch_add(1);
     for (auto& driver : drivers_) {
@@ -432,8 +440,47 @@ UiInputReservation::UiInputReservation(std::shared_ptr<State> state)
 }
 UiInputReservation::~UiInputReservation() { Release(); }
 void UiInputReservation::Release() noexcept {
-  if (!released_.exchange(true) && state_->count.fetch_sub(1) == 1) {
-    state_->edges.fetch_add(1);
+  if (!released_.exchange(true)) {
+    // Publish quarantine before the last count can become zero. A poll may
+    // consume it only after all modal owners have released their tokens.
+    state_->release_pending.store(true);
+    if (state_->count.fetch_sub(1) == 1) { state_->edges.fetch_add(1); }
+  }
+}
+void InputSystem::BeginHostUiInputEpoch() {
+  // Capture before swapping epochs; a close held across title replacement is
+  // still consumed even if its old token is released after this boundary.
+  CaptureUiHeldButtons();
+  host_only_ui_input_.store(std::make_shared<UiInputReservation::State>(0));
+  ui_input_blocking_edges_.fetch_add(1);
+}
+std::shared_ptr<UiInputReservation> InputSystem::ReserveHostUiInput() {
+  const auto state = host_only_ui_input_.load();
+  if (!state || state->count.load() == UINT32_MAX) { return {}; }
+  auto token = std::shared_ptr<UiInputReservation>(new UiInputReservation(state));
+  if (state->count.load() == 1) {
+    for (auto& driver : drivers_) {
+      driver->SetNativeTextHostModal(native_input_generation_.load(), true);
+      driver->ResetNativeText(native_input_generation_.load());
+    }
+  }
+  return token;
+}
+void InputSystem::ObserveHostUiRelease() {
+  const auto host = host_only_ui_input_.load();
+  const auto native = host_ui_input_reservations_.load();
+  const bool host_released = host && !host->count.load() &&
+                             host->release_pending.exchange(false);
+  const bool native_released = native &&
+      native->generation == native_input_generation_.load() &&
+      !native->count.load() && native->release_pending.exchange(false);
+  if (host_released || native_released) {
+    CaptureUiHeldButtons();
+    for (auto& driver : drivers_) {
+      driver->SetNativeTextHostModal(native_input_generation_.load(),
+                                     IsUIInputBlocked());
+      driver->ResetNativeText(native_input_generation_.load());
+    }
   }
 }
 std::shared_ptr<UiInputReservation> InputSystem::ReserveHostUiInput(
@@ -593,6 +640,7 @@ void InputSystem::EndNativeInputTransport(uint64_t generation) {
   }
   StopNativeDeviceNotifications(generation);
   SetNativeInputOwner(generation, false);
+  CaptureUiHeldButtons();
   host_ui_input_reservations_.store({});
   native_input_generation_ = 0;
   native_guide_capture_ = {};
@@ -710,11 +758,18 @@ NativeGuideDispatch InputSystem::DispatchNativeGuideButtonEdge(
 
 X_RESULT InputSystem::GetStateForNativeDriver(uint32_t slot, uint32_t flags,
                                               X_INPUT_STATE* state) {
+  const bool blocked_at_entry = IsUIInputBlocked();
+  const uint32_t edges_at_entry = UiInputBlockingEdges();
   const auto result = GetStateForUI(slot, flags, state);
   if (result != X_ERROR_SUCCESS) {
     return result;
   }
   ApplyNativeHostModalSuppression(slot, state);
+  if (blocked_at_entry || edges_at_entry != UiInputBlockingEdges()) {
+    const uint32_t packet = state->packet_number;
+    *state = {};
+    state->packet_number = packet;
+  }
   return result;
 }
 
@@ -723,6 +778,7 @@ void InputSystem::ApplyNativeHostModalSuppression(uint32_t slot,
   if (!state || slot >= XUserMaxUserCount) {
     return;
   }
+  ObserveHostUiRelease();
   state->packet_number = state->packet_number + UiInputBlockingEdges();
   if (IsUIInputBlocked()) {
     const uint32_t packet = state->packet_number;
@@ -815,6 +871,7 @@ X_RESULT InputSystem::GetNativeTextKeystroke(uint64_t generation,
   if (!output || user_index >= XUserMaxUserCount) {
     return X_ERROR_INVALID_PARAMETER;
   }
+  ObserveHostUiRelease();
   if (!HasNativeTextInput(generation)) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
@@ -860,6 +917,9 @@ X_RESULT InputSystem::GetKeystroke(uint32_t user_index, uint32_t flags,
                                    bool ui_active) {
   SCOPE_profile_cpu_f("hid");
 
+  const bool blocked_at_entry = IsUIInputBlocked();
+  const uint32_t edges_at_entry = UiInputBlockingEdges();
+  ObserveHostUiRelease();
   // While UI holds the input, connected slots have no keystrokes and empty ones
   // stay empty, as xam reports them. Never success, since a title draining
   // keystrokes until EMPTY would spin forever.
@@ -885,6 +945,14 @@ X_RESULT InputSystem::GetKeystroke(uint32_t user_index, uint32_t flags,
 
   auto try_driver = [&](InputDriver* driver, uint8_t driver_slot) -> X_RESULT {
     X_RESULT r = driver->GetKeystroke(driver_slot, flags, out_keystroke);
+    if (r == X_ERROR_SUCCESS &&
+        (blocked_at_entry || IsUIInputBlocked() ||
+         edges_at_entry != UiInputBlockingEdges())) {
+      ObserveHostUiRelease();
+      driver->DiscardKeystrokes();
+      *out_keystroke = {};
+      return X_ERROR_EMPTY;
+    }
     if (r == X_ERROR_INVALID_PARAMETER || r == X_ERROR_DEVICE_NOT_CONNECTED) {
       return r;
     }

@@ -15,6 +15,7 @@
 #include "xenia/base/byte_order.h"
 #include "xenia/base/mutex.h"
 #include "xenia/kernel/native_system_input_data.h"
+#include "xenia/kernel/native_system_ui_startup.h"
 #include "xenia/memory.h"
 
 namespace xe::kernel::test {
@@ -236,5 +237,74 @@ TEST_CASE("Native input observers read-only under the catalog memory lock",
           Status::kValid);
   REQUIRE(ReadNativeSystemInputBindingData(f.memory).status == Status::kValid);
   REQUIRE(f.Snapshot() == before);
+}
+
+namespace {
+// Inert real-Memory metadata for rejection coverage only. This fixture has no
+// Kernel, source module, original constructor, actual Task or readiness owner.
+constexpr uint32_t kProfileQueue = 0x81A8E000;
+void PutProfileInitializationMetadata(InputDataFixture& f) {
+  f.Store(0x81AA3E90, kProfileQueue | 2);
+  f.Store(kProfileQueue, 0x815F90A0);
+  f.Store(kProfileQueue + 4, 1);
+  f.Store(kProfileQueue + 8, 0);
+  f.Store(kProfileQueue + 0x18, 1);
+  f.Store(kProfileQueue + 0x1C, 1);
+  for (uint32_t slot = 0; slot < 4; ++slot) {
+    for (uint32_t kind = 0; kind < 2; ++kind) {
+      const uint32_t buffer = 0x81A8E100 + (slot * 2 + kind) * 0x40;
+      f.Store((kind ? 0x81AA3320 : 0x81AA28E0) + slot * 0x290 + 0x278,
+              buffer);
+      std::memset(f.memory.TranslateVirtual(buffer), 0, 0x22);
+    }
+  }
+}
+}
+TEST_CASE("Profile initialization data rejects absent and Task-tagged serial queues",
+          "[native_profile_data][real_memory]") {
+  InputDataFixture f;
+  PutProfileInitializationMetadata(f);
+  const auto reference = GENERATE(0u, kProfileQueue, kProfileQueue | 1u,
+                                  kProfileQueue | 3u);
+  f.Store(0x81AA3E90, reference);
+  const auto before = f.Snapshot();
+  const auto observed = ReadNativeSystemProfileInitializationData(f.memory);
+  CHECK(observed.status == NativeSystemProfileInitializationData::Status::kQueueTag);
+  CHECK(observed.queue_reference == reference);
+  CHECK(f.Snapshot() == before);
+}
+TEST_CASE("Profile init-only data rejects foreign vtable and already active queue state",
+          "[native_profile_data][real_memory]") {
+  InputDataFixture f;
+  PutProfileInitializationMetadata(f);
+  const auto cut = GENERATE(0u, 1u, 2u, 3u, 4u);
+  if (cut == 0) f.Store(kProfileQueue, 0x815F9098); // native Task vtable
+  if (cut == 1) f.Store(kProfileQueue + 4, 2); // legal later; not pristine init
+  if (cut == 2) f.Store(kProfileQueue + 8, 0x81A8E400);
+  if (cut == 3) f.Store(kProfileQueue + 0x18, 4);
+  if (cut == 4) f.Store(kProfileQueue + 0x1C, 0);
+  const auto before = f.Snapshot();
+  CHECK(ReadNativeSystemProfileInitializationData(f.memory).status ==
+        (cut == 0 ? NativeSystemProfileInitializationData::Status::kQueueObject
+                  : NativeSystemProfileInitializationData::Status::kQueueState));
+  CHECK(f.Snapshot() == before);
+}
+TEST_CASE("Profile initialization data preserves partial native buffer evidence",
+          "[native_profile_data][real_memory]") {
+  InputDataFixture f;
+  PutProfileInitializationMetadata(f);
+  const auto index = GENERATE(0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u);
+  const uint32_t cell = (index & 1 ? 0x81AA3320 : 0x81AA28E0) +
+                        (index / 2) * 0x290 + 0x278;
+  SECTION("An allocation failed") { f.Store(cell, 0); }
+  SECTION("A stale buffer aliases the serial queue") { f.Store(cell, kProfileQueue); }
+  SECTION("A buffer extent was never committed") { f.Store(cell, 0x81AB0000); }
+  SECTION("The original memset has not completed") {
+    *f.memory.TranslateVirtual<uint8_t*>(0x81A8E100 + index * 0x40 + 0x21) = 1;
+  }
+  const auto before = f.Snapshot();
+  CHECK(ReadNativeSystemProfileInitializationData(f.memory).status ==
+        NativeSystemProfileInitializationData::Status::kBuffer);
+  CHECK(f.Snapshot() == before);
 }
 }  // namespace xe::kernel::test

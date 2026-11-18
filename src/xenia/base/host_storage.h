@@ -5,6 +5,8 @@
 #ifndef XENIA_BASE_HOST_STORAGE_H_
 #define XENIA_BASE_HOST_STORAGE_H_
 #include <atomic>
+#include <chrono>
+#include <stop_token>
 #include "xenia/base/content_package_tree.h"
 #include <cstdint>
 #include <filesystem>
@@ -33,12 +35,72 @@ struct HostStorageSnapshot {
 class HostStorageGuestProjection;
 class ManagedVolumeAuthority;
 class ContentMutationOwner;
+class HostStorageRoot;
+class HostStorageManagedMetadata;
+class HostStorageBootstrapDirectory;
+class ManagedStorageBootstrap;
+class ManagedBootstrapGuestAdmissionPermit;
+// Call-local diagnostic scalars only. The caller reads after the real joined
+// operation; this receipt owns no resource and grants no storage permission.
+struct HostStorageFailureObservation {
+  uint32_t operation=0,reason=0,line=0,error_category=0,available=0;
+  int32_t error_value=0;
+  uint64_t root=0,space=0,filesystem=0,file=0,guard_owner=0,guard_request=0;
+  void Capture(uint32_t op,uint32_t why,uint32_t at,
+               const std::error_code& error) noexcept {
+    if(line || !error)return;
+    operation=op;reason=why;line=at;error_value=error.value();
+    error_category=&error.category()==&std::generic_category()?1u:
+        &error.category()==&std::system_category()?2u:3u;
+  }
+};
+// No destructor/callback, allocation, locking or error-message formatting.
+struct HostStorageFailureScope {
+  HostStorageFailureObservation* observation;
+  const std::error_code& error;
+  uint32_t operation,reason=0;
+  void At(uint32_t why) noexcept {reason=why;}
+  void Capture(uint32_t line) const noexcept {
+    if(observation)observation->Capture(operation,reason,line,error);
+  }
+};
+// Synchronous, negative-only cancellation/deadline for host preparation. It
+// grants no file, mount or source authority. Link only retained lifetimes and
+// destroy after the real host operation returns, never an abandoned IO wait.
+class HostStoragePreparationWait final {
+ public:
+  explicit HostStoragePreparationWait(std::chrono::steady_clock::time_point deadline)
+      : deadline_(deadline) {}
+  HostStoragePreparationWait(const HostStoragePreparationWait&) = delete;
+  HostStoragePreparationWait& operator=(const HostStoragePreparationWait&) = delete;
+  bool LinkCancellation(std::stop_token token);
+  bool LinkCancellationFlag(std::shared_ptr<const std::atomic<bool>>);
+  std::span<const std::stop_token> cancellation_tokens() const { return tokens_; }
+  std::span<const std::shared_ptr<const std::atomic<bool>>> cancellation_flags() const { return flags_; }
+  std::error_code Check() const;
+  std::chrono::steady_clock::time_point deadline() const { return deadline_; }
+  std::stop_token token() const { return stop_.get_token(); }
+  void PauseForExternalLock() const;
+ private:
+  struct ForwardStop {
+    std::stop_source* target;
+    void operator()() const noexcept { target->request_stop(); }
+  };
+  const std::chrono::steady_clock::time_point deadline_;
+  std::stop_source stop_;
+  std::vector<std::unique_ptr<std::stop_callback<ForwardStop>>> links_;
+  std::vector<std::stop_token> tokens_;
+  std::vector<std::shared_ptr<const std::atomic<bool>>> flags_;
+};
 struct GuestHostBacking {
   std::filesystem::path path;
   bool subtree = false;
   std::optional<FileHandleInfo> opened_file = std::nullopt;
   std::shared_ptr<const HostStorageGuestProjection> projection = {};
   bool requires_projection = false;
+  // Call-local exact declared Root, used only for negative lifetime cuts.
+  // The resulting mount must not own this (a source may itself own a mount).
+  std::shared_ptr<const HostStorageRoot> source;
 };
 class HostStorageGuestMount {
  public:
@@ -155,10 +217,17 @@ class HostStorageSpace : public std::enable_shared_from_this<HostStorageSpace> {
       const std::filesystem::path& relative) const;
   std::unique_ptr<MutationGuard> Begin(const std::filesystem::path&,
       std::error_code&, std::shared_ptr<const HostStorageDirectoryIdentity> = {});
+  // Only host preparation outside inherited namespace/model/owner locks.
+  // One deadline is shared with every subsequent phase of that preparation.
+  std::unique_ptr<MutationGuard> BeginPreparation(const std::filesystem::path&,
+      std::error_code&, HostStoragePreparationWait&,
+      std::shared_ptr<const HostStorageDirectoryIdentity> identity = {},
+      HostStorageFailureObservation* diagnostic = nullptr);
   // Admission cannot wait on another process while a namespace caller owns
   // GCRC. Busy is explicit; no guest-memory/provider callbacks run here.
   std::unique_ptr<MutationGuard> TryBegin(const std::filesystem::path&,
-      std::error_code&, std::shared_ptr<const HostStorageDirectoryIdentity> = {});
+      std::error_code&, std::shared_ptr<const HostStorageDirectoryIdentity> = {},
+      HostStorageFailureObservation* diagnostic = nullptr);
   ~HostStorageSpace();
 
  private:
@@ -175,6 +244,7 @@ class HostStorageManagedMetadata;
 class ManagedDeviceIdentity;
 class ProfileIntentOwner;
 class HostStorageIntentLease;
+class ManagedFormatGuestAdmissionPermit;
 struct HostStorageRootIdentity {
   uint64_t filesystem = 0, directory = 0, mount = 0;
   bool operator==(const HostStorageRootIdentity&) const = default;
@@ -185,6 +255,39 @@ struct HostStorageDurableObservation {
   std::error_code error;
   bool matched = false, durable = false;
 };
+struct HostStorageBootstrapPublication {
+  std::error_code error;
+  bool published = false, durable = false;
+  // Native construction root; its exact capsule retains private protection
+  // until typed private refinement or atomic public admission has succeeded.
+  std::shared_ptr<HostStorageRoot> canonical_root;
+};
+struct HostStorageBootstrapRecordPublication {
+  std::error_code error;
+  bool published = false, durable = false;
+};
+class HostStorageBootstrapDirectory final {
+ public:
+  ~HostStorageBootstrapDirectory();
+  HostStorageBootstrapDirectory(const HostStorageBootstrapDirectory&) = delete;
+  HostStorageBootstrapDirectory& operator=(const HostStorageBootstrapDirectory&) = delete;
+  const std::shared_ptr<HostStorageRoot>& root() const;
+  const std::filesystem::path& target() const;
+  const std::filesystem::path& staging() const;
+  uint64_t native_directory() const;
+ private:
+  friend class HostStorageRoot;
+  friend class HostStorageProtection;
+  friend class ManagedStorageBootstrap;
+  friend class SnapshotRecoveryOwner;
+  friend class HostStorageBootstrapTestAccess;
+  struct State;
+  explicit HostStorageBootstrapDirectory(std::unique_ptr<State>);
+  std::unique_ptr<State> state_;
+};
+// Closed internal operation purposes. No public API accepts this as authority;
+// only the typed publisher friends may enter a private snapshot lane.
+enum class PrivateSnapshotPurpose { kOrdinary, kMediaReference, kCacheTable };
 class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
  public:
   static constexpr size_t kMaximumSnapshotBatchTokens = 4096;
@@ -201,6 +304,8 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
     bool durable = false;
     std::shared_ptr<const HostStorageSnapshotToken> current;
   };
+  // Native path spellings reject embedded NULs before any OS observation;
+  // relative descendants use the same rule before resolving a component.
   static std::shared_ptr<HostStorageRoot> Open(
       const std::filesystem::path&, bool read_only, std::error_code&,
       uint64_t reserve = 0,
@@ -212,6 +317,7 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   bool read_only() const;
   bool native_filesystem_authority() const;
   void Retire();
+  bool LinkPreparationCancellation(HostStoragePreparationWait&) const;
   // Cached logical cancellation only. Includes owned parent generations; no
   // filesystem observation, metadata lock or guest callback.
   bool retiring() const;
@@ -252,18 +358,22 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   // protection and prevents later private admission while that mount lives.
   // Empty declares a genuinely host-free guest device. No guest name resolver.
   static std::shared_ptr<const HostStorageGuestMount> AdmitGuestMount(
-      std::optional<std::vector<GuestHostBacking>>, std::error_code&);
+      std::optional<std::vector<GuestHostBacking>>, std::error_code&,
+      HostStorageFailureObservation* diagnostic = nullptr,
+      HostStoragePreparationWait* preparation = nullptr);
   // Rights can only narrow. Missing children are never created implicitly.
   std::shared_ptr<HostStorageRoot> Subroot(const std::filesystem::path&,
                                            bool force_readonly,
-                                           std::error_code&) const;
+                                           std::error_code&,
+      HostStorageFailureObservation* diagnostic = nullptr) const;
   // A new local view also depends on a logical source generation. Physical
   // admission remains owned by this root's actual destination filesystem.
   std::shared_ptr<HostStorageRoot> WithDependency(
       std::shared_ptr<const HostStorageRoot>, std::error_code&) const;
   std::unique_ptr<FileHandle> OpenFile(const std::filesystem::path& relative,
                                        uint32_t access, std::error_code&,
-                                       bool create_exclusive = false) const;
+                                       bool create_exclusive = false,
+      HostStorageFailureObservation* diagnostic = nullptr) const;
   // Writes a newly created staged/journal file only; never truncates a target.
   FileIoResult WriteNewFile(const std::filesystem::path&,
                             std::span<const uint8_t>,
@@ -383,15 +493,33 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   friend class HostStorageProtection;
   friend class ProfileIntentOwner;
   friend class SnapshotRecoveryOwner;
+  friend class SnapshotPublisher;
   friend class ContentMutationOwner;
+  friend class CacheStorageOwner;
+  friend class MediaReferenceStore;
   friend class HostStorageSnapshotTestAccess;
   friend class HostStorageManagedMetadata;
   friend class ManagedDeviceIdentity;
   friend class ManagedVolumeAuthority;
   friend class ManagedStorageContext;
+  friend class ManagedStorageBootstrap;
+  friend class HostStorageBootstrapDirectory;
+  friend class HostStorageBootstrapTestAccess;
   std::shared_ptr<HostStorageRoot> MountedFilesystemRoot(std::error_code&) const;
   std::shared_ptr<HostStorageRoot> IndependentNamespaceView(std::error_code&) const;
+  // Physical bootstrap parents outlive a logical source generation. Issued
+  // only from this current source's actual EX lease; no guest/format role.
+  std::shared_ptr<HostStorageRoot> RetainBootstrapNamespace(
+      const HostStorageIntentLease&, std::error_code&) const;
+  // Internal physical copy only; callers retain the typed native admission.
+  std::shared_ptr<HostStorageRoot> CloneNativeLineage(std::error_code&) const;
   std::error_code PrivateDirectory() const;
+  // Cache bootstrap only: before any guest admission, the source may contain
+  // only its exact retained private binding and already-decoded marker inode.
+  // This observes names/IDs; it neither adopts nor removes unknown payloads.
+  std::error_code CheckCacheBootstrapSource(
+      const HostStorageRoot* exact_binding,uint64_t exact_marker_file,
+      std::span<const std::shared_ptr<const HostStorageRoot>> preserved = {}) const;
   void SetFormatEligibility(bool allow);
   std::error_code CheckStateContainer(bool public_shell) const;
   std::shared_ptr<const HostStorageGuestProjection> Projection() const;
@@ -400,12 +528,82 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
       std::vector<std::shared_ptr<const HostStorageRoot>> private_roots,
       std::vector<std::shared_ptr<const HostStorageRoot>> namespace_roots,
       bool allow_format, std::error_code&);
+  // Exact settled native capsules only, after the typed initializer has proved
+  // their final binding roles. Ordinary projection callers transfer nothing.
+  std::shared_ptr<const HostStorageGuestProjection> InstallBootstrapProjection(
+      std::vector<std::shared_ptr<const HostStorageRoot>> private_roots,
+      std::vector<std::shared_ptr<const HostStorageRoot>> namespace_roots,
+      bool allow_format,
+      std::span<HostStorageBootstrapDirectory* const> settled_private,
+      HostStorageBootstrapDirectory* exact_public_or_null, std::error_code&);
+  std::shared_ptr<const HostStorageGuestProjection> InstallFormatProjection(
+      const std::shared_ptr<const HostStorageGuestProjection>& previous,
+      std::vector<std::shared_ptr<const HostStorageRoot>> private_roots,
+      std::vector<std::shared_ptr<const HostStorageRoot>> namespace_roots,
+      bool allow_format, std::error_code&);
+  enum class ProjectionAdmissionRole {
+    kOrdinary, kBootstrapSourceUnadmitted, kOwnedFormatSourceUnadmitted
+  };
+  std::shared_ptr<const HostStorageGuestProjection> InstallProjectionInternal(
+      std::vector<std::shared_ptr<const HostStorageRoot>> private_roots,
+      std::vector<std::shared_ptr<const HostStorageRoot>> namespace_roots,
+      bool allow_format,
+      std::span<HostStorageBootstrapDirectory* const> settled_private,
+      HostStorageBootstrapDirectory* exact_public_or_null,
+      ProjectionAdmissionRole, std::error_code&,
+      const HostStorageGuestProjection* exact_previous_format = nullptr);
+  // Release only this exact bootstrap generation after its actual coordinator
+  // has durably committed and ordinarily recovered the retained typed owners.
+  std::error_code AdmitBootstrapProjection(ManagedBootstrapGuestAdmissionPermit&);
+  std::error_code AdmitFormatProjection(ManagedFormatGuestAdmissionPermit&);
   std::error_code PrivateExcludedFrom(const HostStorageRoot&) const;
-  std::error_code AttachPublicProjection(const HostStorageRoot& source);
-  enum class ManagedMetadataOpen { kCreate, kExisting, kProbeExisting };
+  std::error_code AttachPublicProjection(const HostStorageRoot& source,
+      HostStorageBootstrapDirectory* exact_public = nullptr);
+  enum class ManagedMetadataOpen {
+    kCreate, kExisting, kProbeExisting, kCreatePending, kExistingPending
+  };
+  // All modes defer GuestView until the identity producer validates its full
+  // source/binding wire. A non-null result may accompany a post-rename error;
+  // retain it and reconcile rather than describing uncertain creation as absent.
   std::shared_ptr<HostStorageManagedMetadata> OpenManagedMetadata(
       const std::filesystem::path&, std::error_code&,
-      ManagedMetadataOpen = ManagedMetadataOpen::kCreate) const;
+      ManagedMetadataOpen = ManagedMetadataOpen::kCreate,
+      std::span<const uint8_t> complete_initial = {},
+      std::string_view initializer_nonce = {},
+      std::shared_ptr<const HostStorageIntentLease> same_source_lease = {}) const;
+  std::error_code AdmitManagedMetadata(HostStorageManagedMetadata&) const;
+  // Ordinary browse structure only: same actual source directory or empty;
+  // no ownership, payload adoption, creation or format permission is minted.
+  std::error_code CheckBootstrapBrowseDirectory(const HostStorageRoot& actual_source) const;
+  static std::filesystem::path MetadataBootstrapTemporary(std::string_view nonce);
+  static std::filesystem::path DirectoryBootstrapTemporary(
+      const std::filesystem::path& target_leaf, std::string_view nonce);
+  std::vector<std::filesystem::path> ListBootstrapRecords(std::error_code&) const;
+  std::shared_ptr<HostStorageRoot> ProtectBootstrap(std::error_code&) const;
+  std::shared_ptr<HostStorageRoot> RebaseBootstrapRoot(
+      const HostStorageRoot&, const std::filesystem::path&, std::error_code&) const;
+  mutable std::atomic<unsigned> bootstrap_test_boundary_{0};
+  std::unique_ptr<HostStorageBootstrapDirectory> BeginBootstrapDirectory(
+      const std::filesystem::path& target_leaf, std::string_view nonce,
+      std::error_code&, std::shared_ptr<const HostStorageIntentLease> = {}) const;
+  std::unique_ptr<HostStorageBootstrapDirectory> ResumeBootstrapDirectory(
+      const std::filesystem::path& target_leaf,
+      const std::filesystem::path& staging_leaf, uint64_t expected_native_directory,
+      std::error_code&, std::shared_ptr<const HostStorageIntentLease> = {}) const;
+  // A complete typed owner or validated committed public shell may reclaim an
+  // existing in-process receipt; never discover/adopt an unknown staging name.
+  std::unique_ptr<HostStorageBootstrapDirectory> ResumeRetainedBootstrapDirectory(
+      const std::filesystem::path& target_leaf,
+      const HostStorageRoot& canonical, std::error_code&,
+      std::shared_ptr<const HostStorageIntentLease> same_parent_lease = {}) const;
+  HostStorageBootstrapPublication PublishBootstrapDirectory(
+      HostStorageBootstrapDirectory&) const;
+  HostStorageBootstrapRecordPublication PublishBootstrapRecord(
+      const std::filesystem::path&, std::span<const uint8_t>,
+      std::string_view nonce) const;
+  std::shared_ptr<HostStorageRoot> AdmitBootstrapPublicDirectory(
+      HostStorageBootstrapDirectory&, std::error_code&,
+      const HostStorageRoot* source_projection = nullptr) const;
   // Native FD inventory only; matching names confer no access permission.
   uint32_t ManagedVolumeEntries(std::string_view key, std::error_code&) const;
   bool IntentLeaseMatches(const HostStorageIntentLease&) const;
@@ -416,10 +614,32 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
       const HostStorageGuestProjection& retained);
   std::shared_ptr<const HostStorageIntentLease> RebindFormatLease(
       const HostStorageIntentLease&, std::error_code&) const;
+  // Friend-only host intent lane. Ordinary snapshot APIs retain their private
+  // target denials; only a direct flat protector and media digest leaf qualify.
+  bool IsFlatSnapshotTarget() const;
+  bool IsMediaReferenceSnapshotTarget(const std::filesystem::path&) const;
+  // Typed host reference metadata only; no guest namespace or file permission.
+  std::error_code EnsureMediaReferenceReserve() const;
+  // Complete, durable media owner only. Generic ProtectFlat cannot consume a
+  // bootstrap receipt; this exact capsule transfers its registered lineage.
+  std::shared_ptr<HostStorageRoot> ProtectMediaReferenceDirectory(
+      HostStorageBootstrapDirectory&, std::error_code&) const;
+  std::vector<std::filesystem::path> ListMediaReferenceFiles(
+      std::error_code&) const;
+  // Cache-only irreversible cached DENIAL, attached to an actual GuestView
+  // before publication. The atoms own no Root/FD/lease and cannot mint access.
+  bool BindCacheCancellation(std::shared_ptr<const std::atomic<bool>> owner,
+      std::shared_ptr<const std::atomic<bool>> slot);
+  bool IsCacheSnapshotTarget(const std::filesystem::path&) const;
+  bool IsPrivateSnapshotTarget(const std::filesystem::path&, PrivateSnapshotPurpose) const;
+  ReplaceResult CompareAndPublishSnapshotInternal(
+      const HostStorageSnapshotToken&, HostStorageSnapshotStage&,
+      std::span<const uint8_t>,
+      std::shared_ptr<const HostStorageSnapshotToken>, PrivateSnapshotPurpose purpose) const;
   ReplaceResult CompareAndDeleteSnapshotInternal(
       const HostStorageSnapshotToken& expected,
       std::shared_ptr<const HostStorageSnapshotToken> recovery,
-      std::error_code post_flush_error) const;
+      std::error_code post_flush_error, PrivateSnapshotPurpose purpose = PrivateSnapshotPurpose::kOrdinary) const;
   HostStorageRootIdentity IntentRootIdentity(std::error_code&) const;
   std::error_code IntentDisjointFrom(const HostStorageRoot&) const;
   std::shared_ptr<const HostStorageIntentLease> AcquireIntentLease(
@@ -455,6 +675,13 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   void ReleaseContentNamespace() const;
   std::vector<ContentPackageInitialEntry> CaptureInitialContentTree(
       const std::filesystem::path&, std::error_code&) const;
+  // Only an authenticated stream-start record from ContentMutationOwner may
+  // authorize this cleanup. Unknown/replaced members are preserved/refused.
+  std::error_code DiscardStreamContentDirectory(
+      const std::filesystem::path&, uint64_t,
+      std::span<const ContentPackageInitialEntry>) const;
+  std::error_code DiscardStreamHeaderStage(const std::filesystem::path&,
+      uint64_t, std::span<const uint8_t>) const;
   HostStorageDurableObservation ObserveInitialContentDirectory(
       const std::filesystem::path&, uint64_t,
       std::span<const ContentPackageInitialEntry>) const;
@@ -475,6 +702,19 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   std::shared_ptr<HostStorageRoot> ProtectContentMutations(std::error_code&) const;
   bool is_content_mutation_private() const;
   std::vector<std::filesystem::path> ListContentMutationFiles(std::error_code&) const;
+  // Atomic append under the existing protected records root. Partial writes
+  // stay noncanonical private evidence and authorize no dependent effects.
+  std::error_code AppendContentRecord(const std::filesystem::path&,
+      std::span<const uint8_t>, std::string_view temporary_nonce,
+      unsigned stop_boundary = 0) const;
+  std::error_code CheckContentPreparationPeer(const HostStorageRoot&) const;
+  // Exact no-follow observations and preservation-only CAS rename. These
+  // private methods never unlink, edit payloads or grant publication authority.
+  std::optional<FileHandleInfo> ObservePreparationArtifact(
+      const std::filesystem::path&, std::error_code&) const;
+  std::error_code PreservePreparationArtifact(const std::filesystem::path&,
+      uint64_t observed_file, bool directory, const HostStorageRoot& staging,
+      const std::filesystem::path& destination) const;
   std::vector<std::pair<std::filesystem::path, uint64_t>> ListContentStageDirectories(
       std::error_code&) const;
   const std::shared_ptr<const HostStorageFileLease>& ContentPermit() const;
@@ -491,7 +731,9 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
       const std::filesystem::path&, uint32_t, std::error_code&,
       bool create_exclusive, bool overwrite,
       bool nonwaiting_admission = false, bool stage = false,
-      bool* created = nullptr) const;
+      bool* created = nullptr,
+      HostStorageFailureObservation* diagnostic = nullptr,
+      HostStoragePreparationWait* preparation = nullptr) const;
   std::error_code Validate() const;
   void RetainHandle() const;
   void ReleaseHandle() const;
@@ -539,6 +781,15 @@ class HostStorageManagedMetadata final {
  private:
   friend class HostStorageRoot;
   friend class ManagedDeviceIdentity;
+  friend class ManagedStorageBootstrap;
+  friend class HostStorageBootstrapTestAccess;
+  struct BootstrapWriteResult {
+    std::error_code error;
+    size_t bytes = 0;
+    bool published = false, durable = false;
+    std::filesystem::path previous;
+    uint64_t previous_file = 0;
+  };
   struct WriteResult {
     std::error_code error;
     size_t bytes = 0;
@@ -561,9 +812,20 @@ class HostStorageManagedMetadata final {
   std::error_code Check() const;
   WriteResult Initialize(std::span<const uint8_t>);
   WriteResult Append(std::span<const uint8_t>);
+  // A new locked inode replaces the exact old marker; previous names the
+  // unchanged old inode, never an unlinkable scratch file. published uncertainty
+  // must be reconciled by the coordinator before admitting this object.
+  BootstrapWriteResult AppendBootstrapAtomically(
+      std::span<const uint8_t> suffix,
+      std::shared_ptr<const HostStorageIntentLease> same_source_lease,
+      std::string_view nonce);
   std::error_code Synchronize() const;
   std::shared_ptr<const HostStorageIntentLease> ReserveFormatSource(
       std::error_code&) const;
+  // Already-complete owned-format recovery: clone only the native generation,
+  // retaining pending guest admission; no epoch append or data deletion.
+  FormatResult PrepareFormatRecoveryGeneration(
+      std::shared_ptr<const HostStorageIntentLease>);
   FormatResult Format(std::span<const uint8_t> pending_record,
                       std::span<const uint8_t> complete_record,
                       bool already_pending, std::atomic<bool>& old_cancellation,

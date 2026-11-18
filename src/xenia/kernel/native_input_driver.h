@@ -45,6 +45,8 @@ class NativeInputDriver
     kSystemRequest,
     kFailedConnectionOrBind
   };
+  // Immutable diagnostic scalars only; never input/source/admission authority.
+  struct TraceIdentity {uint64_t domain=0;uint32_t root_hmodule=0;uint64_t root_generation=0;};
   struct Config {
     KernelState* kernel = nullptr;
     uint64_t generation = 0;
@@ -75,13 +77,17 @@ class NativeInputDriver
   static std::unique_ptr<Installation> Install(
       const std::shared_ptr<NativeInputDriver>& driver);
   static std::shared_ptr<NativeInputDriver> Lookup(KernelState* kernel);
+  // Seal/join only kernel-input callbacks. Physical read/write/output providers
+  // remain current for genuine native cleanup until the later full BeginStop.
+  static void SealCallbackAdmissionForKernel(KernelState* kernel);
+  static bool DrainCallbackAdmissionForKernel(KernelState* kernel);
   static void BeginStopForKernel(KernelState* kernel);
   static bool DrainForKernel(KernelState* kernel);
   static bool ReleaseInputTransportAfterProducersStoppedForKernel(
       KernelState* kernel);
   ~NativeInputDriver();
 
-  uint64_t generation() const { return config_.generation; }
+  uint64_t generation() const { return generation_; }
   // Diagnostic correlation only, never native user/Kernel/Source authority.
   uint64_t trace_input_generation() const { return transport_generation_; }
   // Diagnostic POD only, observed through the existing successful native
@@ -197,10 +203,10 @@ class NativeInputDriver
    private:
     NativeInputDriver* owner_;
   };
-  explicit NativeInputDriver(Config config, uint64_t transport_generation)
-      : config_(std::move(config)),
-        transport_generation_(transport_generation) {}
+  explicit NativeInputDriver(Config config, uint64_t transport_generation,TraceIdentity);
   Poll AcquirePoll();
+  void SealCallbackAdmission();
+  bool DrainCallbackAdmission();
   bool IsCurrent() const;
   bool QueueCallback(Callback kind, std::span<const uint32_t> arguments,
                      std::function<void(bool, uint32_t)> completed = {},
@@ -222,13 +228,17 @@ class NativeInputDriver
       uint32_t native_owner, uint32_t native_task, uint64_t trace_id);
   bool GuideOwnerMatches(uint32_t owner, uint32_t task) const;
 
-  const Config config_;
+  Config config_; // Resources revoked in place only after actual final producer stop.
+  KernelState* const kernel_identity_; // Numeric registry identity; never late dereferenced.
+  const uint64_t generation_;
+  const TraceIdentity trace_identity_;
   const uint64_t transport_generation_;
   mutable std::mutex mutex_;
   std::mutex refresh_mutex_;
   std::condition_variable drained_;
+  bool callback_admission_sealed_ = false;
   bool stopping_ = false;
-  bool transport_released_ = false;
+  bool transport_released_ = false, transport_releasing_ = false;
   bool notification_stop_published_ = false, notification_stop_failed_ = false;
   std::shared_ptr<hid::NativeDeviceNotificationRundown> notification_rundown_;
   bool transport_started_ = false;

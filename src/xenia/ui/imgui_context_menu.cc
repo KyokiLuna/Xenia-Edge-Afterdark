@@ -56,6 +56,9 @@ ImGuiContextMenu::~ImGuiContextMenu() {
   if (visibility_) {
     visibility_(false);
   }
+  if (lifetime_ && !deferred_action_queued_) {
+    lifetime_->FinishHostOperation();
+  }
 }
 
 void ImGuiContextMenu::OnClose() {
@@ -81,13 +84,17 @@ void ImGuiContextMenu::OnClose() {
   // ImGui state to be fully cleaned up first
   if (pending_callback_) {
     if (lifetime_) {
-      imgui_drawer()->PostDeferredCallback(
+      deferred_action_queued_ = imgui_drawer()->PostDeferredCallback(
           [owner = lifetime_,
            callback = std::move(pending_callback_)]() mutable {
             auto entered = owner->TryEnter();
             if (!entered) {
               return;
             }
+            // Destruction already published visibility(false). Keep this
+            // entered scope alive, but retire its modal claim before an action
+            // opens the next selector/profile UI. No readiness is reminted.
+            owner->FinishHostOperation();
             // All callback-local captured owners die before the route entry.
             auto run = std::move(callback);
             run();

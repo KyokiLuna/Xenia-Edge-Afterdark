@@ -35,6 +35,10 @@ struct PPCBuiltins {
   Function* leave_global_lock;
   Function* syscall_handler;
   Function* log_lr_handler;
+  // Fixed native Complete publication observation; no guest export/API.
+  Function* native_avatar_completion_publication;
+  Function* native_identity_render_iteration_end;
+  Function* native_identity_task_diagnostic[12];
 };
 
 class PPCFrontend {

@@ -14,6 +14,7 @@
 #include <ctime>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -23,6 +24,7 @@
 #include "xenia/xbox.h"
 
 namespace xe {
+namespace filesystem { class HostMetadataWriter; class HostStorageSnapshotToken; }
 namespace app {
 
 constexpr uint32_t kLibraryMetadataRevision = 1;
@@ -115,6 +117,13 @@ struct LibraryEntry {
   // Encoded art is persisted through IconPath, rather than duplicated in TOML.
   std::optional<vfs::TitleResourceMetadata> title_resources;
 
+  // A validated original shown while canonical publication is unavailable.
+  // Never serialized or presented as a successful durable migration.
+  bool transient_legacy = false;
+  // Opaque source observation follows DTO copies too. An older copied row
+  // cannot acquire a newer model token just because another update succeeded.
+  std::shared_ptr<const filesystem::HostStorageSnapshotToken> canonical_snapshot;
+
   LibraryKey key() const { return {title_id, version}; }
 
   // The flagged default, else the first. Precondition: paths is non-empty.
@@ -130,8 +139,8 @@ class GameLibrary {
   // Scans the library root and (re)loads every release's metadata. A title
   // still in an older layout is migrated once, which reads its files and so
   // splits any that turn out to hold more than one release. A title that
-  // already has a version folder costs only a directory listing, so the
-  // orphaned root game.toml is never parsed again.
+  // already has releases still retries missing legacy parts. Existing release
+  // records and explicit removal records always win over stale legacy data.
   void Load();
 
   // A release recorded without a field its files can supply.
@@ -202,7 +211,8 @@ class GameLibrary {
   bool SetIcon(const LibraryKey& key, std::span<const uint8_t> png);
   std::filesystem::path IconPath(const LibraryKey& key) const;
 
-  // Removes a release's folder and drops it from the in-memory list.
+  // Durably removes a release from the index, retaining original paths/art
+  // and recovery bytes. A same-slot removal record prevents legacy revival.
   bool Remove(const LibraryKey& key);
 
  private:
@@ -211,20 +221,19 @@ class GameLibrary {
   // <root>/<title_id>/<version>. A pure function of the key, so a release is
   // always where the key says and never has to be searched for.
   std::filesystem::path EntryDir(const LibraryKey& key) const;
-  // Whether any release folder survives under a title, which is what decides
-  // if the title folder is still wanted. A game.toml has to be there, but it
-  // does not have to parse: one we failed to read still holds the folder.
-  bool HasReleaseFolder(uint32_t title_id) const;
-  // Moves one title out of an older layout into <title_id>/<version>/, and
+  // Observes retained legacy metadata into missing <title_id>/<version>/ slots, and
   // appends what it found to entries_. Reads every path, so it also separates
   // a title that turns out to hold more than one release.
-  void MigrateTitle(const std::filesystem::path& title_dir);
+  void MigrateTitle(const std::filesystem::path& title_dir,
+                    const std::vector<std::filesystem::path>& removed_paths);
   bool WriteEntryAtomic(const LibraryEntry& entry,
-                        const std::filesystem::path& dir);
+                        const std::filesystem::path& dir,
+                        bool removed = false, bool require_absent = false);
   // Reads one game.toml. The folder name is what settles an entry's version,
   // so the parsed value is only a fallback for a hand-moved folder.
   bool ReadEntry(const std::filesystem::path& game_toml,
-                 LibraryEntry& entry) const;
+                 LibraryEntry& entry, bool* removed = nullptr,
+                 std::shared_ptr<const filesystem::HostStorageSnapshotToken>* observed = nullptr) const;
   // A release found among an entry's paths, with the art its own files carry
   // rather than the art the title as a whole had.
   struct Release {
@@ -247,11 +256,26 @@ class GameLibrary {
                                          bool& identified) const;
   // Writes `icon` into `dir`, or copies the art already at `fallback_dir`
   // when the file has no readable embedded title art.
-  void PlaceIcon(const std::filesystem::path& dir,
+  bool PlaceIcon(const std::filesystem::path& dir,
                  const std::vector<uint8_t>& icon,
                  const std::filesystem::path& fallback_dir) const;
 
+  std::shared_ptr<filesystem::HostMetadataWriter> Writer() const;
+  // Proof attached to this existing model's canonical slots, including loaded
+  // removal records. It is neither a filesystem registry nor serialized data.
+  struct CanonicalObservation {
+    LibraryKey key;
+    std::shared_ptr<const filesystem::HostStorageSnapshotToken> snapshot;
+    bool ambiguous = false;
+  };
+  std::shared_ptr<const filesystem::HostStorageSnapshotToken> Observed(
+      const LibraryKey&) const;
+  bool HasObservation(const LibraryKey&) const;
+  void Remember(const LibraryKey&,
+      std::shared_ptr<const filesystem::HostStorageSnapshotToken>);
+  std::vector<CanonicalObservation> observations_;
   std::filesystem::path root_;
+  mutable std::shared_ptr<filesystem::HostMetadataWriter> writer_;
   std::vector<LibraryEntry> entries_;
   std::vector<std::string> split_titles_;
   std::function<void()> changed_callback_;

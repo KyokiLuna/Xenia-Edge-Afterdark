@@ -32,10 +32,18 @@ uint32_t xeObCreateObject(X_OBJECT_TYPE* object_factory,
                           X_OBJECT_ATTRIBUTES* optional_attributes,
                           uint32_t object_size_sans_headers,
                           uint32_t* out_object, cpu::ppc::PPCContext* context);
-// Drops a leading \??\, the DOS devices directory the ObDosDevices root also
-// names, so \??\game:\file is game:\file.
+// The native DOS object-directory pseudo-root, not a real directory handle.
+inline constexpr uint32_t kObDosDevicesRoot = 0xFFFFFFFDu;
+// Drops only the explicit TITLE DOS prefix, so \??\game:\file is game:\file.
 void xeObStripDosDevicesPrefix(std::string& path);
-// Canonical link name without the \??\ or \System??\ object directory.
+// Capture bare DOS aliases from the actual original caller before host I/O.
+// Explicit namespaces/absolute names and actual directory handles are unchanged.
+void xeObCaptureFilePathForCaller(std::string& path, uint32_t root_directory);
+// Excludes only a recognized DOS object-directory prefix from strict payload
+// validation for root0/ObDosDevices. The actual path and realm are unchanged.
+std::string_view xeObDosPathValidationView(std::string_view path,
+                                           uint32_t root_directory) noexcept;
+// Canonical link name without \??\; explicit SYSTEM names remain distinct.
 std::string xeObSymbolicLinkName(std::string_view name);
 }  // namespace xboxkrnl
 }  // namespace kernel

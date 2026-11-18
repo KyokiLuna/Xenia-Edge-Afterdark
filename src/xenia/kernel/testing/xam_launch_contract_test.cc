@@ -7,7 +7,10 @@
  ******************************************************************************
  */
 #include <array>
+#include <memory>
+#include <string>
 #include <vector>
+#include "xenia/emulator_lifecycle.h"
 
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/kernel/xam/xam_launch_contract.h"
@@ -101,4 +104,38 @@ TEST_CASE("Spawn launch transport preserves every byte including zeros",
   CHECK(EncodeLaunchData({}).empty());
 }
 
+}  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+TEST_CASE(
+    "Owned lifecycle launch payload retains moved reservations and exact "
+    "launch bytes",
+    "[kernel][xam][launch][host-queue]") {
+  std::string host = "/copied/title.xex", module = "sub/default.xex";
+  std::vector<uint8_t> bytes{0, 0x80, 0xFF, 0};
+  auto reservation = std::make_unique<uint32_t>(0x12345678);
+  std::string got_host, got_module;
+  std::vector<uint8_t> got_bytes;
+  uint32_t got_reservation = 0;
+  EmulatorLifecycle::Request request;
+  request.SetWork([host, module, bytes, reservation = std::move(reservation),
+                   &got_host, &got_module, &got_bytes, &got_reservation] {
+    got_host = host;
+    got_module = module;
+    got_bytes = bytes;
+    got_reservation = *reservation;
+  });
+  CHECK_FALSE(reservation);
+  host.clear();
+  module.clear();
+  bytes.clear();
+  // SetWork is the production copied host-payload holder, not a launch result.
+  auto copy = request.work;
+  request.work = {};
+  copy();
+  CHECK(got_host == "/copied/title.xex");
+  CHECK(got_module == "sub/default.xex");
+  CHECK((got_bytes == std::vector<uint8_t>{0, 0x80, 0xFF, 0}));
+  CHECK(got_reservation == 0x12345678);
+}
 }  // namespace xe::kernel::xam::test

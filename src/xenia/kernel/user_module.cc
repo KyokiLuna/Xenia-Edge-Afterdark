@@ -8,6 +8,7 @@
  */
 
 #include "xenia/kernel/user_module.h"
+#include "xenia/kernel/util/xex_guest_header.h"
 
 #include <atomic>
 #include <memory>
@@ -270,10 +271,20 @@ X_STATUS UserModule::LoadContinue() {
   // Copy the xex2 header into guest memory.
   auto header = this->xex_module()->xex_header();
   auto security_header = this->xex_module()->xex_security_info();
-  guest_xex_header_ = memory()->SystemHeapAlloc(header->header_size);
-
-  uint8_t* xex_header_ptr = memory()->TranslateVirtual(guest_xex_header_);
-  std::memcpy(xex_header_ptr, header, header->header_size);
+  const uint32_t header_size = header->header_size;
+  const uint32_t guest_header = memory()->SystemHeapAlloc(header_size);
+  if (!guest_header) {
+    return X_STATUS_NO_MEMORY;
+  }
+  uint8_t* xex_header_ptr = memory()->TranslateVirtual(guest_header);
+  std::memcpy(xex_header_ptr, header, header_size);
+  if (!RelocateXexSecurityInfoForGuest({xex_header_ptr, header_size},
+                                      guest_header)) {
+    memory()->SystemHeapFree(guest_header);
+    return X_STATUS_INVALID_IMAGE_FORMAT;
+  }
+  // Publish only the complete resident view. Host/file metadata stays raw.
+  guest_xex_header_ = guest_header;
 
   // Cache some commonly used headers...
   this->xex_module()->GetOptHeader(XEX_HEADER_ENTRY_POINT, &entry_point_);

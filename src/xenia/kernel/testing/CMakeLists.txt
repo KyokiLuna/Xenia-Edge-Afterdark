@@ -13,3 +13,13 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET xenia-kernel-tests)
   target_link_libraries(xenia-kernel-tests PRIVATE xenia-apu-sdl)
 endif()
+
+# The explicit genuine-library integration case also checks the real kernel
+# license setting and PNG decoder. Reuse the same pure metadata sources as
+# xenia-vfs-tests; these files do not start the frontend or an emulated title.
+if(TARGET xenia-kernel-tests)
+  target_sources(xenia-kernel-tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/xenia/app/game_library.cc
+    ${PROJECT_SOURCE_DIR}/src/xenia/app/title_metadata_cache.cc
+  )
+endif()

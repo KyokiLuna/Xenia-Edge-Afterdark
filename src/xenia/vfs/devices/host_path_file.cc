@@ -43,6 +43,41 @@ std::optional<filesystem::FileHandleInfo> HostPathFile::QueryBackingInfo(
   return file_handle_->QueryInfo(error);
 }
 
+X_STATUS HostPathFile::QueryAllocationSize(uint64_t* output) const {
+  if (!output) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  // The real opened file retains this tree. Never reselect a device/path or
+  // refresh Entry metadata after a rename, replacement or logical overwrite.
+  const auto& device = retained_device();
+  if (!entry_ || !device || device.get() != entry_->device() || !file_handle_) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  const uint64_t unit = uint64_t(entry_->sectors_per_allocation_unit()) *
+                        device->bytes_per_sector();
+  // Validate geometry before entering the native backend.
+  uint64_t zero = 0;
+  auto status = RoundFileAllocationSize(0, unit, &zero);
+  if (XFAILED(status)) {
+    return status;
+  }
+  std::error_code error;
+  const auto bytes = file_handle_->QueryAllocatedBytes(error);
+  if (error == std::errc::value_too_large) {
+    return X_STATUS(0xC0000095);  // STATUS_INTEGER_OVERFLOW
+  }
+  if (error) {
+    return HostStorageError(error);
+  }
+  if (!bytes) {
+    return X_STATUS_NOT_SUPPORTED;
+  }
+  return RoundFileAllocationSize(*bytes, unit, output);
+}
+
 bool HostPathFile::HasMutatingClose() const {
   return EntryHasMutatingClose(entry_);
 }

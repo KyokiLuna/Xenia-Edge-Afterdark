@@ -31,7 +31,8 @@ std::unique_ptr<StfsContainerEntry> StfsContainerEntry::Create(
 X_STATUS StfsContainerEntry::Open(uint32_t desired_access, File** out_file) {
   auto lock = global_critical_region::AcquireDirect();
   *out_file = nullptr;
-  if (static_cast<const StfsContainerDevice*>(device())->retired()) {
+  if (device()->namespace_retiring() ||
+      static_cast<const StfsContainerDevice*>(device())->retired()) {
     return X_STATUS(0xC000009D);  // DEVICE_NOT_CONNECTED.
   }
   *out_file = new StfsContainerFile(desired_access, this);

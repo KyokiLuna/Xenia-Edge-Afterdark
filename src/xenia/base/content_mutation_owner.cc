@@ -8,6 +8,7 @@
 #include <random>
 #include <set>
 #include "xenia/base/mutex.h"
+#include "xenia/base/managed_storage_bootstrap.h"
 namespace xe::filesystem {
 namespace {
 namespace wire = content_mutation_wire;
@@ -38,11 +39,72 @@ void Number(std::vector<uint8_t>& out, uint64_t n) {
 std::filesystem::path Journal(std::string_view nonce, bool done = false) {
   return "content-" + std::string(nonce) + (done ? ".done" : ".intent");
 }
+std::filesystem::path PreparationJournal(std::string_view nonce) {
+  return "content-" + std::string(nonce) + ".plan";
+}
+std::filesystem::path AbortJournal(std::string_view nonce) {
+  return "content-" + std::string(nonce) + ".abort";
+}
+std::filesystem::path PreservationJournal(std::string_view nonce, bool header) {
+  return "content-" + std::string(nonce) + (header ? ".keep1" : ".keep0");
+}
+bool HasPreparation(const wire::Record& r) {
+  return std::any_of(r.preparation_digest.begin(),r.preparation_digest.end(),[](uint8_t b) { return b != 0; });
+}
+std::filesystem::path StreamJournal(std::string_view nonce) {
+  return "content-" + std::string(nonce) + ".stream";
+}
+bool SameStreamAuthority(const wire::Record& admitted, const wire::Record& complete) {
+  if (!admitted.streamed || !admitted.stream_pending || !complete.streamed || complete.stream_pending ||
+      admitted.identity != complete.identity || admitted.nonce != complete.nonce ||
+      admitted.package != complete.package || admitted.target != complete.target ||
+      admitted.preparation_digest != complete.preparation_digest ||
+      admitted.stage != complete.stage || admitted.stage_file != complete.stage_file ||
+      admitted.directory_stage != complete.directory_stage || admitted.intended != complete.intended ||
+      admitted.initial_tree.size() != complete.initial_tree.size()) { return false; }
+  std::map<std::filesystem::path, const ContentPackageInitialEntry*> rows;
+  for (const auto& row : admitted.initial_tree) { rows.emplace(row.entry.relative, &row); }
+  for (const auto& row : complete.initial_tree) {
+    const auto found = rows.find(row.entry.relative);
+    if (found == rows.end()) { return false; }
+    const auto& expected = found->second->entry;
+    if (row.entry.file != expected.file || row.entry.mode != expected.mode ||
+        row.entry.directory != expected.directory ||
+        (!row.entry.directory && row.entry.bytes != expected.bytes)) { return false; }
+  }
+  return true;
+}
 struct Active {
   std::atomic<uint64_t>& value;
   explicit Active(std::atomic<uint64_t>& v) : value(v) { value.fetch_add(1, std::memory_order_acq_rel); }
   ~Active() { value.fetch_sub(1, std::memory_order_acq_rel); }
 };
+}
+std::vector<uint8_t> ContentMutationOwner::BootstrapMarker(
+    const ManagedDeviceIdentity& identity, const HostStorageRoot& root,
+    const HostStorageRoot& records, const HostStorageRoot& staging,
+    std::error_code& error) {
+  error.clear();
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    error = Error(std::errc::operation_not_permitted); return {};
+  }
+  // Byte-for-byte XCMOWN1 producer, shared by the ordinary factory and the
+  // native component initializer. Native IDs describe actual retained roots;
+  // the resulting detached bytes confer no creation/publication authority.
+  std::vector<uint8_t> marker{'X','C','M','O','W','N','1','\n'};
+  marker.insert(marker.end(), identity.uuid().begin(), identity.uuid().end());
+  Number(marker, identity.directory_file_id());
+  Number(marker, identity.device_id());
+  const auto& source = identity.source_id();
+  Number(marker, source.size()); marker.insert(marker.end(), source.begin(), source.end());
+  for (const auto* owned : {&root, &records, &staging}) {
+    const auto id = owned->IntentRootIdentity(error);
+    if (error) { return {}; } Number(marker, id.directory);
+  }
+  const auto digest = wire::Digest(marker, error);
+  if (error) { return {}; }
+  marker.insert(marker.end(), digest.begin(), digest.end());
+  return marker;
 }
 std::error_code ContentMutationOwner::CheckCurrent() const {
   if (xe::global_critical_region::is_held_by_current_thread()) {
@@ -64,7 +126,7 @@ std::shared_ptr<ContentMutationOwner> ContentMutationOwner::OpenInternal(
     std::shared_ptr<HostStorageRoot> parent,
     std::shared_ptr<const SnapshotRecoveryOwner> recovery,
     std::shared_ptr<const HostStorageIntentLease> source_lease,
-    bool initialize) {
+    bool initialize, ManagedBootstrapCreationPermit* creation) {
   auto out = std::shared_ptr<ContentMutationOwner>(new ContentMutationOwner);
   out->content_ = std::move(content); out->identity_ = std::move(identity);
   out->parent_ = std::move(parent); out->recovery_ = std::move(recovery);
@@ -77,7 +139,20 @@ std::shared_ptr<ContentMutationOwner> ContentMutationOwner::OpenInternal(
       !out->content_->IntentLeaseMatches(*out->source_lease_)) {
     error = Error(std::errc::permission_denied); return out;
   }
-  error = out->identity_->CheckCurrent();
+  if (creation) {
+    error = creation->Consume(ManagedBootstrapCreationPermit::Purpose::kContentMutation,
+                              *out->identity_, *out->parent_, *out->source_lease_);
+    if (!error) { error = out->identity_->CheckBootstrapCurrent(*creation); }
+    // The capsule producer publishes both complete component and link before
+    // opening this owner. A permit never enables this legacy staging path.
+    initialize = false;
+  } else {
+    error = out->identity_->CheckCurrent();
+    if (!error && out->identity_->binding_required()) {
+      error = ManagedStorageBootstrap::ValidateOwnerParent(*out->identity_, *out->parent_);
+      initialize = false;
+    }
+  }
   if (!error) { error = out->recovery_->CheckTarget(*out->content_); }
   if (error) { return out; }
   out->wire_identity_ = {out->identity_->uuid(), out->identity_->content_epoch(),
@@ -105,6 +180,12 @@ std::shared_ptr<ContentMutationOwner> ContentMutationOwner::OpenInternal(
   if (!created && !link->exists()) {
     error = Error(std::errc::state_not_recoverable); return out;
   }
+  if (creation) {
+    // Preserve the producer's exact canonical native component capability;
+    // the consumed permit proves it against this ordinary named resolution.
+    root=creation->ComponentRoot(root,error);
+    if (!root || error) { return out; }
+  }
   error = root->PrivateDirectory();
   if (!error) { error = root->IntentDisjointFrom(*out->content_); }
   if (error) { return out; }
@@ -116,22 +197,25 @@ std::shared_ptr<ContentMutationOwner> ContentMutationOwner::OpenInternal(
     if (error) { return out; }
     if (std::string_view(leaf) == "records") {
       out->records_ = child->ProtectContentMutations(error);
-    } else { out->staging_ = std::move(child); }
+    } else {
+      // This actual private child is a native construction namespace, not a
+      // guest-relative view of Content. Keep its exact retained dependency,
+      // identity, readonly policy and retirement chain, while source guest
+      // exclusions continue to protect it through the shared native registry.
+      auto native_stage = child->IndependentNamespaceView(error);
+      // Native staging remains private while its operation still depends on
+      // the exact live content generation, including after physical anchoring.
+      out->staging_ = native_stage ? native_stage->WithDependency(out->content_, error)
+                                  : nullptr;
+      if (!out->staging_ && !error) {
+        error = Error(std::errc::state_not_recoverable);
+      }
+    }
     if (error) { return out; }
   }
-  std::vector<uint8_t> marker{'X','C','M','O','W','N','1','\n'};
-  marker.insert(marker.end(), out->identity_->uuid().begin(), out->identity_->uuid().end());
-  Number(marker, out->identity_->directory_file_id());
-  Number(marker, out->identity_->device_id());
-  const auto& source = out->identity_->source_id();
-  Number(marker, source.size()); marker.insert(marker.end(), source.begin(), source.end());
-  for (const auto& owned : {root, out->records_, out->staging_}) {
-    const auto id = owned->IntentRootIdentity(error);
-    if (error) { return out; } Number(marker, id.directory);
-  }
-  auto digest = wire::Digest(marker, error);
+  const auto marker = BootstrapMarker(*out->identity_, *root,
+                                       *out->records_, *out->staging_, error);
   if (error) { return out; }
-  marker.insert(marker.end(), digest.begin(), digest.end());
   if (created) {
     const auto written = out->records_->WriteNewFile("owner.v1", marker);
     error = written.error;
@@ -153,8 +237,12 @@ std::shared_ptr<ContentMutationOwner> ContentMutationOwner::OpenInternal(
   if (!error && (!actual || !actual->exists() || !Equal(actual->bytes(), marker))) {
     error = Error(std::errc::state_not_recoverable);
   }
-  if (!error) { error = out->RecoverLocked(); }
-  out->blocked_.store(bool(error), std::memory_order_release);
+  // A pending owner is a private retained initializer result, never a ready
+  // catalog authority. The coordinator commits its durable binding under the
+  // same source exclusion, then calls ordinary Recover before publication.
+  // Operational CheckCurrent remains strict; no token is retained or replayed.
+  if (!error && !creation) { error = out->RecoverLocked(); }
+  out->blocked_.store(creation || bool(error), std::memory_order_release);
   return out;
 }
 bool ContentMutationOwner::Visible(const std::filesystem::path& package) const {
@@ -214,6 +302,298 @@ std::error_code ContentMutationOwner::EnsureParents(
   }
   return {};
 }
+std::error_code ContentMutationOwner::AppendRecord(
+    const std::filesystem::path& path, std::span<const uint8_t> bytes) {
+  std::string temporary;
+  for (unsigned i = 0; i != 8 && !wire::ValidNonce(temporary); ++i) { temporary = Nonce(); }
+  if (!wire::ValidNonce(temporary)) { return Error(std::errc::io_error); }
+  unsigned stop = 0;
+  if (!record_stop_suffix_.empty() && path.string().ends_with(record_stop_suffix_)) {
+    stop = record_stop_boundary_; record_stop_suffix_.clear(); record_stop_boundary_ = 0;
+  }
+  return records_->AppendContentRecord(path,bytes,temporary,stop);
+}
+std::error_code ContentMutationOwner::BeginPreparation(wire::Record& record,
+    const HostStorageSnapshotToken& before, std::span<const uint8_t> header, std::vector<uint8_t>& encoded) {
+  const auto peer = content_->CheckContentPreparationPeer(*staging_);
+  if (peer) { return peer; }
+  wire::Preparation plan{record.identity,record.nonce,record.package,record.target,
+                          uint64_t(header.size()),{}};
+  std::error_code error;
+  plan.header_digest = wire::Digest(header,error);
+  if (!error && before.exists()) {
+    plan.before_file = before.info().file_id; plan.before_bytes = before.bytes().size();
+    plan.before_digest = wire::Digest(before.bytes(),error);
+  }
+  if (!error) { encoded = wire::EncodePreparation(plan,error); }
+  if (!error) { error = AppendRecord(PreparationJournal(plan.nonce),encoded); }
+  if (!error) {
+    record.preparation_digest = wire::Digest(encoded,error);
+    record.stage = wire::PreparationStage(plan);
+  }
+  return error;
+}
+std::vector<std::filesystem::path> ContentMutationOwner::PreservedArtifacts() const {
+  std::lock_guard operation(operation_mutex_);
+  return preserved_artifacts_;
+}
+std::error_code ContentMutationOwner::PreserveArtifact(wire::Preservation ticket,
+    const std::shared_ptr<HostStorageRoot>& source, unsigned stop_boundary) {
+  std::error_code error;
+  const auto space = source->Observe();
+  if (space.error || !space.available || space.read_only ||
+      std::min(space.usable_bytes,preparation_space_ceiling_.value_or(UINT64_MAX)) < (1u << 16)) {
+    return space.error ? space.error : Error(space.read_only ? std::errc::read_only_file_system : std::errc::no_space_on_device);
+  }
+  const auto leaf = PreservationJournal(ticket.nonce,ticket.header);
+  const auto existing = records_->CaptureSnapshot(leaf,4096,error);
+  if (!existing) { return error; }
+  if (existing->exists()) {
+    wire::Preservation prior;
+    if (!wire::DecodePreservation(existing->bytes(),prior,error) ||
+        prior.identity != ticket.identity || prior.nonce != ticket.nonce ||
+        prior.header != ticket.header || prior.source != ticket.source ||
+        prior.preparation_digest != ticket.preparation_digest ||
+        (ticket.file && (prior.file != ticket.file || prior.directory != ticket.directory))) {
+      return error ? error : Error(std::errc::state_not_recoverable);
+    }
+    ticket = std::move(prior);
+  } else {
+    const auto observed = source->ObservePreparationArtifact(ticket.source,error);
+    if (error) { return error; }
+    if (!observed) { return {}; }
+    if (observed->directory != !ticket.header || (!observed->directory && !observed->regular)) {
+      return Error(std::errc::state_not_recoverable);
+    }
+    ticket.file = observed->file_id; ticket.directory = observed->directory;
+    const auto encoded = wire::EncodePreservation(ticket,error);
+    if (!error) { error = AppendRecord(leaf,encoded); }
+    if (error) { return error; }
+  }
+  if (stop_boundary == 1) { return Error(std::errc::operation_canceled); }
+  const auto destination = wire::PreservationDestination(ticket);
+  error = source->PreservePreparationArtifact(ticket.source,ticket.file,ticket.directory,
+                                               *staging_,destination);
+  if (!error) {
+    const auto path = staging_->path()/destination;
+    if (std::find(preserved_artifacts_.begin(),preserved_artifacts_.end(),path) == preserved_artifacts_.end()) {
+      preserved_artifacts_.push_back(path);
+    }
+  }
+  if (!error && stop_boundary == 2) { return Error(std::errc::operation_canceled); }
+  return error;
+}
+std::error_code ContentMutationOwner::CheckPreparationBefore(const wire::Preparation& plan,
+    const HostStorageSnapshotToken& before) const {
+  if (before.exists() != bool(plan.before_file)) { return Error(std::errc::state_not_recoverable); }
+  std::error_code error;
+  if (before.exists() && (before.info().file_id != plan.before_file ||
+      before.bytes().size() != plan.before_bytes || wire::Digest(before.bytes(),error) != plan.before_digest)) {
+    return error ? error : Error(std::errc::state_not_recoverable);
+  }
+  return error;
+}
+std::error_code ContentMutationOwner::ObservePreparationBackup(const wire::Preparation& plan) {
+  if (!plan.before_file) { return {}; }
+  // SnapshotPublisher may have created an incomplete backup before the full
+  // intent exists. Plan-only abort keeps the exact semantic Header untouched;
+  // the named backup is only retained opaque evidence, never restore authority.
+  const auto relative = "snapshot-"+plan.nonce+".bin";
+  std::error_code error;
+  const auto token = recovery_->root()->CaptureSnapshot(relative,wire::kMaximumMetadataBytes,error);
+  if (!token) { return error; }
+  if (!token->exists()) { return {}; }
+  const auto observed = recovery_->root()->ObserveIntentSnapshot(*token);
+  if (observed.error || !observed.durable) { return observed.error ? observed.error : Error(std::errc::io_error); }
+  const auto path = recovery_->root()->path()/relative;
+  if (std::find(preserved_artifacts_.begin(),preserved_artifacts_.end(),path) == preserved_artifacts_.end()) {
+    preserved_artifacts_.push_back(path);
+  }
+  return {};
+}
+std::error_code ContentMutationOwner::AbortPreparation(const wire::Preparation& plan,
+    std::span<const uint8_t> encoded, const std::shared_ptr<HostStorageRoot>& reserved,
+    const std::shared_ptr<HostStorageRoot>& package_reserved, unsigned stop_boundary) {
+  std::error_code error;
+  if (plan.identity != wire_identity_) { return Error(std::errc::state_not_recoverable); }
+  // A canonical promotion always wins, including a rename whose final barrier
+  // failed. The preparation-only path cannot roll back a publication duty.
+  for (const auto& leaf : {Journal(plan.nonce),StreamJournal(plan.nonce)}) {
+    const auto record = records_->CaptureSnapshot(leaf,
+        wire::kMaximumRecordBytes,error);
+    if (!record) { return error; }
+    if (record->exists()) { return Error(std::errc::operation_in_progress); }
+  }
+  auto target = reserved->CaptureSnapshot(plan.target,wire::kMaximumMetadataBytes,error,true);
+  if (!target) { return error; }
+  error = CheckPreparationBefore(plan,*target);
+  if (error) { return error; }
+  const auto package = package_reserved->ObservePreparationArtifact(plan.package,error);
+  if (error || package) { return error ? error : Error(std::errc::state_not_recoverable); }
+  const auto digest = wire::Digest(encoded,error);
+  wire::Preservation directory{plan.identity,plan.nonce,false,0,true,
+                               "package-"+plan.nonce+".tmp",digest};
+  if (!error) { error = PreserveArtifact(directory,staging_,stop_boundary); }
+  wire::Preservation header{plan.identity,plan.nonce,true,0,false,
+                            wire::PreparationStage(plan),digest};
+  if (!error) { error = PreserveArtifact(header,reserved,stop_boundary); }
+  if (!error) { error = ObservePreparationBackup(plan); }
+  const auto terminal = error ? std::vector<uint8_t>{} : wire::Done(encoded,error);
+  if (!error) { error = AppendRecord(AbortJournal(plan.nonce),terminal); }
+  if (!error) {
+    reserved->ReleaseContentNamespace(); package_reserved->ReleaseContentNamespace();
+    pending_reservations_.erase(plan.target); pending_reservations_.erase(plan.package);
+  }
+  return error;
+}
+std::error_code ContentMutationOwner::RecoverPreparations(
+    const std::vector<std::filesystem::path>& names,
+    const std::set<std::filesystem::path>& present,
+    std::map<std::filesystem::path,uint64_t>& known) {
+  std::error_code error;
+  std::map<std::string,std::pair<wire::Preparation,std::vector<uint8_t>>> plans;
+  auto same_source = [&](const wire::Identity& identity) {
+    return identity.uuid == wire_identity_.uuid && identity.source == wire_identity_.source &&
+        identity.device == wire_identity_.device && identity.content_directory == wire_identity_.content_directory &&
+        identity.epoch <= wire_identity_.epoch;
+  };
+  for (const auto& name : names) {
+    const auto text = name.string();
+    if (text.find(".partial-") != std::string::npos) {
+      preserved_artifacts_.push_back(records_->path()/name); continue;
+    }
+    if (!text.ends_with(".plan")) { continue; }
+    const auto token = records_->CaptureSnapshot(name,4096,error);
+    wire::Preparation plan;
+    if (!token || !wire::DecodePreparation(token->bytes(),plan,error)) { return error; }
+    if (name != PreparationJournal(plan.nonce) || !same_source(plan.identity)) { return Error(std::errc::state_not_recoverable); }
+    plans.emplace(plan.nonce,std::make_pair(plan,std::vector<uint8_t>(token->bytes().begin(),token->bytes().end())));
+  }
+  // Before any preparation-only preservation, verify an orphan semantic
+  // Header still matches the exact before snapshot. Completed aborts may be
+  // followed by a legitimate later package/update and must not freeze it.
+  for (const auto& [nonce,pair] : plans) {
+    if (present.contains(Journal(nonce)) || present.contains(StreamJournal(nonce)) ||
+        present.contains(AbortJournal(nonce))) { continue; }
+    const auto& plan = pair.first;
+    auto view = content_;
+    if (const auto old = pending_reservations_.find(plan.target);
+        old != pending_reservations_.end() && old->second.nonce == nonce) { view = old->second.view; }
+    const auto before = view->CaptureSnapshot(plan.target,wire::kMaximumMetadataBytes,error,true);
+    if (!before) { return error; }
+    error = CheckPreparationBefore(plan,*before);
+    if (error) { return error; }
+  }
+  // Validate canonical promotions BEFORE any opaque orphan preservation.
+  for (const auto& name : names) {
+    const auto text = name.string();
+    if (text.find(".partial-") != std::string::npos ||
+        (!text.ends_with(".stream") && !text.ends_with(".intent"))) { continue; }
+    const auto token = records_->CaptureSnapshot(name,
+        std::max(wire::kMaximumRecordBytes,package_wire::kMaximumRecordBytes),error);
+    if (!token) { return error; }
+    constexpr std::string_view magic = "XCPKG03\n";
+    if (token->bytes().size() >= magic.size() && std::equal(magic.begin(),magic.end(),token->bytes().begin())) { continue; }
+    wire::Record record;
+    if (!wire::Decode(token->bytes(),record,error)) { return error; }
+    const auto found = plans.find(record.nonce);
+    if (HasPreparation(record)) {
+      if (found == plans.end() || !wire::MatchesPreparation(found->second.first,found->second.second,record,error)) {
+        return error ? error : Error(std::errc::state_not_recoverable);
+      }
+    } else if (found != plans.end()) { return Error(std::errc::state_not_recoverable); }
+  }
+  // Every preserved destination has one exact durable ticket, even after an
+  // abort. Replaying a rename/barrier is independent from publication success.
+  for (const auto& name : names) {
+    const auto text = name.string();
+    if (!text.ends_with(".keep0") && !text.ends_with(".keep1")) { continue; }
+    const auto token = records_->CaptureSnapshot(name,4096,error);
+    wire::Preservation ticket;
+    if (!token || !wire::DecodePreservation(token->bytes(),ticket,error)) { return error; }
+    if (name != PreservationJournal(ticket.nonce,ticket.header) || !same_source(ticket.identity)) {
+      return Error(std::errc::state_not_recoverable);
+    }
+    const auto found = plans.find(ticket.nonce);
+    if (present.contains(Journal(ticket.nonce)) || present.contains(StreamJournal(ticket.nonce))) {
+      return Error(std::errc::state_not_recoverable);
+    }
+    if (ticket.header || std::any_of(ticket.preparation_digest.begin(),ticket.preparation_digest.end(),[](uint8_t b){return b != 0;})) {
+      if (found == plans.end() || ticket.identity != found->second.first.identity ||
+          ticket.preparation_digest != wire::Digest(found->second.second,error) ||
+          (ticket.header && ticket.source != wire::PreparationStage(found->second.first))) {
+        return error ? error : Error(std::errc::state_not_recoverable);
+      }
+    }
+    auto source = ticket.header ? content_ : staging_;
+    // Header namespace permits from an in-process failed operation must be
+    // reused, never transiently released to acquire another one.
+    if (ticket.header && found != plans.end()) {
+      const auto old = pending_reservations_.find(found->second.first.target);
+      if (old != pending_reservations_.end() && old->second.nonce == ticket.nonce) { source = old->second.view; }
+    }
+    error = PreserveArtifact(ticket,source);
+    if (error) { return error; }
+    known.emplace(wire::PreservationDestination(ticket),ticket.file);
+  }
+  for (const auto& [nonce,pair] : plans) {
+    const auto& plan = pair.first; const auto& encoded = pair.second;
+    if (present.contains(AbortJournal(nonce))) {
+      if (present.contains(Journal(nonce)) || present.contains(StreamJournal(nonce))) { return Error(std::errc::state_not_recoverable); }
+      const auto terminal = records_->CaptureSnapshot(AbortJournal(nonce),256,error);
+      if (!terminal || !wire::CheckDone(terminal->bytes(),encoded,error)) { return error; }
+      const auto observed = records_->ObserveIntentSnapshot(*terminal);
+      if (observed.error || !observed.durable) { return observed.error ? observed.error : Error(std::errc::io_error); }
+      error = ObservePreparationBackup(plan);
+      if (error) { return error; }
+      for (const auto& slot : {plan.target,plan.package}) {
+        const auto old = pending_reservations_.find(slot);
+        if (old != pending_reservations_.end() && old->second.nonce == nonce) {
+          old->second.view->ReleaseContentNamespace(); pending_reservations_.erase(old);
+        }
+      }
+      continue;
+    }
+    if (present.contains(Journal(nonce)) || present.contains(StreamJournal(nonce))) { continue; }
+    if (plan.identity != wire_identity_) { return Error(std::errc::state_not_recoverable); }
+    std::shared_ptr<HostStorageRoot> reserved, package_reserved;
+    for (const auto& slot : {plan.target,plan.package}) {
+      const auto old = pending_reservations_.find(slot);
+      auto& view = slot == plan.target ? reserved : package_reserved;
+      if (old != pending_reservations_.end() && old->second.nonce == nonce) { view = old->second.view; }
+      if (!view) {
+        std::optional<FileHandleInfo> expected;
+        if (slot == plan.target) {
+          const auto before = content_->CaptureSnapshot(plan.target,wire::kMaximumMetadataBytes,error,true);
+          if (!before) { return error; }
+          error = CheckPreparationBefore(plan,*before);
+          if (error) { return error; }
+          if (before->exists()) { expected=before->info(); }
+        }
+        view = content_->ReserveContentNamespace(slot,expected,slot == plan.package,error);
+      }
+      if (!view) { return error; }
+      pending_reservations_[slot] = {nonce,view};
+    }
+    error = AbortPreparation(plan,encoded,reserved,package_reserved);
+    if (error) { return error; }
+    // Newly written tickets were not in the original inventory.
+    for (const bool header : {false,true}) {
+      const auto ticket = records_->CaptureSnapshot(PreservationJournal(nonce,header),4096,error);
+      if (!ticket) { return error; }
+      if (ticket->exists()) {
+        wire::Preservation saved;
+        if (!wire::DecodePreservation(ticket->bytes(),saved,error)) { return error; }
+        known.emplace(wire::PreservationDestination(saved),saved.file);
+      }
+    }
+  }
+  for (const auto& name : names) {
+    const auto text = name.string();
+    if (text.ends_with(".abort") && !plans.contains(text.substr(8,32))) { return Error(std::errc::bad_message); }
+  }
+  return {};
+}
 ContentMutationOwner::Receipt ContentMutationOwner::WriteMetadata(
     Kind kind, const std::filesystem::path& package,
     std::shared_ptr<const HostStorageSnapshotToken> expected,
@@ -242,6 +622,256 @@ ContentMutationOwner::Receipt ContentMutationOwner::CreateInitial(
   }
   if (refused.error) { return refused; }
   return Mutate(Kind::kCreate,package,std::move(expected),header,cancel,{},members);
+}
+ContentMutationOwner::Receipt ContentMutationOwner::CreateStream(
+    const std::filesystem::path& package,
+    std::shared_ptr<const HostStorageSnapshotToken> expected,
+    std::span<const uint8_t> header, ContentPackageStreamSource& source,
+    const std::atomic<bool>* canceled, std::atomic<uint64_t>* progress) {
+  return StreamInternal(package, std::move(expected), header, source, canceled, progress);
+}
+ContentMutationOwner::Receipt ContentMutationOwner::StreamInternal(
+    const std::filesystem::path& package,
+    std::shared_ptr<const HostStorageSnapshotToken> expected,
+    std::span<const uint8_t> header, ContentPackageStreamSource& source,
+    const std::atomic<bool>* canceled, std::atomic<uint64_t>* progress,
+    uint64_t stop_after_bytes, std::optional<uint64_t> space_ceiling,
+    std::atomic<bool>* cancel_after_authentication, unsigned preparation_boundary) {
+  Receipt receipt;
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    receipt.error = Error(std::errc::operation_not_permitted); return receipt;
+  }
+  std::lock_guard operation(operation_mutex_); Active active(active_);
+  auto& error = receipt.error;
+  error = CheckCurrent();
+  if (!error && (!ready() || active_.load(std::memory_order_acquire) != 1)) {
+    error = Error(std::errc::device_or_resource_busy);
+  }
+  wire::Record record;
+  record.identity = wire_identity_; record.kind = Kind::kCreate;
+  record.package = package; record.streamed = record.stream_pending = true;
+  if (expected) { record.target = expected->relative(); }
+  if (!error && (!expected || expected->root().get() != content_.get() ||
+      wire::Target(record).empty() || header.empty() || header.size() > wire::kMaximumMetadataBytes)) {
+    error = Error(std::errc::invalid_argument);
+  }
+  if (!error && expected->exists()) { error = Error(std::errc::file_exists); }
+  if (!error && canceled && canceled->load(std::memory_order_acquire)) { error = Error(std::errc::operation_canceled); }
+  if (error) { return receipt; }
+  // A bounded metadata snapshot, never a detached aggregate payload.
+  const auto supplied = source.members();
+  if (supplied.size() >= package_wire::kMaximumEntries) {
+    error = Error(std::errc::value_too_large); return receipt;
+  }
+  const std::vector<ContentPackageStreamMember> members(supplied.begin(), supplied.end());
+  error = wire::ValidateStreamMembers(members);
+  if (!error) { error = source.CheckCurrent(); }
+  if (error) { return receipt; }
+  uint64_t allocation = uint64_t(header.size()) * 4 + (16u << 16);
+  for (const auto& member : members) { allocation += member.size + 8192 + member.relative.native().size(); }
+  const auto space = content_->Observe();
+  if (space.error || !space.available || space.read_only ||
+      std::min(space.usable_bytes, space_ceiling.value_or(UINT64_MAX)) < allocation) {
+    error = space.error ? space.error : Error(space.read_only ? std::errc::read_only_file_system : std::errc::no_space_on_device);
+    return receipt;
+  }
+  const auto names = records_->ListContentMutationFiles(error);
+  if (!error && (maximum_records_ < 12 || names.size() > maximum_records_ - 12)) {
+    error = Error(std::errc::no_space_on_device);
+  }
+  if (error) { return receipt; }
+  auto reserved = content_->ReserveContentNamespace(record.target, {}, false, error);
+  if (!reserved) { return receipt; }
+  auto current = reserved->CaptureSnapshot(record.target, wire::kMaximumMetadataBytes, error, true);
+  if (!current || current->exists()) {
+    if (!error) { error = Error(std::errc::file_exists); }
+    reserved->ReleaseContentNamespace(); return receipt;
+  }
+  error = EnsureParents(package.parent_path());
+  auto package_reserved = error ? nullptr : content_->ReserveContentNamespace(package, {}, true, error);
+  if (!package_reserved) { reserved->ReleaseContentNamespace(); return receipt; }
+  auto release = [&] { reserved->ReleaseContentNamespace(); package_reserved->ReleaseContentNamespace(); };
+  auto retain = [&] {
+    blocked_.store(true, std::memory_order_release);
+    pending_reservations_[record.target] = {record.nonce, reserved};
+    pending_reservations_[record.package] = {record.nonce, package_reserved};
+  };
+  for (unsigned i = 0; i != 8 && !wire::ValidNonce(record.nonce); ++i) { record.nonce = Nonce(); }
+  if (!wire::ValidNonce(record.nonce)) { error = Error(std::errc::io_error); release(); return receipt; }
+  receipt.nonce = record.nonce;
+  const auto leaf = "package-" + record.nonce + ".tmp";
+  std::vector<uint8_t> preparation;
+  error = content_->CheckContentPreparationPeer(*staging_);
+  if (error) { release(); return receipt; }
+  // Close admission and retain real namespace permits before a durable plan
+  // or any allocation after it; unwinding can never leave ready=true.
+  retain();
+  error = BeginPreparation(record,*current,header,preparation);
+  // A canonical plan may exist even if its parent barrier returned an error.
+  // It grants no publication authority, but must be reconciled before reuse.
+  if (error) {
+    // No dependent artifacts have been permitted yet. A partial/canonical
+    // control record remains private for Recover, without a leaked live permit.
+    release(); pending_reservations_.erase(record.target); pending_reservations_.erase(record.package);
+    return receipt;
+  }
+  auto abort_preparation = [&](unsigned boundary = 0) {
+    wire::Preparation plan;
+    std::error_code parse;
+    if (!wire::DecodePreparation(preparation,plan,parse)) { error = parse; retain(); return; }
+    const auto original = error;
+    const auto aborted = AbortPreparation(plan,preparation,reserved,package_reserved,boundary);
+    if (aborted) { error = aborted; retain(); }
+    else {
+      error = original; receipt.aborted_before_publication = true;
+      receipt.preserved_artifacts = preserved_artifacts_;
+      blocked_.store(false,std::memory_order_release);
+    }
+  };
+  if (preparation_boundary == 5) { error = Error(std::errc::operation_canceled); return receipt; }
+  error = staging_->Create(leaf, true);
+  if (error) { abort_preparation(); return receipt; }
+  if (preparation_boundary == 8) { error = Error(std::errc::operation_canceled); return receipt; }
+  auto staged = staging_->Subroot(leaf, false, error);
+  if (staged) {
+    record.directory_stage = staged->IntentRootIdentity(error).directory;
+    for (const auto& member : members) {
+      if (error) { break; }
+      if (member.directory) { error = staged->Create(member.relative, true); }
+      else { error = staged->WriteNewFile(member.relative, {}, false).error; }
+      if (!error && preparation_boundary == 4) {
+        error = Error(std::errc::operation_canceled); return receipt;
+      }
+    }
+  }
+  if (!error) { record.initial_tree = staging_->CaptureInitialContentTree(leaf, error); }
+  if (!error && record.initial_tree.size() != members.size() + 1) { error = Error(std::errc::state_not_recoverable); }
+  std::map<std::filesystem::path, uint64_t> declared;
+  for (const auto& member : members) { declared.emplace(member.relative, member.size); }
+  for (auto& row : record.initial_tree) {
+    if (row.entry.directory) { continue; }
+    const auto found = declared.find(row.entry.relative);
+    if (found == declared.end() || row.entry.bytes) { error = Error(std::errc::state_not_recoverable); break; }
+    row.entry.bytes = found->second; row.digest = {};
+  }
+  // The durable plan authenticates only these slots. Ordinary failure moves
+  // observed data intact to preservation; a stream record is still required
+  // before any input payload write or authenticated cleanup.
+  if (error || !staged) { staged.reset(); abort_preparation(); return receipt; }
+  auto prepared = SnapshotPublisher::PrepareInternal(*recovery_, current, header, nullptr, record.nonce, {});
+  if (prepared->receipt().error) {
+    error = prepared->receipt().error; prepared.reset(); staged.reset();
+    abort_preparation(); return receipt;
+  }
+  if (preparation_boundary == 6) { error = Error(std::errc::operation_canceled); return receipt; }
+  record.intended.assign(header.begin(), header.end());
+  record.stage = prepared->receipt().stage; record.stage_file = prepared->stage_info().file_id;
+  const auto admission = wire::Encode(record, error);
+  if (!error) {
+    error = AppendRecord(StreamJournal(record.nonce), admission);
+  }
+  if (error) { retain(); return receipt; }
+  receipt.stream_admitted_durable = true;
+  if (progress) { progress->store(0, std::memory_order_release); }
+  uint64_t transferred = 0;
+  std::vector<uint8_t> buffer(1u << 20);
+  for (size_t index = 0; index != members.size() && !error; ++index) {
+    const auto& member = members[index];
+    if (member.directory) { continue; }
+    auto file = staged->OpenFile(member.relative, FileAccess::kFileWriteData, error);
+    if (!file) { break; }
+    const auto opened = file->QueryInfo(error);
+    const auto admitted = std::find_if(record.initial_tree.begin(), record.initial_tree.end(),
+        [&](const auto& row) { return row.entry.relative == member.relative; });
+    if (!opened || error || admitted == record.initial_tree.end() || !opened->regular ||
+        opened->links != 1 || opened->size || opened->file_id != admitted->entry.file) {
+      if (!error) { error = Error(std::errc::state_not_recoverable); } break;
+    }
+    for (uint64_t offset = 0; offset != member.size && !error;) {
+      if (canceled && canceled->load(std::memory_order_acquire)) { error = Error(std::errc::operation_canceled); break; }
+      error = source.CheckCurrent();
+      if (error) { break; }
+      const auto count = size_t(std::min<uint64_t>(buffer.size(), member.size - offset));
+      auto part = std::span(buffer).first(count);
+      const auto read = source.Read(index, offset, part);
+      if (read.error || read.bytes != count) { error = read.error ? read.error : Error(std::errc::io_error); break; }
+      if (canceled && canceled->load(std::memory_order_acquire)) { error = Error(std::errc::operation_canceled); break; }
+      const auto written = file->WriteAllResult(size_t(offset), part);
+      transferred += written.bytes;
+      if (progress) { progress->fetch_add(written.bytes, std::memory_order_release); }
+      if (written.error || written.bytes != count) { error = written.error ? written.error : Error(std::errc::io_error); break; }
+      offset += count;
+      if (transferred >= stop_after_bytes) {
+        error = Error(std::errc::operation_canceled); retain(); return receipt;
+      }
+    }
+    if (!error) { error = file->FlushResult(); }
+  }
+  if (!error && canceled && canceled->load(std::memory_order_acquire)) { error = Error(std::errc::operation_canceled); }
+  if (!error) { error = source.CheckCurrent(); }
+  if (error) {
+    const auto original = error; prepared.reset(); staged.reset();
+    const auto rollback = RollbackStream(record, admission, reserved, package_reserved);
+    if (rollback) { error = rollback; retain(); }
+    else { error = original; blocked_.store(false, std::memory_order_release); }
+    return receipt;
+  }
+  auto complete = record; complete.stream_pending = false;
+  complete.initial_tree = staging_->CaptureInitialContentTree(leaf, error);
+  if (!error && !SameStreamAuthority(record, complete)) { error = Error(std::errc::state_not_recoverable); }
+  // Private deny-only seam: the complete native tree authentication above ran
+  // normally. Tests can only raise cancellation in its completion window.
+  if (cancel_after_authentication) { cancel_after_authentication->store(true, std::memory_order_release); }
+  const auto encoded = error ? std::vector<uint8_t>{} : wire::Encode(complete, error);
+  // Hashing and encoding can be long. They do not constitute durable complete
+  // preparation; cancellation must roll back, and source withdrawal must
+  // prevent publication.
+  if (!error && canceled && canceled->load(std::memory_order_acquire)) { error = Error(std::errc::operation_canceled); }
+  if (!error) { error = source.CheckCurrent(); }
+  if (!error && canceled && canceled->load(std::memory_order_acquire)) { error = Error(std::errc::operation_canceled); }
+  if (error) {
+    const auto original = error; prepared.reset(); staged.reset();
+    // Authentication conflicts remain a preserved third state; an ordinary
+    // cancellation can discard only its earlier authenticated mutable stage.
+    if (original == std::errc::operation_canceled) {
+      const auto rollback = RollbackStream(record, admission, reserved, package_reserved);
+      if (rollback) { error = rollback; retain(); }
+      else { error = original; blocked_.store(false, std::memory_order_release); }
+    } else { retain(); }
+    return receipt;
+  }
+  error = AppendRecord(Journal(record.nonce),encoded);
+  if (error) { retain(); return receipt; }
+  // Durable complete-tree intent is now the normal publication obligation.
+  // Cancellation after this point cannot discard an already prepared commit.
+  auto result = Advance(complete, encoded, reserved, package_reserved, std::move(prepared), false);
+  result.stream_admitted_durable = true;
+  if (result.complete) { blocked_.store(false, std::memory_order_release); }
+  return result;
+}
+std::error_code ContentMutationOwner::RollbackStream(const wire::Record& record,
+    std::span<const uint8_t> encoded, const std::shared_ptr<HostStorageRoot>& reserved,
+    const std::shared_ptr<HostStorageRoot>& package_reserved) {
+  if (!record.streamed || !record.stream_pending || record.identity != wire_identity_) {
+    return Error(std::errc::state_not_recoverable);
+  }
+  std::error_code error;
+  const auto current = reserved->CaptureSnapshot(record.target, wire::kMaximumMetadataBytes, error, true);
+  if (!current || current->exists()) { return error ? error : Error(std::errc::state_not_recoverable); }
+  error = staging_->DiscardStreamContentDirectory("package-" + record.nonce + ".tmp",
+                                                 record.directory_stage, record.initial_tree);
+  if (!error) { error = reserved->DiscardStreamHeaderStage(record.stage, record.stage_file, record.intended); }
+  if (!error) {
+    const auto done = wire::Done(encoded, error);
+    if (!error) {
+      error = AppendRecord(Journal(record.nonce, true), done);
+    }
+  }
+  if (!error) {
+    reserved->ReleaseContentNamespace(); package_reserved->ReleaseContentNamespace();
+    pending_reservations_.erase(record.target); pending_reservations_.erase(record.package);
+  }
+  return error;
 }
 ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
     Kind kind, const std::filesystem::path& package,
@@ -274,9 +904,11 @@ ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
   }
   if (!initial.empty()) {
     error=wire::ValidateInitialMembers(initial);
-    if (!error && (kind!=Kind::kCreate || expected->exists())) { error=Error(std::errc::file_exists); }
+    if (!error && (kind!=Kind::kCreate || expected->exists())) { error=Error(std::errc::invalid_argument); }
     if (error) { return receipt; }
-    uint64_t bound=uint64_t(bytes.size())*2+131072;
+  }
+  if (kind == Kind::kCreate) {
+    uint64_t bound=uint64_t(bytes.size())*4+uint64_t(expected->bytes().size())*2+(16u << 16);
     for (const auto& member:initial) { bound+=member.bytes.size()+8192+member.relative.native().size(); }
     const auto space=content_->Observe();
     const auto usable=std::min(space.usable_bytes,
@@ -288,7 +920,8 @@ ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
   }
   const auto records = records_->ListContentMutationFiles(error);
   if (error) { return receipt; }
-  if (maximum_records_ < 2 || records.size() > maximum_records_ - 2) {
+  const size_t required_records = kind == Kind::kCreate ? 12 : 4;
+  if (maximum_records_ < required_records || records.size() > maximum_records_ - required_records) {
     // Refuse finite exhaustion before any stage or Prepared; never admit an
     // intent into the last free slot and strand its required Done marker.
     error = Error(std::errc::no_space_on_device); return receipt;
@@ -326,13 +959,42 @@ ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
     error = Error(std::errc::io_error); release(); return receipt;
   }
   receipt.nonce = record.nonce;
+  std::vector<uint8_t> preparation;
+  auto retain = [&] {
+    blocked_.store(true,std::memory_order_release);
+    pending_reservations_[record.target] = {record.nonce,reserved};
+    if (package_reservation) { pending_reservations_[record.package] = {record.nonce,package_reservation}; }
+  };
+  auto abort_preparation = [&] {
+    wire::Preparation plan; std::error_code parse;
+    if (preparation.empty() || !wire::DecodePreparation(preparation,plan,parse)) {
+      if (parse) { error = parse; } retain(); return;
+    }
+    const auto original = error;
+    const auto aborted = AbortPreparation(plan,preparation,reserved,package_reservation);
+    if (aborted) { error = aborted; retain(); }
+    else {
+      error = original; receipt.aborted_before_publication = true;
+      receipt.preserved_artifacts = preserved_artifacts_;
+      blocked_.store(false,std::memory_order_release);
+    }
+  };
   if (kind == Kind::kCreate) {
     error = EnsureParents(package.parent_path());
     if (!error) { package_reservation = content_->ReserveContentNamespace(package, {}, true, error); }
     if (!package_reservation) { release(); return receipt; }
+    error = content_->CheckContentPreparationPeer(*staging_);
+    if (error) { release(); return receipt; }
+    retain();
+    error = BeginPreparation(record,*current,bytes,preparation);
+    if (error) {
+      release(); pending_reservations_.erase(record.target); pending_reservations_.erase(record.package);
+      return receipt;
+    }
+    if (stop_boundary == 5) { error = Error(std::errc::operation_canceled); return receipt; }
     const auto leaf = "package-" + record.nonce + ".tmp";
     error = staging_->Create(leaf, true);
-    const bool directory_created = !error;
+    if (!error && stop_boundary == 8) { error = Error(std::errc::operation_canceled); return receipt; }
     if (!error) { staged_directory = staging_->Subroot(leaf, false, error); }
     if (staged_directory) {
       record.directory_stage = staged_directory->IntentRootIdentity(error).directory;
@@ -347,9 +1009,10 @@ ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
           error=written.error;
           if (!error && written.bytes!=member.bytes.size()) { error=Error(std::errc::io_error); }
         }
-        // Actual post-member boundary models loss before durable Prepared. Such
-        // a private orphan is preserved/refused, never guessed into authority.
-        if (!error && stop_boundary==4) { error=Error(std::errc::operation_canceled); }
+        // A stop seam follows real filesystem creation/write, with only the
+        // durable preparation plan available on restart.
+        if (!error && stop_boundary==4) { error=Error(std::errc::operation_canceled); return receipt; }
+        if (!error && stop_boundary==7) { error=Error(std::errc::operation_canceled); }
       }
       if (!error && !initial.empty()) {
         record.initial_tree=staging_->CaptureInitialContentTree(leaf,error);
@@ -371,12 +1034,7 @@ ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
       if (!error) { error = staging_->FlushDirectory(); }
     }
     if (error || !staged_directory) {
-      if (directory_created) {
-        blocked_.store(true, std::memory_order_release);
-        pending_reservations_[record.target] = {record.nonce, reserved};
-        pending_reservations_[record.package] = {record.nonce, package_reservation};
-      } else { release(); }
-      return receipt;
+      staged_directory.reset(); abort_preparation(); return receipt;
     }
   } else {
     // The package I/O reservation is already active. Reopen through its
@@ -389,6 +1047,9 @@ ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
       *recovery_, current, bytes, cancel, record.nonce, post_stage_parent_error);
   if (prepared->receipt().error) {
     receipt.metadata = prepared->receipt(); error = receipt.metadata.error;
+    if (kind == Kind::kCreate) {
+      prepared.reset(); staged_directory.reset(); abort_preparation(); return receipt;
+    }
     if (staged_directory || receipt.metadata.stage_created || receipt.metadata.recovery_created) {
       // Retain uncertain, unrecorded staging. It is not a completed operation
       // and cannot be recovered by guessing intended bytes after the fact.
@@ -398,6 +1059,7 @@ ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
     } else { release(); }
     return receipt;
   }
+  if (kind == Kind::kCreate && stop_boundary == 6) { error = Error(std::errc::operation_canceled); return receipt; }
   record.before_exists = current->exists();
   record.before_file = current->exists() ? current->info().file_id : 0;
   record.before.assign(current->bytes().begin(), current->bytes().end());
@@ -407,10 +1069,12 @@ ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
   record.recovery = prepared->receipt().recovery;
   if (record.before_exists) { record.recovery_file = prepared->recovery_->info().file_id; }
   const auto encoded = wire::Encode(record, error);
+  if (!error && kind == Kind::kCreate && cancel && cancel->load(std::memory_order_acquire)) {
+    error = Error(std::errc::operation_canceled);
+    prepared.reset(); staged_directory.reset(); abort_preparation(); return receipt;
+  }
   if (!error) {
-    const auto written = records_->WriteNewFile(Journal(record.nonce), encoded);
-    error = written.error;
-    if (!error && written.bytes != encoded.size()) { error = Error(std::errc::io_error); }
+    error = AppendRecord(Journal(record.nonce), encoded);
   }
   if (error) {
     // A short journal may exist. Never release a namespace with uncertain
@@ -431,8 +1095,10 @@ ContentMutationOwner::Receipt ContentMutationOwner::Mutate(
     pending_reservations_[record.package]={record.nonce,std::move(package_reservation)};
     return receipt;
   }
-  return Advance(record, encoded, std::move(reserved), std::move(package_reservation),
-                 std::move(prepared), false,stop_boundary);
+  auto result = Advance(record, encoded, std::move(reserved), std::move(package_reservation),
+                        std::move(prepared), false,stop_boundary);
+  if (result.complete) { blocked_.store(false,std::memory_order_release); }
+  return result;
 }
 ContentMutationOwner::Receipt ContentMutationOwner::Advance(
     const wire::Record& record, std::span<const uint8_t> encoded,
@@ -526,9 +1192,7 @@ ContentMutationOwner::Receipt ContentMutationOwner::Advance(
   if (!error && receipt.durable) {
     const auto done = wire::Done(encoded, error);
     if (!error) {
-      const auto written = records_->WriteNewFile(Journal(record.nonce, true), done);
-      error = written.error;
-      if (!error && written.bytes != done.size()) { error = Error(std::errc::io_error); }
+      error = AppendRecord(Journal(record.nonce, true), done);
     }
   }
   receipt.complete = !error && receipt.durable;
@@ -553,11 +1217,58 @@ std::error_code ContentMutationOwner::RecoverLocked() {
   if (error) { return error; }
   std::set<std::filesystem::path> present(names.begin(), names.end());
   std::map<std::filesystem::path, uint64_t> known_directories;
+  preserved_artifacts_.clear();
+  error = RecoverPreparations(names,present,known_directories);
+  if (error) { return error; }
+  for (const auto& name : names) {
+    if (!name.string().ends_with(".stream")) { continue; }
+    const auto token = records_->CaptureSnapshot(name, wire::kMaximumRecordBytes, error);
+    wire::Record record;
+    if (!token || !wire::Decode(token->bytes(), record, error)) { return error; }
+    if (!record.streamed || !record.stream_pending || name != StreamJournal(record.nonce) ||
+        record.identity.uuid != wire_identity_.uuid || record.identity.source != wire_identity_.source ||
+        record.identity.device != wire_identity_.device ||
+        record.identity.content_directory != wire_identity_.content_directory ||
+        record.identity.epoch > wire_identity_.epoch) { return Error(std::errc::state_not_recoverable); }
+    if (present.contains(Journal(record.nonce))) { continue; }
+    if (present.contains(Journal(record.nonce, true))) {
+      const auto done = records_->CaptureSnapshot(Journal(record.nonce, true), 256, error);
+      if (!done || !wire::CheckDone(done->bytes(), token->bytes(), error)) { return error; }
+      const auto observed = records_->ObserveIntentSnapshot(*done);
+      if (observed.error || !observed.durable) { return observed.error ? observed.error : Error(std::errc::io_error); }
+      for (const auto& slot : {record.target, record.package}) {
+        const auto old = pending_reservations_.find(slot);
+        if (old != pending_reservations_.end() && old->second.nonce == record.nonce) {
+          old->second.view->ReleaseContentNamespace(); pending_reservations_.erase(old);
+        }
+      }
+      continue;
+    }
+    if (record.identity != wire_identity_) { return Error(std::errc::state_not_recoverable); }
+    std::shared_ptr<HostStorageRoot> reserved, package_reserved;
+    if (const auto old = pending_reservations_.find(record.target);
+        old != pending_reservations_.end() && old->second.nonce == record.nonce) { reserved = old->second.view; }
+    if (const auto old = pending_reservations_.find(record.package);
+        old != pending_reservations_.end() && old->second.nonce == record.nonce) { package_reserved = old->second.view; }
+    if (!reserved) { reserved = content_->ReserveContentNamespace(record.target, {}, false, error); }
+    if (!reserved) { return error; }
+    if (!package_reserved) { package_reserved = content_->ReserveContentNamespace(record.package, {}, true, error); }
+    if (!package_reserved) { pending_reservations_[record.target] = {record.nonce, reserved}; return error; }
+    pending_reservations_[record.target] = {record.nonce, reserved};
+    pending_reservations_[record.package] = {record.nonce, package_reserved};
+    error = RollbackStream(record, token->bytes(), reserved, package_reserved);
+    if (error) { return error; }
+  }
   for (const auto& name : names) {
     const auto text = name.string();
-    if (text == "owner.v1") { continue; }
+    if (text == "owner.v1" || text.ends_with(".stream") || text.ends_with(".plan") ||
+        text.ends_with(".abort") || text.ends_with(".keep0") || text.ends_with(".keep1") ||
+        text.find(".partial-") != std::string::npos) { continue; }
     if (text.ends_with(".done") || text.ends_with(".retire")) {
-      if (!present.contains(Journal(text.substr(8, 32)))) { return Error(std::errc::bad_message); }
+      if (!present.contains(Journal(text.substr(8, 32))) &&
+          !(text.ends_with(".done") && present.contains(StreamJournal(text.substr(8, 32))))) {
+        return Error(std::errc::bad_message);
+      }
       continue;
     }
     const auto intent = records_->CaptureSnapshot(name,
@@ -582,6 +1293,15 @@ std::error_code ContentMutationOwner::RecoverLocked() {
         record.identity.source != wire_identity_.source || record.identity.device != wire_identity_.device ||
         record.identity.content_directory != wire_identity_.content_directory ||
         record.identity.epoch > wire_identity_.epoch) { return Error(std::errc::state_not_recoverable); }
+    if (record.stream_pending) { return Error(std::errc::bad_message); }
+    if (record.streamed) {
+      const auto admitted = records_->CaptureSnapshot(StreamJournal(record.nonce), wire::kMaximumRecordBytes, error);
+      wire::Record admission;
+      if (!admitted || !admitted->exists() || !wire::Decode(admitted->bytes(), admission, error) ||
+          !SameStreamAuthority(admission, record)) {
+        return error ? error : Error(std::errc::state_not_recoverable);
+      }
+    }
     if (record.kind == Kind::kCreate) {
       known_directories.emplace("package-" + record.nonce + ".tmp", record.directory_stage);
     }
@@ -657,9 +1377,16 @@ std::error_code ContentMutationOwner::RecoverLocked() {
   for (const auto& [leaf, directory] : staged) {
     const auto found = known_directories.find(leaf);
     if (found == known_directories.end() || found->second != directory) {
-      // No durable intent authenticates this orphan. Preserve it privately,
-      // never adopt/delete it or publish a success-shaped empty package.
-      return Error(std::errc::state_not_recoverable);
+      // Legacy private setup has no payload ownership proof. Record an exact
+      // observation and preserve it opaquely; it may never become a package.
+      const auto text = leaf.string();
+      if (!text.starts_with("package-") || text.size() != 44) { return Error(std::errc::state_not_recoverable); }
+      const auto nonce = text.substr(8,32);
+      if (present.contains(Journal(nonce)) || present.contains(StreamJournal(nonce)) ||
+          present.contains(PreparationJournal(nonce))) { return Error(std::errc::state_not_recoverable); }
+      wire::Preservation ticket{wire_identity_,nonce,false,directory,true,leaf,{}};
+      error = PreserveArtifact(ticket,staging_);
+      if (error) { return error; }
     }
   }
   if (!pending_reservations_.empty()) {
@@ -793,7 +1520,7 @@ ContentMutationOwner::PackageReceipt ContentMutationOwner::DeleteInternal(
     error = Error(std::errc::operation_canceled); return receipt;
   }
   const auto names = records_->ListContentMutationFiles(error);
-  if (!error && (maximum_records_ < 3 || names.size() > maximum_records_ - 3)) {
+  if (!error && (maximum_records_ < 6 || names.size() > maximum_records_ - 6)) {
     error = Error(std::errc::no_space_on_device);
   }
   if (error) { return receipt; }
@@ -851,9 +1578,7 @@ ContentMutationOwner::PackageReceipt ContentMutationOwner::DeleteInternal(
   if (!error && expected->admission_retired()) { error = Error(std::errc::no_such_device); }
   expected.reset();  // Drop all captured payload FDs before actual retirement.
   if (!error) {
-    const auto written = records_->WriteNewFile(Journal(record.nonce), encoded);
-    error = written.error;
-    if (!error && written.bytes != encoded.size()) { error = Error(std::errc::io_error); }
+    error = AppendRecord(Journal(record.nonce), encoded);
   }
   if (error || stop_after_prepared) {
     if (created) {
@@ -956,9 +1681,7 @@ ContentMutationOwner::PackageReceipt ContentMutationOwner::AdvancePackage(
   if (!error && !retire->exists()) {
     const auto bytes = package_wire::Retire(encoded, error);
     if (!error) {
-      const auto written = records_->WriteNewFile(retire_leaf, bytes);
-      error = written.error;
-      if (!error && written.bytes != bytes.size()) { error = Error(std::errc::io_error); }
+      error = AppendRecord(retire_leaf, bytes);
     }
     if (!error) { retire = records_->CaptureSnapshot(retire_leaf, 256, error); }
     if (!error && (!retire || !retire->exists() ||
@@ -986,9 +1709,7 @@ ContentMutationOwner::PackageReceipt ContentMutationOwner::AdvancePackage(
   if (!error) {
     const auto bytes = package_wire::Done(encoded, retire->bytes(), error);
     if (!error) {
-      const auto written = records_->WriteNewFile(Journal(record.nonce, true), bytes);
-      error = written.error;
-      if (!error && written.bytes != bytes.size()) { error = Error(std::errc::io_error); }
+      error = AppendRecord(Journal(record.nonce, true), bytes);
     }
   }
   if (!error) { error = CheckCurrent(); }

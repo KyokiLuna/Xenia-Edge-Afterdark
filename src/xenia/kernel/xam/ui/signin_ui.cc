@@ -25,7 +25,7 @@ SigninUI::SigninUI(xe::ui::ImGuiDrawer* imgui_drawer,
       users_needed_(users_needed),
       title_("Sign In") {}
 
-void SigninUI::OnDraw(ImGuiIO& io) {
+void SigninUI::OnDrawDialog(ImGuiIO& io) {
   bool first_draw = false;
   if (!has_opened_) {
     ImGui::OpenPopup(title_.c_str());
@@ -65,6 +65,10 @@ void SigninUI::OnDraw(ImGuiIO& io) {
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ShouldCloseFromGamepad()) {
       ImGui::CloseCurrentPopup();
       Close();
+      ImGui::EndPopup();
+      ImGui::PopStyleVar(2);
+      ImGui::PopStyleColor(14);
+      return;
     }
     for (uint32_t i = 0; i < users_needed_; i++) {
       ImGui::BeginGroup();
@@ -268,13 +272,14 @@ void SigninUI::OnDraw(ImGuiIO& io) {
           profile_map[slot] = xuid;
         }
       }
-      profile_manager_->LoginMultiple(profile_map);
-      signin_failed_ = false;
+      if (!profile_map.empty()) { profile_manager_->LoginMultiple(profile_map); }
+      signin_failed_ = profile_map.empty();
       for (const auto& [slot, xuid] : profile_map) {
         const auto actual = profile_manager_->CaptureProfile(slot);
         if (!actual || actual->xuid() != xuid) { signin_failed_ = true; }
       }
       if (!signin_failed_) {
+        accepted_ = true;
         ImGui::CloseCurrentPopup();
         Close();
       }
@@ -298,7 +303,7 @@ void SigninUI::OnDraw(ImGuiIO& io) {
 }
 
 void SigninUI::ReloadProfiles(bool first_draw) {
-  auto profile_manager = kernel_state()->xam_state()->profile_manager();
+  auto* profile_manager = profile_manager_;
   auto profiles = profile_manager->GetAccounts();
 
   profile_data_.clear();

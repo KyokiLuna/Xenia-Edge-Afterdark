@@ -19,7 +19,7 @@
 #include "xenia/kernel/xam/xam_content_device.h"
 
 namespace xe::kernel {
-namespace xam { class ManagedFormatSourceProof; }
+namespace xam { class ManagedFormatSourceProof; class SelectedMediaSourceProof; }
 
 // An owned physical-volume projection from the common content-source catalog.
 // Installed-system content on an HDD contributes to the same device. Host
@@ -36,6 +36,9 @@ struct NativeContentStorageDevice {
   // Opaque proof from the actual common registry. It holds no old MVA/source
   // lease; absence/retirement never becomes format permission from path data.
   std::shared_ptr<const xam::ManagedFormatSourceProof> managed_format_proof;
+  // Weak selected-source publication metadata. Native device/USB attachment
+  // receipts and cursor use admission remain separate, mandatory proofs.
+  std::shared_ptr<const xam::SelectedMediaSourceProof> selected_media_proof;
   bool operator==(const NativeContentStorageDevice&) const = default;
 };
 

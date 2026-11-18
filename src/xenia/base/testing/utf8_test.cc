@@ -8,9 +8,11 @@
  */
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "xenia/base/string.h"
+#include "xenia/base/string_key.h"
 
 #include "third_party/catch/include/catch.hpp"
 
@@ -227,6 +229,26 @@ TEST_CASE("UTF-8 Lower ASCII", "[utf8]") {
 
 // TODO(gibbed): hash_fnv1a
 // TODO(gibbed): hash_fnv1a_case
+
+TEST_CASE("Case-insensitive package roots share one map entry", "[utf8]") {
+  std::unordered_map<string_key_insensitive, uint32_t> roots;
+  roots.rehash(257);
+  roots.emplace(string_key_insensitive::create(std::string("DLC1")), 7);
+
+  const string_key_insensitive query(std::string_view("dlc1"));
+  auto found = roots.find(query);
+  REQUIRE(found != roots.end());
+  REQUIRE(found->second == 7);
+  REQUIRE_FALSE(roots.try_emplace(query, 9).second);
+  REQUIRE(roots.size() == 1);
+
+  roots.rehash(1021);
+  found = roots.find(string_key_insensitive(std::string_view("DlC1")));
+  REQUIRE(found != roots.end());
+  REQUIRE(found->second == 7);
+  REQUIRE(roots.erase(query) == 1);
+  REQUIRE(roots.empty());
+}
 
 TEST_CASE("UTF-8 Upper ASCII", "[utf8]") {
   REQUIRE(utf8::upper_ascii("abcxyz") == "ABCXYZ");

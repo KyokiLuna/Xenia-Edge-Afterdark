@@ -10,6 +10,7 @@
 #ifndef XENIA_EMULATOR_H_
 #define XENIA_EMULATOR_H_
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +24,8 @@
 #include "xenia/apu/audio_media_player.h"
 #include "xenia/base/delegate.h"
 #include "xenia/base/exception_handler.h"
+#include "xenia/base/threading.h"
+#include "xenia/emulator_lifecycle.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/title_execution_state.h"
 #include "xenia/kernel/util/game_info_database.h"
@@ -49,6 +52,8 @@ class Processor;
 class ThreadState;
 }  // namespace cpu
 namespace filesystem {
+class ConsoleStorageVolume;
+class CacheStorageOwner;
 class SnapshotRecoveryOwner;
 }  // namespace filesystem
 namespace gpu {
@@ -58,6 +63,7 @@ namespace kernel {
 class ConsoleDataOwner;
 namespace xam {
 struct ProfileGpdReadModels;
+class ContentManager;
 }
 }  // namespace kernel
 namespace hid {
@@ -102,6 +108,16 @@ class Emulator {
   // short capture only. Returned data never borrows Kernel/ProfileManager.
   std::shared_ptr<const kernel::xam::ProfileGpdReadModels> CaptureProfileGpds(
       uint8_t slot, std::error_code&);
+
+  // Try-acquired runtime lifetime for one synchronous metadata/owned-lease
+  // capture. Return before UI enqueue, PPC, provider waits or modal UI.
+  // A Kernel pointer may escape only with an actual owned service admission
+  // captured here and retained through later queue publication; never alone.
+  X_RESULT WithHostRuntime(
+      const std::function<X_RESULT(kernel::KernelState&)>&);
+  // Same boundary for catalog snapshots; return before opening any explorer.
+  X_RESULT WithContentCatalog(
+      const std::function<X_RESULT(kernel::xam::ContentManager&)>&);
 
   // Full command line used when launching the process.
   const std::filesystem::path& command_line() const { return command_line_; }
@@ -315,12 +331,15 @@ class Emulator {
 
   // Mounts scratch, cache, and devkit drives based on cvars.
   void MountStandardDrives();
+  X_STATUS PrepareTitleCaches();
+  bool RetireTitleCaches(bool release_native);
 
   // Terminates the currently running title.
   X_STATUS TerminateTitle();
 
   const std::unique_ptr<vfs::Device> CreateVfsDevice(
-      const std::filesystem::path& path, const std::string_view mount_path);
+      const std::filesystem::path& path, const std::string_view mount_path,
+      std::shared_ptr<const filesystem::ConsoleStorageVolume> forced_volume = {});
 
   X_STATUS MountPath(const std::filesystem::path& path,
                      const std::string_view mount_path);
@@ -414,6 +433,7 @@ class Emulator {
               std::move(other.installation_error_message_)),
           icon_data_(std::move(other.icon_data_)),
           cancelled_(other.cancelled_.load()),
+          import_job_id_(std::exchange(other.import_job_id_, 0)),
           mutex_(std::move(other.mutex_)) {}
 
     // Move assignment
@@ -432,6 +452,7 @@ class Emulator {
             std::move(other.installation_error_message_);
         icon_data_ = std::move(other.icon_data_);
         cancelled_.store(other.cancelled_.load());
+        import_job_id_ = std::exchange(other.import_job_id_, 0);
         mutex_ = std::move(other.mutex_);
       }
       return *this;
@@ -456,10 +477,41 @@ class Emulator {
 
     std::vector<uint8_t> icon_data_;
     std::atomic<bool> cancelled_{false};
+    // Numeric correlation only; native/storage owners live in the operation.
+    uint64_t import_job_id_ = 0;
 
     // Guards every non-atomic field the install thread writes and Tick reads.
     std::unique_ptr<std::mutex> mutex_ = std::make_unique<std::mutex>();
   };
+
+  struct ContentImportTarget {
+    uint32_t device_id = 1;
+    uint32_t title_id = 0;
+    uint64_t owner_xuid = 0;
+    std::vector<XContentType> content_types;
+    std::optional<uint32_t> expected_title_version;
+  };
+  // Thread-neutral admission and owned jobs. No std::mutex ownership crosses
+  // the UI/worker boundary; Shutdown cancels/drains pure host I/O, then clears
+  // all prepared storage owners before deleting the old Kernel.
+  class HostContentImport final {
+   public:
+    ~HostContentImport();
+    HostContentImport(const HostContentImport&) = delete;
+    HostContentImport& operator=(const HostContentImport&) = delete;
+    X_STATUS Prepare(const std::filesystem::path&, ContentInstallEntry&,
+                     const std::optional<ContentImportTarget>& = std::nullopt);
+    X_STATUS Install(ContentInstallEntry&);
+    void Cancel();
+   private:
+    friend class Emulator;
+    struct State;
+    explicit HostContentImport(std::shared_ptr<State>);
+    std::shared_ptr<State> state_;
+  };
+  // Host package installation is deliberately idle-only. Guest installers
+  // remain on their own native storage path.
+  std::shared_ptr<HostContentImport> TryBeginHostContentImport(std::error_code&);
 
   // Whether content holds title data from before profiles for DataMigration.
   bool HasDataToMigrate() const;
@@ -470,7 +522,7 @@ class Emulator {
   X_STATUS ProcessContentPackageHeader(const std::filesystem::path& path,
                                        ContentInstallEntry& installation_info);
 
-  // Extract content of package to content specific directory.
+  // Legacy source entry points. They refuse without the owned idle workflow.
   X_STATUS InstallContentPackage(const std::filesystem::path& path,
                                  ContentInstallEntry& installation_info);
 
@@ -489,6 +541,14 @@ class Emulator {
                      std::vector<uint8_t> launch_data,
                      bool keep_xbox_game = true,
                      const std::string& package_path = {});
+  // Called only by the active prepared replacement on the owned host worker.
+  // Resolves the retained old-Kernel target before native stop. A true result
+  // records host return, not successful guest entry or native/UI readiness.
+  bool RelaunchSystemApplication(kernel::KernelState* expected_kernel,
+                                 uint64_t generation,
+                                 const std::string& guest_path,
+                                 uint32_t launch_flags,
+                                 std::vector<uint8_t> launch_data);
 
   // Stops the current title and returns the kernel to a fresh, idle state
   // (no title loaded). Must be called from a non-guest thread.
@@ -562,6 +622,63 @@ class Emulator {
   void set_disc_picker(DiscPicker picker) { disc_picker_ = std::move(picker); }
 
   void WaitUntilExit();
+  enum class ExitWait { kTitleExited, kControl };
+  ExitWait WaitUntilExit(threading::WaitHandle* control);
+  bool HasLifecycleDriver() const { return bool(lifecycle_); }
+  bool LifecycleClosing() const { return lifecycle_ && lifecycle_->closing(); }
+  bool SubmitLifecycle(EmulatorLifecycle::Request request) {
+    return lifecycle_ && lifecycle_->Submit(std::move(request));
+  }
+  bool RequestLifecycleQuit(uint64_t generation = 0) {
+    EmulatorLifecycle::Request request;
+    request.kind = EmulatorLifecycle::Kind::kQuit;
+    request.expected_generation = generation;
+    return SubmitLifecycle(std::move(request));
+  }
+  EmulatorLifecycle::Producer AdmitLifecyclePreparation() {
+    return lifecycle_ ? lifecycle_->AdmitProducer()
+                      : EmulatorLifecycle::Producer{};
+  }
+  template <class F>
+  std::optional<EmulatorLifecycle::PreparedRequest> PrepareLifecycleWork(
+      EmulatorLifecycle::Kind kind, uint64_t generation,
+      const EmulatorLifecycle::Producer& producer, F&& body) noexcept try {
+#if XE_PLATFORM_MAC
+    // Match the existing in-process relaunch limitation. Refuse before PPC;
+    // no speculative native request may depend on unsupported cancellation.
+    (void)kind; (void)generation; (void)producer; (void)body;
+    return {};
+#else
+    if (!lifecycle_) { return {}; }
+    EmulatorLifecycle::Request request;
+    request.kind = kind;
+    request.expected_generation = generation;
+    request.SetWork(std::forward<F>(body));
+    return lifecycle_->Prepare(std::move(request), producer);
+#endif
+  } catch (...) {
+    return {};
+  }
+  bool PublishPreparedLifecycle(
+      EmulatorLifecycle::PreparedRequest& request,
+      const EmulatorLifecycle::Producer& producer) noexcept {
+    return lifecycle_ &&
+           lifecycle_->PublishPreparedWithoutWake(request, producer);
+  }
+  bool DeferLifecycleClose() {
+    return lifecycle_ && lifecycle_->DeferUserClose();
+  }
+  template <class F>
+  bool SubmitLifecycleWork(EmulatorLifecycle::Kind kind, uint64_t generation,
+                           F&& body) noexcept try {
+    EmulatorLifecycle::Request request;
+    request.kind = kind;
+    request.expected_generation = generation;
+    request.SetWork(std::forward<F>(body));
+    return SubmitLifecycle(std::move(request));
+  } catch (...) {
+    return false;
+  }
 
  public:
   xe::Delegate<uint32_t, const std::string_view> on_launch;
@@ -621,6 +738,13 @@ class Emulator {
   }
 
  private:
+  friend class app::EmulatorApp;
+  bool InstallLifecycle(std::shared_ptr<EmulatorLifecycle> lifecycle);
+  bool ShutdownOnOwnedWorker(EmulatorLifecycle::Work&);
+  bool ShutdownInternal(bool owned_ui_close);
+  void PrepareTitleStop(bool close_ui);
+  std::shared_ptr<EmulatorLifecycle> lifecycle_;
+  kernel::KernelState* native_stop_phase_returned_kernel_ = nullptr;
   enum : uint64_t { EmulatorFlagDisclaimerAcknowledged = 1ULL << 0 };
   static uint64_t GetPersistentEmulatorFlags();
   static void SetPersistentEmulatorFlags(uint64_t new_flags);
@@ -629,6 +753,8 @@ class Emulator {
 
   // Native domains can start resident SYSTEM workers. Join their CPU and
   // callback producers while graphics/audio/input providers are still alive.
+  bool CloseHostContentImportBeforeShutdown();
+  bool HostContentImportPending() const;
   void StopNativeSystemBeforeProviderShutdown();
   bool StartNativeSystemFirstRecordProbeBeforeTitle();
   bool ValidateNativeSystemUiLaunchSelection() const;
@@ -691,6 +817,12 @@ class Emulator {
   vfs::InstalledSystemOperationGate system_operations_;
   std::filesystem::path content_root_;
   std::filesystem::path cache_root_;
+  // TITLE utility cache only. Native SYSTEM SysCache is a separate owner.
+  std::shared_ptr<filesystem::CacheStorageOwner> title_cache_owner_;
+  std::shared_ptr<vfs::Device> title_cache_metadata_device_;
+  std::array<std::string,3> title_cache_source_ids_;
+  std::array<uint64_t,3> title_cache_source_generations_{};
+  uint64_t title_cache_registration_generation_=0;
   // Console authority survives title resets and is destroyed after Kernel/VFS.
   std::unique_ptr<kernel::ConsoleDataOwner> console_data_owner_;
   // Explicit primary managed-storage recovery authority, protected before
@@ -733,6 +865,8 @@ class Emulator {
   // Held across a launch and a whole relaunch so title teardown waits for a
   // launch to finish. Recursive, as a relaunch launches under it.
   std::recursive_mutex launch_mutex_;
+  size_t host_runtime_captures_ = 0;
+  std::shared_ptr<HostContentImport::State> host_content_import_;
   // Relaunch requests so far, to drop one a newer request replaced while it
   // waited for the lock.
   std::atomic<uint64_t> relaunch_requests_{0};

@@ -346,7 +346,8 @@ std::shared_ptr<const NativeFrameOwnerSession::Source>
 NativeFrameOwnerSession::Freeze(
     const ThreadIdentity& thread, Update& update,
     std::span<const uint8_t> primary,
-    std::shared_ptr<const gpu::NativeSystemTitleInput> title_input) {
+    std::shared_ptr<const gpu::NativeSystemTitleInput> title_input,
+    std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard) {
   if (!MatchesThread(thread) || !RuntimeAdmitted(false) || primary.empty() ||
       primary.size() > kMaxPrimaryBytes || primary.size() % 4 ||
       update.session_.lock().get() != this) {
@@ -381,7 +382,8 @@ NativeFrameOwnerSession::Freeze(
       return {};
     }
     source = std::shared_ptr<const Source>(new Source(
-        owner_, source_serial, std::move(immutable), std::move(title_input)));
+        owner_, source_serial, std::move(immutable), std::move(title_input),
+        std::move(presentation_guard)));
     operation.serial_ = StartOperationLocked();
     if (!operation.serial_) {
       return {};
@@ -1165,7 +1167,7 @@ NativeFrameOwnerSession::MintExecutionRequest(
           plan, {owner_, source->serial()}, backend_epoch, output,
           std::move(input_ranges), std::move(shaders), std::move(pins),
           std::move(authority), std::move(output_layout),
-          std::move(input_snapshot)));
+          std::move(input_snapshot), source->presentation_guard()));
   if (!request->ResourcesValid()) {
     return {};
   }
@@ -1268,7 +1270,8 @@ bool NativeFrameOwnerSession::CheckExecutionRequest(
 std::shared_ptr<const NativeFrameOwnerSession::Source>
 NativeFrameOwnerSession::FreezeCurrentUpdate(
     const ThreadIdentity& thread, std::span<const uint8_t> primary,
-    std::shared_ptr<const gpu::NativeSystemTitleInput> title_input) {
+    std::shared_ptr<const gpu::NativeSystemTitleInput> title_input,
+    std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard) {
   Update borrowed;
   {
     std::lock_guard lock(mutex_);
@@ -1276,7 +1279,8 @@ NativeFrameOwnerSession::FreezeCurrentUpdate(
     borrowed.serial_ = active_update_;
   }
   try {
-    auto source = Freeze(thread, borrowed, primary, std::move(title_input));
+    auto source = Freeze(thread, borrowed, primary, std::move(title_input),
+                         std::move(presentation_guard));
     // This is a view of the outer guard's admission, not a second owner of it.
     // Failed validation must not implicitly end the original update.
     borrowed.serial_ = 0;

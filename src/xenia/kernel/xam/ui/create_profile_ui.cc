@@ -16,7 +16,7 @@ namespace kernel {
 namespace xam {
 namespace ui {
 
-void CreateProfileUI::OnDraw(ImGuiIO& io) {
+void CreateProfileUI::OnDrawDialog(ImGuiIO& io) {
   if (!has_opened_) {
     ImGui::OpenPopup("Create Profile");
     has_opened_ = true;
@@ -56,7 +56,7 @@ void CreateProfileUI::OnDraw(ImGuiIO& io) {
     }
 
     auto profile_manager =
-        emulator_->kernel_state()->xam_state()->profile_manager();
+        kernel_->xam_state()->profile_manager();
 
     ImGui::BeginDisabled(created_profile_xuid_ != 0);
     ImGui::Text("Gamertag:");
@@ -97,20 +97,29 @@ void CreateProfileUI::OnDraw(ImGuiIO& io) {
       if (!created_profile_xuid_) {
         created_profile_wanted_signin_ = (profile_manager->GetAccountCount() == 0);
         const auto result = profile_manager->CreateProfileDetailed(
-            gt, created_profile_wanted_signin_, false,
+            gt, false, false,
             uint32_t(avatar_preset_), uint32_t(stock_picture_));
         creation_failed_ = !result.published;
         if (result.published) {
           created_profile_xuid_ = result.xuid;
           created_profile_discovered_ = result.discovered;
-          created_profile_signed_in_ = result.signed_in;
+          if (result.discovered && created_profile_wanted_signin_ &&
+              !kernel_->emulator()->is_title_open()) {
+            profile_manager->Login(result.xuid, uint8_t(controller_));
+          }
+          const auto signed_in = profile_manager->CaptureProfile(
+              uint8_t(controller_));
+          created_profile_signed_in_ = signed_in && signed_in->xuid() == result.xuid;
         }
       } else if (pending_load) {
         created_profile_discovered_ = profile_manager->LoadAccount(created_profile_xuid_);
         if (created_profile_discovered_) {
           // Observe an actual existing sign-in only. Do not mutate an active
           // native identity or invent a successful deferred autologin here.
-          created_profile_signed_in_ = bool(profile_manager->CaptureProfile(created_profile_xuid_));
+          const auto signed_in = profile_manager->CaptureProfile(
+              uint8_t(controller_));
+          created_profile_signed_in_ = signed_in &&
+              signed_in->xuid() == created_profile_xuid_;
         }
       } else {
         done = true;

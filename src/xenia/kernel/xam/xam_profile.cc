@@ -10,6 +10,7 @@
 #include "xenia/kernel/kernel_state.h"
 #include <array>
 #include <cstring>
+#include <utility>
 #include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/profile_manager.h"
@@ -49,13 +50,14 @@ dword_result_t XamProfileOpen_entry(
   /* Notes:
       - If xuid is not local then returns X_ERROR_INVALID_PARAMETER
   */
+  uint32_t mounted_device_id = 0;
   if (!kernel_state()->xam_state()->profile_manager()->MountProfile(
-          xuid, mount_path.value())) {
+          xuid, mount_path.value(), &mounted_device_id)) {
     return X_ERROR_INVALID_PARAMETER;
   }
   if (content_data_ptr) {
     content_data_ptr->content_type = XContentType::kProfile;
-    content_data_ptr->device_id = 1;
+    content_data_ptr->device_id = mounted_device_id;
     content_data_ptr->set_file_name(xe::string_util::to_hex_string(xuid));
     content_data_ptr->title_id = kDashboardID;
   }
@@ -64,7 +66,7 @@ dword_result_t XamProfileOpen_entry(
 DECLARE_XAM_EXPORT1(XamProfileOpen, kNone, kImplemented);
 
 dword_result_t XamProfileCreate_entry(
-    dword_t flags, dword_t device_id, qword_t xuid,
+    dword_t flags, lpdword_t device_id, qword_t xuid,
     pointer_t<X_XAMACCOUNTINFO> account,
     pointer_t<X_USER_PAYMENT_INFO> payment_info,
     pointer_t<X_PASSPORT_SESSION_TOKEN> user_token,
@@ -73,17 +75,18 @@ dword_result_t XamProfileCreate_entry(
   auto* kernel = kernel_state();
   auto& memory = *kernel->memory();
   const auto output = profile_info_ptr.guest_address();
-  if (!account || !output ||
-      !util::GuestIoRangeValid(memory, output, 4, true)) {
+  const auto device = device_id.guest_address();
+  if (!account || !output || !device ||
+      !util::GuestIoRangeValid(memory, output, 4, true) ||
+      !util::GuestIoRangeValid(memory, device, 4, false)) {
     return X_E_INVALIDARG;
   }
-  // Retail17559 r4 is a DWORD device VALUE, not an output pointer. Preserve
-  // its complete 0xAC0 completion layout, including the actual 0x17C Account.
+  // Retail17559 r4 points to a mutable device DWORD. Copy the complete input
+  // packet without borrowing any caller pointer across provider work.
   std::array<uint8_t, 0xAC0> bytes{};
   xe::store_and_swap<uint32_t>(bytes.data(), uint32_t(flags) & 0x7fffffffu);
-  xe::store_and_swap<uint32_t>(bytes.data() + 4, device_id);
-  const uint64_t proper_xuid = xuid ? uint64_t(xuid) : GenerateXuid();
-  xe::store_and_swap<uint64_t>(bytes.data() + 0xA78, proper_xuid);
+  xe::store_and_swap<uint32_t>(bytes.data() + 4, device);
+  xe::store_and_swap<uint64_t>(bytes.data() + 0xA78, uint64_t(xuid));
   xe::store_and_swap<uint32_t>(bytes.data() + 0xABC, uint32_t(flags) >> 31);
   if (XFAILED(util::ReadGuestIoBuffer(memory, account.guest_address(),
       std::span<uint8_t>(bytes).subspan(8, 0x17C))) ||
@@ -98,31 +101,10 @@ dword_result_t XamProfileCreate_entry(
           std::span<uint8_t>(bytes).subspan(0xA9C, 0x1C))))) {
     return X_E_INVALIDARG;
   }
-  auto* manager = kernel->xam_state()->profile_manager();
-  const auto source = kernel->xam_state()->content_manager()->sources().Source("hdd");
-  if (!source || !source->available ||
-      uint32_t(device_id) != source->source.device_id) {
-    return X_E_DEVICE_NOT_CONNECTED;
-  }
-  std::error_code error;
-  const auto record = manager->AllocateProfileCreationResult(bytes, error);
-  if (!record) { return X_HRESULT_FROM_WIN32(X_ERROR_NOT_ENOUGH_MEMORY); }
-  X_XAMACCOUNTINFO copied_account{};
-  std::memcpy(&copied_account, bytes.data() + 8, sizeof(copied_account));
-  const auto result = manager->CreateProfileDetailed(copied_account, proper_xuid);
-  // This HLE implementation completes the real producer synchronously. The
-  // owned completion is not a fabricated retail Task or fabricated success.
-  if (!manager->CompleteProfileCreationResult(record, result)) {
-    manager->DiscardProfileCreationResult(record);
-    return X_E_FAIL;
-  }
-  std::array<uint8_t, 4> pointer_bytes{};
-  xe::store_and_swap<uint32_t>(pointer_bytes.data(), record);
-  if (XFAILED(util::WriteGuestIoBuffer(memory, output, pointer_bytes))) {
-    manager->DiscardProfileCreationResult(record);
-    return X_E_INVALIDARG;
-  }
-  return X_E_SUCCESS;
+  // This manager-owned synchronous provider result is distinct from the
+  // original native callback/Task protocol. It never fabricates packet+AB8.
+  return kernel->xam_state()->profile_manager()->ProduceProfileCreationResult(
+      std::move(bytes), output);
 }
 DECLARE_XAM_EXPORT1(XamProfileCreate, kNone, kSketchy);
 

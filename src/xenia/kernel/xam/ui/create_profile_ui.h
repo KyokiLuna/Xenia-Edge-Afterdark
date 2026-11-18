@@ -19,15 +19,16 @@ namespace ui {
 
 class CreateProfileUI final : public XamDialog {
  public:
-  CreateProfileUI(xe::ui::ImGuiDrawer* imgui_drawer, Emulator* emulator)
-      : XamDialog(imgui_drawer), emulator_(emulator) {
+  CreateProfileUI(xe::ui::ImGuiDrawer* imgui_drawer, KernelState* kernel,
+                   uint32_t controller)
+      : XamDialog(imgui_drawer), kernel_(kernel), controller_(controller) {
     memset(gamertag_, 0, sizeof(gamertag_));
   }
 
   ~CreateProfileUI() = default;
 
  private:
-  void OnDraw(ImGuiIO& io) override;
+  void OnDrawDialog(ImGuiIO& io) override;
 
   bool has_opened_ = false;
   bool focus_set_ = false;
@@ -42,7 +43,8 @@ class CreateProfileUI final : public XamDialog {
   bool created_profile_signed_in_ = false;
   int avatar_preset_ = 0;
   int stock_picture_ = 0;
-  Emulator* emulator_;
+  KernelState* kernel_;
+  const uint32_t controller_;
 };
 
 }  // namespace ui

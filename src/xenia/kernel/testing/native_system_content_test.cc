@@ -211,7 +211,7 @@ TEST_CASE("Avatar catalog documents prerequisites without enabling its routes",
     ++avatars;
     CHECK(profile.uint64_register_mask == 0);
   }
-  CHECK(avatars == 12);
+  CHECK(avatars == 13);
   CHECK(managed_io == 2);
   CHECK(notifications == 6);
   const auto* init =

@@ -51,6 +51,10 @@
 // For implementation use.
 DECLARE_bool(present_render_pass_clear);
 
+namespace xe::gpu {
+class NativeFramePresentationGuard;
+class NativeFramePaintDrainObservation;
+}
 namespace xe {
 namespace ui {
 
@@ -149,6 +153,7 @@ struct NativeUiPlaneImageReference {
   std::shared_ptr<const NativeUiPlaneAuthority> authority;
   uint64_t backend_epoch = 0;
   std::shared_ptr<void> publication;
+  std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard = {};
   bool valid() const noexcept;
 };
 class NativeUiPlaneImageSelection {
@@ -163,12 +168,17 @@ class NativeUiPlaneImageSelection {
     NativeUiPlaneVisibility visibility;
     Selection previous;
     bool authority_live = false, desired_live = false, previous_live = false;
+    NativeUiPlaneImageReference desired_reference, modal_reference;
+    bool desired_reference_live = false, modal_reference_live = false,
+         previous_reference_live = false;
     // Call only outside backend/submission locks. No selection mutation.
     void CheckLiveness() noexcept;
   };
   // All methods except CheckLiveness require the caller's backend lock. Only
   // actual paint may change selection. Receipt/status never promote an image.
-  Preflight Prepare(const NativeUiPlaneVisibility&) const;
+  Preflight Prepare(const NativeUiPlaneVisibility&,
+                    const NativeUiPlaneImageReference& desired = {},
+                    const NativeUiPlaneImageReference& modal = {}) const;
   Selection Select(const Preflight&, const NativeUiPlaneVisibility& current,
                    const NativeUiPlaneImageReference& desired,
                    const NativeUiPlaneImageReference& modal);
@@ -500,6 +510,15 @@ class Presenter {
   virtual NativeUiPlaneStatus GetNativeUiPlaneStatus(
       const gpu::NativeFrameSubmissionIdentity&, uint64_t) {
     return {};
+  }
+  // Exact revoked origin only. Waits actual already-admitted UI sampling;
+  // never native Clear/Source completion, root withdrawal or scanout proof.
+  // Unsupported backends refuse. Call without any transport/PM/observer lock.
+  virtual bool DrainNativeUiPlanePaintForGuard(
+      const std::shared_ptr<const NativeUiPlaneAuthority>&,
+      const std::shared_ptr<const gpu::NativeFramePresentationGuard>&,
+      gpu::NativeFramePaintDrainObservation* = nullptr) {
+    return false;
   }
   // Lifetime mode only, not readiness/admission. Drains an active ordinary
   // capture before native work and excludes further legacy capture attempts.

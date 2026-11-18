@@ -679,6 +679,53 @@ static bool ResolveLaunchTarget(const vfs::Entry* entry,
   return true;
 }
 
+std::optional<SystemLaunchTarget> CaptureSystemLaunchTarget(
+    KernelState& kernel, std::string_view guest_path) {
+  // This path is called by the actual host worker before old-Kernel stop.
+  // No guest/native lock, owner lookup, caller stack or ambient kernel TLS.
+  if (XThread::IsInThread() ||
+      global_critical_region::is_held_by_current_thread() || guest_path.empty() ||
+      guest_path.size() > 0x103 || !NamesDevice(guest_path)) return {};
+  auto* fs = kernel.file_system();
+  std::string translated;
+  if (XFAILED(fs->TranslateSymbolicPath(guest_path, translated))) return {};
+  auto device = fs->AcquirePathDevice(translated);
+  if (!device || device->namespace_retiring()) return {};
+  std::string_view mount = device->mount_path();
+  while (!mount.empty() && mount.back() == '\\') mount.remove_suffix(1);
+  if (mount.empty() || !xe::utf8::starts_with_case(translated, mount) ||
+      (translated.size() > mount.size() && translated[mount.size()] != '\\')) return {};
+  std::string_view relative(translated);
+  relative.remove_prefix(mount.size());
+  while (!relative.empty() && relative.front() == '\\') relative.remove_prefix(1);
+  // Resolve through this exact retained device, never a second alias lookup
+  // that could return a different unretained namespace generation.
+  const auto* entry = device->ResolvePath(relative);
+  if (!entry || device->namespace_retiring() || entry->device() != device.get() ||
+      (entry->attributes() & vfs::kFileAttributeDirectory)) return {};
+  SystemLaunchTarget target;
+  target.owner = std::move(device);
+  if (const auto* host = dynamic_cast<const vfs::HostPathEntry*>(entry)) {
+    target.host_path = host->host_path();
+  } else if (const auto* container =
+                 dynamic_cast<const vfs::XContentContainerDevice*>(entry->device())) {
+    target.launch_module = entry->path();
+    if (const auto* package = container->package_entry()) {
+      const auto& parent=target.owner->mount_parent();
+      if (!parent || parent->namespace_retiring() || package->device()!=parent.get()) return {};
+      const auto* host_package = dynamic_cast<const vfs::HostPathEntry*>(package);
+      if (!host_package) return {}; // No guessed old-title/disc backing.
+      target.host_path = host_package->host_path();
+    } else {
+      target.host_path = container->GetHostPath();
+    }
+  } else {
+    return {}; // Unsupported backing is not a successful Editor launch.
+  }
+  if (target.host_path.empty() || target.owner->namespace_retiring()) return {};
+  return target;
+}
+
 // Starts the title at |host_path| with |launch_path| in it, or its default
 // module when empty. Doesn't return.
 static void StartTitle(XamModule::LoaderData& loader_data,
@@ -701,24 +748,52 @@ static void StartTitle(XamModule::LoaderData& loader_data,
            xe::strip_pii(xe::path_to_utf8(host_path)));
 
     auto new_host_path = xe::path_to_utf8(host_path);
-    auto new_launch_module = launch_path;
+    auto new_launch_module = std::move(launch_path);
     auto new_flags = loader_data.launch_flags;
     auto new_data = loader_data.launch_data;
     auto current_thread = XThread::GetCurrentThread();
 
-    // Must dispatch from a non-guest thread — RelaunchTitle terminates
-    // all guest threads including the caller.
-    std::thread([emulator, new_host_path = std::move(new_host_path),
-                 new_launch_module = std::move(new_launch_module), new_flags,
-                 new_data = std::move(new_data),
-                 package_path = std::move(package_path)]() mutable {
-      emulator->RelaunchTitle(new_host_path, new_launch_module, new_flags,
-                              std::move(new_data), true, package_path);
-    }).detach();
-
+    // The installed App owns the existing host worker. Its command copies all
+    // accepted arguments before this never-return guest frame parks.
+    const auto generation =
+        emulator->title_execution_state().snapshot().generation;
+    if (emulator->HasLifecycleDriver()) {
+      if (!emulator->SubmitLifecycleWork(
+              EmulatorLifecycle::Kind::kReplace, generation,
+              [emulator, new_host_path = std::move(new_host_path),
+               new_launch_module = std::move(new_launch_module), new_flags,
+               new_data = std::move(new_data),
+               package_path = std::move(package_path)]() mutable {
+                emulator->RelaunchTitle(new_host_path, new_launch_module,
+                                        new_flags, std::move(new_data), true,
+                                        package_path);
+              })) {
+        XELOGE("Title handoff was not accepted; native drain is NOT proved");
+        xe::FlushLog();
+        std::quick_exit(EXIT_FAILURE);
+      }
+    } else {
+      if (kernel_state()->HasNativeImportDomains() ||
+          kernel_state()->HasNativeSystemAllocationAuthorities()) {
+        XELOGE("Unowned title handoff cannot stop native providers");
+        xe::FlushLog();
+        std::quick_exit(EXIT_FAILURE);
+      }
+      // Preserve the feature-absent legacy path only; native processes must use
+      // the actual App worker and its final ownership acknowledgment.
+      std::thread([emulator, new_host_path = std::move(new_host_path),
+                   new_launch_module = std::move(new_launch_module), new_flags,
+                   new_data = std::move(new_data),
+                   package_path = std::move(package_path)]() mutable {
+        emulator->RelaunchTitle(new_host_path, new_launch_module, new_flags,
+                                std::move(new_data), true, package_path);
+      }).detach();
+    }
     // Stop running guest code; RelaunchTitle terminates us. Suspend can
     // return on POSIX, so park rather than fall through to spawn.
-    current_thread->Suspend(nullptr);
+    if (current_thread) {
+      current_thread->Suspend(nullptr);
+    }
     while (true) {
       xe::threading::NanoSleep(int64_t(1'000'000'000));
     }

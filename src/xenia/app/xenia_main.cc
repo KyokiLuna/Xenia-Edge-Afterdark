@@ -28,6 +28,7 @@
 #include "xenia/debug/gdb/gdbstub.h"
 #include "xenia/debug/ui/debug_window.h"
 #include "xenia/emulator.h"
+#include "xenia/kernel/native_system_ui_service.h"
 #include "xenia/kernel/xam/xam_module.h"
 #include "xenia/ui/file_picker.h"
 #include "xenia/ui/redist_installer_wx.h"
@@ -350,6 +351,10 @@ class EmulatorApp final : public xe::ui::WindowedApp {
 
   void EmulatorThread();
   void ShutdownEmulatorThreadFromUIThread();
+  void RunLifecycleCommands();
+  void WakeLifecycle();
+  void LaunchInitialPath(const std::filesystem::path& path);
+  [[noreturn]] void LifecycleEmergencyExit(const char* reason);
 
   DebugWindowClosedListener debug_window_closed_listener_;
 
@@ -363,8 +368,10 @@ class EmulatorApp final : public xe::ui::WindowedApp {
 #endif
 
   // Refreshing the emulator - placed after its dependencies.
-  std::atomic<bool> emulator_thread_quit_requested_;
+  std::atomic<bool> emulator_worker_done_{false};
+  bool profiler_shutdown_ = false;
   std::unique_ptr<xe::threading::Event> emulator_thread_event_;
+  std::shared_ptr<EmulatorLifecycle> lifecycle_;
   std::thread emulator_thread_;
 };
 
@@ -631,6 +638,14 @@ bool EmulatorApp::OnInitialize() {
   // Create the emulator but don't initialize so we can setup the window.
   emulator_ =
       std::make_unique<Emulator>("", storage_root, content_root, cache_root);
+  emulator_thread_event_ = xe::threading::Event::CreateAutoResetEvent(false);
+  if (!emulator_thread_event_) {
+    return false;
+  }
+  lifecycle_ = std::make_shared<EmulatorLifecycle>([this] { WakeLifecycle(); });
+  if (!emulator_->InstallLifecycle(lifecycle_)) {
+    return false;
+  }
   if (protected_storage &&
       !emulator_->BindProtectedStorageRoot(std::move(protected_storage))) {
     return false;
@@ -650,32 +665,58 @@ bool EmulatorApp::OnInitialize() {
     return false;
   }
 
-  emulator_thread_quit_requested_.store(false, std::memory_order_relaxed);
-  emulator_thread_event_ = xe::threading::Event::CreateAutoResetEvent(false);
-  assert_not_null(emulator_thread_event_);
+  emulator_worker_done_.store(false, std::memory_order_relaxed);
   emulator_thread_ = std::thread(&EmulatorApp::EmulatorThread, this);
 
   return true;
 }
 
-void EmulatorApp::OnDestroy() {
-  ShutdownEmulatorThreadFromUIThread();
+void EmulatorApp::WakeLifecycle() {
+  // All Quit producers use this installed wake outside the queue lock. A
+  // guest/programmatic request must also release an owned nested UI loop even
+  // if this worker is currently waiting for a synchronous UI callback.
+  if (lifecycle_ && lifecycle_->closing() && emulator_window_ &&
+      !emulator_window_->ScheduleOwnedHostUiDismissal()) {
+    LifecycleEmergencyExit("owned UI dismissal could not be queued");
+  }
+  emulator_thread_event_->Set();
+}
 
+[[noreturn]] void EmulatorApp::LifecycleEmergencyExit(const char* reason) {
+  XELOGE("Emergency process termination: {}; native shutdown is NOT proved",
+         reason);
+  xe::kernel::NativeSystemUiService::ReportForEmulatorOnHostExit(
+      emulator_.get());
+  xe::FlushLog();
+  std::quick_exit(EXIT_FAILURE);
+}
+void EmulatorApp::OnDestroy() {
+  xe::kernel::NativeSystemUiService::ReportForEmulatorOnHostExit(
+      emulator_.get());
+  // Normal close is approved only after the actual owned worker completed.
+  // An unvetoable OS/app destruction must not unwind live native providers.
+  if (emulator_thread_.joinable() &&
+      !emulator_worker_done_.load(std::memory_order_acquire)) {
+    LifecycleEmergencyExit("UI destroyed before owned shutdown acknowledgment");
+  }
+  ShutdownEmulatorThreadFromUIThread();
   if (cvars::discord) {
     discord::DiscordPresence::Shutdown();
   }
-
-  // The profiler needs to shut down before the graphics context.
-  Profiler::Shutdown();
-
-  // TODO(DrChat): Remove this code and do a proper exit.
-  XELOGI("Cheap-skate exit!");
+  emulator_window_.reset();
+  emulator_.reset();
+  if (!profiler_shutdown_) {
+    Profiler::Shutdown();
+    profiler_shutdown_ = true;
+  }
   xe::FlushLog();
-  std::quick_exit(EXIT_SUCCESS);
 }
 
 void EmulatorApp::EmulatorThread() {
   assert_not_null(emulator_thread_event_);
+  if (!lifecycle_->BindWorker()) {
+    LifecycleEmergencyExit("worker binding failed");
+  }
 
   xe::threading::set_name("Emulator");
   Profiler::ThreadEnter("Emulator");
@@ -688,7 +729,8 @@ void EmulatorApp::EmulatorThread() {
       CreateAudioSystem, CreateGraphicsSystem, CreateInputDrivers);
   if (XFAILED(result)) {
     XELOGE("Failed to setup emulator: {:08X}", result);
-    app_context().RequestDeferredQuit();
+    emulator_->RequestLifecycleQuit();
+    RunLifecycleCommands();
     return;
   }
 
@@ -740,7 +782,7 @@ void EmulatorApp::EmulatorThread() {
       emulator_window_->SetupGraphicsSystemPresenterPainting();
       emulator_window_->UpdateTitle();
     } else {
-      app_context().CallInUIThread([this]() {
+      app_context().CallInUIThreadSynchronous([this]() {
         emulator_window_->SetupGraphicsSystemPresenterPainting();
         emulator_window_->UpdateTitle();
       });
@@ -773,27 +815,52 @@ void EmulatorApp::EmulatorThread() {
     // Tear down presenter painting while the graphics system is still alive,
     // so the D3D12 immediate drawer can release its resources cleanly.
     app_context().CallInUIThreadSynchronous([this]() {
+      // These UI borrowers also retain the old Processor/presenter. Withdraw
+      // them while those providers and the callback pump are still alive.
+      if (emulator_->processor()) {
+        emulator_->processor()->set_debug_listener(nullptr);
+      }
+      debug_window_.reset();
+#if XE_PLATFORM_WIN32
+      debug_gdbstub_.reset();
+#endif
       emulator_window_->ShutdownGraphicsSystemPresenterPainting();
+      if (!emulator_->is_relaunching() && !profiler_shutdown_) {
+        Profiler::Shutdown();
+        profiler_shutdown_ = true;
+      }
     });
   });
 
   // Enable emulator input now that the emulator is properly loaded.
-  app_context().CallInUIThread([this]() {
-    emulator_window_->OnEmulatorInitialized();
-    // Re-paint the title now that processor is up, so the game list shows
-    // the active backend tag instead of the bare app name.
-    emulator_window_->UpdateTitle();
-  });
-
-  // Grab path from the flag or unnamed argument.
-  std::filesystem::path path;
-  if (!cvars::target.empty()) {
-    path = cvars::target;
+  if (!app_context().CallInUIThreadSynchronous([this]() {
+        emulator_window_->OnEmulatorInitialized();
+        // Re-paint the title now that processor is up, so the game list shows
+        // the active backend tag instead of the bare app name.
+        emulator_window_->UpdateTitle();
+      })) {
+    LifecycleEmergencyExit("UI initialization callback unavailable");
   }
 
+  // UI initialization completes while the pump remains live. Its explicitly
+  // queued dashboard/user launch takes priority over a later CLI command.
+  if (!cvars::target.empty() && !lifecycle_->Pending() &&
+      !lifecycle_->closing()) {
+    const auto path = std::filesystem::path(cvars::target);
+    if (!emulator_->SubmitLifecycleWork(
+            EmulatorLifecycle::Kind::kLaunch, 0,
+            [this, path] { LaunchInitialPath(path); })) {
+      emulator_->RequestLifecycleQuit();
+    }
+  }
+  RunLifecycleCommands();
+}
+
+void EmulatorApp::LaunchInitialPath(const std::filesystem::path& path) {
+  X_STATUS result = X_STATUS_SUCCESS;
   // Set up launch data BEFORE LaunchPath — LaunchPath starts the game thread,
   // and the game may query XamLoaderGetLaunchData during early init.
-  // Unowned, this frame outlives every relaunch.
+  // This owned worker command keeps no Kernel pointer after its return.
   auto* xam = emulator_->kernel_state()
                   ->GetKernelModule<kernel::xam::XamModule>("xam.xex")
                   .get();
@@ -837,7 +904,7 @@ void EmulatorApp::EmulatorThread() {
     config::LoadGameConfigForFile(GameConfigFile(abs_path));
     if (XFAILED(result = emulator_->SetupSubsystems())) {
       xe::FatalError(fmt::format("Failed to setup subsystems: {:08X}", result));
-      app_context().RequestDeferredQuit();
+      emulator_->RequestLifecycleQuit();
       return;
     }
     // Surface/swap chain must exist before the game thread starts presenting.
@@ -853,40 +920,109 @@ void EmulatorApp::EmulatorThread() {
         !file.empty()) {
       app_context().CallInUIThreadSynchronous(
           [this, &file]() { emulator_window_->ShowMissingXeFuFile(file); });
-      app_context().RequestDeferredQuit();
+      emulator_->RequestLifecycleQuit();
       return;
     }
     if (XFAILED(result)) {
       xe::FatalError(fmt::format("Failed to launch target: {:08X}", result));
-      app_context().RequestDeferredQuit();
+      emulator_->RequestLifecycleQuit();
       return;
     }
   }
-
-  // Now, we're going to use this thread to drive events related to emulation.
-  while (!emulator_thread_quit_requested_.load(std::memory_order_relaxed)) {
-    xe::threading::Wait(emulator_thread_event_.get(), false);
-    emulator_->WaitUntilExit();
-  }
 }
 
+void EmulatorApp::RunLifecycleCommands() {
+  try {
+    for (;;) {
+      auto retired = lifecycle_->RetirePendingOnWorker();
+      retired.clear();
+      if (lifecycle_->Failed()) {
+        LifecycleEmergencyExit("lifecycle ownership lost");
+      }
+      auto work = lifecycle_->Take(
+          emulator_->title_execution_state().snapshot().generation);
+      retired = lifecycle_->RetirePendingOnWorker();
+      retired.clear();
+      if (work) {
+        const auto kind = work->kind();
+        if (kind == EmulatorLifecycle::Kind::kQuit ||
+            kind == EmulatorLifecycle::Kind::kReplaceProcess) {
+          auto& request = work->command_.front().request;
+          if (request.prepare_ui &&
+              !app_context().CallInUIThreadSynchronous(request.prepare_ui)) {
+            LifecycleEmergencyExit("replacement preparation lost UI pump");
+          }
+          auto final_action = std::move(request.after_shutdown_ui);
+          if (!emulator_->ShutdownOnOwnedWorker(*work) ||
+              !lifecycle_->Finish(*work)) {
+            LifecycleEmergencyExit("owned provider shutdown did not complete");
+          }
+          work.reset();
+          retired = lifecycle_->RetirePendingOnWorker();
+          retired.clear();
+          XELOGI(
+              "Owned lifecycle: actual provider shutdown returned; worker "
+              "final tail");
+          // After this publication the worker makes no synchronous UI request.
+          // Joining it from the final UI callback cannot block its cleanup.
+          emulator_worker_done_.store(true, std::memory_order_release);
+          if (!app_context().CallInUIThreadDeferred(
+                  [this, action = std::move(final_action)]() mutable {
+                    ShutdownEmulatorThreadFromUIThread();
+                    if (!lifecycle_->ApproveFinalUiClose()) {
+                      LifecycleEmergencyExit(
+                          "final UI approval lost ownership");
+                    }
+                    if (action && !action()) {
+                      LifecycleEmergencyExit(
+                          "replacement process failed after parent stop");
+                    }
+                    if (emulator_window_ && emulator_window_->window()) {
+                      emulator_window_->window()->RequestClose();
+                    } else {
+                      app_context().QuitFromUIThread();
+                    }
+                  })) {
+            LifecycleEmergencyExit(
+                "final UI acknowledgment could not be queued");
+          }
+          return;
+        }
+        if (!lifecycle_->Execute(*work) || !lifecycle_->Finish(*work)) {
+          LifecycleEmergencyExit("host lifecycle command did not return");
+        }
+        work.reset();
+        // Fresh host reads denied while a command was active are refreshed at
+        // this actual host-return cut, before this worker can take teardown.
+        if (!app_context().CallInUIThreadSynchronous(
+                [this] { emulator_window_->UpdateTitle(); })) {
+          LifecycleEmergencyExit("post-command title refresh lost UI pump");
+        }
+        continue;
+      }
+      if (lifecycle_->Pending() || lifecycle_->Preparing() ||
+          !emulator_->is_title_open()) {
+        xe::threading::Wait(emulator_thread_event_.get(), false);
+      } else if (emulator_->WaitUntilExit(emulator_thread_event_.get()) ==
+                     Emulator::ExitWait::kTitleExited &&
+                 !lifecycle_->Pending()) {
+        xe::threading::Wait(emulator_thread_event_.get(), false);
+      }
+    }
+  } catch (...) {
+    LifecycleEmergencyExit("exception in owned lifecycle worker");
+  }
+}
 void EmulatorApp::ShutdownEmulatorThreadFromUIThread() {
-  // TODO(Triang3l): Proper shutdown of the emulator (relying on std::quick_exit
-  // for now) - currently WaitUntilExit loops forever otherwise (plus possibly
-  // lots of other things not shutting down correctly now). Some parts of the
-  // code call the regular std::exit, which seems to be calling destructors (at
-  // least on Linux), so the entire join is currently commented out.
-#if 0
-  // Same thread as the one created it, to make sure there's zero possibility of
-  // a race with the creation of the emulator thread.
   assert_true(app_context().IsInUIThread());
-  emulator_thread_quit_requested_.store(true, std::memory_order_relaxed);
   if (!emulator_thread_.joinable()) {
     return;
   }
-  emulator_thread_event_->Set();
+  if (!emulator_worker_done_.load(std::memory_order_acquire)) {
+    LifecycleEmergencyExit(
+        "synchronous UI join requested before worker completion");
+  }
   emulator_thread_.join();
-#endif
 }
 
 }  // namespace app

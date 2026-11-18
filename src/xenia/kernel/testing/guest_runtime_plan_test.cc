@@ -21,6 +21,7 @@
 #include "third_party/mbedtls/include/mbedtls/sha1.h"
 #include "third_party/mbedtls/include/mbedtls/sha256.h"
 #include "xenia/kernel/guest_runtime_plan.h"
+#include "xenia/kernel/native_system_ui_startup.h"
 
 namespace xe::kernel::test {
 namespace {
@@ -774,5 +775,138 @@ TEST_CASE("Managed format bridge accepts only its exact retained request ABI",
   Rejected(header + Replace(bridge, "rva=256", "rva=252") + init, view);
   Rejected(header + Replace(bridge, "result='uint32'", "result='void'") + init, view);
   Rejected(header + Replace(bridge, "managed_format_owned_request", "format_raw_device") + init, view);
+}
+}  // namespace xe::kernel::test
+
+
+namespace xe::kernel::test {
+TEST_CASE(
+    "Runtime plans retain native cache query bodies for witnessed and bare "
+    "selectors",
+    "[kernel][guest_runtime_plan][native_cache_query]") {
+  LoadedImage image;
+  const auto ordinal = GENERATE(uint16_t(0x20A), uint16_t(0x211));
+  const bool witnessed = GENERATE(false, true);
+  const auto library = GENERATE("xam.xex", "XAM.xex", "bridge-test.xex");
+  auto view = image.View();
+  view.export_address = [ordinal](uint16_t queried) {
+    return queried == ordinal ? (ordinal == 0x20A ? 0x816D8590u : 0x816D8698u)
+                              : 0u;
+  };
+  std::string bridge = "[[bridge]]\nlibrary = '" + std::string(library) +
+                       "'\nordinal = " + std::to_string(ordinal) + "\n";
+  if (witnessed) {
+    bridge +=
+        "code_size = 12\ncode_sha256 = "
+        "'766cd6615f5d7580131ee3c03e89d7c9e83ea3a78027cf618f78909fa3886151'\n";
+  }
+  const auto text = image.Header() + bridge +
+                    "[[phase]]\nidentity = 'startup'\n" +
+                    Call("entry", image.RvaSelector());
+  std::string error;
+  CHECK_FALSE(ParseGuestRuntimePlan(text, view, &error));
+  CHECK(error == "Native XAM cache queries cannot be replaced by host bridges");
+  // An internal RVA bridge is another selector for the same overlay. Check
+  // exact and partial-overlap spans before any binding or code replacement.
+  const uint32_t native = ordinal == 0x20A ? 0x816D8590u : 0x816D8698u;
+  auto internal_view = view;
+  internal_view.base = native - 0x40;
+  internal_view.is_code = [base = internal_view.base](uint32_t address,
+                                                      uint32_t bytes) {
+    return address >= base + 0x3C && bytes &&
+           uint64_t(address) + bytes <= uint64_t(base) + 0xA0;
+  };
+  for (const auto rva : {0x3Cu, 0x40u, 0x44u}) {
+    const auto internal =
+        image.Header() + "[[bridge]]\nservice = 'active_title_id'\nrva = " +
+        std::to_string(rva) + "\ncode_size = 16\ncode_sha256 = '" +
+        Sha256(std::span<const uint8_t>(image.bytes).subspan(rva, 16)) +
+        "'\narguments = []\nresult = 'uint32'\n[[phase]]\nidentity = "
+        "'startup'\n" +
+        Call("entry", image.RvaSelector());
+    error.clear();
+    CHECK_FALSE(ParseGuestRuntimePlan(internal, internal_view, &error));
+    CHECK(error ==
+          "Native XAM cache queries cannot be replaced by host bridges");
+    auto unrelated = internal_view;
+    unrelated.export_address = [](uint16_t) { return 0u; };
+    CHECK(ParseGuestRuntimePlan(internal, unrelated, nullptr));
+  }
+  // The ordinal itself is not globally reserved in unrelated loaded images.
+  if (!witnessed) {
+    view.export_address = [](uint16_t) { return LoadedImage::kBase + 0x80; };
+    CHECK(ParseGuestRuntimePlan(text, view, nullptr));
+  }
+}
+
+TEST_CASE("Periodic service stop catalog preserves deferred SYSTEM void ABI",
+          "[guest_runtime_plan][native_periodic_service]") {
+  ValidatedGuestRuntimePlan plan;
+  std::string error = "old";
+  CHECK(CheckNativeSystemPeriodicServiceStopPlan(plan, &error) ==
+        NativeSystemPeriodicServiceStopPlan::kAbsent);
+  CHECK(error.empty());
+  GuestRuntime::Function stop;
+  stop.identity = "native-periodic-service-stop";
+  stop.address = 0x819068D0;
+  stop.arguments = {0};
+  stop.return_kind = GuestRuntime::ReturnKind::kVoid;
+  plan.catalog.emplace(stop.identity, stop);
+  plan.contracts.emplace(stop.identity, ValidatedGuestRuntimePlan::Contract{});
+  CHECK(CheckNativeSystemPeriodicServiceStopPlan(plan, &error) ==
+        NativeSystemPeriodicServiceStopPlan::kComplete);
+  CHECK(error.empty());
+  // Metadata validation grants no execution, Task birth or completed drain.
+  CHECK(plan.plan.phases.empty());
+  CHECK(plan.catalog.at(stop.identity) == stop);
+  const auto complete = plan;
+  for (const auto caller : {
+           ValidatedGuestRuntimePlan::CallerPolicy::kSystemTaskOnly,
+           ValidatedGuestRuntimePlan::CallerPolicy::kOriginalTitleOrSystem}) {
+    plan = complete;
+    plan.contracts.at(stop.identity).caller = caller;
+    CHECK(CheckNativeSystemPeriodicServiceStopPlan(plan, nullptr) ==
+          NativeSystemPeriodicServiceStopPlan::kInvalid);
+  }
+}
+
+TEST_CASE("Periodic service stop rejects initialization aliases and changed ABI",
+          "[guest_runtime_plan][native_periodic_service]") {
+  ValidatedGuestRuntimePlan complete;
+  GuestRuntime::Function stop;
+  stop.identity = "native-periodic-service-stop";
+  stop.address = 0x819068D0;
+  stop.arguments = {0};
+  stop.return_kind = GuestRuntime::ReturnKind::kVoid;
+  complete.catalog.emplace(stop.identity, stop);
+  complete.contracts.emplace(stop.identity,
+                             ValidatedGuestRuntimePlan::Contract{});
+  const auto mutation = GENERATE(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+  auto plan = complete;
+  switch (mutation) {
+    case 0: plan.plan.phases.push_back({"stop at boot", {stop}}); break;
+    case 1: {
+      auto alias = stop; alias.identity = "another name"; alias.address += 4;
+      plan.catalog.emplace(alias.identity, alias); break;
+    }
+    case 2: plan.catalog.at(stop.identity).address += 4; break;
+    case 3: plan.catalog.at(stop.identity).arguments = {0, 0}; break;
+    case 4: plan.catalog.at(stop.identity).arguments = {1}; break;
+    case 5:
+      plan.catalog.at(stop.identity).return_kind = GuestRuntime::ReturnKind::kUInt32;
+      break;
+    case 6:
+      plan.contracts.at(stop.identity).result =
+          ValidatedGuestRuntimePlan::ResultPolicy::kAny;
+      break;
+    case 7: plan.contracts.at(stop.identity).before.push_back({1, 0, false}); break;
+    case 8: plan.contracts.at(stop.identity).after.push_back({1, 0, false}); break;
+    case 9: plan.catalog.erase(stop.identity); break;
+    case 10: plan.contracts.erase(stop.identity); break;
+  }
+  std::string error;
+  CHECK(CheckNativeSystemPeriodicServiceStopPlan(plan, &error) ==
+        NativeSystemPeriodicServiceStopPlan::kInvalid);
+  CHECK_FALSE(error.empty());
 }
 }  // namespace xe::kernel::test

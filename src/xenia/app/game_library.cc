@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <sstream>
 #include <fstream>
 #include <regex>
 
@@ -18,6 +19,8 @@
 #include "third_party/tomlplusplus/toml.hpp"
 #include "xenia/base/assert.h"
 #include "xenia/base/filesystem.h"
+#include "xenia/base/host_metadata_writer.h"
+#include "xenia/base/platform.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/string_util.h"
 #include "xenia/base/utf8.h"
@@ -180,24 +183,39 @@ std::optional<GameFileInfo> ReadGameFileInfo(const std::filesystem::path &path,
 
 GameLibrary::GameLibrary(std::filesystem::path root) : root_(std::move(root)) {}
 
+std::shared_ptr<filesystem::HostMetadataWriter> GameLibrary::Writer() const {
+  if (!writer_) {
+    std::error_code error;
+    writer_ = filesystem::HostMetadataWriter::Open(root_, error);
+    if (error) XELOGW("GameLibrary metadata authority: {}", error.message());
+  }
+  return writer_;
+}
+
+std::shared_ptr<const filesystem::HostStorageSnapshotToken> GameLibrary::Observed(
+    const LibraryKey& key) const {
+  const auto found = std::find_if(observations_.begin(), observations_.end(),
+      [&](const auto& item) { return item.key == key; });
+  return found == observations_.end() || found->ambiguous ? nullptr : found->snapshot;
+}
+bool GameLibrary::HasObservation(const LibraryKey& key) const {
+  return std::any_of(observations_.begin(), observations_.end(),
+      [&](const auto& item) { return item.key == key; });
+}
+void GameLibrary::Remember(const LibraryKey& key,
+    std::shared_ptr<const filesystem::HostStorageSnapshotToken> snapshot) {
+  const auto found = std::find_if(observations_.begin(), observations_.end(),
+      [&](const auto& item) { return item.key == key; });
+  if (found == observations_.end()) observations_.push_back({key, std::move(snapshot)});
+  else found->snapshot = std::move(snapshot);
+}
+
 std::filesystem::path GameLibrary::TitleDir(uint32_t title_id) const {
   return root_ / fmt::format("{:08X}", title_id);
 }
 
 std::filesystem::path GameLibrary::EntryDir(const LibraryKey& key) const {
   return TitleDir(key.title_id) / xe::to_path(VersionToString(key.version));
-}
-
-bool GameLibrary::HasReleaseFolder(uint32_t title_id) const {
-  std::error_code ec;
-  for (const auto& sub : xe::filesystem::ListDirectories(TitleDir(title_id))) {
-    const auto dir = sub.path / sub.name;
-    if (ParseVersionFolder(sub.name) &&
-        std::filesystem::exists(dir / "game.toml", ec)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 std::filesystem::path GameLibrary::IconPath(const LibraryKey& key) const {
@@ -246,16 +264,46 @@ const LibraryEntry* GameLibrary::FindByPath(
 }
 
 bool GameLibrary::ReadEntry(const std::filesystem::path& game_toml,
-                            LibraryEntry& entry) const {
+                            LibraryEntry& entry, bool* removed,
+                            std::shared_ptr<const filesystem::HostStorageSnapshotToken>* observed) const {
+  if (observed) observed->reset();
+  const auto writer = Writer();
+  std::error_code read_error;
+  const auto absolute = std::filesystem::absolute(game_toml, read_error).lexically_normal();
+  if (read_error) return false;
+  const auto snapshot = writer->Capture(absolute.lexically_relative(writer->path()),
+                                        2ull << 20, read_error);
+  std::string contents;
+  if (snapshot && !read_error && snapshot->exists()) {
+    const auto bytes = snapshot->bytes();
+    contents.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+  } else {
+#if XE_PLATFORM_WIN32
+    // Preserve bounded read-only compatibility while the common durable
+    // snapshot publisher is unsupported on Windows. Never raw-write fallback.
+    if (read_error != std::errc::operation_not_supported) return false;
+    const auto size = std::filesystem::file_size(game_toml, read_error);
+    if (read_error || size > (2ull << 20)) return false;
+    std::ifstream file(game_toml, std::ios::binary);
+    contents.resize(size_t(size));
+    if (!file || !file.read(contents.data(), std::streamsize(contents.size()))) return false;
+#else
+    return false;
+#endif
+  }
   toml::table tbl;
   try {
-    tbl = toml::parse_file(xe::path_to_utf8(game_toml));
+    tbl = toml::parse(contents);
   } catch (const toml::parse_error& e) {
     XELOGE("GameLibrary: failed to parse {}: {}",
            xe::strip_pii(xe::path_to_utf8(game_toml)), e.description());
     return false;
   }
 
+  const auto removal = tbl["removed"].value<bool>();
+  if (tbl.contains("removed") && !removal) return false;
+  if (removed) *removed = removal.value_or(false);
+  else if (removal.value_or(false)) return false;
   auto title_id_str = tbl["title_id"].value<std::string>();
   if (!title_id_str) {
     XELOGW("GameLibrary: missing title_id, skipping {}",
@@ -333,6 +381,7 @@ bool GameLibrary::ReadEntry(const std::filesystem::path& game_toml,
   }
 
   NormalizeDefault(entry);
+  if (observed) *observed = snapshot;
   return true;
 }
 
@@ -451,27 +500,31 @@ void GameLibrary::NameReleases(std::vector<Release>& releases,
   }
 }
 
-void GameLibrary::PlaceIcon(const std::filesystem::path& dir,
+bool GameLibrary::PlaceIcon(const std::filesystem::path& dir,
                             const std::vector<uint8_t>& icon,
                             const std::filesystem::path& fallback_dir) const {
-  std::error_code ec;
-  if (!icon.empty()) {
-    std::ofstream file(dir / "icon.png", std::ios::binary | std::ios::trunc);
-    if (file) {
-      file.write(reinterpret_cast<const char*>(icon.data()), icon.size());
-      return;
-    }
+  const auto writer = Writer();
+  std::error_code error;
+  const auto relative = std::filesystem::absolute(dir, error).lexically_normal().lexically_relative(writer->path()) / "icon.png";
+  if (error) return false;
+  const auto current = writer->Capture(relative, 4ull << 20, error);
+  if (current && current->exists()) {
+    // Existing custom art wins over stale legacy/package art. Observe its
+    // actual barriers; never overwrite it merely because migration retries.
+    const auto observed = current->root()->ObserveSnapshotDurability(*current);
+    return !observed.error && observed.durable;
   }
-  // A file without a readable embedded image retains the previous title icon.
-  const auto fallback = fallback_dir / "icon.png";
-  if (std::filesystem::exists(fallback, ec)) {
-    std::filesystem::copy_file(
-        fallback, dir / "icon.png",
-        std::filesystem::copy_options::overwrite_existing, ec);
-  }
+  if (error && error != std::errc::no_such_file_or_directory) return false;
+  if (!icon.empty()) return bool(writer->Write(relative, icon, nullptr, true));
+  const auto fallback = writer->Capture(
+      std::filesystem::absolute(fallback_dir, error).lexically_normal().lexically_relative(writer->path()) / "icon.png",
+      4ull << 20, error);
+  if (!fallback || error || !fallback->exists()) return false;
+  return bool(writer->Write(relative, fallback->bytes(), nullptr, true));
 }
 
 void GameLibrary::Load() {
+  observations_.clear();
   entries_.clear();
   split_titles_.clear();
 
@@ -491,47 +544,49 @@ void GameLibrary::Load() {
     }
     const auto dir = title_dir.path / title_dir.name;
 
-    // One version folder is proof the title is in the current layout, so the
-    // game.toml orphaned at its root never gets opened. That costs only the
-    // directory listing, which is what makes the orphan free to keep.
-    //
-    // Existing is what decides it, not loading. Re-deriving from the stale
-    // root file would overwrite the folders that are fine.
-    bool has_release_folder = false;
+    std::vector<std::filesystem::path> removed_paths;
+    const uint32_t title_id = xe::string_util::from_string<uint32_t>(
+        xe::path_to_utf8(title_dir.name), true);
     for (const auto& sub : xe::filesystem::ListDirectories(dir)) {
       const auto version = ParseVersionFolder(sub.name);
-      if (!version) {
-        continue;
-      }
-      const auto game_toml = sub.path / sub.name / "game.toml";
-      if (!std::filesystem::exists(game_toml, ec)) {
-        continue;  // a bare folder is not a release, so migration still runs
-      }
-      has_release_folder = true;
+      if (!version) continue;
       LibraryEntry entry;
-      if (!ReadEntry(game_toml, entry)) {
-        continue;
+      bool removed = false;
+      std::shared_ptr<const filesystem::HostStorageSnapshotToken> observed;
+      if (!ReadEntry(sub.path / sub.name / "game.toml", entry, &removed, &observed) ||
+          entry.title_id != title_id) continue;
+      entry.version = *version;
+      entry.canonical_snapshot = observed;
+      if (observed) {
+        const auto prior = std::find_if(observations_.begin(), observations_.end(),
+            [&](const auto& item) { return item.key == entry.key(); });
+        if (prior != observations_.end()) prior->ambiguous = true;
+        else Remember(entry.key(), std::move(observed));
       }
-      entry.version = *version;  // the folder name is what settles it
-      entries_.push_back(std::move(entry));
+      if (removed) {
+        for (const auto& path : entry.paths) removed_paths.push_back(path.path);
+      } else {
+        entries_.push_back(std::move(entry));
+      }
     }
-    if (!has_release_folder) {
-      MigrateTitle(dir);
-    }
+    // Partial migration is retryable even when another release succeeded.
+    // Existing canonical slots (including unreadable/removal records) block
+    // stale legacy writes. Original metadata and artwork are never deleted.
+    MigrateTitle(dir, removed_paths);
   }
   if (changed_callback_) {
     changed_callback_();
   }
 }
 
-void GameLibrary::MigrateTitle(const std::filesystem::path& title_dir) {
+void GameLibrary::MigrateTitle(const std::filesystem::path& title_dir,
+    const std::vector<std::filesystem::path>& removed_paths) {
   std::error_code ec;
 
   // Where the title's data actually is. A build that keyed releases on media
   // id left <title_id>/<media_id>/ folders holding newer data than the root
   // file, so those win outright when present. Never both, or the root file's
   // stale copy of the same paths would come along too.
-  std::vector<std::filesystem::path> obsolete;
   LibraryEntry merged;
   bool found = false;
   for (const auto& sub :
@@ -542,7 +597,6 @@ void GameLibrary::MigrateTitle(const std::filesystem::path& title_dir) {
     if (!ReadEntry(sub_dir / "game.toml", entry)) {
       continue;
     }
-    obsolete.push_back(sub_dir);
 
     // Pooled rather than migrated one folder at a time. Those folders were
     // keyed on media id, which gave each disc of a set its own, and two of
@@ -566,11 +620,30 @@ void GameLibrary::MigrateTitle(const std::filesystem::path& title_dir) {
     return;
   }
 
+  const auto expected_title = xe::string_util::from_string<uint32_t>(
+      xe::path_to_utf8(title_dir.filename()), true);
+  if (merged.title_id != expected_title) return;
+  // Only exact recorded paths are suppressed. No title-family guess, inode
+  // alias discovery or broad release suppression is used for removal.
+  const auto recorded = [](const auto& a, const auto& b) {
+    return a.lexically_normal() == b.lexically_normal();
+  };
+  std::erase_if(merged.paths, [&](const LibraryPath& path) {
+    if (std::any_of(removed_paths.begin(), removed_paths.end(),
+        [&](const auto& old) { return recorded(path.path, old); })) return true;
+    return std::any_of(entries_.begin(), entries_.end(), [&](const LibraryEntry& existing) {
+      return existing.title_id == merged.title_id &&
+          std::any_of(existing.paths.begin(), existing.paths.end(),
+              [&](const auto& known) { return recorded(path.path, known.path); });
+    });
+  });
+  if (merged.paths.empty()) return;
   bool identified = false;
   auto parts = SplitIntoReleases(merged, identified);
   if (!identified) {
     // No readable path, so no version to name a folder with. Leave the title
     // where it is and try again once the files are back.
+    merged.transient_legacy = true;
     entries_.push_back(std::move(merged));
     return;
   }
@@ -580,22 +653,28 @@ void GameLibrary::MigrateTitle(const std::filesystem::path& title_dir) {
                                 : merged.name);
   }
   for (auto& part : parts) {
+    // A prior canonical observation is authoritative even if a foreign actor
+    // removed/replaced it during this Load. Legacy is never a stale overwrite.
+    if (HasObservation(part.entry.key())) continue;
     const auto release_dir = EntryDir(part.entry.key());
-    std::filesystem::create_directories(release_dir, ec);
-    // The title's own art is the fallback. A release whose package carries
-    // its own gets that instead, so nothing is lost by not looking in the
-    // media-id folders for the copies they were given.
+    const auto writer = Writer();
+    std::error_code error;
+    const auto relative = std::filesystem::absolute(release_dir, error).lexically_normal().lexically_relative(writer->path()) / "game.toml";
+    if (error) continue;
+    const auto current = writer->Capture(relative, 2ull << 20, error);
+    if ((current && current->exists()) ||
+        (error && error != std::errc::no_such_file_or_directory)) continue;
+    // Art and metadata are independently durable single-file publications.
+    // A failed part remains retryable; no multi-file transaction is claimed.
     PlaceIcon(release_dir, part.icon, title_dir);
-    WriteEntryAtomic(part.entry, release_dir);
+    const bool durable = WriteEntryAtomic(part.entry, release_dir, false, true);
+    if (!durable && writer->last_result().error == std::errc::file_exists) continue;
+    part.entry.transient_legacy = !durable;
+    if (durable) part.entry.canonical_snapshot = Observed(part.entry.key());
     entries_.push_back(std::move(part.entry));
   }
+  // Every legacy source and custom artwork remains intact, on all outcomes.
 
-  // Media-id folders are debris from a layout nothing reads any more, now
-  // that what they held is written elsewhere. The root game.toml and icon
-  // stay put, orphaned, for builds that predate versions.
-  for (const auto& dir : obsolete) {
-    std::filesystem::remove_all(dir, ec);
-  }
 }
 
 std::vector<GameLibrary::MissingFields> GameLibrary::FindMissingFields() const {
@@ -603,8 +682,10 @@ std::vector<GameLibrary::MissingFields> GameLibrary::FindMissingFields() const {
   std::error_code ec;
   for (const auto& entry : entries_) {
     // A title still in an older layout gets its fields when it is migrated.
-    if ((entry.content_type != XContentType::kInvalid &&
-         entry.metadata_revision == kLibraryMetadataRevision) ||
+    const bool icon_missing = !std::filesystem::exists(IconPath(entry.key()), ec) && !ec;
+    if (entry.transient_legacy ||
+        (entry.content_type != XContentType::kInvalid &&
+         entry.metadata_revision == kLibraryMetadataRevision && !icon_missing) ||
         !std::filesystem::exists(EntryDir(entry.key()) / "game.toml", ec)) {
       continue;
     }
@@ -659,21 +740,14 @@ bool GameLibrary::FillMissingFields(const LibraryKey& key,
   std::error_code icon_error;
   if (!info.icon.empty() &&
       !std::filesystem::exists(IconPath(key), icon_error) && !icon_error) {
-    SetIcon(key, info.icon);
+    if (!SetIcon(key, info.icon)) return false;
   }
   return true;
 }
 
 bool GameLibrary::WriteEntryAtomic(const LibraryEntry& entry,
-                                   const std::filesystem::path& dir) {
-  std::error_code ec;
-  std::filesystem::create_directories(dir, ec);
-  if (ec) {
-    XELOGE("GameLibrary: cannot create {}: {}",
-           xe::strip_pii(xe::path_to_utf8(dir)), ec.message());
-    return false;
-  }
-
+                                   const std::filesystem::path& dir,
+                                   bool removed, bool require_absent) {
   toml::array paths;
   for (const auto& p : entry.paths) {
     toml::table pt;
@@ -690,6 +764,7 @@ bool GameLibrary::WriteEntryAtomic(const LibraryEntry& entry,
   }
 
   toml::table tbl;
+  if (removed) tbl.insert("removed", true);
   // Omitted while unknown, which is what makes Load() look for it.
   if (entry.content_type != XContentType::kInvalid) {
     tbl.insert("content_type",
@@ -722,30 +797,33 @@ bool GameLibrary::WriteEntryAtomic(const LibraryEntry& entry,
   tbl.insert("title_id", fmt::format("{:08X}", entry.title_id));
   tbl.insert("version", VersionToString(entry.version));
 
-  const auto final_path = dir / "game.toml";
-  const auto tmp_path = dir / "game.toml.tmp";
-  {
-    std::ofstream file(tmp_path, std::ios::binary | std::ios::trunc);
-    if (!file) {
-      XELOGE("GameLibrary: cannot open {}",
-             xe::strip_pii(xe::path_to_utf8(tmp_path)));
-      return false;
-    }
-    file << tbl << "\n";
-    if (!file) {
-      XELOGE("GameLibrary: write failed for {}",
-             xe::strip_pii(xe::path_to_utf8(tmp_path)));
-      return false;
-    }
-  }
-
-  std::filesystem::rename(tmp_path, final_path, ec);
-  if (ec) {
-    XELOGE("GameLibrary: cannot replace {}: {}",
-           xe::strip_pii(xe::path_to_utf8(final_path)), ec.message());
-    std::filesystem::remove(tmp_path, ec);
+  std::ostringstream stream;
+  stream << tbl << "\n";
+  if (!stream) return false;
+  const auto text = stream.str();
+  const auto writer = Writer();
+  std::error_code error;
+  const auto relative = std::filesystem::absolute(dir, error).lexically_normal().lexically_relative(writer->path()) / "game.toml";
+  if (error) return false;
+  const auto model_observed = Observed(entry.key());
+  const bool has_observation = HasObservation(entry.key());
+  if ((require_absent && has_observation) ||
+      (has_observation && !model_observed)) return false;
+  const auto expected = entry.canonical_snapshot ? entry.canonical_snapshot : model_observed;
+  const std::span<const uint8_t> intended{
+      reinterpret_cast<const uint8_t*>(text.data()), text.size()};
+  // Never reacquire a newer token for an older in-memory model. Explicit new
+  // slots may only be created absent; an existing unobserved/unknown/removal
+  // slot requires Load before an update or explicit re-add can be attempted.
+  const auto result = expected ? writer->PublishAt(relative, expected, intended)
+      : writer->Write(relative, intended, nullptr, true);
+  if (!result) {
+    XELOGW("GameLibrary metadata publication: {}", result.error.message());
     return false;
   }
+  const auto current = result.unchanged ? expected : result.publication.current;
+  if (!current) return false;
+  Remember(entry.key(), current);
   return true;
 }
 
@@ -760,6 +838,8 @@ bool GameLibrary::Upsert(LibraryEntry entry) {
     return false;
   }
 
+  entry.transient_legacy = false;
+  entry.canonical_snapshot = Observed(entry.key());
   if (existing) {
     *existing = std::move(entry);
   } else {
@@ -913,65 +993,25 @@ bool GameLibrary::PruneMissingPaths(const LibraryKey& key) {
 }
 
 bool GameLibrary::SetIcon(const LibraryKey& key, std::span<const uint8_t> png) {
-  const auto dir = EntryDir(key);
-  std::error_code ec;
-  std::filesystem::create_directories(dir, ec);
-  if (ec) {
-    XELOGE("GameLibrary: cannot create {}: {}",
-           xe::strip_pii(xe::path_to_utf8(dir)), ec.message());
-    return false;
-  }
-
-  const auto final_path = dir / "icon.png";
-  const auto tmp_path = dir / "icon.png.tmp";
-  {
-    std::ofstream file(tmp_path, std::ios::binary | std::ios::trunc);
-    if (!file) {
-      XELOGE("GameLibrary: cannot open {}",
-             xe::strip_pii(xe::path_to_utf8(tmp_path)));
-      return false;
-    }
-    file.write(reinterpret_cast<const char*>(png.data()), png.size());
-    if (!file) {
-      XELOGE("GameLibrary: write failed for {}",
-             xe::strip_pii(xe::path_to_utf8(tmp_path)));
-      return false;
-    }
-  }
-
-  std::filesystem::rename(tmp_path, final_path, ec);
-  if (ec) {
-    XELOGE("GameLibrary: cannot replace {}: {}",
-           xe::strip_pii(xe::path_to_utf8(final_path)), ec.message());
-    std::filesystem::remove(tmp_path, ec);
-    return false;
-  }
-  return true;
+  const auto writer = Writer();
+  const auto relative = TitleDir(key.title_id).filename() /
+      xe::to_path(VersionToString(key.version)) / "icon.png";
+  const auto result = writer->Write(relative, png);
+  if (!result) XELOGW("GameLibrary art publication: {}", result.error.message());
+  return bool(result);
 }
 
 bool GameLibrary::Remove(const LibraryKey& key) {
-  std::error_code ec;
-  std::filesystem::remove_all(EntryDir(key), ec);
-  if (ec) {
-    XELOGE("GameLibrary: cannot remove {:08X}/{}: {}", key.title_id,
-           VersionToString(key.version), ec.message());
-    return false;
-  }
-  entries_.erase(
-      std::remove_if(entries_.begin(), entries_.end(),
-                     [&](const LibraryEntry& e) { return e.key() == key; }),
-      entries_.end());
-  if (changed_callback_) {
-    changed_callback_();
-  }
-
-  // The last release takes the title folder with it, orphaned root file
-  // included, or an older build would go on listing a title the user removed.
-  // Asks the filesystem rather than the loaded entries, so a release folder
-  // that failed to load still keeps the title folder alive.
-  if (!HasReleaseFolder(key.title_id)) {
-    std::filesystem::remove_all(TitleDir(key.title_id), ec);
-  }
+  const auto* current = Find(key);
+  if (!current) return false;
+  // Retain exact original paths in the ordinary record, so an unreadable
+  // version0 legacy entry cannot reappear under a newly readable version.
+  // Only an explicit durable Upsert can replace this same-slot removal state.
+  if (!WriteEntryAtomic(*current, EntryDir(key), true)) return false;
+  std::erase_if(entries_, [&](const auto& entry) { return entry.key() == key; });
+  if (changed_callback_) changed_callback_();
+  // Packages, legacy metadata, artwork, stages and unknown/symlink entries
+  // remain untouched. The exact old game.toml is in common durable recovery.
   return true;
 }
 

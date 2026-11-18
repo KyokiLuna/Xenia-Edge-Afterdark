@@ -18,6 +18,14 @@ namespace kernel {
 namespace xam {
 namespace apps {
 
+struct X_CONTENT_QUERY_VOLUME_DEVICE_TYPE {
+  char root_name[64];
+  xe::be<uint32_t> is_title_process;
+  xe::be<uint32_t> device_type_ptr;
+  xe::be<uint32_t> overlapped_ptr;
+};
+static_assert_size(X_CONTENT_QUERY_VOLUME_DEVICE_TYPE,0x4C);
+
 struct X_NUI_TITLE_INITIALIZE_DATA {
   xe::be<uint64_t> xam_version;
   xe::be<uint64_t> xtl_version;

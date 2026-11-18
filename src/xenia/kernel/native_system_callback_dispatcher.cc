@@ -9,6 +9,7 @@
 #include "xenia/kernel/native_system_callback_dispatcher.h"
 
 #include <array>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <exception>
@@ -17,9 +18,12 @@
 #include <vector>
 
 #include "xenia/base/logging.h"
+#include "xenia/base/mutex.h"
+#include "xenia/base/threading.h"
 #include "xenia/base/native_system_ui_trace.h"
 #include "xenia/cpu/guest_call_abi.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/guest_scheduler.h"
 #include "xenia/kernel/native_import_domain.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/xthread.h"
@@ -78,7 +82,8 @@ struct NativeSystemCallbackDispatcher::State {
   std::mutex mutex;
   std::condition_variable ready;
   std::deque<std::unique_ptr<Work>> queue;
-  bool stopping = false;
+  bool stopping = false,host_joined=false,stopped_retired=false;
+  size_t enqueue_calls=0;
   object_ref<XHostThread> thread;
 
   int Run() {
@@ -178,7 +183,8 @@ NativeSystemCallbackDispatcher::NativeSystemCallbackDispatcher(
 std::shared_ptr<NativeSystemCallbackDispatcher>
 NativeSystemCallbackDispatcher::Create(
     KernelState* kernel, std::shared_ptr<NativeImportDomain> domain) {
-  if (!kernel || !domain || !domain->active()) {
+  if (!kernel || !domain || !domain->active() ||
+      kernel->guest_scheduler()->shutting_down()) {
     return {};
   }
   auto state = std::make_shared<State>();
@@ -221,16 +227,36 @@ NativeSystemCallbackDispatcher::~NativeSystemCallbackDispatcher() {
 bool NativeSystemCallbackDispatcher::Enqueue(
     uint32_t address, std::span<const uint32_t> arguments, Completion completed,
     BeforeEnter before_enter, uint64_t input_trace_id) {
+  struct Producer {
+    std::shared_ptr<State> state;
+    bool entered=false;
+    ~Producer(){if(entered){std::lock_guard lock(state->mutex);
+      --state->enqueue_calls;state->ready.notify_all();}}
+  } producer{state_};
+  // Move by-value parameters into locals after Producer: parameters otherwise
+  // outlive every local destructor on a refused enqueue. These holders unwind
+  // before Producer drops the count on every path, including exceptions.
+  Completion completion;
+  completion.swap(completed);
+  BeforeEnter enter;
+  enter.swap(before_enter);
+  // The count spans every local native/code/completion holder and is dropped
+  // last, before a strict drain may release Kernel/ThreadState resources.
+  KernelState* kernel;
+  std::shared_ptr<NativeImportDomain> domain;
+  {
+    std::lock_guard lock(state_->mutex);
+    if(state_->stopping || state_->stopped_retired || !state_->kernel ||
+        !state_->domain)return false;
+    ++state_->enqueue_calls;producer.entered=true;
+    kernel=state_->kernel;domain=state_->domain;
+  }
   if (!address || address > UINT32_MAX - 4 || (address & 3) ||
-      arguments.size() > 8 || !state_->domain->active()) {
-    return false;
-  }
-  const auto caller = state_->kernel->ResolveNativeImportCaller(address + 4);
-  if (!caller.scoped || caller.domain != state_->domain || !caller.module) {
-    return false;
-  }
-  auto operation = state_->domain->Acquire();
-  auto lease = state_->kernel->AcquireUserModuleExecutionLease(caller.module);
+      arguments.size() > 8 || !domain->active())return false;
+  const auto caller = kernel->ResolveNativeImportCaller(address + 4);
+  if (!caller.scoped || caller.domain != domain || !caller.module)return false;
+  auto operation = domain->Acquire();
+  auto lease = kernel->AcquireUserModuleExecutionLease(caller.module);
   if (!operation || !lease) {
     return false;
   }
@@ -252,8 +278,8 @@ bool NativeSystemCallbackDispatcher::Enqueue(
     // Queue publication owns the completion only once enqueue succeeds.
     state_->queue.push_back(std::move(work));
     auto& published = state_->queue.back();
-    published->completed = std::move(completed);
-    published->before_enter = std::move(before_enter);
+    published->completed = std::move(completion);
+    published->before_enter = std::move(enter);
   }
   state_->ready.notify_one();
   return true;
@@ -261,12 +287,12 @@ bool NativeSystemCallbackDispatcher::Enqueue(
 
 bool NativeSystemCallbackDispatcher::IsAccepting() const {
   std::lock_guard lock(state_->mutex);
-  return !state_->stopping && state_->domain->active();
+  return !state_->stopping && !state_->stopped_retired && state_->domain && state_->domain->active();
 }
 
 bool NativeSystemCallbackDispatcher::IsCurrentWorker() const {
-  // The actual host-thread identity is immutable after Create publishes this
-  // dispatcher, including after it has joined. No guest TLS is manufactured.
+  // Stopped retirement may release the actual object after its OS join.
+  std::lock_guard lock(state_->mutex);
   return state_->thread && XThread::IsInThread(state_->thread.get());
 }
 
@@ -279,18 +305,55 @@ void NativeSystemCallbackDispatcher::BeginStop() {
 }
 
 bool NativeSystemCallbackDispatcher::DrainAndJoin() {
+  if(global_critical_region::is_held_by_current_thread())return false;
   BeginStop();
-  if (!state_->thread) {
-    return true;
+  object_ref<XHostThread> thread;
+  {std::lock_guard lock(state_->mutex);if(state_->host_joined)return true;thread=state_->thread;}
+  if(thread){
+    if(XThread::IsInThread(thread.get()) || !thread->thread())return false;
+    if(threading::Wait(thread->thread(),false,std::chrono::seconds(5))!=
+        threading::WaitResult::kSuccess)return false;
   }
-  if (XThread::IsInThread(state_->thread.get())) {
-    return false;
-  }
-  return XSUCCEEDED(state_->thread->Wait(0, 0, false, nullptr));
+  std::unique_lock lock(state_->mutex);
+  if(!state_->ready.wait_for(lock,std::chrono::seconds(5),[&]{return !state_->enqueue_calls;}))return false;
+  if(!state_->queue.empty() || state_->thread.get()!=thread.get())return false;
+  state_->host_joined=true;
+  return true;
 }
 
-const std::shared_ptr<NativeImportDomain>&
+bool NativeSystemCallbackDispatcher::RetireAfterActualKernelStop() noexcept try {
+  if(XThread::IsInThread() || global_critical_region::is_held_by_current_thread())return false;
+  KernelState* kernel;
+  {std::lock_guard lock(state_->mutex);if(state_->stopped_retired)return true;
+    if(!state_->stopping || !state_->host_joined || state_->enqueue_calls ||
+        !state_->queue.empty())return false;kernel=state_->kernel;}
+  if(!kernel)return false;
+  for(const auto& thread:kernel->object_table()->GetObjectsByType<XThread>(XObject::Type::Thread))
+    if(thread->is_running())return false;
+  object_ref<XHostThread> thread;
+  std::shared_ptr<NativeImportDomain> domain;
+  {
+    std::lock_guard lock(state_->mutex);
+    if(state_->kernel!=kernel || state_->enqueue_calls || !state_->host_joined ||
+        !state_->queue.empty())return false;
+    state_->stopped_retired=true;state_->kernel=nullptr;
+    thread=std::move(state_->thread);domain=std::move(state_->domain);
+  }
+  // The domain profile owns a real code/resource pin, so even an escaped
+  // dispatcher must drop it here, outside StateMutex and while Kernel lives.
+  if(domain)domain->Retire();
+  {
+    std::lock_guard lock(registry_mutex);
+    for(auto it=registry.begin();it!=registry.end();){
+      const auto actual=it->dispatcher.lock();
+      if(it->kernel==kernel && actual.get()==this)it=registry.erase(it);else ++it;
+    }
+  }
+  return true;
+} catch(...) {return false;}
+std::shared_ptr<NativeImportDomain>
 NativeSystemCallbackDispatcher::domain() const {
+  std::lock_guard lock(state_->mutex);
   return state_->domain;
 }
 

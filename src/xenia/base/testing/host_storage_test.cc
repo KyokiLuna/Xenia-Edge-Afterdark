@@ -7,6 +7,8 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <future>
+#include <iterator>
 #include <random>
 #include <string>
 #include <thread>
@@ -357,6 +359,38 @@ TEST_CASE("Readonly views never gain rename resize or writable-file access",
   auto narrowed = readonly->Subroot({}, false, error);
   REQUIRE(narrowed->read_only());
 }
+TEST_CASE("Storage admission observes the original same-thread and contending guard without changing retry",
+          "[storage_policy]") {
+  Scratch scratch;
+  std::error_code error;
+  auto space=HostStorageSpace::ForPath(scratch.path,0,error,[](const auto&,auto&){
+    return std::filesystem::space_info{1ull<<40,1ull<<30,1ull<<30};});
+  REQUIRE(space); REQUIRE_FALSE(error);
+  auto held=space->Begin(scratch.path,error); REQUIRE(held); REQUIRE_FALSE(error);
+  HostStorageFailureObservation same;
+  CHECK_FALSE(space->TryBegin(scratch.path,error,{},&same));
+  CHECK(error==std::errc::device_or_resource_busy);
+  CHECK(same.operation==1); CHECK(same.reason==2); CHECK(same.line!=0);
+  CHECK(same.error_category==1); CHECK(same.error_value==int(std::errc::device_or_resource_busy));
+  CHECK(same.guard_owner==same.guard_request);
+  const auto first_line=same.line;
+  // A later independent refusal may not replace the originating cut.
+  CHECK_FALSE(space->TryBegin(scratch.path/std::string("bad\0leaf",8),error,{},&same));
+  CHECK(error==std::errc::invalid_argument); CHECK(same.reason==2); CHECK(same.line==first_line);
+  HostStorageFailureObservation competing;
+  std::error_code concurrent_error; bool acquired=false;
+  std::thread contender([&]{auto guard=space->TryBegin(scratch.path,concurrent_error,{},&competing);
+    acquired=bool(guard);});
+  contender.join();
+  CHECK_FALSE(acquired); CHECK(concurrent_error==std::errc::device_or_resource_busy);
+  CHECK(competing.operation==1); CHECK(competing.reason==4);
+  CHECK(competing.guard_owner!=competing.guard_request);
+  held.reset();
+  HostStorageFailureObservation retry;
+  auto admitted=space->TryBegin(scratch.path,error,{},&retry);
+  REQUIRE(admitted); CHECK_FALSE(error); CHECK(retry.line==0);
+  CHECK(same.line==first_line); CHECK(competing.reason==4);
+}
 TEST_CASE("One live allowance serializes concurrent growth across views",
           "[storage_policy]") {
   Scratch scratch;
@@ -610,6 +644,12 @@ TEST_CASE("Storage lock subprocess helper", "[storage_policy_lock_probe]") {
     REQUIRE(guard);
     std::ofstream(root / "a-held") << "held";
     REQUIRE(Marker(root / "release"));
+  } else if (*role == 'c') {
+    HostStoragePreparationWait wait(std::chrono::steady_clock::now()+std::chrono::milliseconds(80));
+    HostStorageFailureObservation diagnostic;
+    auto guard=space->BeginPreparation(root,error,wait,{},&diagnostic);
+    CHECK_FALSE(guard); CHECK(error==std::errc::timed_out);
+    CHECK(diagnostic.operation==1); CHECK(diagnostic.reason==7);
   } else {
     std::ofstream(root / "b-attempt") << "waiting";
     auto guard = space->Begin(root, error);
@@ -634,6 +674,54 @@ TEST_CASE(
   REQUIRE(second.Finish() == 0);
   REQUIRE(std::filesystem::exists(scratch.path / "b-entered"));
 }
+
+TEST_CASE("Preparation guard waits for real handoff and cancels without admitting a guard",
+          "[storage_policy][prepared_mount]") {
+  Scratch scratch; std::error_code error;
+  auto space=HostStorageSpace::ForPath(scratch.path,0,error,[](const auto&,auto&){
+    return std::filesystem::space_info{1ull<<40,1ull<<30,1ull<<30};});
+  REQUIRE(space); auto held=space->Begin(scratch.path,error); REQUIRE(held);
+  HostStoragePreparationWait same(std::chrono::steady_clock::now()+std::chrono::seconds(1));
+  CHECK_FALSE(space->BeginPreparation(scratch.path,error,same));
+  CHECK(error==std::errc::device_or_resource_busy);
+  std::promise<void> started,finished; auto start=started.get_future(); auto done=finished.get_future();
+  bool acquired=false; std::error_code result;
+  std::thread thread([&]{
+    HostStoragePreparationWait wait(std::chrono::steady_clock::now()+std::chrono::seconds(1));
+    started.set_value(); auto guard=space->BeginPreparation(scratch.path,result,wait);
+    acquired=bool(guard); finished.set_value();
+  });
+  start.wait(); const bool actually_waited=done.wait_for(std::chrono::milliseconds(20))==std::future_status::timeout;
+  held.reset(); thread.join();
+  CHECK(actually_waited); CHECK(acquired); CHECK_FALSE(result);
+  held=space->Begin(scratch.path,error); REQUIRE(held);
+  std::stop_source stop; std::promise<void> second_started; auto second=second_started.get_future();
+  std::thread canceled([&]{
+    HostStoragePreparationWait wait(std::chrono::steady_clock::now()+std::chrono::seconds(1));
+    wait.LinkCancellation(stop.get_token()); second_started.set_value();
+    auto guard=space->BeginPreparation(scratch.path,result,wait); acquired=bool(guard);
+  });
+  second.wait(); stop.request_stop(); canceled.join();
+  CHECK_FALSE(acquired); CHECK(result==std::errc::operation_canceled);
+  // Same deadline applies to a later phase, rather than being reset per lock.
+  HostStoragePreparationWait expired(std::chrono::steady_clock::now()-std::chrono::milliseconds(1));
+  held.reset(); CHECK_FALSE(space->BeginPreparation(scratch.path,error,expired));
+  CHECK(error==std::errc::timed_out);
+}
+TEST_CASE("Preparation guard external flock contention has a real bounded deadline",
+          "[storage_policy][prepared_mount]") {
+  Scratch scratch;
+  std::filesystem::create_directory(scratch.path/"tmp-a");
+  std::filesystem::create_directory(scratch.path/"tmp-c");
+  ProbeProcess first,second;
+  first.Start(scratch.path,scratch.path/"tmp-a","a");
+  REQUIRE(Marker(scratch.path/"a-held"));
+  second.Start(scratch.path,scratch.path/"tmp-c","c");
+  const auto timed_result=second.Finish();
+  std::ofstream(scratch.path/"release")<<"release";
+  CHECK(timed_result==0); CHECK(first.Finish()==0);
+}
+
 TEST_CASE(
     "Read mappings and other aliases prevent resize before physical change",
     "[storage_policy]") {
@@ -1141,4 +1229,572 @@ TEST_CASE(
   REQUIRE(std::filesystem::exists(scratch.path / "mount-verified"));
 }
 }  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem {
+class HostStorageBootstrapTestAccess final {
+ public:
+  static auto Metadata(const std::shared_ptr<HostStorageRoot>& root,
+      std::span<const uint8_t> initial, std::string_view nonce,
+      std::error_code& error, std::shared_ptr<const HostStorageIntentLease> lease = {}) {
+    const auto mode = lease ? HostStorageRoot::ManagedMetadataOpen::kCreatePending :
+                              HostStorageRoot::ManagedMetadataOpen::kCreate;
+    return root->OpenManagedMetadata(".xenia-managed-source-v1",error,
+        mode,initial,nonce,std::move(lease));
+  }
+  static auto Browse(const HostStorageRoot& directory,const HostStorageRoot& source) {
+    return directory.CheckBootstrapBrowseDirectory(source);
+  }
+  static auto Lease(const std::shared_ptr<HostStorageRoot>& root,std::error_code& error) {
+    return root->AcquireIntentLease(error,true);
+  }
+  static void Stop(const std::shared_ptr<HostStorageRoot>& root,unsigned point) { root->bootstrap_test_boundary_.store(point); }
+  static auto Temporary(std::string_view nonce) { return HostStorageRoot::MetadataBootstrapTemporary(nonce); }
+  static auto DirectoryTemporary(std::string_view target,std::string_view nonce) { return HostStorageRoot::DirectoryBootstrapTemporary(target,nonce); }
+  static auto Append(HostStorageManagedMetadata& metadata,std::span<const uint8_t> suffix,
+      std::shared_ptr<const HostStorageIntentLease> lease,std::string_view nonce) {
+    return metadata.AppendBootstrapAtomically(suffix,std::move(lease),nonce);
+  }
+  static auto Bytes(const HostStorageManagedMetadata& metadata) { return metadata.bytes_; }
+  static bool Guest(const HostStorageManagedMetadata& metadata) { return bool(metadata.guest_view_); }
+  static auto Current(const HostStorageManagedMetadata& metadata) { return metadata.Check(); }
+  static auto Begin(const std::shared_ptr<HostStorageRoot>& parent,std::string_view target,
+      std::string_view nonce,std::error_code& error,
+      std::shared_ptr<const HostStorageIntentLease> lease = {}) { return parent->BeginBootstrapDirectory(target,nonce,error,std::move(lease)); }
+  static auto Resume(const std::shared_ptr<HostStorageRoot>& parent,
+      const std::filesystem::path& target,const std::filesystem::path& stage,uint64_t id,std::error_code& error) {
+    return parent->ResumeBootstrapDirectory(target,stage,id,error);
+  }
+  static auto Publish(const std::shared_ptr<HostStorageRoot>& parent,HostStorageBootstrapDirectory& directory) {
+    return parent->PublishBootstrapDirectory(directory);
+  }
+  static auto Media(const std::shared_ptr<HostStorageRoot>& parent,
+      HostStorageBootstrapDirectory& directory, std::error_code& error) {
+    return parent->ProtectMediaReferenceDirectory(directory,error);
+  }
+  static auto Admit(const std::shared_ptr<HostStorageRoot>& parent,HostStorageBootstrapDirectory& directory,
+      std::error_code& error,const HostStorageRoot* source = nullptr) {
+    return parent->AdmitBootstrapPublicDirectory(directory,error,source);
+  }
+  static auto Projection(const std::shared_ptr<HostStorageRoot>& source,
+      std::vector<std::shared_ptr<const HostStorageRoot>> private_roots,
+      std::vector<std::shared_ptr<const HostStorageRoot>> namespace_roots,
+      std::span<HostStorageBootstrapDirectory* const> settled_private,
+      HostStorageBootstrapDirectory* public_capsule,std::error_code& error) {
+    return source->InstallBootstrapProjection(std::move(private_roots),std::move(namespace_roots),
+        false,settled_private,public_capsule,error);
+  }
+  static auto OrdinaryProjection(const std::shared_ptr<HostStorageRoot>& source,
+      std::error_code& error) { return source->InstallProjection({},{},false,error); }
+  static auto Record(const std::shared_ptr<HostStorageRoot>& root,const std::filesystem::path& leaf,
+      std::span<const uint8_t> bytes,std::string_view nonce) { return root->PublishBootstrapRecord(leaf,bytes,nonce); }
+  static auto List(const std::shared_ptr<HostStorageRoot>& root,std::error_code& error) { return root->ListBootstrapRecords(error); }
+};
+}
+namespace xe::filesystem::test {
+namespace {
+std::shared_ptr<HostStorageRoot> BootstrapNativeRoot(Scratch& scratch) {
+  std::error_code error;auto root=HostStorageRoot::Open(scratch.path,false,error);
+  REQUIRE(root);REQUIRE_FALSE(error);return root;
+}
+std::vector<uint8_t> BootstrapBytes(const std::filesystem::path& path) {
+  std::ifstream in(path,std::ios::binary);REQUIRE(in.good());
+  return {std::istreambuf_iterator<char>(in),{}};
+}
+constexpr std::string_view kBootstrapNonce="0123456789abcdef0123456789abcdef";
+constexpr std::string_view kBootstrapNext="1123456789abcdef0123456789abcdef";
+}
+TEST_CASE("Atomic managed metadata creation never publishes an empty canonical marker",
+          "[storage_policy][bootstrap][metadata][native]") {
+  const unsigned boundary=GENERATE(1u,2u,3u);
+  Scratch scratch;auto root=BootstrapNativeRoot(scratch);std::error_code error;
+  const std::array<uint8_t,7> complete{1,0,3,4,0xff,6,9};
+  HostStorageBootstrapTestAccess::Stop(root,boundary);
+  auto metadata=HostStorageBootstrapTestAccess::Metadata(root,complete,kBootstrapNonce,error);
+  REQUIRE(error==std::errc::operation_canceled);
+  const auto canonical=scratch.path/".xenia-managed-source-v1";
+  REQUIRE(std::filesystem::exists(canonical)==(boundary==3));
+  if (boundary==3) {
+    REQUIRE(metadata);REQUIRE_FALSE(HostStorageBootstrapTestAccess::Guest(*metadata));
+    REQUIRE(BootstrapBytes(canonical)==std::vector<uint8_t>(complete.begin(),complete.end()));
+    REQUIRE_FALSE(HostStorageBootstrapTestAccess::Current(*metadata));
+  } else {
+    REQUIRE_FALSE(metadata);
+    const auto temporary=scratch.path/HostStorageBootstrapTestAccess::Temporary(kBootstrapNonce);
+    REQUIRE(std::filesystem::exists(temporary));
+    REQUIRE(std::filesystem::file_size(temporary)==(boundary==1?0:complete.size()));
+    // A previous temporary is not adopted by a later create attempt.
+    metadata=HostStorageBootstrapTestAccess::Metadata(root,complete,kBootstrapNonce,error);
+    REQUIRE_FALSE(metadata);REQUIRE(error);REQUIRE_FALSE(std::filesystem::exists(canonical));
+  }
+}
+TEST_CASE("Legacy bootstrap suffix preserves old control inode and transfers to locked new metadata",
+          "[storage_policy][bootstrap][metadata][legacy]") {
+  Scratch scratch;auto root=BootstrapNativeRoot(scratch);std::error_code error;
+  auto lease=HostStorageBootstrapTestAccess::Lease(root,error);REQUIRE(lease);REQUIRE_FALSE(error);
+  const std::array<uint8_t,5> prefix{0,2,4,0xff,8},suffix{9,7,0,3,1};
+  auto metadata=HostStorageBootstrapTestAccess::Metadata(root,prefix,kBootstrapNonce,error,lease);
+  REQUIRE(metadata);REQUIRE_FALSE(error);REQUIRE_FALSE(HostStorageBootstrapTestAccess::Guest(*metadata));
+  struct stat old{};REQUIRE(lstat((scratch.path/".xenia-managed-source-v1").c_str(),&old)==0);
+  HostStorageBootstrapTestAccess::Stop(root,3);
+  const auto appended=HostStorageBootstrapTestAccess::Append(*metadata,suffix,lease,kBootstrapNext);
+  REQUIRE(appended.error==std::errc::operation_canceled);REQUIRE(appended.published);REQUIRE_FALSE(appended.durable);
+  REQUIRE(appended.bytes==suffix.size());REQUIRE(appended.previous_file==uint64_t(old.st_ino));
+  REQUIRE(BootstrapBytes(scratch.path/appended.previous)==std::vector<uint8_t>(prefix.begin(),prefix.end()));
+  struct stat previous{},current{};
+  REQUIRE(lstat((scratch.path/appended.previous).c_str(),&previous)==0);
+  REQUIRE(lstat((scratch.path/".xenia-managed-source-v1").c_str(),&current)==0);
+  REQUIRE(previous.st_ino==old.st_ino);REQUIRE(current.st_ino!=old.st_ino);
+  auto expected=std::vector<uint8_t>(prefix.begin(),prefix.end());expected.insert(expected.end(),suffix.begin(),suffix.end());
+  REQUIRE(HostStorageBootstrapTestAccess::Bytes(*metadata)==expected);
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Current(*metadata));
+  auto competing=HostStorageBootstrapTestAccess::Metadata(root,{},kBootstrapNext,error);
+  REQUIRE_FALSE(competing);REQUIRE(error==std::errc::device_or_resource_busy);
+  // Exact final wire remains, with no replacement or metadata GuestView.
+  REQUIRE(BootstrapBytes(scratch.path/".xenia-managed-source-v1")==expected);
+}
+TEST_CASE("Bootstrap directories resume only recorded IDs and retain protection across uncertain publication",
+          "[storage_policy][bootstrap][directory][native]") {
+  Scratch scratch;auto parent=BootstrapNativeRoot(scratch);std::error_code error;
+  auto stage=HostStorageBootstrapTestAccess::Begin(parent,"published-owner",kBootstrapNonce,error);
+  REQUIRE(stage);REQUIRE_FALSE(error);const auto id=stage->native_directory();const auto leaf=stage->staging();
+  REQUIRE(leaf==HostStorageBootstrapTestAccess::DirectoryTemporary("published-owner",kBootstrapNonce));
+  const std::array<uint8_t,3> owner{4,0,9};
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Record(stage->root(),"owner.v1",owner,kBootstrapNonce).error);
+  REQUIRE_FALSE(stage->root()->GuestView(error));REQUIRE(error==std::errc::permission_denied);
+  stage.reset();stage=HostStorageBootstrapTestAccess::Resume(parent,"published-owner",leaf,id,error);
+  REQUIRE(stage);REQUIRE_FALSE(error);
+  HostStorageBootstrapTestAccess::Stop(parent,3);
+  const auto published=HostStorageBootstrapTestAccess::Publish(parent,*stage);
+  REQUIRE(published.published);REQUIRE_FALSE(published.durable);
+  REQUIRE(published.error==std::errc::operation_canceled);REQUIRE(published.canonical_root);
+  REQUIRE_FALSE(published.canonical_root->GuestView(error));REQUIRE(error==std::errc::permission_denied);
+  REQUIRE(BootstrapBytes(scratch.path/"published-owner/owner.v1")==std::vector<uint8_t>(owner.begin(),owner.end()));
+  const auto durable=HostStorageBootstrapTestAccess::Publish(parent,*stage);
+  REQUIRE_FALSE(durable.error);REQUIRE(durable.durable);REQUIRE_FALSE(durable.published);
+  auto admitted=HostStorageBootstrapTestAccess::Admit(parent,*stage,error);
+  REQUIRE(admitted);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Admit(parent,*stage,error));REQUIRE(error);
+}
+TEST_CASE("Bootstrap resume refuses wrong IDs both-present and native aliases unchanged",
+          "[storage_policy][bootstrap][directory][refusal]") {
+  Scratch scratch;auto parent=BootstrapNativeRoot(scratch);std::error_code error;
+  auto stage=HostStorageBootstrapTestAccess::Begin(parent,"owner",kBootstrapNonce,error);
+  REQUIRE(stage);const auto id=stage->native_directory();const auto leaf=stage->staging();stage.reset();
+  SECTION("Wrong source-local inode") {
+    REQUIRE_FALSE(HostStorageBootstrapTestAccess::Resume(parent,"owner",leaf,id+1,error));REQUIRE(error);
+  }
+  SECTION("Both actual stage and canonical exist") {
+    REQUIRE(std::filesystem::create_directory(scratch.path/"owner"));
+    REQUIRE_FALSE(HostStorageBootstrapTestAccess::Resume(parent,"owner",leaf,id,error));REQUIRE(error);
+    REQUIRE(std::filesystem::exists(scratch.path/leaf));REQUIRE(std::filesystem::exists(scratch.path/"owner"));
+  }
+  SECTION("Symlink cannot stand in for the canonical directory") {
+    REQUIRE(symlink(leaf.c_str(),(scratch.path/"owner").c_str())==0);
+    REQUIRE_FALSE(HostStorageBootstrapTestAccess::Resume(parent,"owner",leaf,id,error));REQUIRE(error);
+    REQUIRE(std::filesystem::is_symlink(scratch.path/"owner"));
+  }
+}
+TEST_CASE("Bootstrap records preserve partial control bytes and never overwrite conflicts",
+          "[storage_policy][bootstrap][record][native]") {
+  Scratch scratch;auto root=BootstrapNativeRoot(scratch);std::error_code error;
+  const std::array<uint8_t,21> bytes{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21};
+  HostStorageBootstrapTestAccess::Stop(root,1);
+  auto cut=HostStorageBootstrapTestAccess::Record(root,"bootstrap.pending.v1",bytes,kBootstrapNonce);
+  REQUIRE(cut.error);REQUIRE_FALSE(cut.published);REQUIRE_FALSE(cut.durable);
+  const auto partial=scratch.path/("bootstrap.pending.v1.partial-"+std::string(kBootstrapNonce));
+  REQUIRE(std::filesystem::file_size(partial)==17);const auto preserved=BootstrapBytes(partial);
+  auto complete=HostStorageBootstrapTestAccess::Record(root,"bootstrap.pending.v1",bytes,kBootstrapNext);
+  REQUIRE_FALSE(complete.error);REQUIRE(complete.published);REQUIRE(complete.durable);
+  auto observed=HostStorageBootstrapTestAccess::Record(root,"bootstrap.pending.v1",bytes,kBootstrapNonce);
+  REQUIRE_FALSE(observed.error);REQUIRE_FALSE(observed.published);REQUIRE(observed.durable);
+  const std::array<uint8_t,1> other{99};
+  REQUIRE(HostStorageBootstrapTestAccess::Record(root,"bootstrap.pending.v1",other,kBootstrapNonce).error);
+  REQUIRE(BootstrapBytes(partial)==preserved);
+  const auto listed=HostStorageBootstrapTestAccess::List(root,error);REQUIRE_FALSE(error);REQUIRE(listed.size()==2);
+  REQUIRE(chmod((scratch.path/"bootstrap.pending.v1").c_str(),0644)==0);
+  REQUIRE(HostStorageBootstrapTestAccess::Record(root,"bootstrap.pending.v1",bytes,kBootstrapNext).error);
+  REQUIRE(BootstrapBytes(scratch.path/"bootstrap.pending.v1")==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+  REQUIRE(chmod((scratch.path/"bootstrap.pending.v1").c_str(),0600)==0);
+  REQUIRE(symlink("bootstrap.pending.v1",(scratch.path/"bootstrap.commit.v1").c_str())==0);
+  REQUIRE(HostStorageBootstrapTestAccess::List(root,error).empty());REQUIRE(error);
+}
+TEST_CASE("Bootstrap admission denial follows genuine native capacity and leaves no new artifact",
+          "[storage_policy][bootstrap][space][refusal]") {
+  Scratch scratch;auto root=BootstrapNativeRoot(scratch);
+  std::ofstream(scratch.path/"sentinel")<<"original bytes";
+  const auto original=BootstrapBytes(scratch.path/"sentinel");
+  const std::array<uint8_t,1> bytes{42};
+  HostStorageBootstrapTestAccess::Stop(root,4);
+  const auto denied=HostStorageBootstrapTestAccess::Record(root,"bootstrap.pending.v1",bytes,kBootstrapNonce);
+  REQUIRE(denied.error==std::errc::no_space_on_device);
+  REQUIRE_FALSE(denied.published);REQUIRE_FALSE(denied.durable);
+  REQUIRE(std::distance(std::filesystem::directory_iterator(scratch.path),std::filesystem::directory_iterator{})==1);
+  REQUIRE(BootstrapBytes(scratch.path/"sentinel")==original);
+  const auto retry=HostStorageBootstrapTestAccess::Record(root,"bootstrap.pending.v1",bytes,kBootstrapNonce);
+  REQUIRE_FALSE(retry.error);REQUIRE(retry.durable);
+}
+
+TEST_CASE("Bootstrap metadata never adopts native aliases or admits an unvalidated marker",
+          "[storage_policy][bootstrap][metadata][refusal]") {
+  Scratch scratch;auto root=BootstrapNativeRoot(scratch);std::error_code error;
+  const std::array<uint8_t,3> bytes{7,0,8};
+  auto metadata=HostStorageBootstrapTestAccess::Metadata(root,bytes,kBootstrapNonce,error);
+  REQUIRE(metadata);REQUIRE_FALSE(error);REQUIRE_FALSE(HostStorageBootstrapTestAccess::Guest(*metadata));
+  metadata.reset();const auto canonical=scratch.path/".xenia-managed-source-v1";
+  SECTION("A second native hard link is refused without changing either name") {
+    REQUIRE(link(canonical.c_str(),(scratch.path/"original-control-alias").c_str())==0);
+    REQUIRE_FALSE(HostStorageBootstrapTestAccess::Metadata(root,{},kBootstrapNext,error));REQUIRE(error);
+    REQUIRE(BootstrapBytes(canonical)==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+    REQUIRE(BootstrapBytes(scratch.path/"original-control-alias")==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+  }
+  SECTION("A canonical symlink is refused without following it") {
+    std::filesystem::rename(canonical,scratch.path/"original-control");
+    REQUIRE(symlink("original-control",canonical.c_str())==0);
+    REQUIRE_FALSE(HostStorageBootstrapTestAccess::Metadata(root,{},kBootstrapNext,error));REQUIRE(error);
+    REQUIRE(std::filesystem::is_symlink(canonical));
+    REQUIRE(BootstrapBytes(scratch.path/"original-control")==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+  }
+}
+TEST_CASE("Bootstrap record inventory refuses an oversized native directory without deleting rows",
+          "[storage_policy][bootstrap][record][bounds]") {
+  Scratch scratch;auto root=BootstrapNativeRoot(scratch);std::error_code error;
+  for(unsigned i=0;i!=65;++i) {
+    if(i==64) { REQUIRE(HostStorageBootstrapTestAccess::List(root,error).size()==64);REQUIRE_FALSE(error); }
+    auto nonce=std::string(kBootstrapNonce);
+    constexpr char hex[]="0123456789abcdef";
+    nonce[0]=hex[i/16];nonce[1]=hex[i%16];
+    const auto file=scratch.path/("bootstrap-preserve-"+nonce+".v1");
+    std::ofstream(file,std::ios::binary)<<"preserved";
+    REQUIRE(chmod(file.c_str(),0600)==0);
+  }
+  REQUIRE(HostStorageBootstrapTestAccess::List(root,error).empty());REQUIRE(error);
+  const std::array<uint8_t,1> bytes{0};
+  REQUIRE(HostStorageBootstrapTestAccess::Record(root,"bootstrap.commit.v1",bytes,kBootstrapNext).error);
+  REQUIRE(std::distance(std::filesystem::directory_iterator(scratch.path),std::filesystem::directory_iterator{})==65);
+}
+
+TEST_CASE("Resumed bootstrap transfers its exact registered family while an unrelated guest retains old protectors",
+          "[storage_policy][bootstrap][directory][retained_guest]") {
+  Scratch scratch, unrelated_scratch, foreign_scratch;
+  auto parent=BootstrapNativeRoot(scratch);
+  auto unrelated=BootstrapNativeRoot(unrelated_scratch);
+  std::error_code error;
+  auto unrelated_guest=unrelated->GuestView(error);REQUIRE(unrelated_guest);REQUIRE_FALSE(error);
+  REQUIRE(chmod(foreign_scratch.path.c_str(),0700)==0);
+  auto foreign=BootstrapNativeRoot(foreign_scratch);
+  auto foreign_protector=foreign->ProtectFlat(error);REQUIRE(foreign_protector);REQUIRE_FALSE(error);
+  uint64_t directory=0;std::filesystem::path stage_leaf;
+  const std::array<uint8_t,4> owner{5,0,8,0xff};
+  {
+    auto initial=HostStorageBootstrapTestAccess::Begin(parent,"public-owner",kBootstrapNonce,error);
+    REQUIRE(initial);REQUIRE_FALSE(error);
+    directory=initial->native_directory();stage_leaf=initial->staging();
+    REQUIRE_FALSE(HostStorageBootstrapTestAccess::Record(initial->root(),"owner.v1",owner,kBootstrapNonce).error);
+    const auto published=HostStorageBootstrapTestAccess::Publish(parent,*initial);
+    REQUIRE_FALSE(published.error);REQUIRE(published.published);REQUIRE(published.durable);
+    REQUIRE_FALSE(published.canonical_root->GuestView(error));REQUIRE(error);
+  }  // capsule, receipt and canonical construction root all die; guest stays
+  auto resumed=HostStorageBootstrapTestAccess::Resume(parent,"public-owner",stage_leaf,directory,error);
+  REQUIRE(resumed);REQUIRE_FALSE(error);
+  const auto observed=HostStorageBootstrapTestAccess::Publish(parent,*resumed);
+  REQUIRE_FALSE(observed.error);REQUIRE_FALSE(observed.published);REQUIRE(observed.durable);
+  // An independent flat policy is not interchangeable with this receipt.
+  REQUIRE_FALSE(resumed->root()->ProtectFlat(error));REQUIRE(error);
+  auto public_view=HostStorageBootstrapTestAccess::Admit(parent,*resumed,error);
+  REQUIRE(public_view);REQUIRE_FALSE(error);
+  std::vector<uint8_t> read;
+  REQUIRE_FALSE(public_view->ReadFile("owner.v1",32,read));
+  REQUIRE(read==std::vector<uint8_t>(owner.begin(),owner.end()));
+  REQUIRE_FALSE(public_view->WriteNewFile("saved.data",owner).error);
+  REQUIRE_FALSE(unrelated_guest->WriteNewFile("ordinary.data",owner).error);
+  // Exact group retirement must leave unrelated private authority enforced.
+  REQUIRE_FALSE(foreign->GuestView(error));REQUIRE(error==std::errc::permission_denied);
+  auto reopened=parent->Subroot("public-owner",false,error);REQUIRE(reopened);REQUIRE_FALSE(error);
+  auto reopened_guest=reopened->GuestView(error);REQUIRE(reopened_guest);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(reopened_guest->ReadFile("saved.data",32,read));
+  REQUIRE(read==std::vector<uint8_t>(owner.begin(),owner.end()));
+}
+
+TEST_CASE("Media private handoff requires its complete durable exact bootstrap receipt",
+          "[storage_policy][bootstrap][directory][media]") {
+  const unsigned variant=GENERATE(0u,1u,2u,3u);
+  Scratch scratch, foreign_scratch;
+  auto parent=BootstrapNativeRoot(scratch);
+  auto foreign=BootstrapNativeRoot(foreign_scratch);
+  std::error_code error;
+  const auto target=variant==1 ? "other-private" : ".xenia-media-v1";
+  auto capsule=HostStorageBootstrapTestAccess::Begin(parent,target,kBootstrapNonce,error);
+  REQUIRE(capsule);REQUIRE_FALSE(error);
+  const std::string owner=variant==2 ? "foreign-owner" : "XENIA-MEDIA-REFERENCES-1\n";
+  const auto bytes=std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(owner.data()),owner.size());
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Record(capsule->root(),"owner.v1",bytes,kBootstrapNonce).error);
+  // Neither a staged capsule nor a foreign parent can authorize this role.
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Media(parent,*capsule,error));
+  REQUIRE(error==std::errc::permission_denied);
+  if (variant==3) { HostStorageBootstrapTestAccess::Stop(parent,3); }
+  auto published=HostStorageBootstrapTestAccess::Publish(parent,*capsule);
+  REQUIRE(published.canonical_root);REQUIRE(published.published);
+  if (variant==3) {
+    REQUIRE(published.error==std::errc::operation_canceled);REQUIRE_FALSE(published.durable);
+    REQUIRE_FALSE(HostStorageBootstrapTestAccess::Media(parent,*capsule,error));
+    REQUIRE(error==std::errc::permission_denied);
+    // The uncertain canonical protector is still real and blocks guest use.
+    REQUIRE_FALSE(published.canonical_root->GuestView(error));REQUIRE(error);
+    published=HostStorageBootstrapTestAccess::Publish(parent,*capsule);
+    REQUIRE_FALSE(published.published);
+  }
+  REQUIRE_FALSE(published.error);REQUIRE(published.durable);
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Media(foreign,*capsule,error));
+  REQUIRE(error==std::errc::permission_denied);
+  REQUIRE_FALSE(published.canonical_root->ProtectFlat(error));REQUIRE(error);
+  auto flat=HostStorageBootstrapTestAccess::Media(parent,*capsule,error);
+  if (variant==1 || variant==2) {
+    REQUIRE_FALSE(flat);REQUIRE(error);
+    REQUIRE_FALSE(published.canonical_root->GuestView(error));REQUIRE(error);
+    return;
+  }
+  REQUIRE(flat);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(flat->GuestView(error));REQUIRE(error);
+  // The typed handoff cannot later become public or settle a second time.
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Admit(parent,*capsule,error));
+  REQUIRE(error==std::errc::permission_denied);
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Media(parent,*capsule,error));
+  REQUIRE(error==std::errc::permission_denied);
+  // Actual parent EX survives protection handoff and ends with the capsule.
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Lease(parent,error));
+  REQUIRE(error==std::errc::device_or_resource_busy);
+  capsule.reset();
+  auto lease=HostStorageBootstrapTestAccess::Lease(parent,error);
+  REQUIRE(lease);REQUIRE_FALSE(error);lease.reset();
+  // General reopen reuses the existing flat owner, then works after retirement.
+  auto reopened=parent->Subroot(target,false,error);REQUIRE(reopened);REQUIRE_FALSE(error);
+  auto reused=reopened->ProtectFlat(error);REQUIRE(reused);REQUIRE_FALSE(error);
+  reused.reset();flat.reset();
+  auto restored=reopened->ProtectFlat(error);REQUIRE(restored);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(restored->GuestView(error));REQUIRE(error);
+  std::vector<uint8_t> read;
+  REQUIRE_FALSE(restored->ReadFile("owner.v1",128,read));
+  REQUIRE(read==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+}
+
+TEST_CASE("Bootstrap projection settles exact private roles but cannot admit guests without real recovered coordinator owners",
+          "[storage_policy][bootstrap][projection][native]") {
+  Scratch scratch, unrelated_scratch;
+  auto source=BootstrapNativeRoot(scratch);auto unrelated=BootstrapNativeRoot(unrelated_scratch);
+  std::error_code error;auto unrelated_guest=unrelated->GuestView(error);
+  REQUIRE(unrelated_guest);REQUIRE_FALSE(error);
+  auto source_lease=HostStorageBootstrapTestAccess::Lease(source,error);
+  REQUIRE(source_lease);REQUIRE_FALSE(error);
+  const std::array<uint8_t,3> owner{9,0,6};
+  const auto make_component=[&](std::string_view name,std::string_view nonce) {
+    auto capsule=HostStorageBootstrapTestAccess::Begin(source,name,nonce,error,source_lease);
+    REQUIRE(capsule);REQUIRE_FALSE(error);
+    REQUIRE_FALSE(HostStorageBootstrapTestAccess::Record(capsule->root(),"owner.v1",owner,nonce).error);
+    const auto published=HostStorageBootstrapTestAccess::Publish(source,*capsule);
+    REQUIRE_FALSE(published.error);REQUIRE(published.published);REQUIRE(published.durable);
+    return capsule;
+  };
+  auto private_capsule=make_component("private-state",kBootstrapNonce);
+  auto public_capsule=make_component("public-shell",kBootstrapNext);
+  auto unrelated_private=make_component("other-private","2123456789abcdef0123456789abcdef");
+  const std::array<HostStorageBootstrapDirectory*,1> settled{private_capsule.get()};
+  const auto private_root=private_capsule->root(), public_root=public_capsule->root();
+  // A capsule is not a caller-provided skip flag: actual exclusion coverage
+  // is required, and refusal leaves the original protections unchanged.
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Projection(source,{},
+      {public_root},settled,public_capsule.get(),error));REQUIRE(error);
+  REQUIRE_FALSE(private_root->GuestView(error));REQUIRE(error==std::errc::permission_denied);
+  auto projection=HostStorageBootstrapTestAccess::Projection(source,{private_root},
+      {public_root},settled,public_capsule.get(),error);
+  REQUIRE(projection);REQUIRE_FALSE(error);
+  // The unlisted other-private capsule is auto-included at its CURRENT
+  // canonical location. A stale registered stage pathname would fail here.
+  REQUIRE_FALSE(source->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+  REQUIRE_FALSE(private_root->GuestView(error));REQUIRE(error==std::errc::permission_denied);
+  REQUIRE(HostStorageBootstrapTestAccess::Publish(source,*private_capsule).error);
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Admit(source,*public_capsule,error,unrelated.get()));REQUIRE(error);
+  REQUIRE_FALSE(public_root->GuestView(error));REQUIRE(error==std::errc::permission_denied);
+  auto public_view=HostStorageBootstrapTestAccess::Admit(source,*public_capsule,error,source.get());
+  REQUIRE_FALSE(public_view);REQUIRE(error==std::errc::operation_in_progress);
+  REQUIRE_FALSE(source->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+  REQUIRE_FALSE(HostStorageRoot::AdmitGuestMount(
+      std::vector<GuestHostBacking>{source->GuestBacking()},error));
+  REQUIRE(error==std::errc::operation_in_progress);
+  // These lower native capsules have no actual coordinator, durable binding
+  // and ordinarily recovered typed owner, so no successful release is faked.
+  // Real commit/Recover/reopen admission belongs to the combined MVA fixtures.
+  REQUIRE_FALSE(unrelated_guest->WriteNewFile("ordinary.data",owner).error);
+  REQUIRE(link((unrelated_scratch.path/"ordinary.data").c_str(),
+      (unrelated_scratch.path/"ordinary-alias.data").c_str())==0);
+  // Real post-initialization private control growth must not inherit the
+  // capsule's bounded bootstrap inventory policy forever. The permanent
+  // projection continues to protect every native file and alias instead.
+  for(unsigned i=0;i!=513;++i) {
+    const auto control=private_root->path()/("journal-fixture-"+std::to_string(i));
+    std::ofstream(control,std::ios::binary)<<"x";REQUIRE(chmod(control.c_str(),0600)==0);
+  }
+  std::vector<uint8_t> bytes;
+  REQUIRE_FALSE(unrelated_guest->ReadFile("ordinary.data",32,bytes));
+  REQUIRE(bytes==std::vector<uint8_t>(owner.begin(),owner.end()));
+  REQUIRE_FALSE(private_root->GuestView(error));REQUIRE(error==std::errc::permission_denied);
+  REQUIRE_FALSE(source->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+  REQUIRE_FALSE(unrelated_guest->WriteNewFile("still-usable.data",owner).error);
+}
+
+TEST_CASE("Bootstrap guest seal covers child raw and reopened admissions without new capsules",
+          "[storage_policy][bootstrap][guest_seal][native]") {
+  Scratch scratch, public_scratch, unrelated_scratch;
+  auto source=BootstrapNativeRoot(scratch), shell=BootstrapNativeRoot(public_scratch);
+  auto unrelated=BootstrapNativeRoot(unrelated_scratch);
+  std::error_code error;const std::array<uint8_t,3> bytes{3,0,7};
+  REQUIRE_FALSE(source->Create("child",true));
+  REQUIRE_FALSE(source->WriteNewFile("source.data",bytes).error);
+  auto child=source->Subroot("child",false,error);REQUIRE(child);REQUIRE_FALSE(error);
+  auto reopened=HostStorageRoot::Open(scratch.path,false,error);REQUIRE(reopened);REQUIRE_FALSE(error);
+  // A committed reopen can have zero new native capsules. It is still the
+  // bootstrap factory role, and cannot inherit ordinary admitted behavior.
+  auto projection=HostStorageBootstrapTestAccess::Projection(source,{}, {shell},{},nullptr,error);
+  REQUIRE(projection);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(source->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+  REQUIRE_FALSE(child->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+  REQUIRE_FALSE(reopened->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+  REQUIRE_FALSE(shell->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+  for (const auto& backing : std::vector<GuestHostBacking>{
+      {scratch.path,true},{scratch.path/"child",true},
+      {scratch.path/"source.data",false},{public_scratch.path,true}}) {
+    REQUIRE_FALSE(HostStorageRoot::AdmitGuestMount(std::vector<GuestHostBacking>{backing},error));
+    REQUIRE(error==std::errc::operation_in_progress);
+  }
+  REQUIRE_FALSE(HostStorageRoot::AdmitGuestMount(std::nullopt,error));
+  REQUIRE(error==std::errc::operation_in_progress);
+  auto unrelated_guest=unrelated->GuestView(error);REQUIRE(unrelated_guest);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(unrelated_guest->WriteNewFile("unrelated.data",bytes).error);
+  std::vector<uint8_t> actual;REQUIRE_FALSE(source->ReadFile("source.data",32,actual));
+  REQUIRE(actual==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+}
+
+TEST_CASE("Ordinary projection guest admission keeps its existing default behavior",
+          "[storage_policy][projection][guest_seal][native]") {
+  Scratch scratch;auto source=BootstrapNativeRoot(scratch);std::error_code error;
+  auto projection=HostStorageBootstrapTestAccess::OrdinaryProjection(source,error);
+  REQUIRE(projection);REQUIRE_FALSE(error);
+  auto guest=source->GuestView(error);REQUIRE(guest);REQUIRE_FALSE(error);
+  auto raw=HostStorageRoot::AdmitGuestMount(
+      std::vector<GuestHostBacking>{{scratch.path,true}},error);
+  REQUIRE(raw);REQUIRE_FALSE(error);
+  const std::array<uint8_t,2> bytes{4,9};
+  REQUIRE_FALSE(guest->WriteNewFile("ordinary.data",bytes).error);
+  std::vector<uint8_t> actual;REQUIRE_FALSE(guest->ReadFile("ordinary.data",32,actual));
+  REQUIRE(actual==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+}
+
+TEST_CASE("Bootstrap guest seal cannot be installed beneath a live raw source or public guest",
+          "[storage_policy][bootstrap][guest_seal][native]") {
+  Scratch scratch, public_scratch;
+  auto source=BootstrapNativeRoot(scratch), shell=BootstrapNativeRoot(public_scratch);
+  std::error_code error;
+  const bool public_backing=GENERATE(false,true);
+  auto admitted=HostStorageRoot::AdmitGuestMount(
+      std::vector<GuestHostBacking>{{public_backing?public_scratch.path:scratch.path,true}},error);
+  REQUIRE(admitted);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Projection(source,{}, {shell},{},nullptr,error));
+  REQUIRE(error==std::errc::device_or_resource_busy);
+  // Refusal does not install a projection or retire any native authority.
+  REQUIRE_FALSE(source->has_guest_projection());
+  admitted.reset();
+  auto projection=HostStorageBootstrapTestAccess::Projection(source,{}, {shell},{},nullptr,error);
+  REQUIRE(projection);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(source->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+}
+
+TEST_CASE("Ordinary bootstrap browse directories cannot hide distinct existing native payloads",
+          "[storage_policy][bootstrap][browse][native]") {
+  Scratch scratch;auto source=BootstrapNativeRoot(scratch);std::error_code error;
+  const std::array<uint8_t,3> bytes{8,0,4};
+  REQUIRE_FALSE(source->WriteNewFile("source-payload",bytes).error);
+  auto same=source->Subroot({},false,error);REQUIRE(same);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Browse(*same,*source));
+  REQUIRE_FALSE(source->Create("public-content",true));
+  REQUIRE(chmod((scratch.path/"public-content").c_str(),0755)==0);
+  auto browse=source->Subroot("public-content",false,error);REQUIRE(browse);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(HostStorageBootstrapTestAccess::Browse(*browse,*source));
+  REQUIRE_FALSE(browse->WriteNewFile("existing-payload",bytes).error);
+  REQUIRE(HostStorageBootstrapTestAccess::Browse(*browse,*source)==std::errc::directory_not_empty);
+  std::vector<uint8_t> actual;REQUIRE_FALSE(browse->ReadFile("existing-payload",32,actual));
+  REQUIRE(actual==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+  REQUIRE_FALSE(source->ReadFile("source-payload",32,actual));
+  REQUIRE(actual==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+}
+
+TEST_CASE("Storage capabilities reject NUL roots before native prefix probes",
+          "[storage_policy][native_path]") {
+  Scratch scratch;
+  REQUIRE(std::filesystem::create_directory(scratch.path / "prefix"));
+  const auto malformed = scratch.path / std::filesystem::path(std::string("prefix\0suffix", 13));
+  std::error_code error;
+  REQUIRE_FALSE(HostStorageRoot::Open(malformed, false, error));
+  CHECK(error == std::errc::invalid_argument);
+  REQUIRE_FALSE(HostStorageDirectoryIdentity::Capture(malformed, error));
+  CHECK(error == std::errc::invalid_argument);
+  REQUIRE_FALSE(HostStorageSpace::ForPath(malformed, 0, error));
+  CHECK(error == std::errc::invalid_argument);
+  auto space = HostStorageSpace::ForPath(scratch.path, 0, error);
+  REQUIRE(space); REQUIRE_FALSE(error);
+  const auto observation = space->Observe(malformed);
+  CHECK_FALSE(observation.available);
+  CHECK(observation.error == std::errc::invalid_argument);
+  REQUIRE_FALSE(space->Begin(malformed, error));
+  CHECK(error == std::errc::invalid_argument);
+  REQUIRE_FALSE(space->TryBegin(malformed, error));
+  CHECK(error == std::errc::invalid_argument);
+  auto root = HostStorageRoot::Open(scratch.path, false, error);
+  REQUIRE(root); REQUIRE_FALSE(error);
+  bool matched = false;
+  REQUIRE_FALSE(root->CaptureGuestDirectory(malformed, true, matched, error));
+  CHECK(matched); CHECK(error == std::errc::invalid_argument);
+  CHECK(std::filesystem::is_directory(scratch.path / "prefix"));
+}
+TEST_CASE("Storage NUL components cannot read or mutate their existing prefix",
+          "[storage_policy][native_path]") {
+  Scratch scratch; std::error_code error;
+  auto root = HostStorageRoot::Open(scratch.path, false, error);
+  REQUIRE(root); REQUIRE_FALSE(error);
+  const std::array<uint8_t, 3> original{0x41, 0, 0xFE}, changed{1, 2, 3};
+  REQUIRE_FALSE(root->WriteNewFile("victim", original).error);
+  REQUIRE_FALSE(root->Create("directory", true));
+  REQUIRE_FALSE(root->WriteNewFile("directory/item", original).error);
+  const auto malformed = std::filesystem::path(std::string("victim\0suffix", 13));
+  const auto directory = std::filesystem::path(std::string("directory\0suffix", 16));
+  REQUIRE_FALSE(root->OpenFile(malformed, FileAccess::kGenericRead, error));
+  CHECK(error);
+  REQUIRE_FALSE(root->OpenFile(malformed, FileAccess::kGenericWrite, error));
+  CHECK(error);
+  std::vector<uint8_t> bytes{9};
+  CHECK(root->ReadFile(malformed, 32, bytes));
+  CHECK(bytes == std::vector<uint8_t>{9});
+  const auto written = root->WriteNewFile(malformed, changed);
+  CHECK(written.error); CHECK(written.bytes == 0);
+  CHECK(root->Remove(malformed, false));
+  CHECK(root->Rename(malformed, "moved", false));
+  CHECK(root->Rename("victim", malformed, true));
+  CHECK(root->Create(std::filesystem::path(std::string("created\0suffix", 14)), true));
+  REQUIRE_FALSE(root->Subroot(directory, false, error)); CHECK(error);
+  REQUIRE_FALSE(root->Subroot(directory / "child", false, error)); CHECK(error);
+  REQUIRE_FALSE(root->CaptureSnapshot(malformed, 32, error)); CHECK(error);
+  REQUIRE_FALSE(root->ReadFile("victim", 32, bytes));
+  CHECK(bytes == std::vector<uint8_t>(original.begin(), original.end()));
+  REQUIRE_FALSE(root->ReadFile("directory/item", 32, bytes));
+  CHECK(bytes == std::vector<uint8_t>(original.begin(), original.end()));
+  CHECK_FALSE(std::filesystem::exists(scratch.path / "moved"));
+  CHECK_FALSE(std::filesystem::exists(scratch.path / "created"));
+  // Existing empty-view and ordinary filename semantics remain usable.
+  auto same = root->Subroot({}, false, error); REQUIRE(same); REQUIRE_FALSE(error);
+  REQUIRE_FALSE(same->WriteNewFile("valid name", changed).error);
+  REQUIRE_FALSE(same->ReadFile("valid name", 32, bytes));
+  CHECK(bytes == std::vector<uint8_t>(changed.begin(), changed.end()));
+}
+
+}
 #endif

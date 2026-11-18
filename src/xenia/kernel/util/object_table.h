@@ -10,6 +10,7 @@
 #ifndef XENIA_KERNEL_UTIL_OBJECT_TABLE_H_
 #define XENIA_KERNEL_UTIL_OBJECT_TABLE_H_
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -25,6 +26,8 @@ class ByteStream;
 
 namespace xe {
 namespace kernel {
+namespace xboxkrnl { class XGuestObject; }
+namespace test { class NativeMediaDeniedAliasTestAccess; }
 namespace util {
 
 class ObjectTable {
@@ -95,6 +98,21 @@ class ObjectTable {
   object_ref<XObject> LookupAllocatedBody(uint32_t body);
 
  private:
+  friend class xboxkrnl::XGuestObject;
+  friend class test::NativeMediaDeniedAliasTestAccess;
+  // Birth metadata only; no Kernel, object, body or native reference ownership.
+  // Capture is lazy, so genuine Reset/destruction invalidates without allocating.
+  std::weak_ptr<const uint8_t> CaptureCountedBodyBirth() {
+    auto global = global_critical_region::AcquireDirect();
+    if (!counted_body_birth_) counted_body_birth_ = std::make_shared<const uint8_t>(0);
+    return counted_body_birth_;
+  }
+  bool CurrentCountedBodyBirth(const std::weak_ptr<const uint8_t>& observed) const {
+    auto global = global_critical_region::AcquireDirect();
+    const auto birth = observed.lock();
+    return birth && birth == counted_body_birth_;
+  }
+  std::shared_ptr<const uint8_t> counted_body_birth_;
   struct ObjectTableEntry {
     int handle_ref_count = 0;
     XObject* object = nullptr;

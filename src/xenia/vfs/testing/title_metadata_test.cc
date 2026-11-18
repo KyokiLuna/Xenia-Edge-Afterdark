@@ -356,6 +356,27 @@ TEST_CASE("Presentation keeps kind and configured entitlement distinct",
           TitleSemanticKind::kUnknown);
 }
 
+TEST_CASE("Configured entitlement can unlock a trial payload while standalone demos remain demos",
+          "[title-metadata][entitlement]") {
+  TitleResourceMetadata resources;
+  resources.raw_title_type = 2;
+  for (const uint32_t mask : {0u, 1u, 2u, 0xFFFFFFFFu}) {
+    CAPTURE(mask);
+    const auto payload = DescribeTitlePresentation(
+        uint32_t(XContentType::kXbox360Title), &resources, mask);
+    REQUIRE(payload.kind == TitleSemanticKind::kGame);
+    REQUIRE(payload.effective_license_mask == mask);
+    REQUIRE(payload.entitlement ==
+            (mask & 1 ? TitleEntitlement::kFull : TitleEntitlement::kTrial));
+    const auto demo = DescribeTitlePresentation(
+        uint32_t(XContentType::kGameDemo), &resources, mask);
+    REQUIRE(demo.kind == TitleSemanticKind::kGame);
+    REQUIRE(demo.entitlement == TitleEntitlement::kTrial);
+    REQUIRE(demo.effective_license_mask == mask);
+    REQUIRE(resources.raw_title_type == 2);
+  }
+}
+
 TEST_CASE("Container metadata uses the same offline executable resources",
           "[title-metadata]") {
   struct Temporary {

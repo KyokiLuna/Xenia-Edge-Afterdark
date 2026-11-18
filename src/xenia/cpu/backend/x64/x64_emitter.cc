@@ -42,6 +42,11 @@
 #include "xenia/kernel/native_notification_presentation.h"
 #include "xenia/kernel/native_content_storage_driver.h"
 #include "xenia/kernel/native_managed_format_frontdoor.h"
+#include "xenia/kernel/native_avatar_service.h"
+#include "xenia/kernel/native_system_ui_service.h"
+#include "xenia/kernel/native_media_service.h"
+#include "xenia/kernel/native_profile_identity_hooks.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/cpu/symbol.h"
 #include "xenia/cpu/thread_state.h"
 
@@ -253,6 +258,32 @@ bool X64Emitter::Emit(HIRBuilder* builder, EmitFunctionInfo& func_info) {
         rdx);  // save time for end of function
   }
 #endif
+  // Claimed SYSTEM Editor calls use the paired owned host loader provider.
+  // Every unclaimed/other loader call continues its original native body.
+  if(kernel::NativeSystemUiService::HooksEditorLoaderFunction(current_guest_function_)){
+    mov(GetNativeParam(0),current_guest_function_);
+    CallNative(reinterpret_cast<void*>(kernel::NativeSystemUiService::GuardEditorLoaderEntry));
+    test(rax,rax);jz(epilog_label,CodeGenerator::T_NEAR);
+  }
+  if(kernel::NativeSystemUiService::HooksSigninFunction(current_guest_function_)){
+    mov(GetNativeParam(0),current_guest_function_);
+    CallNative(reinterpret_cast<void*>(kernel::NativeSystemUiService::ObserveSigninEntry));
+  }
+  if(kernel::NativeMediaService::HooksFunction(current_guest_function_)){
+    mov(GetNativeParam(0),current_guest_function_);
+    CallNative(reinterpret_cast<void*>(kernel::NativeMediaService::GuardEntry));
+    test(rax,rax);jz(epilog_label,CodeGenerator::T_NEAR);
+  }
+  if(kernel::NativeAvatarService::HooksFunction(current_guest_function_)){
+    mov(GetNativeParam(0),current_guest_function_);
+    CallNative(reinterpret_cast<void*>(kernel::NativeAvatarService::GuardEntry));
+    test(rax,rax);jz(epilog_label,CodeGenerator::T_NEAR);
+  }
+  if(kernel::HooksNativeProfileIdentity(current_guest_function_)){
+    mov(GetNativeParam(0),current_guest_function_);
+    CallNative(reinterpret_cast<void*>(kernel::NativeProfileIdentityOwner::GuardEntry));
+    test(rax,rax);jz(epilog_label,CodeGenerator::T_NEAR);
+  }
   // Exact managed-format boundaries; each owner authenticates real code and caller.
   if (kernel::NativeManagedFormatFrontdoor::HooksFunction(current_guest_function_)) {
     mov(GetNativeParam(0), current_guest_function_);
@@ -364,6 +395,22 @@ bool X64Emitter::Emit(HIRBuilder* builder, EmitFunctionInfo& func_info) {
   if (synchronize_stack_on_next_instruction_) {
     synchronize_stack_on_next_instruction_ = false;
     EnsureSynchronizedGuestAndHostStack();
+  }
+  if(kernel::NativeMediaService::HooksFunction(current_guest_function_)){
+    mov(GetNativeParam(0),current_guest_function_);
+    CallNative(reinterpret_cast<void*>(kernel::NativeMediaService::ObserveReturn));
+  }
+  if(kernel::NativeAvatarService::HooksFunction(current_guest_function_)){
+    mov(GetNativeParam(0),current_guest_function_);
+    CallNative(reinterpret_cast<void*>(kernel::NativeAvatarService::ObserveReturn));
+  }
+  if(kernel::HooksNativeProfileIdentity(current_guest_function_)){
+    mov(GetNativeParam(0),current_guest_function_);
+    CallNative(reinterpret_cast<void*>(kernel::NativeProfileIdentityOwner::ObserveReturn));
+  }
+  if(kernel::NativeSystemUiService::HooksSigninFunction(current_guest_function_)){
+    mov(GetNativeParam(0),current_guest_function_);
+    CallNative(reinterpret_cast<void*>(kernel::NativeSystemUiService::ObserveSigninReturn));
   }
   // Exact managed-format boundaries; each owner authenticates real code and caller.
   if (kernel::NativeManagedFormatFrontdoor::HooksFunction(current_guest_function_)) {

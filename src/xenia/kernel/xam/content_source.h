@@ -17,25 +17,32 @@
 #include <system_error>
 #include <vector>
 #include "xenia/kernel/xam/xam_content_device.h"
+#include "xenia/base/cache_storage_owner.h"
 
 namespace xe::filesystem {
 class HostStorageRoot;
+class MediaSelection;
+struct HostStorageSnapshot;
 class ManagedDeviceIdentity;
 class ManagedVolumeAuthority;
 class ManagedVolumeFormatHandoff;
 }  // namespace xe::filesystem
+namespace xe::vfs { class VirtualFileSystem; }
 namespace xe::kernel {
 class NativeContentStorageSource;
+class NativeMediaService;
 }
 
 namespace xe::kernel::xam {
 class ContentManager;
 class ManagedFormatSourceProof;
+class SelectedMediaSourceProof;
+namespace test { class SelectedMediaTimingAccess; class SelectedMediaNativeAdmissionAccess; }
 
 // A source is a physical location, not a title/profile identity. More than one
 // source can contribute to a guest device: installed system content is a
 // read-only source on the HDD, never a second writable copy of those packages.
-enum class ContentSourceKind { kManaged, kInstalledSystem, kHostMedia };
+enum class ContentSourceKind { kManaged, kInstalledSystem, kHostMedia, kSelectedMedia, kCache };
 
 struct ContentSource {
   std::string id;
@@ -69,9 +76,15 @@ struct ContentSourceState {
   std::shared_ptr<const filesystem::ManagedDeviceIdentity> managed_identity;
   std::shared_ptr<const filesystem::ManagedVolumeAuthority> volume;
   // Separate operations: actual filewrites do not imply paired-GPD/format.
+  // Opaque ordinary-media authority. File selections expose no native parent.
+  std::shared_ptr<filesystem::MediaSelection> selected_media;
   bool profile_writable = false;
   bool format_eligible = false;
   std::shared_ptr<const ManagedFormatSourceProof> managed_format_proof;
+  std::shared_ptr<const filesystem::ConsoleStorageVolume> storage_volume;
+  // A refused fresh selected-media observation grants no backing. It does not
+  // overwrite the last physical projection or retire that actual generation.
+  std::error_code observation_error;
 };
 
 // Opaque cached registry capability for one actual managed generation. It is
@@ -97,6 +110,36 @@ class ManagedFormatSourceProof final {
       const std::shared_ptr<const filesystem::ManagedDeviceIdentity>&) const;
   bool MatchesVolume(
       const std::shared_ptr<const filesystem::ManagedVolumeAuthority>&) const;
+  std::unique_ptr<Impl> impl_;
+};
+
+// Identity of one actual registry publication, including metadata-only intent.
+// It owns no registry, selection, Device or native resource and grants no read
+// authority. Numeric generation reuse cannot manufacture this identity.
+class SelectedMediaPublication final {
+ public:
+  ~SelectedMediaPublication() = default;
+  SelectedMediaPublication(const SelectedMediaPublication&) = delete;
+  SelectedMediaPublication& operator=(const SelectedMediaPublication&) = delete;
+
+ private:
+  friend class ContentSourceRegistry;
+  SelectedMediaPublication() = default;
+};
+
+class SelectedMediaUse final {
+ public:
+  ~SelectedMediaUse();
+  SelectedMediaUse(const SelectedMediaUse&)=delete;
+  SelectedMediaUse& operator=(const SelectedMediaUse&)=delete;
+  // Pure atomic cached validation; no registry/native ownership acquisition.
+  // False closes ingress, not permission to skip native
+  // Close/rundown. Destruction drops only an atomic generation use count.
+  bool current() const noexcept;
+ private:
+  friend class ContentSourceRegistry;
+  struct Impl;
+  explicit SelectedMediaUse(std::unique_ptr<Impl>);
   std::unique_ptr<Impl> impl_;
 };
 
@@ -129,6 +172,55 @@ class ContentSourceRegistry {
   bool RegisterReadOnly(ContentSource source,
                         std::shared_ptr<filesystem::HostStorageRoot> authority,
                         uint64_t generation);
+  // Explicit host selection only. No package enumeration/path resolution or
+  // managed/profile/format authority is granted by this registration.
+  bool RegisterSelectedMedia(
+      ContentSource, std::shared_ptr<filesystem::MediaSelection>,
+      uint64_t generation, vfs::VirtualFileSystem&,
+      std::shared_ptr<const SelectedMediaPublication>* publication = nullptr);
+  // A requested receipt is issued by THIS actual transaction before callbacks,
+  // not by a later Source lookup. Existing idempotent publications are refused
+  // when a fresh owner receipt is requested.
+  // Saved intent with genuinely unavailable input. Publishes metadata only;
+  // never opens a path, creates a Device or claims a native attachment.
+  bool RegisterUnavailableSelectedMedia(
+      ContentSource,
+      std::shared_ptr<const SelectedMediaPublication>* publication = nullptr);
+  // Cached metadata check against the exact sampled source and publication.
+  // A foreign newer generation or same-number ABA publication always refuses.
+  bool OwnsSelectedMedia(
+      const ContentSourceState&,
+      const std::shared_ptr<const SelectedMediaPublication>&) const;
+  // Cached post-notification availability of THIS issued publication. No IO,
+  // source re-observation, ownership substitution or native attachment proof.
+  bool SelectedMediaAvailable(
+      const std::string& id,
+      const std::shared_ptr<const SelectedMediaPublication>&) const;
+  bool WithdrawSelectedMedia(
+      const std::string& id, uint64_t expected_generation,
+      const std::shared_ptr<const SelectedMediaPublication>& expected = {});
+  // Host reference removal, after exact withdrawal. Existing cursor/file uses
+  // must really drain before its exact device and source record are forgotten.
+  bool ForgetSelectedMedia(
+      const std::string& id, uint64_t expected_generation,
+      vfs::VirtualFileSystem&,
+      const std::shared_ptr<const SelectedMediaPublication>& expected = {});
+  // Non-content physical cache role: excluded from selectors, package paths,
+  // profiles and user HDD format. Only the exact typed product owner can bind
+  // its current role root and namespace through the existing registry/VFS.
+  bool RegisterCache(ContentSource,std::shared_ptr<filesystem::CacheStorageOwner>,
+      filesystem::CacheStorageOwner::Role,uint64_t generation,vfs::VirtualFileSystem&);
+  // Cancels the exact observed generation before closing its actual VFS graph.
+  // Busy real Files remain bound to that retired device for truthful retry.
+  bool WithdrawCache(const std::string& id,uint64_t expected_generation,vfs::VirtualFileSystem&);
+
+  std::shared_ptr<filesystem::MediaSelection> CaptureSelectedMedia(
+      const ContentSourceState&) const;
+  std::shared_ptr<SelectedMediaUse> CaptureSelectedMediaUse(
+      const ContentSourceState&) const;
+  // Pending controlled retirement is finalized by the existing source refresh
+  // producer after the last exact use drains. No owner callback in a destructor.
+
   class ManagedTransition final {
    public:
     ~ManagedTransition();
@@ -170,9 +262,19 @@ class ContentSourceRegistry {
   std::vector<ContentSourceState> Sources(uint32_t device_id) const;
   std::optional<ContentSourceState> Source(const std::string& id) const;
   std::optional<ContentSourceState> WritableSource(uint32_t device_id) const;
+  // Exact captured cached generation only; no observation or numeric-ID lookup.
+  std::shared_ptr<const filesystem::ConsoleStorageVolume> CaptureStorageVolume(
+      const ContentSourceState&) const;
   std::shared_ptr<filesystem::HostStorageRoot> CaptureManagedDirectory(
       const std::filesystem::path&, bool force_readonly, bool& matched,
-      std::error_code&) const;
+      std::error_code&,
+      std::shared_ptr<const filesystem::ConsoleStorageVolume>* volume = nullptr) const;
+
+  // Exact managed OR registered readonly source directory. Source policy and
+  // root are captured together; unknown writable/catalog roots gain no access.
+  std::shared_ptr<filesystem::HostStorageRoot> CaptureSourceDirectory(
+      const std::filesystem::path&,bool force_readonly,bool& matched,std::error_code&,
+      std::shared_ptr<const filesystem::ConsoleStorageVolume>* volume = nullptr) const;
 
   // An owned observer of managed logical volumes. Its subscription and initial
   // snapshot are atomic; callbacks never borrow this registry or its locks.
@@ -193,6 +295,23 @@ class ContentSourceRegistry {
       bool for_write) const;
 
  private:
+  friend class xe::kernel::NativeMediaService;
+  // Nonwaiting admission only for the exact issued selected proof. No source
+  // refresh, filesystem observation or file/root capability is returned.
+  // Actual native query initialization/open must still succeed truthfully.
+  std::shared_ptr<SelectedMediaUse> CaptureSelectedMediaUse(
+      const std::shared_ptr<const SelectedMediaSourceProof>&,std::error_code&) const;
+  friend class test::SelectedMediaTimingAccess;
+  friend class test::SelectedMediaNativeAdmissionAccess;
+  // Timing only, outside all locks, after actual capture/preparation. No probe
+  // result, file identity, source or authority can be substituted by this seam.
+  void SetSelectedMediaTimingForTest(std::function<void(const std::string&)> sampled,
+      std::function<void(const std::string&)> prepared);
+  static filesystem::HostStorageSnapshot ProbeSelected(
+      const std::shared_ptr<filesystem::MediaSelection>&,bool draining);
+  std::shared_ptr<filesystem::HostStorageRoot> CaptureDirectory(
+      const std::filesystem::path&,bool,bool&,std::error_code&,bool managed_only,
+      std::shared_ptr<const filesystem::ConsoleStorageVolume>*) const;
   bool RegisterImpl(ContentSource, std::shared_ptr<filesystem::HostStorageRoot>,
                     uint64_t, bool fixed,
       std::shared_ptr<const filesystem::ManagedDeviceIdentity> = {},

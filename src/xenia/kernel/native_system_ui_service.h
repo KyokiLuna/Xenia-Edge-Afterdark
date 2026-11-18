@@ -20,11 +20,16 @@
 #include "xenia/kernel/native_system_ui_public_calls.h"
 #include "xenia/kernel/native_system_ui_startup.h"
 
+namespace xe { class Emulator; }
+
 namespace xe::kernel {
 class KernelState;
 class NativeGraphicsDeviceBinding;
 class NativeImportDomain;
 class NativeInputDriver;
+class NativeProfileIdentityOwner;
+class NativeMediaService;
+class NativeSystemTaskContinuation;
 class NativeSystemUiFirstRecordProbe;
 class NativeSystemAllocationAuthority;
 class NativeSystemCallbackDispatcher;
@@ -124,6 +129,7 @@ class NativeSystemUiServiceTransport {
       const NativeSystemUiServiceContext&, XThread&);
 };
 
+class NativeAvatarService;
 class NativeSystemUiService
     : public std::enable_shared_from_this<NativeSystemUiService> {
  public:
@@ -162,6 +168,8 @@ class NativeSystemUiService
     bool start_claimed = false, stopping = false, heap_ready = false;
     bool boot_admitted = false, source_frame_ready = false;
     bool bootstrap_joined = false, stop_drained = false;
+    // Distinct from normal drain: exact covered owners survive to actual stop.
+    bool stop_retained = false;
     bool title_heap_ready = false;
     bool diagnostic_boot_observed = false;
     std::string failure;
@@ -169,6 +177,10 @@ class NativeSystemUiService
   // Exactly one resident service per actual Kernel; retained before Start.
   // Resource paths identify a fresh, separate native root, never title XAM.
   static std::shared_ptr<NativeSystemUiService> Create(Config);
+  // External GUI host only, before its asynchronous shutdown/quick_exit.
+  // Emulator is an immutable comparison key, never dereferenced here. This
+  // captures scalar diagnostics, not CPU stop, native drain or readiness.
+  static void ReportForEmulatorOnHostExit(const ::xe::Emulator*) noexcept;
   ~NativeSystemUiService();
   bool Start();
   Snapshot snapshot() const;
@@ -179,8 +191,10 @@ class NativeSystemUiService
   bool JoinBootstrap(
       std::chrono::milliseconds timeout = std::chrono::seconds(5)) noexcept;
   // Does not claim full CPU/GPU stop. Must precede the existing Kernel cohort
-  // driver/dispatcher/timer/IRQ/scheduler/CP shutdown; false requires fail-stop
-  // retention. No native PPC is executed by stop/destruction.
+  // driver/dispatcher/timer/IRQ/scheduler/CP shutdown. Success is either actual
+  // normal drain or a private exact covered-retention capsule; Snapshot exposes
+  // those as distinct facts. Unknown native host/STARTUP frames still refuse.
+  // No native PPC is executed by external stop/destruction.
   bool StopBeforeCpuAndProviders() noexcept;
   static void StopForKernelOrFailStop(KernelState*) noexcept;
   // Pre-ClearDialogs phase, before full provider/native teardown.
@@ -189,6 +203,19 @@ class NativeSystemUiService
   // admission, denied/failed/closed native calls never silently switch
   // implementation. Executes synchronously on the ACTUAL original TITLE or
   // SYSTEM XThread.
+  // Non-mutating exact entry/own-return observations for a prebound original
+  // public sign-in invocation. Inactive/unrelated native calls are untouched.
+  static constexpr bool HooksSigninFunction(uint32_t address) {
+    return address==0x816C1868 || address==0x816A2FF8;
+  }
+  static constexpr bool HooksEditorLoaderFunction(uint32_t address) {
+    return address == 0x8169F4A8 || address == 0x816A0D70;
+  }
+  // Continue original body on1. Only an exact prebound SYSTEM Editor pair can
+  // supply a real host-provider result and return0 through the existing epilogue.
+  static uint64_t GuardEditorLoaderEntry(void*,uint64_t) noexcept;
+  static void ObserveSigninEntry(void*,uint64_t) noexcept;
+  static void ObserveSigninReturn(void*,uint64_t) noexcept;
   static NativeSystemUiPublicCallResult TryInvokePublicOnOriginalCaller(
       KernelState*, NativeSystemUiPublicCall,
       std::span<const uint32_t>) noexcept;
@@ -200,13 +227,33 @@ class NativeSystemUiService
                                            std::span<const uint64_t>) noexcept;
 
  private:
+  friend class ::xe::Emulator;
+  // Metadata-only observation from the external pre-title failure boundary.
+  void ReportProfileIdentityRefusalOnCoordinator(
+      KernelState*, const char* boundary = "Coordinator") const noexcept;
   friend class NativeSystemUiFirstRecordProbe;
+  friend class NativeAvatarService;
+  friend class NativeMediaService;
+  friend class NativeProfileIdentityOwner;
+  // Usable by actual admitted bootstrap/cleanup before public BootAdmitted.
+  // Lookup supplies ownership only; it creates no native readiness.
+  static std::shared_ptr<NativeProfileIdentityOwner>
+  CaptureProfileIdentityOwner(KernelState*);
+  static std::shared_ptr<NativeAvatarService> CaptureAvatarService(KernelState*);
+  static std::shared_ptr<NativeMediaService> CaptureMediaService(KernelState*);
+  static bool AvatarFamilyRequested(KernelState*);
   // Fixed opt-in diagnostic only: old first-record observation or the strict
   // production-render branch on its already-owned bootstrap. One existing
   // postboot Task; no public family admission or settings mutation.
   static GuestRuntime::ExecutionResult InvokeFixedNotificationDiagnostic(
       KernelState*, XThread&);
   struct State;
+  static bool BindMediaContinuation(
+      const std::shared_ptr<State>&,
+      const std::shared_ptr<NativeSystemTaskContinuation>&);
+  static bool BindProfileIdentityContinuation(
+      const std::shared_ptr<State>&,
+      const std::shared_ptr<NativeSystemTaskContinuation>&);
   class StartupSeams;
   explicit NativeSystemUiService(std::shared_ptr<State>);
   static int Bootstrap(const std::shared_ptr<State>&);

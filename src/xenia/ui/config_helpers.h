@@ -35,10 +35,17 @@ namespace ui {
 inline bool IsInternalCvarSetting(std::string_view name) {
   static constexpr auto names = std::to_array<std::string_view>({
       "default_achievements_backend",
+      "allow_avatar_initialization",
+      "allow_nui_initialization",
+      "achievement_notification_position_by_game",
       "logged_profile_slot_0_xuid",
       "logged_profile_slot_1_xuid",
       "logged_profile_slot_2_xuid",
       "logged_profile_slot_3_xuid",
+      "logged_profile_slot_0_source_id",
+      "logged_profile_slot_1_source_id",
+      "logged_profile_slot_2_source_id",
+      "logged_profile_slot_3_source_id",
       "kernel_build_version",
       "staging_mode",
       "data_center_mode",

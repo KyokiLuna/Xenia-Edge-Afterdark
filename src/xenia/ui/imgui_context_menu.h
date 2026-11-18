@@ -102,6 +102,7 @@ class ImGuiContextMenu : public ImGuiDialog {
   std::vector<MenuItem> items_;
   hid::InputSystem* input_system_;
   std::function<void()> on_close_callback_;
+  bool deferred_action_queued_ = false;
   std::function<void()> pending_callback_;  // Callback to execute after close
   std::function<bool()> input_ownership_callback_;
   int focused_index_ = 0;

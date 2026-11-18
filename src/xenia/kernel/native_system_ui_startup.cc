@@ -7,6 +7,8 @@
  ******************************************************************************
  */
 #include "xenia/kernel/native_system_ui_startup.h"
+#include "xenia/kernel/native_avatar_contract.h"
+#include "xenia/kernel/native_avatar_service.h"
 #include <algorithm>
 #include <array>
 #include <map>
@@ -28,6 +30,8 @@
 #include "xenia/kernel/guest_runtime_call_executor.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/native_import_domain.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
+#include "xenia/kernel/native_profile_identity_contract.h"
 #include "xenia/kernel/native_system_allocation_authority.h"
 #include "xenia/kernel/native_system_content.h"
 #include "xenia/kernel/native_system_input_data.h"
@@ -65,6 +69,9 @@ constexpr Entry kEntries[] = {
     {"native-system-notify-init", 0x816A95A0, 220,
      "bccb7e72058b7ce42fe7f8e2ccb25eaf78966838564c5413c80d3d89e09b45fa",
      Policy::kVoid, 0, Phase::kNotifications, ExecutionStage::kBootstrap},
+    {"native-system-profile-data-init", 0x816DB788, 212,
+     "ac267e2a987800a56f536da15b645f31fa690466c80d7b179b06c40205837e13",
+     Policy::kVoid, 0, Phase::kProfileData, ExecutionStage::kBootstrap},
     {"native-system-input-aux-init", 0x816F44D0, 396,
      "dec3c2185ca94413e1f2e08ea5f1b69436535fd2e85ca27bd1d6c3a318456ad9",
      Policy::kHResult, 0, Phase::kInputAuxiliary, ExecutionStage::kBootstrap},
@@ -246,6 +253,112 @@ Phase ContentPhase(NativeSystemContentCall call) {
   return Phase::kPrepareSeams;
 }
 }  // namespace
+NativeSystemProfileInitializationData ReadNativeSystemProfileInitializationData(
+    Memory& memory) {
+  NativeSystemProfileInitializationData result;
+  auto guard = global_critical_region::AcquireDirect();
+  const auto reference = Word(&memory, 0x81AA3E90);
+  if (!reference) return result;
+  result.queue_reference = *reference;
+  if (*reference < 0x1000 || (*reference & 3) != 2) {
+    result.status = NativeSystemProfileInitializationData::Status::kQueueTag;
+    return result;
+  }
+  result.queue_body = *reference & ~3u;
+  if (uint64_t(result.queue_body) + 0x20 > (uint64_t(1) << 32) ||
+      memory.QueryRangeAccess(result.queue_body, 0x20) ==
+          memory::PageAccess::kNoAccess ||
+      Word(&memory, result.queue_body) != 0x815F90A0u) {
+    result.status = NativeSystemProfileInitializationData::Status::kQueueObject;
+    return result;
+  }
+  // Original BA840 creates the serial queue's base reference and empty list;
+  // BA948 stores body|2 and adds flags1. No Task is created or adopted here.
+  if (Word(&memory, result.queue_body + 4) != 1u ||
+      Word(&memory, result.queue_body + 8) != 0u ||
+      Word(&memory, result.queue_body + 0x18) != 1u ||
+      Word(&memory, result.queue_body + 0x1C) != 1u) {
+    result.status = NativeSystemProfileInitializationData::Status::kQueueState;
+    return result;
+  }
+  for (uint32_t slot = 0; slot < 4; ++slot) {
+    for (uint32_t kind = 0; kind < 2; ++kind) {
+      const uint32_t index = slot * 2 + kind;
+      const uint32_t cell = (kind ? 0x81AA3320u : 0x81AA28E0u) +
+                            slot * 0x290 + 0x278;
+      const auto buffer = Word(&memory, cell);
+      if (!buffer || *buffer < 0x1000 || (*buffer & 3) ||
+          uint64_t(*buffer) + 0x22 > (uint64_t(1) << 32) ||
+          memory.QueryRangeAccess(*buffer, 0x22) ==
+              memory::PageAccess::kNoAccess) {
+        result.status = NativeSystemProfileInitializationData::Status::kBuffer;
+        return result;
+      }
+      for (uint32_t previous = 0; previous < index; ++previous) {
+        if (uint64_t(*buffer) < uint64_t(result.buffers[previous]) + 0x22 &&
+            uint64_t(result.buffers[previous]) < uint64_t(*buffer) + 0x22) {
+          result.status = NativeSystemProfileInitializationData::Status::kBuffer;
+          return result;
+        }
+      }
+      if (uint64_t(*buffer) < uint64_t(result.queue_body) + 0x20 &&
+          uint64_t(result.queue_body) < uint64_t(*buffer) + 0x22) {
+        result.status = NativeSystemProfileInitializationData::Status::kBuffer;
+        return result;
+      }
+      const auto* bytes = memory.TranslateVirtual<const uint8_t*>(*buffer);
+      if (!std::all_of(bytes, bytes + 0x22,
+                       [](uint8_t value) { return value == 0; })) {
+        result.status = NativeSystemProfileInitializationData::Status::kBuffer;
+        return result;
+      }
+      result.buffers[index] = *buffer;
+    }
+  }
+  result.status = NativeSystemProfileInitializationData::Status::kValid;
+  return result;
+}
+NativeSystemPeriodicServiceStopPlan CheckNativeSystemPeriodicServiceStopPlan(
+    const ValidatedGuestRuntimePlan& plan, std::string* error) {
+  constexpr const char* kIdentity = "native-periodic-service-stop";
+  constexpr uint32_t kAddress = 0x819068D0, kBytes = 128;
+  const auto inside = [](uint32_t address) {
+    return address >= kAddress && uint64_t(address) < uint64_t(kAddress) + kBytes;
+  };
+  const auto fail = [&](const char* why) {
+    if (error) *error = why;
+    return NativeSystemPeriodicServiceStopPlan::kInvalid;
+  };
+  for (const auto& phase : plan.plan.phases) {
+    for (const auto& function : phase.functions) {
+      if (function.identity == kIdentity || inside(function.address))
+        return fail("Periodic service stop must remain deferred");
+    }
+  }
+  for (const auto& [identity, function] : plan.catalog) {
+    if (identity != kIdentity && inside(function.address))
+      return fail("Periodic service stop has an aliased native entry");
+  }
+  const auto function = plan.catalog.find(kIdentity);
+  const auto contract = plan.contracts.find(kIdentity);
+  if (function == plan.catalog.end() && contract == plan.contracts.end()) {
+    if (error) error->clear();
+    return NativeSystemPeriodicServiceStopPlan::kAbsent;
+  }
+  if (function == plan.catalog.end() || contract == plan.contracts.end() ||
+      function->second.identity != kIdentity ||
+      function->second.address != kAddress ||
+      function->second.arguments != std::vector<uint64_t>{0} ||
+      function->second.return_kind != GuestRuntime::ReturnKind::kVoid ||
+      contract->second.caller !=
+          ValidatedGuestRuntimePlan::CallerPolicy::kSystemOnly ||
+      contract->second.result != ValidatedGuestRuntimePlan::ResultPolicy::kVoid ||
+      !contract->second.before.empty() || !contract->second.after.empty()) {
+    return fail("Periodic service stop requires the original deferred SYSTEM void ABI");
+  }
+  if (error) error->clear();
+  return NativeSystemPeriodicServiceStopPlan::kComplete;
+}
 struct NativeSystemUiStartupCatalog::State {
   std::shared_ptr<GuestRuntimeCallExecutor> calls;
   std::shared_ptr<NativeSystemAllocationAuthority> allocation;
@@ -254,6 +367,7 @@ struct NativeSystemUiStartupCatalog::State {
   NativeSystemUiStartupSymbols symbols;
   GuestRuntime::Function factory;
   NativeSystemStartupTaskFunctions task_functions;
+  std::optional<GuestRuntime::Function> periodic_service_stop;
   GuestRuntime::Function frontend_callback;
   std::string provenance;
   std::shared_ptr<NativeSystemContent> system_content;
@@ -301,6 +415,16 @@ NativeSystemUiStartupCatalog::Load(
   auto state = std::make_unique<State>();
   state->calls = calls;
   state->allocation = allocation;
+  const auto periodic_stop =
+      CheckNativeSystemPeriodicServiceStopPlan(calls->validated(), error);
+  if (periodic_stop == NativeSystemPeriodicServiceStopPlan::kInvalid) return {};
+  if (periodic_stop == NativeSystemPeriodicServiceStopPlan::kComplete) {
+    if (!CodeHash(*calls, 0x819068D0, 128,
+                  "e15b08f73223ccb8b256e69da67716015fd3e57e1802a3482a8d278e6e02992f"))
+      return fail("Periodic service stop source body changed");
+    state->periodic_service_stop =
+        calls->validated().catalog.at("native-periodic-service-stop");
+  }
   state->plan.identity = "17559-native-system-ui-service-startup-v2-notify";
   const auto content_profiles = NativeSystemContentProfiles();
   const auto family =
@@ -310,6 +434,27 @@ NativeSystemUiStartupCatalog::Load(
   }
   const bool content_enabled =
       family == NativeSystemContentPlanFamily::kComplete;
+  const auto avatar_family=CheckNativeAvatarPlanFamily(calls->validated(),error);
+  if(avatar_family==NativeAvatarPlanFamily::kInvalid ||
+     (avatar_family==NativeAvatarPlanFamily::kComplete && !content_enabled))return {};
+  const bool avatar_enabled=avatar_family==NativeAvatarPlanFamily::kComplete;
+  const auto identity_family =
+      CheckNativeProfileIdentityPlanFamily(calls->validated(), error);
+  if (identity_family == NativeProfileIdentityPlanFamily::kInvalid) return {};
+  const bool profile_data_enabled = calls->validated().catalog.contains(
+      "native-system-profile-data-init");
+  if (identity_family == NativeProfileIdentityPlanFamily::kComplete &&
+      !profile_data_enabled) {
+    return fail("Native identity requires original profile data/serial queue initialization");
+  }
+  std::vector<GuestRuntime::Function> avatar_functions;
+  if(avatar_enabled){
+    for(const auto& role:NativeAvatarStartupProfiles()){
+      if(!CodeHash(*calls,role.address,role.bytes,role.sha256))
+        return fail("Native avatar startup source body changed");
+      avatar_functions.push_back(calls->validated().catalog.at(std::string(role.identity)));
+    }
+  }
   std::vector<GuestRuntime::Function> content_functions;
   if (content_enabled) {
     for (const auto& profile : content_profiles) {
@@ -345,6 +490,10 @@ NativeSystemUiStartupCatalog::Load(
   }
   GuestRuntime::Phase phase{"native-owned-service-startup", {}};
   for (const auto& entry : kEntries) {
+    if (entry.phase == Phase::kProfileData && !profile_data_enabled) continue;
+    // Original969F0 initializes this resident profile serial queue/buffers
+    // afterNotify and beforeInputAux. Older plans without native identity keep
+    // their existing role set; explicit profile-data init grants no roster owner.
     // Preserve original native Main ordering: source/index setup precedes FE;
     // the queued public lookup waits until FE is genuinely initialized.
     if (content_enabled && entry.phase == Phase::kUpdatePredicate) {
@@ -355,6 +504,8 @@ NativeSystemUiStartupCatalog::Load(
     }
     if (content_enabled && entry.phase == Phase::kUiManager) {
       phase.functions.push_back(content_functions[4]);
+      // Real source/index/lookup precedes F3; no rendered panel prerequisite.
+      phase.functions.insert(phase.functions.end(),avatar_functions.begin(),avatar_functions.end());
     }
     const auto found = calls->validated().catalog.find(entry.identity);
     const auto contract = calls->validated().contracts.find(entry.identity);
@@ -371,6 +522,10 @@ NativeSystemUiStartupCatalog::Load(
       return fail(
           "Validated deferred startup prototype/code/result contract mismatch");
     }
+    if (entry.phase == Phase::kProfileData &&
+        (found->second.return_kind != GuestRuntime::ReturnKind::kVoid ||
+         !contract->second.before.empty() || !contract->second.after.empty()))
+      return fail("Profile initializer requires the exact original void ABI");
     // FE's one runtime DWORD is supplied only from the actual native predicate;
     // the immutable plan preserves its prototype, not a forged constant result.
     if (entry.arguments && found->second.arguments[0] != 0) {
@@ -769,6 +924,10 @@ const NativeSystemStartupTaskFunctions&
 NativeSystemUiStartupCatalog::task_functions() const {
   return state_->task_functions;
 }
+const GuestRuntime::Function*
+NativeSystemUiStartupCatalog::periodic_service_stop() const {
+  return state_->periodic_service_stop ? &*state_->periodic_service_stop : nullptr;
+}
 const GuestRuntime::Function&
 NativeSystemUiStartupCatalog::frontend_callback_entry() const {
   return state_->frontend_callback;
@@ -884,6 +1043,95 @@ NativeSystemUiStartupCatalog::ReadSharedGraphicsState() const {
   result.status = NativeSystemSharedGraphicsState::Status::kObserved;
   return result;
 }
+bool NativeSystemUiStartupCatalog::CheckNativeProfileInitializationUnused(
+    std::string* error) const {
+  // Authenticate the constructor's immutable transitive source BEFORE any
+  // native allocation/write, then observe the separate unused-cell condition.
+  if (!CheckNativeProfileInitializationSource(error)) return false;
+  const auto& calls = *state_->calls;
+  const auto module = calls.module();
+  const auto zero_cell = [&](uint32_t cell) {
+    return calls.kernel()->GetUserModuleForAddress(cell).get() == module.get() &&
+           Data(calls, cell) && Word(calls.kernel()->memory(), cell) == 0u;
+  };
+  if (!zero_cell(0x81AA3E90)) {
+    if (error) *error = "Profile serial queue was already published";
+    return false;
+  }
+  for (uint32_t slot = 0; slot < 4; ++slot) {
+    if (!zero_cell(0x81AA28E0 + slot * 0x290 + 0x278) ||
+        !zero_cell(0x81AA3320 + slot * 0x290 + 0x278)) {
+      if (error) *error = "Profile buffer was already published";
+      return false;
+    }
+  }
+  return true;
+}
+
+bool NativeSystemUiStartupCatalog::CheckNativeProfileInitializationSource(
+    std::string* error) const {
+  const auto fail = [&](const char* text) {
+    if (error) *error = text;
+    return false;
+  };
+  const auto& calls = *state_->calls;
+  if (!SameRoot(calls, *state_->allocation))
+    return fail("Profile initializer root/cohort admission changed");
+  const auto module = calls.module();
+  auto* image = module->xex_module();
+  auto* memory = calls.kernel()->memory();
+  constexpr Anchor proof[] = {
+      {0x816DB788, 212, "ac267e2a987800a56f536da15b645f31fa690466c80d7b179b06c40205837e13"},
+      {0x816BA948, 96, "6427b5bbb42394e4c06118b05e17d08f3950aa4b7c27a447e8a0b998ab067d92"},
+      {0x816BA840, 140, "9cf540311f375ecddda25fc0aa61baa4a695abad49e079cc0db72ad2c2af1869"},
+      {0x816DF980, 12, "70f22fb6b7f504e4d866870c6eaf0ba82589d742e4961a3d14087e7ec9044f6e"},
+      {0x816B7500, 68, "21e063f92eb8221af9fc9cc97b25703feab5ddf5254f00c250b255e0c80bc5f3"},
+  };
+  for (const auto& body : proof) {
+    if (calls.kernel()->GetUserModuleForAddress(body.address).get() != module.get() ||
+        !CodeHash(calls, body.address, body.length, body.hash))
+      return fail("Profile constructor/provider/destructor source changed");
+    for (uint32_t at = body.address; at < body.address + body.length; at += 4) {
+      if (image->TranslateCode(at) != memory->TranslateVirtual<const uint8_t*>(at))
+        return fail("Profile constructor/provider/destructor has a host overlay");
+    }
+  }
+  const auto root_word = [&](uint32_t at) -> std::optional<uint32_t> {
+    if (calls.kernel()->GetUserModuleForAddress(at).get() != module.get() ||
+        !Data(calls, at)) return {};
+    return Word(memory, at);
+  };
+  if (!root_word(0x81AA3E90) || root_word(0x81A8302C) != 0x815FB150u ||
+      root_word(0x815FB15C) != 0x816DF980u ||
+      root_word(0x815F90A0) != 0x816B7500u)
+    return fail("Profile provider/serial queue root data changed");
+  for (uint32_t slot = 0; slot < 4; ++slot) {
+    if (!root_word(0x81AA28E0 + slot * 0x290 + 0x278) ||
+        !root_word(0x81AA3320 + slot * 0x290 + 0x278))
+      return fail("Profile buffer cell is outside actual root data");
+  }
+  return true;
+}
+
+bool NativeSystemUiStartupCatalog::CheckNativeProfileInitialization(
+    std::string* error) const {
+  // Native execution may not replace constructor/provider source or tables.
+  // Queue/buffer pristine-state checks belong only to this original init cut.
+  if (!CheckNativeProfileInitializationSource(error)) return false;
+  auto* memory = state_->calls->kernel()->memory();
+  const auto data = ReadNativeSystemProfileInitializationData(*memory);
+  if (data.status != NativeSystemProfileInitializationData::Status::kValid) {
+    if (error) *error = "Native profile serial queue/eight buffers incomplete; status=" +
+                        std::to_string(uint32_t(data.status));
+    return false;
+  }
+  // The global base reference and native buffers are resident heap resources.
+  // Native Task completion releases only its own queue reference (B8A88).
+  // Keep the base and root heap through actual all-CPU/GPU stop/heap teardown;
+  // neither successful initialization nor service quiescence is queue drainage.
+  return true;
+}
+
 bool NativeSystemUiStartupCatalog::CheckNativeNotificationInitialization(
     std::string* error) const {
   const auto fail = [&](std::string reason) {
@@ -1020,10 +1268,15 @@ bool CloseTask(XThread& thread,
     return false;
   }
   reference->release_attempted = true;  // never retry an uncertain native Close
+  // The watched close owns the exact already-observed Task lifetime and its
+  // native entry/own-return/delete/free receipts, including closed admission.
+  auto close = NativeProfileIdentityOwner::BeforeNativeTaskClose(
+      reference->calls->kernel(), thread, reference->handle);
+  if (!close.admitted()) return false;
   const std::array args{reference->handle};
   const auto result = reference->calls->ExecuteDeferredSystemFunction(
       thread, "native-system-close-task", args);
-  if (!result.succeeded) {
+  if (!close.Complete(result.succeeded,uint32_t(result.return_value))) {
     return false;
   }
   reference->owned = false;
@@ -1097,7 +1350,15 @@ GuestRuntime::ExecutionResult NativeSystemUiStartupRuntime::InitializeFrontend(
     XThread& thread, const std::shared_ptr<NativeSystemUiStartupSeams>& seams) {
   const auto self = shared_from_this();
   const auto catalog = catalog_;
+  const auto avatar=NativeAvatarService::Lookup(catalog->calls()->kernel());
+  std::shared_ptr<StartupTaskReference> task;
   const auto fail = [&](std::string detail) {
+    // On an explicitly returned frontend failure, close any already resident
+    // F3 through its genuine native protocol BEFORE allocation admission seals.
+    // An unknown/unreturned scope is retained, not reclassified as drained.
+    if(avatar && task && task->owned &&
+       !avatar->AbortFrontendResident(thread,task->handle))
+      detail += "; native F3 resident cleanup retained/uncertain";
     catalog->allocation()->CloseAdmission();
     return Fail(std::move(detail));
   };
@@ -1109,7 +1370,7 @@ GuestRuntime::ExecutionResult NativeSystemUiStartupRuntime::InitializeFrontend(
     return fail(
         "Frontend callback is not the actual native SYSTEM Task worker");
   }
-  const auto task = AcquireTask(catalog->calls(), thread);
+  task = AcquireTask(catalog->calls(), thread);
   if (!task) {
     return fail("Actual native GetCurrentTask owned-reference check failed");
   }
@@ -1161,6 +1422,20 @@ GuestRuntime::ExecutionResult NativeSystemUiStartupRuntime::InitializeFrontend(
             }
             return called;
           }
+          const auto avatar_profiles=NativeAvatarStartupProfiles();
+          const auto avatar_role=std::find_if(avatar_profiles.begin(),avatar_profiles.end(),
+              [&](const auto& p){return p.identity==function.identity;});
+          if(avatar_role!=avatar_profiles.end()){
+            std::string error;
+            if(!avatar || !avatar->AdoptStartup(function.identity,thread,&error) ||
+               !SameActualTask(thread,task))
+              return fail("Native avatar resident receipt adoption: "+error);
+            // These deferred catalog roles remain unchanged metadata. Their
+            // ORIGINAL work already ran in the guarded FE builtin call. Never
+            // replay setup/load or reset its live native RWLock.
+            return GuestRuntime::ExecutionResult{
+                true,0,"Adopted exact genuine FE resident F3 receipts"};
+          }
           const Entry* role = nullptr;
           for (const auto& entry : kEntries) {
             if (function.identity == entry.identity) {
@@ -1181,6 +1456,11 @@ GuestRuntime::ExecutionResult NativeSystemUiStartupRuntime::InitializeFrontend(
           if (!flags) {
             return fail("Actual hardware guard unreadable");
           }
+          if(role->phase==Phase::kFeRegistry && avatar){
+            std::string error;
+            if(!avatar->PrepareFrontendResident(thread,task->handle,arguments[0],&error))
+              return fail("Native FE resident preparation: "+error);
+          }
           GuestRuntime::ExecutionResult called;
           if (role->phase == Phase::kUiManager && !(*flags & 0x200)) {
             called = {
@@ -1190,11 +1470,18 @@ GuestRuntime::ExecutionResult NativeSystemUiStartupRuntime::InitializeFrontend(
             called = catalog->calls()->ExecuteDeferredNativeTaskFunction(
                 thread, function.identity, arguments);
           }
+          if(role->phase==Phase::kFeRegistry && avatar){
+            std::string error;
+            if(!avatar->ObserveFrontendResident(thread,task->handle,called,&error)){
+              auto failure=fail("Native FE resident observation: "+error+called.detail);
+              failure.return_value=called.return_value;
+              return failure;
+            }
+          }
           if (!called.succeeded) {
-            catalog->allocation()->CloseAdmission();
-            called.detail = "Native frontend call " + function.identity + ": " +
-                            called.detail;
-            return called;
+            auto failure=fail("Native frontend call "+function.identity+": "+called.detail);
+            failure.return_value=called.return_value;
+            return failure;
           }
           if (role->phase == Phase::kUpdatePredicate) {
             if (called.return_value > 1) {
@@ -1213,13 +1500,18 @@ GuestRuntime::ExecutionResult NativeSystemUiStartupRuntime::InitializeFrontend(
           }
           return called;
         });
+    if(!Ready(status)){
+      auto failed=fail("Frontend transaction failed/retired");
+      if(!SameActualTask(thread,task) || !CloseTask(thread,task))
+        failed.detail += "; native Task reference release uncertain";
+      return failed;
+    }
     // Explicit healthy-context release before native callback returns. No PPC
     // release is attempted by an exception/forced-unwind destructor.
     if (!SameActualTask(thread, task) || !CloseTask(thread, task)) {
       return fail("Native Task reference release uncertain");
     }
-    return Ready(status) ? GuestRuntime::ExecutionResult{true, 0, {}}
-                         : fail("Frontend transaction failed/retired");
+    return GuestRuntime::ExecutionResult{true,0,{}};
   } catch (...) {
     catalog->allocation()->CloseAdmission();
     throw;
@@ -1444,6 +1736,12 @@ NativeSystemUiStartupRuntime::Status NativeSystemUiStartupRuntime::Initialize(
           }
           if (!role || role->execution != ExecutionStage::kBootstrap) {
             return fail("Unexpected early role");
+          }
+          if (role->phase == Phase::kProfileData) {
+            std::string profile_error;
+            if (!catalog->CheckNativeProfileInitializationUnused(&profile_error))
+              return fail("Profile constructor may not overwrite prior native ownership: " +
+                          profile_error);
           }
           const auto called = catalog->calls()->ExecuteDeferredSystemFunction(
               bootstrap, function.identity, {});

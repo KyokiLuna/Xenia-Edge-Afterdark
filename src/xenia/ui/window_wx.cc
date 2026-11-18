@@ -495,6 +495,35 @@ bool WxWindow::OpenImpl() {
   return true;
 }
 
+bool WxWindow::DismissOwnedPopupMenu(wxMenu* menu) {
+  assert_true(app_context().IsInUIThread());
+  if (!menu || !frame_) {
+    return false;
+  }
+  auto* invoking = menu->GetInvokingWindow();
+  while (invoking && invoking != frame_) {
+    invoking = invoking->GetParent();
+  }
+  if (invoking != frame_) {
+    return false;
+  }
+#if XE_PLATFORM_LINUX && defined(__WXGTK__)
+  if (!menu->m_popupShown || !menu->m_menu) {
+    return false;
+  }
+  // The real wxGTK hide signal clears its own m_popupShown and lets the
+  // existing native PopupMenu loop return. Never manufacture that return.
+  gtk_menu_popdown(GTK_MENU(menu->m_menu));
+  return true;
+#elif XE_PLATFORM_WIN32
+  // EndMenu ends the actual menu-tracking loop on this UI thread. The exact
+  // registered popup and invoking-frame ancestry above exclude other windows.
+  return ::EndMenu() != FALSE;
+#else
+  return false;  // No equivalent popup-cancellation proof for this backend.
+#endif
+}
+
 void WxWindow::RequestCloseImpl() {
   if (frame_) {
     frame_->Close();
@@ -723,6 +752,12 @@ void WxWindow::RequestPaintAfterImpl(uint32_t milliseconds) {
 void WxWindow::OnPaintDelayTimer(wxTimerEvent& event) { RequestPaint(); }
 
 void WxWindow::OnFrameClose(wxCloseEvent& event) {
+  // Native cleanup may need the live surface and UI callback pump. Intercept
+  // before OnBeforeClose; forced/non-vetoable platform destruction is distinct.
+  if (event.CanVeto() && DeferCloseRequest()) {
+    event.Veto();
+    return;
+  }
   if (frame_ && !frame_->IsFullScreen()) {
     SaveGeometryToConfig();
   }

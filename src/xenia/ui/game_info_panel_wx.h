@@ -15,6 +15,7 @@
 #include <ctime>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -38,8 +39,7 @@ class wxWindow;
 namespace xe {
 namespace kernel {
 namespace xam {
-class ContentManager;
-class ProfileManager;
+struct ContentCatalogLocation;
 }  // namespace xam
 }  // namespace kernel
 
@@ -59,6 +59,9 @@ struct ContentLocation {
 struct ContentItem {
   wxString name;
   uint64_t size_bytes = 0;
+  // Owned presentation bytes plus a weak exact-source proof. No native file,
+  // volume authority or HDD flock survives in a pane across title teardown.
+  std::shared_ptr<const kernel::xam::ContentCatalogLocation> location;
 };
 
 // Everything known about one title: art, name and play progress in a header,
@@ -84,6 +87,9 @@ class GameInfoPanel : public wxPanel {
   void ShowTitle(const LibraryKey& key, CompatState compat,
                  const TitleStats& stats);
   void ShowNoSelection();
+  // Coalesces a shared host installation's completed content change without
+  // rescanning the entire game library or changing the selected title.
+  void RefreshContent();
 
   // Fired after a disc edit changes what the game list would show.
   void SetLibraryChangedCallback(std::function<void()> cb) {
@@ -121,7 +127,7 @@ class GameInfoPanel : public wxPanel {
   void BuildDiscsSection(wxWindow* parent, wxBoxSizer* sizer);
   // The content folders one section covers, listed together. `header_format`
   // is a complete translatable phrase holding a single %zu for the item count.
-  // The first location is the section's own: what its folder button opens.
+  // Each installed row retains its actual source and package location.
   // `note` replaces the rows when the content is not reachable (no profile
   // signed in).
   // `allow_import` offers an Add button for content the user can supply as
@@ -130,9 +136,11 @@ class GameInfoPanel : public wxPanel {
                            const wxString& header_format,
                            std::vector<ContentLocation> locations,
                            const wxString& note, bool allow_import = false);
-  // Vets picked packages against this title and moves each good one into the
-  // location its own content type names. Rejects are reported together.
+  // Vets picked packages against the original selection, then enters the
+  // same install workflow as the Tools menu. No filesystem copy lives here.
   void ImportContent(const std::vector<ContentLocation>& locations);
+  void OpenContentLocation(
+      std::shared_ptr<const kernel::xam::ContentCatalogLocation> location);
   // An original Xbox game keeps its saves and downloads where XeFu puts them,
   // not in a profile.
   void BuildXboxOriginalSaves(wxWindow* parent, wxBoxSizer* sizer);
@@ -148,7 +156,7 @@ class GameInfoPanel : public wxPanel {
 
   // "<text> (n)" with a right-aligned folder button, and an Add button when
   // `import_locations` name somewhere the user can drop packages. `open_path`
-  // is created if it doesn't exist yet. Returns the label so a section can
+  // is offered only if it already exists. Returns the label so a section can
   // restate its count later.
   wxStaticText* AddSectionHeader(
       wxWindow* parent, wxBoxSizer* sizer, const wxString& text,
@@ -173,10 +181,6 @@ class GameInfoPanel : public wxPanel {
   // media id, so nothing can name them apart; the user has to.
   void OnRenameTitle();
   void OnRemoveDisc();
-
-  // Null until the kernel is up.
-  kernel::xam::ProfileManager* profile_manager() const;
-  kernel::xam::ContentManager* content_manager() const;
 
   EmulatorWindow* emulator_window_;
   LibraryKey key_;

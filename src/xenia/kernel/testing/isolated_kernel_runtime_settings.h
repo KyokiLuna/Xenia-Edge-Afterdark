@@ -23,6 +23,10 @@ DECLARE_string(logged_profile_slot_0_xuid);
 DECLARE_string(logged_profile_slot_1_xuid);
 DECLARE_string(logged_profile_slot_2_xuid);
 DECLARE_string(logged_profile_slot_3_xuid);
+DECLARE_string(logged_profile_slot_0_source_id);
+DECLARE_string(logged_profile_slot_1_source_id);
+DECLARE_string(logged_profile_slot_2_source_id);
+DECLARE_string(logged_profile_slot_3_source_id);
 DECLARE_bool(mount_memory_unit);
 DECLARE_bool(allow_plugins);
 DECLARE_bool(kernel_debug_monitor);
@@ -68,6 +72,7 @@ class IsolatedKernelRuntimeSettings {
     cvars::system_readonly_source_root.swap(system_source_);
     for (std::size_t i = 0; i != profiles_.size(); ++i) {
       profile_fields_[i]->swap(profiles_[i]);
+      profile_source_fields_[i]->swap(profile_sources_[i]);
     }
     cvars::cl.swap(command_line_);
     ::xe::hid::cvars::slot_bindings_passthrough.swap(input_bindings_);
@@ -98,6 +103,10 @@ class IsolatedKernelRuntimeSettings {
   const std::array<std::string*, 4> profile_fields_{
       &cvars::logged_profile_slot_0_xuid, &cvars::logged_profile_slot_1_xuid,
       &cvars::logged_profile_slot_2_xuid, &cvars::logged_profile_slot_3_xuid};
+  std::array<std::string, 4> profile_sources_{};
+  const std::array<std::string*, 4> profile_source_fields_{
+      &cvars::logged_profile_slot_0_source_id, &cvars::logged_profile_slot_1_source_id,
+      &cvars::logged_profile_slot_2_source_id, &cvars::logged_profile_slot_3_source_id};
   std::string command_line_;
   std::string input_bindings_;
   bool debug_ = false;

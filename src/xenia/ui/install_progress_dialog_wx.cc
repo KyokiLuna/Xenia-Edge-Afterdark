@@ -8,6 +8,7 @@
  */
 
 #include "xenia/ui/install_progress_dialog_wx.h"
+#include <wx/weakref.h>
 
 #include <mutex>
 
@@ -15,7 +16,6 @@
 
 #include <wx/button.h>
 #include <wx/gauge.h>
-#include <wx/hyperlink.h>
 #include <wx/msgdlg.h>
 #include <wx/scrolwin.h>
 #include <wx/sizer.h>
@@ -40,11 +40,10 @@ constexpr int kTimerMs = 100;
 }  // namespace
 
 InstallProgressDialog::InstallProgressDialog(
-    wxWindow* parent, const std::filesystem::path& content_root,
+    wxWindow* parent,
     std::shared_ptr<std::vector<Emulator::ContentInstallEntry>> entries)
     : wxDialog(parent, wxID_ANY, _("Installation Progress"), wxDefaultPosition,
                wxSize(640, 460), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
-      content_root_(content_root),
       content_entries_(std::move(entries)),
       timer_(this) {
   Build();
@@ -52,9 +51,18 @@ InstallProgressDialog::InstallProgressDialog(
   Bind(wxEVT_SHOW, [this](wxShowEvent& evt) {
     if (evt.IsShown() && kickoff_) {
       auto work = std::move(kickoff_);
-      CallAfter([work = std::move(work)] { work(); });
+      wxWeakRef<InstallProgressDialog> alive(this);
+      CallAfter([alive, work = std::move(work)] {
+        // A queued callback may run after an early modal/window close. Never
+        // invoke its stack-bound kickoff after ShowModal returned.
+        if (alive && alive->IsModal()) { work(); }
+      });
     }
     evt.Skip();
+  });
+  Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
+    if (!IsEverythingDone()) { OnCancel(); }
+    event.Skip();
   });
   timer_.Start(kTimerMs);
   Tick();
@@ -89,17 +97,10 @@ void InstallProgressDialog::Build() {
     auto* col = new wxBoxSizer(wxVERTICAL);
     widgets.name = new wxStaticText(row_box, wxID_ANY, "");
     widgets.path_prefix = new wxStaticText(row_box, wxID_ANY, "");
-    widgets.path_link =
-        new wxHyperlinkCtrl(row_box, wxID_ANY, " ", " ", wxDefaultPosition,
-                            wxDefaultSize, wxHL_ALIGN_LEFT);
-    widgets.path_link->Bind(wxEVT_HYPERLINK, [this, i](wxHyperlinkEvent&) {
-      std::filesystem::path target =
-          content_root_ / (*content_entries_)[i].data_installation_path_;
-      std::thread(xe::LaunchFileExplorer, std::move(target)).detach();
-    });
+    widgets.path_value = new wxStaticText(row_box, wxID_ANY, " ");
     auto* path_row = new wxBoxSizer(wxHORIZONTAL);
     path_row->Add(widgets.path_prefix, 0, wxALIGN_CENTER_VERTICAL);
-    path_row->Add(widgets.path_link, 1, wxALIGN_CENTER_VERTICAL);
+    path_row->Add(widgets.path_value, 1, wxALIGN_CENTER_VERTICAL);
     widgets.type = new wxStaticText(row_box, wxID_ANY, "");
     widgets.status = new wxStaticText(row_box, wxID_ANY, "");
     widgets.progress =
@@ -140,6 +141,7 @@ void InstallProgressDialog::Tick() {
     Emulator::InstallState state{};
     X_STATUS result{};
     std::string error;
+    std::vector<uint8_t> icon;
     uint64_t total = 0;
     uint64_t current = 0;
     wxString type_text;
@@ -155,6 +157,7 @@ void InstallProgressDialog::Tick() {
         result = entry.installation_result_;
         error = entry.installation_error_message_;
         content_type = entry.content_type_;
+        icon = entry.icon_data_;
       }
       total = entry.content_size_.load();
       current = entry.currently_installed_size_.load();
@@ -173,8 +176,11 @@ void InstallProgressDialog::Tick() {
     wxString path_label = _("Installation Path: ");
     std::string dest_str = xe::path_to_utf8(dest);
     widgets.path_prefix->SetLabel(path_label);
-    widgets.path_link->SetLabel(wxString::FromUTF8(dest_str));
-    widgets.path_link->SetURL(wxString::FromUTF8(dest_str));
+    widgets.path_value->SetLabel(wxString::FromUTF8(dest_str));
+    if (icon != widgets.icon_data) {
+      widgets.icon_data = std::move(icon);
+      widgets.icon->SetBitmap(DecodePngIcon(widgets.icon_data, kIconSize));
+    }
     widgets.type->SetLabel(type_text);
 
     wxString status_text = wxString::Format(
@@ -187,7 +193,9 @@ void InstallProgressDialog::Tick() {
     }
     widgets.status->SetLabel(status_text);
 
-    if (total > 0) {
+    if (state == Emulator::InstallState::installed) {
+      widgets.progress->SetValue(100);
+    } else if (total > 0) {
       int percent =
           static_cast<int>(static_cast<double>(current) / total * 100.0);
       widgets.progress->SetValue(std::clamp(percent, 0, 100));
@@ -240,29 +248,18 @@ void InstallProgressDialog::OnCancel() {
   for (auto& e : *content_entries_) {
     cancel_if_active(e);
   }
+  if (cancel_) { cancel_(); }
   cancel_button_->Disable();
   cancel_button_->SetLabel(_("Cancelling..."));
 }
 
 bool InstallProgressDialog::IsEverythingDone() const {
-  auto entry_done = [](auto& e) {
-    if (e.cancelled_.load()) {
-      return true;
-    }
-    Emulator::InstallState state;
-    {
-      std::lock_guard<std::mutex> lock(*e.mutex_);
-      state = e.installation_state_;
-    }
-    if (state == Emulator::InstallState::failed) {
-      return true;
-    }
-    uint64_t total = e.content_size_.load();
-    uint64_t current = e.currently_installed_size_.load();
-    if (total > 0 && current == total) {
-      return true;
-    }
-    return false;
+  auto entry_done = [](auto& entry) {
+    std::lock_guard lock(*entry.mutex_);
+    // Byte progress and a cancellation request are not a committed result.
+    // Installed is terminal even for a valid zero-byte payload.
+    return entry.installation_state_ == Emulator::InstallState::installed ||
+           entry.installation_state_ == Emulator::InstallState::failed;
   };
   for (auto& e : *content_entries_) {
     if (!entry_done(e)) {

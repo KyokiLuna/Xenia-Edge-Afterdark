@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <exception>
 #include <limits>
@@ -62,7 +63,7 @@ uint64_t InputTraceId() noexcept {
   }
   return value == UINT64_MAX ? 0 : value;
 }
-void InputTrace(Trace& limiter, const NativeInputDriver::Config& config,
+void InputTrace(Trace& limiter, const NativeInputDriver::TraceIdentity& identity,
                 uint64_t generation, const char* event,
                 std::initializer_list<Trace::Field> fields) noexcept {
   if (!cvars::native_system_ui_trace) {
@@ -70,12 +71,11 @@ void InputTrace(Trace& limiter, const NativeInputDriver::Config& config,
   }
   // Trace-only paths may run after ordinary admission was denied. Inert
   // contexts must not be dereferenced just to format optional identities.
-  const auto domain = config.dispatcher ? config.dispatcher->domain() : nullptr;
-  if (domain) {
+  if (identity.domain) {
     limiter.Emit("input", event,
-                 {{"domain_id", domain->id()},
-                  {"root_hmodule", domain->root().hmodule},
-                  {"root_load_generation", domain->root().generation},
+                 {{"domain_id", identity.domain},
+                  {"root_hmodule", identity.root_hmodule},
+                  {"root_load_generation", identity.root_generation},
                   {"input_generation", generation}},
                  fields);
   } else {
@@ -249,13 +249,17 @@ bool TextProfileMatches(KernelState& kernel, UserModule& module) {
 
 }  // namespace
 
+NativeInputDriver::NativeInputDriver(Config config,uint64_t transport_generation,TraceIdentity trace)
+    :config_(std::move(config)),kernel_identity_(config_.kernel),generation_(config_.generation),
+     trace_identity_(trace),transport_generation_(transport_generation) {}
+
 std::shared_ptr<NativeInputDriver> NativeInputDriver::Create(Config config) {
+  const auto domain=config.dispatcher?config.dispatcher->domain():nullptr;
   if (!config.kernel || !config.generation || !config.dispatcher ||
       !config.authorize_current_caller || !config.validate_callback ||
       !config.allow_physical_input || !config.validate_device_context ||
       !config.protocol_failed ||
-      config.dispatcher->domain()->id() != config.generation ||
-      !config.dispatcher->IsAccepting() ||
+      !domain || !config.dispatcher->IsAccepting() || domain->id() != config.generation ||
       !config.kernel->emulator()->input_system()) {
     return {};
   }
@@ -268,7 +272,8 @@ std::shared_ptr<NativeInputDriver> NativeInputDriver::Create(Config config) {
     return {};
   }
   auto driver = std::shared_ptr<NativeInputDriver>(
-      new NativeInputDriver(std::move(config), transport_generation));
+      new NativeInputDriver(std::move(config), transport_generation,
+          TraceIdentity{domain->id(),domain->root().hmodule,domain->root().generation}));
   return driver;
 }
 
@@ -343,6 +348,26 @@ std::shared_ptr<NativeInputDriver> NativeInputDriver::Lookup(
   return found == installed.end() ? nullptr : found->second.lock();
 }
 
+void NativeInputDriver::SealCallbackAdmissionForKernel(KernelState* kernel) {
+  if (auto driver = Lookup(kernel)) driver->SealCallbackAdmission();
+}
+bool NativeInputDriver::DrainCallbackAdmissionForKernel(KernelState* kernel) {
+  auto driver = Lookup(kernel);
+  return !driver || driver->DrainCallbackAdmission();
+}
+void NativeInputDriver::SealCallbackAdmission() {
+  std::lock_guard lock(mutex_);
+  callback_admission_sealed_ = true;
+  drained_.notify_all();
+}
+bool NativeInputDriver::DrainCallbackAdmission() {
+  if (callback_driver == this || global_critical_region::is_held_by_current_thread()) return false;
+  SealCallbackAdmission();
+  std::unique_lock lock(mutex_);
+  // Timeout preserves every outstanding reservation and declines stop proof.
+  return drained_.wait_for(lock, std::chrono::seconds(5), [&] { return !pending_callbacks_; });
+}
+
 void NativeInputDriver::BeginStopForKernel(KernelState* kernel) {
   if (auto driver = Lookup(kernel)) {
     driver->BeginStop();
@@ -363,22 +388,21 @@ bool NativeInputDriver::ReleaseInputTransportAfterProducersStoppedForKernel(
 NativeInputDriver::~NativeInputDriver() {
   BeginStop();
   std::lock_guard lock(installed_mutex);
-  auto found = installed.find(config_.kernel);
+  auto found = installed.find(kernel_identity_);
   if (found != installed.end() && found->second.expired()) {
     installed.erase(found);
   }
 }
 
 bool NativeInputDriver::IsCurrent() const {
+  std::shared_ptr<NativeSystemCallbackDispatcher> dispatcher;
   {
     std::lock_guard lock(mutex_);
-    if (stopping_) {
-      return false;
-    }
+    if (stopping_) return false;
+    dispatcher=config_.dispatcher;
   }
-  return config_.dispatcher->domain()->active() &&
-         config_.dispatcher->domain()->id() == generation() &&
-         config_.dispatcher->IsAccepting();
+  const auto domain=dispatcher?dispatcher->domain():nullptr;
+  return domain && domain->active() && domain->id()==generation() && dispatcher->IsAccepting();
 }
 
 bool NativeInputDriver::AuthorizeCurrentCaller() const {
@@ -406,7 +430,7 @@ bool NativeInputDriver::SetCallback(Callback kind, uint32_t address) {
   {
     std::lock_guard lock(mutex_);
     auto& registration = registrations_[size_t(kind)];
-    if (stopping_ || registration.epoch == UINT64_MAX) {
+    if (stopping_ || callback_admission_sealed_ || registration.epoch == UINT64_MAX) {
       return false;
     }
     if (registration.address != address) {
@@ -417,7 +441,7 @@ bool NativeInputDriver::SetCallback(Callback kind, uint32_t address) {
   }
   if (cvars::native_system_ui_trace) {
     static Trace trace;
-    InputTrace(trace, config_, transport_generation_, "callback_registration",
+    InputTrace(trace, trace_identity_, transport_generation_, "callback_registration",
                {{"kind", uint32_t(kind)},
                 {"address", observed.address},
                 {"requested_address", address},
@@ -472,13 +496,14 @@ bool NativeInputDriver::EnableGuideIntent(
       {0x816F0E70, 180,
        "4a909f7a2505c327c3bc537be2d156824fad32d39ca6d7c054958eb934b8636a"},
   };
+  const auto domain=config_.dispatcher?config_.dispatcher->domain():nullptr;
+  if(!domain)return false;
   auto* kernel = config_.kernel;
   auto* memory = kernel->memory();
   auto module = kernel->GetUserModuleForAddress(0x816F2E60);
   if (!module ||
-      module->hmodule_ptr() != config_.dispatcher->domain()->root().hmodule ||
-      module->load_generation() !=
-          config_.dispatcher->domain()->root().generation ||
+      module->hmodule_ptr() != domain->root().hmodule ||
+      module->load_generation() != domain->root().generation ||
       module->GetProcAddressByOrdinal(0x506) != 0x816F2E60) {
     return false;
   }
@@ -522,7 +547,7 @@ bool NativeInputDriver::EnableGuideIntent(
   auto input_lock = input->lock();
   const bool enabled = input->EnableNativeGuideTransport(transport_generation_);
   static Trace trace;
-  InputTrace(trace, config_, transport_generation_, "guide_channel_enabled",
+  InputTrace(trace, trace_identity_, transport_generation_, "guide_channel_enabled",
              {{"enabled", enabled}});
   return enabled;
 }
@@ -550,7 +575,7 @@ NativeInputDriver::CaptureGuideButtonEdge(uint32_t slot) {
   static Trace trace;
   TraceExit trace_exit{[&] {
     if (trace_id) {
-      InputTrace(trace, config_, transport_generation_, "guide_capture",
+      InputTrace(trace, trace_identity_, transport_generation_, "guide_capture",
                  {{"input_trace_id", trace_id},
                   {"slot", slot},
                   {"reason", trace_reason}});
@@ -605,7 +630,7 @@ NativeInputDriver::CaptureGuideButtonEdge(uint32_t slot) {
   }
   static Trace identity_trace;
   if (trace_id) {
-    InputTrace(identity_trace, config_, transport_generation_,
+    InputTrace(identity_trace, trace_identity_, transport_generation_,
                "guide_capture_identity",
                {{"input_trace_id", trace_id},
                 {"slot", slot},
@@ -648,7 +673,7 @@ hid::NativeGuideDispatch NativeInputDriver::DispatchGuideButtonEdge(
     static Trace trace;
     TraceExit trace_exit{[&] {
       if (trace_id && self) {
-        InputTrace(trace, self->config_, self->transport_generation_,
+        InputTrace(trace, self->trace_identity_, self->transport_generation_,
                    "guide_eligible",
                    {{"input_trace_id", trace_id},
                     {"slot", device->slot},
@@ -719,7 +744,7 @@ hid::NativeGuideDispatch NativeInputDriver::DispatchGuideButtonEdge(
                 &accepted, trace_id);
   static Trace trace;
   if (trace_id) {
-    InputTrace(trace, config_, transport_generation_, "guide_enqueue",
+    InputTrace(trace, trace_identity_, transport_generation_, "guide_enqueue",
                {{"input_trace_id", trace_id},
                 {"slot", device->slot},
                 {"native_user", user},
@@ -740,6 +765,10 @@ bool NativeInputDriver::QueueCallback(
   if (accepted_out) {
     *accepted_out = false;
   }
+  {
+    std::lock_guard lock(mutex_);
+    if (callback_admission_sealed_) return false;
+  }
   if (!IsCurrent()) {
     return false;
   }
@@ -747,7 +776,7 @@ bool NativeInputDriver::QueueCallback(
   {
     std::lock_guard lock(mutex_);
     registration = registrations_[size_t(kind)];
-    if (stopping_ || !registration.address) {
+    if (stopping_ || callback_admission_sealed_ || !registration.address) {
       return false;
     }
     ++pending_callbacks_;
@@ -764,7 +793,7 @@ bool NativeInputDriver::QueueCallback(
     }
     static std::array<Trace, 4> traces;
     if (trace_id) {
-      InputTrace(traces[size_t(kind)], self->config_,
+      InputTrace(traces[size_t(kind)], self->trace_identity_,
                  self->transport_generation_, "callback_complete",
                  {{"input_trace_id", trace_id},
                   {"kind", uint32_t(kind)},
@@ -790,7 +819,7 @@ bool NativeInputDriver::QueueCallback(
     }
     std::lock_guard lock(self->mutex_);
     const auto& current = self->registrations_[size_t(kind)];
-    if (self->stopping_ || current.epoch != registration.epoch ||
+    if (self->stopping_ || self->callback_admission_sealed_ || current.epoch != registration.epoch ||
         current.address != registration.address) {
       return {};
     }
@@ -818,7 +847,7 @@ NativeInputDriver::initial_binding_snapshot() const {
   const bool current = IsCurrent();
   std::lock_guard lock(mutex_);
   InitialBindingSnapshot out;
-  out.accepting = current && !stopping_;
+  out.accepting = current && !stopping_ && !callback_admission_sealed_;
   out.failed = protocol_failed_;
   out.callbacks_registered =
       registrations_[size_t(Callback::kUserBinding)].address == 0x816D9060 &&
@@ -847,7 +876,7 @@ void NativeInputDriver::ProtocolFailed(uint32_t handle,
   bool notify = false;
   {
     std::lock_guard lock(mutex_);
-    if (!stopping_ && !protocol_failed_) {
+    if (!stopping_ && !callback_admission_sealed_ && !protocol_failed_) {
       protocol_failed_ = true;
       notify = true;
     }
@@ -856,7 +885,7 @@ void NativeInputDriver::ProtocolFailed(uint32_t handle,
     return;
   }
   static Trace trace;
-  InputTrace(trace, config_, transport_generation_, "device_protocol_failed",
+  InputTrace(trace, trace_identity_, transport_generation_, "device_protocol_failed",
              {{"device_handle", handle}, {"reason", reason}});
   try {
     config_.protocol_failed();
@@ -905,7 +934,7 @@ bool NativeInputDriver::AnnounceDevice(const std::shared_ptr<Device>& device,
   const uint64_t trace_id = InputTraceId();
   static Trace request_trace;
   if (trace_id) {
-    InputTrace(request_trace, config_, transport_generation_, "binding_request",
+    InputTrace(request_trace, trace_identity_, transport_generation_, "binding_request",
                {{"input_trace_id", trace_id},
                 {"slot", device->slot},
                 {"device_handle", device->handle},
@@ -927,6 +956,9 @@ bool NativeInputDriver::AnnounceDevice(const std::shared_ptr<Device>& device,
         bool adopted = false, failed = false, native_rejected = false;
         {
           std::lock_guard lock(self->mutex_);
+          // A callback sealed before PPC supplied no bind/unbind/output fact.
+          // Keep the prior native binding until genuine cleanup or CPU stop.
+          if (!entered && self->callback_admission_sealed_) return;
           const auto binding =
               self->registrations_[size_t(Callback::kUserBinding)];
           const bool expected =
@@ -970,7 +1002,7 @@ bool NativeInputDriver::AnnounceDevice(const std::shared_ptr<Device>& device,
         static Trace trace;
         if (trace_id) {
           if (entered && result == 0 && !removed) {
-            InputTrace(trace, self->config_, self->transport_generation_,
+            InputTrace(trace, self->trace_identity_, self->transport_generation_,
                        "binding_output",
                        {{"input_trace_id", trace_id},
                         {"slot", device->slot},
@@ -981,7 +1013,7 @@ bool NativeInputDriver::AnnounceDevice(const std::shared_ptr<Device>& device,
                         {"assigned_byte", assigned},
                         {"adopted", adopted}});
           } else {
-            InputTrace(trace, self->config_, self->transport_generation_,
+            InputTrace(trace, self->trace_identity_, self->transport_generation_,
                        "binding_output",
                        {{"input_trace_id", trace_id},
                         {"slot", device->slot},
@@ -1272,6 +1304,7 @@ void NativeInputDriver::BeginStop() {
       return;
     }
     stopping_ = true;
+    callback_admission_sealed_ = true;
     started = transport_started_;
     text_visible_ = false;
     text_owner_readable_ = false;
@@ -1336,28 +1369,58 @@ bool NativeInputDriver::Drain() {
 }
 
 bool NativeInputDriver::ReleaseInputTransportAfterProducersStopped() {
-  if (!Drain()) {
-    return false;
+  {
+    std::lock_guard lock(mutex_);
+    if (transport_released_) return true; // Closed metadata: no old Kernel/provider access.
+    if (transport_releasing_) return false;
   }
+  std::shared_ptr<NativeInputDriver> current;
+  {
+    std::lock_guard lock(installed_mutex);
+    const auto found=installed.find(kernel_identity_);
+    if(found!=installed.end())current=found->second.lock();
+  }
+  if(current.get()!=this)return false; // Never act through a replacement's equal Kernel address.
+  if (!Drain()) return false;
   bool started = false;
   {
     std::lock_guard lock(mutex_);
-    if (!stopping_ || !notification_stop_published_ ||
-        notification_stop_failed_ || pending_callbacks_ || active_polls_) {
-      return false;
-    }
-    if (transport_released_) {
-      return true;
-    }
-    transport_released_ = true;
-    started = transport_started_;
+    if (transport_released_) return true;
+    if (transport_releasing_ || !stopping_ || !notification_stop_published_ ||
+        notification_stop_failed_ || pending_callbacks_ || active_polls_) return false;
+    transport_releasing_=true;started=transport_started_;
   }
-  auto* input = config_.kernel->emulator()->input_system();
-  if (input && started) {
-    auto lock = input->lock();
-    input->EndNativeInputTransport(transport_generation_);
-  }
-  return true;
+  try {
+    if(started){
+      auto* input=config_.kernel?config_.kernel->emulator()->input_system():nullptr;
+      if(!input){std::lock_guard lock(mutex_);transport_releasing_=false;return false;}
+      auto input_lock=input->lock();
+      input->EndNativeInputTransport(transport_generation_);
+    }
+    bool withdrawn=false;std::shared_ptr<NativeInputDriver> observed;
+    {
+      std::lock_guard lock(installed_mutex);
+      const auto found=installed.find(kernel_identity_);
+      if(found!=installed.end())observed=found->second.lock();
+      if(observed.get()==this){installed.erase(found);withdrawn=true;}
+    }
+    if(!withdrawn){std::lock_guard lock(mutex_);transport_releasing_=false;return false;}
+    observed.reset(); // No strong/final resource release under registry mutex.
+    Config retired_config;
+    std::function<bool()> retired_guide;
+    std::function<NativeUiBackendRoute::Admission()> retired_admit;
+    std::shared_ptr<hid::NativeDeviceNotificationRundown> retired_rundown;
+    {
+      std::lock_guard lock(mutex_);
+      transport_released_=true;transport_releasing_=false;
+      retired_config=std::move(config_);config_={};
+      retired_rundown=std::move(notification_rundown_);
+      retired_guide=std::move(guide_requests_allowed_);retired_admit=std::move(admit_ui_);
+    }
+    // Escaped old Driver handles retain only closed metadata/scalar diagnostics.
+    // Provider/domain/code closures are released outside driver/input/registry locks.
+    retired_rundown.reset();retired_config={};retired_guide={};retired_admit={};return true;
+  }catch(...){std::lock_guard lock(mutex_);transport_releasing_=false;return false;}
 }
 
 NativeInputDriver::Poll NativeInputDriver::AcquirePoll() {
@@ -1393,7 +1456,7 @@ X_STATUS NativeInputDriver::GetDeviceStats(
     static Trace trace;
     const bool known = exceptions == std::uncaught_exceptions();
     if (known) {
-      InputTrace(trace, config_, transport_generation_, "device_stats_return",
+      InputTrace(trace, trace_identity_, transport_generation_, "device_stats_return",
                  {{"device_handle", handle},
                   {"selector", selector},
                   {"return_status_known", 1},
@@ -1401,7 +1464,7 @@ X_STATUS NativeInputDriver::GetDeviceStats(
                   {"slot_known", slot_known},
                   {"slot", slot}});
     } else {
-      InputTrace(trace, config_, transport_generation_, "device_stats_return",
+      InputTrace(trace, trace_identity_, transport_generation_, "device_stats_return",
                  {{"device_handle", handle},
                   {"selector", selector},
                   {"return_status_known", 0},
@@ -1470,12 +1533,12 @@ X_STATUS NativeInputDriver::TakeFailedConnectionOrBind(
     static Trace trace;
     const bool known = exceptions == std::uncaught_exceptions();
     if (known) {
-      InputTrace(trace, config_, transport_generation_, "failed_binding_query",
+      InputTrace(trace, trace_identity_, transport_generation_, "failed_binding_query",
                  {{"return_status_known", 1},
                   {"status", status},
                   {"returned_handle", value}});
     } else {
-      InputTrace(trace, config_, transport_generation_, "failed_binding_query",
+      InputTrace(trace, trace_identity_, transport_generation_, "failed_binding_query",
                  {{"return_status_known", 0}});
     }
   }};
@@ -1516,7 +1579,7 @@ X_STATUS NativeInputDriver::ReadState(uint32_t handle,
       trace.EmitTransition(key | (uint64_t(1) << 51), "input",
                            "read_state_scope_exception",
                            {{"input_generation", transport_generation_},
-                            {"domain_id", config_.generation},
+                            {"domain_id", generation_},
                             {"device_handle", handle},
                             {"returned_normally", 0},
                             {"return_status_known", 0},
@@ -1530,7 +1593,7 @@ X_STATUS NativeInputDriver::ReadState(uint32_t handle,
                            {{"input_generation", transport_generation_},
                             {"returned_normally", 1},
                             {"return_status_known", 1},
-                            {"domain_id", config_.generation},
+                            {"domain_id", generation_},
                             {"device_handle", handle},
                             {"status", trace_result},
                             {"reason", trace_reason},
@@ -1633,10 +1696,10 @@ X_STATUS NativeInputDriver::ReadState(uint32_t handle,
             device->native_user_registration == registration.epoch &&
             device->native_user < XUserMaxUserCount &&
             output_capture_b_sequence_ != UINT64_MAX) {
-          const auto domain = config_.dispatcher->domain();
-          output_capture_b_down_ =
+          const auto domain = config_.dispatcher?config_.dispatcher->domain():nullptr;
+          if(domain)output_capture_b_down_ =
               BDownCaptureObservation{transport_generation_,
-                                      config_.generation,
+                                      generation_,
                                       domain->root().generation,
                                       text_foreground_,
                                       text_visibility_sequence_,
@@ -1658,7 +1721,7 @@ X_STATUS NativeInputDriver::ReadState(uint32_t handle,
       uint64_t(sampled.gamepad.buttons) | (uint64_t(allowed) << 32), "input",
       "physical_state",
       {{"input_generation", transport_generation_},
-       {"domain_id", config_.generation},
+       {"domain_id", generation_},
        {"slot", device->slot},
        {"device_handle", handle},
        {"native_read_status", X_STATUS_SUCCESS},
@@ -1767,7 +1830,8 @@ bool NativeInputDriver::ReadNativeTextUser(const cpu::ppc::PPCContext& context,
       actual.phase != TitleExecutionState::Phase::kRunning) {
     return false;
   }
-  const auto domain = config_.dispatcher->domain();
+  const auto domain = config_.dispatcher?config_.dispatcher->domain():nullptr;
+  if(!domain)return false;
   auto operation = domain->Acquire();
   auto module = kernel->GetUserModuleForAddress(0x816F1DC0);
   if (!operation || !module ||
@@ -1859,8 +1923,9 @@ void NativeInputDriver::ObserveNativeUiVisibility(
     const NativeSystemUiVisibilityEvent& event) noexcept {
   try {
     auto poll = AcquirePoll();
-    const auto domain = config_.dispatcher->domain();
-    if (!poll || !IsCurrent() || event.domain_id() != domain->id() ||
+    if(!poll || !IsCurrent())return;
+    const auto domain = config_.dispatcher?config_.dispatcher->domain():nullptr;
+    if (!domain || event.domain_id() != domain->id() ||
         event.root_load_generation() != domain->root().generation ||
         !event.sequence()) {
       return;
@@ -2045,7 +2110,7 @@ void NativeInputDriver::ApplyHostTextOwner() noexcept {
     trace.EmitTransition((revision << 1) | uint64_t(enabled), "input",
                          "text_owner_mode",
                          {{"input_generation", transport_generation_},
-                          {"domain_id", config_.generation},
+                          {"domain_id", generation_},
                           {"owner_revision", revision},
                           {"native_user", user},
                           {"requested_enabled", enabled},
@@ -2103,7 +2168,7 @@ bool NativeInputDriver::QueueTextBinding(
     return allowed;
   };
   static Trace request_trace;
-  InputTrace(request_trace, config_, transport_generation_,
+  InputTrace(request_trace, trace_identity_, transport_generation_,
              "text_binding_request",
              {{"device_handle", endpoint->handle},
               {"binding_identity", owner.group},
@@ -2124,6 +2189,7 @@ bool NativeInputDriver::QueueTextBinding(
         {
           std::lock_guard lock(self->mutex_);
           endpoint->pending = false;
+          if (!executed && self->callback_admission_sealed_) return;
           if (executed && result == 0 && assigned < XUserMaxUserCount) {
             if (removed) {
               uncertain = assigned != endpoint->assigned_user;
@@ -2164,7 +2230,7 @@ bool NativeInputDriver::QueueTextBinding(
           notify_protocol = uncertain && !self->stopping_;
         }
         static Trace complete_trace;
-        InputTrace(complete_trace, self->config_, self->transport_generation_,
+        InputTrace(complete_trace, self->trace_identity_, self->transport_generation_,
                    "text_binding_complete",
                    {{"device_handle", endpoint->handle},
                     {"removed", removed},
@@ -2285,7 +2351,7 @@ X_RESULT NativeInputDriver::ReadText(uint32_t user,
     if (returned) {
       trace.EmitTransition(key, "input", "text_read_result",
                            {{"input_generation", transport_generation_},
-                            {"domain_id", config_.generation},
+                            {"domain_id", generation_},
                             {"native_user", user},
                             {"audience_known", audience_known},
                             {"audience", audience},
@@ -2300,7 +2366,7 @@ X_RESULT NativeInputDriver::ReadText(uint32_t user,
     } else {
       trace.EmitTransition(key, "input", "text_read_exception",
                            {{"input_generation", transport_generation_},
-                            {"domain_id", config_.generation},
+                            {"domain_id", generation_},
                             {"native_user", user},
                             {"audience_known", audience_known},
                             {"result_known", 0}});

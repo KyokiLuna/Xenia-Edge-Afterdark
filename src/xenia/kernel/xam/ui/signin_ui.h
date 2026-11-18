@@ -24,9 +24,10 @@ class SigninUI final : public XamDialog {
            uint32_t last_used_slot, uint32_t users_needed);
 
   ~SigninUI() = default;
+  bool accepted() const { return accepted_; }
 
  private:
-  void OnDraw(ImGuiIO& io) override;
+  void OnDrawDialog(ImGuiIO& io) override;
 
   void ReloadProfiles(bool first_draw);
 
@@ -35,6 +36,7 @@ class SigninUI final : public XamDialog {
 
   ProfileManager* profile_manager_ = nullptr;
 
+  bool accepted_ = false;
   bool has_opened_ = false;
   std::string title_;
   uint32_t users_needed_ = 1;

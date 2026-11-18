@@ -141,6 +141,30 @@ class SharedVfsReadBacking final : public XContentReadBacking {
   const filesystem::FileHandleInfo info_;
 };
 
+// A retained immutable guest File has no native HostPath identity to query.
+// Its captured Entry extent belongs to the same retained readonly tree, and
+// every read propagates that actual File's status/count without host reopen.
+class SharedImmutableVfsReadBacking final : public XContentReadBacking {
+ public:
+  explicit SharedImmutableVfsReadBacking(std::shared_ptr<File> file)
+      : XContentReadBacking(file->entry()->size()), file_(std::move(file)) {}
+  std::optional<std::vector<filesystem::GuestHostBacking>> GuestBackings()
+      const override { return file_->retained_device()->GuestBackings(); }
+  bool supports_concurrent_io() const override {
+    return file_->retained_device()->supports_concurrent_io();
+  }
+  const Entry* package_entry() const override { return file_->entry(); }
+
+ protected:
+  X_STATUS ReadPartial(size_t offset, std::span<uint8_t> output,
+                       size_t* transferred) const override {
+    return file_->ReadSync(output, offset, transferred);
+  }
+
+ private:
+  const std::shared_ptr<File> file_;
+};
+
 bool ReadOnlyFileAdmitted(const File* file) {
   constexpr uint32_t writes = FileAccess::kGenericWrite |
                               FileAccess::kGenericAll |
@@ -215,9 +239,21 @@ std::unique_ptr<XContentReadBacking> XContentReadBacking::FromSharedFile(
     return fail(X_STATUS_INVALID_DEVICE_REQUEST);
   }
   if (!ReadOnlyFileAdmitted(file.get())) { return fail(X_STATUS_ACCESS_DENIED); }
-  // Do not use a stale Entry size or infer host ownership for another backend.
   const auto* host = dynamic_cast<const HostPathFile*>(file.get());
-  if (!host) { return fail(X_STATUS_NOT_SUPPORTED); }
+  if (!host) {
+    // A mutable non-host Entry is not an extent/ownership certificate. Only
+    // a genuine already-open readonly tree may lend its immutable extent.
+    if (!file->retained_device()->is_read_only() ||
+        !file->entry()->is_read_only() ||
+        (file->entry()->attributes() & kFileAttributeDirectory) ||
+        file->entry()->size() > SIZE_MAX) {
+      return fail(X_STATUS_NOT_SUPPORTED);
+    }
+    if (status) { *status = X_STATUS_SUCCESS; }
+    return std::make_unique<SharedImmutableVfsReadBacking>(file);
+  }
+  // HostPath still requires real retained-handle identity/size before and
+  // after reads. The immutable guest lane must never weaken those checks.
   std::error_code error;
   const auto info = host->QueryBackingInfo(error);
   if (!info || error) {
@@ -247,18 +283,7 @@ std::unique_ptr<XContentContainerDevice>
 XContentContainerDevice::CreateContentDevice(
     const std::string_view mount_path, const std::filesystem::path& host_path) {
   auto backing = XContentReadBacking::Open(host_path);
-  const auto header = backing ? ReadContainerHeader(*backing) : nullptr;
-  if (!header || !header->content_header.is_magic_valid()) { return {}; }
-  switch (header->content_metadata.volume_type) {
-    case XContentVolumeType::kStfs:
-      return std::make_unique<StfsContainerDevice>(
-          mount_path, std::move(backing), host_path);
-    case XContentVolumeType::kSvod:
-      // Fragmented SVOD keeps its existing dedicated host-file reader.
-      return std::make_unique<SvodContainerDevice>(mount_path, host_path);
-    default:
-      return {};
-  }
+  return CreateContentDevice(mount_path, std::move(backing), host_path);
 }
 
 std::unique_ptr<XContentContainerDevice>
@@ -290,13 +315,21 @@ XContentContainerDevice::CreateContentDevice(const std::string_view mount_path,
 std::unique_ptr<XContentContainerDevice>
 XContentContainerDevice::CreateContentDevice(
     const std::string_view mount_path,
-    std::unique_ptr<XContentReadBacking> backing) {
+    std::unique_ptr<XContentReadBacking> backing,
+    const std::filesystem::path& host_path) {
   const auto header = backing ? ReadContainerHeader(*backing) : nullptr;
-  if (!header || !header->content_header.is_magic_valid() ||
-      header->content_metadata.volume_type != XContentVolumeType::kStfs) {
-    return {};
+  if (!header || !header->content_header.is_magic_valid()) { return {}; }
+  switch (header->content_metadata.volume_type) {
+    case XContentVolumeType::kStfs:
+      return std::make_unique<StfsContainerDevice>(
+          mount_path, std::move(backing), host_path);
+    case XContentVolumeType::kSvod:
+      if (host_path.empty()) { return {}; }
+      return std::make_unique<SvodContainerDevice>(
+          mount_path, std::move(backing), host_path);
+    default:
+      return {};
   }
-  return std::make_unique<StfsContainerDevice>(mount_path, std::move(backing));
 }
 
 XContentContainerDevice::XContentContainerDevice(

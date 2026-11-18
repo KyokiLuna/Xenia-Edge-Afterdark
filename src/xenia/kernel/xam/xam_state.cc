@@ -8,6 +8,7 @@
  */
 
 #include "xenia/kernel/xam/xam_state.h"
+#include "xenia/base/logging.h"
 #include "xenia/emulator.h"
 #include "xenia/vfs/installed_system_source.h"
 #include "xenia/vfs/virtual_file_system.h"
@@ -76,6 +77,21 @@ XamState::XamState(Emulator* emulator, KernelState* kernel_state)
          "\\Device\\Mass0\\Content", u"USB Storage", false,
          0, "\\Device\\Mass0", emulator->storage_root() / "mu",
          emulator->storage_root()});
+  }
+
+  std::error_code media_error;
+  const auto media = content_manager_->RestoreMediaReferences(
+      *kernel_state->file_system(), media_error);
+  if (!global_critical_region::is_held_by_current_thread()) {
+    if (media_error) {
+      XELOGW("Media references unavailable: {}", media_error.message());
+    }
+    for (const auto& row : media) {
+      if (row.error) {
+        XELOGW("Media reference {} is saved but inactive: {}", row.id,
+               row.error.message());
+      }
+    }
   }
 
   if (const auto installed = emulator->installed_system_source()) {

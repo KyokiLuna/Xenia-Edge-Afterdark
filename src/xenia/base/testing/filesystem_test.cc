@@ -7,6 +7,7 @@
  ******************************************************************************
  */
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -126,3 +127,119 @@ TEST_CASE("List Files", "[filesystem]") {
 }
 
 }  // namespace xe::base::test
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+#include <sys/stat.h>
+#include <unistd.h>
+namespace xe::base::test {
+namespace {
+uint64_t ObservedNativeAllocation(const filesystem::FileHandle& file) {
+  struct stat value{};
+  REQUIRE(::fstat(int(file.native_handle()), &value) == 0);
+  REQUIRE(S_ISREG(value.st_mode));
+  REQUIRE(value.st_blocks >= 0);
+  REQUIRE(uint64_t(value.st_blocks) <= UINT64_MAX / 512);
+  return uint64_t(value.st_blocks) * 512;
+}
+}  // namespace
+TEST_CASE("Native allocation observes real sparse extents independently of EOF",
+          "[filesystem][allocation][retained]") {
+  ScratchDir scratch;
+  const auto path = scratch.path() / "allocation";
+  {
+    std::ofstream file(path, std::ios::binary);
+    REQUIRE(file.good());
+  }
+  auto file = filesystem::FileHandle::OpenExisting(
+      path, filesystem::FileAccess::kGenericAll);
+  REQUIRE(file);
+  std::error_code error;
+  auto allocated = file->QueryAllocatedBytes(error);
+  REQUIRE_FALSE(error);
+  REQUIRE(allocated);
+  REQUIRE(*allocated == ObservedNativeAllocation(*file));
+  constexpr size_t size = 8 * 1024 * 1024;
+  REQUIRE_FALSE(file->ResizeResult(size));
+  allocated = file->QueryAllocatedBytes(error);
+  REQUIRE_FALSE(error);
+  REQUIRE(allocated);
+  REQUIRE(*allocated == ObservedNativeAllocation(*file));
+  REQUIRE(*allocated == 0);  // Sparse zero is not an unsupported result.
+  auto info = file->QueryInfo(error);
+  REQUIRE(info);
+  REQUIRE_FALSE(error);
+  REQUIRE(info->size == size);
+  const std::array<uint8_t, 3> bytes{0xA5, 0, 0x69};
+  const auto written = file->WriteAllResult(size - bytes.size(), bytes);
+  REQUIRE_FALSE(written.error);
+  REQUIRE(written.bytes == bytes.size());
+  REQUIRE_FALSE(file->FlushResult());
+  allocated = file->QueryAllocatedBytes(error);
+  REQUIRE_FALSE(error);
+  REQUIRE(allocated);
+  REQUIRE(*allocated == ObservedNativeAllocation(*file));
+  REQUIRE(*allocated < size);
+  std::array<uint8_t, 3> read{};
+  const auto result = file->ReadResult(size - bytes.size(), read);
+  REQUIRE_FALSE(result.error);
+  REQUIRE(result.bytes == bytes.size());
+  REQUIRE(read == bytes);
+  REQUIRE_FALSE(file->ResizeResult(0));
+  REQUIRE_FALSE(file->FlushResult());
+  allocated = file->QueryAllocatedBytes(error);
+  REQUIRE_FALSE(error);
+  REQUIRE(allocated);
+  REQUIRE(*allocated == ObservedNativeAllocation(*file));
+  REQUIRE(*allocated == 0);
+}
+TEST_CASE("Native allocation remains on an open inode after rename and unlink",
+          "[filesystem][allocation][retained]") {
+  ScratchDir scratch;
+  const auto path = scratch.path() / "name";
+  const auto held = scratch.path() / "held";
+  {
+    std::ofstream file(path, std::ios::binary);
+    file << "native";
+    REQUIRE(file.good());
+  }
+  auto file = filesystem::FileHandle::OpenExisting(
+      path, filesystem::FileAccess::kGenericRead);
+  REQUIRE(file);
+  struct stat before{};
+  REQUIRE(::fstat(int(file->native_handle()), &before) == 0);
+  std::filesystem::rename(path, held);
+  {
+    std::ofstream replacement(path, std::ios::binary);
+    replacement << std::string(16384, 'z');
+    REQUIRE(replacement.good());
+  }
+  struct stat named{};
+  REQUIRE(::stat(path.c_str(), &named) == 0);
+  REQUIRE(named.st_ino != before.st_ino);
+  std::error_code error;
+  auto allocated = file->QueryAllocatedBytes(error);
+  REQUIRE_FALSE(error);
+  REQUIRE(allocated);
+  REQUIRE(*allocated == ObservedNativeAllocation(*file));
+  auto info = file->QueryInfo(error);
+  REQUIRE(info);
+  REQUIRE_FALSE(error);
+  REQUIRE(info->file_id == uint64_t(before.st_ino));
+  REQUIRE(info->size == 6);
+  REQUIRE(std::filesystem::remove(held));
+  allocated = file->QueryAllocatedBytes(error);
+  REQUIRE_FALSE(error);
+  REQUIRE(allocated);
+  REQUIRE(*allocated == ObservedNativeAllocation(*file));
+  info = file->QueryInfo(error);
+  REQUIRE(info);
+  REQUIRE_FALSE(error);
+  REQUIRE(info->links == 0);
+  auto directory = filesystem::FileHandle::OpenExisting(
+      scratch.path(), filesystem::FileAccess::kGenericRead);
+  REQUIRE(directory);
+  REQUIRE_FALSE(directory->QueryAllocatedBytes(error));
+  REQUIRE(error == std::errc::operation_not_supported);
+}
+}  // namespace xe::base::test
+#endif

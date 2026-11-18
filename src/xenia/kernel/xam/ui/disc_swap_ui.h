@@ -45,7 +45,7 @@ class DiscSwapUI final : public XamGamepadDialog {
   DiscSwapResult result() const { return result_; }
   const std::filesystem::path& selected_path() const { return selected_path_; }
 
-  void OnDraw(ImGuiIO& io) override;
+  void OnDrawDialog(ImGuiIO& io) override;
 
  private:
   bool has_opened_ = false;

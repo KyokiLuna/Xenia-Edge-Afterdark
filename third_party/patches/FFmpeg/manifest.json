@@ -1,0 +1,11 @@
+{
+  "component": "FFmpeg",
+  "base_revision": "c4f44071adecd5e568470e58ab4bdf483598dbc8",
+  "path": "libavcodec/wmaprodec.c",
+  "before_sha256": "dd6d34004bf820848c384c0e16efa93a56898c96b843141f35b96d5aa40fe6a6",
+  "after_sha256": "79f5bb89f74f17eee65117ea896df888f91d8f46ae2b006b810afaaaa2cb62b3",
+  "patch_sha256": "b95c67702987e8f15bee29f236a55380f1c2824dc02de2ddc67b1923ee955a77",
+  "purpose": "Preserve existing Afterdark XMA frame output-offset and cut-frame overlap-tail corrections in reproducible source checkouts.",
+  "application": "python3 tools/research/apply_source_patches.py after ./xb setup and before ./xb build --config=release",
+  "archive_requirement": "Source archives must retain this patch, patcher, manifest and component revision; GitHub automatic source archives do not include submodule payloads."
+}

@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -41,12 +42,15 @@
 #include "xenia/xbox.h"
 
 class wxTimer;
+class wxMenu;
 
 namespace xe {
 namespace app {
 
 class GameListPanel;
 struct WxToolbarState;
+
+class HostLifecycleModalHook;
 
 class EmulatorWindow {
  public:
@@ -91,22 +95,36 @@ class EmulatorWindow {
   ui::Presenter* GetGraphicsSystemPresenter() const;
   void SetupGraphicsSystemPresenterPainting();
   void ShutdownGraphicsSystemPresenterPainting();
+  void PrepareFinalProviderShutdown();
+  bool ScheduleOwnedHostUiDismissal();
+  void DismissOwnedHostUi();
 
   void OnEmulatorInitialized();
+
+  // Both the Tools menu and a title's Content pane enter this workflow.
+  // A pane supplies its original title/type/owner identity; the menu accepts
+  // the package's own identity. The backend owns installation and reporting.
+  using ContentInstallTarget = Emulator::ContentImportTarget;
+  bool InstallContentPackages(
+      const std::vector<std::filesystem::path>& paths,
+      const std::optional<ContentInstallTarget>& target = std::nullopt);
 
   // Starts a new xenia process continuing this session with |args|, then
   // |target| (UTF-8, empty for the game list). Returns whether it started.
   bool SpawnEmulatorProcess(const std::vector<std::string>& args,
                             const std::string& target);
+  bool QueueProcessReplacement(std::vector<std::string> args,
+                               std::string target,
+                               uint64_t expected_generation = 0);
   // With |boot_animation| the boot animation plays before the title starts.
   void LaunchTitleInNewProcess(const std::filesystem::path& path_to_file,
                                bool boot_animation = false,
                                uint32_t launch_flags = 0,
                                std::vector<uint8_t> launch_data = {});
   xe::X_STATUS RunTitle(const std::filesystem::path& path_to_file,
-                        bool boot_animation = false,
-                        uint32_t launch_flags = 0,
-                        std::vector<uint8_t> launch_data = {});
+                        bool boot_animation = false, uint32_t launch_flags = 0,
+                        std::vector<uint8_t> launch_data = {},
+                        uint64_t expected_generation = 0);
   void UpdateTitle();
 
   void SetFullscreen(bool fullscreen);
@@ -128,6 +146,8 @@ class EmulatorWindow {
   // Asks for a title or disc image to run, or returns an empty path.
   std::filesystem::path PickTitleFile();
   void FileAddGames();
+  void AddMediaReference(bool folder);
+  void ManageMediaReferences();
   // Starts the installed dashboard after the boot animation.
   void StartDashboard();
   std::filesystem::path GetInstalledDashboardPath() const;
@@ -163,6 +183,10 @@ class EmulatorWindow {
   void ApplyDisplayConfigForCvars();
 
  private:
+  class HostPopupScope;
+  std::unique_ptr<HostLifecycleModalHook> lifecycle_modals_;
+  wxMenu* lifecycle_popup_ = nullptr;
+  bool lifecycle_popup_cancel_requested_ = false;
   class EmulatorWindowListener final : public ui::WindowListener,
                                        public ui::WindowInputListener {
    public:
@@ -274,6 +298,7 @@ class EmulatorWindow {
 
   GameListPanel* game_list_panel_ = nullptr;
   std::unique_ptr<GameLibrary> game_library_;
+  std::shared_ptr<filesystem::HostMetadataWriter> library_metadata_writer_;
   // Cleared when this window goes, which drops what the library fill thread
   // still has queued for it.
   // UI-owned metadata records. The worker never reads GameLibrary or cvars.

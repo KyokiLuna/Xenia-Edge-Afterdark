@@ -7,10 +7,13 @@
  ******************************************************************************
  */
 
+#include <array>
 #include "xenia/base/logging.h"
 #include "xenia/base/string_util.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_media_service.h"
 #include "xenia/kernel/util/shim_utils.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/xam/xam_module.h"
 #include "xenia/kernel/xam/xam_content_device.h"
 #include "xenia/kernel/xam/xam_private.h"
@@ -74,6 +77,9 @@ dword_result_t XamEnumerate_entry(dword_t handle, dword_t flags,
                                   lpvoid_t buffer, dword_t buffer_length,
                                   lpdword_t items_returned,
                                   pointer_t<XAM_OVERLAPPED> overlapped) {
+  if(const auto media=NativeMediaService::TryEnumerationOnOriginalCaller(kernel_state(),0x250,
+      std::array<uint32_t,6>{handle,flags,buffer.guest_address(),buffer_length,
+                            items_returned.guest_address(),overlapped.guest_address()}))return *media;
   uint32_t dummy = 0;
   object_ref<XEnumerator> completed_device_enum;
   // The console's XamEnumerate sets the top bit of the flags it passes on, so
@@ -126,6 +132,9 @@ dword_result_t XamCreateEnumeratorHandle_entry(
     dword_t user_index, dword_t app_id, dword_t open_message,
     dword_t close_message, dword_t extra_size, dword_t item_count,
     dword_t flags, lpdword_t out_handle) {
+  if(const auto media=NativeMediaService::TryEnumerationOnOriginalCaller(kernel_state(),0x24E,
+      std::array<uint32_t,8>{user_index,app_id,open_message,close_message,extra_size,item_count,
+                            flags,out_handle.guest_address()}))return *media;
   uint32_t enum_handle = 0;
   X_STATUS result = 0;
 
@@ -157,6 +166,8 @@ DECLARE_XAM_EXPORT1(XamCreateEnumeratorHandle, kNone, kImplemented);
 
 dword_result_t XamGetPrivateEnumStructureFromHandle_entry(
     dword_t handle, lpdword_t out_object_ptr) {
+  if(const auto media=NativeMediaService::TryEnumerationOnOriginalCaller(kernel_state(),0x24F,
+      std::array<uint32_t,2>{handle,out_object_ptr.guest_address()}))return *media;
   auto e = kernel_state()->object_table()->LookupObject<XEnumerator>(handle);
   if (!e) {
     return X_STATUS_INVALID_HANDLE;
@@ -176,9 +187,21 @@ DECLARE_XAM_EXPORT1(XamGetPrivateEnumStructureFromHandle, kNone, kImplemented);
 
 dword_result_t XamProfileCreateEnumerator_entry(dword_t device_id,
                                                 lpdword_t handle_ptr) {
-  if (!handle_ptr) {
+  auto* kernel = kernel_state();
+  auto& memory = *kernel->memory();
+  const auto output = handle_ptr.guest_address();
+  if (!output || !util::GuestIoRangeValid(memory, output, 4, true)) {
     return X_ERROR_INVALID_PARAMETER;
   }
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    return X_ERROR_FUNCTION_FAILED;
+  }
+
+  // Capture owned inventory before allocating/publishing an enum handle.
+  std::error_code error;
+  const auto inventory = kernel_state()->xam_state()->profile_manager()->
+      CaptureProfileInventory(device_id, error);
+  if (error) { return X_ERROR_FUNCTION_FAILED; }
 
   auto e =
       object_ref<ProfileEnumerator>(new ProfileEnumerator(kernel_state(), 1));
@@ -190,14 +213,16 @@ dword_result_t XamProfileCreateEnumerator_entry(dword_t device_id,
     return result;
   }
 
-  const auto& accounts =
-      kernel_state()->xam_state()->profile_manager()->GetAccounts();
+  for (const auto& row : inventory) { e->AppendItem(row); }
 
-  for (const auto& [xuid, account] : *accounts) {
-    e->AppendItem({xuid, account, 1});
+  std::array<uint8_t, 4> bytes{};
+  xe::store_and_swap<uint32_t>(bytes.data(), e->handle());
+  if (XFAILED(util::WriteGuestIoBuffer(memory, output, bytes))) {
+    // This handle really exists, but was never delivered to the caller.
+    // Drop the actual table handle; the local object_ref keeps teardown safe.
+    kernel->object_table()->RemoveHandle(e->handle());
+    return X_ERROR_FUNCTION_FAILED;
   }
-
-  *handle_ptr = e->handle();
   return X_ERROR_SUCCESS;
 }
 DECLARE_XAM_EXPORT1(XamProfileCreateEnumerator, kNone, kImplemented);

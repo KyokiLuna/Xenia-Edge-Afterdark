@@ -49,6 +49,8 @@ class GameListPanel : public wxPanel {
   ~GameListPanel() override = default;
 
   void Reload();
+  // Refresh only the selected title's content after the common host install.
+  void RefreshContent();
   // Shows what changed in one release since the list read it.
   void RefreshEntry(const LibraryKey& key);
   void SetLaunchCallback(LaunchCallback cb) { launch_cb_ = std::move(cb); }

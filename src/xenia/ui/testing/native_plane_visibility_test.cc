@@ -8,6 +8,7 @@
 #include <thread>
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/ui/native_ui_plane_handoff.h"
+#include "xenia/gpu/native_frame_execution.h"
 #include "xenia/ui/presenter.h"
 
 namespace xe::ui::test {
@@ -96,7 +97,7 @@ NativeUiPlaneImageSelection::Selection Paint(
     const NativeUiPlaneVisibility& visible,
     const NativeUiPlaneImageReference& desired = {},
     const NativeUiPlaneImageReference& received = {}) {
-  auto probe = selector.Prepare(visible);
+  auto probe = selector.Prepare(visible, desired, received);
   probe.CheckLiveness();  // Production performs this outside its backend lock.
   return selector.Select(probe, visible, desired, received);
 }
@@ -870,6 +871,153 @@ TEST_CASE("Modal record-time permission retains exact snapshot semantics",
   unadmitted.visibility_revision = 2;
   CHECK_FALSE(CanRecordNativeUiPlaneAfterHandoff(
       modal, f.Visible(2, {}), unadmitted));
+}
+
+// Models metadata origin only, never native readiness or a GPU completion.
+class IdentityPresentationGuard final : public gpu::NativeFramePresentationGuard {
+ public:
+  explicit IdentityPresentationGuard(bool admitted = true,
+                                     const bool* backend_owned = nullptr)
+      : admitted_(admitted), backend_owned_(backend_owned) {}
+  bool IsLive() const noexcept override {
+    ++live_checks;
+    if (backend_owned_ && *backend_owned_) ++forbidden_checks;
+    return admitted_ && !IsRevoked();
+  }
+  bool IsRevoked() const noexcept override {
+    return revoked.load(std::memory_order_acquire);
+  }
+  void Revoke() noexcept { revoked.store(true, std::memory_order_release); }
+  mutable std::atomic<unsigned> live_checks{0}, forbidden_checks{0};
+ private:
+  const bool admitted_;
+  const bool* backend_owned_;
+  std::atomic<bool> revoked{false};
+};
+
+TEST_CASE("An admitted modal paint cannot survive its captured identity guard",
+          "[native_plane][identity_guard][modal][recording]") {
+  Fixture f;
+  NativeUiPlaneImageSelection selector;
+  const auto visibility = f.Visible(1, {});
+  auto image = f.Reference(11);
+  auto guard = std::make_shared<IdentityPresentationGuard>();
+  image.presentation_guard = guard;
+  auto selected = Paint(selector, visibility, {}, image);
+  REQUIRE(selected);
+  CHECK(CanRecordNativeUiPlaneAfterHandoff(visibility, visibility, selected));
+  // Actual cross-thread revocation after selection, before recording.
+  std::thread revoke([&] { guard->Revoke(); });
+  revoke.join();
+  CHECK_FALSE(NativeUiPlaneImageSelection::CanRecord(visibility, selected));
+  CHECK_FALSE(CanRecordNativeUiPlaneAfterHandoff(
+      visibility, visibility, selected));
+  CHECK_FALSE(Paint(selector, visibility, {}, image));
+}
+
+TEST_CASE("A fresh global modal state cannot reauthorize a cached old image",
+          "[native_plane][identity_guard][modal][pending]") {
+  Fixture f;
+  NativeUiPlaneImageSelection selector;
+  auto old_image = f.Reference(11);
+  auto old_guard = std::make_shared<IdentityPresentationGuard>();
+  old_image.presentation_guard = old_guard;
+  const auto old_visibility = f.Visible(1, {});
+  auto old_selection = Paint(selector, old_visibility, {}, old_image);
+  REQUIRE(old_selection);
+  old_guard->Revoke();
+  // New CPU/native identity is admitted but its real Source/image is pending.
+  // The latest cached modal surface still carries the old, revoked origin.
+  const auto new_visibility = f.Visible(2, {});
+  CHECK_FALSE(Paint(selector, new_visibility, {}, old_image));
+  auto fresh_image = f.Reference(12);
+  fresh_image.presentation_guard =
+      std::make_shared<IdentityPresentationGuard>();
+  const auto fresh = Paint(selector, new_visibility, {}, fresh_image);
+  REQUIRE(fresh);
+  CHECK(fresh.reference.image == fresh_image.image);
+  CHECK_FALSE(CanRecordNativeUiPlaneAfterHandoff(
+      new_visibility, new_visibility, old_selection));
+  // Repeated new global state never changes the old immutable origin.
+  CHECK_FALSE(Paint(selector, f.Visible(3, {}), {}, old_image));
+}
+
+TEST_CASE("A hidden refresh source stays unpresentable through later grants",
+          "[native_plane][identity_guard][hidden_refresh]") {
+  Fixture f;
+  NativeUiPlaneImageSelection selector;
+  auto image = f.Reference(11);
+  auto hidden = std::make_shared<IdentityPresentationGuard>(false);
+  image.presentation_guard = hidden;
+  CHECK_FALSE(hidden->IsRevoked());
+  CHECK_FALSE(Paint(selector, f.Visible(1, {}), {}, image));
+  CHECK_FALSE(Paint(selector, f.Visible(2, f.Permission(11)), image));
+  auto fresh_guard = std::make_shared<IdentityPresentationGuard>();
+  auto fresh_image = f.Reference(12);
+  fresh_image.presentation_guard = fresh_guard;
+  REQUIRE(Paint(selector, f.Visible(3, f.Permission(12)), fresh_image));
+  CHECK_FALSE(Paint(selector, f.Visible(4, {}), {}, image));
+  CHECK_FALSE(hidden->IsLive());
+}
+
+TEST_CASE("Identity guard preflight is exact and never calls live checks locked",
+          "[native_plane][identity_guard][preflight]") {
+  Fixture f;
+  NativeUiPlaneImageSelection selector;
+  bool backend_owned = false;
+  auto guard = std::make_shared<IdentityPresentationGuard>(true, &backend_owned);
+  auto first = f.Reference(11);
+  first.presentation_guard = guard;
+  const auto visibility = f.Visible(1, {});
+  auto probe = selector.Prepare(visibility, {}, first);
+  probe.CheckLiveness();
+  const auto checks = guard->live_checks.load();
+  backend_owned = true;
+  auto selected = selector.Select(probe, visibility, {}, first);
+  REQUIRE(selected);
+  CHECK(NativeUiPlaneImageSelection::CanRecord(visibility, selected));
+  auto unobserved = f.Reference(12);
+  unobserved.presentation_guard = std::make_shared<IdentityPresentationGuard>();
+  CHECK_FALSE(selector.Select(probe, visibility, {}, unobserved));
+  guard->Revoke();
+  CHECK_FALSE(selector.Select(probe, visibility, {}, first));
+  backend_owned = false;
+  CHECK(guard->live_checks == checks);
+  CHECK(guard->forbidden_checks == 0);
+}
+
+TEST_CASE("Pending nonmodal receipts cannot retain a revoked image guard",
+          "[native_plane][identity_guard][nonmodal][lifetime]") {
+  Fixture f;
+  NativeUiPlaneImageSelection selector;
+  auto image = f.Reference(11);
+  auto guard = std::make_shared<IdentityPresentationGuard>();
+  image.presentation_guard = guard;
+  auto selected = Paint(selector, f.Visible(1, f.Permission(11)), image);
+  REQUIRE(selected);
+  REQUIRE(selector.retained_publication() == image.publication);
+  guard->Revoke();
+  CHECK_FALSE(Paint(selector, f.Visible(2, f.Permission(12)), {}));
+  CHECK_FALSE(selector.retained_publication());
+  CHECK_FALSE(CanRecordNativeUiPlaneAfterHandoff(
+      f.Visible(1, f.Permission(11)), f.Visible(2, f.Permission(12)), selected));
+  // A retained sampling lease still owns the actual image until released;
+  // revocation is visibility denial, not permission to destroy its payload.
+  CHECK(selected.reference.publication == image.publication);
+}
+
+TEST_CASE("Unsupported presenters refuse revoked-guard paint retirement",
+          "[native_plane][identity_guard][paint_drain]") {
+  Fixture f;
+  MetadataPresenter presenter;
+  auto guard = std::make_shared<IdentityPresentationGuard>();
+  REQUIRE(presenter.BindNativeUiPlaneAuthority(f.authority));
+  CHECK_FALSE(presenter.DrainNativeUiPlanePaintForGuard(f.authority, guard));
+  guard->Revoke();
+  CHECK_FALSE(presenter.DrainNativeUiPlanePaintForGuard(f.authority, guard));
+  CHECK(presenter.GetNativeUiPlaneAuthority(
+      f.authority->owner().allocation_owner,
+      f.authority->owner().backend_epoch) == f.authority);
 }
 }  // namespace
 }  // namespace xe::ui::test

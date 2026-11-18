@@ -51,6 +51,11 @@ class WxWindow : public Window {
 
   PhysicalKeyState QueryPhysicalKeyState(VirtualKey key) const override;
 
+  // Requests cancellation of this frame's exact active host popup. True is
+  // request acceptance only; the caller retains its scope until PopupMenu
+  // returns.
+  bool DismissOwnedPopupMenu(wxMenu* menu);
+
   wxFrame* frame() const { return frame_; }
   wxWindow* render_panel() const { return render_panel_; }
   wxAuiManager* aui_manager() { return &aui_manager_; }

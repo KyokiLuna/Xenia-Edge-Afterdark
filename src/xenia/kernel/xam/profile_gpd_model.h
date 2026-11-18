@@ -15,6 +15,8 @@ class ProfileIntentOwner;
 namespace xe::kernel::xam {
 std::error_code ValidateProfileGpdRecords(std::span<const uint8_t>,
                                           bool dashboard);
+class ProfileManager;
+class ProfileRosterIntent;
 class ProfileGpdModelAuthority;
 class ProfileGpdTransaction;
 struct ProfileGpdReadModels {
@@ -137,6 +139,24 @@ class ProfileGpdModelAuthority final
   uint32_t user_slot() const { return slot_; }
   uint64_t sign_in_generation() const { return sign_in_generation_; }
   void Retire();
+  class RosterPause final {
+   public:
+    ~RosterPause();
+    RosterPause(const RosterPause&) = delete;
+   private:
+    friend class ProfileGpdModelAuthority;
+    friend class ProfileManager;
+    friend class ProfileRosterIntent;
+    explicit RosterPause(std::shared_ptr<ProfileGpdModelAuthority> owner)
+        : owner_(std::move(owner)) {}
+    void SealForNativeEntry() { sealed_ = true; }
+    void ReleaseKnownOutcome();
+    std::shared_ptr<ProfileGpdModelAuthority> owner_;
+    uint64_t serial_ = 0;
+    bool sealed_ = false;
+  };
+  // Does not discard a pending actual mutation or change immutable read data.
+  std::unique_ptr<RosterPause> PauseForRoster(std::error_code&);
   // Only genuine Load results qualify; absent is retained as absent and can be
   // consumed only by the explicit TouchTitle creation policy, never as repair.
   std::error_code InstallLoaded(std::map<uint32_t, GpdSnapshotLoad>);
@@ -179,6 +199,8 @@ class ProfileGpdModelAuthority final
   const std::shared_ptr<ProfileStorageLease> storage_;
   mutable std::mutex mutex_;
   std::atomic<bool> retired_{false};
+  std::atomic<uint64_t> roster_pause_{0};
+  uint64_t next_roster_pause_ = 1;
   uint64_t version_ = 0, next_request_id_ = 1;
   std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines_;
   std::shared_ptr<const ProfileGpdReadModels> models_;

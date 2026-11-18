@@ -5,6 +5,9 @@
  * Released under the BSD license - see LICENSE in the root for more details.
  */
 #include "xenia/base/managed_device_identity.h"
+#include "xenia/base/testing/cache_storage_fixture.h"
+#include "xenia/base/cache_storage_wire.h"
+#include "xenia/base/mutex.h"
 #include "xenia/base/content_mutation_wire.h"
 #include "xenia/base/content_package_mutation_wire.h"
 #include <algorithm>
@@ -944,6 +947,259 @@ TEST_CASE("Package retirement and completion bind the exact prepared stage and k
   REQUIRE(cpw::Done(malformed, retire, error).empty()); REQUIRE(error);
   auto trailing = done; trailing.push_back(0);
   REQUIRE_FALSE(cpw::CheckDone(trailing, prepared, retire, error)); REQUIRE(error);
+}
+
+TEST_CASE("Cache products own three real folders and persist one bounded table", "[cache_owner][persistence]") {
+  CacheFixture f;std::error_code error;
+  auto a=f.Open(0x4D5309C9,error);REQUIRE(a);REQUIRE_FALSE(error);REQUIRE(a->current_cached());
+  auto b=f.Open(0x415608FC,error);REQUIRE(b);REQUIRE_FALSE(error);f.Originals();
+  std::array<ManagedDeviceIdentity::Uuid,3> uuid{};
+  for(size_t i=0;i<3;++i){
+    auto identity=CacheStorageOwnerTestAccess::Identity(*a,CacheStorageOwner::Role(i));REQUIRE(identity);
+    uuid[i]=identity->uuid();REQUIRE(identity->content_epoch()==1);
+    REQUIRE(identity->configured_location()==f.Source(0x4D5309C9,i));
+    auto view=a->CaptureRoot(CacheStorageOwner::Role(i),error);REQUIRE(view);REQUIRE_FALSE(error);
+    const std::array<uint8_t,4> bytes{uint8_t(i),0,0xAA,0xFE};
+    REQUIRE_FALSE(view->WriteNewFile("actual-payload.bin",bytes).error);
+    auto other=b->CaptureRoot(CacheStorageOwner::Role(i),error);REQUIRE(other);REQUIRE_FALSE(error);
+    REQUIRE_FALSE(std::filesystem::exists(other->path()/"actual-payload.bin"));
+  }
+  std::array<uint8_t,0x400> bytes{};for(size_t i=0;i<bytes.size();++i)bytes[i]=uint8_t(i*19+7);
+  const auto written=a->WriteTable(0,bytes);REQUIRE_FALSE(written.error);REQUIRE(written.complete);
+  REQUIRE(written.table_published);REQUIRE(written.table_durable);REQUIRE_FALSE(a->FlushTable());
+  std::array<uint8_t,0x400> output{};REQUIRE_FALSE(a->ReadTable(0,output));REQUIRE(output==bytes);
+  auto escaped=a;auto weak=std::weak_ptr<const ManagedDeviceIdentity>(CacheStorageOwnerTestAccess::Identity(*a,CacheStorageOwner::Role::kLegacy));
+  REQUIRE(a->CloseNativeAfterIoDrained());REQUIRE(weak.expired());a.reset();
+  auto reopened=f.Open(0x4D5309C9,error,2);REQUIRE(reopened);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(escaped->current_cached());REQUIRE(escaped->CheckCurrent());
+  REQUIRE_FALSE(reopened->ReadTable(0,output));REQUIRE(output==bytes);
+  for(size_t i=0;i<3;++i){const auto actual=CacheStorageOwnerTestAccess::Identity(*reopened,CacheStorageOwner::Role(i));
+    REQUIRE(actual);REQUIRE(actual->uuid()==uuid[i]);REQUIRE(actual->content_epoch()==1);
+    REQUIRE(CacheFixture::NativeBytes(f.Source(0x4D5309C9,i)/"actual-payload.bin")==
+        std::vector<uint8_t>{uint8_t(i),0,0xAA,0xFE});}
+  f.Originals();
+}
+TEST_CASE("Cache table rejects unsupported whole ranges and precommit cancellation", "[cache_owner][range][cancel]") {
+  CacheFixture f;std::error_code error;auto owner=f.Open(0x1234,error);REQUIRE(owner);REQUIRE_FALSE(error);
+  const std::array<uint8_t,4> data{9,8,7,6};REQUIRE(owner->WriteTable(0x100,data).complete);
+  const auto before=owner->table(error);REQUIRE_FALSE(error);
+  for(const auto offset:{uint64_t(0x3FF),uint64_t(0x401),UINT64_MAX}){
+    std::array<uint8_t,4> untouched;untouched.fill(0xCD);
+    REQUIRE(owner->ReadTable(offset,untouched)==std::errc::operation_not_supported);
+    REQUIRE(untouched==std::array<uint8_t,4>{0xCD,0xCD,0xCD,0xCD});
+    const auto denied=owner->WriteTable(offset,data);REQUIRE(denied.error==std::errc::operation_not_supported);
+    REQUIRE_FALSE(denied.table_published);REQUIRE_FALSE(denied.complete);
+  }
+  std::atomic<bool> cancel{true};const auto canceled=owner->WriteTable(0x100,std::array<uint8_t,4>{1,2,3,4},&cancel);
+  REQUIRE(canceled.error==std::errc::operation_canceled);REQUIRE_FALSE(canceled.table_published);
+  REQUIRE(owner->table(error)==before);REQUIRE_FALSE(error);f.Originals();
+}
+TEST_CASE("Cache bootstrap resumes actual interrupted native cut points", "[cache_owner][bootstrap][recovery]") {
+  const auto boundary=GENERATE(1u,2u,3u,4u,5u,6u,7u);
+  CacheFixture f;std::error_code error;const uint32_t product=0xCAFE0001;
+  auto options=f.Options(product);
+  auto partial=CacheStorageOwnerTestAccess::StopOpen(CacheStorageOwnerTestAccess::Product(product),options,boundary,error);
+  REQUIRE(partial);REQUIRE(error);REQUIRE_FALSE(partial->current_cached());
+  for(size_t i=0;i<3;++i){
+    auto source=CacheStorageOwnerTestAccess::NativeSource(*partial,CacheStorageOwner::Role(i));REQUIRE(source);
+    // Cut7 is AFTER the actual one-use admission of slot0, unlike all
+    // earlier cuts. Preserve that true native effect rather than claim it
+    // rolled back merely because the aggregate factory returned an error.
+    if(boundary==7 && !i){auto admitted=source->GuestView(error);REQUIRE(admitted);REQUIRE_FALSE(error);}
+    else{REQUIRE_FALSE(source->GuestView(error));REQUIRE(error);}
+    auto raw=HostStorageRoot::Open(f.Source(product,i),false,error);REQUIRE(raw);REQUIRE_FALSE(error);
+    // A raw view has no exact managed projection and still cannot expose the
+    // private binding directory, including after real source admission.
+    REQUIRE_FALSE(raw->GuestView(error));REQUIRE(error);
+  }
+  REQUIRE(partial->CloseNativeAfterIoDrained());
+  auto reopened=f.Open(product,error,2);REQUIRE(reopened);REQUIRE_FALSE(error);REQUIRE_FALSE(reopened->CheckCurrent());
+  if(boundary==1 || boundary==4){const auto preserved=reopened->preserved_paths();REQUIRE_FALSE(preserved.empty());
+    for(const auto& path:preserved)REQUIRE(std::filesystem::exists(path));}
+  for(size_t i=0;i<3;++i){auto guest=reopened->CaptureRoot(CacheStorageOwner::Role(i),error);REQUIRE(guest);REQUIRE_FALSE(error);
+    REQUIRE(guest->CheckGuestAccess(".xenia-cache-binding-v1",true));
+    REQUIRE_FALSE(guest->OpenFile(".xenia-cache-binding-v1/owner.v1",FileAccess::kGenericRead,error));REQUIRE(error);}
+  f.Originals();
+}
+TEST_CASE("Cache floor refusal preserves originals and recovers an actual initializer", "[cache_owner][space][recovery]") {
+  CacheFixture f;std::error_code error;const uint32_t product=0xCAFE0002;
+  auto denied=CacheStorageOwnerTestAccess::StopOpen(CacheStorageOwnerTestAccess::Product(product),f.Options(product),8,error);
+  REQUIRE(denied);REQUIRE(error==std::errc::no_space_on_device);REQUIRE_FALSE(denied->current_cached());
+  REQUIRE_FALSE(std::filesystem::exists(f.Source(product,0)/ManagedDeviceIdentity::kMarker));f.Originals();
+  // Deny-only native seam runs after genuine shared admission, never a fake
+  // successful space probe. The production filesystem reserve is really20GiB.
+  REQUIRE(f.root->Observe().reserve_bytes>=CacheStorageOwner::kMinimumFreeBytes);
+  REQUIRE(denied->CloseNativeAfterIoDrained());auto ready=f.Open(product,error,2);
+  REQUIRE(ready);REQUIRE_FALSE(error);REQUIRE_FALSE(ready->CheckCurrent());f.Originals();
+}
+TEST_CASE("Cache native format preserves other slots and refuses real open Files", "[cache_owner][format][busy]") {
+  CacheFixture f;std::error_code error;auto owner=f.Open(0x1234,error);REQUIRE(owner);REQUIRE_FALSE(error);
+  const auto slot=CacheStorageOwner::Role::kCache0;
+  auto view=owner->CaptureRoot(slot,error);REQUIRE(view);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(view->WriteNewFile("payload",kData).error);
+  auto file=view->OpenFile("payload",FileAccess::kGenericRead,error);REQUIRE(file);REQUIRE_FALSE(error);
+  auto busy=owner->CaptureFormat(slot,8);REQUIRE(busy);REQUIRE(busy->receipt().error);
+  REQUIRE_FALSE(busy->receipt().prepared_durable);REQUIRE(CacheFixture::NativeBytes(view->path()/"payload")==std::vector<uint8_t>(kData.begin(),kData.end()));
+  busy.reset();file.reset();view.reset();
+  auto other=owner->CaptureRoot(CacheStorageOwner::Role::kCache1,error);REQUIRE(other);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(other->WriteNewFile("other-payload",kData).error);const auto other_path=other->path();other.reset();
+  auto format=owner->CaptureFormat(slot,8);REQUIRE(format);REQUIRE_FALSE(format->receipt().error);REQUIRE(format->receipt().prepared_durable);
+  const auto completed=CacheStorageOwner::ExecuteFormat(*format);REQUIRE_FALSE(completed.error);REQUIRE(completed.complete);
+  REQUIRE(completed.epoch_published);REQUIRE(completed.epoch_durable);REQUIRE(completed.data_started);
+  REQUIRE_FALSE(std::filesystem::exists(f.Source(0x1234,1)/"payload"));
+  REQUIRE(CacheFixture::NativeBytes(other_path/"other-payload")==std::vector<uint8_t>(kData.begin(),kData.end()));
+  REQUIRE(owner->table(error).sectors_per_cluster[0]==8);REQUIRE_FALSE(error);
+  REQUIRE(CacheStorageOwnerTestAccess::Identity(*owner,slot)->content_epoch()==2);f.Originals();
+}
+TEST_CASE("Cache format restarts exact actual data table and committed cut points", "[cache_owner][format][recovery]") {
+  const auto boundary=GENERATE(1u,2u,3u,4u,5u);
+  CacheFixture f;std::error_code error;const uint32_t product=0xFEED0001;
+  auto owner=f.Open(product,error);REQUIRE(owner);REQUIRE_FALSE(error);
+  const auto slot=CacheStorageOwner::Role::kCache1;
+  auto view=owner->CaptureRoot(slot,error);REQUIRE(view);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(view->WriteNewFile("before-reset",kData).error);view.reset();
+  const auto old_uuid=CacheStorageOwnerTestAccess::Identity(*owner,slot)->uuid();
+  auto handoff=owner->CaptureFormat(slot,16);REQUIRE(handoff);REQUIRE_FALSE(handoff->receipt().error);
+  const auto stopped=CacheStorageOwnerTestAccess::StopFormat(*handoff,boundary);
+  REQUIRE(stopped.error==std::errc::operation_canceled);REQUIRE_FALSE(stopped.complete);
+  REQUIRE(stopped.epoch_durable);REQUIRE(stopped.data_started);REQUIRE(stopped.epoch==2);
+  REQUIRE_FALSE(std::filesystem::exists(f.Source(product,2)/"before-reset"));
+  REQUIRE(std::filesystem::exists(stopped.preserved));
+  // A real external post-reset file makes repeated deletion observable.
+  {std::ofstream sentinel(f.Source(product,2)/"after-reset",std::ios::binary);REQUIRE(sentinel.is_open());sentinel<<"keep-new-epoch";sentinel.flush();REQUIRE(sentinel.good());}
+  REQUIRE(owner->CloseNativeAfterIoDrained());
+  auto fresh=f.Open(product,error,2);REQUIRE(fresh);
+  if(error){REQUIRE(error==std::errc::operation_in_progress);auto recovery=fresh->InspectRecovery(slot);REQUIRE(recovery);REQUIRE_FALSE(recovery->receipt().error);
+    const auto result=CacheStorageOwner::ResumeFormat(*recovery);REQUIRE_FALSE(result.error);REQUIRE(result.complete);REQUIRE(result.epoch==2);}
+  REQUIRE_FALSE(fresh->CheckCurrent());
+  REQUIRE(CacheFixture::NativeBytes(f.Source(product,2)/"after-reset")==std::vector<uint8_t>{'k','e','e','p','-','n','e','w','-','e','p','o','c','h'});
+  const auto actual=CacheStorageOwnerTestAccess::Identity(*fresh,slot);REQUIRE(actual);REQUIRE(actual->uuid()==old_uuid);REQUIRE(actual->content_epoch()==2);
+  REQUIRE(fresh->table(error).sectors_per_cluster[1]==16);REQUIRE_FALSE(error);
+  REQUIRE(CacheStorageOwner::ResumeFormat(*handoff).error);f.Originals();
+}
+TEST_CASE("Cache source replacement never reopens its old capability by path", "[cache_owner][removal]") {
+  CacheFixture f;std::error_code error;const uint32_t product=0x1234;
+  auto owner=f.Open(product,error);REQUIRE(owner);REQUIRE_FALSE(error);
+  const auto original=f.Source(product,1);const auto moved=original.parent_path()/"removed-source";
+  std::filesystem::rename(original,moved);REQUIRE(std::filesystem::create_directory(original));
+  REQUIRE(owner->CheckCurrent());std::array<uint8_t,4> output{0xCC,0xCC,0xCC,0xCC};
+  REQUIRE(owner->ReadTable(0,output));REQUIRE(output==std::array<uint8_t,4>{0xCC,0xCC,0xCC,0xCC});
+  owner->Retire();REQUIRE(owner->CloseNativeAfterIoDrained());
+  auto denied=f.Open(product,error,2);REQUIRE(denied);REQUIRE(error);REQUIRE_FALSE(denied->current_cached());
+  REQUIRE(std::filesystem::exists(moved/ManagedDeviceIdentity::kMarker));
+  REQUIRE_FALSE(std::filesystem::exists(original/ManagedDeviceIdentity::kMarker));f.Originals();
+}
+
+TEST_CASE("Cache purpose rejects validly hashed NUL paths before native reopening", "[cache_owner][wire][malformed]") {
+  namespace cw=cache_storage_detail;
+  CacheFixture f;std::error_code error;const uint32_t product=0x1234;
+  auto owner=f.Open(product,error);REQUIRE(owner);REQUIRE_FALSE(error);
+  const auto real=CacheFixture::NativeBytes(f.Source(product,0)/".xenia-cache-binding-v1/owner.v1");
+  const auto original=cw::DecodeBinding(real,error);REQUIRE_FALSE(error);
+  const auto before=CacheFixture::NativeBytes(original.table.path+"/cache-table.v1");
+  auto invalid=original;invalid.private_parent.path.push_back('\0');invalid.private_parent.path+="suffix";
+  REQUIRE(cw::EncodeBinding(invalid,error).empty());REQUIRE(error);error.clear();
+  auto damaged=real;const auto at=std::search(damaged.begin(),damaged.end(),original.table.path.begin(),original.table.path.end());
+  REQUIRE(at!=damaged.end());*at=0;
+  const auto hash=cw::Hash(std::span(damaged).first(damaged.size()-32),error);REQUIRE_FALSE(error);
+  std::copy(hash.begin(),hash.end(),damaged.end()-32);
+  cw::DecodeBinding(damaged,error);REQUIRE(error);
+  REQUIRE(CacheFixture::NativeBytes(original.table.path+"/cache-table.v1")==before);
+  REQUIRE_FALSE(owner->CheckCurrent());f.Originals();
+}
+TEST_CASE("Committed cache controls are preserved and missing targets are never recreated", "[cache_owner][conflict][persistence]") {
+  const auto kind=GENERATE(0u,1u,2u);
+  namespace cw=cache_storage_detail;
+  CacheFixture f;std::error_code error;const uint32_t product=0x1234;
+  auto owner=f.Open(product,error);REQUIRE(owner);REQUIRE_FALSE(error);
+  const auto binding=cw::DecodeBinding(CacheFixture::NativeBytes(f.Source(product,0)/".xenia-cache-binding-v1/owner.v1"),error);
+  REQUIRE_FALSE(error);const auto table=std::filesystem::path(binding.table.path)/"cache-table.v1";
+  const auto original=CacheFixture::NativeBytes(table);
+  const auto source_id=CacheStorageOwnerTestAccess::Identity(*owner,CacheStorageOwner::Role::kLegacy)->source_id();
+  REQUIRE(owner->CloseNativeAfterIoDrained());
+  const auto target=kind==1?f.Source(product,0)/ManagedDeviceIdentity::kMarker:table;
+  auto preserved=target;preserved+=".preserved";
+  if(kind!=2)std::filesystem::rename(target,preserved);
+  else{auto future=original;future[0]='Y';std::ofstream output(target,std::ios::binary|std::ios::trunc);REQUIRE(output.is_open());
+    output.write(reinterpret_cast<const char*>(future.data()),std::streamsize(future.size()));output.flush();REQUIRE(output.good());}
+  const auto expected=kind==2?CacheFixture::NativeBytes(target):CacheFixture::NativeBytes(preserved);
+  auto denied=f.Open(product,error,2);REQUIRE(denied);REQUIRE(error);REQUIRE_FALSE(denied->current_cached());
+  if(kind==2)REQUIRE(CacheFixture::NativeBytes(target)==expected);
+  else{REQUIRE_FALSE(std::filesystem::exists(target));REQUIRE(CacheFixture::NativeBytes(preserved)==expected);}
+  REQUIRE(denied->CloseNativeAfterIoDrained());
+  if(kind==1){auto raw=HostStorageRoot::Open(f.Source(product,0),false,error);REQUIRE(raw);REQUIRE_FALSE(error);
+    REQUIRE_FALSE(ManagedDeviceIdentity::Open(raw,source_id,1,error));REQUIRE(error);
+    REQUIRE_FALSE(std::filesystem::exists(target));REQUIRE(CacheFixture::NativeBytes(preserved)==expected);}
+  f.Originals();
+}
+TEST_CASE("Cache bootstrap refuses a genuine foreign guest and never adopts unknown payload", "[cache_owner][conflict][privacy]") {
+  CacheFixture f;std::error_code error;const uint32_t product=0x1234;
+  const auto leaf=CacheStorageOwnerTestAccess::Product(product).key();
+  REQUIRE_FALSE(f.parents[0]->Create(leaf,true));auto source=f.parents[0]->Subroot(leaf,false,error);REQUIRE(source);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(source->WriteNewFile("foreign-payload",kData).error);
+  auto foreign=source->GuestView(error);REQUIRE(foreign);REQUIRE_FALSE(error);
+  auto denied=f.Open(product,error);REQUIRE(denied);REQUIRE(error==std::errc::device_or_resource_busy);
+  REQUIRE_FALSE(denied->current_cached());REQUIRE_FALSE(std::filesystem::exists(f.Source(product,0)/ManagedDeviceIdentity::kMarker));
+  REQUIRE(CacheFixture::NativeBytes(f.Source(product,0)/"foreign-payload")==std::vector<uint8_t>(kData.begin(),kData.end()));
+  REQUIRE(denied->CloseNativeAfterIoDrained());foreign.reset();source.reset();
+  auto unknown=f.Open(product,error,2);REQUIRE(unknown);REQUIRE(error);REQUIRE_FALSE(unknown->current_cached());
+  REQUIRE_FALSE(std::filesystem::exists(f.Source(product,0)/ManagedDeviceIdentity::kMarker));
+  REQUIRE(CacheFixture::NativeBytes(f.Source(product,0)/"foreign-payload")==std::vector<uint8_t>(kData.begin(),kData.end()));f.Originals();
+}
+
+TEST_CASE("Cache purpose refuses real nested or aliased slot parents before mutation", "[cache_owner][confinement]") {
+  const auto nested=GENERATE(false,true);
+  CacheFixture f;std::error_code error;const uint32_t product=0x1234;
+  auto options=f.Options(product);std::shared_ptr<HostStorageRoot> conflicting;
+  const auto key=CacheStorageOwnerTestAccess::Product(product).key();
+  if(nested){REQUIRE_FALSE(f.parents[0]->Create(key,true));
+    conflicting=f.parents[0]->Subroot(key,false,error);}
+  else conflicting=HostStorageRoot::Open(f.parents[0]->path(),false,error);
+  REQUIRE(conflicting);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(conflicting->WriteNewFile("must-preserve",kData).error);options.role_parents[1]=conflicting;
+  const auto preserved=CacheFixture::NativeBytes(conflicting->path()/"must-preserve");
+  auto denied=CacheStorageOwner::Open(CacheStorageOwnerTestAccess::Product(product),options,error);
+  REQUIRE(denied);REQUIRE(error);REQUIRE_FALSE(denied->current_cached());
+  REQUIRE(CacheFixture::NativeBytes(conflicting->path()/"must-preserve")==preserved);
+  for(size_t i=0;i<3;++i){
+    if(nested && !i)REQUIRE(std::filesystem::is_directory(f.Source(product,i)));
+    else REQUIRE_FALSE(std::filesystem::exists(f.Source(product,i)));
+    REQUIRE_FALSE(std::filesystem::exists(f.Source(product,i)/ManagedDeviceIdentity::kMarker));
+  }
+  REQUIRE_FALSE(std::filesystem::exists(conflicting->path()/key));
+  REQUIRE_FALSE(std::filesystem::exists(options.private_parent->path()/SnapshotRecoveryOwner::kDirectory));f.Originals();
+}
+
+TEST_CASE("Cache cached retirement cancels actual Files before separately drained native release", "[cache_owner][lifetime]") {
+  CacheFixture f;std::error_code error;const uint32_t product=0x1234;
+  auto owner=f.Open(product,error);REQUIRE(owner);REQUIRE_FALSE(error);
+  auto view=owner->CaptureRoot(CacheStorageOwner::Role::kCache0,error);REQUIRE(view);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(view->WriteNewFile("retained",kData).error);
+  auto file=view->OpenFile("retained",FileAccess::kGenericRead,error);REQUIRE(file);REQUIRE_FALSE(error);
+  const auto weak=std::weak_ptr<const ManagedDeviceIdentity>(
+      CacheStorageOwnerTestAccess::Identity(*owner,CacheStorageOwner::Role::kCache0));
+  {auto namespace_lock=global_critical_region::AcquireDirect();
+    owner->Retire();REQUIRE_FALSE(owner->current_cached());REQUIRE(view->retiring());
+    REQUIRE_FALSE(owner->CloseNativeAfterIoDrained());REQUIRE_FALSE(weak.expired());}
+  REQUIRE(owner->CloseNativeAfterIoDrained());REQUIRE(weak.expired());
+  std::array<uint8_t,4> untouched{0xCD,0xCD,0xCD,0xCD};const auto read=file->ReadResult(0,untouched);
+  REQUIRE(read.error);REQUIRE(read.bytes==0);REQUIRE(untouched==std::array<uint8_t,4>{0xCD,0xCD,0xCD,0xCD});
+  file.reset();view.reset();
+  auto fresh=f.Open(product,error,2);REQUIRE(fresh);REQUIRE_FALSE(error);REQUIRE_FALSE(fresh->CheckCurrent());
+  REQUIRE(CacheFixture::NativeBytes(f.Source(product,1)/"retained")==std::vector<uint8_t>(kData.begin(),kData.end()));f.Originals();
+}
+TEST_CASE("Cache registration admission retains its actual mutex owner through unlock", "[cache_owner][lifetime][registration]") {
+  CacheFixture f;std::error_code error;auto owner=f.Open(0x1234,error);REQUIRE(owner);REQUIRE_FALSE(error);
+  const auto weak_owner=std::weak_ptr<CacheStorageOwner>(owner);
+  const auto weak_identity=std::weak_ptr<const ManagedDeviceIdentity>(
+      CacheStorageOwnerTestAccess::Identity(*owner,CacheStorageOwner::Role::kLegacy));
+  auto admission=CacheStorageOwnerTestAccess::RegistrationGuard(owner,error);
+  REQUIRE(admission);REQUIRE_FALSE(error);owner.reset();
+  REQUIRE_FALSE(weak_owner.expired());REQUIRE_FALSE(weak_identity.expired());
+  // Outside every namespace/model guard, actual unlock precedes final owner
+  // release and its ordinary native teardown. No guest/format permit is made.
+  admission.reset();REQUIRE(weak_owner.expired());REQUIRE(weak_identity.expired());
+  auto reopened=f.Open(0x1234,error,2);REQUIRE(reopened);REQUIRE_FALSE(error);f.Originals();
 }
 }  // namespace xe::filesystem::test
 #endif

@@ -27,7 +27,7 @@ class TitleListUI final : public XamDialog {
   ~TitleListUI();
 
  private:
-  void OnDraw(ImGuiIO& io) override;
+  void OnDrawDialog(ImGuiIO& io) override;
 
   void LoadProfileTitleList(xe::ui::ImGuiDrawer* imgui_drawer,
                             const UserProfile* profile);

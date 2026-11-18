@@ -42,6 +42,12 @@ class XStfsDevice final : public XObject {
   const std::array<uint8_t, 36>& descriptor() const { return descriptor_; }
 
  private:
+  friend class NativeStfsDeviceTestAccess;
+  // Deny-only test boundary after genuine native parsing/admission. It can
+  // withdraw/replace the original parent, never fabricate child success.
+  static X_STATUS CreateInternal(KernelState&, uint32_t, uint32_t,
+      bool retire_parent_before_commit,
+      std::unique_ptr<vfs::Device>* replacement_before_commit = nullptr);
   explicit XStfsDevice(KernelState&, uint32_t context_size,
                        std::string name, std::array<uint8_t, 36> descriptor);
   bool AllocateBodyAndContext();
@@ -52,8 +58,9 @@ class XStfsDevice final : public XObject {
   uint32_t context_ = 0;
   mutable std::mutex state_mutex_;
   uint64_t pointer_references_ = 0;
-  bool retired_ = true;
-  std::shared_ptr<vfs::Device> active_device_;
+  bool retired_ = true, dismounting_ = false;
+  // VFS owns active mounts; an ABI body is only a weak tombstone observer.
+  std::weak_ptr<vfs::Device> active_device_;
   // No owning reference in a tombstone. Kernel stop checks this after its
   // XFiles drain, before destroying the Kernel an escaped alias would use.
   std::weak_ptr<void> backing_lifetime_;

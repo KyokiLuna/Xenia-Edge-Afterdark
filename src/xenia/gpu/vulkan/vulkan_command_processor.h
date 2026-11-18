@@ -58,6 +58,7 @@
 
 namespace xe {
 namespace gpu {
+class NativeFramePresentationGuard;
 namespace vulkan {
 
 class VulkanCommandProcessor final : public CommandProcessor {
@@ -515,6 +516,7 @@ class VulkanCommandProcessor final : public CommandProcessor {
     uint64_t backend_epoch = 0, version = 0;
     uint32_t width = 0, height = 0;
     std::shared_ptr<const ui::NativeUiPlaneAuthority> authority;
+    std::shared_ptr<const NativeFramePresentationGuard> presentation_guard;
     VkImage image = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;

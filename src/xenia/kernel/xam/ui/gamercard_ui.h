@@ -50,7 +50,7 @@ class GamercardUI final : public XamDialog {
   ~GamercardUI() = default;
 
  private:
-  void OnDraw(ImGuiIO& io) override;
+  void OnDrawDialog(ImGuiIO& io) override;
   void DrawBaseSettings(ImGuiIO& io);
   void DrawOnlineSettings(ImGuiIO& io);
   void DrawGpdSettings(ImGuiIO& io);

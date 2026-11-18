@@ -1,5 +1,6 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "xenia/base/managed_volume_authority.h"
+#include "xenia/base/managed_storage_bootstrap.h"
 #include "xenia/base/content_mutation_owner.h"
 #include <algorithm>
 #include <array>
@@ -17,6 +18,119 @@
 namespace xe::filesystem {
 class ContentMutationOwnerTestAccess final {
  public:
+  static std::filesystem::path RecordDirectory(const ContentMutationOwner& owner) { return owner.records_->path(); }
+  static std::filesystem::path StageDirectory(const ContentMutationOwner& owner) { return owner.staging_->path(); }
+  static std::filesystem::path RecoveryDirectory(const ContentMutationOwner& owner) { return owner.recovery_->root()->path(); }
+  static content_mutation_wire::Preparation ReadPreparation(const ContentMutationOwner& owner, const std::string& nonce) {
+    std::error_code error;
+    const auto token = owner.records_->CaptureSnapshot("content-"+nonce+".plan",4096,error);
+    REQUIRE(token); REQUIRE_FALSE(error); REQUIRE(token->exists());
+    content_mutation_wire::Preparation plan;
+    REQUIRE(content_mutation_wire::DecodePreparation(token->bytes(),plan,error)); REQUIRE_FALSE(error); return plan;
+  }
+  static void RequirePreparationBinding(const ContentMutationOwner& owner,
+      const content_mutation_wire::Record& record) {
+    std::error_code error;
+    const auto token = owner.records_->CaptureSnapshot(
+        "content-" + record.nonce + ".plan", 4096, error);
+    REQUIRE(token); REQUIRE_FALSE(error); REQUIRE(token->exists());
+    content_mutation_wire::Preparation plan;
+    REQUIRE(content_mutation_wire::DecodePreparation(token->bytes(), plan, error));
+    REQUIRE_FALSE(error);
+    REQUIRE(record.preparation_digest == content_mutation_wire::Digest(token->bytes(), error));
+    REQUIRE_FALSE(error);
+    REQUIRE(content_mutation_wire::MatchesPreparation(plan, token->bytes(), record, error));
+    REQUIRE_FALSE(error);
+    // A different digest cannot authenticate the same source, package, Header
+    // and intended metadata, even when all the other record fields match.
+    auto mismatched = record; mismatched.preparation_digest[0] ^= 1;
+    REQUIRE_FALSE(content_mutation_wire::MatchesPreparation(
+        plan, token->bytes(), mismatched, error));
+    REQUIRE_FALSE(error);
+  }
+  static void RequireAborted(const ContentMutationOwner& owner, const std::string& nonce) {
+    std::error_code error;
+    const auto plan = owner.records_->CaptureSnapshot("content-"+nonce+".plan",4096,error);
+    REQUIRE(plan); REQUIRE_FALSE(error); REQUIRE(plan->exists());
+    const auto terminal = owner.records_->CaptureSnapshot("content-"+nonce+".abort",256,error);
+    REQUIRE(terminal); REQUIRE_FALSE(error); REQUIRE(terminal->exists());
+    REQUIRE(content_mutation_wire::CheckDone(terminal->bytes(),plan->bytes(),error)); REQUIRE_FALSE(error);
+    for (const auto* suffix : {".intent",".stream",".done"}) {
+      const auto token = owner.records_->CaptureSnapshot("content-"+nonce+suffix,4096,error);
+      REQUIRE(token); REQUIRE_FALSE(error); REQUIRE_FALSE(token->exists());
+    }
+  }
+  static void StopRecord(ContentMutationOwner& owner, std::string suffix, unsigned boundary) {
+    owner.record_stop_suffix_ = std::move(suffix); owner.record_stop_boundary_ = boundary;
+  }
+  static void DenyPreparationSpace(ContentMutationOwner& owner, bool deny) {
+    owner.preparation_space_ceiling_ = deny ? std::optional<uint64_t>(0) : std::nullopt;
+  }
+  static ContentMutationOwner::Receipt StopStreamPreparation(ContentMutationOwner& owner,
+      const std::filesystem::path& package, std::shared_ptr<const HostStorageSnapshotToken> header,
+      std::span<const uint8_t> metadata, ContentPackageStreamSource& source, unsigned boundary) {
+    return owner.StreamInternal(package,std::move(header),metadata,source,nullptr,nullptr,UINT64_MAX,{},nullptr,boundary);
+  }
+  static std::error_code StopPreservation(ContentMutationOwner& owner, const std::string& nonce, unsigned boundary) {
+    const auto plan = ReadPreparation(owner,nonce); std::error_code error;
+    const auto encoded = owner.records_->CaptureSnapshot("content-"+nonce+".plan",4096,error);
+    REQUIRE(encoded); REQUIRE_FALSE(error);
+    return owner.AbortPreparation(plan,encoded->bytes(),owner.pending_reservations_.at(plan.target).view,
+                                 owner.pending_reservations_.at(plan.package).view,boundary);
+  }
+  static ContentMutationOwner::Receipt UncertainInitialStage(ContentMutationOwner& owner,
+      const std::filesystem::path& package,std::shared_ptr<const HostStorageSnapshotToken> header,
+      std::span<const uint8_t> metadata,std::span<const ContentPackageInitialMember> members) {
+    return owner.Mutate(ContentMutationOwner::Kind::kCreate,package,std::move(header),metadata,nullptr,
+                         std::make_error_code(std::errc::io_error),members);
+  }
+  static ContentMutationOwner::Receipt CancelStreamAfterAuthentication(
+      ContentMutationOwner& owner, const std::filesystem::path& package,
+      std::shared_ptr<const HostStorageSnapshotToken> header,
+      std::span<const uint8_t> metadata, ContentPackageStreamSource& source,
+      std::atomic<bool>& canceled, std::atomic<uint64_t>& progress) {
+    return owner.StreamInternal(package, std::move(header), metadata, source,
+        &canceled, &progress, UINT64_MAX, {}, &canceled);
+  }
+  static ContentMutationOwner::Receipt StopStream(ContentMutationOwner& owner,
+      const std::filesystem::path& package,
+      std::shared_ptr<const HostStorageSnapshotToken> header,
+      std::span<const uint8_t> metadata, ContentPackageStreamSource& source,
+      std::atomic<uint64_t>& progress, uint64_t after) {
+    return owner.StreamInternal(package, std::move(header), metadata, source,
+                                nullptr, &progress, after);
+  }
+  static ContentMutationOwner::Receipt DenyStreamSpace(ContentMutationOwner& owner,
+      const std::filesystem::path& package,
+      std::shared_ptr<const HostStorageSnapshotToken> header,
+      std::span<const uint8_t> metadata, ContentPackageStreamSource& source) {
+    return owner.StreamInternal(package, std::move(header), metadata, source,
+                                nullptr, nullptr, UINT64_MAX, uint64_t(0));
+  }
+  static content_mutation_wire::Record StreamRecord(
+      const ContentMutationOwner& owner, const std::string& nonce) {
+    std::error_code error;
+    auto token = owner.records_->CaptureSnapshot("content-" + nonce + ".stream",
+        content_mutation_wire::kMaximumRecordBytes, error);
+    REQUIRE(token); REQUIRE_FALSE(error); REQUIRE(token->exists());
+    content_mutation_wire::Record record;
+    REQUIRE(content_mutation_wire::Decode(token->bytes(), record, error));
+    REQUIRE_FALSE(error); return record;
+  }
+  static void RequireStreamRollbackDone(const ContentMutationOwner& owner,
+                                        const std::string& nonce) {
+    std::error_code error;
+    auto start = owner.records_->CaptureSnapshot("content-" + nonce + ".stream",
+        content_mutation_wire::kMaximumRecordBytes, error);
+    REQUIRE(start); REQUIRE_FALSE(error); REQUIRE(start->exists());
+    auto done = owner.records_->CaptureSnapshot("content-" + nonce + ".done", 256, error);
+    REQUIRE(done); REQUIRE_FALSE(error); REQUIRE(done->exists());
+    REQUIRE(content_mutation_wire::CheckDone(done->bytes(), start->bytes(), error));
+    REQUIRE_FALSE(error);
+    const auto empty = std::filesystem::is_empty(owner.staging_->path(), error);
+    REQUIRE_FALSE(error);
+    REQUIRE(empty);
+  }
   static ContentMutationOwner::Receipt StopInitial(
       ContentMutationOwner& owner,const std::filesystem::path& package,
       std::shared_ptr<const HostStorageSnapshotToken> header,
@@ -168,6 +282,14 @@ class ContentMutationOwnerTestAccess final {
       REQUIRE(token); REQUIRE_FALSE(error); REQUIRE_FALSE(token->exists());
     }
   }
+  static void NoCompleteIntent(const ContentMutationOwner& owner,
+                               const std::string& nonce) {
+    std::error_code error;
+    const auto token = owner.records_->CaptureSnapshot(
+        "content-" + nonce + ".intent",
+        content_mutation_wire::kMaximumRecordBytes, error);
+    REQUIRE(token); REQUIRE_FALSE(error); REQUIRE_FALSE(token->exists());
+  }
   static std::vector<uint8_t> PendingBytes(const ContentMutationOwner& owner,
       const std::filesystem::path& target, const std::filesystem::path& file) {
     const auto found = owner.pending_reservations_.find(target);
@@ -219,6 +341,61 @@ class ContentMutationOwnerTestAccess final {
 // root identity is mocked; restart below reopens the actual files noncreating.
 class ManagedVolumeAuthorityTestAccess final {
  public:
+  static std::shared_ptr<const ManagedVolumeAuthority> OpenLegacyProducer(
+      ManagedVolumeAuthority::Options options) {
+    auto result = std::shared_ptr<ManagedVolumeAuthority>(new ManagedVolumeAuthority);
+    auto anchor = options.content;
+    std::error_code error;
+    result->content_ = anchor->Subroot({}, false, error);
+    REQUIRE(result->content_); REQUIRE_FALSE(error);
+    // Invoke the genuine existing normal B2 producer, including its real MDI,
+    // profile/recovery/mutation factories and final EncodeBinding commit.
+    // No modern bootstrap skip flag, hand-built wire or fabricated lease.
+    return ManagedVolumeAuthority::OpenLegacyInternal(std::move(options),
+        std::move(anchor), std::move(result), false);
+  }
+  static std::filesystem::path LegacyBindingPath(const ManagedVolumeAuthority& owner) {
+    return owner.binding_root_ ? owner.binding_root_->path() : std::filesystem::path{};
+  }
+  static std::shared_ptr<const ManagedVolumeAuthority> StopBootstrap(
+      ManagedVolumeAuthority::Options options,unsigned boundary) {
+    return ManagedVolumeAuthority::OpenInternal(std::move(options),false,boundary);
+  }
+  static unsigned BootstrapBoundaries(const ManagedVolumeAuthority& volume) {
+    return ManagedStorageBootstrap::Boundaries(volume);
+  }
+  static bool HasExactSourceAnchor(const ManagedVolumeAuthority& volume) {
+    if (!volume.state_parent_ || !volume.content_ || !volume.source_lease_ ||
+        volume.state_parent_.get()==volume.content_.get() ||
+        volume.state_parent_->path()!=volume.content_->path() ||
+        volume.state_parent_->format_eligible() ||
+        !volume.state_parent_->native_filesystem_authority() ||
+        !volume.content_->native_filesystem_authority()) {return false;}
+    const auto& anchor=volume.state_parent_->directory_identity();
+    const auto& source=volume.content_->directory_identity();
+    return anchor && source && anchor->SameEntry({},*source,{}) &&
+        volume.intents_ && volume.intents_->source()==volume.content_ &&
+        !volume.identity_->CheckCurrent() && !volume.intents_->error();
+  }
+  static std::filesystem::path PublicAuthorityPath(const ManagedVolumeAuthority& volume) {
+    return volume.public_authority_?volume.public_authority_->path():std::filesystem::path{};
+  }
+  static std::vector<uint8_t> WrongBindingTag(std::span<const uint8_t> wire) {
+    std::error_code error;
+    const auto decoded=ManagedDeviceIdentity::DescribeBootstrapWire(wire,error);
+    REQUIRE_FALSE(error);REQUIRE(decoded.binding);REQUIRE(wire.size()>168);
+    auto reference=*decoded.binding;reference.binding_directory^=1;
+    if (!reference.binding_directory) {reference.binding_directory=2;}
+    const auto prefix=wire.first(wire.size()-168);
+    auto suffix=ManagedDeviceIdentity::BootstrapSuffix(prefix,reference,error);
+    REQUIRE_FALSE(error);REQUIRE(suffix.size()==168);
+    std::vector<uint8_t> changed(prefix.begin(),prefix.end());
+    changed.insert(changed.end(),suffix.begin(),suffix.end());
+    const auto valid=ManagedDeviceIdentity::DescribeBootstrapWire(changed,error);
+    REQUIRE_FALSE(error);REQUIRE(valid.uuid==decoded.uuid);REQUIRE(valid.epoch==decoded.epoch);
+    REQUIRE(valid.binding->binding_directory!=decoded.binding->binding_directory);
+    return changed;
+  }
   static std::error_code PrepareOnly(ManagedVolumeFormatHandoff& ticket) {
     ticket.operation_ = ManagedDeviceIdentity::PrepareHandoff(
         ticket.identity_, ticket.binding_);
@@ -233,6 +410,16 @@ class ManagedVolumeAuthorityTestAccess final {
     ticket.operation_ = ManagedVolumeAuthority::PrepareFormatHandoff(ticket, external);
     ticket.error_ = ticket.operation_->error;
     return {ticket.error_, bool(ticket.operation_->source_lease)};
+  }
+  static std::shared_ptr<const HostStorageRoot> ObservedFormatSource(
+      const ManagedVolumeFormatHandoff& ticket) {
+    return ticket.operation_?ticket.operation_->observation_source:nullptr;
+  }
+  static std::shared_ptr<const HostStorageRoot> FormatPublicAuthority(
+      const ManagedVolumeFormatHandoff& ticket) { return ticket.public_authority_; }
+  static std::shared_ptr<const ManagedVolumeAuthority> StopAfterFormatAdmission(
+      ManagedVolumeFormatHandoff& ticket) {
+    return ManagedVolumeAuthority::FromCompletedFormatInternal(ticket,1);
   }
   static std::shared_ptr<const ManagedVolumeAuthority> OwnersReadyOnly(
       ManagedVolumeFormatHandoff& ticket) {
@@ -291,6 +478,7 @@ struct VolumeScratch {
     return owner;
   }
 };
+std::vector<uint8_t> BootstrapFile(const std::filesystem::path&);
 struct TreeRow {
   std::filesystem::file_type type;
   std::filesystem::perms permissions;
@@ -554,6 +742,8 @@ TEST_CASE(
     intents = owner->root()->path();
   }
   const auto legacy = TreeBytes(scratch.path);
+  struct stat legacy_marker{};
+  REQUIRE(stat((source->path()/ManagedDeviceIdentity::kMarker).c_str(),&legacy_marker)==0);
   ManagedVolumeAuthority::Options options;
   options.content = source;
   options.source_id = id;
@@ -582,7 +772,15 @@ TEST_CASE(
     std::set<std::string> added;
     for (const auto& [path, row] : legacy) {
       const auto found = before.find(path);
-      REQUIRE(found != before.end()); REQUIRE(found->second == row);
+      REQUIRE(found != before.end());
+      if (path==std::string("legacy-content/")+ManagedDeviceIdentity::kMarker) {
+        // Explicit migration appends one checked required-reference frame.
+        // Every old byte/unknown field remains the exact prefix; UUID/epoch
+        // and purpose roots above are independently required to stay equal.
+        REQUIRE(found->second.type==row.type);REQUIRE(found->second.permissions==row.permissions);
+        REQUIRE(found->second.bytes.size()==row.bytes.size()+168);
+        REQUIRE(std::equal(row.bytes.begin(),row.bytes.end(),found->second.bytes.begin()));
+      } else {REQUIRE(found->second==row);}
     }
     for (const auto& [path, row] : before) {
       if (legacy.contains(path)) { continue; }
@@ -596,7 +794,34 @@ TEST_CASE(
         REQUIRE_FALSE(row.bytes.empty());
       }
     }
-    REQUIRE(added == content_purpose);
+    auto expected_added=content_purpose;
+    const auto binding_relative=std::filesystem::path("legacy-content")/
+        (".xenia-device-binding-v1-"+BindingKey(id,source->path()));
+    REQUIRE(added.contains(binding_relative.generic_string()));
+    expected_added.insert(binding_relative.generic_string());
+    const std::set<std::string> fixed_controls{"owner.v1","bootstrap-source.v1",
+        "bootstrap.pending.v1","bootstrap.commit.v1",
+        "bootstrap.component-08.v1","bootstrap.component-09.v1"};
+    std::set<std::string> observed_controls;unsigned preservation_records=0,preserved_markers=0;
+    for (const auto& path:added) {
+      const std::filesystem::path relative(path);
+      if (relative.parent_path()==binding_relative) {
+        const auto leaf=relative.filename().string();
+        if (leaf.starts_with("bootstrap-preserve-") && leaf.ends_with(".v1")) {++preservation_records;}
+        else {REQUIRE(fixed_controls.contains(leaf));observed_controls.insert(leaf);}
+        expected_added.insert(path);
+      } else if (relative.parent_path()=="legacy-content" &&
+                 relative.filename().string().starts_with("preserved-") &&
+                 relative.filename().string().ends_with("-h")) {
+        ++preserved_markers;expected_added.insert(path);
+        const auto& old=legacy.at(std::string("legacy-content/")+ManagedDeviceIdentity::kMarker);
+        REQUIRE(before.at(path).bytes==old.bytes);
+        struct stat preserved{};REQUIRE(stat((scratch.path/relative).c_str(),&preserved)==0);
+        REQUIRE(preserved.st_ino==legacy_marker.st_ino);REQUIRE(preserved.st_dev==legacy_marker.st_dev);
+      }
+    }
+    REQUIRE(observed_controls==fixed_controls);REQUIRE(preservation_records==1);REQUIRE(preserved_markers==1);
+    REQUIRE(added==expected_added);
     options.existing_legacy = ManagedVolumeAuthority::Options::ExistingLegacy{
         scratch.root, shell, recovery};
     const auto owner = ManagedVolumeAuthority::Open(std::move(options));
@@ -803,6 +1028,57 @@ TEST_CASE(
   REQUIRE(std::filesystem::is_regular_file(original_intents / "owner.v1"));
   REQUIRE(std::filesystem::is_regular_file(original_recovery / "owner.v1"));
 }
+TEST_CASE("Published bootstrap guest retirement and release do not own its pinned public scope",
+          "[managed_volume_authority][bootstrap][public_view][lifetime]") {
+  const bool retire_published=GENERATE(false,true);
+  VolumeScratch scratch;
+  std::shared_ptr<HostStorageRoot> source,public_guest;
+  std::weak_ptr<HostStorageRoot> published;
+  std::weak_ptr<const HostStorageGuestProjection> projection;
+  ManagedDeviceIdentity::Uuid uuid;
+  {
+    auto owner=scratch.Open();
+    source=owner->content();public_guest=owner->public_root();
+    REQUIRE(source);REQUIRE(public_guest);
+    uuid=owner->identity()->uuid();published=public_guest;
+    projection=public_guest->GuestBacking().projection;
+    REQUIRE_FALSE(projection.expired());
+    if (retire_published) {
+      // Format/teardown logically closes the actual returned guest, not the
+      // strongly pinned unadmitted public namespace owned by the projection.
+      public_guest->Retire();
+      std::error_code error;
+      REQUIRE_FALSE(public_guest->GuestView(error));
+      REQUIRE(error==std::errc::no_such_device);
+      auto source_guest=source->GuestView(error);
+      REQUIRE(source_guest);REQUIRE_FALSE(error);
+    }
+  }
+  // An explicitly retained guest is a real external authority. It must keep
+  // the projection alive until its own final owner releases it.
+  REQUIRE_FALSE(published.expired());
+  REQUIRE_FALSE(projection.expired());
+  if (!retire_published) {
+    const std::array<uint8_t,4> bytes{0x50,0,0xA3,0x7F};
+    REQUIRE_FALSE(public_guest->WriteNewFile("retained-public.data",bytes).error);
+    std::vector<uint8_t> read;
+    REQUIRE_FALSE(public_guest->ReadFile("retained-public.data",16,read));
+    REQUIRE(read==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+    REQUIRE_FALSE(public_guest->Remove("retained-public.data",false));
+  }
+  public_guest.reset();
+  REQUIRE(published.expired());
+  REQUIRE(projection.expired());
+  const auto expired=source->GuestBacking();
+  REQUIRE(expired.requires_projection);REQUIRE_FALSE(expired.projection);
+  std::error_code error;
+  REQUIRE_FALSE(source->GuestView(error));
+  REQUIRE(error==std::errc::no_such_device);
+  const auto reopened=scratch.Open();
+  REQUIRE(reopened->profile_writable());
+  REQUIRE(reopened->mutations()->ready());
+  REQUIRE(reopened->identity()->uuid()==uuid);
+}
 TEST_CASE(
     "Expired filtered authority cannot be re-admitted as an unfiltered path",
     "[managed_volume_authority]") {
@@ -879,7 +1155,13 @@ TEST_CASE(
   REQUIRE(owner->intents()->private_parent()->path() == scratch.path);
   REQUIRE(owner->public_root()->path() == scratch.path / "public");
   REQUIRE(owner->identity()->configured_location() == content->path());
-  REQUIRE_FALSE(owner->content()->has_guest_projection());
+  REQUIRE(owner->content()->has_guest_projection());
+  std::error_code projected_error;
+  auto projected=owner->content()->GuestView(projected_error);
+  REQUIRE(projected);REQUIRE_FALSE(projected_error);
+  const auto binding=".xenia-device-binding-v1-"+BindingKey("hdd",content->path());
+  REQUIRE_FALSE(projected->OpenFile(std::filesystem::path(binding)/"owner.v1",FileAccess::kGenericRead,projected_error));
+  REQUIRE(projected_error==std::errc::permission_denied);
   options.legacy_recovery.reset();
   const auto incomplete = ManagedVolumeAuthority::Open(options);
   REQUIRE(incomplete->error());
@@ -917,6 +1199,68 @@ TEST_CASE(
   REQUIRE(guest);
   REQUIRE_FALSE(guest->OpenFile(state.filename() / "owner.v1",
                                 FileAccess::kGenericRead, error));
+}
+TEST_CASE("Managed format preserves native ancestors while retiring only old generations",
+          "[managed_volume_authority][format][native_anchor]") {
+  const bool replace_ancestor = GENERATE(false, true);
+  VolumeScratch scratch;
+  REQUIRE_FALSE(scratch.root->Create("parent", true));
+  REQUIRE_FALSE(scratch.root->Create("parent/content", true));
+  std::error_code error;
+  auto parent = scratch.root->Subroot("parent", false, error);
+  REQUIRE(parent); REQUIRE_FALSE(error);
+  auto source = parent->Subroot("content", false, error);
+  REQUIRE(source); REQUIRE_FALSE(error);
+  ManagedVolumeAuthority::Options options;
+  options.content = source;
+  options.source_id = "native-anchor-format";
+  options.device_id = 3;
+  auto owner = ManagedVolumeAuthority::Open(options);
+  REQUIRE(owner); REQUIRE_FALSE(owner->error());
+  REQUIRE(ManagedVolumeAuthorityTestAccess::HasExactSourceAnchor(*owner));
+  auto old_source = owner->content();
+  auto old_guest = old_source->GuestView(error);
+  REQUIRE(old_guest); REQUIRE_FALSE(error);
+  auto preserved = owner->recovery()->root();
+  std::vector<uint8_t> marker;
+  REQUIRE_FALSE(preserved->ReadFile(SnapshotRecoveryOwner::kMarker, 256, marker));
+  REQUIRE_FALSE(marker.empty());
+  auto ticket = owner->CaptureFormatHandoff();
+  REQUIRE(ticket); REQUIRE_FALSE(ticket->error());
+  ticket->ClosePublishedPublicView();
+  owner.reset();
+  const auto receipt = ManagedVolumeAuthority::ExecuteFormat(*ticket);
+  REQUIRE_FALSE(receipt.error); REQUIRE(receipt.complete);
+  auto current = ManagedVolumeAuthority::FromCompletedFormat(*ticket);
+  REQUIRE(current); REQUIRE_FALSE(current->error());
+  REQUIRE(current->profile_writable());
+  std::vector<uint8_t> read;
+  REQUIRE(old_source->ReadFile("ordinary.bin", 256, read) ==
+          std::errc::no_such_device);
+  REQUIRE(old_guest->ReadFile("ordinary.bin", 256, read) ==
+          std::errc::no_such_device);
+  REQUIRE_FALSE(preserved->ReadFile(SnapshotRecoveryOwner::kMarker, 256, read));
+  REQUIRE(read == marker);
+  REQUIRE_FALSE(current->identity()->CheckCurrent());
+  if (replace_ancestor) {
+    // The final directory remains the SAME inode through this ancestor alias.
+    // Its original derived-parent O_NOFOLLOW proof must still reject it.
+    struct stat before{}, aliased{};
+    REQUIRE(stat(preserved->path().c_str(), &before) == 0);
+    const auto bytes = TreeBytes(scratch.path / "parent");
+    std::filesystem::rename(scratch.path / "parent", scratch.path / "moved");
+    std::filesystem::create_directory_symlink("moved", scratch.path / "parent");
+    REQUIRE(stat(preserved->path().c_str(), &aliased) == 0);
+    REQUIRE(before.st_dev == aliased.st_dev);
+    REQUIRE(before.st_ino == aliased.st_ino);
+    REQUIRE(preserved->ReadFile(SnapshotRecoveryOwner::kMarker, 256, read));
+    REQUIRE(TreeBytes(scratch.path / "moved") == bytes);
+    REQUIRE(std::filesystem::remove(scratch.path / "parent"));
+    std::filesystem::rename(scratch.path / "moved", scratch.path / "parent");
+    REQUIRE_FALSE(preserved->ReadFile(SnapshotRecoveryOwner::kMarker, 256, read));
+    REQUIRE(read == marker);
+    REQUIRE_FALSE(current->identity()->CheckCurrent());
+  }
 }
 TEST_CASE("Managed format needs real owner drain and restores only fresh views",
           "[managed_volume_authority][format]") {
@@ -1033,6 +1377,8 @@ TEST_CASE("Managed format completes exact next-epoch owners and preserves privat
   auto owner = scratch.Open();
   const auto uuid = owner->identity()->uuid();
   const auto epoch = owner->identity()->content_epoch();
+  REQUIRE(owner->identity()->binding_required());
+  const auto source_prefix=BootstrapFile(scratch.path/ManagedDeviceIdentity::kMarker);
   const auto old_intent = owner->intents()->root()->path();
   const auto recovery = owner->recovery()->root()->path();
   // Retained private files must come through their real namespace producer;
@@ -1074,6 +1420,10 @@ TEST_CASE("Managed format completes exact next-epoch owners and preserves privat
   REQUIRE(next->profile_writable());
   REQUIRE(next->identity()->uuid() == uuid);
   REQUIRE(next->identity()->content_epoch() == epoch + 1);
+  REQUIRE(next->identity()->binding_required());
+  const auto advanced_source=BootstrapFile(scratch.path/ManagedDeviceIdentity::kMarker);
+  REQUIRE(advanced_source.size()>source_prefix.size());
+  REQUIRE(std::equal(source_prefix.begin(),source_prefix.end(),advanced_source.begin()));
   REQUIRE(next->intents()->managed_identity() == next->identity());
   REQUIRE(next->intents()->source() == next->content());
   REQUIRE(next->intents()->root()->path() != old_intent);
@@ -1088,6 +1438,8 @@ TEST_CASE("Managed format completes exact next-epoch owners and preserves privat
   REQUIRE_FALSE(reopened->error());
   REQUIRE(reopened->identity()->uuid() == uuid);
   REQUIRE(reopened->identity()->content_epoch() == epoch + 1);
+  REQUIRE(reopened->identity()->binding_required());
+  REQUIRE(BootstrapFile(scratch.path/ManagedDeviceIdentity::kMarker)==advanced_source);
   REQUIRE(reopened->intents()->managed_identity() == reopened->identity());
   REQUIRE(TreeBytes(old_intent) == old_redo_bytes);
   REQUIRE(TreeBytes(recovery) == recovery_bytes);
@@ -1146,6 +1498,123 @@ TEST_CASE("Managed handoff restart validates each actual durable owner phase",
   REQUIRE_FALSE(next->identity()->CheckCurrent());
   REQUIRE_FALSE(std::filesystem::exists(scratch.path / "save.bin"));
   REQUIRE(std::filesystem::exists(scratch.path / "after-reset.bin") == (stop >= 1));
+}
+TEST_CASE("Inspected format keeps common guest admission sealed through real commit and retry",
+          "[managed_volume_authority][format][recovery][guest_seal]") {
+  const int phase=GENERATE(0,1,2);
+  const bool stop_after_admission=GENERATE(false,true);
+  VolumeScratch scratch;
+  auto owner=scratch.Open();
+  const auto uuid=owner->identity()->uuid();
+  const auto epoch=owner->identity()->content_epoch();
+  const auto public_path=owner->public_root()->path();
+  auto ticket=owner->CaptureFormatHandoff();
+  REQUIRE(ticket);REQUIRE_FALSE(ticket->error());
+  ticket->ClosePublishedPublicView();owner.reset();
+  REQUIRE_FALSE(ManagedVolumeAuthorityTestAccess::PrepareOnly(*ticket));
+  if (phase>=1) {
+    const auto reset=ManagedVolumeAuthority::ExecuteFormat(*ticket);
+    REQUIRE_FALSE(reset.error);REQUIRE(reset.complete);
+    std::ofstream(scratch.path/"after-reset.bin")<<"must not be reset again";
+  }
+  if (phase==2) {
+    auto ready=ManagedVolumeAuthorityTestAccess::OwnersReadyOnly(*ticket);
+    REQUIRE(ready);REQUIRE_FALSE(ready->error());REQUIRE(ticket->phase()==2);
+    ready.reset();
+  }
+  ticket.reset();
+  ticket=ManagedVolumeAuthority::InspectFormatRecovery(ExistingFormatOptions(scratch));
+  REQUIRE(ticket);REQUIRE_FALSE(ticket->error());
+  auto observed=ManagedVolumeAuthorityTestAccess::ObservedFormatSource(*ticket);
+  auto public_authority=ManagedVolumeAuthorityTestAccess::FormatPublicAuthority(*ticket);
+  REQUIRE(observed);REQUIRE(public_authority);
+  const auto old_backing=observed->GuestBacking(); // retain original sealed projection
+  const auto before=TreeBytes(scratch.path);
+  auto require_pending=[](const std::shared_ptr<const HostStorageRoot>& root) {
+    std::error_code error;
+    REQUIRE_FALSE(root->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+    REQUIRE_FALSE(HostStorageRoot::AdmitGuestMount(
+        std::vector<GuestHostBacking>{root->GuestBacking()},error));
+    REQUIRE(error==std::errc::operation_in_progress);
+    auto raw=HostStorageRoot::Open(root->path(),false,error,0);
+    REQUIRE(raw);REQUIRE_FALSE(error);
+    REQUIRE_FALSE(raw->GuestView(error));REQUIRE(error==std::errc::operation_in_progress);
+    REQUIRE_FALSE(HostStorageRoot::AdmitGuestMount(
+        std::vector<GuestHostBacking>{{root->path(),true}},error));
+    REQUIRE(error==std::errc::operation_in_progress);
+  };
+  require_pending(observed);require_pending(public_authority);
+  REQUIRE(TreeBytes(scratch.path)==before);
+  // Resume genuinely completes reset if needed; no fake owner readiness.
+  std::shared_ptr<const ManagedVolumeAuthority> current;
+  if (stop_after_admission) {
+    const auto reset=ManagedVolumeAuthority::ExecuteFormat(*ticket);
+    REQUIRE_FALSE(reset.error);REQUIRE(reset.complete);
+    auto stopped=ManagedVolumeAuthorityTestAccess::StopAfterFormatAdmission(*ticket);
+    REQUIRE(stopped);REQUIRE(stopped->error()==std::errc::operation_canceled);
+    REQUIRE(ticket->phase()==3);
+    stopped.reset();
+    std::ofstream(scratch.path/"after-admit.bin")<<"must survive admitted retry";
+    current=ManagedVolumeAuthority::ResumeFormat(*ticket);
+    REQUIRE(std::filesystem::is_regular_file(scratch.path/"after-admit.bin"));
+  } else {
+    current=ManagedVolumeAuthority::ResumeFormat(*ticket);
+  }
+  REQUIRE(current);REQUIRE_FALSE(current->error());REQUIRE(current->profile_writable());
+  REQUIRE(current->identity()->uuid()==uuid);
+  REQUIRE(current->identity()->content_epoch()==epoch+1);
+  REQUIRE(std::filesystem::exists(scratch.path/"after-reset.bin")==bool(phase>=1));
+  std::error_code error;
+  REQUIRE_FALSE(observed->GuestView(error));REQUIRE(error==std::errc::no_such_device);
+  REQUIRE_FALSE(HostStorageRoot::AdmitGuestMount(std::vector<GuestHostBacking>{old_backing},error));
+  REQUIRE(error==std::errc::permission_denied);
+  auto fresh=current->content()->GuestView(error);REQUIRE(fresh);REQUIRE_FALSE(error);
+  auto raw_public=HostStorageRoot::Open(public_path,false,error,0);
+  REQUIRE(raw_public);REQUIRE_FALSE(error);
+  auto admitted_public=raw_public->GuestView(error);REQUIRE(admitted_public);REQUIRE_FALSE(error);
+  const std::array<uint8_t,3> bytes{0x17,0,0xE4};
+  REQUIRE_FALSE(current->public_root()->WriteNewFile("after-format.bin",bytes).error);
+  std::vector<uint8_t> read;
+  REQUIRE_FALSE(admitted_public->ReadFile("after-format.bin",16,read));
+  REQUIRE(read==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+  // ticket AND old_backing remain live: no stale global SourceUnadmitted seal.
+}
+TEST_CASE("Nonpending format inspection cannot retain a false guest admission seal",
+          "[managed_volume_authority][format][recovery][guest_seal]") {
+  VolumeScratch scratch;
+  auto owner=scratch.Open();REQUIRE_FALSE(owner->error());
+  const auto uuid=owner->identity()->uuid();owner.reset();
+  const auto before=TreeBytes(scratch.path);
+  const auto refused=ManagedVolumeAuthority::InspectFormatRecovery(ExistingFormatOptions(scratch));
+  REQUIRE(refused);REQUIRE(refused->error());
+  REQUIRE(TreeBytes(scratch.path)==before);
+  const auto current=ManagedVolumeAuthority::Open(ExistingFormatOptions(scratch));
+  REQUIRE(current);REQUIRE_FALSE(current->error());REQUIRE(current->profile_writable());
+  REQUIRE(current->identity()->uuid()==uuid);REQUIRE(TreeBytes(scratch.path)==before);
+}
+TEST_CASE("Owned format refuses a foreign raw public guest before Prepared publication",
+          "[managed_volume_authority][format][foreign_guest]") {
+  VolumeScratch scratch;
+  auto owner=scratch.Open();
+  std::error_code error;
+  auto raw=HostStorageRoot::Open(owner->public_root()->path(),false,error,0);
+  REQUIRE(raw);REQUIRE_FALSE(error);
+  auto foreign=raw->GuestView(error);REQUIRE(foreign);REQUIRE_FALSE(error);
+  auto ticket=owner->CaptureFormatHandoff();REQUIRE(ticket);REQUIRE_FALSE(ticket->error());
+  ticket->ClosePublishedPublicView();owner.reset();
+  const auto before=TreeBytes(scratch.path);
+  const auto denied=ManagedVolumeAuthority::ExecuteFormat(*ticket);
+  REQUIRE(denied.error==std::errc::device_or_resource_busy);
+  REQUIRE_FALSE(denied.epoch_published);REQUIRE_FALSE(denied.data_started);
+  REQUIRE(ticket->phase()==0);REQUIRE(TreeBytes(scratch.path)==before);
+  foreign.reset();raw.reset();
+  auto restored=ManagedVolumeAuthority::RestoreUnchangedFormat(*ticket);
+  REQUIRE(restored);REQUIRE_FALSE(restored->error());
+  restored.reset();
+  const auto reset=ManagedVolumeAuthority::ExecuteFormat(*ticket);
+  REQUIRE_FALSE(reset.error);REQUIRE(reset.complete);
+  const auto current=ManagedVolumeAuthority::FromCompletedFormat(*ticket);
+  REQUIRE(current);REQUIRE_FALSE(current->error());REQUIRE(current->profile_writable());
 }
 TEST_CASE("Managed handoff removal refuses both old and replacement directories unchanged",
           "[managed_volume_authority][format][removal]") {
@@ -1667,9 +2136,9 @@ TEST_CASE("Content journal reserves intent and done capacity before any stage",
   REQUIRE(expected); REQUIRE_FALSE(error);
   const std::array<uint8_t,3> bytes{1,2,3};
   REQUIRE(owner->Create(package, expected, bytes).complete);
-  // The real first transaction owns marker+intent+done (3 actual files).
-  // Lower ONLY the private admission budget to4: a one-slot check would allow
-  // mutation, while the required two-slot rule must refuse with no new files.
+  // The real first transaction owns marker+plan+intent+done. Lower only the
+  // private budget to four: the next atomic intent/Done append must refuse
+  // before private stage creation, including its temporary record slots.
   ContentMutationOwnerTestAccess::LimitRecords(*owner, 4);
   auto before = owner->CaptureMetadata(ContentMutationOwner::Kind::kHeader, package, header, error);
   REQUIRE(before); REQUIRE_FALSE(error);
@@ -2297,6 +2766,62 @@ TEST_CASE("Initial content creation publishes the complete native tree and Heade
   volume=scratch.Open(); REQUIRE(volume->mutations()->Visible(kInitialPackage));
   CheckInitialBytes(*volume->content(),members);
 }
+TEST_CASE("Native private staging retains dependency without inheriting the guest source namespace",
+          "[base][storage][content_mutation][initial_members][native_staging]") {
+  const bool retire_source=GENERATE(false,true);
+  VolumeScratch scratch;auto volume=scratch.Open();auto owner=volume->mutations();
+  std::error_code error;
+  auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,
+      kInitialPackage,kInitialHeader,error);
+  REQUIRE(header);REQUIRE_FALSE(error);
+  auto source_guest=volume->content()->GuestView(error);
+  REQUIRE(source_guest);REQUIRE_FALSE(error);
+  const auto members=InitialMembers();const std::array<uint8_t,3> metadata{3,0,7};
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(
+      *owner,kInitialPackage,header,metadata,members,1);
+  REQUIRE(stopped.error==std::errc::operation_canceled);
+  REQUIRE(stopped.prepared_durable);REQUIRE_FALSE(stopped.complete);
+  REQUIRE_FALSE(owner->ready());
+  auto staged=ContentMutationOwnerTestAccess::PackageOperation(*owner,stopped.nonce);
+  std::vector<uint8_t> bytes;
+  REQUIRE_FALSE(staged->ReadFile("Account",16,bytes));
+  REQUIRE(bytes==members.front().bytes);
+  const auto private_member=(staged->path()/"Account").lexically_relative(volume->content()->path());
+  REQUIRE_FALSE(source_guest->OpenFile(private_member,FileAccess::kGenericRead,error));
+  REQUIRE(error==std::errc::permission_denied);
+  source_guest.reset();
+  // Native capability separation must never become a guest privacy bypass.
+  REQUIRE_FALSE(staged->GuestView(error));
+  REQUIRE(error==std::errc::permission_denied);
+  REQUIRE_FALSE(HostStorageRoot::AdmitGuestMount(
+      std::vector<GuestHostBacking>{staged->GuestBacking()},error));
+  REQUIRE(error==std::errc::permission_denied);
+  const auto account=staged->path()/"Account";
+  if (retire_source) {
+    // The independent namespace still depends on the original exact child and
+    // its source generation. It cannot read through actual source removal.
+    volume->content()->Retire();
+    REQUIRE(staged->ReadFile("Account",16,bytes)==std::errc::no_such_device);
+    std::ifstream actual(account,std::ios::binary);
+    const std::vector<uint8_t> preserved{std::istreambuf_iterator<char>(actual),
+                                        std::istreambuf_iterator<char>()};
+    REQUIRE(preserved==members.front().bytes);
+    REQUIRE_FALSE(std::filesystem::exists(scratch.path/kInitialPackage));
+    REQUIRE_FALSE(std::filesystem::exists(scratch.path/kInitialHeader));
+  } else {
+    // Cancellation after genuine durable Prepared retains its obligation.
+    // Release actual receipt/native owners, then ordinary recovery completes.
+    staged.reset();header.reset();stopped.metadata={};owner.reset();volume.reset();
+    volume=scratch.Open();owner=volume->mutations();
+    REQUIRE(owner->ready());REQUIRE(owner->Visible(kInitialPackage));
+    CheckInitialBytes(*volume->content(),members);
+    auto current=owner->CaptureMetadata(ContentMutationOwner::Kind::kHeader,
+        kInitialPackage,kInitialHeader,error);
+    REQUIRE(current);REQUIRE_FALSE(error);
+    REQUIRE(std::vector<uint8_t>(current->bytes().begin(),current->bytes().end())==
+        std::vector<uint8_t>(metadata.begin(),metadata.end()));
+  }
+}
 TEST_CASE("Initial content restart finishes genuine Prepared Header and rename boundaries",
           "[base][storage][content_mutation][initial_members][restart]") {
   unsigned boundary=1;bool retain_receipt=false;
@@ -2407,7 +2932,7 @@ TEST_CASE("Initial content creation respects a real foreign absent Header reserv
   REQUIRE(owner->CreateInitial(kInitialPackage,header,metadata,members).complete);
   CheckInitialBytes(*volume->content(),members);
 }
-TEST_CASE("Interrupted unprepared initial member is retained privately and never adopted",
+TEST_CASE("Interrupted unprepared initial member is preserved without blocking the HDD",
           "[base][storage][content_mutation][initial_members][partial]") {
   VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations();
   std::error_code error;
@@ -2423,8 +2948,13 @@ TEST_CASE("Interrupted unprepared initial member is retained privately and never
   std::vector<uint8_t> actual; REQUIRE_FALSE(staged->ReadFile("Account",128,actual));
   REQUIRE(actual==members.front().bytes);
   REQUIRE_FALSE(std::filesystem::exists(staged->path()/"nested/settings.gpd"));
-  REQUIRE(owner->Recover()); REQUIRE_FALSE(owner->ready());
-  REQUIRE(std::filesystem::exists(staged->path()/"Account"));
+  const auto old_path = staged->path(); staged.reset();
+  REQUIRE_FALSE(owner->Recover()); REQUIRE(owner->ready());
+  REQUIRE_FALSE(std::filesystem::exists(old_path));
+  const auto preserved = ContentMutationOwnerTestAccess::StageDirectory(*owner)/("preserved-"+stopped.nonce+"-d");
+  std::ifstream retained(preserved/"Account",std::ios::binary); REQUIRE(retained.good());
+  REQUIRE(std::vector<uint8_t>(std::istreambuf_iterator<char>(retained),{}) == members.front().bytes);
+  ContentMutationOwnerTestAccess::RequireAborted(*owner,stopped.nonce);
 }
 }  // namespace xe::filesystem::test
 #endif
@@ -2465,16 +2995,1185 @@ TEST_CASE("Initial content journal authenticates full tree manifest and refuses 
   REQUIRE(stopped.prepared_durable);
   const auto actual=ContentMutationOwnerTestAccess::ReadRecord(*owner,stopped.nonce);
   auto encoded=content_mutation_wire::Encode(actual,error);
-  REQUIRE_FALSE(error); REQUIRE(encoded.size()>200); REQUIRE(encoded[11]==3);
+  REQUIRE_FALSE(error); REQUIRE(encoded.size()>200); REQUIRE(encoded[11]==5);
+  ContentMutationOwnerTestAccess::RequirePreparationBinding(*owner, actual);
   content_mutation_wire::Record decoded;
   REQUIRE(content_mutation_wire::Decode(encoded,decoded,error)); REQUIRE_FALSE(error);
   REQUIRE(decoded.initial_tree==actual.initial_tree); REQUIRE(decoded.intended==metadata);
+  REQUIRE(decoded.preparation_digest==actual.preparation_digest);
+  // Retain explicit reader coverage for historical V3 records, which predate
+  // the preparation-only plan and therefore have no preparation digest.
+  auto legacy=actual; legacy.preparation_digest={};
+  const auto legacy_encoded=content_mutation_wire::Encode(legacy,error);
+  REQUIRE_FALSE(error); REQUIRE(legacy_encoded[11]==3);
+  content_mutation_wire::Record legacy_decoded;
+  REQUIRE(content_mutation_wire::Decode(legacy_encoded,legacy_decoded,error));
+  REQUIRE_FALSE(error); REQUIRE(legacy_decoded.initial_tree==actual.initial_tree);
+  REQUIRE(legacy_decoded.intended==metadata); REQUIRE_FALSE(legacy_decoded.streamed);
+  REQUIRE(legacy_decoded.preparation_digest==legacy.preparation_digest);
   auto invalid=actual; invalid.initial_tree.front().entry.file=invalid.stage_file;
   REQUIRE(content_mutation_wire::Encode(invalid,error).empty()); REQUIRE(error);
   encoded.back()^=1; decoded.nonce="unchanged";
   REQUIRE_FALSE(content_mutation_wire::Decode(encoded,decoded,error)); REQUIRE(error);
   REQUIRE(decoded.nonce=="unchanged");
   REQUIRE_FALSE(std::filesystem::exists(scratch.path/kInitialPackage));
+}
+}  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+namespace {
+// Every successful byte comes from one real originally opened host file.
+// Fault controls only cancel/refuse; they cannot manufacture successful reads.
+class NativeStreamInput final : public ContentPackageStreamSource {
+ public:
+  NativeStreamInput(const std::filesystem::path& path, uint64_t size) {
+    { std::ofstream create(path, std::ios::binary); REQUIRE(create.good()); }
+    auto writer = FileHandle::OpenExisting(path, FileAccess::kGenericRead | FileAccess::kGenericWrite);
+    REQUIRE(writer); REQUIRE_FALSE(writer->ResizeResult(size));
+    const std::array<uint8_t, 7> first{0, 1, 0x80, 0xFF, 4, 5, 6};
+    const std::array<uint8_t, 5> last{9, 0, 7, 0xFE, 5};
+    REQUIRE(writer->WriteAllResult(0, first).bytes == first.size());
+    REQUIRE(writer->WriteAllResult(size_t(size - last.size()), last).bytes == last.size());
+    REQUIRE_FALSE(writer->FlushResult()); writer.reset();
+    file = FileHandle::OpenExisting(path, FileAccess::kFileReadData);
+    REQUIRE(file); std::error_code error; const auto info = file->QueryInfo(error);
+    REQUIRE(info); REQUIRE_FALSE(error); captured = *info;
+    rows.push_back({"payload.bin", size, false});
+  }
+  std::span<const ContentPackageStreamMember> members() const override { return rows; }
+  FileIoResult Read(size_t member, uint64_t offset, std::span<uint8_t> output) override {
+    if (member || offset > captured.size || output.size() > captured.size - offset || offset > SIZE_MAX) {
+      return {std::make_error_code(std::errc::invalid_argument), 0};
+    }
+    largest_read = std::max(largest_read, output.size()); ++reads;
+    const auto result = file->ReadResult(size_t(offset), output);
+    if (cancel && reads == cancel_on_read) { cancel->store(true, std::memory_order_release); }
+    return result;
+  }
+  std::error_code CheckCurrent() const override {
+    std::error_code error; const auto info = file->QueryInfo(error);
+    if (error) { return error; }
+    return info && info->regular && info->file_id == captured.file_id &&
+        info->filesystem_id == captured.filesystem_id && info->size == captured.size
+        ? std::error_code{} : std::make_error_code(std::errc::state_not_recoverable);
+  }
+  std::unique_ptr<FileHandle> file;
+  FileHandleInfo captured;
+  std::vector<ContentPackageStreamMember> rows;
+  size_t reads = 0, largest_read = 0, cancel_on_read = 2;
+  std::atomic<bool>* cancel = nullptr;
+};
+void CheckStreamPayload(const HostStorageRoot& root, NativeStreamInput& source) {
+  std::error_code error;
+  auto destination = root.OpenFile(kInitialPackage / "payload.bin", FileAccess::kFileReadData, error);
+  REQUIRE(destination); REQUIRE_FALSE(error);
+  const auto info = destination->QueryInfo(error); REQUIRE(info); REQUIRE_FALSE(error);
+  REQUIRE(info->size == source.captured.size);
+  std::vector<uint8_t> expected(1u << 20), actual(1u << 20);
+  for (uint64_t offset = 0; offset != info->size;) {
+    const auto count = size_t(std::min<uint64_t>(actual.size(), info->size - offset));
+    const auto read = destination->ReadResult(size_t(offset), std::span(actual).first(count));
+    const auto input = source.file->ReadResult(size_t(offset), std::span(expected).first(count));
+    REQUIRE_FALSE(read.error); REQUIRE(read.bytes == count);
+    REQUIRE_FALSE(input.error); REQUIRE(input.bytes == count);
+    REQUIRE(std::equal(actual.begin(), actual.begin() + count, expected.begin()));
+    offset += count;
+  }
+}
+}
+TEST_CASE("Streamed content exceeds 128 MiB using retained host input and bounded reads",
+          "[base][storage][content_mutation][stream]") {
+  VolumeScratch scratch, inputs; auto volume = scratch.Open(); auto owner = volume->mutations();
+  NativeStreamInput source(inputs.path / "selected.bin", (129ull << 20) + 17);
+  // Replacing the selected pathname cannot change the already retained input.
+  std::filesystem::rename(inputs.path / "selected.bin", inputs.path / "retained.bin");
+  { std::ofstream(inputs.path / "selected.bin", std::ios::binary) << "replacement"; }
+  std::error_code error;
+  auto header = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, kInitialPackage, kInitialHeader, error);
+  REQUIRE(header); REQUIRE_FALSE(error);
+  const std::array<uint8_t, 4> metadata{0x58, 0, 0x80, 0xFF};
+  std::atomic<uint64_t> progress{UINT64_MAX};
+  auto made = owner->CreateStream(kInitialPackage, header, metadata, source, nullptr, &progress);
+  REQUIRE_FALSE(made.error); REQUIRE(made.complete); REQUIRE(made.stream_admitted_durable);
+  REQUIRE(made.prepared_durable); REQUIRE(owner->ready()); REQUIRE(owner->Visible(kInitialPackage));
+  REQUIRE(progress.load() == source.captured.size); REQUIRE(source.reads > 128);
+  REQUIRE(source.largest_read <= (1u << 20)); CheckStreamPayload(*volume->content(), source);
+  const auto record = ContentMutationOwnerTestAccess::ReadRecord(*owner, made.nonce);
+  REQUIRE(record.streamed); REQUIRE_FALSE(record.stream_pending);
+  REQUIRE(record.initial_tree.back().entry.bytes == source.captured.size);
+  auto encoded = content_mutation_wire::Encode(record, error);
+  REQUIRE_FALSE(error); REQUIRE(encoded[11] == 5);
+  ContentMutationOwnerTestAccess::RequirePreparationBinding(*owner, record);
+  content_mutation_wire::Record decoded;
+  REQUIRE(content_mutation_wire::Decode(encoded, decoded, error));
+  REQUIRE_FALSE(error); REQUIRE(decoded.streamed); REQUIRE_FALSE(decoded.stream_pending);
+  REQUIRE(decoded.initial_tree == record.initial_tree);
+  REQUIRE(decoded.preparation_digest == record.preparation_digest);
+  // V4 remains readable independently of the new preparation-bound writer.
+  auto legacy = record; legacy.preparation_digest = {};
+  const auto legacy_encoded = content_mutation_wire::Encode(legacy, error);
+  REQUIRE_FALSE(error); REQUIRE(legacy_encoded[11] == 4);
+  content_mutation_wire::Record legacy_decoded;
+  REQUIRE(content_mutation_wire::Decode(legacy_encoded, legacy_decoded, error));
+  REQUIRE_FALSE(error); REQUIRE(legacy_decoded.streamed); REQUIRE_FALSE(legacy_decoded.stream_pending);
+  REQUIRE(legacy_decoded.initial_tree == record.initial_tree);
+  REQUIRE(legacy_decoded.intended == record.intended);
+  REQUIRE(legacy_decoded.preparation_digest == legacy.preparation_digest);
+  header.reset(); made.metadata = SnapshotPublicationReceipt(); owner.reset(); volume.reset();
+  volume = scratch.Open(); REQUIRE(volume->mutations()->Visible(kInitialPackage));
+  CheckStreamPayload(*volume->content(), source);
+}
+TEST_CASE("Stream cancellation rolls back only authenticated private staging without publication",
+          "[base][storage][content_mutation][stream][cancel]") {
+  VolumeScratch scratch, inputs; auto volume = scratch.Open(); auto owner = volume->mutations();
+  NativeStreamInput source(inputs.path / "selected.bin", 4ull << 20);
+  std::error_code error;
+  auto header = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, kInitialPackage, kInitialHeader, error);
+  REQUIRE(header); REQUIRE_FALSE(error);
+  std::atomic<bool> canceled{false}; std::atomic<uint64_t> progress{0}; source.cancel = &canceled;
+  const std::array<uint8_t, 2> metadata{1, 2};
+  const auto stopped = owner->CreateStream(kInitialPackage, header, metadata, source, &canceled, &progress);
+  REQUIRE(stopped.error == std::errc::operation_canceled); REQUIRE_FALSE(stopped.complete);
+  REQUIRE(stopped.stream_admitted_durable); REQUIRE_FALSE(stopped.prepared_durable);
+  REQUIRE(progress.load() == (1u << 20)); REQUIRE(owner->ready());
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / kInitialPackage));
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / kInitialHeader));
+  ContentMutationOwnerTestAccess::RequireStreamRollbackDone(*owner, stopped.nonce);
+  REQUIRE_FALSE(owner->Recover()); REQUIRE_FALSE(source.CheckCurrent());
+  source.cancel = nullptr;
+  REQUIRE(owner->CreateStream(kInitialPackage, header, metadata, source).complete);
+  CheckStreamPayload(*volume->content(), source);
+}
+TEST_CASE("Interrupted streamed writes recover their exact private stage without input replay",
+          "[base][storage][content_mutation][stream][restart]") {
+  VolumeScratch scratch, inputs; auto volume = scratch.Open(); auto owner = volume->mutations();
+  NativeStreamInput source(inputs.path / "selected.bin", 4ull << 20);
+  std::error_code error;
+  auto header = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, kInitialPackage, kInitialHeader, error);
+  REQUIRE(header); REQUIRE_FALSE(error); std::atomic<uint64_t> progress{0};
+  const std::array<uint8_t, 2> metadata{3, 4};
+  auto stopped = ContentMutationOwnerTestAccess::StopStream(*owner, kInitialPackage, header, metadata, source, progress, 2ull << 20);
+  REQUIRE(stopped.error); REQUIRE(stopped.stream_admitted_durable); REQUIRE_FALSE(stopped.prepared_durable);
+  REQUIRE_FALSE(stopped.complete); REQUIRE_FALSE(owner->ready()); REQUIRE(progress.load() == (2ull << 20));
+  const auto admission = ContentMutationOwnerTestAccess::StreamRecord(*owner, stopped.nonce);
+  REQUIRE(admission.stream_pending);
+  {
+    auto stage = ContentMutationOwnerTestAccess::PackageOperation(*owner, stopped.nonce);
+    REQUIRE(std::filesystem::file_size(stage->path() / "payload.bin") == (2ull << 20));
+  }
+  const auto reads = source.reads;
+  header.reset(); stopped.metadata = SnapshotPublicationReceipt(); owner.reset(); volume.reset();
+  volume = scratch.Open(); owner = volume->mutations();
+  REQUIRE(owner->ready()); REQUIRE(source.reads == reads);
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / kInitialPackage));
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / kInitialHeader));
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / admission.stage));
+  ContentMutationOwnerTestAccess::RequireStreamRollbackDone(*owner, stopped.nonce);
+  header = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, kInitialPackage, kInitialHeader, error);
+  REQUIRE(header); REQUIRE_FALSE(error);
+  REQUIRE(owner->CreateStream(kInitialPackage, header, metadata, source).complete);
+  CheckStreamPayload(*volume->content(), source);
+}
+TEST_CASE("Stream recovery preserves foreign members instead of adopting or deleting them",
+          "[base][storage][content_mutation][stream][conflict]") {
+  VolumeScratch scratch, inputs; auto volume = scratch.Open(); auto owner = volume->mutations();
+  NativeStreamInput source(inputs.path / "selected.bin", 4ull << 20);
+  std::error_code error;
+  auto header = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, kInitialPackage, kInitialHeader, error);
+  REQUIRE(header); REQUIRE_FALSE(error); std::atomic<uint64_t> progress{0};
+  const std::array<uint8_t, 2> metadata{5, 6};
+  const auto stopped = ContentMutationOwnerTestAccess::StopStream(*owner, kInitialPackage, header, metadata, source, progress, 1u << 20);
+  REQUIRE(stopped.stream_admitted_durable);
+  auto stage = ContentMutationOwnerTestAccess::PackageOperation(*owner, stopped.nonce);
+  SECTION("Unknown native entry") { std::ofstream(stage->path() / "foreign.bin") << "preserve"; }
+  SECTION("Replacement of a recorded inode") {
+    std::filesystem::rename(stage->path() / "payload.bin", stage->path() / "retained-original.bin");
+    std::ofstream(stage->path() / "payload.bin") << "foreign";
+  }
+  const auto before = TreeBytes(stage->path());
+  REQUIRE(owner->Recover()); REQUIRE_FALSE(owner->ready());
+  REQUIRE(TreeBytes(stage->path()) == before);
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / kInitialPackage));
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / kInitialHeader));
+}
+TEST_CASE("Stream space and existing-destination refusal happen before payload or staging",
+          "[base][storage][content_mutation][stream][space]") {
+  VolumeScratch scratch, inputs; auto volume = scratch.Open(); auto owner = volume->mutations();
+  NativeStreamInput source(inputs.path / "selected.bin", 4ull << 20);
+  std::error_code error;
+  auto header = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, kInitialPackage, kInitialHeader, error);
+  REQUIRE(header); REQUIRE_FALSE(error); const std::array<uint8_t, 2> metadata{7, 8};
+  SECTION("Deny-only ceiling after actual native space observation") {
+    const auto before = TreeBytes(scratch.path);
+    const auto refused = ContentMutationOwnerTestAccess::DenyStreamSpace(*owner, kInitialPackage, header, metadata, source);
+    REQUIRE(refused.error == std::errc::no_space_on_device); REQUIRE_FALSE(refused.stream_admitted_durable);
+    REQUIRE(TreeBytes(scratch.path) == before);
+  }
+  SECTION("Existing destination is preserved before the first private stage") {
+    REQUIRE(std::filesystem::create_directories(scratch.path / kInitialPackage));
+    { std::ofstream(scratch.path / kInitialPackage / "original.bin") << "original"; }
+    const auto before = TreeBytes(scratch.path);
+    const auto refused = owner->CreateStream(kInitialPackage, header, metadata, source);
+    REQUIRE(refused.error == std::errc::file_exists); REQUIRE_FALSE(refused.stream_admitted_durable);
+    REQUIRE(TreeBytes(scratch.path) == before);
+  }
+  REQUIRE(source.reads == 0); REQUIRE(owner->ready()); REQUIRE_FALSE(source.CheckCurrent());
+}
+}  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+TEST_CASE("Stream cancellation during complete-tree authentication aborts before complete intent",
+          "[base][storage][content_mutation][stream][cancel]") {
+  VolumeScratch scratch, inputs; auto volume = scratch.Open(); auto owner = volume->mutations();
+  NativeStreamInput source(inputs.path / "selected.bin", 4ull << 20);
+  std::error_code error;
+  auto header = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,
+      kInitialPackage, kInitialHeader, error);
+  REQUIRE(header); REQUIRE_FALSE(error);
+  std::atomic<bool> canceled{false}; std::atomic<uint64_t> progress{0};
+  const std::array<uint8_t, 2> metadata{0xCA, 0xCE};
+  // This seam only raises the genuine cancellation flag after native full-tree
+  // hashing has completed. It cannot skip, alter or fabricate successful I/O.
+  const auto stopped = ContentMutationOwnerTestAccess::CancelStreamAfterAuthentication(
+      *owner, kInitialPackage, header, metadata, source, canceled, progress);
+  REQUIRE(canceled.load()); REQUIRE(progress.load() == source.captured.size);
+  REQUIRE(source.reads == 4); REQUIRE(source.largest_read == (1u << 20));
+  REQUIRE(stopped.error == std::errc::operation_canceled);
+  REQUIRE(stopped.stream_admitted_durable); REQUIRE_FALSE(stopped.prepared_durable);
+  REQUIRE_FALSE(stopped.complete); REQUIRE(owner->ready());
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / kInitialPackage));
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / kInitialHeader));
+  // Cancellation must leave no complete publication intent, while retaining
+  // the authenticated stream admission and its required rollback terminal.
+  ContentMutationOwnerTestAccess::NoCompleteIntent(*owner, stopped.nonce);
+  const auto admission = ContentMutationOwnerTestAccess::StreamRecord(*owner, stopped.nonce);
+  REQUIRE(admission.streamed); REQUIRE(admission.stream_pending);
+  ContentMutationOwnerTestAccess::RequirePreparationBinding(*owner, admission);
+  ContentMutationOwnerTestAccess::RequireStreamRollbackDone(*owner, stopped.nonce);
+  REQUIRE_FALSE(owner->Recover()); REQUIRE_FALSE(source.CheckCurrent());
+  canceled.store(false);
+  REQUIRE(owner->CreateStream(kInitialPackage, header, metadata, source, &canceled).complete);
+  CheckStreamPayload(*volume->content(), source);
+}
+}  // namespace xe::filesystem::test
+#endif
+
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+namespace {
+std::vector<uint8_t> NativeBytes(const std::filesystem::path& path) {
+  std::ifstream file(path,std::ios::binary); REQUIRE(file.good());
+  return {std::istreambuf_iterator<char>(file),{}};
+}
+void NoPreparedDestination(const VolumeScratch& scratch) {
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path/kInitialPackage));
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path/kInitialHeader));
+}
+}  // namespace
+TEST_CASE("Create preparation survives real directory member and Header cuts without publication",
+          "[base][storage][content_mutation][preparation][restart]") {
+  unsigned boundary = 5;
+  SECTION("Plan durable before directory") { boundary = 5; }
+  SECTION("Actual empty directory exists") { boundary = 8; }
+  SECTION("Actual first member bytes exist") { boundary = 4; }
+  SECTION("Actual Header sibling stage is durable") { boundary = 6; }
+  VolumeScratch scratch; auto volume = scratch.Open(); auto owner = volume->mutations();
+  std::error_code error; const auto members = InitialMembers(); const std::array<uint8_t,3> metadata{1,4,7};
+  auto header = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error);
+  auto stopped = ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,metadata,members,boundary);
+  REQUIRE(stopped.error); REQUIRE_FALSE(stopped.prepared_durable); REQUIRE_FALSE(owner->ready()); NoPreparedDestination(scratch);
+  const auto plan = ContentMutationOwnerTestAccess::ReadPreparation(*owner,stopped.nonce);
+  const auto staging = ContentMutationOwnerTestAccess::StageDirectory(*owner);
+  const auto directory = staging/("package-"+stopped.nonce+".tmp");
+  const auto preserved = staging/("preserved-"+stopped.nonce+"-d");
+  uint64_t inode = 0;
+  if (boundary != 5) { struct stat stat{}; REQUIRE(lstat(directory.c_str(),&stat)==0); inode = stat.st_ino; }
+  header.reset(); stopped.metadata = {}; owner.reset(); volume.reset();
+  volume = scratch.Open(); owner = volume->mutations(); REQUIRE(owner->ready()); NoPreparedDestination(scratch);
+  ContentMutationOwnerTestAccess::RequireAborted(*owner,stopped.nonce);
+  REQUIRE_FALSE(std::filesystem::exists(directory));
+  if (boundary != 5) {
+    struct stat stat{}; REQUIRE(lstat(preserved.c_str(),&stat)==0); REQUIRE(uint64_t(stat.st_ino)==inode);
+    const auto paths = owner->PreservedArtifacts(); REQUIRE(std::find(paths.begin(),paths.end(),preserved)!=paths.end());
+  }
+  if (boundary == 4 || boundary == 6) { REQUIRE(NativeBytes(preserved/"Account")==members.front().bytes); }
+  if (boundary == 6) {
+    const auto header_copy = staging/("preserved-"+stopped.nonce+"-h");
+    REQUIRE(NativeBytes(header_copy)==std::vector<uint8_t>(metadata.begin(),metadata.end()));
+    REQUIRE_FALSE(std::filesystem::exists(scratch.path/content_mutation_wire::PreparationStage(plan)));
+  }
+  const auto recovered = TreeBytes(scratch.path); REQUIRE_FALSE(owner->Recover()); REQUIRE(TreeBytes(scratch.path)==recovered);
+  header = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); REQUIRE(owner->CreateInitial(kInitialPackage,header,metadata,members).complete);
+  CheckInitialBytes(*volume->content(),members);
+}
+TEST_CASE("Stream preparation recovery requires no selected input or payload replay",
+          "[base][storage][content_mutation][stream][preparation]") {
+  unsigned boundary = 4;
+  SECTION("Plan before directory") { boundary=5; }
+  SECTION("Created directory") { boundary=8; }
+  SECTION("Precreated actual member") { boundary=4; }
+  SECTION("Header before stream admission") { boundary=6; }
+  VolumeScratch scratch,inputs; auto volume=scratch.Open(); auto owner=volume->mutations();
+  // A real retained sparse host input larger than detached-tree capacity. No
+  // payload is read before the canonical stream admission exists.
+  auto source=std::make_unique<NativeStreamInput>(inputs.path/"large.bin",(129ull<<20)+17);
+  std::error_code error; auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); const std::array<uint8_t,2> metadata{4,9};
+  auto stopped=ContentMutationOwnerTestAccess::StopStreamPreparation(*owner,kInitialPackage,header,metadata,*source,boundary);
+  REQUIRE(stopped.error); REQUIRE_FALSE(stopped.stream_admitted_durable); REQUIRE(source->reads==0);
+  source.reset(); header.reset(); stopped.metadata={}; owner.reset(); volume.reset();
+  volume=scratch.Open(); owner=volume->mutations(); REQUIRE(owner->ready()); NoPreparedDestination(scratch);
+  ContentMutationOwnerTestAccess::RequireAborted(*owner,stopped.nonce);
+  REQUIRE_FALSE(owner->Recover());
+}
+TEST_CASE("Canonical phase append never treats a partial private record as a committed obligation",
+          "[base][storage][content_mutation][preparation][record]") {
+  std::string phase=".plan"; unsigned boundary=3; bool stream=false, abort=false, committed=false, uncertain=false;
+  SECTION("Partial plan control bytes") { phase=".plan"; boundary=3; }
+  SECTION("Full temporary plan before rename") { phase=".plan"; boundary=1; }
+  SECTION("Canonical plan before parent barrier") { phase=".plan"; boundary=2; }
+  SECTION("Stream temporary admission") { phase=".stream"; boundary=3; stream=true; }
+  SECTION("Canonical stream admission before barrier") { phase=".stream"; boundary=2; stream=true; }
+  SECTION("Partial complete intent") { phase=".intent"; boundary=3; }
+  SECTION("Canonical complete intent before barrier") { phase=".intent"; boundary=2; committed=true; }
+  SECTION("Partial Done after real publication") { phase=".done"; boundary=3; committed=true; }
+  SECTION("Canonical Done before parent barrier") { phase=".done"; boundary=2; committed=true; }
+  SECTION("Partial preservation observation") { phase=".keep0"; boundary=3; abort=true; }
+  SECTION("Canonical preservation observation before barrier") { phase=".keep0"; boundary=2; abort=true; }
+  SECTION("Partial public Header preservation observation") { phase=".keep1"; boundary=3; uncertain=true; }
+  SECTION("Canonical public Header observation before barrier") { phase=".keep1"; boundary=2; uncertain=true; }
+  SECTION("Partial abort terminal") { phase=".abort"; boundary=3; abort=true; }
+  SECTION("Canonical abort before parent barrier") { phase=".abort"; boundary=2; abort=true; }
+  VolumeScratch scratch,inputs; auto volume=scratch.Open(); auto owner=volume->mutations();
+  std::error_code error; auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); const auto members=InitialMembers(); const std::array<uint8_t,2> metadata{5,6};
+  NativeStreamInput source(inputs.path/"source.bin",4ull<<20);
+  ContentMutationOwnerTestAccess::StopRecord(*owner,phase,boundary);
+  auto stopped = stream ? owner->CreateStream(kInitialPackage,header,metadata,source) :
+      uncertain ? ContentMutationOwnerTestAccess::UncertainInitialStage(*owner,kInitialPackage,header,metadata,members) :
+      ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,metadata,members,abort?7:0);
+  REQUIRE(stopped.error); REQUIRE_FALSE(stopped.complete); REQUIRE_FALSE(owner->ready());
+  const auto records=ContentMutationOwnerTestAccess::RecordDirectory(*owner);
+  std::vector<std::filesystem::path> partials;
+  for (const auto& entry:std::filesystem::directory_iterator(records)) {
+    if (entry.path().filename().string().find(".partial-")!=std::string::npos) { partials.push_back(entry.path()); }
+  }
+  REQUIRE(partials.empty()==(boundary==2));
+  const auto saved = partials.empty()?std::vector<uint8_t>{}:NativeBytes(partials.front());
+  header.reset(); stopped.metadata={}; owner.reset(); volume.reset();
+  volume=scratch.Open(); owner=volume->mutations(); REQUIRE(owner->ready());
+  REQUIRE(std::filesystem::exists(scratch.path/kInitialPackage)==committed);
+  REQUIRE(std::filesystem::exists(scratch.path/kInitialHeader)==committed);
+  if (committed) { CheckInitialBytes(*volume->content(),members); }
+  else if (phase!=".plan" || boundary==2) {
+    if (!stream || boundary!=2) { ContentMutationOwnerTestAccess::RequireAborted(*owner,stopped.nonce); }
+    else { ContentMutationOwnerTestAccess::RequireStreamRollbackDone(*owner,stopped.nonce); }
+  }
+  if (!partials.empty()) {
+    REQUIRE(NativeBytes(partials.front())==saved);
+    const auto paths=owner->PreservedArtifacts(); REQUIRE(std::find(paths.begin(),paths.end(),partials.front())!=paths.end());
+  }
+  const auto before=TreeBytes(scratch.path); REQUIRE_FALSE(owner->Recover()); REQUIRE(TreeBytes(scratch.path)==before);
+}
+TEST_CASE("Preparation quarantine replays its actual ticket and rename boundaries",
+          "[base][storage][content_mutation][preparation][quarantine]") {
+  unsigned boundary=1; SECTION("Ticket before rename") { boundary=1; } SECTION("Rename before abort") { boundary=2; }
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations(); std::error_code error;
+  auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); const auto members=InitialMembers(); const std::array<uint8_t,1> metadata{8};
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,metadata,members,4);
+  REQUIRE(stopped.error); REQUIRE(ContentMutationOwnerTestAccess::StopPreservation(*owner,stopped.nonce,boundary));
+  const auto staging=ContentMutationOwnerTestAccess::StageDirectory(*owner);
+  const auto source=staging/("package-"+stopped.nonce+".tmp"), destination=staging/("preserved-"+stopped.nonce+"-d");
+  REQUIRE(std::filesystem::exists(source)==(boundary==1)); REQUIRE(std::filesystem::exists(destination)==(boundary==2));
+  header.reset(); stopped.metadata={}; owner.reset(); volume.reset();
+  volume=scratch.Open(); owner=volume->mutations(); REQUIRE(owner->ready());
+  REQUIRE(NativeBytes(destination/"Account")==members.front().bytes); NoPreparedDestination(scratch);
+  ContentMutationOwnerTestAccess::RequireAborted(*owner,stopped.nonce);
+}
+TEST_CASE("Unprepared data conflicts are preserved and floor denial remains retryable",
+          "[base][storage][content_mutation][preparation][conflict]") {
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations(); std::error_code error;
+  auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); const auto members=InitialMembers(); const std::array<uint8_t,1> metadata{8};
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,metadata,members,4);
+  auto stage=ContentMutationOwnerTestAccess::PackageOperation(*owner,stopped.nonce); const auto staged=stage->path(); stage.reset();
+  bool floor=false;
+  SECTION("Symlink cannot be followed or silently removed") { REQUIRE(symlink("Account",(staged/"link").c_str())==0); }
+  SECTION("Hardlink cannot be adopted as owned bytes") { REQUIRE(link((staged/"Account").c_str(),(staged/"alias").c_str())==0); }
+  SECTION("Different destination blocks exact no-replace preservation") {
+    std::filesystem::create_directory(staged.parent_path()/("preserved-"+stopped.nonce+"-d"));
+  }
+  SECTION("Deny-only ceiling follows genuine native capacity observation") {
+    floor=true; ContentMutationOwnerTestAccess::DenyPreparationSpace(*owner,true);
+  }
+  const auto before=TreeBytes(scratch.path);
+  const auto result=owner->Recover(); REQUIRE(result); REQUIRE_FALSE(owner->ready());
+  if (floor) { REQUIRE(result==std::errc::no_space_on_device); }
+  // A failed observation can append only its actual private control ticket;
+  // every original Account byte and every foreign entry remains intact.
+  REQUIRE(NativeBytes(staged/"Account")==members.front().bytes); NoPreparedDestination(scratch);
+  if (floor) {
+    REQUIRE(TreeBytes(scratch.path)==before); ContentMutationOwnerTestAccess::DenyPreparationSpace(*owner,false);
+    REQUIRE_FALSE(owner->Recover()); REQUIRE(owner->ready());
+  }
+}
+TEST_CASE("Ordinary pre-admission cancellation and Header uncertainty preserve data then restore availability",
+          "[base][storage][content_mutation][preparation][failure]") {
+  bool uncertain=false; SECTION("Cancellation after real first member") {} SECTION("Actual Header write with uncertain parent barrier") { uncertain=true; }
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations(); std::error_code error;
+  auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); const auto members=InitialMembers(); const std::array<uint8_t,2> metadata{2,7};
+  auto result=uncertain?ContentMutationOwnerTestAccess::UncertainInitialStage(*owner,kInitialPackage,header,metadata,members):
+      ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,metadata,members,7);
+  REQUIRE(result.error); REQUIRE(result.aborted_before_publication); REQUIRE_FALSE(result.complete); REQUIRE(owner->ready());
+  REQUIRE_FALSE(result.preserved_artifacts.empty()); NoPreparedDestination(scratch);
+  ContentMutationOwnerTestAccess::RequireAborted(*owner,result.nonce);
+  const auto retained=TreeBytes(scratch.path); REQUIRE_FALSE(owner->Recover()); REQUIRE(TreeBytes(scratch.path)==retained);
+}
+TEST_CASE("A durable preservation ticket cannot be reminted for a replacement inode",
+          "[base][storage][content_mutation][preparation][replacement]") {
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations(); std::error_code error;
+  auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); const auto members=InitialMembers(); const std::array<uint8_t,1> metadata{3};
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,metadata,members,4);
+  REQUIRE(stopped.error);
+  REQUIRE(ContentMutationOwnerTestAccess::StopPreservation(*owner,stopped.nonce,1));
+  const auto staging=ContentMutationOwnerTestAccess::StageDirectory(*owner);
+  const auto original=staging/("package-"+stopped.nonce+".tmp");
+  const auto escaped=scratch.path/"fixture-retained-original";
+  std::filesystem::rename(original,escaped); REQUIRE(std::filesystem::create_directory(original));
+  { std::ofstream file(original/"foreign.bin",std::ios::binary); file<<"foreign retained bytes"; }
+  const auto before=TreeBytes(scratch.path);
+  REQUIRE(owner->Recover()); REQUIRE_FALSE(owner->ready()); REQUIRE(TreeBytes(scratch.path)==before);
+  REQUIRE(NativeBytes(escaped/"Account")==members.front().bytes);
+  REQUIRE(std::filesystem::exists(original/"foreign.bin")); NoPreparedDestination(scratch);
+}
+TEST_CASE("Legacy private orphans are preserved without touching unclaimed public Header siblings",
+          "[base][storage][content_mutation][preparation][legacy]") {
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations(); std::error_code error;
+  auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error);
+  const std::string nonce="aabbccddeeff00112233445566778899";
+  const auto staging=ContentMutationOwnerTestAccess::StageDirectory(*owner);
+  const auto directory=staging/("package-"+nonce+".tmp"); REQUIRE(std::filesystem::create_directory(directory));
+  REQUIRE(chmod(directory.c_str(),0700)==0);
+  const std::array<uint8_t,3> bytes{8,7,6};
+  { std::ofstream file(directory/"legacy.bin",std::ios::binary); file.write(reinterpret_cast<const char*>(bytes.data()),bytes.size()); }
+  const auto public_stage=scratch.path/kInitialHeader.parent_path()/(".xenia-stage-"+nonce+".tmp");
+  { std::ofstream file(public_stage,std::ios::binary); file<<"unclaimed old Header evidence"; }
+  const auto public_bytes=NativeBytes(public_stage);
+  header.reset(); owner.reset(); volume.reset(); volume=scratch.Open(); owner=volume->mutations();
+  REQUIRE(owner->ready()); NoPreparedDestination(scratch);
+  const auto destination=staging/("preserved-"+nonce+"-d"); REQUIRE(NativeBytes(destination/"legacy.bin")==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+  REQUIRE(NativeBytes(public_stage)==public_bytes);
+  const auto before=TreeBytes(scratch.path); REQUIRE_FALSE(owner->Recover()); REQUIRE(TreeBytes(scratch.path)==before);
+}
+TEST_CASE("Partial planned Header bytes are preserved rather than decoded or adopted",
+          "[base][storage][content_mutation][preparation][partial_header]") {
+  unsigned boundary=0;
+  SECTION("Observe partial Header and preserve directly") {}
+  SECTION("Public Header ticket before rename") { boundary=1; }
+  SECTION("Public Header moved before terminal") { boundary=2; }
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations(); std::error_code error;
+  auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); const auto members=InitialMembers(); const std::array<uint8_t,2> metadata{1,2};
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,metadata,members,5);
+  const auto plan=ContentMutationOwnerTestAccess::ReadPreparation(*owner,stopped.nonce);
+  const auto stage=scratch.path/content_mutation_wire::PreparationStage(plan);
+  { std::ofstream file(stage,std::ios::binary); file<<"incomplete native stage bytes"; }
+  REQUIRE(chmod(stage.c_str(),0600)==0); const auto bytes=NativeBytes(stage);
+  if (boundary) {
+    REQUIRE(ContentMutationOwnerTestAccess::StopPreservation(*owner,stopped.nonce,boundary));
+    header.reset(); stopped.metadata={}; owner.reset(); volume.reset();
+    volume=scratch.Open(); owner=volume->mutations();
+  } else { REQUIRE_FALSE(owner->Recover()); }
+  REQUIRE(owner->ready()); NoPreparedDestination(scratch);
+  const auto preserved=ContentMutationOwnerTestAccess::StageDirectory(*owner)/("preserved-"+stopped.nonce+"-h");
+  REQUIRE(NativeBytes(preserved)==bytes); REQUIRE_FALSE(std::filesystem::exists(stage));
+  ContentMutationOwnerTestAccess::RequireAborted(*owner,stopped.nonce);
+}
+TEST_CASE("Create wire binds the exact preparation and refuses checksum-valid mismatched plans",
+          "[base][storage][content_mutation][preparation][wire]") {
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations(); std::error_code error;
+  auto header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); const auto members=InitialMembers(); const std::array<uint8_t,2> metadata{1,2};
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,metadata,members,1);
+  REQUIRE(stopped.prepared_durable); auto plan=ContentMutationOwnerTestAccess::ReadPreparation(*owner,stopped.nonce);
+  const auto record=ContentMutationOwnerTestAccess::ReadRecord(*owner,stopped.nonce);
+  const auto bytes=content_mutation_wire::EncodePreparation(plan,error); REQUIRE_FALSE(error);
+  REQUIRE(content_mutation_wire::MatchesPreparation(plan,bytes,record,error)); REQUIRE_FALSE(error);
+  plan.header_bytes++;
+  const auto mismatch=content_mutation_wire::EncodePreparation(plan,error); REQUIRE_FALSE(error);
+  REQUIRE_FALSE(content_mutation_wire::MatchesPreparation(plan,mismatch,record,error));
+  const auto path=ContentMutationOwnerTestAccess::RecordDirectory(*owner)/("content-"+stopped.nonce+".plan");
+  { std::ofstream file(path,std::ios::binary|std::ios::trunc); file.write(reinterpret_cast<const char*>(mismatch.data()),mismatch.size()); }
+  const auto before=TreeBytes(scratch.path); REQUIRE(owner->Recover()); REQUIRE_FALSE(owner->ready());
+  REQUIRE(TreeBytes(scratch.path)==before); NoPreparedDestination(scratch);
+}
+namespace {
+std::vector<uint8_t> OrphanHeaderBytes() {
+  std::vector<uint8_t> bytes(733);
+  for (size_t i=0;i!=bytes.size();++i) { bytes[i]=uint8_t((i*37+11)&255); }
+  return bytes;  // Complete format-neutral bytes, including unknown padding/tail.
+}
+std::shared_ptr<const HostStorageSnapshotToken> MakeOrphanHeader(
+    const VolumeScratch& scratch, ContentMutationOwner& owner, std::span<const uint8_t> bytes) {
+  std::error_code error;
+  auto absent=owner.CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(absent); REQUIRE_FALSE(error); REQUIRE_FALSE(absent->exists());
+  auto made=owner.Create(kInitialPackage,absent,bytes); REQUIRE(made.complete); made.metadata={}; absent.reset();
+  REQUIRE(std::filesystem::remove(scratch.path/kInitialPackage));
+  auto orphan=owner.CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(orphan); REQUIRE_FALSE(error); REQUIRE(orphan->exists()); return orphan;
+}
+void RequireExactOrphan(const VolumeScratch& scratch,uint64_t inode,std::span<const uint8_t> bytes) {
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path/kInitialPackage));
+  struct stat info{}; REQUIRE(lstat((scratch.path/kInitialHeader).c_str(),&info)==0);
+  REQUIRE(uint64_t(info.st_ino)==inode);
+  REQUIRE(NativeBytes(scratch.path/kInitialHeader)==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+}
+}  // namespace
+TEST_CASE("Empty create preserves an authenticated orphan Header across plan-only restart cuts",
+          "[base][storage][content_mutation][preparation][orphan_header]") {
+  unsigned boundary=5;
+  SECTION("Plan before package stage") { boundary=5; }
+  SECTION("Empty package stage exists") { boundary=8; }
+  SECTION("Header stage and exact old backup exist") { boundary=6; }
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations();
+  const auto before=OrphanHeaderBytes(); auto header=MakeOrphanHeader(scratch,*owner,before);
+  const auto inode=header->info().file_id; auto intended=before; intended[12]^=0x39;
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,intended,{},boundary);
+  REQUIRE(stopped.error); REQUIRE_FALSE(stopped.prepared_durable); REQUIRE_FALSE(owner->ready());
+  const auto plan=ContentMutationOwnerTestAccess::ReadPreparation(*owner,stopped.nonce);
+  REQUIRE(plan.before_file==inode); REQUIRE(plan.before_bytes==before.size());
+  RequireExactOrphan(scratch,inode,before);
+  const auto backup=ContentMutationOwnerTestAccess::RecoveryDirectory(*owner)/("snapshot-"+stopped.nonce+".bin");
+  if (boundary==6) { REQUIRE(NativeBytes(backup)==before); }
+  header.reset(); stopped.metadata={}; owner.reset(); volume.reset();
+  volume=scratch.Open(); owner=volume->mutations(); REQUIRE(owner->ready()); RequireExactOrphan(scratch,inode,before);
+  ContentMutationOwnerTestAccess::RequireAborted(*owner,stopped.nonce);
+  if (boundary==6) {
+    REQUIRE(NativeBytes(backup)==before);
+    const auto paths=owner->PreservedArtifacts(); REQUIRE(std::find(paths.begin(),paths.end(),backup)!=paths.end());
+  }
+  const auto recovered=TreeBytes(scratch.path); REQUIRE_FALSE(owner->Recover()); REQUIRE(TreeBytes(scratch.path)==recovered);
+  std::error_code error; header=owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,kInitialPackage,kInitialHeader,error);
+  REQUIRE(header); REQUIRE_FALSE(error); REQUIRE(header->exists());
+  REQUIRE(owner->Create(kInitialPackage,header,intended).complete);
+  REQUIRE(NativeBytes(scratch.path/kInitialHeader)==intended); REQUIRE(std::filesystem::is_empty(scratch.path/kInitialPackage));
+}
+TEST_CASE("Prepared orphan Header creation retains normal publisher backup and commit authority",
+          "[base][storage][content_mutation][preparation][orphan_header][commit]") {
+  unsigned boundary=1;
+  SECTION("Complete intent before Header CAS") { boundary=1; }
+  SECTION("Actual Header CAS before package publication") { boundary=2; }
+  SECTION("Actual package publication before Done") { boundary=3; }
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations();
+  const auto before=OrphanHeaderBytes(); auto header=MakeOrphanHeader(scratch,*owner,before); auto intended=before; intended[23]^=0x55;
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,intended,{},boundary);
+  REQUIRE(stopped.error); REQUIRE(stopped.prepared_durable); REQUIRE_FALSE(stopped.complete);
+  const auto record=ContentMutationOwnerTestAccess::ReadRecord(*owner,stopped.nonce);
+  REQUIRE(record.before_exists); REQUIRE(record.before==before); REQUIRE(record.intended==intended);
+  const auto backup=ContentMutationOwnerTestAccess::RecoveryDirectory(*owner)/record.recovery;
+  REQUIRE(NativeBytes(backup)==before);
+  header.reset(); stopped.metadata={}; owner.reset(); volume.reset();
+  volume=scratch.Open(); owner=volume->mutations(); REQUIRE(owner->ready()); REQUIRE(owner->Visible(kInitialPackage));
+  REQUIRE(NativeBytes(scratch.path/kInitialHeader)==intended); REQUIRE(NativeBytes(backup)==before);
+  REQUIRE(std::filesystem::is_empty(scratch.path/kInitialPackage));
+}
+TEST_CASE("Plan-only orphan Header abort cannot adopt a replaced or modified semantic Header",
+          "[base][storage][content_mutation][preparation][orphan_header][conflict]") {
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations();
+  const auto before=OrphanHeaderBytes(); auto header=MakeOrphanHeader(scratch,*owner,before);
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,before,{},5);
+  const auto target=scratch.path/kInitialHeader;
+  SECTION("Same inode changed raw bytes") { std::ofstream file(target,std::ios::binary|std::ios::app); file<<"external change"; }
+  SECTION("Different inode with matching raw bytes") {
+    std::filesystem::rename(target,scratch.path/"fixture-retained-orphan");
+    std::ofstream file(target,std::ios::binary); file.write(reinterpret_cast<const char*>(before.data()),before.size());
+  }
+  const auto tree=TreeBytes(scratch.path); REQUIRE(owner->Recover()); REQUIRE_FALSE(owner->ready());
+  REQUIRE(TreeBytes(scratch.path)==tree); REQUIRE_FALSE(std::filesystem::exists(scratch.path/kInitialPackage));
+}
+TEST_CASE("Partial old-Header backup is retained opaquely while the exact semantic Header survives",
+          "[base][storage][content_mutation][preparation][orphan_header][partial_backup]") {
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations();
+  const auto before=OrphanHeaderBytes(); auto header=MakeOrphanHeader(scratch,*owner,before); const auto inode=header->info().file_id;
+  auto stopped=ContentMutationOwnerTestAccess::StopInitial(*owner,kInitialPackage,header,before,{},5);
+  const auto backup=ContentMutationOwnerTestAccess::RecoveryDirectory(*owner)/("snapshot-"+stopped.nonce+".bin");
+  const std::vector<uint8_t> partial(before.begin(),before.begin()+17);
+  { std::ofstream file(backup,std::ios::binary); file.write(reinterpret_cast<const char*>(partial.data()),partial.size()); }
+  REQUIRE(chmod(backup.c_str(),0600)==0);
+  header.reset(); stopped.metadata={}; owner.reset(); volume.reset();
+  volume=scratch.Open(); owner=volume->mutations(); REQUIRE(owner->ready()); RequireExactOrphan(scratch,inode,before);
+  REQUIRE(NativeBytes(backup)==partial); ContentMutationOwnerTestAccess::RequireAborted(*owner,stopped.nonce);
+  const auto paths=owner->PreservedArtifacts(); REQUIRE(std::find(paths.begin(),paths.end(),backup)!=paths.end());
+}
+TEST_CASE("Ordinary pre-intent failure leaves an existing orphan Header byte and identity exact",
+          "[base][storage][content_mutation][preparation][orphan_header][failure]") {
+  VolumeScratch scratch; auto volume=scratch.Open(); auto owner=volume->mutations();
+  const auto before=OrphanHeaderBytes(); auto header=MakeOrphanHeader(scratch,*owner,before); const auto inode=header->info().file_id;
+  auto result=ContentMutationOwnerTestAccess::UncertainInitialStage(*owner,kInitialPackage,header,before,{});
+  REQUIRE(result.error); REQUIRE(result.aborted_before_publication); REQUIRE(owner->ready());
+  RequireExactOrphan(scratch,inode,before); ContentMutationOwnerTestAccess::RequireAborted(*owner,result.nonce);
+}
+}  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+
+namespace xe::filesystem::test {
+namespace {
+ManagedVolumeAuthority::Options BootstrapOptions(VolumeScratch& scratch,
+                                                std::string id="bootstrap-device") {
+  ManagedVolumeAuthority::Options options;
+  options.content=scratch.root;options.state_parent_override=scratch.root;
+  options.source_id=std::move(id);options.device_id=3;return options;
+}
+std::vector<uint8_t> BootstrapFile(const std::filesystem::path& path) {
+  std::ifstream input(path,std::ios::binary);
+  return {std::istreambuf_iterator<char>(input),std::istreambuf_iterator<char>()};
+}
+}
+TEST_CASE("Managed bootstrap resumes actual component publication cuts without replacing source identity",
+          "[managed_volume_authority][initialization][bootstrap]") {
+  unsigned boundaries=0;
+  {
+    VolumeScratch complete;
+    const auto volume=ManagedVolumeAuthority::Open(BootstrapOptions(complete));
+    REQUIRE(volume);REQUIRE_FALSE(volume->error());REQUIRE(volume->profile_writable());
+    REQUIRE(volume->identity()->binding_required());
+    boundaries=ManagedVolumeAuthorityTestAccess::BootstrapBoundaries(*volume);
+    REQUIRE(boundaries>=20);REQUIRE(boundaries<=64);
+  }
+  for (unsigned cut=1;cut<=boundaries;++cut) {
+    CAPTURE(cut,boundaries);
+    VolumeScratch scratch;
+    const std::array<uint8_t,5> original{0x51,0,0xA7,0xFF,0x2C};
+    REQUIRE_FALSE(scratch.root->WriteNewFile("existing-save",original).error);
+    struct stat before{};REQUIRE(stat((scratch.path/"existing-save").c_str(),&before)==0);
+    auto options=BootstrapOptions(scratch);
+    auto stopped=ManagedVolumeAuthorityTestAccess::StopBootstrap(options,cut);
+    REQUIRE(stopped);REQUIRE(stopped->error()==std::errc::operation_canceled);
+    REQUIRE_FALSE(stopped->profile_writable());
+    std::optional<ManagedDeviceIdentity::Uuid> uuid;
+    std::vector<uint8_t> source;
+    if (stopped->identity()) {
+      uuid=stopped->identity()->uuid();source=BootstrapFile(scratch.path/ManagedDeviceIdentity::kMarker);
+    }
+    const auto binding=scratch.path/(".xenia-device-binding-v1-"+BindingKey(options.source_id,scratch.path));
+    if (uuid && !std::filesystem::exists(binding/"bootstrap.commit.v1")) {
+      std::error_code error;
+      REQUIRE_FALSE(ManagedDeviceIdentity::OpenExisting(scratch.root,options.source_id,3,error));
+      REQUIRE(error==std::errc::operation_in_progress);
+      REQUIRE(stopped->identity()->CheckCurrent()==std::errc::operation_in_progress);
+      REQUIRE_FALSE(stopped->identity()->source()->GuestView(error));
+      REQUIRE((error==std::errc::operation_in_progress || error==std::errc::permission_denied));
+      const auto blocked=ProfileIntentOwner::Open(scratch.root,stopped->identity());
+      REQUIRE(blocked);REQUIRE(blocked->error()==std::errc::operation_in_progress);
+    }
+    if (uuid && stopped->content()->has_guest_projection()) {
+      std::error_code error;REQUIRE_FALSE(stopped->content()->GuestView(error));
+      REQUIRE(error==std::errc::operation_in_progress);
+      REQUIRE_FALSE(HostStorageRoot::AdmitGuestMount(
+          std::vector<GuestHostBacking>{stopped->content()->GuestBacking()},error));
+      REQUIRE(error==std::errc::operation_in_progress);
+    }
+    stopped.reset();
+    auto volume=ManagedVolumeAuthority::Open(options);
+    REQUIRE(volume);REQUIRE_FALSE(volume->error());REQUIRE(volume->profile_writable());
+    REQUIRE(volume->mutations()->ready());REQUIRE(volume->identity()->binding_required());
+    if (uuid) {
+      REQUIRE(volume->identity()->uuid()==*uuid);
+      REQUIRE(BootstrapFile(scratch.path/ManagedDeviceIdentity::kMarker)==source);
+    }
+    struct stat after{};REQUIRE(stat((scratch.path/"existing-save").c_str(),&after)==0);
+    REQUIRE(after.st_ino==before.st_ino);REQUIRE(after.st_dev==before.st_dev);
+    REQUIRE(BootstrapFile(scratch.path/"existing-save")==std::vector<uint8_t>(original.begin(),original.end()));
+    const auto committed=TreeBytes(scratch.path);
+    const auto profile=volume->intents()->root()->path();
+    const auto recovery=volume->recovery()->root()->path();
+    volume.reset();
+    const auto reopened=ManagedVolumeAuthority::Open(options);
+    REQUIRE(reopened);REQUIRE_FALSE(reopened->error());REQUIRE(reopened->profile_writable());
+    REQUIRE(reopened->intents()->root()->path()==profile);
+    REQUIRE(reopened->recovery()->root()->path()==recovery);
+    REQUIRE(TreeBytes(scratch.path)==committed);
+  }
+}
+TEST_CASE("Source-identical parent selection retains the exact native write capability",
+          "[managed_volume_authority][initialization][bootstrap][source_lease]") {
+  const bool explicit_parent=GENERATE(false,true);
+  VolumeScratch scratch;
+  auto options=BootstrapOptions(scratch);
+  std::error_code error;
+  if (explicit_parent) {
+    // A real separately captured capability, not a fabricated lease/root.
+    options.state_parent_override=scratch.root->Subroot({},false,error);
+    REQUIRE(options.state_parent_override);
+    REQUIRE_FALSE(error);
+    REQUIRE(options.state_parent_override.get()!=scratch.root.get());
+  } else {
+    options.state_parent_override.reset();
+  }
+  auto volume=ManagedVolumeAuthority::Open(options);
+  REQUIRE(volume);
+  REQUIRE_FALSE(volume->error());
+  REQUIRE(volume->profile_writable());
+  REQUIRE(volume->mutations()->ready());
+  REQUIRE(ManagedVolumeAuthorityTestAccess::HasExactSourceAnchor(*volume));
+  REQUIRE(volume->public_root().get()!=volume->content().get());
+  REQUIRE(volume->public_root()->path()!=volume->content()->path());
+  const auto stable=TreeBytes(scratch.path);
+  volume.reset();
+  const auto reopened=ManagedVolumeAuthority::Open(options);
+  REQUIRE(reopened);
+  REQUIRE_FALSE(reopened->error());
+  REQUIRE(reopened->profile_writable());
+  REQUIRE(ManagedVolumeAuthorityTestAccess::HasExactSourceAnchor(*reopened));
+  REQUIRE(reopened->public_root().get()!=reopened->content().get());
+  REQUIRE(TreeBytes(scratch.path)==stable);
+}
+TEST_CASE("Committed bootstrap reclaims its retained public receipt with the exact parent lease",
+          "[managed_volume_authority][initialization][bootstrap][retained_public]") {
+  unsigned committed_cut=0;
+  {
+    VolumeScratch complete;
+    const auto ready=ManagedVolumeAuthority::Open(BootstrapOptions(complete));
+    REQUIRE(ready);
+    REQUIRE_FALSE(ready->error());
+    committed_cut=ManagedVolumeAuthorityTestAccess::BootstrapBoundaries(*ready);
+    REQUIRE(committed_cut>=20);
+  }
+  VolumeScratch scratch, unrelated;
+  std::error_code error;
+  auto unrelated_guest=unrelated.root->GuestView(error);
+  REQUIRE(unrelated_guest);
+  REQUIRE_FALSE(error);
+  auto options=BootstrapOptions(scratch);
+  // The final producer cut is after durable binding commit, before ordinary
+  // Recover, guest seal release and exact public-capsule admission.
+  auto stopped=ManagedVolumeAuthorityTestAccess::StopBootstrap(options,committed_cut);
+  REQUIRE(stopped);
+  REQUIRE(stopped->error()==std::errc::operation_canceled);
+  REQUIRE(stopped->identity());
+  REQUIRE(stopped->mutations());
+  REQUIRE_FALSE(stopped->mutations()->ready());
+  const auto uuid=stopped->identity()->uuid();
+  const auto public_path=ManagedVolumeAuthorityTestAccess::PublicAuthorityPath(*stopped);
+  REQUIRE_FALSE(public_path.empty());
+  struct stat before{};
+  REQUIRE(stat(public_path.c_str(),&before)==0);
+  const auto binding=scratch.path/(".xenia-device-binding-v1-"+
+      BindingKey(options.source_id,scratch.path));
+  REQUIRE_FALSE(BootstrapFile(binding/"bootstrap.commit.v1").empty());
+  REQUIRE_FALSE(stopped->content()->GuestView(error));
+  REQUIRE(error==std::errc::operation_in_progress);
+  auto raw_public=HostStorageRoot::Open(public_path,false,error);
+  REQUIRE(raw_public);
+  REQUIRE_FALSE(error);
+  REQUIRE_FALSE(raw_public->GuestView(error));
+  REQUIRE(error==std::errc::operation_in_progress);
+  const auto committed=TreeBytes(scratch.path);
+  stopped.reset();  // actual public receipt stays retained by unrelated guest
+  auto reopened=ManagedVolumeAuthority::Open(options);
+  REQUIRE(reopened);
+  REQUIRE_FALSE(reopened->error());
+  REQUIRE(reopened->profile_writable());
+  REQUIRE(reopened->mutations()->ready());
+  REQUIRE(reopened->identity()->uuid()==uuid);
+  REQUIRE(ManagedVolumeAuthorityTestAccess::HasExactSourceAnchor(*reopened));
+  REQUIRE(reopened->public_root()->path()==public_path);
+  struct stat after{};
+  REQUIRE(stat(public_path.c_str(),&after)==0);
+  REQUIRE(after.st_dev==before.st_dev);
+  REQUIRE(after.st_ino==before.st_ino);
+  REQUIRE(TreeBytes(scratch.path)==committed);
+  const std::array<uint8_t,3> bytes{0x3A,0,0xA9};
+  // The same committed native public inode now has an actual usable guest
+  // capability, while the replacement projection still excludes private data.
+  REQUIRE_FALSE(reopened->public_root()->WriteNewFile("retained-public.data",bytes).error);
+  std::vector<uint8_t> read;
+  REQUIRE_FALSE(reopened->public_root()->ReadFile("retained-public.data",16,read));
+  REQUIRE(read==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+  error.clear();
+  // A reused typed protector may retain an older source projection. Open a
+  // fresh native view to prove the CURRENT common physical private exclusion.
+  auto raw_private=HostStorageRoot::Open(reopened->intents()->root()->path(),false,error);
+  REQUIRE(raw_private);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(raw_private->GuestView(error));
+  REQUIRE(error==std::errc::permission_denied);
+  REQUIRE_FALSE(unrelated_guest->WriteNewFile("ordinary.data",bytes).error);
+}
+TEST_CASE("Interrupted binding resumes its exact retained receipt before flat ownership",
+          "[managed_volume_authority][initialization][bootstrap][retained_guest]") {
+  VolumeScratch scratch, unrelated;
+  std::error_code error;
+  auto unrelated_guest=unrelated.root->GuestView(error);
+  REQUIRE(unrelated_guest);
+  REQUIRE_FALSE(error);
+  auto options=BootstrapOptions(scratch);
+  // Cut3 is after the complete real binding directory has been published,
+  // before any managed source marker or component is created.
+  auto stopped=ManagedVolumeAuthorityTestAccess::StopBootstrap(options,3);
+  REQUIRE(stopped);
+  REQUIRE(stopped->error()==std::errc::operation_canceled);
+  REQUIRE_FALSE(stopped->profile_writable());
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path/ManagedDeviceIdentity::kMarker));
+  const auto binding=scratch.path/(".xenia-device-binding-v1-"+
+      BindingKey(options.source_id,scratch.path));
+  const auto pending=BootstrapFile(binding/"bootstrap.pending.v1");
+  REQUIRE_FALSE(pending.empty());
+  struct stat before{};
+  REQUIRE(stat(binding.c_str(),&before)==0);
+  REQUIRE(S_ISDIR(before.st_mode));
+  stopped.reset();  // the unrelated guest retains the old registered protector
+  auto volume=ManagedVolumeAuthority::Open(options);
+  REQUIRE(volume);
+  REQUIRE_FALSE(volume->error());
+  REQUIRE(volume->profile_writable());
+  REQUIRE(volume->mutations()->ready());
+  struct stat after{};
+  REQUIRE(stat(binding.c_str(),&after)==0);
+  REQUIRE(after.st_dev==before.st_dev);
+  REQUIRE(after.st_ino==before.st_ino);
+  REQUIRE(BootstrapFile(binding/"bootstrap.pending.v1")==pending);
+  REQUIRE(volume->identity()->binding_required());
+  const std::array<uint8_t,3> ordinary{7,0,9};
+  REQUIRE_FALSE(unrelated_guest->WriteNewFile("ordinary.data",ordinary).error);
+  auto raw_binding=scratch.root->Subroot(binding.filename(),false,error);
+  REQUIRE(raw_binding);
+  REQUIRE_FALSE(error);
+  REQUIRE_FALSE(raw_binding->GuestView(error));
+  REQUIRE(error==std::errc::permission_denied);
+}
+TEST_CASE("A required bootstrap reference never becomes legacy when its binding is missing",
+          "[managed_volume_authority][initialization][bootstrap]") {
+  VolumeScratch scratch;auto options=BootstrapOptions(scratch);
+  ManagedDeviceIdentity::Uuid uuid;
+  {
+    auto volume=ManagedVolumeAuthority::Open(options);REQUIRE_FALSE(volume->error());
+    uuid=volume->identity()->uuid();
+  }
+  const auto binding=scratch.path/(".xenia-device-binding-v1-"+BindingKey(options.source_id,scratch.path));
+  const auto source=BootstrapFile(scratch.path/ManagedDeviceIdentity::kMarker);
+  std::filesystem::rename(binding,scratch.path/"preserved-binding");
+  const auto before=TreeBytes(scratch.path);
+  std::error_code error;
+  REQUIRE_FALSE(ManagedDeviceIdentity::Open(scratch.root,options.source_id,3,error));
+  REQUIRE(error==std::errc::state_not_recoverable);
+  REQUIRE_FALSE(ManagedDeviceIdentity::CheckExisting(scratch.root,options.source_id,3,error));
+  REQUIRE(error==std::errc::state_not_recoverable);
+  const auto refused=ManagedVolumeAuthority::Open(options);
+  REQUIRE(refused);REQUIRE(refused->error());REQUIRE_FALSE(refused->profile_writable());
+  REQUIRE(BootstrapFile(scratch.path/ManagedDeviceIdentity::kMarker)==source);
+  REQUIRE(TreeBytes(scratch.path)==before);
+}
+TEST_CASE("Fresh primary public browsing mkdir survives before and after its real effect",
+          "[managed_volume_authority][initialization][bootstrap]") {
+  auto prepare=[](VolumeScratch& scratch) {
+    REQUIRE_FALSE(scratch.root->Create("content",true));
+    REQUIRE_FALSE(scratch.root->Create("public",true));
+    std::error_code error;ManagedVolumeAuthority::Options options;
+    options.content=scratch.root->Subroot("content",false,error);
+    REQUIRE(options.content);REQUIRE_FALSE(error);
+    options.source_id="primary-bootstrap";options.device_id=1;
+    options.preserve_legacy_layout=true;options.legacy_private_parent=scratch.root;
+    options.legacy_public_root=scratch.root->Subroot("public",false,error);
+    options.legacy_recovery=SnapshotRecoveryOwner::Open(scratch.root);
+    REQUIRE(options.legacy_public_root);REQUIRE(options.legacy_recovery);
+    REQUIRE_FALSE(options.legacy_recovery->error());return options;
+  };
+  unsigned boundaries=0;
+  {
+    VolumeScratch scratch;auto volume=ManagedVolumeAuthority::Open(prepare(scratch));
+    REQUIRE_FALSE(volume->error());boundaries=ManagedVolumeAuthorityTestAccess::BootstrapBoundaries(*volume);
+  }
+  bool saw_before=false,saw_after=false;
+  for (unsigned cut=1;cut<=boundaries;++cut) {
+    VolumeScratch scratch;auto options=prepare(scratch);
+    const std::array<uint8_t,2> bytes{0x48,0x44};
+    REQUIRE_FALSE(options.legacy_public_root->WriteNewFile("host-file",bytes).error);
+    auto stopped=ManagedVolumeAuthorityTestAccess::StopBootstrap(options,cut);
+    REQUIRE(stopped);REQUIRE(stopped->error()==std::errc::operation_canceled);
+    if (stopped->identity()) {
+      const bool exists=std::filesystem::is_directory(scratch.path/"public/Content");
+      saw_before|=!exists;saw_after|=exists;
+    }
+    stopped.reset();
+    const auto volume=ManagedVolumeAuthority::Open(options);
+    REQUIRE(volume);REQUIRE_FALSE(volume->error());REQUIRE(volume->profile_writable());
+    REQUIRE(volume->public_root()->path()==scratch.path/"public");
+    REQUIRE(std::filesystem::is_directory(scratch.path/"public/Content"));
+    REQUIRE(BootstrapFile(scratch.path/"public/host-file")==std::vector<uint8_t>(bytes.begin(),bytes.end()));
+  }
+  REQUIRE(saw_before);REQUIRE(saw_after);
+}
+TEST_CASE("An existing public Content payload is preserved and cannot be silently covered",
+          "[managed_volume_authority][initialization][bootstrap]") {
+  VolumeScratch scratch;
+  REQUIRE_FALSE(scratch.root->Create("content",true));
+  REQUIRE_FALSE(scratch.root->Create("public",true));
+  REQUIRE_FALSE(scratch.root->Create("public/Content",true));
+  const std::array<uint8_t,3> bytes{9,1,7};
+  REQUIRE_FALSE(scratch.root->WriteNewFile("public/Content/user-data",bytes).error);
+  std::error_code error;ManagedVolumeAuthority::Options options;
+  options.content=scratch.root->Subroot("content",false,error);options.source_id="public-conflict";options.device_id=1;
+  options.preserve_legacy_layout=true;options.legacy_private_parent=scratch.root;
+  options.legacy_public_root=scratch.root->Subroot("public",false,error);
+  options.legacy_recovery=SnapshotRecoveryOwner::Open(scratch.root);
+  REQUIRE(options.legacy_recovery);REQUIRE_FALSE(options.legacy_recovery->error());
+  const auto before=TreeBytes(scratch.path);
+  const auto refused=ManagedVolumeAuthority::Open(options);
+  REQUIRE(refused);REQUIRE(refused->error()==std::errc::directory_not_empty);
+  REQUIRE_FALSE(refused->profile_writable());REQUIRE(TreeBytes(scratch.path)==before);
+}
+}  // namespace xe::filesystem::test
+
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+TEST_CASE("Legacy migration waits for real canonical metadata and profile owners then remains bound",
+          "[managed_volume_authority][initialization][bootstrap]") {
+  const bool keep_profile=GENERATE(false,true);
+  VolumeScratch scratch;
+  REQUIRE_FALSE(scratch.root->Create("legacy",true));
+  REQUIRE_FALSE(scratch.root->Create("shell",true));
+  REQUIRE_FALSE(scratch.root->Create("shell/Content",true));
+  std::error_code error;
+  auto source=scratch.root->Subroot("legacy",false,error);REQUIRE(source);
+  auto shell=scratch.root->Subroot("shell",false,error);REQUIRE(shell);
+  std::shared_ptr<const SnapshotRecoveryOwner> recovery=SnapshotRecoveryOwner::Open(scratch.root);
+  REQUIRE(recovery);REQUIRE_FALSE(recovery->error());
+  auto identity=ManagedDeviceIdentity::Open(source,"legacy-busy",3,error);
+  REQUIRE(identity);REQUIRE_FALSE(error);
+  auto profile=ProfileIntentOwner::Open(scratch.root,identity);
+  REQUIRE(profile);REQUIRE_FALSE(profile->error());
+  const auto uuid=identity->uuid();const auto epoch=identity->content_epoch();
+  const auto old_source=BootstrapFile(source->path()/ManagedDeviceIdentity::kMarker);
+  if (!keep_profile) {profile.reset();}
+  const auto before=TreeBytes(scratch.path);
+  ManagedVolumeAuthority::Options options;options.content=source;
+  options.source_id="legacy-busy";options.device_id=3;
+  options.existing_legacy=ManagedVolumeAuthority::Options::ExistingLegacy{scratch.root,shell,recovery};
+  auto busy=ManagedVolumeAuthority::Open(options);
+  REQUIRE(busy);REQUIRE(busy->error()==std::errc::device_or_resource_busy);
+  REQUIRE_FALSE(busy->profile_writable());REQUIRE(TreeBytes(scratch.path)==before);
+  busy.reset();profile.reset();identity.reset();
+  auto migrated=ManagedVolumeAuthority::Open(options);
+  REQUIRE(migrated);REQUIRE_FALSE(migrated->error());REQUIRE(migrated->profile_writable());
+  REQUIRE(migrated->identity()->uuid()==uuid);REQUIRE(migrated->identity()->content_epoch()==epoch);
+  REQUIRE(migrated->identity()->binding_required());
+  const auto tagged=BootstrapFile(source->path()/ManagedDeviceIdentity::kMarker);
+  REQUIRE(tagged.size()==old_source.size()+168);
+  REQUIRE(std::equal(old_source.begin(),old_source.end(),tagged.begin()));
+  migrated.reset();
+  const auto binding=source->path()/(".xenia-device-binding-v1-"+BindingKey("legacy-busy",source->path()));
+  std::filesystem::rename(binding,scratch.path/"held-legacy-binding");
+  const auto absent=TreeBytes(scratch.path);
+  REQUIRE_FALSE(ManagedDeviceIdentity::Open(source,"legacy-busy",3,error));
+  REQUIRE(error==std::errc::state_not_recoverable);
+  const auto refused=ManagedVolumeAuthority::Open(options);
+  REQUIRE(refused);REQUIRE(refused->error());REQUIRE_FALSE(refused->profile_writable());
+  REQUIRE(TreeBytes(scratch.path)==absent);
+}
+}  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+TEST_CASE("Checksum-valid source references still require the exact native binding",
+          "[managed_volume_authority][initialization][bootstrap]") {
+  VolumeScratch scratch;auto options=BootstrapOptions(scratch);
+  {const auto owner=ManagedVolumeAuthority::Open(options);REQUIRE_FALSE(owner->error());}
+  const auto marker=scratch.path/ManagedDeviceIdentity::kMarker;
+  const auto changed=ManagedVolumeAuthorityTestAccess::WrongBindingTag(BootstrapFile(marker));
+  {std::ofstream output(marker,std::ios::binary|std::ios::trunc);
+   output.write(reinterpret_cast<const char*>(changed.data()),std::streamsize(changed.size()));
+   REQUIRE(output.good());}
+  const auto before=TreeBytes(scratch.path);std::error_code error;
+  REQUIRE_FALSE(ManagedDeviceIdentity::OpenExisting(scratch.root,options.source_id,3,error));
+  REQUIRE(error==std::errc::state_not_recoverable);
+  const auto refused=ManagedVolumeAuthority::Open(options);
+  REQUIRE(refused);REQUIRE(refused->error());REQUIRE_FALSE(refused->profile_writable());
+  REQUIRE(TreeBytes(scratch.path)==before);
+}
+}  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+TEST_CASE("Historical native B2 and explicit legacy formats reconstruct sealed recovery without new ownership",
+          "[managed_volume_authority][format][recovery][legacy_b2]") {
+  const bool primary = GENERATE(false, true);
+  const int stop = GENERATE(0, 1, 2);
+  VolumeScratch scratch;
+  ManagedVolumeAuthority::Options options;
+  options.source_id = primary ? "legacy-primary-format" : "legacy-b2-format";
+  options.device_id = primary ? 1 : 3;
+  options.state_parent_override = scratch.root;
+  std::error_code error;
+  if (primary) {
+    REQUIRE_FALSE(scratch.root->Create("content", true));
+    REQUIRE_FALSE(scratch.root->Create("public", true));
+    REQUIRE_FALSE(scratch.root->Create("public/Content", true));
+    options.content = scratch.root->Subroot("content", false, error);
+    REQUIRE(options.content); REQUIRE_FALSE(error);
+    options.preserve_legacy_layout = true;
+    options.legacy_private_parent = scratch.root;
+    options.legacy_public_root = scratch.root->Subroot("public", false, error);
+    REQUIRE(options.legacy_public_root); REQUIRE_FALSE(error);
+    options.legacy_recovery = SnapshotRecoveryOwner::Open(scratch.root);
+    REQUIRE(options.legacy_recovery); REQUIRE_FALSE(options.legacy_recovery->error());
+  } else {
+    options.content = scratch.root;
+  }
+  auto original = ManagedVolumeAuthorityTestAccess::OpenLegacyProducer(options);
+  REQUIRE(original); REQUIRE_FALSE(original->error()); REQUIRE(original->profile_writable());
+  REQUIRE_FALSE(original->identity()->binding_required());
+  const auto uuid = original->identity()->uuid();
+  const auto epoch = original->identity()->content_epoch();
+  const auto source_path = original->content()->path();
+  const auto binding_path = ManagedVolumeAuthorityTestAccess::LegacyBindingPath(*original);
+  const auto old_profile_path = original->intents()->root()->path();
+  const auto profile_wire = BootstrapFile(old_profile_path/"owner.v1");
+  const auto source_wire = BootstrapFile(source_path/ManagedDeviceIdentity::kMarker);
+  REQUIRE_FALSE(profile_wire.empty()); REQUIRE_FALSE(source_wire.empty());
+  std::vector<uint8_t> binding_wire;
+  if (!primary) {
+    REQUIRE_FALSE(binding_path.empty());
+    binding_wire = BootstrapFile(binding_path/"owner.v1");
+    REQUIRE(binding_wire.size() > 8);
+    REQUIRE(std::string(binding_wire.begin(), binding_wire.begin()+8) == "XMVOLB2\n");
+    REQUIRE_FALSE(std::filesystem::exists(binding_path/"bootstrap.pending.v1"));
+  } else {
+    REQUIRE(binding_path.empty());
+  }
+  struct stat old_profile{};
+  REQUIRE(stat(old_profile_path.c_str(), &old_profile) == 0);
+  std::ofstream(source_path/"before-format.bin") << "reset once";
+  auto ticket = original->CaptureFormatHandoff();
+  REQUIRE(ticket); REQUIRE_FALSE(ticket->error());
+  ticket->ClosePublishedPublicView(); original.reset();
+  REQUIRE_FALSE(ManagedVolumeAuthorityTestAccess::PrepareOnly(*ticket));
+  REQUIRE(ticket->phase() == 1);
+  if (stop >= 1) {
+    const auto reset = ManagedVolumeAuthority::ExecuteFormat(*ticket);
+    REQUIRE_FALSE(reset.error); REQUIRE(reset.complete);
+    REQUIRE_FALSE(std::filesystem::exists(source_path/"before-format.bin"));
+    std::ofstream(source_path/"after-reset.bin") << "must survive recovery";
+  }
+  if (stop == 2) {
+    auto ready = ManagedVolumeAuthorityTestAccess::OwnersReadyOnly(*ticket);
+    REQUIRE(ready); REQUIRE_FALSE(ready->error()); REQUIRE(ticket->phase() == 2);
+    ready.reset();
+  }
+  ticket.reset();
+  const auto interrupted = TreeBytes(scratch.path);
+  auto ordinary = ManagedVolumeAuthority::Open(options);
+  REQUIRE(ordinary); REQUIRE(ordinary->error()); REQUIRE_FALSE(ordinary->profile_writable());
+  REQUIRE(TreeBytes(scratch.path) == interrupted);
+  ordinary.reset();
+  ticket = ManagedVolumeAuthority::InspectFormatRecovery(options);
+  REQUIRE(ticket); REQUIRE_FALSE(ticket->error());
+  REQUIRE(ticket->phase() == (stop == 2 ? 2 : 1));
+  REQUIRE(TreeBytes(scratch.path) == interrupted);
+  const auto observed = ManagedVolumeAuthorityTestAccess::ObservedFormatSource(*ticket);
+  REQUIRE(observed);
+  REQUIRE_FALSE(observed->GuestView(error));
+  REQUIRE(error == std::errc::operation_in_progress);
+  REQUIRE_FALSE(HostStorageRoot::AdmitGuestMount(
+      std::vector<GuestHostBacking>{{source_path, true}}, error));
+  REQUIRE(error == std::errc::operation_in_progress);
+  REQUIRE(TreeBytes(scratch.path) == interrupted);
+  auto current = ManagedVolumeAuthority::ResumeFormat(*ticket);
+  REQUIRE(current); REQUIRE_FALSE(current->error()); REQUIRE(current->profile_writable());
+  REQUIRE(current->identity()->uuid() == uuid);
+  REQUIRE(current->identity()->content_epoch() == epoch+1);
+  REQUIRE_FALSE(current->identity()->binding_required());
+  REQUIRE_FALSE(current->identity()->CheckCurrent());
+  REQUIRE_FALSE(std::filesystem::exists(source_path/"before-format.bin"));
+  REQUIRE(std::filesystem::exists(source_path/"after-reset.bin") == bool(stop>=1));
+  struct stat kept_profile{};
+  REQUIRE(stat(old_profile_path.c_str(), &kept_profile) == 0);
+  REQUIRE(kept_profile.st_dev == old_profile.st_dev);
+  REQUIRE(kept_profile.st_ino == old_profile.st_ino);
+  REQUIRE(BootstrapFile(old_profile_path/"owner.v1") == profile_wire);
+  const auto completed_wire = BootstrapFile(source_path/ManagedDeviceIdentity::kMarker);
+  REQUIRE(completed_wire.size() > source_wire.size());
+  REQUIRE(std::equal(source_wire.begin(), source_wire.end(), completed_wire.begin()));
+  if (!primary) {
+    REQUIRE(BootstrapFile(binding_path/"owner.v1") == binding_wire);
+    REQUIRE_FALSE(std::filesystem::exists(binding_path/"bootstrap.pending.v1"));
+  }
+  // A genuine current profile owner exists only because format created it.
+  // Removing it cannot turn ordinary reopen/migration into fresh creation.
+  const auto current_profile_path = current->intents()->root()->path();
+  current.reset(); ticket.reset();
+  std::filesystem::rename(current_profile_path, scratch.path/"preserved-current-profile");
+  const auto absent = TreeBytes(scratch.path);
+  ordinary = ManagedVolumeAuthority::Open(options);
+  REQUIRE(ordinary); REQUIRE(ordinary->error()); REQUIRE_FALSE(ordinary->profile_writable());
+  REQUIRE_FALSE(std::filesystem::exists(current_profile_path));
+  REQUIRE(TreeBytes(scratch.path) == absent);
+}
+}  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+TEST_CASE("A failed historical profile proof cannot resume through an unsealed format operation",
+          "[managed_volume_authority][format][recovery][legacy_b2]") {
+  VolumeScratch scratch;
+  ManagedVolumeAuthority::Options options;
+  options.content=scratch.root; options.state_parent_override=scratch.root;
+  options.source_id="legacy-failed-proof"; options.device_id=3;
+  auto original=ManagedVolumeAuthorityTestAccess::OpenLegacyProducer(options);
+  REQUIRE(original); REQUIRE_FALSE(original->error()); REQUIRE(original->profile_writable());
+  REQUIRE_FALSE(original->identity()->binding_required());
+  const auto uuid=original->identity()->uuid();
+  const auto epoch=original->identity()->content_epoch();
+  const auto old_profile=original->intents()->root()->path();
+  std::ofstream(scratch.path/"before-format.bin")<<"must survive failed inspection";
+  auto ticket=original->CaptureFormatHandoff();
+  REQUIRE(ticket); REQUIRE_FALSE(ticket->error());
+  ticket->ClosePublishedPublicView(); original.reset();
+  REQUIRE_FALSE(ManagedVolumeAuthorityTestAccess::PrepareOnly(*ticket));
+  REQUIRE(ticket->phase()==1); ticket.reset();
+  // Move the genuine original component intact. No fake metadata is written,
+  // and invalid/missing profile evidence never grants permission to reset data.
+  const auto preserved=scratch.path/"preserved-old-profile";
+  std::filesystem::rename(old_profile,preserved);
+  REQUIRE_FALSE(scratch.root->FlushDirectory());
+  const auto before=TreeBytes(scratch.path);
+  ticket=ManagedVolumeAuthority::InspectFormatRecovery(options);
+  REQUIRE(ticket); REQUIRE(ticket->error()==std::errc::no_such_file_or_directory);
+  REQUIRE(TreeBytes(scratch.path)==before);
+  auto refused=ManagedVolumeAuthority::ResumeFormat(*ticket);
+  REQUIRE(refused); REQUIRE(refused->error()==std::errc::operation_not_permitted);
+  REQUIRE_FALSE(refused->profile_writable());
+  REQUIRE(TreeBytes(scratch.path)==before);
+  REQUIRE(std::filesystem::is_regular_file(scratch.path/"before-format.bin"));
+  refused.reset(); ticket.reset();
+  // Restore that same native component and perform a NEW full inspection.
+  std::filesystem::rename(preserved,old_profile);
+  REQUIRE_FALSE(scratch.root->FlushDirectory());
+  ticket=ManagedVolumeAuthority::InspectFormatRecovery(options);
+  REQUIRE(ticket); REQUIRE_FALSE(ticket->error());
+  auto recovered=ManagedVolumeAuthority::ResumeFormat(*ticket);
+  REQUIRE(recovered); REQUIRE_FALSE(recovered->error()); REQUIRE(recovered->profile_writable());
+  REQUIRE(recovered->identity()->uuid()==uuid);
+  REQUIRE(recovered->identity()->content_epoch()==epoch+1);
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path/"before-format.bin"));
 }
 }  // namespace xe::filesystem::test
 #endif

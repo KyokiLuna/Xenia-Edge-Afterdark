@@ -45,14 +45,22 @@ class Controller final : public InputDriver {
     *out = {};
     out->packet_number = packets[slot];
     out->gamepad.buttons = buttons[slot];
+    auto action = std::move(on_read);
+    if (action) { action(); }
     return X_ERROR_SUCCESS;
   }
   X_RESULT SetState(uint32_t, X_INPUT_VIBRATION*) override {
     return X_ERROR_SUCCESS;
   }
-  X_RESULT GetKeystroke(uint32_t, uint32_t, X_INPUT_KEYSTROKE*) override {
-    return X_ERROR_EMPTY;
+  X_RESULT GetKeystroke(uint32_t, uint32_t, X_INPUT_KEYSTROKE* output) override {
+    if (!stroke.virtual_key) { return X_ERROR_EMPTY; }
+    *output = stroke;
+    return X_ERROR_SUCCESS;
   }
+  void DiscardKeystrokes() override { stroke = {}; ++discarded; }
+  X_INPUT_KEYSTROKE stroke{};
+  unsigned discarded = 0;
+  std::function<void()> on_read;
   std::array<uint16_t, XUserMaxUserCount> buttons{};
   std::array<uint32_t, XUserMaxUserCount> packets{};
 };
@@ -330,5 +338,155 @@ TEST_CASE(
   input.reset();  // Queue retains only CPU counter state, never this provider.
   app.ExecutePendingFunctionsFromUIThread();
   CHECK(accessed == 0);
+}
+}  // namespace xe::hid::test
+
+namespace xe::hid::test {
+TEST_CASE("Host-only modal blocks title polling without a native transport",
+          "[ui][input][host_ui_fallback]") {
+  InputSystem input(nullptr);
+  auto driver = std::make_unique<Controller>();
+  auto* physical = driver.get();
+  input.AddDriver(std::move(driver));
+  auto guard = input.lock();
+  input.BindSlot(3, physical, 3, "physical3", "controller3");
+  input.BeginHostUiInputEpoch();
+  REQUIRE(input.native_input_generation() == 0);
+  auto modal = input.ReserveHostUiInput();
+  REQUIRE(modal);
+  physical->buttons[3] = X_INPUT_GAMEPAD_A | X_INPUT_GAMEPAD_B |
+                          X_INPUT_GAMEPAD_START;
+  physical->packets[3] = 91;
+  X_INPUT_STATE title{}, raw{};
+  REQUIRE(input.GetStateForUI(3, InputType::Controller, &raw) == X_ERROR_SUCCESS);
+  CHECK(raw.gamepad.buttons == physical->buttons[3]);
+  REQUIRE(input.GetState(3, InputType::Controller, &title) == X_ERROR_SUCCESS);
+  CHECK(title.gamepad.buttons == 0);
+  const uint32_t blocked_packet = title.packet_number;
+  X_INPUT_KEYSTROKE stroke{};
+  physical->stroke.virtual_key = 0x5800;  // XINPUT A
+  REQUIRE(input.GetKeystroke(3, InputType::Controller, &stroke) == X_ERROR_EMPTY);
+  modal->Release();  // A/B/Start are still physically held at close.
+  REQUIRE(input.GetState(3, InputType::Controller, &title) == X_ERROR_SUCCESS);
+  CHECK(title.gamepad.buttons == 0);
+  CHECK(title.packet_number != blocked_packet);
+  physical->stroke.virtual_key = 0x5800;
+  REQUIRE(input.GetKeystroke(3, InputType::Controller, &stroke) == X_ERROR_EMPTY);
+  CHECK(physical->discarded > 0);
+  physical->buttons[3] = 0;
+  REQUIRE(input.GetState(3, InputType::Controller, &title) == X_ERROR_SUCCESS);
+  physical->buttons[3] = X_INPUT_GAMEPAD_A | X_INPUT_GAMEPAD_B |
+                          X_INPUT_GAMEPAD_START;
+  REQUIRE(input.GetState(3, InputType::Controller, &title) == X_ERROR_SUCCESS);
+  CHECK(title.gamepad.buttons == physical->buttons[3]);
+}
+TEST_CASE("Close during an in-flight title poll cannot leak its final press",
+          "[ui][input][host_ui_fallback]") {
+  InputSystem input(nullptr);
+  auto driver = std::make_unique<Controller>();
+  auto* physical = driver.get();
+  input.AddDriver(std::move(driver));
+  auto guard = input.lock();
+  input.BindSlot(2, physical, 2, "physical2", "controller2");
+  input.BeginHostUiInputEpoch();
+  auto modal = input.ReserveHostUiInput();
+  REQUIRE(modal);
+  physical->buttons[2] = X_INPUT_GAMEPAD_A | X_INPUT_GAMEPAD_B |
+                          X_INPUT_GAMEPAD_START;
+  physical->on_read = [modal] { modal->Release(); };
+  X_INPUT_STATE state{};
+  REQUIRE(input.GetState(2, InputType::Controller, &state) == X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == 0);
+  REQUIRE(input.GetStateForNativeDriver(2, InputType::Controller, &state) ==
+          X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == 0);
+  physical->buttons[2] = 0;
+  REQUIRE(input.GetState(2, InputType::Controller, &state) == X_ERROR_SUCCESS);
+  physical->buttons[2] = X_INPUT_GAMEPAD_START;
+  REQUIRE(input.GetState(2, InputType::Controller, &state) == X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == X_INPUT_GAMEPAD_START);
+}
+TEST_CASE("Canceled host-only queue and old epoch release are inert after reset",
+          "[ui][input][host_ui_fallback]") {
+  class Context final : public ui::WindowedAppContext {
+    void NotifyUILoopOfPendingFunctions() override {}
+    void PlatformQuitFromUIThread() override {}
+  } app;
+  NativeUiBackendRoute route;
+  auto epoch = std::make_shared<const NativeUiBackendRoute::HostOnlyEpoch>();
+  auto lease = route.AdmitHostOnly(epoch, 0).host;
+  REQUIRE(lease);
+  auto completion = std::make_shared<kernel::xam::HostUiFallbackCompletion>();
+  auto input = std::make_unique<InputSystem>(nullptr);
+  std::shared_ptr<UiInputReservation> old, current;
+  {
+    auto guard = input->lock();
+    input->BeginHostUiInputEpoch();
+    old = input->ReserveHostUiInput();
+  }
+  REQUIRE(old);
+  unsigned accesses = 0;
+  REQUIRE(kernel::xam::QueueHostUiFallback(
+      app, lease, completion, [old, &accesses](const auto&) { ++accesses; }));
+  route.BeginStop();
+  CHECK(completion->result().result == ui::TextEntryResult::kAborted);
+  REQUIRE(route.Drain(std::chrono::steady_clock::now()));
+  {
+    auto guard = input->lock();
+    input->BeginHostUiInputEpoch();
+    current = input->ReserveHostUiInput();
+  }
+  REQUIRE(current);
+  old->Release();
+  CHECK(input->IsUIInputBlocked());
+  current->Release();
+  CHECK_FALSE(input->IsUIInputBlocked());
+  input.reset();  // Old queued token and factory cannot touch this provider.
+  app.ExecutePendingFunctionsFromUIThread();
+  CHECK(accesses == 0);
+}
+}  // namespace xe::hid::test
+
+namespace xe::hid::test {
+TEST_CASE("Native-selected host reservation alone quarantines its final close press",
+          "[ui][input][native_transport][host_ui_fallback]") {
+  InputSystem input(nullptr);
+  auto driver = std::make_unique<Controller>();
+  auto* physical = driver.get();
+  input.AddDriver(std::move(driver));
+  auto guard = input.lock();
+  input.BindSlot(1, physical, 1, "physical1", "controller1");
+  REQUIRE(input.BeginNativeInputTransport(41));
+  auto modal = input.ReserveHostUiInput(41);
+  REQUIRE(modal);
+  physical->buttons[1] = X_INPUT_GAMEPAD_A | X_INPUT_GAMEPAD_B |
+                          X_INPUT_GAMEPAD_START;
+  X_INPUT_STATE state{};
+  physical->on_read = [modal] { modal->Release(); };
+  REQUIRE(input.GetStateForNativeDriver(1, InputType::Controller, &state) ==
+          X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == 0);
+  REQUIRE(input.GetState(1, InputType::Controller, &state) == X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == 0);
+  physical->stroke.virtual_key = 0x5800;
+  X_INPUT_KEYSTROKE stroke{};
+  REQUIRE(input.GetKeystroke(1, InputType::Controller, &stroke) == X_ERROR_EMPTY);
+  physical->buttons[1] = 0;
+  REQUIRE(input.GetStateForUI(1, InputType::Controller, &state) == X_ERROR_SUCCESS);
+  physical->buttons[1] = X_INPUT_GAMEPAD_A | X_INPUT_GAMEPAD_B |
+                          X_INPUT_GAMEPAD_START;
+  REQUIRE(input.GetState(1, InputType::Controller, &state) == X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == physical->buttons[1]);
+  auto old = input.ReserveHostUiInput(41);
+  REQUIRE(old);
+  input.EndNativeInputTransport(41);
+  REQUIRE(input.BeginNativeInputTransport(42));
+  auto replacement = input.ReserveHostUiInput(42);
+  REQUIRE(replacement);
+  old->Release();
+  CHECK(input.IsUIInputBlocked());
+  replacement->Release();
+  REQUIRE(input.GetState(1, InputType::Controller, &state) == X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == 0);
 }
 }  // namespace xe::hid::test

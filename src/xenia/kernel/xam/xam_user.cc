@@ -18,8 +18,10 @@
 #include "xenia/base/logging.h"
 #include "xenia/emulator.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/user_profile.h"
+#include "xenia/kernel/xam/profile_manager.h"
 #include "xenia/kernel/xam/user_settings.h"
 #include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xam/xam_state.h"
@@ -43,20 +45,26 @@ namespace xam {
 
 X_HRESULT_result_t XamUserGetXUID_entry(dword_t user_index, dword_t type_mask,
                                         lpqword_t xuid_ptr) {
+  uint64_t diagnostic_xuid=0;
+  const auto observed=[&](uint32_t status){
+    kernel_state()->xam_state()->profile_manager()->RecordNativeProfileQuery(
+        0x20A,user_index,status,diagnostic_xuid,type_mask);
+    return status;
+  };
   assert_true(type_mask == 1 || type_mask == 2 || type_mask == 3 ||
               type_mask == 4 || type_mask == 7);
   if (!xuid_ptr) {
-    return X_E_INVALIDARG;
+    return observed(X_E_INVALIDARG);
   }
 
   *xuid_ptr = 0;
 
   if (user_index >= XUserMaxUserCount) {
-    return X_E_INVALIDARG;
+    return observed(X_E_INVALIDARG);
   }
 
   if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
-    return X_E_NO_SUCH_USER;
+    return observed(X_E_NO_SUCH_USER);
   }
 
   const auto& user_profile =
@@ -71,13 +79,15 @@ X_HRESULT_result_t XamUserGetXUID_entry(dword_t user_index, dword_t type_mask,
   types &= type_mask;
 
   if (types & X_USER_XUID_ONLINE) {
-    *xuid_ptr = user_profile->GetOnlineXUID();
+    diagnostic_xuid=user_profile->GetOnlineXUID();
+    *xuid_ptr = diagnostic_xuid;
   } else if (types & X_USER_XUID_OFFLINE) {
-    *xuid_ptr = user_profile->xuid();
+    diagnostic_xuid=user_profile->xuid();
+    *xuid_ptr = diagnostic_xuid;
   } else {
-    return X_E_NO_SUCH_USER;
+    return observed(X_E_NO_SUCH_USER);
   }
-  return X_E_SUCCESS;
+  return observed(X_E_SUCCESS);
 }
 DECLARE_XAM_EXPORT1(XamUserGetXUID, kUserProfiles, kImplemented);
 
@@ -104,8 +114,13 @@ DECLARE_XAM_EXPORT1(XamUserGetIndexFromXUID, kUserProfiles, kImplemented);
 
 dword_result_t XamUserGetSigninState_entry(dword_t user_index) {
   uint32_t signin_state = 0;
-  if (user_index >= XUserMaxUserCount) {
+  const auto observed=[&]{
+    kernel_state()->xam_state()->profile_manager()->RecordNativeProfileQuery(
+        0x210,user_index,0,signin_state);
     return signin_state;
+  };
+  if (user_index >= XUserMaxUserCount) {
+    return observed();
   }
 
   if (kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
@@ -113,7 +128,7 @@ dword_result_t XamUserGetSigninState_entry(dword_t user_index) {
         kernel_state()->xam_state()->GetUserProfile(user_index);
     signin_state = user_profile->signin_state();
   }
-  return signin_state;
+  return observed();
 }
 DECLARE_XAM_EXPORT2(XamUserGetSigninState, kUserProfiles, kImplemented,
                     kHighFrequency);
@@ -280,6 +295,9 @@ uint32_t XamUserReadProfileSettingsEx(
   if (XFAILED(util::ReadGuestIoBuffer(memory, setting_ids, id_bytes))) {
     return diagnostic("ids_read", X_ERROR_INVALID_PARAMETER);
   }
+  if (xuids && (!xuid_count || xuid_count > 16)) {
+    return diagnostic("xuid_count", X_ERROR_FUNCTION_FAILED);
+  }
   std::vector<uint32_t> ids;
   ids.reserve(setting_count);
   uint64_t header_bytes =
@@ -318,22 +336,11 @@ uint32_t XamUserReadProfileSettingsEx(
     return diagnostic("required_overflow", X_ERROR_INVALID_PARAMETER);
   }
   if (!buffer_address || capacity < required) {
-    if (!capacity) {
-      xe::store_and_swap<uint32_t>(size_bytes.data(), uint32_t(required));
-      if (XFAILED(util::WriteGuestIoBuffer(memory, buffer_size_address,
-                                           size_bytes))) {
-        return diagnostic("size_publish", X_ERROR_FUNCTION_FAILED);
-      }
+    xe::store_and_swap<uint32_t>(size_bytes.data(), uint32_t(required));
+    if (XFAILED(util::WriteGuestIoBuffer(memory, buffer_size_address, size_bytes))) {
+      return diagnostic("size_publish", X_ERROR_FUNCTION_FAILED);
     }
     return diagnostic("size_query", X_ERROR_INSUFFICIENT_BUFFER);
-  }
-  if (xuids && (!xuid_count || xuid_count > 16)) {
-    return diagnostic("xuid_count", X_ERROR_FUNCTION_FAILED);
-  }
-  // The legacy implementation only consumed the first XUID despite claiming
-  // all rows. Do not fabricate the still-unqualified remote/multi-XUID result.
-  if (xuids && xuid_count != 1) {
-    return diagnostic("xuid_batch_unsupported", X_ERROR_FUNCTION_FAILED);
   }
   if (!util::GuestIoRangeValid(memory, buffer_address, capacity, true) ||
       util::GuestIoRangesOverlap(memory, buffer_address, capacity,
@@ -341,118 +348,119 @@ uint32_t XamUserReadProfileSettingsEx(
     return diagnostic("output_range_or_alias", X_ERROR_INVALID_PARAMETER);
   }
   std::error_code error;
-  ProfileGpdWriter writer;
+  const uint32_t effective_title = title_id ? title_id : kernel->title_id();
+  std::shared_ptr<const ProfileSettingsReadBatch> observed;
   if (xuids) {
-    std::array<uint8_t, 8> xuid{};
-    if (XFAILED(util::ReadGuestIoBuffer(memory, xuids, xuid))) {
+    std::vector<uint8_t> raw(size_t(xuid_count) * 8);
+    if (XFAILED(util::ReadGuestIoBuffer(memory, xuids, raw))) {
       return diagnostic("xuid_read", X_ERROR_INVALID_PARAMETER);
     }
-    writer = kernel->xam_state()->profile_manager()->CaptureGpdWriter(
-        xe::load_and_swap<uint64_t>(xuid.data()), error);
+    std::vector<uint64_t> requested;
+    requested.reserve(xuid_count);
+    for (uint32_t i = 0; i != xuid_count; ++i) {
+      requested.push_back(xe::load_and_swap<uint64_t>(raw.data() + size_t(i) * 8));
+    }
+    observed = kernel->xam_state()->profile_manager()->CaptureProfileSettingsRead(
+        requested, effective_title, error);
   } else if (user_index < XUserMaxUserCount) {
-    writer = kernel->xam_state()->profile_manager()->CaptureGpdWriter(
-        uint8_t(user_index), error);
+    observed = kernel->xam_state()->profile_manager()->CaptureProfileSettingsRead(
+        uint8_t(user_index), effective_title, error);
   }
-  if (!writer.model) {
-    return diagnostic("writer_capture", X_ERROR_FUNCTION_FAILED, error);
-  }
-  const auto models = kernel->xam_state()->profile_manager()->CaptureGpdRead(
-      writer.model->xuid(), error);
-  if (!models) {
-    return diagnostic("models_capture", X_ERROR_FUNCTION_FAILED, error);
-  }
-  const auto captured = writer.model->CaptureRead(error);
-  if (!captured || captured->models != models) {
-    return diagnostic(captured ? "models_changed" : "origin_capture",
-                      X_ERROR_FUNCTION_FAILED, error);
+  if (!observed) {
+    return diagnostic("read_observation", X_ERROR_FUNCTION_FAILED, error);
   }
   std::vector<uint8_t> output(size_t(required), 0);
   size_t record_at = 8, data_at = 8 + size_t(header_bytes);
   uint32_t valid = 0;
-  for (auto id : ids) {
-    if (!UserSetting::is_setting_valid(id)) {
-      diagnostic("setting_skipped", X_ERROR_SUCCESS, {}, id);
-      continue;
-    }
-    const auto value =
-        models->Setting(title_id ? title_id : kernel->title_id(), id, error);
-    if (error || !value) {
-      return diagnostic("setting_lookup", X_ERROR_FUNCTION_FAILED, error, id);
-    }
-    X_USER_PROFILE_SETTING row{};
-    row.setting_id = id;
-    row.source = value->get_setting_source();
-    row.data = *value->get_data();
-    if (xuids) {
-      row.xuid = writer.model->xuid();
-    } else {
-      row.xuid = UINT64_MAX;
-      row.user_index = user_index;
-    }
-    if (UserSetting::requires_additional_data(id)) {
-      const auto owned = value->get_extended_data();
-      const uint32_t count = std::min<uint32_t>(uint32_t(owned.size()),
-                                                UserSetting::get_max_size(id));
-      if (data_at > output.size() || count > output.size() - data_at) {
-        return diagnostic("payload_bound", X_ERROR_FUNCTION_FAILED, {}, id);
+  for (const auto& user : observed->users()) {
+    for (auto id : ids) {
+      if (!UserSetting::is_setting_valid(id)) {
+        diagnostic("setting_skipped", X_ERROR_SUCCESS, {}, id);
+        continue;
       }
-      row.data.data.binary.size = count;
-      row.data.data.binary.ptr = count ? buffer_address + uint32_t(data_at) : 0;
-      if (count) {
-        std::memcpy(output.data() + data_at, owned.data(), count);
+      const auto value = user.Setting(effective_title, id, error);
+      if (error) {
+        return diagnostic("setting_lookup", X_ERROR_FUNCTION_FAILED, error, id);
       }
-      data_at += UserSetting::get_max_size(id);
-    }
-    if (diagnostic_id) {
-      // Hash only the same already-owned bytes selected for the prepared row.
-      // "prepared" is not delivery; only the later published result witnesses
-      // successful publication of this unchanged owned output vector.
-      const auto payload = value->get_extended_data();
-      const uint32_t payload_size = UserSetting::requires_additional_data(id)
-                                        ? uint32_t(row.data.data.binary.size)
-                                        : 0;
-      std::array<char, 65> digest_text{};
-      const char* hash = "not-binary";
-      if (value->get_type() == X_USER_DATA_TYPE::BINARY) {
-        std::array<uint8_t, 32> digest{};
-        constexpr uint8_t empty = 0;
-        hash = "unavailable";
-        if (!mbedtls_sha256(payload_size ? payload.data() : &empty,
-                            payload_size, digest.data(), 0)) {
-          constexpr char hex[] = "0123456789abcdef";
-          for (size_t n = 0; n != digest.size(); ++n) {
-            digest_text[n * 2] = hex[digest[n] >> 4];
-            digest_text[n * 2 + 1] = hex[digest[n] & 15];
-          }
-          hash = digest_text.data();
+      X_USER_PROFILE_SETTING row{};
+      row.setting_id = id;
+      row.source = value ? value->get_setting_source() : X_USER_PROFILE_SETTING_SOURCE::NO_VALUE;
+      if (value) { row.data = *value->get_data(); }
+      else { row.data.type = X_USER_DATA_TYPE::UNSET; }
+      if (xuids) {
+        row.xuid = user.xuid();
+      } else {
+        row.xuid = UINT64_MAX;
+        row.user_index = user_index;
+      }
+      if (UserSetting::requires_additional_data(id)) {
+        const auto owned = value ? value->get_extended_data() : std::span<const uint8_t>{};
+        const uint32_t count = std::min<uint32_t>(uint32_t(owned.size()),
+                                                  UserSetting::get_max_size(id));
+        if (data_at > output.size() || count > output.size() - data_at) {
+          return diagnostic("payload_bound", X_ERROR_FUNCTION_FAILED, {}, id);
         }
+        row.data.data.binary.size = count;
+        row.data.data.binary.ptr = count ? buffer_address + uint32_t(data_at) : 0;
+        if (count) {
+          std::memcpy(output.data() + data_at, owned.data(), count);
+        }
+        data_at += UserSetting::get_max_size(id);
       }
-      logging::AppendLogLineFormat(
-          LogSrc::Kernel, LogLevel::Debug, logging::kPrefixCharDebug,
-          "Profile settings read diagnostic {}: stage=prepared_row "
-          "setting={:08X} source={} type={} binary_or_string_bytes={} "
-          "sha256={}",
-          diagnostic_id, id, uint32_t(value->get_setting_source()),
-          uint32_t(value->get_type()), payload_size, hash);
+      if (diagnostic_id) {
+        // Hash only the same already-owned bytes selected for the prepared row.
+        // "prepared" is not delivery; only the later published result witnesses
+        // successful publication of this unchanged owned output vector.
+        const auto payload = value ? value->get_extended_data() : std::span<const uint8_t>{};
+        const uint32_t payload_size = UserSetting::requires_additional_data(id)
+                                          ? uint32_t(row.data.data.binary.size)
+                                          : 0;
+        std::array<char, 65> digest_text{};
+        const char* hash = "not-binary";
+        if (value && value->get_type() == X_USER_DATA_TYPE::BINARY) {
+          std::array<uint8_t, 32> digest{};
+          constexpr uint8_t empty = 0;
+          hash = "unavailable";
+          if (!mbedtls_sha256(payload_size ? payload.data() : &empty,
+                              payload_size, digest.data(), 0)) {
+            constexpr char hex[] = "0123456789abcdef";
+            for (size_t n = 0; n != digest.size(); ++n) {
+              digest_text[n * 2] = hex[digest[n] >> 4];
+              digest_text[n * 2 + 1] = hex[digest[n] & 15];
+            }
+            hash = digest_text.data();
+          }
+        }
+        logging::AppendLogLineFormat(
+            LogSrc::Kernel, LogLevel::Debug, logging::kPrefixCharDebug,
+            "Profile settings read diagnostic {}: stage=prepared_row "
+            "setting={:08X} source={} type={} binary_or_string_bytes={} "
+            "sha256={}",
+            diagnostic_id, id, uint32_t(row.source.get()),
+            uint32_t(row.data.type), payload_size, hash);
+      }
+      std::memcpy(output.data() + record_at, &row, sizeof(row));
+      record_at += sizeof(row);
+      ++valid;
     }
-    std::memcpy(output.data() + record_at, &row, sizeof(row));
-    record_at += sizeof(row);
-    ++valid;
   }
   xe::store_and_swap<uint32_t>(output.data(), valid);
   xe::store_and_swap<uint32_t>(output.data() + 4, buffer_address + 8);
-  auto run = [kernel, model = writer.model, origin = captured->origin,
+  xe::store_and_swap<uint32_t>(size_bytes.data(), uint32_t(required));
+  auto run = [kernel, observed = std::move(observed), buffer_size_address, size_bytes,
               buffer_address, output = std::move(output), diagnostic, valid](
                  uint32_t& extended_error, uint32_t& length) {
     extended_error = X_E_FAIL;
     length = 0;
-    if (!model->IsCurrent(origin)) {
+    if (!observed->IdentityCurrent()) {
       return diagnostic("publish_origin_changed", X_ERROR_FUNCTION_FAILED,
                         {}, 0, valid);
     }
-    if (XFAILED(util::WriteGuestIoBuffer(*kernel->memory(), buffer_address,
-                                         output))) {
-      extended_error = X_E_INVALIDARG;
+    const std::array<util::GuestIoWrite, 2> writes{{
+        {buffer_address, output}, {buffer_size_address, size_bytes}}};
+    const auto publication = observed->Publish(*kernel->memory(), writes);
+    if (XFAILED(publication)) {
+      extended_error = publication == X_STATUS_CANCELLED ? X_E_FAIL : X_E_INVALIDARG;
       return diagnostic("publish_guest_write", X_ERROR_FUNCTION_FAILED,
                         {}, 0, valid);
     }
@@ -1505,8 +1513,9 @@ DECLARE_XAM_EXPORT1(XamUserGetUserTenure, kUserProfiles, kImplemented);
 
 // Signs in or out the profile of each slot with a XUID, one XUID per slot.
 static X_RESULT UserLogon(const std::vector<uint64_t>& xuids, uint32_t flags,
-                          uint32_t overlapped_ptr) {
-  auto run = [xuids, flags](uint32_t& extended_error,
+    uint32_t overlapped_ptr,
+    std::array<std::optional<ProfileRosterSelectionOrigin>, 4> origins = {}) {
+  auto run = [xuids, flags, origins = std::move(origins)](uint32_t& extended_error,
                             uint32_t& length) -> X_RESULT {
     if (xe::global_critical_region::is_held_by_current_thread()) {
       extended_error = X_E_NOT_IMPLEMENTED;
@@ -1515,58 +1524,39 @@ static X_RESULT UserLogon(const std::vector<uint64_t>& xuids, uint32_t flags,
     }
     auto const profile_manager = kernel_state()->xam_state()->profile_manager();
 
-    X_STATUS result = X_ERROR_SUCCESS;
-
-    // The console adds each profile to the slot its XUID is in.
-    if (flags & static_cast<uint32_t>(UserLogonFlags::AddUser)) {
-      for (uint8_t user_index = 0; user_index < XUserMaxUserCount;
-           user_index++) {
-        if (xuids[user_index]) {
-          profile_manager->Login(xuids[user_index], user_index, true);
-          const auto actual = profile_manager->CaptureProfile(user_index);
-          if (!actual || actual->xuid() != xuids[user_index]) {
-            result = X_ERROR_FUNCTION_FAILED;
-          }
+    std::error_code error;
+    const auto expected = profile_manager->CaptureRosterExpected(error);
+    X_RESULT result = X_ERROR_SUCCESS;
+    if (error || !expected.roster) { result = X_ERROR_BUSY; }
+    else {
+      ProfileRosterDesired desired;
+      for (uint8_t slot = 0; slot != 4; ++slot) { desired.xuids[slot] = expected.roster->slots()[slot].xuid; }
+      const bool add = flags & static_cast<uint32_t>(UserLogonFlags::AddUser);
+      const bool remove = flags & static_cast<uint32_t>(UserLogonFlags::RemoveUser);
+      const bool clear_empty = flags & static_cast<uint32_t>(UserLogonFlags::ForceLiveLogOff);
+      if (add || (!add && !remove)) {
+        for (uint8_t slot = 0; slot != 4; ++slot) {
+          if (xuids[slot]) {
+            for (uint8_t other = 0; other != 4; ++other) {
+              if (desired.xuids[other] == xuids[slot]) { desired.xuids[other] = 0; }
+            }
+            desired.xuids[slot] = xuids[slot];
+            desired.origins[slot] = origins[slot];
+          } else if (!add && !remove && clear_empty) { desired.xuids[slot] = 0; }
         }
       }
-    }
-
-    if (flags & static_cast<uint32_t>(UserLogonFlags::RemoveUser)) {
-      for (auto& xuid : xuids) {
-        const uint8_t assigned_index =
-            profile_manager->GetUserIndexAssignedToProfile(xuid);
-
-        if (xuid) {
-          if (kernel_state()->xam_state()->IsUserSignedIn(xuid)) {
-            profile_manager->Logout(assigned_index, true);
+      if (remove) {
+        for (const auto xuid : xuids) { if (xuid) {
+          for (uint8_t slot = 0; slot != 4; ++slot) {
+            if (desired.xuids[slot] == xuid) { desired.xuids[slot] = 0; desired.origins[slot].reset(); }
           }
-        }
+        } }
       }
-    }
-
-    // Without Add or Remove the array is one XUID per slot, and only
-    // ForceLiveLogOff signs out an empty slot.
-    if (!(flags & (static_cast<uint32_t>(UserLogonFlags::AddUser) |
-                   static_cast<uint32_t>(UserLogonFlags::RemoveUser)))) {
-      const bool sign_out_empty =
-          flags & static_cast<uint32_t>(UserLogonFlags::ForceLiveLogOff);
-      for (uint8_t user_index = 0; user_index < XUserMaxUserCount;
-           user_index++) {
-        if (!xuids[user_index] && sign_out_empty &&
-            kernel_state()->xam_state()->IsUserSignedIn(
-                static_cast<uint32_t>(user_index))) {
-          profile_manager->Logout(user_index, true);
-        }
-      }
-      for (uint8_t user_index = 0; user_index < XUserMaxUserCount;
-           user_index++) {
-        if (xuids[user_index]) {
-          profile_manager->Login(xuids[user_index], user_index, true);
-          const auto actual = profile_manager->CaptureProfile(user_index);
-          if (!actual || actual->xuid() != xuids[user_index]) {
-            result = X_ERROR_FUNCTION_FAILED;
-          }
-        }
+      const auto outcome = profile_manager->AdoptRoster(desired, expected);
+      if (outcome.error || outcome.phase != ProfileRosterPhase::kCommitted) {
+        result = outcome.error == std::errc::no_such_device ? X_ERROR_DEVICE_NOT_CONNECTED :
+                 outcome.error == std::errc::invalid_argument ? X_ERROR_INVALID_PARAMETER :
+                 outcome.error == std::errc::device_or_resource_busy ? X_ERROR_BUSY : X_ERROR_FUNCTION_FAILED;
       }
     }
 
@@ -1588,6 +1578,11 @@ static X_RESULT UserLogon(const std::vector<uint64_t>& xuids, uint32_t flags,
 // https://github.com/TeaModz/XeLiveStealth-Full-Source/blob/d4a7439ac6241c4a13e883a6f156623d1c08f6eb/XeLive/Utils.cpp#L416
 dword_result_t XamUserLogon_entry(lpqword_t xuids_ptr, dword_t flags,
                                   pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  const std::array<uint64_t, 3> original = {
+      xuids_ptr.guest_address(), static_cast<uint32_t>(flags), overlapped_ptr.guest_address()};
+  const auto native = NativeProfileIdentityOwner::TryLogonOnOriginalCaller(
+      kernel_state(), 0x20B, original);
+  if (!native.may_use_legacy()) { return native.value; }
   if (!xuids_ptr) {
     return X_ERROR_INVALID_PARAMETER;
   }
@@ -1613,6 +1608,11 @@ DECLARE_XAM_EXPORT1(XamUserLogon, kUserProfiles, kImplemented);
 dword_result_t XamUserLogonEx_entry(pointer_t<X_PROFILEENUMRESULT> profiles_ptr,
                                     dword_t flags,
                                     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  const std::array<uint64_t, 3> original = {
+      profiles_ptr.guest_address(), static_cast<uint32_t>(flags), overlapped_ptr.guest_address()};
+  const auto native = NativeProfileIdentityOwner::TryLogonOnOriginalCaller(
+      kernel_state(), 0x224, original);
+  if (!native.may_use_legacy()) { return native.value; }
   if (!profiles_ptr) {
     return X_ERROR_INVALID_PARAMETER;
   }
@@ -1621,14 +1621,27 @@ dword_result_t XamUserLogonEx_entry(pointer_t<X_PROFILEENUMRESULT> profiles_ptr,
                                       profiles_ptr.guest_address(), bytes))) {
     return X_ERROR_INVALID_PARAMETER;
   }
+  std::array<std::optional<ProfileRosterSelectionOrigin>, 4> origins{};
   std::vector<uint64_t> xuids;
   xuids.reserve(XUserMaxUserCount);
   for (uint32_t i = 0; i != XUserMaxUserCount; ++i) {
     X_PROFILEENUMRESULT profile{};
     std::memcpy(&profile, bytes.data() + i * sizeof(profile), sizeof(profile));
     xuids.push_back(profile.xuid_offline);
+    if (profile.xuid_offline) {
+      std::error_code error;
+      const auto metadata = kernel_state()->xam_state()->profile_manager()->CaptureCachedAccount(profile.xuid_offline, error);
+      if (!metadata || error || metadata->device_id() != uint32_t(profile.device_id)) { return X_ERROR_INVALID_PARAMETER; }
+      ProfileRosterSelectionOrigin origin;
+      origin.device_id = metadata->device_id(); origin.source_id = metadata->source_id();
+      origin.source_generation = metadata->source_generation();
+      origin.original_account_row.emplace();
+      std::copy_n(bytes.data() + i * sizeof(profile), sizeof(profile), origin.original_account_row->data());
+      origins[i] = std::move(origin);
+    }
+
   }
-  return UserLogon(xuids, flags, overlapped_ptr.guest_address());
+  return UserLogon(xuids, flags, overlapped_ptr.guest_address(), std::move(origins));
 }
 DECLARE_XAM_EXPORT1(XamUserLogonEx, kUserProfiles, kImplemented);
 

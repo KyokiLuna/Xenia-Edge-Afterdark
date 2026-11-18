@@ -251,6 +251,12 @@ GameListPanel::GameListPanel(wxWindow* parent, EmulatorWindow* emulator_window)
   });
 }
 
+void GameListPanel::RefreshContent() {
+  if (info_panel_) {
+    info_panel_->RefreshContent();
+  }
+}
+
 void GameListPanel::Reload() {
   entries_.clear();
   auto reveal_list = [this]() {

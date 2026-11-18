@@ -10,9 +10,11 @@
 #ifndef XENIA_KERNEL_XAM_PROFILE_MANAGER_H_
 #define XENIA_KERNEL_XAM_PROFILE_MANAGER_H_
 
+#include <array>
 #include <bitset>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <span>
 #include <string>
@@ -26,8 +28,10 @@
 #include "xenia/kernel/xam/profile_gpd_transaction.h"
 #include "xenia/kernel/xam/profile_gpd_model.h"
 #include "xenia/kernel/xam/profile_gpd_publication.h"
+#include "xenia/kernel/xam/profile_roster.h"
 #include "xenia/kernel/xam/profile_account_snapshot.h"
 #include "xenia/kernel/xam/profile_account_file.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
 
 namespace xe::filesystem {
 class HostStorageRoot;
@@ -44,6 +48,7 @@ namespace kernel {
 namespace xam {
 class UserTracker;
 class ContentManager;
+struct ContentSourceState;
 }  // namespace xam
 }  // namespace kernel
 }  // namespace xe
@@ -79,6 +84,59 @@ const static inline uint64_t GenerateOnlineXuid() {
   return (0x9ULL << 48) + (gen() % (1ULL << 31));
 }
 
+namespace test { class ProfileSettingsReadTestAccess; }
+class ProfileManager;
+struct NativeProfileProjection; // synchronous POD diagnostic only
+struct ProfileSettingsReadLifetime;
+struct ProfileSettingsReadUse;
+struct ProfileSettingsReadNativeOwners;
+// A service/lifetime capability, not a statement that any user is signed in or
+// that native module/resource initialization has completed.
+class ProfileSettingsReadProvider final {
+ public:
+  bool Current(const ProfileManager&) const;
+ private:
+  friend class ProfileManager;
+  ProfileSettingsReadProvider(const ProfileManager*,
+      std::shared_ptr<ProfileSettingsReadLifetime>);
+  const ProfileManager* const owner_;  // comparison only, never a callback
+  const std::shared_ptr<ProfileSettingsReadLifetime> lifetime_;
+};
+// Each user is an independently validated immutable observation. This is not
+// a global point-in-time transaction across users or filesystems.
+class ProfileSettingsReadBatch final {
+ public:
+  class User final {
+   public:
+    uint64_t xuid() const { return xuid_; }
+    std::optional<UserSetting> Setting(uint32_t title, uint32_t id,
+                                      std::error_code&) const;
+   private:
+    friend class ProfileManager;
+    friend class ProfileSettingsReadBatch;
+    uint64_t xuid_ = 0;
+    std::weak_ptr<const ProfileSettingsReadUse> use_;
+    std::weak_ptr<ProfileSettingsReadNativeOwners> native_;
+    std::shared_ptr<const GpdInfoProfile> dashboard_;
+    std::shared_ptr<const GpdInfoTitle> title_;
+    uint32_t title_id_ = 0;
+  };
+  const std::vector<User>& users() const { return users_; }
+  // Cached logical lifetime/source/account ownership only: later ordinary
+  // data changes do not undo a completed immutable read observation.
+  bool IdentityCurrent() const;
+  X_STATUS Publish(Memory&, std::span<const util::GuestIoWrite>) const;
+ private:
+  friend class ProfileManager;
+  friend class util::GuestIoProfileReadScope;
+  bool IdentityCurrentAdmitted() const;
+  const ProfileManager* profile_owner_ = nullptr; // actual gate Use only
+  ProfileSettingsReadBatch() = default;
+  std::shared_ptr<const ProfileSettingsReadUse> use_;
+  std::shared_ptr<ProfileAccountCommitGate> publication_gate_;
+  std::vector<User> users_;
+};
+
 class ProfileManager {
  public:
   static bool DecryptAccountFile(std::span<const uint8_t> data,
@@ -99,6 +157,25 @@ class ProfileManager {
 
   ~ProfileManager();
   void InitializeProfiles();
+  // Advisory scalar observations only; no admission, lookup, or guest IO.
+  void RecordNativeProfileQuery(uint32_t ordinal, uint32_t slot,
+                                uint32_t status, uint64_t value,
+                                uint32_t flags = 0) const noexcept;
+  void RecordNativeSigninUi(uint32_t user, uint32_t users, uint32_t flags,
+                            uint32_t overlap, uint32_t result, uint32_t route,
+                            uint32_t stage, uint32_t native_owned) const noexcept;
+  std::shared_ptr<const ProfileSettingsReadProvider>
+  CaptureProfileSettingsReadProvider() const;
+  std::shared_ptr<const ProfileSettingsReadBatch> CaptureProfileSettingsRead(
+      std::span<const uint64_t> xuids, uint32_t title, std::error_code&);
+  std::shared_ptr<const ProfileSettingsReadBatch> CaptureProfileSettingsRead(
+      uint8_t slot, uint32_t title, std::error_code&);
+  // Owned last-known local metadata derived from authentic Account receipts,
+  // never a borrowed map/model or synthetic HDD1 identity. These display rows
+  // grant no fresh native-source, storage-read or sign-in authority.
+  std::vector<X_PROFILEENUMRESULT> CaptureProfileInventory(uint32_t device_id,
+                                                          std::error_code&) const;
+  void ReapReleasedProfileReads();
   ProfileGpdWriter CaptureGpdWriter(uint64_t xuid, std::error_code&);
   ProfileGpdWriter CaptureGpdWriter(uint8_t slot, std::error_code&);
   std::error_code ReloadGpdModel(uint64_t xuid);
@@ -115,10 +192,15 @@ class ProfileManager {
       uint32_t avatar_preset = 0, uint32_t stock_picture = 0);
   ProfileCreationResult CreateProfileDetailed(
       const X_XAMACCOUNTINFO&, uint64_t xuid, bool autologin = false,
-      uint32_t avatar_preset = 0, uint32_t stock_picture = 0);
+      uint32_t avatar_preset = 0, uint32_t stock_picture = 0,
+      std::optional<uint32_t> selected_device = {});
 
   // Owned synchronous HLE completion records. These do not mint a retail
   // Task. Status/free accepts only an allocation issued by this manager.
+  // One counted local-provider operation spans pending publication, real
+  // synchronous creation and terminalization, even when stop seals admission.
+  X_HRESULT ProduceProfileCreationResult(std::array<uint8_t, 0xAC0>,
+                                          uint32_t output_address);
   uint32_t AllocateProfileCreationResult(std::span<const uint8_t>,
                                          std::error_code&);
   bool CompleteProfileCreationResult(uint32_t, ProfileCreationResult);
@@ -131,7 +213,10 @@ class ProfileManager {
 
   bool DeleteProfile(const uint64_t xuid);
 
-  bool MountProfile(const uint64_t xuid, std::string mount_path = "");
+  // Optional host scalar output names the exact registered mount device. It is
+  // stored only after a genuine mount reference has been acquired successfully.
+  bool MountProfile(const uint64_t xuid, std::string mount_path = "",
+                    uint32_t* mounted_device_id = nullptr);
   bool DismountProfile(const uint64_t xuid);
   bool DismountProfile(std::string_view mount_path);
 
@@ -144,6 +229,15 @@ class ProfileManager {
       uint64_t xuid, std::error_code& error);
   std::shared_ptr<ProfileGpdModelAuthority> AcquireProfileGpdModel(
       uint8_t slot, std::error_code& error);
+
+  ProfileRosterExpected CaptureRosterExpected(std::error_code&) const;
+  std::shared_ptr<ProfileRosterIntent> PrepareRoster(
+      const ProfileRosterDesired&, const ProfileRosterExpected&,
+      std::error_code&);
+  ProfileRosterResult CommitHostRoster(const std::shared_ptr<ProfileRosterIntent>&);
+  ProfileRosterResult CancelRoster(const std::shared_ptr<ProfileRosterIntent>&);
+  ProfileRosterResult AdoptRoster(const ProfileRosterDesired&,
+                                 const ProfileRosterExpected&);
 
   void Login(const uint64_t xuid, const uint8_t user_index = XUserIndexAny,
              bool notify = true);
@@ -187,10 +281,17 @@ class ProfileManager {
       uint64_t xuid, std::error_code&) const;
 
   uint32_t GetAccountCount() const {
-    auto lock = xe::global_critical_region::AcquireDirect();
-    return static_cast<uint32_t>(accounts_.size());
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { return 0; }
+    uint32_t count = 0;
+    for (const auto& [xuid, account] : accounts_) {
+      std::error_code error;
+      if (!profile_discovery_conflicts_.contains(xuid) ||
+          CaptureCachedAccount(xuid, error)) { ++count; }
+    }
+    return count;
   }
-  bool IsAnyProfileSignedIn() const { return !logged_profiles_.empty(); }
+  bool IsAnyProfileSignedIn() const;
 
   // Short, nonblocking namespace/profile reservation. It owns only locks and
   // authorizes pure admission closure, never IO, callbacks or owner teardown.
@@ -222,6 +323,87 @@ class ProfileManager {
   static bool IsGamertagValid(const std::string gamertag);
 
  private:
+  friend class ::xe::kernel::NativeProfileIdentityOwner;
+  friend class ::xe::kernel::NativeSystemUiService;
+  friend class ProfileRosterIntent;
+  friend class ProfileRosterPublicationCell;
+  friend class ProfileRosterNativeReadScope;
+  void InitializeRosterAuthority();
+  void BeginRosterStop();
+  void CloseRosterAuthority();
+  void RetryRosterSettlement();
+  // One originating DeleteProfile call owns this noncopyable proof. The
+  // existing retirement-set node and immutable authenticated origin are held
+  // before any requested roster removal; no proof escapes the C++ call.
+  struct ProfileDeletionReservation {
+    ProfileDeletionReservation() = default;
+    ProfileDeletionReservation(const ProfileDeletionReservation&) = delete;
+    ProfileDeletionReservation& operator=(const ProfileDeletionReservation&) = delete;
+    const ProfileManager* owner = nullptr;
+    uint64_t xuid = 0;
+    const uint64_t* retirement = nullptr;
+    std::shared_ptr<const ProfileAccountMetadata> metadata;
+    std::shared_ptr<const ContentSourceState> source;
+  };
+  ProfileRosterResult AdoptRosterInternal(const ProfileRosterDesired&,
+      const ProfileRosterExpected&, const ProfileDeletionReservation*);
+  // Retain the exact unpublished attempt across real busy cancellation.
+  // Public PrepareRoster keeps its existing interface.
+  std::shared_ptr<ProfileRosterIntent> PrepareRosterAttempt(
+      const ProfileRosterDesired&, const ProfileRosterExpected&,
+      std::error_code&, std::shared_ptr<ProfileRosterIntent>* retained_attempt,
+      const ProfileDeletionReservation* deletion = nullptr);
+  std::shared_ptr<const ProfileAccountSnapshot> RefreshRosterAccount(
+      const std::shared_ptr<const ProfileAccountSnapshot>&);
+  std::shared_ptr<UserProfile> CaptureRosterProfile(uint8_t) const;
+  std::shared_ptr<ProfileGpdModelAuthority> CaptureRosterModel(uint64_t) const;
+  std::shared_ptr<ProfileAccountIdentity> CaptureRosterIdentity(uint64_t) const;
+  std::shared_ptr<const ProfileAccountSnapshot> CaptureRosterAccount(uint64_t) const;
+  std::shared_ptr<const HostRoster> CaptureSelectedRoster(
+      NativeProfileProjection* diagnostic = nullptr) const;
+  void ReportNativeProfileDiagnostics(const char* boundary) const noexcept;
+  ProfileRosterResult SettleRoster(const std::shared_ptr<ProfileRosterIntent>&,
+                                  bool native_joined);
+  std::shared_ptr<ProfileRosterAuthority> roster_authority_;
+  std::shared_ptr<const ProfileRosterNativeBinding> ClaimNativeRosterFactory();
+  bool InstallNativeRosterOwner(
+      const std::shared_ptr<const ProfileRosterNativeBinding>&,
+      std::weak_ptr<::xe::kernel::NativeProfileIdentityOwner>);
+  std::shared_ptr<ProfileRosterNativeReadTicket> CaptureCurrentNativeReadTicket(
+      const std::shared_ptr<const ProfileRosterNativeBinding>&,
+      std::error_code&);
+  std::shared_ptr<ProfileRosterPublicationCell> EnterNativeRoster(
+      const std::shared_ptr<ProfileRosterIntent>&,
+      const std::shared_ptr<const ProfileRosterNativeBinding>&,
+      std::error_code&);
+  ProfileRosterResult FinalizeNativeRoster(
+      const std::shared_ptr<ProfileRosterIntent>&,
+      const ProfileRosterNativeCompletion&);
+
+  friend class ProfileSettingsReadProvider;
+  friend class test::ProfileSettingsReadTestAccess;
+  friend bool ProfileSettingsReadBatch::IdentityCurrentAdmitted() const;
+  friend X_STATUS ProfileSettingsReadBatch::Publish(
+      Memory&, std::span<const util::GuestIoWrite>) const;
+  struct ProfileReadMountNode {
+    std::weak_ptr<const ProfileSettingsReadUse> use;
+    std::shared_ptr<ProfileSettingsReadNativeOwners> native;
+    std::shared_ptr<ProfileReadMountNode> next;
+    uint64_t mount_generation = 0;
+  };
+  // The first read after durable creation has no cached Account origin yet.
+  // Keep the exact selected source through that shared discovery path.
+  bool LoadAccountInternal(uint64_t, const ContentSourceState* exact_source,
+                           std::optional<uint64_t> discovery_revision = {});
+  bool MountProfileInternal(uint64_t, std::string,
+                            std::shared_ptr<ProfileReadMountNode> = {},
+                            const ContentSourceState* exact_source = nullptr,
+                            uint32_t* mounted_device_id = nullptr);
+  bool DismountProfileInternal(std::string_view,
+                              std::shared_ptr<ProfileReadMountNode> = {});
+  std::shared_ptr<ProfileSettingsReadLifetime> settings_read_lifetime_;
+  std::shared_ptr<const ProfileSettingsReadProvider> settings_read_provider_;
+  uint64_t next_profile_mount_generation_ = 1;
   friend class ProfileAccountFileService;
   friend class ProfileAccountManagedFile;
   std::shared_ptr<ProfileAccountCommitGate> account_commit_gate_;
@@ -241,11 +423,18 @@ class ProfileManager {
   std::shared_ptr<ProfileAccountIdentity> CaptureAccountIdentity(
       uint64_t xuid, std::error_code&);
   bool PublishAccountCache(std::shared_ptr<const ProfileAccountSnapshot>,
-                           std::error_code&);
+                           std::error_code&,
+                           std::optional<uint64_t> discovery_revision = {});
   bool SetLiveDefaults(X_XAMACCOUNTINFO* account) const;
 
-  std::filesystem::path GetProfilePath(const uint64_t xuid) const;
-  std::vector<uint64_t> FindProfiles() const;
+  struct ProfileDiscovery;
+  ProfileDiscovery FindProfiles() const;
+  // Negative last-known discovery metadata only. It grants no source/storage
+  // authority and never retires an already committed exact roster origin.
+  void MarkProfileDiscoveryConflictLocked(uint64_t);
+  std::set<uint64_t> profile_discovery_conflicts_;
+  uint64_t profile_discovery_revision_ = 1;
+  std::mutex profile_discovery_mutex_;
 
   uint8_t FindFirstFreeProfileSlot() const;
   std::bitset<XUserMaxUserCount> GetUsedUserSlots() const;
@@ -267,6 +456,12 @@ class ProfileManager {
     std::shared_ptr<ProfileStorageLease> publication_lease;
     std::shared_ptr<const filesystem::ManagedDeviceIdentity> managed_identity;
     std::shared_ptr<vfs::ManagedFileService> account_service;
+    uint64_t mount_generation = 0;
+    size_t read_references = 0;
+    std::shared_ptr<ProfileReadMountNode> read_head;
+    // Exact unpublished producer captured before common registration. Map keys
+    // are case-folded metadata; they are never a registered-device identity.
+    std::shared_ptr<vfs::HostPathDevice> device;
   };
   mutable std::recursive_mutex profile_mount_mutex_;
   std::mutex profile_config_mutex_;
@@ -278,6 +473,10 @@ class ProfileManager {
   // survive the unique UserProfile destroyed by sign-out. Never drop by XUID.
   std::vector<std::shared_ptr<ProfileGpdModelAuthority>> retired_gpd_models_;
 
+  uint32_t AllocateProfileCreationResultEntered(std::span<const uint8_t>,
+                                                std::error_code&);
+  bool CompleteProfileCreationResultEntered(uint32_t, ProfileCreationResult);
+  void DiscardProfileCreationResultEntered(uint32_t);
   struct GuestProfileCreationResult {
     ProfileCreationResult result;
     bool completed = false, consuming = false;

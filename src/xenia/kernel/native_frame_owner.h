@@ -49,6 +49,10 @@ class NativeFrameSource {
   const memory::PhysicalAllocationOwner& owner() const { return owner_; }
   uint64_t serial() const { return serial_; }
   std::span<const uint8_t> primary() const { return primary_; }
+  const std::shared_ptr<const gpu::NativeFramePresentationGuard>&
+  presentation_guard() const {
+    return presentation_guard_;
+  }
   const std::shared_ptr<const gpu::NativeSystemTitleInput>& title_input()
       const {
     return title_input_;
@@ -59,15 +63,19 @@ class NativeFrameSource {
   NativeFrameSource(
       memory::PhysicalAllocationOwner owner, uint64_t serial,
       std::vector<uint8_t> primary,
-      std::shared_ptr<const gpu::NativeSystemTitleInput> title_input)
+      std::shared_ptr<const gpu::NativeSystemTitleInput> title_input,
+      std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard)
       : owner_(owner),
         serial_(serial),
         primary_(std::move(primary)),
-        title_input_(std::move(title_input)) {}
+        title_input_(std::move(title_input)),
+        presentation_guard_(std::move(presentation_guard)) {}
   const memory::PhysicalAllocationOwner owner_;
   const uint64_t serial_;
   const std::vector<uint8_t> primary_;
   const std::shared_ptr<const gpu::NativeSystemTitleInput> title_input_;
+  const std::shared_ptr<const gpu::NativeFramePresentationGuard>
+      presentation_guard_;
 };
 
 // Production implementation belongs to NativeGraphicsDeviceBinding and owns
@@ -198,12 +206,16 @@ class NativeFrameOwnerSession
   std::shared_ptr<const Source> Freeze(
       const ThreadIdentity& thread, Update& update,
       std::span<const uint8_t> primary,
-      std::shared_ptr<const gpu::NativeSystemTitleInput> title_input = {});
+      std::shared_ptr<const gpu::NativeSystemTitleInput> title_input = {},
+      std::shared_ptr<const gpu::NativeFramePresentationGuard>
+          presentation_guard = {});
   // Nested post-End seal callback may consume the persistent active update;
   // the original outer guard need not be accessible in that callback.
   std::shared_ptr<const Source> FreezeCurrentUpdate(
       const ThreadIdentity& thread, std::span<const uint8_t> primary,
-      std::shared_ptr<const gpu::NativeSystemTitleInput> title_input = {});
+      std::shared_ptr<const gpu::NativeSystemTitleInput> title_input = {},
+      std::shared_ptr<const gpu::NativeFramePresentationGuard>
+          presentation_guard = {});
   bool AttachPhysicalPin(const ThreadIdentity& thread,
                          const std::shared_ptr<const Source>& source,
                          std::shared_ptr<const memory::PhysicalRangePin> pin);

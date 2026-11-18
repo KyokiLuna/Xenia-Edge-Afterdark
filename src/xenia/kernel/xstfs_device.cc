@@ -19,6 +19,7 @@
 #include "xenia/kernel/xfile.h"
 #include "xenia/vfs/devices/xcontent_container_device.h"
 #include "xenia/vfs/devices/xcontent_devices/stfs_container_device.h"
+#include "xenia/vfs/host_storage_errors.h"
 
 namespace xe::kernel {
 namespace {
@@ -131,39 +132,52 @@ uint64_t XStfsDevice::pointer_references() const {
   return pointer_references_;
 }
 bool XStfsDevice::retired() const {
-  std::lock_guard lock(state_mutex_);
-  return retired_;
+  std::shared_ptr<vfs::Device> active; bool retired;
+  {
+    std::lock_guard lock(state_mutex_);
+    retired = retired_ || dismounting_; active = active_device_.lock();
+  }
+  return retired || !active || active->namespace_retiring();
 }
 X_STATUS XStfsDevice::Control(uint32_t /*code*/) const {
-  std::lock_guard lock(state_mutex_);
-  if (retired_ || !active_device_ ||
-      static_cast<const vfs::StfsContainerDevice*>(
-          active_device_.get())->retired()) { return kDisconnected; }
-  // Even descriptor3 is left unsupported in this first consumer slice. The
-  // evidenced mode2/3 PIRS mount/read/close route needs none of these controls.
-  // In particular, no fake flush, checkpoint or error-poll success is emitted.
+  std::shared_ptr<vfs::Device> active; bool retired;
+  {
+    std::lock_guard lock(state_mutex_);
+    retired = retired_ || dismounting_; active = active_device_.lock();
+  }
+  if (retired || !active || active->namespace_retiring() ||
+      static_cast<const vfs::StfsContainerDevice*>(active.get())->retired()) { return kDisconnected; }
   return X_STATUS_INVALID_DEVICE_REQUEST;
 }
+
 X_STATUS XStfsDevice::Dismount() {
   std::shared_ptr<vfs::Device> active;
   {
     std::lock_guard lock(state_mutex_);
-    if (retired_) { return kDisconnected; }
-    retired_ = true;
-    active = std::move(active_device_);
+    if (retired_ || dismounting_) { return kDisconnected; }
+    dismounting_ = true; active = active_device_.lock();
   }
-  // No state mutex or GCRC is held while an actual reader/FD may be destroyed.
-  // A namespace replacement is never removed on the old body's behalf.
-  if (active) {
-    kernel_state()->file_system()->UnregisterDevice(mount_name_, active.get());
-    active->Retire();
+  // The same closure handles native/HLE descendants. No raw Kernel callback
+  // lives in a File/Device destructor, and no state mutex spans actual rundown.
+  const auto status = active ? kernel_state()->RetireMountedDeviceTree(active)
+                             : X_STATUS_SUCCESS;
+  {
+    std::lock_guard lock(state_mutex_);
+    dismounting_ = false;
+    if (XSUCCEEDED(status)) { retired_ = true; active_device_.reset(); }
   }
-  active.reset();
-  return X_STATUS_SUCCESS;
+  // The first explicit dismount still acknowledges a body whose old mount
+  // was already withdrawn/replaced. It never chooses the replacement by name.
+  return status;
 }
 
 X_STATUS XStfsDevice::Create(KernelState& kernel, uint32_t address,
                               uint32_t size) {
+  return CreateInternal(kernel, address, size, false);
+}
+X_STATUS XStfsDevice::CreateInternal(KernelState& kernel, uint32_t address,
+    uint32_t size, bool retire_parent_before_commit,
+    std::unique_ptr<vfs::Device>* replacement_before_commit) {
   if (size != sizeof(CreatePacket)) { return X_STATUS_INVALID_PARAMETER; }
   if (global_critical_region::is_held_by_current_thread()) {
     return X_STATUS_INVALID_DEVICE_REQUEST;
@@ -206,6 +220,14 @@ X_STATUS XStfsDevice::Create(KernelState& kernel, uint32_t address,
   auto owner = std::make_shared<object_ref<XFile>>(std::move(file));
   std::shared_ptr<vfs::File> shared(owner, (*owner)->file());
   if (!shared) { return X_STATUS_INVALID_HANDLE; }
+  auto parent = shared->retained_device();
+  {
+    auto lock = global_critical_region::AcquireDirect();
+    if (!parent || parent.get() != (*owner)->device() || parent->namespace_retiring() ||
+        kernel.file_system()->AcquireDevice(parent->mount_path()) != parent) {
+      return kDisconnected;
+    }
+  }
   std::unique_ptr<vfs::XContentContainerDevice> device;
   const auto read_error = std::make_shared<std::atomic<X_STATUS>>(X_STATUS_SUCCESS);
   const bool concurrent = shared->retained_device() &&
@@ -264,16 +286,31 @@ X_STATUS XStfsDevice::Create(KernelState& kernel, uint32_t address,
   if (!kernel.KeepNativeStfsDevice(stfs)) {
     return X_STATUS_INSUFFICIENT_RESOURCES;
   }
+  std::unique_ptr<vfs::Device> prepared_device = std::move(device);
+  std::error_code preparation_error;
+  auto prepared = kernel.file_system()->PrepareDeviceRegistration(
+      prepared_device, preparation_error, parent);
+  if (!prepared) { return preparation_error ? vfs::HostStorageError(preparation_error) : kDisconnected; }
+  if (retire_parent_before_commit) {
+    status = kernel.RetireMountedDeviceTree(parent);
+    if (XFAILED(status)) { return status; }
+    if (replacement_before_commit) {
+      if (!*replacement_before_commit) { return X_STATUS_INVALID_PARAMETER; }
+      std::shared_ptr<vfs::Device> replacement;
+      status = kernel.file_system()->RegisterDeviceExclusive(
+          std::move(*replacement_before_commit), replacement);
+      if (XFAILED(status)) { return status; }
+    }
+  }
   std::shared_ptr<vfs::Device> registered;
-  status = kernel.file_system()->RegisterDeviceExclusive(std::move(device),
-                                                        registered);
+  status = kernel.file_system()->RegisterPreparedDeviceExclusive(*prepared, registered);
   if (status != X_STATUS_SUCCESS) { return status; }
   {
     std::lock_guard lock(stfs->state_mutex_);
     stfs->active_device_ = registered;
     stfs->retired_ = false;
   }
-  if (static_cast<const vfs::StfsContainerDevice*>(
+  if (registered->namespace_retiring() || static_cast<const vfs::StfsContainerDevice*>(
           registered.get())->retired()) {
     stfs->Dismount();
     return kDisconnected;

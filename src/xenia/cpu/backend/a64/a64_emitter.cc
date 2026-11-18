@@ -30,6 +30,11 @@
 #include "xenia/kernel/native_notification_presentation.h"
 #include "xenia/kernel/native_content_storage_driver.h"
 #include "xenia/kernel/native_managed_format_frontdoor.h"
+#include "xenia/kernel/native_avatar_service.h"
+#include "xenia/kernel/native_system_ui_service.h"
+#include "xenia/kernel/native_media_service.h"
+#include "xenia/kernel/native_profile_identity_hooks.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 
 DECLARE_int64(a64_max_stackpoints);
 DECLARE_bool(a64_enable_host_guest_stack_synchronization);
@@ -263,6 +268,37 @@ bool A64Emitter::Emit(hir::HIRBuilder* builder, EmitFunctionInfo& func_info) {
   // ========================================================================
   code_offsets.body = getSize();
 
+  // Allocate the epilog label (owned by label_cache_ for cleanup).
+  auto epilog_label_ptr = new Label();
+  label_cache_.push_back(epilog_label_ptr);
+  epilog_label_ = epilog_label_ptr;
+
+  // Claimed SYSTEM Editor calls use the paired owned host loader provider.
+  // Every unclaimed/other loader call continues its original native body.
+  if(kernel::NativeSystemUiService::HooksEditorLoaderFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeSystemUiService::GuardEditorLoaderEntry));
+    cbz(x0,epilog_label());
+  }
+  if(kernel::NativeSystemUiService::HooksSigninFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeSystemUiService::ObserveSigninEntry));
+  }
+  if(kernel::NativeMediaService::HooksFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeMediaService::GuardEntry));
+    cbz(x0,epilog_label());
+  }
+  if(kernel::NativeAvatarService::HooksFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeAvatarService::GuardEntry));
+    cbz(x0,epilog_label());
+  }
+  if(kernel::HooksNativeProfileIdentity(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeProfileIdentityOwner::GuardEntry));
+    cbz(x0,epilog_label());
+  }
   // Narrow production storage frontdoor; authenticated owners reject foreign calls.
   if (kernel::NativeManagedFormatFrontdoor::HooksFunction(current_guest_function_)) {
     mov(x1, static_cast<uint64_t>(current_guest_function_));
@@ -314,11 +350,6 @@ bool A64Emitter::Emit(hir::HIRBuilder* builder, EmitFunctionInfo& func_info) {
     mov(x1, static_cast<uint64_t>(current_guest_function_));
     CallNative(reinterpret_cast<void*>(TraceFunctionEntry));
   }
-
-  // Allocate the epilog label (owned by label_cache_ for cleanup).
-  auto epilog_label_ptr = new Label();
-  label_cache_.push_back(epilog_label_ptr);
-  epilog_label_ = epilog_label_ptr;
 
   // Walk HIR blocks and emit ARM64 instructions.
   auto block = builder->first_block();
@@ -430,6 +461,22 @@ bool A64Emitter::Emit(hir::HIRBuilder* builder, EmitFunctionInfo& func_info) {
   if (synchronize_stack_on_next_instruction_) {
     synchronize_stack_on_next_instruction_ = false;
     EnsureSynchronizedGuestAndHostStack();
+  }
+  if(kernel::NativeMediaService::HooksFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeMediaService::ObserveReturn));
+  }
+  if(kernel::NativeAvatarService::HooksFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeAvatarService::ObserveReturn));
+  }
+  if(kernel::HooksNativeProfileIdentity(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeProfileIdentityOwner::ObserveReturn));
+  }
+  if(kernel::NativeSystemUiService::HooksSigninFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeSystemUiService::ObserveSigninReturn));
   }
   // Narrow production storage frontdoor; authenticated owners reject foreign calls.
   if (kernel::NativeManagedFormatFrontdoor::HooksFunction(current_guest_function_)) {

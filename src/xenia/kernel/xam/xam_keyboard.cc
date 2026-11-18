@@ -104,9 +104,9 @@ X_RESULT ShowKeyboardUI(
     return X_ERROR_ACCESS_DENIED;
   }
   if (host_route) {
-    auto selected_reservation = std::make_shared<HostUiFallbackReservation>(
+    auto selected_reservation = HostUiFallbackReservation::TryCreate(
         xam, state->emulator()->input_system());
-    if (!selected_reservation->input_gap()) {
+    if (!selected_reservation || !selected_reservation->input_gap()) {
       return X_ERROR_NOT_READY;
     }
     auto completion = std::make_shared<HostUiFallbackCompletion>();
@@ -120,6 +120,7 @@ X_RESULT ShowKeyboardUI(
                 default_text = std::move(default_text),
                 title = std::move(title), description = std::move(description)](
                    uint32_t& extended_error, uint32_t& length) -> X_RESULT {
+      HostUiFallbackOperationCompletion operation_completion(host_route);
       constexpr size_t kNoCopyEditingBudget = 256;
       const size_t max_units =
           buffer_length ? buffer_length - 1 : kNoCopyEditingBudget;
@@ -150,8 +151,10 @@ X_RESULT ShowKeyboardUI(
       const auto value = completion->result();
       selected_reservation->Release();
       length = 0;
-      if (value.result != xe::ui::TextEntryResult::kAccepted) {
-        const auto result = CompleteKeyboardText(value.result, {}, {});
+      auto entered = host_route->TryEnter();
+      if (!entered || value.result != xe::ui::TextEntryResult::kAccepted) {
+        const auto result = CompleteKeyboardText(
+            entered ? value.result : xe::ui::TextEntryResult::kAborted, {}, {});
         extended_error = result.extended_error;
         return result.result;
       }
@@ -171,9 +174,11 @@ X_RESULT ShowKeyboardUI(
       extended_error = result.extended_error;
       return result.result;
     };
-    auto post = [state, host_route] {
+    auto post = [state] {
       xe::threading::Sleep(std::chrono::milliseconds(200));
-      state->BroadcastNotification(kXNotificationSystemUI, false);
+      if (!state->xam_state()->IsUIActive()) {
+        state->BroadcastNotification(kXNotificationSystemUI, false);
+      }
     };
     if (overlapped) {
       state->CompleteOverlappedDeferredEx(std::move(run), overlapped,

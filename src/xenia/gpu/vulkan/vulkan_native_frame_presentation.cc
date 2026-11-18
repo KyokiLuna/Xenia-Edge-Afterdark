@@ -160,6 +160,7 @@ VulkanCommandProcessor::BeginNativePresentationImage(
   image->backend_epoch = request->backend_epoch();
   image->version = native_presentation_next_version_++;
   image->authority = std::move(authority);
+  image->presentation_guard = request->presentation_guard();
   if (request->output_layout()) {
     image->width = request->output_layout()->width;
     image->height = request->output_layout()->height;
@@ -356,7 +357,11 @@ void VulkanCommandProcessor::PublishCompletedNativePresentationImages() {
         image->native_completion.status() != GpuCompletionStatus::kComplete) {
       continue;
     }
-    if (!image->authority || !image->authority->IsLive() ||
+    if ((image->presentation_guard &&
+         (image->presentation_guard->IsRevoked() ||
+          !image->presentation_guard->IsLive() ||
+          image->presentation_guard->IsRevoked())) ||
+        !image->authority || !image->authority->IsLive() ||
         presenter->GetNativeUiPlaneAuthority(
             image->identity.owner, image->backend_epoch) != image->authority) {
       static xe::NativeSystemUiTraceLimiter limiter;
@@ -378,6 +383,7 @@ void VulkanCommandProcessor::PublishCompletedNativePresentationImages() {
     ui::vulkan::VulkanPresenter::NativeUiPlaneImage publication;
     publication.device = GetVulkanDevice();
     publication.authority = image->authority;
+    publication.presentation_guard = image->presentation_guard;
     publication.identity = image->identity;
     publication.backend_epoch = image->backend_epoch;
     publication.version = image->version;

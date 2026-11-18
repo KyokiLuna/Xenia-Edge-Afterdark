@@ -61,8 +61,9 @@ class XContentReadBacking {
   static std::unique_ptr<XContentReadBacking> FromFile(File*&);
   // Nonconsuming admission. The shared alias must retain the actual File's
   // owner (for example its existing XFile); it must not Destroy that borrowed
-  // File independently. Failure does not change the caller's owner. Initially
-  // supports HostPathFile with real retained-handle size/identity queries.
+  // File independently. Failure does not change the caller's owner. HostPath
+  // requires real retained-handle size/identity queries; an immutable non-host
+  // File retains its actual readonly Device/Entry extent and read semantics.
   // The same read-only/mutating-close policy as FromFile applies.
   static std::unique_ptr<XContentReadBacking> FromSharedFile(
       const std::shared_ptr<File>& file, X_STATUS* status = nullptr);
@@ -91,11 +92,13 @@ class XContentContainerDevice : public Device {
   static std::unique_ptr<XContentContainerDevice> CreateContentDevice(
       const std::string_view mount_path, Entry* entry);
 
-  // STFS only: the retained reader supplies the same parser without a host
-  // reopen or whole-file mapping. SVOD still needs its fragmented host source.
+  // The retained reader supplies the package header without a host reopen.
+  // SVOD additionally requires the original host path for its data fragments;
+  // borrowed guest entries (no host path) remain STFS-only.
   static std::unique_ptr<XContentContainerDevice> CreateContentDevice(
       const std::string_view mount_path,
-      std::unique_ptr<XContentReadBacking> backing);
+      std::unique_ptr<XContentReadBacking> backing,
+      const std::filesystem::path& host_path = {});
 
   static std::unique_ptr<XContentContainerHeader> ReadContainerHeader(
       const XContentReadBacking& backing);
@@ -112,6 +115,10 @@ class XContentContainerDevice : public Device {
   ~XContentContainerDevice() override;
 
   bool Initialize() override;
+  std::shared_ptr<Device> RetainedBackingParent() const override {
+    const auto* entry = backing_ ? backing_->package_entry() : nullptr;
+    return entry ? entry->device()->weak_from_this().lock() : nullptr;
+  }
   std::optional<std::vector<filesystem::GuestHostBacking>> GuestBackings()
       const override {
     if (backing_required_) {

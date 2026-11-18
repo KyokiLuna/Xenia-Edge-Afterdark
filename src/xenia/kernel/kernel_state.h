@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "xenia/base/bit_map.h"
+#include "xenia/base/native_ui_backend_route.h"
 #include "xenia/base/physical_range_leases.h"
 #include "xenia/cpu/backend/backend.h"
 #include "xenia/cpu/export_resolver.h"
@@ -60,6 +61,7 @@ class AchievementManager;
 class AppManager;
 class ContentManager;
 class XamState;
+class HostUiFallbackAccess;
 struct XCONTENT_AGGREGATE_DATA;
 }  // namespace xam
 }  // namespace kernel
@@ -222,6 +224,8 @@ class KernelState {
   // Conservative native STFS body/context lifetime; never owns retired mounts
   // or file/source leases. Reclaimed only after actual Kernel CPU shutdown.
   bool KeepNativeStfsDevice(const object_ref<XStfsDevice>& device);
+  X_STATUS RetireMountedDeviceTree(const std::shared_ptr<vfs::Device>&,
+                                  bool include_root = true);
 
   uint32_t title_id() const;
   bool is_title_open() const;
@@ -414,6 +418,7 @@ class KernelState {
   // Terminates a title: Unloads all modules, and kills all guest threads.
   // This DOES NOT RETURN if called from a guest thread!
   void TerminateTitle();
+  void SealStoragePreparation();
 
   // Handles a game-requested exit to the dashboard: hands off to the host UI
   // when it registered a handler, otherwise terminates the title.
@@ -427,6 +432,17 @@ class KernelState {
   // Gracefully stops the dispatch thread. Call before force-terminating
   // threads to avoid corrupting the CV it's blocked on.
   void ShutdownDispatchThread();
+  // Existing XAM SystemUI flag arbitrates all host modal callers. This exact
+  // Kernel epoch only grants host callback rundown, never native readiness.
+  std::shared_ptr<NativeUiBackendRoute::HostLease> AcquireLegacyHostUi();
+  std::weak_ptr<xam::HostUiFallbackAccess> host_ui_access() const {
+    return host_ui_access_;
+  }
+  bool QueueHostUiWork(std::function<void()>);
+  void BeginStopLegacyHostUi() noexcept;
+  bool SealLegacyHostUi() noexcept;
+  std::shared_ptr<NativeUiBackendRoute::NativeCreationLease>
+      AcquireNativeUiCreation();
 
   void RegisterThread(XThread* thread);
   void UnregisterThread(XThread* thread);
@@ -530,6 +546,12 @@ class KernelState {
   std::array<uint32_t, 0x11> xbdm_counters_address = {};
 
  private:
+  friend class NativeProfileIdentityOwner;
+  // Denial-only cache for the explicitly selected identity factory. Native
+  // DC628 cannot consult a registry under its publisher lock. This never
+  // grants publication: an exact actual-Task prebound cell is still required.
+  // A failed/retired factory cannot reopen raw cache writes in this Kernel.
+  std::atomic<bool> native_profile_identity_claimed_{false};
   void CompleteUserModuleUnload(const object_ref<UserModule>& module,
                                 bool call_entry);
   void LoadKernelModule(object_ref<KernelModule> kernel_module);
@@ -604,6 +626,13 @@ class KernelState {
   std::vector<TerminateNotification> terminate_notifications_;
   uint32_t kernel_guest_globals_ = 0;
 
+  bool InitializeDispatchThread();
+  bool dispatch_stopping_ = false;
+  NativeUiBackendRoute host_ui_route_;
+  const std::shared_ptr<const NativeUiBackendRoute::HostOnlyEpoch>
+      host_ui_epoch_ =
+          std::make_shared<const NativeUiBackendRoute::HostOnlyEpoch>();
+  std::shared_ptr<xam::HostUiFallbackAccess> host_ui_access_;
   std::atomic<bool> dispatch_thread_running_;
   object_ref<XHostThread> dispatch_thread_;
   // Must be guarded by the global critical region.

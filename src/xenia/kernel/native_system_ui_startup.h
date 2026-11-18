@@ -19,12 +19,19 @@
 #include "xenia/base/physical_range_leases.h"
 #include "xenia/kernel/guest_runtime.h"
 #include "xenia/kernel/native_system_title_heap_data.h"
+namespace xe { class Memory; }
 namespace xe::kernel {
 class GuestRuntimeCallExecutor;
 class NativeSystemAllocationAuthority;
 class XThread;
 class NativeSystemUiService;
 class NativeSystemContent;
+struct ValidatedGuestRuntimePlan;
+// The optional stop descriptor does not start, identify or own a native Task.
+// A typed factory owner separately requires it before creating periodic work.
+enum class NativeSystemPeriodicServiceStopPlan { kAbsent, kComplete, kInvalid };
+NativeSystemPeriodicServiceStopPlan CheckNativeSystemPeriodicServiceStopPlan(
+    const ValidatedGuestRuntimePlan&, std::string* error = nullptr);
 struct NativeSystemInputCallbackProfile {
   uint32_t user_binding = 0, device_config = 0, failed_binding = 0;
 };
@@ -43,8 +50,20 @@ enum class NativeSystemUiStartupPhase {
   kSystemContentIndex = 10,
   kSystemContentLookup = 11,
   kSystemStorageInitialized = 12,
-  kSystemStorageBootCompleted = 13
+  kSystemStorageBootCompleted = 13,
+  kProfileData = 14
 };
+// Bounded data observation only. These bytes cannot establish that an original
+// initializer ran, native ownership, or readiness without the catalog/call cut.
+struct NativeSystemProfileInitializationData {
+  enum class Status { kUnavailable, kQueueTag, kQueueObject, kQueueState,
+                      kBuffer, kValid };
+  Status status = Status::kUnavailable;
+  uint32_t queue_reference = 0, queue_body = 0;
+  std::array<uint32_t, 8> buffers{};
+};
+NativeSystemProfileInitializationData ReadNativeSystemProfileInitializationData(
+    Memory&);
 struct NativeSystemUiStartupSymbols {
   uint32_t manager_base = 0, dc_cell = 0;
   uint32_t shared_device_cell = 0, record_context_cell = 0;
@@ -80,6 +99,9 @@ class NativeSystemUiStartupCatalog {
   const GuestRuntime::Plan& early_plan() const;
   const GuestRuntime::Plan& frontend_plan() const;
   const NativeSystemStartupTaskFunctions& task_functions() const;
+  // Exact original SYSTEM-callable Cancel/Wait/Close wrapper, deferred only.
+  // Null keeps legacy plans valid but cannot authorize the periodic factory.
+  const GuestRuntime::Function* periodic_service_stop() const;
   // Transport-only verified unused private-root81696558 entry; never execute
   // its original whole-boot body. Root may instead use a trusted Kernel thunk.
   const GuestRuntime::Function& frontend_callback_entry() const;
@@ -103,6 +125,10 @@ class NativeSystemUiStartupCatalog {
   // This observes initialization only, never a notification or UI owner.
   bool CheckNativeNotificationInitialization(
       std::string* error = nullptr) const;
+  // Initialization-cut only, immediately after original816DB788. Later native
+  // queue references/state and profile bytes are legitimately mutable. Never
+  // use this pristine check as a live getter/readiness predicate.
+  bool CheckNativeProfileInitialization(std::string* error = nullptr) const;
   // Host implementation of the three verified Kernel registrations in original
   // Main. This profile is read once BEFORE the first callback can run. It never
   // executes a Main interior or writes native tables/event/voice cells.
@@ -122,6 +148,8 @@ class NativeSystemUiStartupCatalog {
       XThread& actual_bootstrap, const NativeSystemPreparedTitle&) const;
   struct State;
   explicit NativeSystemUiStartupCatalog(std::unique_ptr<State>);
+  bool CheckNativeProfileInitializationSource(std::string* error) const;
+  bool CheckNativeProfileInitializationUnused(std::string* error) const;
   friend class NativeSystemUiStartupRuntime;
   std::unique_ptr<State> state_;
 };

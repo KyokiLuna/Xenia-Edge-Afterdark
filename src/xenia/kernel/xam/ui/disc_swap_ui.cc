@@ -50,7 +50,7 @@ DiscSwapUI::DiscSwapUI(xe::ui::ImGuiDrawer* imgui_drawer,
   }
 }
 
-void DiscSwapUI::OnDraw(ImGuiIO& io) {
+void DiscSwapUI::OnDrawDialog(ImGuiIO& io) {
   if (!has_opened_) {
     ImGui::OpenPopup(title_.c_str());
     has_opened_ = true;

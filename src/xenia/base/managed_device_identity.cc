@@ -5,6 +5,8 @@
  * Released under the BSD license - see LICENSE in the root for more details.
  */
 #include "xenia/base/managed_device_identity.h"
+#include "xenia/base/cache_storage_owner.h"
+#include "xenia/base/managed_storage_bootstrap.h"
 #include <algorithm>
 #include <mutex>
 #include <optional>
@@ -18,6 +20,8 @@ constexpr std::string_view kMagic = "XMDI001\n", kEpochMagic = "XMEPO01\n";
 constexpr size_t kMaximum = 65536, kRecordBytes = 88;
 constexpr std::string_view kFormatMagic = "XMFMT01\n";
 constexpr size_t kFormatRecordBytes = 136;
+constexpr std::string_view kBootstrapMagic = "XMVREF1\n";
+constexpr size_t kBootstrapRecordBytes = 168;
 enum class FormatPhase : uint64_t { kPrepared = 1, kOwnersReady = 2, kCommitted = 3 };
 struct FormatRecord {
   uint64_t old_epoch = 0;
@@ -98,6 +102,8 @@ struct Record {
   std::string source, location;
   bool pending = false;
   std::optional<FormatRecord> format;
+  std::optional<ManagedBootstrapReference> bootstrap;
+  Digest bootstrap_prefix{};
   bool handoff_pending() const {
     return format && format->phase != FormatPhase::kCommitted;
   }
@@ -139,6 +145,16 @@ std::vector<uint8_t> Initial(const Record& r, std::error_code& error) {
   const auto hash = Hash(wire, error);
   Raw(wire, hash);
   Raw(wire, Epoch(1, false, hash, error));
+  return wire;
+}
+std::vector<uint8_t> BootstrapFrame(const ManagedBootstrapReference& reference,
+    const Digest& previous, std::error_code& error) {
+  std::vector<uint8_t> wire;
+  Raw(wire, {reinterpret_cast<const uint8_t*>(kBootstrapMagic.data()), 8});
+  U64(wire, reference.epoch); U64(wire, reference.binding_directory);
+  Raw(wire, reference.nonce); Raw(wire, reference.pending_digest);
+  Raw(wire, reference.prefix_digest); Raw(wire, previous);
+  Raw(wire, Hash(wire, error));
   return wire;
 }
 Record Decode(std::span<const uint8_t> wire, std::error_code& error) {
@@ -191,8 +207,12 @@ Record Decode(std::span<const uint8_t> wire, std::error_code& error) {
         {reinterpret_cast<const uint8_t*>(kEpochMagic.data()), 8});
     const bool format_record = Equal(magic,
         {reinterpret_cast<const uint8_t*>(kFormatMagic.data()), 8});
-    const auto length = epoch_record ? kRecordBytes : kFormatRecordBytes;
-    if ((!epoch_record && !format_record) || outer.bytes.size() < length) {
+    const bool bootstrap_record = Equal(magic,
+        {reinterpret_cast<const uint8_t*>(kBootstrapMagic.data()), 8});
+    const auto length = epoch_record ? kRecordBytes :
+        bootstrap_record ? kBootstrapRecordBytes : kFormatRecordBytes;
+    if ((!epoch_record && !format_record && !bootstrap_record) ||
+        outer.bytes.size() < length) {
       error = Bad();
       return {};
     }
@@ -228,6 +248,34 @@ Record Decode(std::span<const uint8_t> wire, std::error_code& error) {
       result.pending = phase == 1;
       digest = next;
       first = false;
+      continue;
+    }
+    if (bootstrap_record) {
+      ManagedBootstrapReference observed;
+      observed.epoch = entry.U64();
+      observed.binding_directory = entry.U64();
+      const auto nonce = entry.Take(16), pending = entry.Take(32),
+                 prefix = entry.Take(32);
+      if (nonce.size() != 16 || pending.size() != 32 || prefix.size() != 32 ||
+          first || result.bootstrap || result.pending || result.handoff_pending() ||
+          observed.epoch != result.epoch || !observed.binding_directory ||
+          std::all_of(nonce.begin(), nonce.end(), [](auto b) { return !b; }) ||
+          std::all_of(pending.begin(), pending.end(), [](auto b) { return !b; }) ||
+          !Equal(entry.Take(32), digest)) {
+        error = Bad(); return {};
+      }
+      const auto prefix_size = wire.size() - outer.bytes.size() - length;
+      const auto actual_prefix = Hash(wire.first(prefix_size), error);
+      auto next = Hash(raw.first(kBootstrapRecordBytes - 32), error);
+      if (error || !Equal(prefix, actual_prefix) ||
+          !Equal(entry.Take(32), next) || entry.error || !entry.bytes.empty()) {
+        error = error ? error : Bad(); return {};
+      }
+      std::copy(nonce.begin(), nonce.end(), observed.nonce.begin());
+      std::copy(pending.begin(), pending.end(), observed.pending_digest.begin());
+      std::copy(prefix.begin(), prefix.end(), observed.prefix_digest.begin());
+      result.bootstrap = observed; result.bootstrap_prefix = actual_prefix;
+      digest = next;
       continue;
     }
     FormatRecord observed;
@@ -307,6 +355,7 @@ ManagedDeviceIdentity::ManagedDeviceIdentity(
       pending_format_(pending),
       state_(std::move(state)) {
   retired_.store(pending, std::memory_order_release);
+  binding_required_.store(bool(state_->record.bootstrap), std::memory_order_release);
 }
 ManagedDeviceIdentity::~ManagedDeviceIdentity() = default;
 std::shared_ptr<const ManagedDeviceIdentity> ManagedDeviceIdentity::Open(
@@ -336,90 +385,214 @@ bool ManagedDeviceIdentity::CheckExisting(
 std::shared_ptr<const ManagedDeviceIdentity>
 ManagedDeviceIdentity::OpenInternal(
     std::shared_ptr<const HostStorageRoot> source, std::string source_id,
-    uint32_t device_id, std::error_code& error, bool create, bool admit_guest) {
+    uint32_t device_id, std::error_code& error, bool create, bool admit_guest,
+    std::shared_ptr<const HostStorageIntentLease> same_source_lease,
+    std::shared_ptr<ManagedStorageBootstrap> bootstrap,
+    std::span<const uint8_t> complete_initial,
+    std::string_view initializer_nonce, const CacheStorageOwner* cache_initializer) {
   error.clear();
   if (!source || source->read_only() || source->is_guest_private() ||
       source_id.empty() || source_id.size() > 256 ||
       source_id.find('\0') != std::string::npos || !device_id ||
       source->path().generic_string().size() > 4096) {
-    error = std::make_error_code(std::errc::invalid_argument);
-    return {};
+    error = std::make_error_code(std::errc::invalid_argument); return {};
   }
   const auto live = source->IntentRootIdentity(error);
-  if (error) {
-    return {};
+  if (error) { return {}; }
+  if (!bootstrap && !(cache_initializer &&
+      cache_initializer->AllowsPending(*source,source_id,device_id))) {
+    error = ManagedStorageBootstrap::BeforeNormalOpen(*source, source_id, device_id);
+    if (error) { return {}; }
   }
-  const auto mode = create ? HostStorageRoot::ManagedMetadataOpen::kCreate
-                    : admit_guest
-                        ? HostStorageRoot::ManagedMetadataOpen::kExisting
-                        : HostStorageRoot::ManagedMetadataOpen::kProbeExisting;
-  auto metadata = source->OpenManagedMetadata(kMarker, error, mode);
-  if (!metadata) {
-    return {};
+  std::vector<uint8_t> prepared;
+  if (create && complete_initial.empty()) {
+    prepared = PrepareBootstrapPrefix(*source, source_id, device_id, error);
+    if (error) { return {}; }
+    complete_initial = prepared;
   }
-  if (metadata->created_) {
-    Record record;
-    record.source = source_id;
-    record.device = device_id;
-    record.directory = live.directory;
-    record.location = source->path().generic_string();
-    std::random_device random;
-    for (auto& byte : record.uuid) {
-      byte = uint8_t(random());
-    }
-    // Explicit random UUID version/variant bits, no host/filesystem ID guess.
-    record.uuid[6] = uint8_t((record.uuid[6] & 0x0F) | 0x40);
-    record.uuid[8] = uint8_t((record.uuid[8] & 0x3F) | 0x80);
-    const auto bytes = Initial(record, error);
-    if (error) {
-      return {};
-    }
-    const auto write = metadata->Initialize(bytes);
-    error = write.error;
-    if (!error && (!write.durable || write.bytes != bytes.size())) {
-      error = std::make_error_code(std::errc::io_error);
-    }
-    if (error) {
-      return {};
-    }
-  }
+  const auto mode = same_source_lease
+      ? (create ? HostStorageRoot::ManagedMetadataOpen::kCreatePending
+                : HostStorageRoot::ManagedMetadataOpen::kExistingPending)
+      : create ? HostStorageRoot::ManagedMetadataOpen::kCreate
+               : admit_guest ? HostStorageRoot::ManagedMetadataOpen::kExisting
+                             : HostStorageRoot::ManagedMetadataOpen::kProbeExisting;
+  // Every mode returns an unadmitted same-FD metadata object. Decode and the
+  // durable binding gate must finish before any GuestView can be attached.
+  auto metadata = source->OpenManagedMetadata(kMarker, error, mode,
+      complete_initial, initializer_nonce, std::move(same_source_lease));
+  if (!metadata) { return {}; }
+  const auto publication_error = error;
+  error.clear();
   auto record = Decode(metadata->bytes_, error);
-  if (error) {
-    return {};
-  }
+  if (error) { return {}; }
   if (record.source != source_id || record.device != device_id ||
       record.directory != live.directory ||
       record.location != source->path().generic_string()) {
-    error = Conflict();
-    return {};
+    error = Conflict(); return {};
   }
   error = metadata->Check();
-  if (error) {
-    return {};
+  if (error) { return {}; }
+  auto description = DescribeBootstrapWire(metadata->bytes_, error);
+  if (error) { return {}; }
+  description.marker_file = metadata->info_.file_id;
+  auto gate = ManagedStorageBootstrap::CheckNormal(*source, description);
+  if (gate && (!bootstrap || !bootstrap->AllowsPending(*source, description)) &&
+      !(cache_initializer && cache_initializer->AllowsPending(
+          *source,source_id,device_id,&description))) {
+    error = gate; return {};
+  }
+  if (admit_guest && !bootstrap && !cache_initializer && !publication_error && !record.pending &&
+      !record.handoff_pending() && (!record.bootstrap || source->Projection())) {
+    error = source->AdmitManagedMetadata(*metadata);
+    if (error) { return {}; }
   }
   auto state = std::make_shared<State>();
-  state->record = record;
-  state->metadata = std::move(metadata);
-  auto result =
-      std::shared_ptr<const ManagedDeviceIdentity>(new ManagedDeviceIdentity(
-          std::move(source), std::move(source_id), device_id, record.uuid,
-          record.epoch, record.directory, record.location,
+  state->record = record; state->metadata = std::move(metadata);
+  auto result = std::shared_ptr<const ManagedDeviceIdentity>(
+      new ManagedDeviceIdentity(std::move(source), std::move(source_id), device_id,
+          record.uuid, record.epoch, record.directory, record.location,
           record.pending || record.handoff_pending(), std::move(state)));
-  if (record.pending || record.handoff_pending()) {
+  if (publication_error) { error = publication_error; }
+  else if (record.pending || record.handoff_pending()) {
     error = std::make_error_code(std::errc::operation_in_progress);
   }
   return result;
 }
-std::error_code ManagedDeviceIdentity::CheckCurrent() const {
-  if (retiring()) {
-    return Canceled();
+
+std::vector<uint8_t> ManagedDeviceIdentity::PrepareBootstrapPrefix(
+    const HostStorageRoot& source, std::string_view source_id, uint32_t device_id,
+    std::error_code& error) {
+  error.clear();
+  if (source_id.empty() || source_id.size() > 256 || !device_id ||
+      source_id.find('\0') != std::string_view::npos ||
+      source.path().generic_string().size() > 4096) {
+    error = std::make_error_code(std::errc::invalid_argument); return {};
   }
-  std::lock_guard lock(state_->mutex);
-  if (retiring()) {
-    return Canceled();
-  }
-  return state_->metadata->Check();
+  const auto live = source.IntentRootIdentity(error);
+  if (error) { return {}; }
+  Record record;
+  record.source = source_id; record.device = device_id;
+  record.directory = live.directory; record.location = source.path().generic_string();
+  std::random_device random;
+  for (auto& byte : record.uuid) { byte = uint8_t(random()); }
+  record.uuid[6] = uint8_t((record.uuid[6] & 0x0F) | 0x40);
+  record.uuid[8] = uint8_t((record.uuid[8] & 0x3F) | 0x80);
+  return Initial(record, error);
 }
+ManagedBootstrapSourceDescription ManagedDeviceIdentity::DescribeBootstrapWire(
+    std::span<const uint8_t> bytes, std::error_code& error) {
+  auto record = Decode(bytes, error);
+  ManagedBootstrapSourceDescription result;
+  if (error) { return result; }
+  result.uuid = record.uuid; result.epoch = record.epoch;
+  result.directory = record.directory; result.device = record.device;
+  result.source = record.source; result.location = record.location;
+  result.last_hash = record.last_hash; result.binding = record.bootstrap;
+  result.prefix_digest = record.bootstrap ? record.bootstrap_prefix : Hash(bytes, error);
+  result.format_pending = record.pending || record.handoff_pending();
+  return result;
+}
+std::vector<uint8_t> ManagedDeviceIdentity::BootstrapSuffix(
+    std::span<const uint8_t> prefix, const ManagedBootstrapReference& reference,
+    std::error_code& error) {
+  error.clear(); auto record = Decode(prefix, error);
+  if (error) { return {}; }
+  const auto actual = Hash(prefix, error);
+  if (error || record.bootstrap || record.pending || record.handoff_pending() ||
+      reference.epoch != record.epoch || !reference.binding_directory ||
+      reference.prefix_digest != actual ||
+      std::all_of(reference.nonce.begin(), reference.nonce.end(), [](auto b) { return !b; }) ||
+      std::all_of(reference.pending_digest.begin(), reference.pending_digest.end(), [](auto b) { return !b; })) {
+    error = error ? error : Conflict(); return {};
+  }
+  auto suffix = BootstrapFrame(reference, record.last_hash, error);
+  if (!error && suffix.size() > kMaximum - prefix.size()) {
+    error = std::make_error_code(std::errc::file_too_large);
+  }
+  return error ? std::vector<uint8_t>{} : suffix;
+}
+std::vector<uint8_t> ManagedDeviceIdentity::BootstrapWire(std::error_code& error) const {
+  std::lock_guard lock(state_->mutex);
+  error = state_->metadata->Check();
+  return error ? std::vector<uint8_t>{} : state_->metadata->bytes_;
+}
+ManagedDeviceIdentity::BootstrapAppendReceipt
+ManagedDeviceIdentity::AppendBootstrapReference(
+    const ManagedBootstrapReference& reference,
+    std::shared_ptr<const HostStorageIntentLease> lease,
+    std::string_view nonce) const {
+  BootstrapAppendReceipt result;
+  std::lock_guard lock(state_->mutex);
+  if (!lease || !source_->IntentLeaseMatches(*lease) ||
+      state_->metadata->guest_view_) {
+    result.error = std::make_error_code(std::errc::permission_denied); return result;
+  }
+  result.error = state_->metadata->Check();
+  if (result.error) { return result; }
+  if (state_->record.bootstrap) {
+    if (*state_->record.bootstrap != reference) { result.error = Conflict(); }
+    else { result.durable = true; }
+    return result;
+  }
+  const auto suffix = BootstrapSuffix(state_->metadata->bytes_, reference, result.error);
+  if (result.error) { return result; }
+  const auto before_uuid = state_->record.uuid;
+  const auto before_epoch = state_->record.epoch;
+  const auto written = state_->metadata->AppendBootstrapAtomically(suffix,
+      std::move(lease), nonce);
+  result.error = written.error; result.published = written.published;
+  result.durable = written.durable; result.previous = written.previous;
+  result.previous_file = written.previous_file;
+  // A post-rename barrier error cannot erase the actual marker transition.
+  // Keep the new FD/wire/tag in this unpublished owner and fail readiness.
+  if (written.published) {
+    std::error_code decoded; auto actual = Decode(state_->metadata->bytes_, decoded);
+    if (decoded || actual.uuid != before_uuid || actual.epoch != before_epoch ||
+        !actual.bootstrap || *actual.bootstrap != reference) {
+      result.error = decoded ? decoded : Conflict(); Retire(); return result;
+    }
+    state_->record = std::move(actual);
+    binding_required_.store(true, std::memory_order_release);
+  }
+  if (!result.error && (!written.published || !written.durable ||
+                         written.bytes != suffix.size())) {
+    result.error = std::make_error_code(std::errc::io_error);
+  }
+  return result;
+}
+ManagedBootstrapSourceDescription ManagedDeviceIdentity::DescribeBootstrapCurrent(
+    std::error_code& error) const {
+  std::lock_guard lock(state_->mutex);
+  error=state_->metadata->Check();if (error) { return {}; }
+  auto result=DescribeBootstrapWire(state_->metadata->bytes_,error);
+  if (!error) { result.marker_file=state_->metadata->info_.file_id; }return result;
+}
+std::error_code ManagedDeviceIdentity::AdmitBootstrapIdentity() const {
+  if (auto error = CheckCurrent()) { return error; }
+  std::lock_guard lock(state_->mutex);
+  return source_->AdmitManagedMetadata(*state_->metadata);
+}
+std::error_code ManagedDeviceIdentity::CheckCurrent() const {
+  if (retiring()) { return Canceled(); }
+  std::lock_guard lock(state_->mutex);
+  if (retiring()) { return Canceled(); }
+  auto error = state_->metadata->Check();
+  if (error) { return error; }
+  auto description = DescribeBootstrapWire(state_->metadata->bytes_, error);
+  if (error) { return error; }
+  description.marker_file = state_->metadata->info_.file_id;
+  return ManagedStorageBootstrap::CheckNormal(*source_, description);
+}
+std::error_code ManagedDeviceIdentity::CheckBootstrapCurrent(
+    const ManagedBootstrapCreationPermit& permit) const {
+  if (retiring()) { return Canceled(); }
+  {
+    std::lock_guard lock(state_->mutex);
+    if (auto error = state_->metadata->Check()) { return error; }
+  }
+  return permit.Check(*this);
+}
+
 std::unique_ptr<ManagedDeviceIdentity::Handoff>
 ManagedDeviceIdentity::PrepareHandoff(
     std::shared_ptr<const ManagedDeviceIdentity> owner, Digest binding,
@@ -507,6 +680,8 @@ ManagedDeviceIdentity::InspectHandoff(
   handoff->nonce = record.format->nonce;
   handoff->old_epoch = record.format->old_epoch;
   handoff->phase = uint64_t(record.format->phase);
+  handoff->observation_source = identity.source_;
+  handoff->observation_projection = identity.source_->Projection();
   handoff->source_lease =
       identity.state_->metadata->ReserveFormatSource(handoff->error);
   if (!handoff->source_lease || handoff->error) { return handoff; }
@@ -532,7 +707,7 @@ std::error_code ManagedDeviceIdentity::ReopenHandoffForResume(Handoff& handoff) 
   }
   std::error_code error;
   auto current = OpenInternal(source, old->source_id_, old->device_id_, error,
-                              false, false);
+                              false, false, handoff.source_lease);
   if (!current || (error && error != std::errc::operation_in_progress)) {
     return error ? error : Conflict();
   }
@@ -577,6 +752,26 @@ ManagedDeviceFormatReceipt ManagedDeviceIdentity::ExecuteHandoff(
     receipt.epoch_observed = true;
     receipt.epoch_durable = true;
     receipt.complete = true;
+    if (!handoff.recovery_source) {
+      const auto generation = owner->state_->metadata->PrepareFormatRecoveryGeneration(
+          handoff.source_lease);
+      if (generation.error || !generation.fresh_source ||
+          !generation.fresh_projection || !generation.fresh_source_lease) {
+        receipt.error = generation.error ? generation.error : Conflict();
+        receipt.complete = false; handoff.error = receipt.error; return receipt;
+      }
+      handoff.recovery_source = generation.fresh_source;
+      handoff.projection = generation.fresh_projection;
+      handoff.source_lease = generation.fresh_source_lease;
+      std::error_code error;
+      auto current = OpenInternal(generation.fresh_source, owner->source_id_,
+          owner->device_id_, error, false, false, handoff.source_lease);
+      if (!current || (error && error != std::errc::operation_in_progress)) {
+        receipt.error = error ? error : Conflict();
+        receipt.complete = false; handoff.error = receipt.error; return receipt;
+      }
+      handoff.identity = std::move(current);
+    }
   } else {
     if (record.format->phase != FormatPhase::kPrepared ||
         (record.pending ? record.epoch != receipt.content_epoch
@@ -613,7 +808,8 @@ ManagedDeviceFormatReceipt ManagedDeviceIdentity::ExecuteHandoff(
     }
     std::error_code error;
     auto current = OpenInternal(result.fresh_source, owner->source_id_,
-                                owner->device_id_, error, false, false);
+                                owner->device_id_, error, false, false,
+                                handoff.source_lease);
     if (!current || (error && error != std::errc::operation_in_progress)) {
       receipt.error = error ? error : Conflict();
       receipt.complete = false; handoff.error = receipt.error; return receipt;
@@ -640,6 +836,22 @@ ManagedDeviceFormatReceipt ManagedDeviceIdentity::ExecuteHandoff(
   handoff.phase = uint64_t(actual.format->phase);
   receipt.current = std::move(creator);
   return receipt;
+}
+std::error_code ManagedDeviceIdentity::CheckCompletedHandoff(const Handoff& handoff) {
+  if (handoff.error || !handoff.identity || !handoff.creator_ready || handoff.phase != 3 ||
+      !handoff.source_lease || !handoff.recovery_source || !handoff.projection ||
+      handoff.identity->source_ != handoff.recovery_source ||
+      !handoff.recovery_source->IntentLeaseMatches(*handoff.source_lease) ||
+      handoff.recovery_source->Projection() != handoff.projection) { return Conflict(); }
+  auto error = handoff.identity->CheckCurrent();
+  if (error) { return error; }
+  std::unique_lock lock(handoff.identity->state_->mutex, std::try_to_lock);
+  if (!lock.owns_lock()) { return std::make_error_code(std::errc::device_or_resource_busy); }
+  const auto& record = handoff.identity->state_->record;
+  return record.pending || record.epoch != handoff.old_epoch + 1 || !record.format ||
+      record.format->phase != FormatPhase::kCommitted ||
+      record.format->old_epoch != handoff.old_epoch || record.format->nonce != handoff.nonce ||
+      record.format->binding != handoff.binding ? Conflict() : std::error_code{};
 }
 std::error_code ManagedDeviceIdentity::AdvanceHandoff(
     Handoff& handoff, bool committed) {
@@ -737,8 +949,8 @@ ManagedDeviceFormatReceipt ManagedDeviceIdentity::FormatInternal(
   receipt.complete = result.complete;
   receipt.removed_entries = result.removed_entries;
   if (result.complete) {
-    receipt.current = Open(result.fresh_source, owner->source_id_,
-                           owner->device_id_, receipt.error);
+    receipt.current = OpenInternal(result.fresh_source, owner->source_id_,
+        owner->device_id_, receipt.error, false, true, result.fresh_source_lease);
     if (!receipt.current || receipt.error) {
       receipt.complete = false;
     }

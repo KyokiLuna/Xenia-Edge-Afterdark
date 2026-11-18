@@ -1,10 +1,13 @@
 #include <array>
 #include <algorithm>
 #include <fstream>
+#include <future>
+#include <thread>
 #include <random>
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/base/managed_volume_authority.h"
+#include "xenia/base/testing/cache_storage_fixture.h"
 #include "xenia/vfs/devices/host_path_entry.h"
 #include "xenia/vfs/devices/host_path_file.h"
 #include "xenia/vfs/host_storage_errors.h"
@@ -723,6 +726,119 @@ TEST_CASE("Refused device admission preserves the caller and permits later real 
   prepared.reset();CHECK(observation.destroyed==1);CHECK_FALSE(observation.under_namespace);
 }
 
+
+
+namespace {
+class PreparedFileDevice final : public HostPathDevice {
+ public:
+  PreparedFileDevice(std::string_view name,const std::filesystem::path& path,
+      std::shared_ptr<Device> parent={})
+      :HostPathDevice(name,path,true),file_(path/"data"),parent_(std::move(parent)) {}
+  std::optional<std::vector<filesystem::GuestHostBacking>> GuestBackings() const override {
+    return std::vector<filesystem::GuestHostBacking>{{file_,false}};
+  }
+  std::shared_ptr<Device> RetainedBackingParent() const override { return parent_; }
+ private:
+  std::filesystem::path file_;
+  std::shared_ptr<Device> parent_;
+};
+}
+TEST_CASE("Prepared file admission joins real contention and stop seals only registration",
+          "[vfs][prepared_mount][wait]") {
+  PreparedMountRoot root; std::ofstream(root.path/"data")<<"value";
+  VirtualFileSystem fs; std::error_code error;
+  std::unique_ptr<Device> device=std::make_unique<PreparedFileDevice>("Wait:",root.path);
+  REQUIRE(device->Initialize()); auto* exact=device.get();
+  auto space=filesystem::HostStorageSpace::ForPath(root.path,0,error); REQUIRE(space);
+  auto held=space->Begin(root.path,error); REQUIRE(held);
+  // The legacy direct lane still refuses this actual current-thread guard.
+  CHECK_FALSE(device->AdmitGuestStorage(error));
+  CHECK(error==std::errc::device_or_resource_busy);
+  std::unique_ptr<VirtualFileSystem::PreparedDeviceRegistration> prepared;
+  std::promise<void> started,finished; auto start=started.get_future(); auto done=finished.get_future();
+  std::thread worker([&]{started.set_value();prepared=fs.PrepareDeviceRegistration(device,error);finished.set_value();});
+  start.wait(); const bool waited=done.wait_for(std::chrono::milliseconds(20))==std::future_status::timeout;
+  held.reset(); worker.join();
+  CHECK(waited); REQUIRE(prepared); CHECK_FALSE(error); CHECK(prepared->device().get()==exact);
+  fs.SealStoragePreparation(); fs.BeginStoragePreparation();
+  std::shared_ptr<Device> published;
+  CHECK(fs.RegisterPreparedDeviceExclusive(*prepared,published)==X_STATUS_CANCELLED);
+  CHECK_FALSE(published);
+  // Reopening does not revive the old prepared epoch. Only a new real
+  // preparation can publish, and stopping never revokes existing file IO.
+  std::unique_ptr<Device> canceled=std::make_unique<PreparedFileDevice>("Canceled:",root.path);
+  REQUIRE(canceled->Initialize()); auto* retained=canceled.get();
+  held=space->Begin(root.path,error); REQUIRE(held);
+  std::promise<void> second_started; auto second=second_started.get_future();
+  std::unique_ptr<VirtualFileSystem::PreparedDeviceRegistration> refused;
+  std::thread stopped([&]{second_started.set_value();refused=fs.PrepareDeviceRegistration(canceled,error);});
+  second.wait(); fs.SealStoragePreparation(); stopped.join();
+  CHECK_FALSE(refused); CHECK(error==std::errc::operation_canceled); CHECK(canceled.get()==retained);
+  held.reset();
+  auto ordinary=filesystem::HostStorageRoot::Open(root.path,false,error,0); REQUIRE(ordinary);
+  auto file=ordinary->OpenFile("data",FileAccess::kFileReadData,error); REQUIRE(file);
+  std::array<uint8_t,5> bytes{}; auto read=file->ReadResult(0,bytes);
+  CHECK_FALSE(read.error); CHECK(read.bytes==5);
+  fs.BeginStoragePreparation();
+  auto fresh=fs.PrepareDeviceRegistration(canceled,error); REQUIRE(fresh); CHECK_FALSE(error);
+  CHECK(fs.RegisterPreparedDeviceExclusive(*fresh,published)==X_STATUS_SUCCESS);
+  CHECK(published.get()==retained);
+  // A raw declared Root needs no SourceParentSelection. Its original token
+  // remains meaningful after the temporary linked callbacks are destroyed.
+  auto declared=filesystem::HostStorageRoot::Open(root.path,false,error,0); REQUIRE(declared);
+  std::unique_ptr<Device> rooted=std::make_unique<HostPathDevice>("Rooted:",root.path,true,false,"FATX",declared);
+  REQUIRE(rooted->Initialize());
+  auto rooted_prepared=fs.PrepareDeviceRegistration(rooted,error); REQUIRE(rooted_prepared);
+  declared->Retire(); std::shared_ptr<Device> denied;
+  CHECK(fs.RegisterPreparedDeviceExclusive(*rooted_prepared,denied)==X_STATUS_CANCELLED);
+  CHECK_FALSE(denied);
+#if XE_PLATFORM_LINUX
+  // Reuse the existing product-identity fixture; all source/binding/GuestView
+  // admission and cancellation below go through the real public cache owner.
+  filesystem::test::CacheFixture cache_fixture;
+  auto cache_owner=cache_fixture.Open(0x5A170001,error);
+  REQUIRE(cache_owner); REQUIRE_FALSE(error);
+  auto cache_source=cache_owner->CaptureRoot(filesystem::CacheStorageOwner::Role::kLegacy,error);
+  REQUIRE(cache_source); REQUIRE_FALSE(error); CHECK_FALSE(cache_source->retiring());
+  std::unique_ptr<Device> cached=std::make_unique<HostPathDevice>("Cached:",cache_source->path(),true,false,"FATX",cache_source);
+  REQUIRE(cached->Initialize());
+  auto cache_prepared=fs.PrepareDeviceRegistration(cached,error); REQUIRE(cache_prepared);
+  // Retire changes the original owner's cached cancellation scalar. It does
+  // not fabricate a Root retirement callback or a completed VFS operation.
+  cache_owner->Retire(); CHECK(cache_source->retiring());
+  CHECK(fs.RegisterPreparedDeviceExclusive(*cache_prepared,denied)==X_STATUS_CANCELLED);
+  CHECK_FALSE(denied);
+  cache_prepared.reset(); cache_source.reset();
+  // The unpublished VFS capsule and our escaped Root are actually gone before
+  // native cache-identity/FD teardown, outside every namespace/owner lock.
+  REQUIRE(cache_owner->CloseNativeAfterIoDrained());
+  cache_fixture.Originals();
+#endif
+  prepared.reset(); fresh.reset(); rooted_prepared.reset();
+  published.reset(); file.reset(); fs.Clear();
+}
+TEST_CASE("Prepared file wait observes exact retained parent namespace cancellation",
+          "[vfs][prepared_mount][wait]") {
+  PreparedMountRoot root; std::ofstream(root.path/"data")<<"value";
+  VirtualFileSystem fs; std::error_code error;
+  std::unique_ptr<Device> parent=std::make_unique<HostPathDevice>("Parent:",root.path,true);
+  REQUIRE(parent->Initialize());
+  auto parent_prepared=fs.PrepareDeviceRegistration(parent,error); REQUIRE(parent_prepared);
+  std::shared_ptr<Device> parent_owner;
+  REQUIRE(fs.RegisterPreparedDeviceExclusive(*parent_prepared,parent_owner)==X_STATUS_SUCCESS);
+  std::unique_ptr<Device> child=std::make_unique<PreparedFileDevice>("Child:",root.path,parent_owner);
+  REQUIRE(child->Initialize()); auto* exact=child.get();
+  auto space=filesystem::HostStorageSpace::ForPath(root.path,0,error); REQUIRE(space);
+  auto held=space->Begin(root.path,error); REQUIRE(held);
+  std::promise<void> started,finished; auto start=started.get_future(); auto done=finished.get_future();
+  std::unique_ptr<VirtualFileSystem::PreparedDeviceRegistration> result;
+  std::thread thread([&]{started.set_value();result=fs.PrepareDeviceRegistration(child,error,parent_owner);finished.set_value();});
+  start.wait(); const bool waited=done.wait_for(std::chrono::milliseconds(20))==std::future_status::timeout;
+  parent_owner->BeginNamespaceRetirement(); thread.join(); CHECK(waited);
+  CHECK_FALSE(result); CHECK((error==std::errc::operation_canceled || error==std::errc::no_such_device));
+  CHECK(child.get()==exact); held.reset();
+  child.reset();parent_prepared.reset();parent_owner.reset();fs.Clear();
+}
 
 namespace {
 class DirectoryPinnedManagedLeaf final : public ManagedFileService {

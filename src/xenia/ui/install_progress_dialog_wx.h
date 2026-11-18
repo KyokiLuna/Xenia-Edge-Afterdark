@@ -22,7 +22,6 @@
 
 class wxButton;
 class wxGauge;
-class wxHyperlinkCtrl;
 class wxScrolledWindow;
 class wxStaticBitmap;
 class wxStaticText;
@@ -37,7 +36,7 @@ namespace ui {
 class InstallProgressDialog : public wxDialog {
  public:
   InstallProgressDialog(
-      wxWindow* parent, const std::filesystem::path& content_root,
+      wxWindow* parent,
       std::shared_ptr<std::vector<Emulator::ContentInstallEntry>> entries);
 
   // Sets work to run on the UI event loop once the dialog is being shown
@@ -47,6 +46,9 @@ class InstallProgressDialog : public wxDialog {
     kickoff_ = std::move(work);
   }
 
+  void SetCancellationCallback(std::function<void()> cancel) {
+    cancel_ = std::move(cancel);
+  }
   ~InstallProgressDialog() override;
 
  private:
@@ -54,7 +56,8 @@ class InstallProgressDialog : public wxDialog {
     wxStaticBitmap* icon = nullptr;
     wxStaticText* name = nullptr;
     wxStaticText* path_prefix = nullptr;
-    wxHyperlinkCtrl* path_link = nullptr;
+    wxStaticText* path_value = nullptr;
+    std::vector<uint8_t> icon_data;
     wxStaticText* type = nullptr;
     wxStaticText* status = nullptr;
     wxGauge* progress = nullptr;
@@ -66,7 +69,6 @@ class InstallProgressDialog : public wxDialog {
   size_t EntryCount() const;
   bool IsEverythingDone() const;
 
-  std::filesystem::path content_root_;
   std::shared_ptr<std::vector<Emulator::ContentInstallEntry>> content_entries_;
 
   wxScrolledWindow* list_panel_ = nullptr;
@@ -75,6 +77,7 @@ class InstallProgressDialog : public wxDialog {
   wxTimer timer_;
   std::vector<EntryWidgets> rows_;
   std::function<void()> kickoff_;
+  std::function<void()> cancel_;
   bool was_done_ = false;
   bool success_dialog_shown_ = false;
 };

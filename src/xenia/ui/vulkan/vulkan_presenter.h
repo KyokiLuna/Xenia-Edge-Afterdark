@@ -156,8 +156,13 @@ class VulkanPresenter final : public Presenter {
     VkImageView view = VK_NULL_HANDLE;
     std::shared_ptr<void> lifetime;
     gpu::GpuCompletion producer_completion;
+    std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard;
   };
   bool PublishNativeUiPlane(NativeUiPlaneImage image);
+  bool DrainNativeUiPlanePaintForGuard(
+      const std::shared_ptr<const NativeUiPlaneAuthority>&,
+      const std::shared_ptr<const gpu::NativeFramePresentationGuard>&,
+      gpu::NativeFramePaintDrainObservation* = nullptr) override;
   bool BeginNativeGpuCohort(uint64_t backend_epoch) override;
   NativeUiPlaneStatus GetNativeUiPlaneStatus(
       const gpu::NativeFrameSubmissionIdentity& identity,
@@ -495,7 +500,8 @@ class VulkanPresenter final : public Presenter {
       const std::shared_ptr<NativeUiPlanePublication>&) const;
   void PollNativeUiPlaneCompletionsLocked();
   void FailNativeUiPlane() noexcept;
-  bool AwaitNativeUiPlanePaintRetirementLocked();
+  bool AwaitNativeUiPlanePaintRetirementLocked(
+      gpu::NativeFramePaintDrainObservation* = nullptr);
   bool RecordNativeUiPlane(
       VkCommandBuffer command_buffer, uint64_t paint_submission,
       const NativeUiPlaneVisibility& visibility,

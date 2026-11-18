@@ -20,8 +20,10 @@
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/native_import_domain.h"
 #include "xenia/kernel/user_module.h"
+#include "xenia/kernel/util/xex_guest_header.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
+#include "xenia/kernel/xboxkrnl/xboxkrnl_ob.h"
 #include "xenia/kernel/xthread.h"
 #include "xenia/xbox.h"
 
@@ -683,6 +685,7 @@ dword_result_t XexLoadImageHeaders_entry(pointer_t<X_ANSI_STRING> path,
   }
   auto current_kernel = ctx->kernel_state;
   auto target_path = util::TranslateAnsiPath(current_kernel->memory(), path);
+  xeObCaptureFilePathForCaller(target_path, 0);
 
   vfs::File* vfs_file = nullptr;
   vfs::FileAction file_action;
@@ -705,6 +708,11 @@ dword_result_t XexLoadImageHeaders_entry(pointer_t<X_ANSI_STRING> path,
     return result_status;
   }
 
+  if (bytes_read != 2048) {
+    vfs_file->Destroy();
+    return X_STATUS_INVALID_IMAGE_FORMAT;
+  }
+
   if (header->magic != 'XEX2') {
     vfs_file->Destroy();
     return X_STATUS_INVALID_IMAGE_FORMAT;
@@ -718,13 +726,16 @@ dword_result_t XexLoadImageHeaders_entry(pointer_t<X_ANSI_STRING> path,
     if (header_size <= 0x800) {
       result_status = X_STATUS_SUCCESS;
     } else {
+      bytes_read = 0;
       result_status = vfs_file->ReadSync(
           std::span<uint8_t>(
               reinterpret_cast<uint8_t*>(header.host_address() + 2048),
               header_size - 2048),
           2048, &bytes_read);
       if (result_status >= X_STATUS_SUCCESS) {
-        result_status = X_STATUS_SUCCESS;
+        result_status = bytes_read == header_size - 2048
+                            ? X_STATUS_SUCCESS
+                            : X_STATUS_INVALID_IMAGE_FORMAT;
       }
     }
 
@@ -735,18 +746,10 @@ dword_result_t XexLoadImageHeaders_entry(pointer_t<X_ANSI_STRING> path,
   // The security info's offset becomes its address in the buffer, which is
   // how titles reach it.
   if (result_status == X_STATUS_SUCCESS) {
-    const uint32_t security_offset = header->security_offset;
-    const uint32_t remaining =
-        security_offset < header_size ? header_size - security_offset : 0;
-    const uint8_t* data = reinterpret_cast<uint8_t*>(header.host_address());
-    const uint32_t security_size =
-        remaining >= 4 ? xe::load_and_swap<uint32_t>(data + security_offset)
-                       : 0;
-    // At least everything before the page descriptors.
-    if (security_size < 0x184 || security_size > remaining) {
+    if (!RelocateXexSecurityInfoForGuest(
+            {reinterpret_cast<uint8_t*>(header.host_address()), header_size},
+            header.guest_address())) {
       result_status = X_STATUS_INVALID_IMAGE_FORMAT;
-    } else {
-      header->security_offset = header.guest_address() + security_offset;
     }
   }
 

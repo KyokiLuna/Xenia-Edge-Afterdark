@@ -11,6 +11,7 @@
 #define XENIA_KERNEL_XAM_XAM_CONTENT_DEVICE_H_
 
 #include <cstdint>
+#include "xenia/base/console_storage_volume.h"
 #include <memory>
 #include <optional>
 #include <span>
@@ -26,16 +27,7 @@ namespace xam {
 class ContentSourceRegistry;
 class ManagedFormatSourceProof;
 
-enum class DeviceType : uint32_t {
-  Invalid = 0,
-  HDD = 1,
-  MU = 2,  // support removed in 9199
-  System = 3,
-  ODD = 4,
-  TransferCable = 8,
-  Sapphire = 15,
-  USBMASS = 16,  // Added in 8955
-};
+using DeviceType = filesystem::ConsoleStorageType;
 
 enum class DummyDeviceId : uint32_t {
   HDD = 1,

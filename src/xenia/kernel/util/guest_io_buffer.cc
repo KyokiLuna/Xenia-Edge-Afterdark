@@ -56,9 +56,9 @@ X_STATUS CheckWrites(Memory& memory, std::span<const GuestIoWrite> writes,
   }
   return X_STATUS_SUCCESS;
 }
-template <typename Store>
+template <typename Store,typename Admission=GuestIoProfileReadScope>
 X_STATUS WriteBatch(Memory& memory, std::span<const GuestIoWrite> writes,
-                    Store store) {
+                    Store store, Admission* admission = nullptr) {
   if (writes.size() > 2) {
     return X_STATUS_INVALID_PARAMETER;
   }
@@ -95,6 +95,10 @@ X_STATUS WriteBatch(Memory& memory, std::span<const GuestIoWrite> writes,
   if (XFAILED(status)) {
     return status;
   }
+  if (admission) {
+    status = admission->Admit();
+    if (XFAILED(status)) { return status; }
+  }
   for (size_t i = 0; i < writes.size(); ++i) {
     if (writes[i].bytes.empty()) {
       continue;
@@ -105,6 +109,7 @@ X_STATUS WriteBatch(Memory& memory, std::span<const GuestIoWrite> writes,
     store(i, output);
     std::atomic_thread_fence(std::memory_order_release);
   }
+  if (admission) { admission->Release(); }
   // Every byte is already committed before an invalidation callback can run.
   // Such observers may change mappings afterward; no rejected partial write
   // or borrowed translated destination crosses those calls.
@@ -175,6 +180,20 @@ X_STATUS WriteGuestIoBuffers(Memory& memory,
   return WriteBatch(memory, writes, [&](size_t i, uint8_t* output) {
     std::memcpy(output, writes[i].bytes.data(), writes[i].bytes.size());
   });
+}
+X_STATUS WriteGuestIoBuffers(Memory& memory,
+                             std::span<const GuestIoWrite> writes,
+                             GuestIoProfileReadScope& admission) {
+  return WriteBatch(memory, writes, [&](size_t i, uint8_t* output) {
+    std::memcpy(output, writes[i].bytes.data(), writes[i].bytes.size());
+  }, &admission);
+}
+X_STATUS WriteGuestIoBuffers(Memory& memory,
+                             std::span<const GuestIoWrite> writes,
+                             GuestIoNativeMediaFactoryScope& admission) {
+  return WriteBatch(memory, writes, [&](size_t i,uint8_t* output) {
+    std::memcpy(output,writes[i].bytes.data(),writes[i].bytes.size());
+  }, &admission);
 }
 X_STATUS WriteGuestIoBuffer(Memory& memory, uint32_t address,
                             std::span<const uint8_t> input) {

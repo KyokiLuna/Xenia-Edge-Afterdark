@@ -298,10 +298,13 @@ class Fixture {
         address, id));
     *range = {memory.GetPhysicalAddress(*address), size};
   }
-  void Freeze(std::shared_ptr<const gpu::NativeSystemTitleInput> input = {}) {
+  void Freeze(
+      std::shared_ptr<const gpu::NativeSystemTitleInput> input = {},
+      std::shared_ptr<const gpu::NativeFramePresentationGuard> guard = {}) {
     auto update = session->BeginUpdate(thread);
     REQUIRE(update);
-    source = session->Freeze(thread, update, primary, std::move(input));
+    source = session->Freeze(thread, update, primary, std::move(input),
+                             std::move(guard));
     REQUIRE(source);
     const std::array<Range, 2> ranges{record, output};
     const auto pin = memory.PinOwnedPhysicalRanges(session->owner(), ranges);
@@ -3637,6 +3640,170 @@ TEST_CASE("Exact-source Title bundle rejects detached mismatch or missing "
   CHECK_FALSE(std::filesystem::exists(OutputCaptureFile(base, ".inputs.bin")));
   CHECK_FALSE(
       std::filesystem::exists(OutputCaptureFile(base, ".readback.json")));
+}
+
+class MetadataPresentationGuard final : public gpu::NativeFramePresentationGuard {
+ public:
+  explicit MetadataPresentationGuard(bool admitted) : admitted_(admitted) {}
+  bool IsLive() const noexcept override { return admitted_ && !IsRevoked(); }
+  bool IsRevoked() const noexcept override { return revoked_.load(); }
+  void Revoke() noexcept { revoked_.store(true); }
+ private:
+  const bool admitted_;
+  std::atomic<bool> revoked_{false};
+};
+
+TEST_CASE("Revoked presentation origin preserves real frame storage and retirement",
+          "[kernel][native_frame_execution][presentation_guard]") {
+  const bool admitted = GENERATE(false, true);
+  Fixture f;
+  REQUIRE(f.session->AbortUnsubmitted(f.thread, f.source));
+  auto guard = std::make_shared<MetadataPresentationGuard>(admitted);
+  f.Freeze({}, guard);
+  REQUIRE(f.source->presentation_guard() == guard);
+  gpu::GpuCompletionQueue queue;
+  f.graph->epoch = queue.backend_epoch();
+  f.graph->accepts_model_submission = true;
+  f.graph->presentation_allowed = true;
+  const auto request = f.Mint();
+  REQUIRE(request);
+  CHECK(request->presentation_guard() == guard);
+  CHECK(request->IsAdmitted());
+  CHECK(request->IsPresentationOwnerLive() == admitted);
+  guard->Revoke();
+  CHECK_FALSE(request->IsPresentationOwnerLive());
+  // Real Memory backing/pins and existing host completion queue exercise the
+  // actual owner path; this is not a native GPU submission/completion claim.
+  REQUIRE(request->IsAdmitted());
+  REQUIRE(request->MarkSubmissionAttempted());
+  const auto completion = queue.TrackNativeFrameSubmitted(1, request->identity());
+  REQUIRE(f.session->AttachGpu(f.thread, f.source, completion));
+  queue.CompleteThrough(1);
+  REQUIRE(f.session->RetireComplete(f.thread, f.source));
+  CHECK_FALSE(request->IsAdmitted());
+  CHECK_FALSE(request->IsPresentationOwnerLive());
+  CHECK(request->presentation_guard() == guard);
+}
+
+
+TEST_CASE("Hidden completed control advances physical overlay input for the next draw",
+          "[kernel][native_frame_execution][presentation_guard][overlay_lineage]") {
+  // Actual Memory allocations, Session Sources, immutable snapshots and the
+  // existing host completion queue. This proves owner/metadata plumbing only,
+  // not native PPC, a GPU submission/fence or visible pixels.
+  Fixture f(false,true,ModelOverlayGeometry(),true);
+  const auto draw_primary=f.primary;
+  const auto draw_plan=f.plan;
+  const auto draw_shaders=f.shaders;
+  UseControlPrimary(f);
+  REQUIRE(f.session->AbortUnsubmitted(f.thread,f.source));
+  auto hidden=std::make_shared<MetadataPresentationGuard>(false);
+  f.Freeze({},hidden);
+  gpu::GpuCompletionQueue queue;
+  f.graph->epoch=queue.backend_epoch();
+  f.graph->accepts_model_submission=true;
+  f.graph->presentation_allowed=true;
+  const auto control=MintControl(f,CaptureControl(f));
+  REQUIRE(control);
+  REQUIRE(control->MarkSubmissionAttempted());
+  const auto ticket=queue.TrackNativeFrameSubmitted(31,control->identity());
+  REQUIRE(f.session->AttachGpu(f.thread,f.source,ticket));
+  gpu::NativeFrameExecutionResult result;
+  result.status=gpu::NativeFrameExecutionResult::Status::kSubmitted;
+  result.title_state_restored=true;
+  result.completion=ticket;
+  gpu::NativeOverlayState prior;
+  prior.Set(gpu::NativeOverlayState::Field::kEnable,1);
+  CHECK_FALSE(gpu::DeriveCompletedNativeOverlayState(*control,result,prior));
+  queue.CompleteThrough(31);
+  REQUIRE(control->IsPresentationOwnerCurrent());
+  CHECK_FALSE(control->IsPresentationOwnerLive());
+  const auto completed=gpu::DeriveCompletedNativeOverlayState(*control,result,prior);
+  REQUIRE(completed);
+  CHECK(*completed==control->plan()->native_overlay_program()->Apply(prior));
+  REQUIRE(completed->Has(gpu::NativeOverlayState::kEnable));
+  CHECK(completed->enable==0);
+  REQUIRE(f.session->RetireComplete(f.thread,f.source));
+  CHECK_FALSE(control->IsAdmitted());
+  CHECK(control->IsPresentationOwnerCurrent());
+  CHECK_FALSE(control->IsPresentationOwnerLive());
+
+  // The real next record receives the completed physical lineage. Its normal
+  // immutable proof and request retain it while the same hidden pixel gate
+  // continues denying presentation.
+  f.primary=draw_primary;f.plan=draw_plan;f.shaders=draw_shaders;
+  std::memcpy(f.memory.TranslatePhysical(f.record.address),f.primary.data(),f.primary.size());
+  f.Freeze({},hidden);
+  const auto record=f.Pm4Record();
+  const auto vd=f.Pm4Layout(record,f.Descriptor(record));
+  REQUIRE(vd);REQUIRE(vd->pm4_resolve);
+  auto data=NativeFrameExecutionTestAccess::ModelProofData(*vd->pm4_resolve);
+  data.input_state=completed; // The existing explicit immutable storage model.
+  std::fill(data.descriptor.begin()+8,data.descriptor.end(),0);
+  data.output={gpu::NativeFramePm4ResolveProof::Mapping::Kind::kCanonicalPhysical,
+               f.output.address,f.output.address};
+  data.origin=gpu::NativeFramePm4ResolveProof::OutputOrigin::kNativeOverlay;
+  data.display=ModelDisplayInformation();
+  const auto layout=DeriveModelOverlay(f,data);
+  REQUIRE(layout);REQUIRE(layout->overlay_state);
+  CHECK(layout->pm4_resolve->overlay_input_state()==completed);
+  const auto draw=NativeFrameExecutionTestAccess::Mint(f.session,f.thread,f.source,f.plan,
+      f.output,f.Inputs(),f.shaders,layout,ModelOverlaySnapshot(f));
+  REQUIRE(draw);REQUIRE(draw->MarkSubmissionAttempted());
+  const auto draw_ticket=queue.TrackNativeFrameSubmitted(32,draw->identity());
+  REQUIRE(f.session->AttachGpu(f.thread,f.source,draw_ticket));
+  queue.CompleteThrough(32);
+  gpu::NativeFrameExecutionResult drawn;
+  drawn.status=gpu::NativeFrameExecutionResult::Status::kSubmitted;
+  drawn.title_state_restored=true;drawn.completion=draw_ticket;
+  drawn.draw_commands=uint32_t(draw->plan()->inventory().draws.size()-1);
+  drawn.copy_operations=1;
+  drawn.written_range={f.output.address,layout->required_bytes};
+  const auto next=gpu::DeriveCompletedNativeOverlayState(*draw,drawn,completed);
+  REQUIRE(next);CHECK(next==layout->overlay_state);
+  CHECK_FALSE(draw->IsPresentationOwnerLive());
+  REQUIRE(f.session->RetireComplete(f.thread,f.source));
+  CHECK(draw->IsPresentationOwnerCurrent());
+  f.graph->presentation_allowed=false; // The actual owner/foreground ended.
+  CHECK_FALSE(control->IsPresentationOwnerCurrent());
+  CHECK_FALSE(gpu::DeriveCompletedNativeOverlayState(*control,result,prior));
+  CHECK_FALSE(gpu::DeriveCompletedNativeOverlayState(*draw,drawn,completed));
+}
+
+TEST_CASE("Completed overlay lineage rejects foreign and incomplete execution facts",
+          "[kernel][native_frame_execution][presentation_guard][overlay_lineage]") {
+  Fixture f;UseControlPrimary(f);
+  REQUIRE(f.session->AbortUnsubmitted(f.thread,f.source));
+  auto hidden=std::make_shared<MetadataPresentationGuard>(false);
+  f.Freeze({},hidden);
+  gpu::GpuCompletionQueue queue;
+  f.graph->epoch=queue.backend_epoch();f.graph->accepts_model_submission=true;
+  f.graph->presentation_allowed=true;
+  const auto request=MintControl(f,CaptureControl(f));REQUIRE(request);
+  REQUIRE(request->MarkSubmissionAttempted());
+  const auto ticket=queue.TrackNativeFrameSubmitted(41,request->identity());
+  REQUIRE(f.session->AttachGpu(f.thread,f.source,ticket));queue.CompleteThrough(41);
+  gpu::NativeFrameExecutionResult result;
+  result.status=gpu::NativeFrameExecutionResult::Status::kSubmitted;
+  result.title_state_restored=true;result.completion=ticket;
+  REQUIRE(gpu::DeriveCompletedNativeOverlayState(*request,result,{}));
+  SECTION("unsupported execution") {result.status=gpu::NativeFrameExecutionResult::Status::kUnsupported;}
+  SECTION("failed execution") {result.status=gpu::NativeFrameExecutionResult::Status::kFailed;}
+  SECTION("title state was not restored") {result.title_state_restored=false;}
+  SECTION("foreign Source completion") {
+    auto foreign=request->identity();++foreign.source_serial;
+    result.completion=queue.TrackNativeFrameSubmitted(42,foreign);queue.CompleteThrough(42);
+  }
+  SECTION("pending completion") {result.completion=queue.TrackNativeFrameSubmitted(42,request->identity());}
+  SECTION("control cannot invent draw operations") {result.draw_commands=1;}
+  SECTION("control cannot invent a write") {result.written_range=f.output;}
+  SECTION("ended actual owner") {f.graph->presentation_allowed=false;}
+  SECTION("revoked actual Session") {f.session->Revoke();}
+  CHECK_FALSE(gpu::DeriveCompletedNativeOverlayState(*request,result,{}));
+  // Ended/revoked owners do not gain a retirement shortcut. The fixture's
+  // existing genuine host stop path owns any remaining cleanup.
+  if(f.session->GetSnapshot().phase!=Session::Phase::kQuarantined)
+    REQUIRE(f.session->RetireComplete(f.thread,f.source));
 }
 
 }  // namespace xe::kernel::test

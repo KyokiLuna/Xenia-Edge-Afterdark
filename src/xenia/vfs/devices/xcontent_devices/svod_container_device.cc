@@ -31,6 +31,16 @@ SvodContainerDevice::SvodContainerDevice(const std::string_view mount_path,
   SetName("FATX");
 }
 
+SvodContainerDevice::SvodContainerDevice(
+    const std::string_view mount_path,
+    std::unique_ptr<XContentReadBacking> header_backing,
+    const std::filesystem::path& host_path)
+    : XContentContainerDevice(mount_path, std::move(header_backing), host_path),
+      svod_base_offset_(),
+      svod_layout_() {
+  SetName("FATX");
+}
+
 SvodContainerDevice::~SvodContainerDevice() {}
 
 SvodContainerDevice::Result SvodContainerDevice::LoadHostFiles() {

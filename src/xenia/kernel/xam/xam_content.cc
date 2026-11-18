@@ -8,16 +8,27 @@
  */
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <iterator>
+#include <string_view>
+#include <optional>
 #include <limits>
 #include <vector>
 
 #include "xenia/base/filesystem.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/math.h"
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/base/string_util.h"
 #include "xenia/base/utf8.h"
 #include "xenia/emulator.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_avatar_service.h"
+#include "xenia/kernel/xthread.h"
+#include "xenia/cpu/thread_state.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
+#include "xenia/vfs/virtual_file_system.h"
 #include "xenia/kernel/smc.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
@@ -332,6 +343,39 @@ static bool ValidRootName(std::string_view name) {
          std::string_view::npos;
 }
 
+// Retain original-call bytes rather than a translated guest C string across
+// deferred work. The bound is the same as the common guest VFS path limit.
+static std::optional<std::string> ReadOwnedContentString(uint32_t address) {
+  if (!address) { return {}; }
+  std::string value;
+  for (uint32_t offset = 0;
+       offset != vfs::VirtualFileSystem::kMaximumTranslatedPath; ++offset) {
+    if (uint64_t(address) + offset > UINT32_MAX) { return {}; }
+    std::array<uint8_t, 1> byte{};
+    if (XFAILED(util::ReadGuestIoBuffer(*kernel_state()->memory(),
+                                      address + offset, byte))) { return {}; }
+    if (!byte[0]) { return value; }
+    value.push_back(char(byte[0]));
+  }
+  return {};
+}
+
+// The actual 17559 helper distinguishes SYSTEM and TITLE object directories.
+// Do this on the original public caller, never from the later SYSTEM worker.
+static std::string CaptureContentCallerPath(std::string_view path, bool root) {
+  if (xe::utf8::starts_with_case(path, "\\System??\\") ||
+      xe::utf8::starts_with_case(path, "\\??\\")) { return std::string(path); }
+  if (!root && (path.empty() || path.front() == '\\' ||
+                path.find(':') == std::string_view::npos)) {
+    return std::string(path);
+  }
+  const auto* thread = XThread::GetCurrentThread();
+  const bool system = thread && thread->thread_state() &&
+      xboxkrnl::xeKeGetCurrentProcessType(thread->thread_state()->context()) ==
+          X_PROCTYPE_SYSTEM;
+  return std::string(system ? "\\System??\\" : "\\??\\") + std::string(path);
+}
+
 // xam takes an ASCII file name but lets its first byte have the top bit set.
 static bool ValidFileName(const XCONTENT_DATA& content_data) {
   const auto& name = content_data.file_name_raw;
@@ -381,10 +425,50 @@ dword_result_t xeXamContentCreate(dword_t user_index, lpstring_t root_name,
                                   lpdword_t license_mask_ptr,
                                   dword_t cache_size, qword_t content_size,
                                   pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  static std::atomic<uint64_t> diagnostic_requests{0};
+  const uint64_t diagnostic_id = cvars::native_system_ui_trace
+      ? diagnostic_requests.fetch_add(1, std::memory_order_relaxed) : UINT64_MAX;
+  auto trace = [id = diagnostic_id, user = uint32_t(user_index), flags = uint32_t(flags),
+                cache = uint32_t(cache_size), size = uint64_t(content_size),
+                input = content_data_ptr.guest_address(), input_size = uint32_t(content_data_size),
+                root_pointer = root_name.guest_address(), overlap = overlapped_ptr.guest_address(),
+                disposition_output = disposition_ptr.guest_address(),
+                license_output = license_mask_ptr.guest_address()](
+      const char* stage, X_RESULT result, uint64_t xuid = 0,
+      uint32_t disposition = UINT32_MAX, uint32_t extended = UINT32_MAX,
+      uint32_t license = 0, const XCONTENT_AGGREGATE_DATA* data = nullptr,
+      std::string_view root = {}) noexcept {
+    if (id > 16) return;
+    try {
+      if (id == 16) {
+        if (std::string_view(stage) == "entry")
+          XELOGI("StorageDiagnostic create budget_exhausted limit=16 later_requests=unknown");
+        return;
+      }
+      std::string_view filename;
+      if (data) {
+        const auto end = std::find(std::begin(data->file_name_raw), std::end(data->file_name_raw), '\0');
+        filename = std::string_view(data->file_name_raw, size_t(end - data->file_name_raw));
+      }
+      XELOGI("StorageDiagnostic create id={} stage={} user={} flags={:08X} cache={} size={:016X} "
+             "input={:08X} input_size={} root_pointer={:08X} root={:.64} overlap={:08X} "
+             "disposition_output={:08X} license_output={:08X} device_known={} device={} type={} "
+             "title={:08X} filename={:.64} xuid={:016X} disposition={} license={:08X} result={:08X} result_known={} extended={:08X}",
+             id, stage, user, flags, cache, size, input, input_size, root_pointer, root,
+             overlap, disposition_output, license_output, bool(data),
+             data ? uint32_t(data->device_id) : UINT32_MAX,
+             data ? uint32_t(data->content_type.get()) : UINT32_MAX,
+             data ? uint32_t(data->title_id) : 0, filename, xuid, disposition, license, result, result != UINT32_MAX, extended);
+    } catch (...) {}
+  };
+  trace("entry", UINT32_MAX);
   if (cache_size > 0xEF000) {
+    trace("reject_cache_size", X_ERROR_INVALID_PARAMETER);
     return X_ERROR_INVALID_PARAMETER;
   }
-  if (!root_name || !ValidRootName(root_name.value())) {
+  const auto owned_root = ReadOwnedContentString(root_name.guest_address());
+  if (!owned_root || !ValidRootName(*owned_root)) {
+    trace("reject_root", X_ERROR_INVALID_NAME);
     return X_ERROR_INVALID_NAME;
   }
   // xam clears them before looking anything up.
@@ -401,20 +485,25 @@ dword_result_t xeXamContentCreate(dword_t user_index, lpstring_t root_name,
   } else if (content_data_size == sizeof(XCONTENT_AGGREGATE_DATA)) {
     content_data = *content_data_ptr.as<XCONTENT_AGGREGATE_DATA*>();
   } else {
+    trace("reject_descriptor_size", X_ERROR_INVALID_PARAMETER);
     assert_always();
     return X_ERROR_INVALID_PARAMETER;
   }
+  trace("owned_descriptor", UINT32_MAX, 0, UINT32_MAX, UINT32_MAX,
+        0, &content_data, *owned_root);
 
   auto content_manager = kernel_state()->content_manager();
 
-  auto run = [content_manager, user_index, root_name = root_name.value(), flags,
-              content_data, disposition_ptr, license_mask_ptr, overlapped_ptr](
+  auto run = [content_manager, user_index, root_name = CaptureContentCallerPath(*owned_root, true), flags,
+              content_data, disposition_ptr, license_mask_ptr, overlapped_ptr, trace](
                  uint32_t& extended_error, uint32_t& length) -> X_RESULT {
     uint64_t xuid = 0;
     X_RESULT result = ContentXuid(user_index, xuid);
     if (content_data.content_type == XContentType::kMarketplaceContent) {
       xuid = 0;
     }
+    trace("owner_resolution", result, xuid, UINT32_MAX, UINT32_MAX,
+          0, &content_data, root_name);
     if (!result) {
       result = content_manager->CheckPackageName(xuid, content_data);
     }
@@ -422,8 +511,8 @@ dword_result_t xeXamContentCreate(dword_t user_index, lpstring_t root_name,
     // root in use still makes the package and fails with ERROR_DUP_NAME, while
     // an open fails with ERROR_ALREADY_EXISTS.
     const bool root_in_use =
-        kernel_state()->file_system()->IsSymbolicLinkRegistered(root_name +
-                                                                ':');
+        kernel_state()->file_system()->IsSymbolicLinkRegistered(root_name + ':') ||
+        content_manager->IsRootTaken(root_name);
 
     kDispositionState disposition = kDispositionState::Unknown;
     if (!result) {
@@ -483,6 +572,8 @@ dword_result_t xeXamContentCreate(dword_t user_index, lpstring_t root_name,
           break;
       }
     }
+    trace(root_in_use ? "root_in_use" : "root_available", result, xuid,
+          uint32_t(disposition), UINT32_MAX, 0, &content_data, root_name);
     if (root_in_use && disposition != kDispositionState::Unknown) {
       if (disposition == kDispositionState::Create) {
         if (!content_manager->ContentExists(xuid, content_data)) {
@@ -502,6 +593,8 @@ dword_result_t xeXamContentCreate(dword_t user_index, lpstring_t root_name,
       result = content_manager->OpenContent(root_name, xuid, content_data,
                                             content_license);
     }
+    trace("open_create_result", result, xuid, uint32_t(disposition),
+          UINT32_MAX, content_license, &content_data, root_name);
     // A request that failed reports no disposition.
     if (result) {
       disposition = kDispositionState::Unknown;
@@ -521,14 +614,19 @@ dword_result_t xeXamContentCreate(dword_t user_index, lpstring_t root_name,
     if (result && overlapped_ptr) {
       result = X_ERROR_FUNCTION_FAILED;
     }
+    trace("worker_return", result, xuid, uint32_t(disposition),
+          extended_error, content_license, &content_data, root_name);
     return result;
   };
 
   if (!overlapped_ptr) {
     uint32_t extended_error, length;
-    return run(extended_error, length);
+    const auto result = run(extended_error, length);
+    trace("synchronous_return", result, 0, length, extended_error);
+    return result;
   } else {
     kernel_state()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
+    trace("queued_pending", X_ERROR_IO_PENDING);
     return X_ERROR_IO_PENDING;
   }
 }
@@ -538,13 +636,39 @@ dword_result_t XamContentCreateEx_entry(
     dword_t flags, lpdword_t disposition_ptr, lpdword_t license_mask_ptr,
     dword_t cache_size, qword_t content_size,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  // Raw public admission metadata precedes every guest descriptor read.
+  static std::atomic<uint64_t> public_requests{0};
+  const auto diagnostic_id = cvars::native_system_ui_trace
+      ? public_requests.fetch_add(1, std::memory_order_relaxed) : UINT64_MAX;
+  auto trace_public = [diagnostic_id, user_index, root_name, content_data_ptr,
+                       flags, disposition_ptr, license_mask_ptr, cache_size,
+                       content_size, overlapped_ptr](const char* stage, X_RESULT result) noexcept {
+    if (diagnostic_id > 16) return;
+    try {
+      if (diagnostic_id == 16) {
+        if (std::string_view(stage) == "entry")
+          XELOGI("StorageDiagnostic create_public budget_exhausted limit=16 later_requests=unknown");
+        return;
+      }
+      XELOGI("StorageDiagnostic create_public id={} stage={} user={} root={:08X} data={:08X} flags={:08X} "
+             "disposition={:08X} license={:08X} cache={} size={:016X} overlap={:08X} result={:08X} result_known={}",
+             diagnostic_id, stage, uint32_t(user_index), root_name.guest_address(),
+             content_data_ptr.guest_address(), uint32_t(flags), disposition_ptr.guest_address(),
+             license_mask_ptr.guest_address(), uint32_t(cache_size), uint64_t(content_size),
+             overlapped_ptr.guest_address(), result, result != UINT32_MAX);
+    } catch (...) {}
+  };
+  trace_public("entry", UINT32_MAX);
   if (!ValidFileName(*content_data_ptr.as<XCONTENT_DATA*>())) {
+    trace_public("reject_filename", X_ERROR_INVALID_PARAMETER);
     return X_ERROR_INVALID_PARAMETER;
   }
-  return xeXamContentCreate(user_index, root_name, content_data_ptr,
+  const auto result = xeXamContentCreate(user_index, root_name, content_data_ptr,
                             sizeof(XCONTENT_DATA), flags, disposition_ptr,
                             license_mask_ptr, cache_size, content_size,
                             overlapped_ptr);
+  trace_public("return", result);
+  return result;
 }
 DECLARE_XAM_EXPORT1(XamContentCreateEx, kContent, kImplemented);
 
@@ -579,59 +703,57 @@ dword_result_t XamContentOpenFile_entry(
     dword_t user_index, lpstring_t root_name, lpstring_t path, dword_t flags,
     dword_t unknown, lpdword_t license_mask_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
-  if (!root_name || !ValidRootName(root_name.value())) {
+  const auto owned_root = ReadOwnedContentString(root_name.guest_address());
+  const auto owned_path = ReadOwnedContentString(path.guest_address());
+  if (!owned_root || !ValidRootName(*owned_root)) {
     return X_ERROR_INVALID_NAME;
   }
+  if (!owned_path) { return X_ERROR_INVALID_PARAMETER; }
+  if(const auto native=NativeAvatarService::TryOpenAssetPack(
+         kernel_state(),user_index,CaptureContentCallerPath(*owned_root,true),
+         CaptureContentCallerPath(*owned_path,false),flags,unknown,
+         license_mask_ptr.guest_address(),overlapped_ptr.guest_address()))return *native;
   // Cleared before the request is queued.
   if (license_mask_ptr) {
-    *license_mask_ptr = 0;
-  }
-  auto run = [path = path.value(), root_name = root_name.value(),
-              overlapped = bool(overlapped_ptr)](uint32_t& extended_error,
-                                                 uint32_t& length) -> X_RESULT {
-    X_RESULT result = X_ERROR_FILE_NOT_FOUND;
-    if (auto entry = kernel_state()->file_system()->ResolvePath(path)) {
-      result =
-          kernel_state()->content_manager()->OpenContentFile(root_name, entry);
+    const std::array<uint8_t, 4> zero{};
+    if (XFAILED(util::WriteGuestIoBuffer(*kernel_state()->memory(),
+                                        license_mask_ptr.guest_address(), zero))) {
+      return X_ERROR_INVALID_PARAMETER;
     }
-    extended_error = X_HRESULT_FROM_WIN32(result);
-    length = 0;
-    if (result && overlapped) {
-      result = X_ERROR_FUNCTION_FAILED;
-    }
-    return result;
-  };
-
-  if (!overlapped_ptr) {
-    uint32_t extended_error, length;
-    return run(extended_error, length);
   }
-  kernel_state()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
-  return X_ERROR_IO_PENDING;
+  return kernel_state()->content_manager()->OpenContentFile(
+      CaptureContentCallerPath(*owned_root, true),
+      CaptureContentCallerPath(*owned_path, false), nullptr,
+      overlapped_ptr.guest_address());
 }
-DECLARE_XAM_EXPORT1(XamContentOpenFile, kContent, kSketchy);
+DECLARE_XAM_EXPORT2(XamContentOpenFile, kContent, kImplemented, kSketchy);
 
 dword_result_t XamContentFlush_entry(lpstring_t root_name,
                                      pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
-  if (!root_name || !ValidRootName(root_name.value())) {
+  const auto owned_root = ReadOwnedContentString(root_name.guest_address());
+  if (!owned_root || !ValidRootName(*owned_root)) {
     return X_ERROR_INVALID_NAME;
   }
   // Preserve the real caller's overlap/event/APC completion policy. The
   // host barrier owns its retained package, files and source outside GCRC.
   return CompleteRequest(overlapped_ptr,
-      kernel_state()->content_manager()->FlushContent(root_name.value()));
+      kernel_state()->content_manager()->FlushContent(CaptureContentCallerPath(*owned_root, true)));
 }
 DECLARE_XAM_EXPORT1(XamContentFlush, kContent, kImplemented);
 
 dword_result_t XamContentClose_entry(lpstring_t root_name,
                                      pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
-  if (!root_name || !ValidRootName(root_name.value())) {
+  const auto owned_root = ReadOwnedContentString(root_name.guest_address());
+  if (!owned_root || !ValidRootName(*owned_root)) {
     return X_ERROR_INVALID_NAME;
   }
+  if(const auto native=NativeAvatarService::TryCloseAssetPack(
+         kernel_state(),CaptureContentCallerPath(*owned_root,true),
+         overlapped_ptr.guest_address()))return *native;
   // Closes a previously opened root from XamContentCreate*.
   return CompleteRequest(
       overlapped_ptr,
-      kernel_state()->content_manager()->CloseContent(root_name.value()));
+      kernel_state()->content_manager()->CloseContent(CaptureContentCallerPath(*owned_root, true)));
 }
 DECLARE_XAM_EXPORT1(XamContentClose, kContent, kImplemented);
 
@@ -1006,32 +1128,32 @@ constexpr std::string_view kLaunchRootName = "XSYSLAUNCH";
 // Launches |xex_name| in the package open at the launch root.
 static void LaunchOpenedImage(const std::string& xex_name, bool on_disc,
                               uint32_t flags) {
-  LaunchTitle(fmt::format("{}:\\{}", kLaunchRootName, xex_name), {},
+  LaunchTitle(fmt::format("{}:\\{}", CaptureContentCallerPath(kLaunchRootName, true), xex_name), {},
               flags | (on_disc ? 0x80 : 0));
 }
 
 dword_result_t XamContentLaunchImageFromFileInternal_entry(
     lpstring_t image_location, lpstring_t xex_name, dword_t unknown) {
-  if (!image_location) {
-    return X_ERROR_INVALID_PARAMETER;
-  }
-  vfs::Entry* entry =
-      kernel_state()->file_system()->ResolvePath(image_location.value());
-  if (!entry) {
-    return X_ERROR_FILE_NOT_FOUND;
+  const auto owned_location = ReadOwnedContentString(image_location.guest_address());
+  if (!owned_location) { return X_ERROR_INVALID_PARAMETER; }
+  const auto captured_path = CaptureContentCallerPath(*owned_location, false);
+  bool on_disc = false;
+  {
+    auto lock = global_critical_region::AcquireDirect();
+    const auto* entry = kernel_state()->file_system()->ResolvePath(captured_path);
+    const auto* title = kernel_state()->file_system()->ResolvePath(kernel_state()->title_mount_path_);
+    if (!entry) { return X_ERROR_FILE_NOT_FOUND; }
+    on_disc = title && title->device() == entry->device();
   }
 
   const X_RESULT result = kernel_state()->content_manager()->OpenContentFile(
-      kLaunchRootName, entry);
+      CaptureContentCallerPath(kLaunchRootName, true),
+      captured_path);
   if (result) {
     return result;
   }
 
-  // The title's own device stands for its disc, as it does for disc content.
-  const vfs::Entry* title_root = kernel_state()->file_system()->ResolvePath(
-      kernel_state()->title_mount_path_);
-  LaunchOpenedImage(xex_name ? xex_name.value() : std::string(),
-                    title_root && title_root->device() == entry->device(), 0);
+  LaunchOpenedImage(xex_name ? xex_name.value() : std::string(), on_disc, 0);
   return X_ERROR_SUCCESS;
 }
 DECLARE_XAM_EXPORT1(XamContentLaunchImageFromFileInternal, kContent, kSketchy);
@@ -1059,7 +1181,7 @@ static X_RESULT LaunchContentImage(uint32_t user_index,
   }
   uint32_t content_license = 0;
   if (!result) {
-    result = content_manager->OpenContent(kLaunchRootName, xuid, content_data,
+    result = content_manager->OpenContent(CaptureContentCallerPath(kLaunchRootName, true), xuid, content_data,
                                           content_license);
   }
   if (result) {

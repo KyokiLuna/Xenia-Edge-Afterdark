@@ -10,6 +10,12 @@
 #include "xenia/kernel/xam/apps/xam_app.h"
 
 #include "xenia/base/logging.h"
+#include <algorithm>
+#include <cstring>
+#include <iterator>
+#include <span>
+#include "xenia/kernel/util/guest_io_buffer.h"
+#include "xenia/vfs/virtual_file_system.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/nui.h"
 #include "xenia/kernel/xam/xam_content_device.h"
@@ -88,55 +94,42 @@ X_HRESULT XamApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       return result;
     }
     case 0x00020021: {
-      struct XContentQueryVolumeDeviceType {
-        char root_name[64];
-        xe::be<uint32_t> is_title_process;
-        xe::be<DeviceType> device_type_ptr;
-        xe::be<uint32_t> overlapped_ptr;
-      }* data = reinterpret_cast<XContentQueryVolumeDeviceType*>(buffer);
-      assert_true(buffer_length == sizeof(XContentQueryVolumeDeviceType));
-
-      std::string target;
-      if (!kernel_state_->file_system()->FindSymbolicLink(
-              std::string(data->root_name) + ':', target)) {
-        return X_E_INVALIDARG;
+      // Copy/validate the complete native request before dereferencing strings
+      // or output. Failed resolution never zeroes or partially changes output.
+      X_CONTENT_QUERY_VOLUME_DEVICE_TYPE data{};
+      if (buffer_length!=sizeof(data) || XFAILED(util::ReadGuestIoBuffer(*memory_,buffer_ptr,
+          {reinterpret_cast<uint8_t*>(&data),sizeof(data)}))) { return X_E_INVALIDARG; }
+      const auto end=std::find(std::begin(data.root_name),std::end(data.root_name),'\0');
+      if (end==std::end(data.root_name) || end==std::begin(data.root_name)) { return X_E_INVALIDARG; }
+      const std::string root(data.root_name,end);
+      const bool system_prefix=xe::utf8::starts_with_case(root,"\\System??\\");
+      const bool title_prefix=xe::utf8::starts_with_case(root,"\\??\\");
+      const size_t prefix=system_prefix ? 10 : title_prefix ? 4 : 0;
+      const auto leaf=std::string_view(root).substr(prefix);
+      if (leaf.empty() || leaf.find_first_of(":\\/")!=std::string_view::npos) { return X_E_INVALIDARG; }
+      // Actual17559 preserves either explicit prefix. Bare names select
+      // SYSTEM for0 and TITLE for any nonzero DWORD, not only boolean1.
+      const auto query=prefix ? root+":" :
+          std::string(uint32_t(data.is_title_process) ? "\\??\\" : "\\System??\\")+root+":";
+      const uint32_t output=data.device_type_ptr;
+      if (!output || (output&3) || !util::GuestIoRangeValid(*memory_,output,4,true)) { return X_E_INVALIDARG; }
+      std::shared_ptr<vfs::Device> device;
+      std::shared_ptr<const filesystem::ConsoleStorageVolume> volume;
+      uint32_t type = 0;
+      {
+        // Presentation-only point-in-time snapshot. Retain this exact device,
+        // never a later replacement, without observing any host/source I/O.
+        auto lock = global_critical_region::AcquireDirect();
+        device=kernel_state_->file_system()->AcquirePathDevice(query);
+        volume=device ? device->storage_volume() : nullptr;
+        if (!volume || device->namespace_retiring()) { return X_E_INVALIDARG; }
+        if (!volume->available_cached()) { return X_HRESULT_FROM_WIN32(X_ERROR_DEVICE_NOT_CONNECTED); }
+        type=uint32_t(volume->type());
       }
-
-      // Content packages are mounted from the HDD content store.
-      const bool is_content_package = target.starts_with("\\Device\\Content\\");
-
-      // Only apply this check to XContent packages
-      if (!is_content_package && !target.starts_with("\\Device\\Package_")) {
-        return X_E_INVALIDARG;
-      }
-
-      xe::be<DeviceType>* device_type_ptr =
-          memory_->TranslateVirtual<xe::be<DeviceType>*>(
-              static_cast<uint32_t>(data->device_type_ptr.get()));
-
-      if (is_content_package) {
-        *device_type_ptr = DeviceType::HDD;
-      } else {
-        switch (kernel_state_->deployment_type_) {
-          case XDeploymentType::kDownload:
-          case XDeploymentType::kInstalledToHDD: {
-            *device_type_ptr = DeviceType::HDD;
-          } break;
-          case XDeploymentType::kOpticalDisc: {
-            *device_type_ptr = DeviceType::ODD;
-          } break;
-          default: {
-            *device_type_ptr = DeviceType::Invalid;
-          } break;
-        }
-      }
-
-      XELOGD("XContentQueryVolumeDeviceType('{}', {:08X}, {:08X}, {:08X})",
-             data->root_name,
-             static_cast<uint32_t>(data->is_title_process.get()),
-             static_cast<uint32_t>(data->device_type_ptr.get()),
-             static_cast<uint32_t>(data->overlapped_ptr.get()));
-
+      xe::be<uint32_t> result{}; result=type;
+      if (XFAILED(util::WriteGuestIoBuffer(*memory_,output,
+          {reinterpret_cast<const uint8_t*>(&result),sizeof(result)}))) { return X_E_INVALIDARG; }
+      XELOGD("XContentQueryVolumeDeviceType('{}') = {}",root,uint32_t(volume->type()));
       return X_E_SUCCESS;
     }
     case 0x00021012: {

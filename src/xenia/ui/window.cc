@@ -421,6 +421,11 @@ void Window::OnSurfaceChanged(bool new_surface_potentially_exists) {
   }
 }
 
+bool Window::DeferCloseRequest() {
+  assert_true(app_context_.IsInUIThread());
+  return close_request_handler_ && close_request_handler_();
+}
+
 void Window::OnBeforeClose(WindowDestructionReceiver& destruction_receiver) {
   // Because events are not sent from closed windows, and to make sure the
   // window isn't closed while its surface is still attached to the presenter,

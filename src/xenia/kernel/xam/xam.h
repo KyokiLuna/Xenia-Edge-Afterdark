@@ -306,15 +306,15 @@ enum class SigninUiFlags : uint32_t {
 
 struct X_PROFILE_CREATION_INFO {
   uint32_t flags;
-  uint32_t device_id;
+  uint32_t device_id_ptr;
   X_XAMACCOUNTINFO account_info;
   X_USER_PAYMENT_INFO user_payment_info;
   uint32_t unk;
   uint64_t offline_xuid;
   X_PASSPORT_SESSION_TOKEN user_token;
   X_PASSPORT_SESSION_TOKEN owner_token;
-  uint32_t task_handle_ptr;
-  uint32_t profile_creation_ptr;
+  uint32_t task_reference;  // Original native protocol only; HLE records mint none.
+  uint32_t original_flags_high_bit;
 };
 static_assert_size(X_PROFILE_CREATION_INFO, 0xAC0);
 

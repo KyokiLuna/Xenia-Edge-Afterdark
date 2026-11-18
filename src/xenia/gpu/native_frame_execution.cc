@@ -466,7 +466,8 @@ NativeFrameExecutionRequest::NativeFrameExecutionRequest(
     std::vector<std::shared_ptr<const memory::PhysicalRangePin>> pins,
     std::shared_ptr<NativeFrameExecutionAuthority> authority,
     std::optional<NativeFrameOutputLayout> output_layout,
-    std::shared_ptr<const NativeFrameInputSnapshot> input_snapshot)
+    std::shared_ptr<const NativeFrameInputSnapshot> input_snapshot,
+    std::shared_ptr<const NativeFramePresentationGuard> presentation_guard)
     : plan_(std::move(plan)),
       identity_(identity),
       backend_epoch_(backend_epoch),
@@ -476,7 +477,8 @@ NativeFrameExecutionRequest::NativeFrameExecutionRequest(
       shaders_(std::move(shaders)),
       pins_(std::move(pins)),
       authority_(std::move(authority)),
-      input_snapshot_(std::move(input_snapshot)) {}
+      input_snapshot_(std::move(input_snapshot)),
+      presentation_guard_(std::move(presentation_guard)) {}
 
 bool NativeFrameExecutionRequest::ResourcesValid() const {
   const bool control = plan_ && plan_->is_overlay_control();
@@ -712,12 +714,65 @@ bool NativeFrameExecutionRequest::IsAdmitted() const {
 bool NativeFrameExecutionRequest::MarkSubmissionAttempted() const {
   return ResourcesValid() && authority_->MarkSubmissionAttempted(*this);
 }
-bool NativeFrameExecutionRequest::IsPresentationOwnerLive() const noexcept {
+bool NativeFrameExecutionRequest::IsPresentationOwnerCurrent() const noexcept {
   try {
     return ResourcesValid() && authority_->IsPresentationOwnerLive(*this);
   } catch (...) {
     return false;
   }
+}
+bool NativeFrameExecutionRequest::IsPresentationOwnerLive() const noexcept {
+  try {
+    // Hidden refresh still executes and retires physically. The guard is
+    // intentionally absent from ResourcesValid and GPU admission.
+    return (!presentation_guard_ ||
+            (!presentation_guard_->IsRevoked() &&
+             presentation_guard_->IsLive() &&
+             !presentation_guard_->IsRevoked())) &&
+           IsPresentationOwnerCurrent() &&
+           (!presentation_guard_ || !presentation_guard_->IsRevoked());
+  } catch (...) {
+    return false;
+  }
+}
+std::optional<NativeOverlayState> DeriveCompletedNativeOverlayState(
+    const NativeFrameExecutionRequest& request,
+    const NativeFrameExecutionResult& result,
+    std::optional<NativeOverlayState> prior) {
+  const auto tag=result.completion.native_frame_identity();
+  const auto& plan=request.plan();
+  if (!plan || (prior && !prior->valid()) ||
+      result.status!=NativeFrameExecutionResult::Status::kSubmitted ||
+      !result.title_state_restored ||
+      result.completion.status()!=GpuCompletionStatus::kComplete ||
+      !result.completion.submission() ||
+      result.completion.backend_epoch()!=request.backend_epoch() ||
+      !tag || *tag!=request.identity() ||
+      !NativeFrameOperationsMatchPlan(*plan,result) ||
+      !request.IsPresentationOwnerCurrent()) {
+    return {};
+  }
+  std::optional<NativeOverlayState> next;
+  if (plan->is_overlay_control()) {
+    const auto& program=plan->native_overlay_program();
+    if (!program) { return {}; }
+    next=program->Apply(prior.value_or(NativeOverlayState{}));
+  } else {
+    const auto& layout=request.output_layout();
+    if (!layout || !layout->overlay_state ||
+        result.written_range.address!=request.output_range().address ||
+        result.written_range.length<layout->required_bytes ||
+        result.written_range.length>request.output_range().length) {
+      return {};
+    }
+    // The immutable sealed proof already incorporates this Source's actual
+    // overlay input. Do not replace it with an unrelated caller's prior state.
+    next=layout->overlay_state;
+  }
+  // Owner observation can re-enter a stop/revoke path; retain the original
+  // currentness check on both sides of deriving the owned metadata result.
+  return next && next->valid() && request.IsPresentationOwnerCurrent()
+      ? next : std::nullopt;
 }
 std::unique_ptr<NativeFrameReadbackAdmission>
 NativeFrameExecutionRequest::AcquireCompletedReadback(

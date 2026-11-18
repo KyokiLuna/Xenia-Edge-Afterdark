@@ -13,6 +13,7 @@
 #include <functional>
 #include <fstream>
 #include <initializer_list>
+#include <limits>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -93,6 +94,10 @@ class ObservedHandle final : public filesystem::FileHandle {
   std::optional<filesystem::FileHandleInfo> QueryInfo(
       std::error_code& e) const override {
     return real_->QueryInfo(e);
+  }
+  std::optional<uint64_t> QueryAllocatedBytes(
+      std::error_code& error) const override {
+    return real_->QueryAllocatedBytes(error);
   }
   std::error_code LastError() const override { return real_->LastError(); }
   bool Read(size_t o, void* p, size_t n, size_t* count) override {
@@ -1262,6 +1267,47 @@ void Probe::RunOverwriteCases(Fixture& f) {
                              [&](const auto& x) { return x->handle() == handle; });
     Need(found != f.files.end(), "actual guest handle belongs to fixture");
     auto* const expected_object = found->get();
+    uint64_t observed_allocation = 0;
+    {
+      // The authenticated native Close consumer issues E8/class19/length8
+      // before releasing its file. Exercise that ordering through the real
+      // SYSTEM trampoline, after actual queued writes/Flush have completed.
+      // A separate native FD is only an oracle; it is released before Close.
+      std::error_code error;
+      auto observer = m.root->OpenFile(
+          "probe.bin", filesystem::FileAccess::kFileReadData, error);
+      Need(bool(observer) && !error, "allocation oracle retained regular FD");
+      struct stat native{};
+      Need(!fstat(int(observer->native_handle()), &native) &&
+               S_ISREG(native.st_mode) && native.st_blocks >= 0 &&
+               uint64_t(native.st_blocks) <=
+                   uint64_t(std::numeric_limits<int64_t>::max()) / 512,
+           "allocation oracle actual native counter without signed overflow");
+      auto* host = dynamic_cast<vfs::HostPathFile*>(expected_object->file());
+      Need(host != nullptr, "allocation query retains real HostPathFile");
+      const auto actual = host->QueryBackingInfo(error);
+      Need(actual && !error && actual->regular &&
+               actual->filesystem_id == uint64_t(native.st_dev) &&
+               actual->file_id == uint64_t(native.st_ino) &&
+               actual->size == uint64_t(native.st_size) &&
+               m.device->sectors_per_allocation_unit() == 1 &&
+               m.device->bytes_per_sector() == 512,
+           "allocation oracle proves identical inode and guest512 geometry");
+      observed_allocation = uint64_t(native.st_blocks) * 512;
+      f.Fill(kQueryIo - 8, 24, 0x5A);
+      f.Fill(kInfo - 8, 24, 0xA5);
+      Need(f.Call(0xE8, "NtQueryInformationFile",
+                  {handle, f.Addr(kQueryIo), f.Addr(kInfo), 8, 19}) ==
+                   X_STATUS_SUCCESS &&
+               f.Word(kQueryIo) == X_STATUS_SUCCESS &&
+               f.Word(kQueryIo + 4) == 8 &&
+               word64(kInfo) == observed_allocation &&
+               f.Filled(kQueryIo - 8, 8, 0x5A) &&
+               f.Filled(kQueryIo + 8, 8, 0x5A) &&
+               f.Filled(kInfo - 8, 8, 0xA5) &&
+               f.Filled(kInfo + 8, 8, 0xA5) && f.Idle(),
+           "actual E8 class19 exact8 allocation/IOSB and guards before Close");
+    }
     bool removed = false;
     auto retire_tracking_if_closed = [&] {
       if (removed) return true;
@@ -1285,6 +1331,22 @@ void Probe::RunOverwriteCases(Fixture& f) {
     Need(f.Poll([&] {
       return !m.root->open_file_count() && !m.device->has_open_files();
     }), "closed overwrite object refs and backend leases actually released");
+    f.Fill(kQueryIo - 8, 24, 0x5A);
+    f.Fill(kInfo - 8, 24, 0xA5);
+    Need(f.Call(0xE8, "NtQueryInformationFile",
+                {handle, f.Addr(kQueryIo), f.Addr(kInfo), 8, 19}) ==
+                 X_STATUS_INVALID_HANDLE &&
+             f.Filled(kQueryIo - 8, 24, 0x5A) &&
+             f.Filled(kInfo - 8, 24, 0xA5),
+         "actual class19 after Close refuses stale handle without publication");
+    Write("actual_retained_allocation_query_before_close", true,
+          fmt::format("\"ordinal\":232,\"information_class\":19,"
+                      "\"information_length\":8,\"allocation_bytes\":{},"
+                      "\"native_fd_inode_oracle\":true,"
+                      "\"query_before_registered_NtClose\":true,"
+                      "\"stale_handle_refused\":true,"
+                      "\"full_native_cache_close\":\"UNVERIFIED\","
+                      "\"production_ready\":false", observed_allocation));
   };
   const std::array<uint8_t, 8> seed{'a','b','c','d','e','f','g','h'};
   auto& m = mount_seeded("overwrite", seed);

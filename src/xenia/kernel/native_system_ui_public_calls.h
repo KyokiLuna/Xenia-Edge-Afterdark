@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 #include "xenia/base/native_ui_backend_route.h"
@@ -26,6 +27,8 @@ enum class NativeSystemUiPublicCall : uint16_t {
   kEnableSystemAppInput = 0x196,
   kIsUiActive = 0x2EC,
   kShowGuide = 0x304,
+  kShowSignin = 0x2BC,
+  kShowSigninWithUser = 0x2BE,
   kShowKeyboard = 0x2C1,
   kShowMessageBox = 0x2CA,
   kShowDeviceSelector = 0x2CB,
@@ -41,6 +44,7 @@ enum class NativeSystemUiPublicCall : uint16_t {
   kAvatarGetAssetsResultSize = 0x5E0,
   kAvatarGetAssets = 0x5E1,
   kAvatarSetManifest = 0x5E4,
+  kAvatarLoadAnimation = 0x5E7,
   kAvatarGetMetadataRandom = 0x5EB,
   kAvatarGetMetadataSignedOutProfileCount = 0x5EE,
   kAvatarGetMetadataSignedOutProfile = 0x5EF,
@@ -95,6 +99,42 @@ std::span<const NativeSystemUiPublicCallProfile> NativeSystemUiPublicProfiles();
 bool NativeSystemPublicFamilyRouteEnabled(NativeSystemPublicFamily);
 bool NativeSystemUiPublicArgumentsValid(NativeSystemUiPublicCall,
                                         std::span<const uint64_t>);
+// Metadata policy only, not a native/caller/profile/UI capability. Production
+// facts come exclusively from the private exact prebound invocation observer.
+struct NativeSigninCreationFacts {
+  bool armed=false,entered=false,returned=false,sender_entered=false,sender_returned=false,lost=false;
+  uint32_t helper_value=0,sender_value=0;
+};
+enum class NativeSigninCreationDecision { kUncertain, kNoUi, kQueued };
+NativeSigninCreationDecision DecideNativeSigninCreation(
+    const NativeSigninCreationFacts&,bool normal_return,bool exact_withdrawal,
+    uint32_t public_value) noexcept;
+// Original17559 Editor helper stack layout. This is scalar ABI metadata only;
+// the Service must additionally retain and authenticate actual caller/code.
+struct NativeEditorLoaderStack {
+  uint32_t producer_sp = 0, data = 0, path = 0;
+};
+std::optional<NativeEditorLoaderStack> CaptureNativeEditorLoaderStack(
+    uint32_t editor_entry_sp, uint32_t stack_limit, uint32_t stack_base) noexcept;
+// Distinguishes the paired producer and launch cut. Never native execution or
+// an ownership grant; production obtains the supplied frame from its exact cell.
+bool MatchesNativeEditorLoaderEdge(bool launch, uint32_t producer_sp,
+                                   uint64_t actual_sp, uint64_t actual_lr) noexcept;
+// Native1A6 returns HRESULT; nativeSYSTEM1A5 returns BOOL acceptance.
+// A failed HRESULT must never become a truthy accepted-launch value.
+constexpr uint32_t NativeEditorLoaderRefusal(bool launch) noexcept {
+  return launch ? 0u : 0x80004004u;
+}
+struct NativeEditorLoaderCodeProfile {
+  std::string_view identity;
+  uint32_t address, bytes, arguments;
+  std::string_view sha256;
+};
+std::span<const NativeEditorLoaderCodeProfile> NativeEditorLoaderCodeProfiles();
+struct ValidatedGuestRuntimePlan;
+// Pure plan-shape policy; code/current caller/Producer remain separate.
+bool NativeEditorLoaderPlanPairValid(const ValidatedGuestRuntimePlan&);
+
 struct NativeSystemUiPublicCallResult {
   enum class Disposition {
     kInactive,

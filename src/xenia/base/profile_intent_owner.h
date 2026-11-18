@@ -8,6 +8,8 @@ namespace xe::kernel::xam {
 class GpdDurableIntentStore;
 }
 namespace xe::filesystem {
+class ManagedStorageBootstrap;
+class ManagedBootstrapCreationPermit;
 // Explicit Emulator bootstrap BEFORE any guest mount. Distinct from console
 // configuration and the existing single-file snapshot recovery authority.
 class ProfileIntentOwner final {
@@ -36,10 +38,16 @@ class ProfileIntentOwner final {
  private:
   friend class xe::kernel::xam::GpdDurableIntentStore;
   friend class ManagedVolumeAuthority;
+  friend class ManagedStorageBootstrap;
   static std::unique_ptr<ProfileIntentOwner> OpenInternal(
       std::shared_ptr<const HostStorageRoot>,
       std::shared_ptr<const ManagedDeviceIdentity>, bool create,
-      std::shared_ptr<const HostStorageIntentLease> source_lease = {});
+      std::shared_ptr<const HostStorageIntentLease> source_lease = {},
+      ManagedBootstrapCreationPermit* creation = nullptr);
+  // Detached existing marker bytes only; never ownership/write permission.
+  static std::vector<uint8_t> BootstrapMarker(const ManagedDeviceIdentity&);
+  static std::vector<uint8_t> FormatInspectionMarker(
+      const ManagedDeviceIdentity&, uint64_t authenticated_epoch);
   // Called only after a complete durable journal has been decoded/verified.
   // Existing intended bytes OR explicitly journaled intended absence can be
   // observed durably. This never claims publication or mints a retry token.

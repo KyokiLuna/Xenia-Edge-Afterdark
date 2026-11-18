@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "xenia/kernel/xam/content_source.h"
 
 namespace xe {
 class Memory;
@@ -26,6 +27,7 @@ class GuestRuntimeCallExecutor;
 class NativeSystemAllocationAuthority;
 class NativeSystemUiStartupCatalog;
 class NativeSystemUiStartupRuntime;
+class NativeAvatarService;
 class XThread;
 struct ValidatedGuestRuntimePlan;
 
@@ -114,6 +116,12 @@ class NativeSystemContent {
   bool CheckStorageDriverContext(uint32_t callback = 0) const;
 
  private:
+  friend class NativeAvatarService;
+  // Actual current source/index/package observation, privately borrowed by
+  // the avatar owner. A copied Snapshot or caller readiness flag cannot mint
+  // this retained source capability.
+  std::optional<xam::ContentSourceState> CaptureAvatarSource(
+      const GuestRuntimeCallExecutor&) const;
   friend class NativeSystemUiStartupCatalog;
   friend class NativeSystemUiStartupRuntime;
   static std::shared_ptr<NativeSystemContent> Create(

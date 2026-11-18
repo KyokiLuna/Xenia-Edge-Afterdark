@@ -38,6 +38,7 @@
 #include <wx/toplevel.h>
 #include <wx/translation.h>
 #include <wx/variant.h>
+#include <wx/weakref.h>
 
 #include "third_party/fmt/include/fmt/chrono.h"
 #include "third_party/fmt/include/fmt/format.h"
@@ -60,7 +61,6 @@
 #include "xenia/ui/icon_decode.h"
 #include "xenia/ui/patches_panel_wx.h"
 #include "xenia/ui/wx_locale.h"
-#include "xenia/vfs/devices/xcontent_container_device.h"
 #include "xenia/vfs/xbox_original_data.h"
 
 namespace xe {
@@ -109,10 +109,25 @@ constexpr char kXboxOriginalCompatUrl[] =
     "https://consolemods.org/wiki/"
     "Xbox_360:Original_Xbox_Games_Compatibility_List";
 
-kernel::xam::XamState* XamStateOf(EmulatorWindow* emulator_window) {
-  auto* emulator = emulator_window ? emulator_window->emulator() : nullptr;
-  auto* kernel_state = emulator ? emulator->kernel_state() : nullptr;
-  return kernel_state ? kernel_state->xam_state() : nullptr;
+uint64_t CaptureSignedInXuid(EmulatorWindow* window, uint8_t requested_slot) {
+  auto* emulator = window ? window->emulator() : nullptr;
+  uint64_t xuid = 0;
+  if (emulator) {
+    emulator->WithHostRuntime([&](kernel::KernelState& runtime) -> X_RESULT {
+      auto* profiles = runtime.xam_state()->profile_manager();
+      if (requested_slot < XUserMaxUserCount) {
+        const auto profile = profiles->CaptureProfile(requested_slot);
+        if (profile) { xuid = profile->xuid(); }
+      } else {
+        for (uint8_t slot = 0; slot < XUserMaxUserCount; ++slot) {
+          const auto profile = profiles->CaptureProfile(slot);
+          if (profile) { xuid = profile->xuid(); break; }
+        }
+      }
+      return X_ERROR_SUCCESS;
+    });
+  }
+  return xuid;
 }
 
 // Bytes held by a file, or by everything under a directory.
@@ -162,31 +177,39 @@ wxString FormatLastPlayed(time_t timestamp) {
   return wxString::FromUTF8(fmt::format("{:%Y-%m-%d %H:%M}", tm));
 }
 
-// Installed content of one type. The content manager resolves the friendly
-// name out of each package header; without a kernel we can only show the file
-// names on disk.
+// Enumerate the registry's actual device IDs. Guest device zero is not an
+// all-device request, and a row's physical location must not be guessed from
+// the primary content root. Overlay priority remains the common backend's.
 std::vector<ContentItem> ListContentItems(kernel::xam::ContentManager* manager,
-                                          const std::filesystem::path& root,
-                                          uint64_t xuid, uint32_t title_id,
-                                          XContentType content_type) {
+                                        uint64_t xuid, uint32_t title_id,
+                                        XContentType content_type) {
   std::vector<ContentItem> items;
-  if (manager) {
-    for (const auto& data :
-         manager->ListContent(0, xuid, title_id, content_type)) {
-      const auto display_name = xe::to_utf8(data.display_name());
-      ContentItem item;
-      item.name = wxString::FromUTF8(display_name.empty() ? data.file_name()
-                                                          : display_name);
-      item.size_bytes = PathSize(root / xe::to_path(data.file_name()));
-      items.push_back(std::move(item));
-    }
+  if (!manager) {
     return items;
   }
-  for (const auto& info : xe::filesystem::ListFiles(root)) {
-    ContentItem item;
-    item.name = wxString::FromUTF8(xe::path_to_utf8(info.name));
-    item.size_bytes = PathSize(info.path / info.name);
-    items.push_back(std::move(item));
+  for (const auto device : manager->sources().DeviceIds()) {
+    for (const auto& data :
+         manager->ListContent(device, xuid, title_id, content_type)) {
+      kernel::xam::ContentCatalogLocation location;
+      if (manager->CaptureContentLocation(xuid, data, location)) {
+        continue;
+      }
+      const auto display_name = xe::to_utf8(location.descriptor.display_name());
+      ContentItem item;
+      item.name = wxString::FromUTF8(display_name.empty()
+                                        ? location.descriptor.file_name()
+                                        : display_name);
+      if (!location.source_name.empty()) {
+        item.name = wxString::Format(
+            _("%s (%s)"), item.name,
+            wxString::FromUTF8(xe::to_utf8(location.source_name)));
+      }
+      item.size_bytes = location.attributes.size;
+      item.location =
+          std::make_shared<const kernel::xam::ContentCatalogLocation>(
+              std::move(location));
+      items.push_back(std::move(item));
+    }
   }
   return items;
 }
@@ -250,21 +273,15 @@ GameInfoPanel::GameInfoPanel(wxWindow* parent, EmulatorWindow* emulator_window)
   Rebuild();
 }
 
-kernel::xam::ProfileManager* GameInfoPanel::profile_manager() const {
-  auto* xam_state = XamStateOf(emulator_window_);
-  return xam_state ? xam_state->profile_manager() : nullptr;
-}
-
-kernel::xam::ContentManager* GameInfoPanel::content_manager() const {
-  auto* xam_state = XamStateOf(emulator_window_);
-  return xam_state ? xam_state->content_manager() : nullptr;
-}
-
 void GameInfoPanel::ShowTitle(const LibraryKey& key, CompatState compat,
                               const TitleStats& stats) {
   key_ = key;
   compat_ = compat;
   stats_ = stats;
+  refresh_timer_.StartOnce(kRefreshDelayMs);
+}
+
+void GameInfoPanel::RefreshContent() {
   refresh_timer_.StartOnce(kRefreshDelayMs);
 }
 
@@ -363,15 +380,14 @@ void GameInfoPanel::BuildPage(int page) {
       // shared profile's save folder instead, and a few put install data
       // there, but the folder is a save location whatever lands in it, so it
       // is listed here rather than with installed content.
-      auto* profiles = profile_manager();
-      auto* primary = profiles ? profiles->GetProfile(uint8_t(0)) : nullptr;
+      const uint64_t primary_xuid = CaptureSignedInXuid(emulator_window_, 0);
       std::vector<ContentLocation> locations;
-      if (primary) {
-        locations.push_back({XContentType::kSavedGame, primary->xuid()});
+      if (primary_xuid) {
+        locations.push_back({XContentType::kSavedGame, primary_xuid});
       }
       locations.push_back({XContentType::kSavedGame, 0});
       BuildContentSection(window, sizer, _("Saves (%zu)"), std::move(locations),
-                          primary ? wxString() : _("No profile is signed in."));
+                          primary_xuid ? wxString() : _("Profile saves are unavailable."));
       break;
     }
     case kPagePatches:
@@ -656,31 +672,30 @@ void GameInfoPanel::BuildContentSection(wxWindow* parent, wxBoxSizer* sizer,
                                         std::vector<ContentLocation> locations,
                                         const wxString& note,
                                         bool allow_import) {
-  auto* profiles = profile_manager();
-  std::filesystem::path root;
   std::vector<ContentItem> items;
-  if (note.empty() && profiles && !locations.empty()) {
-    root = profiles->GetProfileContentPath(
-        locations.front().xuid, key_.title_id, locations.front().content_type);
-    for (const auto& location : locations) {
-      auto found = ListContentItems(
-          content_manager(),
-          profiles->GetProfileContentPath(location.xuid, key_.title_id,
-                                          location.content_type),
-          location.xuid, key_.title_id, location.content_type);
-      items.insert(items.end(), std::make_move_iterator(found.begin()),
-                   std::make_move_iterator(found.end()));
-    }
-  }
-
+  auto* emulator = emulator_window_ ? emulator_window_->emulator() : nullptr;
+  const uint32_t title_id = key_.title_id;
+  const auto result = emulator ? emulator->WithContentCatalog(
+      [&](kernel::xam::ContentManager& manager) -> X_RESULT {
+        for (const auto& location : locations) {
+          auto found = ListContentItems(&manager, location.xuid, title_id,
+                                        location.content_type);
+          items.insert(items.end(), std::make_move_iterator(found.begin()),
+                       std::make_move_iterator(found.end()));
+        }
+        return X_ERROR_SUCCESS;
+      }) : X_ERROR_DEVICE_NOT_CONNECTED;
   AddSectionHeader(parent, sizer, wxString::Format(header_format, items.size()),
-                   root,
-                   allow_import ? locations : std::vector<ContentLocation>());
-
-  if (!note.empty()) {
-    AddNoteRow(parent, sizer, note);
+                   {}, allow_import && result == X_ERROR_SUCCESS
+                           ? locations : std::vector<ContentLocation>());
+  if (result != X_ERROR_SUCCESS) {
+    AddNoteRow(parent, sizer,
+        _("Storage is busy or unavailable. Refresh after the current operation."));
     return;
   }
+  if (!note.empty()) { AddNoteRow(parent, sizer, note); }
+  // Shared saves/content remain discoverable independently of a healthy
+  // signed-in profile. An informational profile note does not hide those rows.
   AddContentRows(parent, sizer, items);
 }
 
@@ -691,12 +706,30 @@ void GameInfoPanel::AddContentRows(wxWindow* parent, wxBoxSizer* sizer,
     return;
   }
 
-  auto* grid = new wxFlexGridSizer(2, FromDIP(2), char_w_ * 2);
+  const bool has_locations =
+      std::any_of(items.begin(), items.end(),
+                  [](const auto& item) { return bool(item.location); });
+  auto* grid = new wxFlexGridSizer(has_locations ? 3 : 2, FromDIP(2),
+                                  char_w_ * 2);
   grid->AddGrowableCol(0);
   for (const auto& item : items) {
     grid->Add(MakeElidedLabel(parent, item.name), 0, wxEXPAND);
     grid->Add(new wxStaticText(parent, wxID_ANY, FormatSize(item.size_bytes)),
               0, wxALIGN_RIGHT);
+    if (has_locations) {
+      if (item.location) {
+        auto* open = new wxButton(parent, wxID_ANY, _("Open folder"),
+                                  wxDefaultPosition, wxDefaultSize,
+                                  wxBU_EXACTFIT);
+        open->Bind(
+            wxEVT_BUTTON, [this, location = item.location](wxCommandEvent&) {
+              OpenContentLocation(location);
+            });
+        grid->Add(open, 0, wxALIGN_RIGHT);
+      } else {
+        grid->AddSpacer(0);
+      }
+    }
   }
   sizer->Add(grid, 0, wxEXPAND);
 }
@@ -711,10 +744,8 @@ std::filesystem::path GameInfoPanel::XboxOriginalTitleDir(
   std::filesystem::path dir;
   if (area == "UDATA") {
     // The signed-in profile's, as the game would get.
-    auto* profiles = profile_manager();
-    auto* profile = profiles ? profiles->GetProfile(XUserIndexAny) : nullptr;
-    dir = vfs::FindXboxOriginalSaves(emulator->compatibility_path(),
-                                     profile ? profile->xuid() : 0);
+    const auto xuid = CaptureSignedInXuid(emulator_window_, XUserIndexAny);
+    dir = vfs::FindXboxOriginalSaves(emulator->compatibility_path(), xuid);
   } else {
     dir = vfs::FindXboxOriginalPath(
         vfs::FindXboxOriginalPath(emulator->compatibility_path(), "Xbox1"),
@@ -820,90 +851,75 @@ void GameInfoPanel::BuildConfigSection(wxWindow* parent, wxBoxSizer* sizer) {
 
 void GameInfoPanel::ImportContent(
     const std::vector<ContentLocation>& locations) {
-  auto* profiles = profile_manager();
-  if (!profiles || locations.empty()) {
+  if (!emulator_window_ || locations.empty()) {
+    return;
+  }
+  const auto selected_locations = locations;
+  const auto selected_key = key_;
+  wxWeakRef<GameInfoPanel> alive(this);
+  const uint64_t owner = selected_locations.front().xuid;
+  if (std::any_of(selected_locations.begin(), selected_locations.end(),
+                  [owner](const auto& location) {
+                    return location.xuid != owner;
+                  })) {
+    wxMessageBox(_("Choose one profile before importing content."),
+                 _("Content import"), wxOK | wxICON_WARNING,
+                 wxGetTopLevelParent(this));
     return;
   }
   wxFileDialog picker(wxGetTopLevelParent(this), _("Select content packages"),
                       wxString(), wxString(), _("All Files (*.*)|*.*"),
                       wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
-  if (picker.ShowModal() != wxID_OK) {
+  const auto selection = picker.ShowModal();
+  if (!alive || selection != wxID_OK) {
     return;
   }
   wxArrayString picked;
   picker.GetPaths(picked);
 
-  wxArrayString rejected;
-  size_t added = 0;
-  for (const auto& picked_path : picked) {
-    const auto source = xe::to_path(picked_path.utf8_string());
-    const wxString name =
-        wxString::FromUTF8(xe::path_to_utf8(source.filename()));
-
-    // Same header the content list reads to name these packages.
-    const auto header =
-        vfs::XContentContainerDevice::ReadContainerHeader(source);
-    if (!header || !header->content_header.is_magic_valid()) {
-      rejected.Add(wxString::Format(_("%s is not a content package."), name));
-      continue;
+  std::vector<std::filesystem::path> paths;
+  paths.reserve(picked.size());
+  for (const auto& path : picked) { paths.push_back(xe::to_path(path.utf8_string())); }
+  if (paths.empty()) { return; }
+  EmulatorWindow::ContentInstallTarget target;
+  target.title_id = selected_key.title_id;
+  target.owner_xuid = owner;
+  if (selected_key.version) { target.expected_title_version = selected_key.version; }
+  for (const auto& location : selected_locations) {
+    if (std::find(target.content_types.begin(), target.content_types.end(),
+                  location.content_type) == target.content_types.end()) {
+      target.content_types.push_back(location.content_type);
     }
-    const auto data =
-        vfs::XContentContainerDevice::ContentDataFromHeader(*header);
-    if (data.title_id != key_.title_id) {
-      rejected.Add(wxString::Format(_("%s belongs to title %08X."), name,
-                                    data.title_id.get()));
-      continue;
-    }
-    // A section can cover more than one folder, so the package's own type
-    // picks the one it lands in.
-    const auto location =
-        std::find_if(locations.begin(), locations.end(),
-                     [&data](const ContentLocation& candidate) {
-                       return data.content_type == candidate.content_type;
-                     });
-    if (location == locations.end()) {
-      rejected.Add(
-          wxString::Format(_("%s is a different kind of content."), name));
-      continue;
-    }
-    // A title update's header describes the release it patches rather than
-    // itself, so its version names that release the same way ours does. Media
-    // id cannot: a set has one per disc, and the update carries only the disc
-    // it was built against. An unknown on either side skips the check rather
-    // than refusing on missing information.
-    const uint32_t version =
-        header->content_metadata.execution_info.version_value;
-    if (data.content_type == XContentType::kInstaller && key_.version &&
-        version && version != key_.version) {
-      rejected.Add(wxString::Format(
-          _("%s is for a different release of this game."), name));
-      continue;
-    }
-
-    const auto root = profiles->GetProfileContentPath(
-        location->xuid, key_.title_id, location->content_type);
-    std::error_code ec;
-    std::filesystem::create_directories(root, ec);
-    const auto destination = root / source.filename();
-    std::filesystem::copy_file(
-        source, destination, std::filesystem::copy_options::overwrite_existing,
-        ec);
-    if (ec) {
-      rejected.Add(wxString::Format(_("%s could not be copied: %s"), name,
-                                    wxString::FromUTF8(ec.message())));
-      continue;
-    }
-    ++added;
   }
+  emulator_window_->InstallContentPackages(paths, target);
+  if (alive) { RefreshContent(); }
+}
 
-  if (!rejected.IsEmpty()) {
-    wxMessageBox(wxJoin(rejected, '\n'), _("Some packages were not added"),
-                 wxOK | wxICON_WARNING, wxGetTopLevelParent(this));
+void GameInfoPanel::OpenContentLocation(
+    std::shared_ptr<const kernel::xam::ContentCatalogLocation> location) {
+  auto* emulator = emulator_window_ ? emulator_window_->emulator() : nullptr;
+  std::filesystem::path path;
+  const auto result = location && emulator ? emulator->WithContentCatalog(
+      [&](kernel::xam::ContentManager& manager) -> X_RESULT {
+        if (!manager.IsContentLocationCurrent(*location)) {
+          return X_ERROR_DEVICE_NOT_CONNECTED;
+        }
+        path = location->directory ? location->package_path
+                                   : location->package_path.parent_path();
+        return X_ERROR_SUCCESS;
+      }) : X_ERROR_DEVICE_NOT_CONNECTED;
+  if (result != X_ERROR_SUCCESS) {
+    wxWeakRef<GameInfoPanel> alive(this);
+    wxMessageBox(_("This storage location is busy or no longer available. "
+                   "Refresh the content list."),
+                 _("Storage unavailable"), wxOK | wxICON_INFORMATION,
+                 wxGetTopLevelParent(this));
+    if (alive) { RefreshContent(); }
+    return;
   }
-  if (added) {
-    // Deferred: this runs from the Add button, which the rebuild destroys.
-    CallAfter([this]() { Rebuild(); });
-  }
+  // Explorer receives only a copied path after the runtime callback returns.
+  // Browsing creates nothing and grants no storage mutation authority.
+  std::thread(xe::LaunchFileExplorer, std::move(path)).detach();
 }
 
 wxStaticText* GameInfoPanel::AddSectionHeader(
@@ -916,7 +932,7 @@ wxStaticText* GameInfoPanel::AddSectionHeader(
   row->Add(label, 0, wxALIGN_CENTER_VERTICAL);
   row->AddStretchSpacer();
 
-  if (!import_locations.empty() && !open_path.empty()) {
+  if (!import_locations.empty()) {
     auto* add = new wxButton(parent, wxID_ANY, _("Add..."), wxDefaultPosition,
                              wxDefaultSize, wxBU_EXACTFIT);
     add->Bind(wxEVT_BUTTON, [this, import_locations](wxCommandEvent&) {
@@ -929,9 +945,10 @@ wxStaticText* GameInfoPanel::AddSectionHeader(
     auto* open = new wxButton(parent, wxID_ANY, _("Open folder"),
                               wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
     open->Bind(wxEVT_BUTTON, [open_path](wxCommandEvent&) {
-      // A content folder only exists once something is in it.
       std::error_code ec;
-      std::filesystem::create_directories(open_path, ec);
+      if (!std::filesystem::is_directory(open_path, ec) || ec) {
+        return;
+      }
       std::thread(xe::LaunchFileExplorer, open_path).detach();
     });
     row->Add(open, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 8);

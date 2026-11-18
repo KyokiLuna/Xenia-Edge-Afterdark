@@ -13,10 +13,13 @@
 #include <charconv>
 #include <limits>
 #include <sstream>
+#include <utility>
 
 #include "third_party/mbedtls/include/mbedtls/sha256.h"
 #include "third_party/tomlplusplus/toml.hpp"
 #include "xenia/cpu/guest_call_abi.h"
+#include "xenia/kernel/native_avatar_contract.h"
+#include "xenia/kernel/native_profile_identity_contract.h"
 
 namespace xe::kernel {
 namespace {
@@ -186,6 +189,17 @@ std::optional<ValidatedGuestRuntimePlan> ParseGuestRuntimePlan(
           return fail("Invalid internal bridge selector or host service ABI");
         }
         const uint32_t address = image.base + *rva;
+        // The RVA selector must not provide another encoding of the forbidden
+        // native-query replacement, including a partial overlapping overlay.
+        for (const auto [ordinal, native] :
+             std::array<std::pair<uint16_t, uint32_t>, 2>{{
+                 {0x20A, 0x816D8590}, {0x211, 0x816D8698}}}) {
+          if (uint64_t(address) < uint64_t(native) + 12 &&
+              uint64_t(native) < uint64_t(address) + *size &&
+              image.export_address(ordinal) == native) {
+            return fail("Native XAM cache queries cannot be replaced by host bridges");
+          }
+        }
         if (!CodeHashMatches(image, address, *size, *sha)) {
           return fail("Internal bridge code identity mismatch");
         }
@@ -211,7 +225,34 @@ std::optional<ValidatedGuestRuntimePlan> ParseGuestRuntimePlan(
           library->empty() || library->size() > 256) {
         return fail("Invalid guest export bridge identity");
       }
-      result.bridges.push_back({*library, uint16_t(*ordinal)});
+      // A runtime export bridge replaces the selected image's own entry,
+      // independently of its host-library destination. These two retail XAM
+      // entries query native cache publication, not the host selected roster.
+      // Check the actual export identity so unrelated images' ordinal numbers
+      // and ordinary title import resolution retain their existing behavior.
+      if ((*ordinal == 0x20A && image.export_address(0x20A) == 0x816D8590) ||
+          (*ordinal == 0x211 && image.export_address(0x211) == 0x816D8698)) {
+        return fail("Native XAM cache queries cannot be replaced by host bridges");
+      }
+      ValidatedGuestRuntimePlan::Bridge entry{*library, uint16_t(*ordinal)};
+      if (bridge->contains("code_size") || bridge->contains("code_sha256")) {
+        const auto bytes = Dword((*bridge)["code_size"]);
+        const auto sha = (*bridge)["code_sha256"].value<std::string>();
+        const auto* profile = NativeAvatarBridge(uint16_t(*ordinal));
+        const auto* identity = NativeProfileIdentityBridge(uint16_t(*ordinal));
+        const uint32_t address = profile ? profile->address : identity ? identity->address : 0;
+        const uint32_t full_size = profile ? profile->bytes : identity ? identity->bytes : 0;
+        const std::string_view full_sha = profile ? profile->sha256 : identity ? identity->sha256 : std::string_view{};
+        if (*library != "xam.xex" || (!profile && !identity) || !bytes || !sha ||
+            *bytes != full_size || *sha != full_sha ||
+            image.export_address(uint16_t(*ordinal)) != address ||
+            !CodeHashMatches(image, address, *bytes, *sha)) {
+          return fail("Full-entry shared profile provider source witness mismatch");
+        }
+        entry.code_size = *bytes;
+        entry.code_sha256 = *sha;
+      }
+      result.bridges.push_back(std::move(entry));
     }
   } else if (root.contains("bridge")) {
     return fail("Invalid bridge array");
@@ -360,6 +401,14 @@ std::optional<ValidatedGuestRuntimePlan> ParseGuestRuntimePlan(
   }
   if (result.plan.phases.empty()) {
     return fail("No runtime initialization phases");
+  }
+  if (CheckNativeAvatarPlanFamily(result, error) ==
+      NativeAvatarPlanFamily::kInvalid) {
+    return std::nullopt;
+  }
+  if (CheckNativeProfileIdentityPlanFamily(result, error) ==
+      NativeProfileIdentityPlanFamily::kInvalid) {
+    return std::nullopt;
   }
   if (error) {
     error->clear();

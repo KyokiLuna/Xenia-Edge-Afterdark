@@ -188,7 +188,7 @@ void GameAchievementsUI::DrawTitleAchievementInfo(
   ImGui::PopFont();
 }
 
-void GameAchievementsUI::OnDraw(ImGuiIO& io) {
+void GameAchievementsUI::OnDrawDialog(ImGuiIO& io) {
   // Handle keyboard escape or gamepad B/Back to close
   if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ShouldCloseFromGamepad()) {
     Close();

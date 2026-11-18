@@ -10,11 +10,15 @@
 #include "xenia/base/filesystem.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/math.h"
+#include "xenia/base/mutex.h"
 #include "xenia/base/utf8.h"
 #include "xenia/kernel/info/file.h"
 #include "xenia/kernel/info/volume.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/util/shim_utils.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
+#include <array>
+#include <limits>
 #include "xenia/kernel/xboxkrnl/xboxkrnl_ob.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/kernel/xfile.h"
@@ -52,6 +56,65 @@ uint32_t GetQueryFileInfoMinimumLength(uint32_t info_class) {
   }
 }
 
+namespace {
+X_STATUS QueryRetainedAllocationInformation(
+    KernelState* kernel, uint32_t handle, uint32_t output, uint32_t iosb) {
+  if (!kernel) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  auto file = kernel->object_table()->LookupObject<XFile>(handle);
+  if (!file || !file->file() || !file->entry() || !file->device()) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  auto& memory = *kernel->memory();
+  constexpr uint32_t bytes = sizeof(X_FILE_ALLOCATION_INFORMATION);
+  static_assert(bytes == 8);
+  if (!util::GuestIoRangeValid(memory, output, bytes, true) ||
+      (iosb && !util::GuestIoRangeValid(memory, iosb,
+                                       sizeof(X_IO_STATUS_BLOCK), true))) {
+    return X_STATUS_ACCESS_VIOLATION;
+  }
+  if (iosb && util::GuestIoRangesOverlap(memory, output, bytes, iosb,
+                                        sizeof(X_IO_STATUS_BLOCK))) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  uint64_t allocation = 0;
+  // A scheduling boundary which declines execution during shutdown must not
+  // turn a still-zero local value into fabricated successful allocation.
+  X_STATUS status = X_STATUS_CANCELLED;
+  kernel->RunBlockingIo(
+      [&] { status = file->file()->QueryAllocationSize(&allocation); },
+      file->device()->supports_concurrent_io()
+          ? GuestScheduler::BlockingCallClass::kConcurrent
+          : GuestScheduler::BlockingCallClass::kSerial);
+  if (XFAILED(status)) {
+    return status;
+  }
+  if (allocation > uint64_t(std::numeric_limits<int64_t>::max())) {
+    return X_STATUS(0xC0000095);  // STATUS_INTEGER_OVERFLOW
+  }
+  X_FILE_ALLOCATION_INFORMATION information{};
+  information.allocation_size = allocation;
+  X_IO_STATUS_BLOCK status_block{};
+  status_block.status = X_STATUS_SUCCESS;
+  status_block.information = bytes;
+  const std::array<util::GuestIoWrite, 2> writes{{
+      {output, {reinterpret_cast<const uint8_t*>(&information), bytes}},
+      {iosb, iosb ? std::span<const uint8_t>(
+                         reinterpret_cast<const uint8_t*>(&status_block),
+                         sizeof(status_block))
+                  : std::span<const uint8_t>{}},
+  }};
+  // Both complete actual outputs and physical aliases are revalidated after
+  // every provider wait before either payload or IOSB is stored. Extra caller
+  // capacity, position, completions and failed-request bytes stay untouched.
+  return util::WriteGuestIoBuffers(memory, writes);
+}
+}  // namespace
+
 dword_result_t NtQueryInformationFile_entry(
     dword_t file_handle, pointer_t<X_IO_STATUS_BLOCK> io_status_block_ptr,
     lpvoid_t info_ptr, dword_t info_length, dword_t info_class) {
@@ -62,6 +125,12 @@ dword_result_t NtQueryInformationFile_entry(
 
   if (info_length < minimum_length) {
     return X_STATUS_INFO_LENGTH_MISMATCH;
+  }
+
+  if (info_class == XFileAllocationInformation) {
+    return QueryRetainedAllocationInformation(
+        kernel_state(), file_handle, info_ptr.guest_address(),
+        io_status_block_ptr.guest_address());
   }
 
   auto file = kernel_state()->object_table()->LookupObject<XFile>(file_handle);
@@ -376,6 +445,46 @@ dword_result_t NtQueryVolumeInformationFile_entry(
     return X_STATUS_INVALID_HANDLE;
   }
 
+  if (info_class == XFileFsDeviceInformation) {
+    // Native XAM's FE20021 handler reaches this path too. Retain the actual
+    // open file's device and use the same immutable console volume descriptor
+    // as HLE FE dispatch, never the current title's deployment or a root lookup.
+    const auto device = file->file()->retained_device();
+    if (!device || device.get() != file->device()) {
+      return X_STATUS_INVALID_HANDLE;
+    }
+    const auto volume = device->storage_volume();
+    if (device->namespace_retiring() ||
+        (volume && !volume->available_cached())) {
+      return vfs::HostStorageError(std::make_error_code(std::errc::no_such_device));
+    }
+    X_FILE_FS_DEVICE_INFORMATION information{};
+    const auto physical_type = volume
+        ? filesystem::NativeStorageDeviceType(volume->type())
+        : std::optional<uint32_t>{};
+    information.device_type = static_cast<X_FILE_DEVICE_TYPE>(
+        physical_type.value_or(FILE_DEVICE_UNKNOWN));
+    // Preserve the existing mounted-content compatibility characteristic.
+    // Its separate retail policy is not inferred from the physical host disk.
+    information.characteristics =
+        xe::utf8::starts_with(device->mount_path(), "\\Device\\Content\\") ? 2 : 0;
+    X_IO_STATUS_BLOCK status_block{};
+    status_block.status = X_STATUS_SUCCESS;
+    status_block.information = sizeof(information);
+    const std::array<util::GuestIoWrite, 2> writes{{
+        {info_ptr.guest_address(),
+         {reinterpret_cast<const uint8_t*>(&information), sizeof(information)}},
+        {io_status_block_ptr.guest_address(),
+         io_status_block_ptr
+             ? std::span<const uint8_t>(
+                   reinterpret_cast<const uint8_t*>(&status_block), sizeof(status_block))
+             : std::span<const uint8_t>{}}
+    }};
+    // Validate both full outputs and their physical aliases before either is
+    // written. Unlike legacy info classes, extra caller capacity stays intact.
+    return util::WriteGuestIoBuffers(*kernel_state()->memory(), writes);
+  }
+
   info_ptr.Zero(info_length);
 
   X_STATUS status = X_STATUS_SUCCESS;
@@ -440,7 +549,7 @@ dword_result_t NtQueryVolumeInformationFile_entry(
     case XFileFsDeviceInformation: {
       auto info = info_ptr.as<X_FILE_FS_DEVICE_INFORMATION*>();
       auto file_device = file->device();
-      XELOGW("Stub XFileFsDeviceInformation!");
+      // Unreachable: handled above by the common retained-volume path.
       info->device_type =
           FILE_DEVICE_UNKNOWN;  // 415608D8 checks for FILE_DEVICE_EHSTOR;
       // 58480880 deletes a content package it reopens unless its volume

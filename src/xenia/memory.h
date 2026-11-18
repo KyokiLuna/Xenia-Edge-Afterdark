@@ -34,6 +34,42 @@ class ByteStream;
 namespace xe {
 
 class Memory;
+class BaseHeap;
+namespace kernel {
+class NativeAvatarService;
+class NativeProfileIdentityOwner;
+class NativeMediaService;
+namespace test { class NativeAvatarServiceTestAccess; }
+}  // namespace kernel
+
+// A native avatar operation borrows these existing guest bytes. This is not
+// allocation ownership: the caller must still keep its CRT/custom-heap
+// suballocation alive until native completion. The token preserves committed
+// backing/protection against the page allocator, including physical aliases.
+struct NativeAvatarBackingRange {
+  uint32_t address = 0, length = 0;
+  bool writable = true;
+};
+class NativeAvatarBackingLease final {
+ public:
+  bool current() const { return current_.load(std::memory_order_acquire); }
+ private:
+  friend class Memory;
+  struct Range {
+    const BaseHeap* heap = nullptr;
+    uint32_t address = 0, length = 0;
+    bool physical = false;
+    uint32_t physical_address = 0;
+  };
+  NativeAvatarBackingLease() = default;
+  std::vector<Range> ranges_;
+  std::atomic<bool> current_{true};
+};
+
+// Shared private service spelling for the SAME no-retag committed-backing
+// contract. This adds no allocation/suballocation or GPU ownership authority.
+using NativeServiceBackingRange = NativeAvatarBackingRange;
+using NativeServiceBackingLease = NativeAvatarBackingLease;
 
 enum SystemHeapFlag : uint32_t {
   kSystemHeapVirtual = 1 << 0,
@@ -1165,6 +1201,22 @@ class Memory {
   friend class BaseHeap;
 
   friend class PhysicalHeap;
+  friend class kernel::NativeAvatarService;
+  friend class kernel::NativeProfileIdentityOwner;
+  friend class kernel::NativeMediaService;
+  friend class kernel::test::NativeAvatarServiceTestAccess;
+  // Private exact native-avatar ingress only. No foreign allocation is tagged
+  // or adopted, and no caller boolean supplies a SYSTEM allocation owner.
+  std::shared_ptr<const NativeAvatarBackingLease> BorrowNativeAvatarBacking(
+      std::span<const NativeAvatarBackingRange> ranges);
+  std::shared_ptr<const NativeServiceBackingLease> BorrowNativeServiceBacking(
+      std::span<const NativeServiceBackingRange> ranges);
+  bool HasNativeAvatarBackingLocked() const;
+  bool HasNativeAvatarBackingLocked(const BaseHeap&, uint32_t address,
+                                    uint32_t length) const;
+  bool NativeAvatarPhysicalRangeLocked(const BaseHeap&, uint32_t address,
+                                        uint32_t* physical_address) const;
+  std::vector<std::weak_ptr<NativeAvatarBackingLease>> native_avatar_backing_;
   bool CanMutatePhysicalRangeLocked(const BaseHeap& heap, uint32_t address,
                                     uint32_t length) const;
   void ForgetPhysicalRangeLocked(const BaseHeap& heap, uint32_t address,

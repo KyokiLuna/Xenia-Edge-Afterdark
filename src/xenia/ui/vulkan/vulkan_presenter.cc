@@ -19,6 +19,7 @@
 #include "xenia/base/math.h"
 #include "xenia/base/native_system_ui_trace.h"
 #include "xenia/base/platform.h"
+#include "xenia/gpu/native_frame_execution.h"
 #include "xenia/ui/native_ui_plane_handoff.h"
 #include "xenia/ui/vulkan/vulkan_util.h"
 
@@ -1522,7 +1523,20 @@ Presenter::PaintResult VulkanPresenter::PaintAndPresentImpl(
   NativeUiPlaneImageSelection::Preflight native_probe;
   {
     std::lock_guard lock(submission_mutex_);
-    native_probe = native_ui_plane_selection_.Prepare(native_visibility);
+    NativeUiPlaneImageReference desired;
+    if (native_visibility.image_permission) {
+      for (auto it = native_ui_plane_publications_.rbegin();
+           it != native_ui_plane_publications_.rend(); ++it) {
+        if ((*it)->image.identity ==
+            native_visibility.image_permission->image()) {
+          desired = NativePlaneReference(*it);
+          break;
+        }
+      }
+    }
+    native_probe = native_ui_plane_selection_.Prepare(
+        native_visibility, desired,
+        NativePlaneReference(native_ui_plane_current_));
   }
   // Authority/epoch checks may inspect actual native host metadata. No backend
   // lock may be held; the locked selection below rechecks snapshot identities
@@ -2834,7 +2848,11 @@ bool VulkanPresenter::PublishNativeUiPlane(NativeUiPlaneImage image) {
   const auto authority =
       GetNativeUiPlaneAuthority(image.identity.owner, image.backend_epoch);
   const auto tag = image.producer_completion.native_frame_identity();
-  if (!authority || authority != image.authority ||
+  if ((image.presentation_guard &&
+       (image.presentation_guard->IsRevoked() ||
+        !image.presentation_guard->IsLive() ||
+        image.presentation_guard->IsRevoked())) ||
+      !authority || authority != image.authority ||
       image.device != vulkan_device_ || !image.identity.valid() ||
       !image.version || !image.width || !image.height || !image.image ||
       !image.view || !image.lifetime || !tag || *tag != image.identity ||
@@ -2885,21 +2903,74 @@ void VulkanPresenter::FailNativeUiPlane() noexcept {
   }
 }
 
-bool VulkanPresenter::AwaitNativeUiPlanePaintRetirementLocked() {
-  if (!native_gpu_cohort_epoch_ || native_ui_plane_stopped_) {
-    return true;
+bool VulkanPresenter::DrainNativeUiPlanePaintForGuard(
+    const std::shared_ptr<const NativeUiPlaneAuthority>& authority,
+    const std::shared_ptr<const gpu::NativeFramePresentationGuard>& guard,
+    gpu::NativeFramePaintDrainObservation* observation) {
+  using Stage=gpu::NativeFramePaintDrainObservation::Stage;
+  if(observation)observation->Begin(Stage::kPresenter);
+  const auto observed=[&](uint32_t bit,bool value) noexcept {
+    return observation?observation->Observe(Stage::kPresenter,bit,value):value;
+  };
+  const auto finish=[&](bool value) noexcept {
+    if(observation)observation->Finish(Stage::kPresenter,value);return value;
+  };
+  // Retirement does not require a new visibility grant. Actual title stop
+  // changes Running/foreground ownership before draining captured sampling.
+  // Exact registered authority/backend and sticky revoked origin remain below.
+  if (observed(0,!authority) || observed(1,!guard) || observed(2,!guard->IsRevoked())) {
+    return finish(false);
   }
+  std::lock_guard lock(submission_mutex_);
+  if (observed(3,submissions_sealed_) || observed(4,native_ui_plane_failed_) ||
+      observed(5,!native_gpu_cohort_epoch_) || observed(6,native_ui_plane_stopped_) ||
+      observed(7,authority->owner().backend_epoch != native_gpu_cohort_epoch_) ||
+      observed(8,SnapshotNativeUiPlaneVisibility().authority != authority) ||
+      observed(9,!guard->IsRevoked())) {
+    return finish(false);
+  }
+  // Same real timeline used for paint image reclamation, under the mutex that
+  // owns recording/submission. This is sampling retirement, not native clear.
+  const auto await_original=[&] {
+    if(observation)observation->Begin(Stage::kPaintRetirement);
+    const bool value=AwaitNativeUiPlanePaintRetirementLocked(observation);
+    if(observation)observation->Finish(Stage::kPaintRetirement,value);
+    return value;
+  };
+  return finish(observed(10,await_original()) && observed(11,guard->IsRevoked()) &&
+         observed(12,SnapshotNativeUiPlaneVisibility().authority == authority));
+}
+
+bool VulkanPresenter::AwaitNativeUiPlanePaintRetirementLocked(
+    gpu::NativeFramePaintDrainObservation* observation) {
+  using Stage=gpu::NativeFramePaintDrainObservation::Stage;
+  using Scalar=gpu::NativeFramePaintDrainObservation::Scalar;
+  if(observation)observation->Begin(Stage::kPaintFence);
+  const auto observed=[&](uint32_t bit,bool value) noexcept {
+    return observation?observation->Observe(Stage::kPaintFence,bit,value):value;
+  };
+  const auto captured=[&](Scalar field,auto value) noexcept {
+    return observation?observation->Value(field,value):value;
+  };
+  const auto finish=[&](bool value) noexcept {
+    if(observation)observation->Finish(Stage::kPaintFence,value);return value;
+  };
+  if (observed(0,!native_gpu_cohort_epoch_) || observed(1,native_ui_plane_stopped_)) {
+    return finish(true);
+  }
+  if(observation)observation->Begin(Stage::kPaintFenceAwait);
   paint_context_.completion_timeline.AwaitAllSubmissions();
-  if (paint_context_.completion_timeline.last_completion_error() !=
-          VK_SUCCESS ||
-      paint_context_.completion_timeline
-              .GetCompletedSubmissionFromLastUpdate() <
-          paint_context_.completion_timeline.GetUpcomingSubmission() - 1) {
+  if(observation)observation->FinishVoid(Stage::kPaintFenceAwait);
+  if (observed(2,captured(Scalar::kCompletionError,paint_context_.completion_timeline.last_completion_error()) !=
+          VK_SUCCESS) ||
+      observed(3,captured(Scalar::kCompletedSubmission,paint_context_.completion_timeline
+              .GetCompletedSubmissionFromLastUpdate()) <
+          captured(Scalar::kUpcomingSubmission,paint_context_.completion_timeline.GetUpcomingSubmission()) - 1)) {
     FailNativeUiPlane();
-    return false;
+    return finish(false);
   }
   PollNativeUiPlaneCompletionsLocked();
-  return !native_ui_plane_failed_;
+  return finish(observed(4,!native_ui_plane_failed_));
 }
 
 NativeUiPlaneImageReference VulkanPresenter::NativePlaneReference(
@@ -2909,7 +2980,8 @@ NativeUiPlaneImageReference VulkanPresenter::NativePlaneReference(
     return {};
   }
   return {publication->image.identity, publication->image.authority,
-          publication->image.backend_epoch, publication};
+          publication->image.backend_epoch, publication,
+          publication->image.presentation_guard};
 }
 
 void VulkanPresenter::PollNativeUiPlaneCompletionsLocked() {
@@ -2985,7 +3057,8 @@ NativeUiPlaneStatus VulkanPresenter::GetNativeUiPlaneStatus(
   NativeUiPlaneImageSelection::Preflight probe;
   {
     std::lock_guard lock(submission_mutex_);
-    probe = native_ui_plane_selection_.Prepare(visibility);
+    probe = native_ui_plane_selection_.Prepare(
+        visibility, {}, NativePlaneReference(native_ui_plane_current_));
   }
   probe.CheckLiveness();
   std::lock_guard lock(submission_mutex_);

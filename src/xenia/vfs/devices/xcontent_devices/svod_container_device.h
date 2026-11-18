@@ -23,6 +23,9 @@ class SvodContainerDevice : public XContentContainerDevice {
  public:
   SvodContainerDevice(const std::string_view mount_path,
                       const std::filesystem::path& host_path);
+  SvodContainerDevice(const std::string_view mount_path,
+                      std::unique_ptr<XContentReadBacking> header_backing,
+                      const std::filesystem::path& host_path);
   ~SvodContainerDevice() override;
 
   std::optional<std::vector<filesystem::GuestHostBacking>> GuestBackings()
@@ -30,7 +33,11 @@ class SvodContainerDevice : public XContentContainerDevice {
     if (host_path_.empty() || files_.size() > 1023) {
       return std::nullopt;
     }
-    std::vector<filesystem::GuestHostBacking> result{{host_path_, false}};
+    auto header_backings = XContentContainerDevice::GuestBackings();
+    if (!header_backings || header_backings->size() != 1) {
+      return std::nullopt;
+    }
+    auto result = std::move(*header_backings);
     for (const auto& [index, file] : files_) {
       std::error_code error;
       const auto info = file->QueryInfo(error);

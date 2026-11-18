@@ -377,6 +377,35 @@ std::shared_ptr<ProfileAccountIdentity> ProfileAccountIdentity::Capture(
   return std::shared_ptr<ProfileAccountIdentity>(
       new ProfileAccountIdentity(std::move(lease), slot, generation));
 }
+ProfileAccountIdentity::RosterPause::~RosterPause() {
+  if (!sealed_) { ReleaseKnownOutcome(); }
+}
+void ProfileAccountIdentity::RosterPause::ReleaseKnownOutcome() {
+  if (!owner_) { return; }
+  owner_->writes_.fetch_and(~kPaused, std::memory_order_release);
+  owner_.reset();
+}
+std::unique_ptr<ProfileAccountIdentity::RosterPause>
+ProfileAccountIdentity::PauseForRoster(std::error_code& error) {
+  error.clear();
+  auto result = std::unique_ptr<RosterPause>(new RosterPause(shared_from_this()));
+  uint64_t expected = 0;
+  if (retired() || storage_->retiring() ||
+      !writes_.compare_exchange_strong(expected, kPaused,
+                                      std::memory_order_acq_rel)) {
+    result->owner_.reset();
+    error = std::make_error_code(retired() || storage_->retiring() ||
+                                (expected & kClosed)
+                                    ? std::errc::operation_canceled
+                                    : std::errc::device_or_resource_busy);
+    return {};
+  }
+  if (retired() || storage_->retiring()) {
+    error = std::make_error_code(std::errc::operation_canceled);
+    return {}; // Ordinary unpublished pause releases only its own paused bit.
+  }
+  return result;
+}
 ProfileAccountIdentity::Write::~Write() {
   if (owner_) {
     owner_->writes_.fetch_sub(1, std::memory_order_acq_rel);
@@ -390,7 +419,7 @@ std::unique_ptr<ProfileAccountIdentity::Write> ProfileAccountIdentity::EnterWrit
   // IO is retained by this short atomic lease operation.
   auto use = std::unique_ptr<Write>(new Write(shared_from_this()));
   auto state = writes_.load(std::memory_order_acquire);
-  while (!(state & kClosed) && state < 32) {
+  while (!(state & (kClosed | kPaused)) && (state & kCountMask) < 32) {
     if (writes_.compare_exchange_weak(state, state + 1,
           std::memory_order_acq_rel)) {
       storage_->device()->RetainManagedFile();

@@ -12,6 +12,9 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -22,6 +25,9 @@
 namespace xe::kernel {
 class KernelState;
 class NativeSystemCallbackDispatcher;
+class NativeMediaService;
+class NativeSystemUiService;
+namespace test { class NativeContentStorageDriverTestAccess; }
 
 // Physical snapshot/change transport beneath native XAM's storage policy.
 // The native initializer owns its table, worker, mount state, IDs, source
@@ -62,7 +68,7 @@ class NativeContentStorageDriver
   static std::shared_ptr<NativeContentStorageDriver> Lookup(KernelState*);
   ~NativeContentStorageDriver();
 
-  uint64_t generation() const { return config_.generation; }
+  uint64_t generation() const { return generation_; }
   bool AuthorizeCurrentCaller() const;
   bool SetCallback(uint32_t address);
   // Transactionally publishes the supported24-byte output prefix before
@@ -94,17 +100,40 @@ class NativeContentStorageDriver
   Snapshot snapshot() const;
 
  private:
+  friend class NativeMediaService;
+  friend class NativeSystemUiService;
+  friend class test::NativeContentStorageDriverTestAccess;
+  // Service-only, after strict producer/callback drain and its factual whole
+  // CPU/IO/GPU stop. No native Close, completion or device action is inferred.
+  bool RetireAfterActualKernelStop(KernelState* expected_kernel) noexcept;
+  // Actual processing output, never a native-number/path relabeling. This
+  // value owns only common denial metadata, not a device/backing/Kernel lease.
+  struct SelectedMediaProcessingReceipt {
+    const NativeContentStorageDriver* issuer=nullptr;
+    uint64_t driver_generation=0,cookie=0;
+    uint32_t native_id=0;
+    std::shared_ptr<const xam::SelectedMediaSourceProof> source;
+  };
+  std::optional<SelectedMediaProcessingReceipt> CaptureSelectedMediaProcessing(
+      std::string_view actual_native_path) const noexcept;
+  bool SelectedMediaProcessingCurrent(const SelectedMediaProcessingReceipt&) const noexcept;
   struct State;
   struct Call;
   explicit NativeContentStorageDriver(Config);
   std::shared_ptr<Call> AcquireCall();
+  std::shared_ptr<Call> AcquireConfigUse(bool stopping_allowed = false) const noexcept;
   bool IsCurrent() const;
+  // Same host-owned path producer, under the caller's memory/State guards.
+  uint32_t GetOrCreateGuestPathLocked(const std::string& path);
   void Publish(NativeContentStorageSnapshot) noexcept;
   bool QueueWake() noexcept;
   void ProtocolFailed() noexcept;
   void OnProcessingEntry(const cpu::ppc::PPCContext&);
   void OnProcessingReturn(const cpu::ppc::PPCContext&);
   void StopFormatBindings() noexcept;
+  // Historical comparison metadata only; never dereferenced after retirement.
+  KernelState* const kernel_identity_;
+  const uint64_t generation_;
   Config config_;
   std::unique_ptr<State> state_;
 };

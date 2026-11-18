@@ -8,6 +8,8 @@
  */
 
 #include "xenia/kernel/xam/xam_avatar.h"
+#include "xenia/kernel/native_avatar_service.h"
+#include "xenia/kernel/native_system_ui_service.h"
 #include <array>
 #include <algorithm>
 #include "xenia/kernel/util/guest_io_buffer.h"
@@ -19,14 +21,27 @@
 #include "xenia/kernel/xam/xam_state.h"
 
 DEFINE_bool(allow_avatar_initialization, false,
-            "Enable Avatar Initialization\n"
-            "Only set true when testing Avatar games. Certain games may crash "
-            "due to requirement of full avatar implementation.",
+            "Legacy setting; avatar readiness requires the actual owned native service.",
             "Kernel");
 
 namespace xe {
 namespace kernel {
 namespace xam {
+
+// No host fallback after a native Editor attempt. Its owned SYSTEM launch
+// pair is distinct from avatar engine readiness and from a title's exit ABI.
+dword_result_t XamLaunchAvatarEditor_entry(dword_t user_index, dword_t flags,
+                                           lpu16string_t name) {
+  const auto result = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kLaunchAvatarEditor,
+      std::array<uint32_t,3>{user_index, flags, name.guest_address()});
+  // Editor is HRESULT-returning. Preserve the actual native return verbatim;
+  // inactive/denied host policy must not look like positive native success.
+  if (result.disposition == NativeSystemUiPublicCallResult::Disposition::kReturned)
+    return result.value;
+  return X_HRESULT_FROM_WIN32(result.handled() ? result.value : X_ERROR_NOT_READY);
+}
+DECLARE_XAM_EXPORT2(XamLaunchAvatarEditor, kAvatars, kImplemented, kSketchy);
 
 // Start/End
 dword_result_t XamAvatarInitialize_entry(
@@ -37,24 +52,27 @@ dword_result_t XamAvatarInitialize_entry(
     lpdword_t unk5,             // data segment ptr
     dword_t unk6                // flags - 0x00300000, 0x30, etc
 ) {
-  if (kernel_state()->title_id() == kAvatarEditorID) {
-    return X_STATUS_SUCCESS;
-  }
-
-  return cvars::allow_avatar_initialization ? X_STATUS_SUCCESS : ~0u;
+  if(const auto native=NativeAvatarService::TryInvokeOnOriginalCaller(
+         kernel_state(),NativeSystemUiPublicCall::kAvatarInitialize,
+         std::array<uint64_t,6>{coordinate_system,unk2,processor_number,function_ptrs.guest_address(),unk5.guest_address(),unk6});native.handled())return native.value;
+  return X_E_FAIL;  // No native owner: no fabricated Editor/engine readiness.
 }
-DECLARE_XAM_EXPORT1(XamAvatarInitialize, kAvatars, kStub);
+DECLARE_XAM_EXPORT2(XamAvatarInitialize, kAvatars, kImplemented, kSketchy);
 
 void XamAvatarShutdown_entry() {
-  // Calls XMsgStartIORequestEx(0xf3,0x600002,0,0,0,0).
-  // in 12611 its XamUnloadSysApp(0xf2,1)
+  // 17559 original wrapper unloads F2 and waits its real native close Task.
+  NativeAvatarService::TryInvokeOnOriginalCaller(
+      kernel_state(),NativeSystemUiPublicCall::kAvatarShutdown,{});
 }
-DECLARE_XAM_EXPORT1(XamAvatarShutdown, kAvatars, kStub);
+DECLARE_XAM_EXPORT2(XamAvatarShutdown, kAvatars, kImplemented, kSketchy);
 
 // Get & Set
 dword_result_t XamAvatarGetManifestLocalUser_entry(
     dword_t user_index, pointer_t<X_AVATAR_METADATA> avatar_metadata_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  if(const auto native=NativeAvatarService::TryInvokeOnOriginalCaller(
+         kernel_state(),NativeSystemUiPublicCall::kAvatarGetManifestLocalUser,
+         std::array<uint64_t,3>{user_index,avatar_metadata_ptr.guest_address(),overlapped_ptr.guest_address()});native.handled())return native.value;
   auto* kernel = kernel_state();
   const uint32_t destination = avatar_metadata_ptr.guest_address();
   if (user_index >= XUserMaxUserCount || !destination ||
@@ -134,18 +152,21 @@ DECLARE_XAM_EXPORT1(XamAvatarGetManifestsByXuid, kAvatars, kStub)
 dword_result_t XamAvatarGetAssetsResultSize_entry(
     dword_t avatar_component_mask, lpdword_t result_buffer_size_ptr,
     lpdword_t gpu_resource_buffer_size_ptr) {
-  *result_buffer_size_ptr = 0;
-  *gpu_resource_buffer_size_ptr = 0;
-
-  return X_STATUS_SUCCESS;
+  if(const auto native=NativeAvatarService::TryInvokeOnOriginalCaller(
+         kernel_state(),NativeSystemUiPublicCall::kAvatarGetAssetsResultSize,
+         std::array<uint64_t,3>{avatar_component_mask,result_buffer_size_ptr.guest_address(),gpu_resource_buffer_size_ptr.guest_address()});native.handled())return native.value;
+  return X_E_FAIL;  // Unknown native sizes cannot become zero-size success.
 }
-DECLARE_XAM_EXPORT1(XamAvatarGetAssetsResultSize, kAvatars, kStub);
+DECLARE_XAM_EXPORT2(XamAvatarGetAssetsResultSize, kAvatars, kImplemented, kSketchy);
 
 dword_result_t XamAvatarGetAssets_entry(
     pointer_t<X_AVATAR_METADATA> avatar_metadata_ptr,
     dword_t avatar_component_mask, dword_t flags, lpdword_t result_buffer_ptr,
     lpdword_t gpu_resource_buffer_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  if(const auto native=NativeAvatarService::TryInvokeOnOriginalCaller(
+         kernel_state(),NativeSystemUiPublicCall::kAvatarGetAssets,
+         std::array<uint64_t,6>{avatar_metadata_ptr.guest_address(),avatar_component_mask,flags,result_buffer_ptr.guest_address(),gpu_resource_buffer_ptr.guest_address(),overlapped_ptr.guest_address()});native.handled())return native.value;
   // 58410907 doesn't crash if we return failure.
   if (overlapped_ptr) {
     kernel_state()->CompleteOverlappedImmediateEx(
@@ -154,9 +175,9 @@ dword_result_t XamAvatarGetAssets_entry(
     return X_ERROR_IO_PENDING;
   }
 
-  return X_STATUS_SUCCESS;
+  return X_E_FAIL;
 }
-DECLARE_XAM_EXPORT1(XamAvatarGetAssets, kAvatars, kStub);
+DECLARE_XAM_EXPORT2(XamAvatarGetAssets, kAvatars, kImplemented, kSketchy);
 
 dword_result_t XamAvatarSetCustomAsset_entry(
     dword_t buffer_size, lpdword_t asset_data_ptr, dword_t custom_color_count,
@@ -169,6 +190,9 @@ DECLARE_XAM_EXPORT1(XamAvatarSetCustomAsset, kAvatars, kStub)
 dword_result_t XamAvatarSetManifest_entry(
     dword_t user_index, dword_t avatar_info_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  if(const auto native=NativeAvatarService::TryInvokeOnOriginalCaller(
+         kernel_state(),NativeSystemUiPublicCall::kAvatarSetManifest,
+         std::array<uint64_t,3>{user_index,avatar_info_ptr,overlapped_ptr.guest_address()});native.handled())return native.value;
   auto* kernel = kernel_state();
   if (user_index >= XUserMaxUserCount || !avatar_info_ptr) {
     return X_E_INVALIDARG;
@@ -239,40 +263,52 @@ dword_result_t XamAvatarGetMetadataRandom_entry(
     dword_t body_type, dword_t avatars_count,
     pointer_t<X_AVATAR_METADATA> avatar_metadata_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  if(const auto native=NativeAvatarService::TryInvokeOnOriginalCaller(
+         kernel_state(),NativeSystemUiPublicCall::kAvatarGetMetadataRandom,
+         std::array<uint64_t,4>{body_type,avatars_count,avatar_metadata_ptr.guest_address(),overlapped_ptr.guest_address()});native.handled())return native.value;
+
   if (overlapped_ptr) {
-    kernel_state()->CompleteOverlappedImmediate(overlapped_ptr,
-                                                X_ERROR_SUCCESS);
+    kernel_state()->CompleteOverlappedImmediateEx(overlapped_ptr,
+        X_ERROR_FUNCTION_FAILED,X_E_FAIL,0);
     return X_ERROR_IO_PENDING;
   }
 
-  return X_STATUS_SUCCESS;
+  return X_E_FAIL;
 }
-DECLARE_XAM_EXPORT1(XamAvatarGetMetadataRandom, kAvatars, kStub);
+DECLARE_XAM_EXPORT2(XamAvatarGetMetadataRandom, kAvatars, kImplemented, kSketchy);
 
 dword_result_t XamAvatarGetMetadataSignedOutProfileCount_entry(
     lpdword_t profile_count_ptr, pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  if(const auto native=NativeAvatarService::TryInvokeOnOriginalCaller(
+         kernel_state(),NativeSystemUiPublicCall::kAvatarGetMetadataSignedOutProfileCount,
+         std::array<uint64_t,2>{profile_count_ptr.guest_address(),overlapped_ptr.guest_address()});native.handled())return native.value;
+
   if (overlapped_ptr) {
-    kernel_state()->CompleteOverlappedImmediate(overlapped_ptr,
-                                                X_ERROR_SUCCESS);
+    kernel_state()->CompleteOverlappedImmediateEx(overlapped_ptr,
+        X_ERROR_FUNCTION_FAILED,X_E_FAIL,0);
     return X_ERROR_IO_PENDING;
   }
 
-  return X_STATUS_SUCCESS;
+  return X_E_FAIL;
 }
-DECLARE_XAM_EXPORT1(XamAvatarGetMetadataSignedOutProfileCount, kAvatars, kStub);
+DECLARE_XAM_EXPORT2(XamAvatarGetMetadataSignedOutProfileCount, kAvatars, kImplemented, kSketchy);
 
 dword_result_t XamAvatarGetMetadataSignedOutProfile_entry(
     dword_t profile_index, pointer_t<X_AVATAR_METADATA> avatar_metadata_ptr,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
+  if(const auto native=NativeAvatarService::TryInvokeOnOriginalCaller(
+         kernel_state(),NativeSystemUiPublicCall::kAvatarGetMetadataSignedOutProfile,
+         std::array<uint64_t,3>{profile_index,avatar_metadata_ptr.guest_address(),overlapped_ptr.guest_address()});native.handled())return native.value;
+
   if (overlapped_ptr) {
-    kernel_state()->CompleteOverlappedImmediate(overlapped_ptr,
-                                                X_ERROR_SUCCESS);
+    kernel_state()->CompleteOverlappedImmediateEx(overlapped_ptr,
+        X_ERROR_FUNCTION_FAILED,X_E_FAIL,0);
     return X_ERROR_IO_PENDING;
   }
 
-  return X_STATUS_SUCCESS;
+  return X_E_FAIL;
 }
-DECLARE_XAM_EXPORT1(XamAvatarGetMetadataSignedOutProfile, kAvatars, kStub);
+DECLARE_XAM_EXPORT2(XamAvatarGetMetadataSignedOutProfile, kAvatars, kImplemented, kSketchy);
 
 dword_result_t XamAvatarManifestGetBodyType_entry(
     pointer_t<X_AVATAR_METADATA> avatar_metadata_ptr) {
@@ -351,58 +387,18 @@ void XamAvatarSetMocks_entry() {
 DECLARE_XAM_EXPORT1(XamAvatarSetMocks, kAvatars, kStub);
 
 // Animation
-const static std::map<uint64_t, std::string> XAnimationTypeMap = {
-    // Animation Generic Stand
-    {0x0040000000030003, "Animation Generic Stand 0"},
-    {0x0040000000040003, "Animation Generic Stand 1"},
-    {0x0040000000050003, "Animation Generic Stand 2"},
-    {0x0040000000270003, "Animation Generic Stand 3"},
-    {0x0040000000280003, "Animation Generic Stand 4"},
-    {0x0040000000290003, "Animation Generic Stand 5"},
-    {0x00400000002A0003, "Animation Generic Stand 6"},
-    {0x00400000002B0003, "Animation Generic Stand 7"},
-    // Animation Idle
-    {0x0040000000130001, "Animation Male Idle Looks Around"},
-    {0x0040000000140001, "Animation Male Idle Stretch"},
-    {0x0040000000150001, "Animation Male Idle Shifts Weight"},
-    {0x0040000000260001, "Animation Male Idle Checks Hand"},
-    {0x0040000000090002, "Animation Female Idle Check Nails"},
-    {0x00400000000A0002, "Animation Female Idle Looks Around"},
-    {0x00400000000B0002, "Animation Female Idle Shifts Weight"},
-    {0x00400000000C0002, "Animation Female Idle Fixes Shoe"},
-};
-
-// https://github.com/xenia-canary/xenia-canary/commit/212c99eee2724de15f471148d10197d89794ff32
 dword_result_t XamAvatarLoadAnimation_entry(
     lpqword_t asset_id_ptr, dword_t flags, lpvoid_t output,
     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
-  /* Notes:
-      - unknown[4] & unknown[0] = 0x10000000
-      - Calls XMsgStartIORequestEx(0xf3, 0x60000F, overlapped_ptr, stack1, 0x18,
-     unknown) 0xf2 12611
-  */
-  assert_true(asset_id_ptr);
-
-  std::string summary = "Request to load avatar animation: ";
-
-  if (XAnimationTypeMap.contains(*asset_id_ptr)) {
-    summary += XAnimationTypeMap.at(*asset_id_ptr);
-  } else {
-    summary += fmt::format("Unknown animation 0x{:016x}",
-                           static_cast<uint64_t>(*asset_id_ptr));
-  }
-
-  XELOGD("{}", summary);
-
-  if (overlapped_ptr) {
-    kernel_state()->CompleteOverlappedImmediate(overlapped_ptr,
-                                                X_ERROR_SUCCESS);
-    return X_ERROR_IO_PENDING;
-  }
-
-  return X_STATUS_SUCCESS;
+  if(const auto native=NativeAvatarService::TryInvokeOnOriginalCaller(
+         kernel_state(),NativeSystemUiPublicCall::kAvatarLoadAnimation,
+         std::array<uint64_t,4>{asset_id_ptr.guest_address(),flags,output.guest_address(),
+                                overlapped_ptr.guest_address()});native.handled())return native.value;
+  // The original native worker must produce animation buffers; an absent
+  // route cannot complete the overlap or return outputless success.
+  return X_E_FAIL;
 }
-DECLARE_XAM_EXPORT1(XamAvatarLoadAnimation, kAvatars, kStub);
+DECLARE_XAM_EXPORT2(XamAvatarLoadAnimation, kAvatars, kImplemented, kSketchy);
 
 dword_result_t XamAvatarGenerateMipMaps_entry(
     lpdword_t avatar_assets_ptr, dword_t flags, dword_t buffer_size,

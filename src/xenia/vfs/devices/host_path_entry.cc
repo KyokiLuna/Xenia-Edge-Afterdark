@@ -305,6 +305,12 @@ HostPathEntry* HostPathEntry::Create(Device* device, Entry* parent,
 X_STATUS HostPathEntry::Open(uint32_t desired_access, File** out_file) {
   if (device_->ProtectsManagedFile(host_path_)) { return X_STATUS_ACCESS_DENIED; }
   auto global_lock = global_critical_region_.Acquire();
+  if (device_->namespace_retiring()) {
+    // An already-open writer may finish while ordinary close is busy. A new
+    // direct Entry open cannot bypass the same namespace closure, or consume
+    // that writer's retained overwrite reservation as a refusal side effect.
+    return HostStorageError(std::make_error_code(std::errc::no_such_device));
+  }
   if (!out_file) {
     AbortOverwrite();
     return X_STATUS_INVALID_PARAMETER;

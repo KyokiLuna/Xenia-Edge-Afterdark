@@ -692,6 +692,10 @@ uint64_t ProfileGpdModelAuthority::AllocateRequestId(std::error_code& error) {
     error = Error(std::errc::device_or_resource_busy);
     return 0;
   }
+  if (roster_pause_.load(std::memory_order_acquire)) {
+    error = Error(std::errc::device_or_resource_busy);
+    return 0;
+  }
   if (retired_.load() || storage_->retiring()) {
     error = Error(std::errc::operation_canceled);
     return 0;
@@ -706,6 +710,42 @@ void ProfileGpdModelAuthority::Retire() {
   // Sign-out may hold GCRC. Never wait for the metadata/planner lane here.
   retired_.store(true, std::memory_order_release);
   // Pending state and exact storage survive for journal recovery.
+}
+ProfileGpdModelAuthority::RosterPause::~RosterPause() {
+  if (!sealed_) { ReleaseKnownOutcome(); }
+}
+void ProfileGpdModelAuthority::RosterPause::ReleaseKnownOutcome() {
+  if (!owner_) { return; }
+  uint64_t expected = serial_;
+  owner_->roster_pause_.compare_exchange_strong(expected, 0,
+                                               std::memory_order_release);
+  owner_.reset();
+}
+std::unique_ptr<ProfileGpdModelAuthority::RosterPause>
+ProfileGpdModelAuthority::PauseForRoster(std::error_code& error) {
+  error.clear();
+  auto result = std::unique_ptr<RosterPause>(new RosterPause(shared_from_this()));
+  std::unique_lock lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    error = Error(std::errc::device_or_resource_busy);
+    return {};
+  }
+  if (retired_.load(std::memory_order_acquire) || storage_->retiring()) {
+    error = Error(std::errc::operation_canceled);
+    return {};
+  }
+  if (roster_pause_.load(std::memory_order_acquire) || pending_) {
+    error = Error(std::errc::device_or_resource_busy);
+    return {};
+  }
+  if (!models_ || !baselines_ || !version_ || !next_roster_pause_ ||
+      next_roster_pause_ == UINT64_MAX) {
+    error = Error(std::errc::operation_canceled);
+    return {};
+  }
+  result->serial_ = next_roster_pause_++;
+  roster_pause_.store(result->serial_, std::memory_order_release);
+  return result;
 }
 std::unique_ptr<ProfileGpdModelAuthority::PreparedCommit>
 ProfileGpdModelAuthority::PrepareLoaded(
@@ -746,6 +786,10 @@ ProfileGpdModelAuthority::PrepareLoaded(
   prepared->models = std::move(read_models);
   std::unique_lock lock(mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
+    error = Error(std::errc::device_or_resource_busy);
+    return {};
+  }
+  if (roster_pause_.load(std::memory_order_acquire)) {
     error = Error(std::errc::device_or_resource_busy);
     return {};
   }
@@ -811,6 +855,10 @@ std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::Begin(
   }
   std::unique_lock lock(mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
+    error = Error(std::errc::device_or_resource_busy);
+    return {};
+  }
+  if (roster_pause_.load(std::memory_order_acquire)) {
     error = Error(std::errc::device_or_resource_busy);
     return {};
   }
@@ -1080,6 +1128,10 @@ ProfileGpdModelAuthority::PrepareCommit(
       error = Error(std::errc::device_or_resource_busy);
       return {};
     }
+    if (roster_pause_.load(std::memory_order_acquire)) {
+      error = Error(std::errc::device_or_resource_busy);
+      return {};
+    }
     if (pending_ != pending ||
         pending->origin().stamp.model_version != version_) {
       error = Error(std::errc::state_not_recoverable);
@@ -1183,6 +1235,10 @@ ProfileGpdModelAuthority::TryCommit(
     error = Error(std::errc::device_or_resource_busy);
     return {};
   }
+  if (roster_pause_.load(std::memory_order_acquire)) {
+    error = Error(std::errc::device_or_resource_busy);
+    return {};
+  }
   const auto& prepared_state = *result->prepared_;
   const auto& pending = prepared_state.pending;
   if (retired_.load(std::memory_order_acquire) || storage_->retiring() ||
@@ -1208,6 +1264,7 @@ bool ProfileGpdModelAuthority::CommitGuard::Apply() noexcept {
     return true;
   }
   if (owner_->retired_.load(std::memory_order_acquire) ||
+      owner_->roster_pause_.load(std::memory_order_acquire) ||
       owner_->storage_->retiring()) {
     return false;
   }

@@ -20,6 +20,10 @@
 #include "xenia/emulator.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/native_managed_format_io.h"
+#include "xenia/kernel/native_avatar_contract.h"
+#include "xenia/kernel/native_avatar_service.h"
+#include "xenia/kernel/native_profile_identity_contract.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/kernel/native_system_allocation_authority.h"
 #include "xenia/kernel/native_system_ui_public_calls.h"
 #include "xenia/kernel/user_module.h"
@@ -69,6 +73,8 @@ struct GuestRuntimeCallExecutor::State {
   std::mutex mutex;
   bool bridges_installed = false, bridges_active = false,
        bridges_failed = false;
+  std::shared_ptr<const AvatarProviderBinding> avatar_provider;
+  std::shared_ptr<const ProfileIdentityProviderBinding> identity_provider;
 };
 GuestRuntimeCallExecutor::GuestRuntimeCallExecutor(std::unique_ptr<State> state)
     : state_(std::move(state)) {}
@@ -193,6 +199,16 @@ bool GuestRuntimeCallExecutor::InstallTrustedBridges(std::string* error) {
     if (heap.state == GuestRuntime::State::kReady && heap.plan &&
         *heap.plan == state_->validated.plan) {
       state_->bridges_installed = true;
+      if (CheckNativeAvatarPlanFamily(state_->validated) ==
+          NativeAvatarPlanFamily::kComplete) {
+        state_->avatar_provider = std::shared_ptr<const AvatarProviderBinding>(
+            new AvatarProviderBinding(this));
+      }
+      if (CheckNativeProfileIdentityPlanFamily(state_->validated) ==
+          NativeProfileIdentityPlanFamily::kComplete) {
+        state_->identity_provider = std::shared_ptr<const ProfileIdentityProviderBinding>(
+            new ProfileIdentityProviderBinding(this));
+      }
       return true;
     }
     if (heap.state != GuestRuntime::State::kResourcesLoaded &&
@@ -213,8 +229,12 @@ bool GuestRuntimeCallExecutor::InstallTrustedBridges(std::string* error) {
       // host pointers. The managed bridge has one exact original full extent.
       bool bound = false;
       if (!bridge.address) {
-        bound = image->BindGuestExportToHost(bridge.ordinal, bridge.library,
-                                             bridge.ordinal);
+        bound = bridge.code_size
+                    ? image->BindGuestExportToHost(
+                          bridge.ordinal, bridge.library, bridge.ordinal,
+                          bridge.code_size, bridge.code_sha256)
+                    : image->BindGuestExportToHost(
+                          bridge.ordinal, bridge.library, bridge.ordinal);
       } else if (bridge.service == "active_title_id") {
         bound = image->BindGuestFunctionToHost(
             bridge.address, bridge.code_size, bridge.code_sha256, ActiveTitleId,
@@ -244,11 +264,89 @@ bool GuestRuntimeCallExecutor::InstallTrustedBridges(std::string* error) {
     state_->bridges_active = false;
     state_->bridges_installed = success;
     state_->bridges_failed = !success;
+    if (success && CheckNativeAvatarPlanFamily(state_->validated) ==
+                       NativeAvatarPlanFamily::kComplete) {
+      state_->avatar_provider = std::shared_ptr<const AvatarProviderBinding>(
+          new AvatarProviderBinding(this));
+    }
+    if (success && CheckNativeProfileIdentityPlanFamily(state_->validated) ==
+                       NativeProfileIdentityPlanFamily::kComplete) {
+      state_->identity_provider = std::shared_ptr<const ProfileIdentityProviderBinding>(
+          new ProfileIdentityProviderBinding(this));
+    }
   }
   if (!success && error) {
     *error = "Trusted implemented/quiescent bridge unavailable";
   }
   return success;
+}
+
+std::shared_ptr<const GuestRuntimeCallExecutor::AvatarProviderBinding>
+GuestRuntimeCallExecutor::CaptureAvatarProviderBinding() {
+  std::lock_guard lock(state_->mutex);
+  return state_->bridges_installed && !state_->bridges_failed
+             ? state_->avatar_provider : nullptr;
+}
+
+std::shared_ptr<const GuestRuntimeCallExecutor::ProfileIdentityProviderBinding>
+GuestRuntimeCallExecutor::CaptureProfileIdentityProviderBinding() {
+  std::lock_guard lock(state_->mutex);
+  return state_->bridges_installed && !state_->bridges_failed
+             ? state_->identity_provider : nullptr;
+}
+
+GuestRuntime::ExecutionResult
+GuestRuntimeCallExecutor::ExecuteOwnedIdentityIngressOnOriginalCaller(
+    XThread& thread, uint16_t ordinal, std::span<const uint32_t> args) {
+  if (!NativeProfileIdentityOwner::OwnsIngressCall(this, thread, ordinal, args)) {
+    return Failure("No actual native identity Task/source ingress owner");
+  }
+  for (const auto& role : NativeProfileIdentityIngressProfiles()) {
+    if (role.ordinal != ordinal) continue;
+    const auto f = state_->validated.catalog.find(std::string(role.identity));
+    const auto c = state_->validated.contracts.find(std::string(role.identity));
+    if (f == state_->validated.catalog.end() ||
+        c == state_->validated.contracts.end() ||
+        state_->initialization.contains(f->first) ||
+        f->second.address != role.address || f->second.arguments.size() != 3 ||
+        args.size() != 3 ||
+        c->second.caller != ValidatedGuestRuntimePlan::CallerPolicy::kOriginalTitleOrSystem ||
+        c->second.result != ValidatedGuestRuntimePlan::ResultPolicy::kAny) {
+      return Failure("Native identity exact ingress prototype absent");
+    }
+    // Normal native negative HRESULT remains a normal returned value, not an
+    // execution-uncertainty signal or permission to retry a host mutation.
+    return Execute(thread, f->second, args, false);
+  }
+  return Failure("Unknown native identity ingress ordinal");
+}
+
+GuestRuntime::ExecutionResult
+GuestRuntimeCallExecutor::ExecuteAvatarRegistersOnOriginalCaller(
+    XThread& thread, NativeSystemUiPublicCall call,
+    std::span<const uint64_t> args) {
+  const auto* p = NativeSystemUiPublicProfile(call);
+  if (!p || !NativeSystemUiPublicArgumentsValid(call, args) ||
+      !NativeAvatarService::OwnsOriginalCall(this, thread, call, args)) {
+    return Failure("No current native-avatar original-caller owner");
+  }
+  const auto f = state_->validated.catalog.find(std::string(p->identity));
+  const auto c = state_->validated.contracts.find(std::string(p->identity));
+  const bool is_void = call == NativeSystemUiPublicCall::kAvatarShutdown;
+  if (f == state_->validated.catalog.end() ||
+      c == state_->validated.contracts.end() ||
+      state_->initialization.contains(f->first) ||
+      f->second.address != p->address ||
+      f->second.arguments.size() != args.size() ||
+      c->second.caller !=
+          ValidatedGuestRuntimePlan::CallerPolicy::kOriginalTitleOrSystem ||
+      c->second.result != (is_void ? ValidatedGuestRuntimePlan::ResultPolicy::kVoid
+                                   : ValidatedGuestRuntimePlan::ResultPolicy::kAny)) {
+    return Failure("Avatar exact deferred original-caller contract absent");
+  }
+  // An ordinary negative native HRESULT is a truthful normal return. It is
+  // not confused with an execution failure or rewritten to success/pending.
+  return ExecuteRegisters(thread, f->second, args, 0, false);
 }
 
 GuestRuntime::ExecutionResult GuestRuntimeCallExecutor::Execute(
@@ -372,6 +470,8 @@ GuestRuntimeCallExecutor::ExecuteDeferredSystemFunction(
         "Deferred prototype requires the verified actual native Task "
         "transaction");
   }
+  if(found->second.address==0x816F44D0)
+    return NativeProfileIdentityOwner::ExecuteBootstrapInputAuxiliary(*this,thread,found->second,args);
   return Execute(thread, found->second, args, true);
 }
 GuestRuntime::ExecutionResult

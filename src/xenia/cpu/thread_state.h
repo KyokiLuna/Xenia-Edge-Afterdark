@@ -10,6 +10,7 @@
 #ifndef XENIA_CPU_THREAD_STATE_H_
 #define XENIA_CPU_THREAD_STATE_H_
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -18,6 +19,11 @@
 #include "xenia/cpu/thread_state.h"
 #include "xenia/memory.h"
 
+namespace xe::kernel {
+class NativeProfileIdentityOwner;
+class NativeSystemUiService;
+namespace xam { class ProfileRosterNativeReadScope; }
+}
 namespace xe {
 namespace cpu {
 
@@ -56,6 +62,28 @@ class ThreadState {
   FunctionTraceState& function_trace_state() { return function_trace_state_; }
 
  private:
+  friend class xe::kernel::NativeProfileIdentityOwner;
+  friend class xe::kernel::NativeSystemUiService;
+  friend class xe::kernel::xam::ProfileRosterNativeReadScope;
+  // Whole actual native work records own these prebound cells. Never host TLS,
+  // current UID or a borrowed guest address; no owning ref drops at publication
+  // or native listener unlock. Actual owner clears them before joined teardown.
+  // Same actual original public invocation owns this scalar-only cell through
+  // guest execution. Only its normal host return withdraws the exact pointer;
+  // uncertain native execution retains the invocation, never a borrowed stack.
+  std::atomic<void*> native_signin_creation_cell_{nullptr};
+  // Exact SYSTEM Editor public invocation owns this paired loader capability.
+  // Unclaimed native loader calls retain their original body; no ambient TLS.
+  std::atomic<void*> native_editor_handoff_cell_{nullptr};
+  // Scalar-only task diagnostic cells belong to the retained identity State;
+  // actual work entry/return stacks them, stopped retirement detaches them.
+  std::atomic<void*> native_identity_task_diagnostic_cell_{nullptr};
+  // One retained native getter use prebinds its exact acquisition receipt.
+  // Getter hooks touch only scalars/atomics, even inside native lock scopes.
+  std::atomic<void*> native_identity_task_reference_cell_{nullptr};
+  std::atomic<void*> native_identity_publication_cell_{nullptr};
+  std::atomic<void*> native_identity_listener_cell_{nullptr};
+  std::atomic<void*> native_profile_roster_read_{nullptr};
   Processor* processor_;
   Memory* memory_;
   void* backend_data_;

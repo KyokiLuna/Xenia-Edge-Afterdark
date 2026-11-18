@@ -134,6 +134,43 @@ TEST_CASE("Checked call packs the observed twelve-DWORD texture header ABI",
   fixture.CheckRestored();
 }
 
+// Real checked packer and Memory, with a host inspection callback only. This
+// tests the recovered two/three-word producer ABI, not native UI acceptance,
+// current Task, selected account, completion or readiness.
+TEST_CASE("Original caller signin preserves user flags and raw Win32 return",
+          "[kernel][guest_call_abi][native_signin]") {
+  const auto ordinal=GENERATE(0x2BCu,0x2BEu);
+  const auto call=static_cast<kernel::NativeSystemUiPublicCall>(ordinal);
+  const auto* profile=kernel::NativeSystemUiPublicProfile(call);
+  REQUIRE(profile);
+  REQUIRE(profile->argument_count==(ordinal==0x2BC?2:3));
+  CHECK(profile->uint64_register_mask==0);
+  const uint32_t user=GENERATE(0u,3u,0xFFu);
+  constexpr uint32_t flags=0x00400008; // preserve both native selector bits
+  const uint32_t returned=GENERATE(0u,5u,14u,1627u);
+  std::vector<uint64_t> values=ordinal==0x2BC?std::vector<uint64_t>{1,flags}:
+      std::vector<uint64_t>{user,1,flags};
+  REQUIRE(kernel::NativeSystemUiPublicArgumentsValid(call,values));
+  std::vector<Argument> arguments;
+  for(const auto value:values)arguments.push_back(Argument::UInt32(uint32_t(value)));
+  AbiFixture fixture;
+  constexpr uint64_t pcr=0x1234567870010000;
+  fixture.context.r[13]=pcr;
+  const auto result=fixture.Call(arguments,[&](uint32_t){
+    fixture.context.r[1]-=kGuestCallExecuteStackPadding;
+    fixture.context.lr=0xBCBCBCBC;
+    for(size_t n=0;n<values.size();++n)CHECK(fixture.context.r[3+n]==values[n]);
+    CHECK(fixture.context.r[13]==pcr);
+    fixture.context.r[3]=returned;return true;
+  });
+  CHECK(result.executed);CHECK(result.value==returned);
+  CHECK(fixture.context.r[13]==pcr);fixture.CheckRestored();
+  for(size_t n=0;n<values.size();++n){auto wrong=values;wrong[n]|=uint64_t(1)<<32;
+    CHECK_FALSE(kernel::NativeSystemUiPublicArgumentsValid(call,wrong));}
+  values.push_back(0);
+  CHECK_FALSE(kernel::NativeSystemUiPublicArgumentsValid(call,values));
+}
+
 // These exercise the real checked CPU packer/Memory stack with an executor
 // inspection seam. They do not execute native XAM or fabricate a Task/TLS.
 TEST_CASE(

@@ -9,6 +9,11 @@
 
 #include <ranges>
 #include "xenia/emulator.h"
+#include <condition_variable>
+#include <map>
+#include <set>
+#include <thread>
+#include "xenia/vfs/host_storage_errors.h"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -26,6 +31,7 @@
 #include "xenia/base/exception_handler.h"
 #include "xenia/base/filesystem.h"
 #include "xenia/base/host_storage.h"
+#include "xenia/base/cache_storage_owner.h"
 #include "xenia/base/literals.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/mapped_memory.h"
@@ -62,6 +68,7 @@
 #include "xenia/kernel/xam/content_manager.h"
 #include "xenia/kernel/xam/ui/disc_swap_ui.h"
 #include "xenia/kernel/xam/xam_module.h"
+#include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xam/xam_state.h"
 #include "xenia/kernel/xam/xdbf/spa_info.h"
 #include "xenia/kernel/xbdm/xbdm_module.h"
@@ -81,6 +88,7 @@
 #include "xenia/vfs/devices/disc_zarchive_device.h"
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/devices/null_device.h"
+#include "xenia/vfs/devices/cache_metadata_device.h"
 #include "xenia/vfs/devices/xcontent_container_device.h"
 #include "xenia/vfs/entry.h"
 #include "xenia/vfs/file.h"
@@ -408,6 +416,9 @@ void Emulator::StopNativeSystemBeforeProviderShutdown() {
   // Seal creation and join the WHOLE actual SYSTEM bootstrap host frame,
   // including failures before a domain/allocation authority was registered.
   // Its admitted native frontend still needs every provider below to be live.
+  // Service seals input callback/continuation ingress before its exact host
+  // frame join. A private covered-retention capsule may keep heap-owned work
+  // through the ACTUAL CPU/IO/GPU stop below; that is not native completion.
   kernel::NativeSystemUiService::StopForKernelOrFailStop(kernel_state_.get());
   const auto fail_stop = []() noexcept {
     try {
@@ -521,23 +532,459 @@ Emulator::CaptureProfileGpds(uint8_t slot, std::error_code& error) {
   return kernel_state_->xam_state()->profile_manager()->CaptureGpdRead(slot,
                                                                        error);
 }
-void Emulator::Shutdown() {
-  std::lock_guard<std::recursive_mutex> profile_capture_boundary(launch_mutex_);
-  XELOGI("Emulator::Shutdown: starting teardown");
-  const uint64_t closing_generation = title_execution_state_.BeginStopping();
-  title_execution_owner_.store(nullptr, std::memory_order_release);
+X_RESULT Emulator::WithHostRuntime(
+    const std::function<X_RESULT(kernel::KernelState&)>& capture) {
+  std::unique_lock lock(launch_mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) { return X_ERROR_BUSY; }
+  if (!capture || !kernel_state_ ||
+      title_execution_state_.snapshot().phase ==
+          kernel::TitleExecutionState::Phase::kStopping) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
+  }
+  struct Capture {
+    size_t& depth;
+    explicit Capture(size_t& value) : depth(value) { ++depth; }
+    ~Capture() { --depth; }
+  } interval(host_runtime_captures_);
+  return capture(*kernel_state_);
+}
+X_RESULT Emulator::WithContentCatalog(
+    const std::function<X_RESULT(kernel::xam::ContentManager&)>& read) {
+  if (!read) { return X_ERROR_INVALID_PARAMETER; }
+  return WithHostRuntime([&](kernel::KernelState& runtime) {
+    return runtime.content_manager()
+        ? read(*runtime.content_manager()) : X_ERROR_DEVICE_NOT_CONNECTED;
+  });
+}
+
+struct Emulator::HostContentImport::State {
+  using Job = kernel::xam::ContentManager::PreparedImport;
+  explicit State(kernel::KernelState* captured,
+                 vfs::InstalledSystemOperationGate::Reservation reservation)
+      : kernel_owner(captured), admission(std::move(reservation)) {}
+  std::mutex mutex;
+  std::condition_variable drained;
+  bool closing = false, close_draining = false, closed = false;
+  std::thread::id close_thread;
+  std::atomic<bool> canceled{false};
+  size_t active = 0;
+  uint64_t next_job = 1;
+  // Valid only while an active Worker excludes Close's Kernel teardown.
+  kernel::KernelState* kernel_owner = nullptr;
+  std::optional<vfs::InstalledSystemOperationGate::Reservation> admission;
+  std::map<uint64_t, std::unique_ptr<Job>> jobs;
+  std::map<std::thread::id, size_t> worker_threads;
+  std::map<std::atomic<bool>*, size_t> worker_cancellations;
+
+  class Worker final {
+   public:
+    Worker(std::shared_ptr<State> state, std::atomic<bool>* cancel)
+        : state_(std::move(state)), cancel_(cancel) {
+      std::lock_guard lock(state_->mutex);
+      if (state_->closing || state_->canceled.load(std::memory_order_acquire) ||
+          !state_->kernel_owner) { return; }
+      try {
+        auto [thread, unused_thread] = state_->worker_threads.try_emplace(
+            std::this_thread::get_id(), 0);
+        auto [flag, unused_flag] = state_->worker_cancellations.try_emplace(
+            cancel_, 0);
+        ++thread->second;
+        ++flag->second;
+        ++state_->active;
+      } catch (const std::bad_alloc&) {
+        return;
+      }
+      kernel_ = state_->kernel_owner;
+    }
+    Worker(const Worker&) = delete;
+    Worker& operator=(const Worker&) = delete;
+    ~Worker() {
+      if (!kernel_) { return; }
+      std::lock_guard lock(state_->mutex);
+      const auto flag = state_->worker_cancellations.find(cancel_);
+      if (--flag->second == 0) { state_->worker_cancellations.erase(flag); }
+      const auto thread = state_->worker_threads.find(std::this_thread::get_id());
+      if (--thread->second == 0) { state_->worker_threads.erase(thread); }
+      --state_->active;
+      state_->drained.notify_all();
+    }
+    explicit operator bool() const { return kernel_ != nullptr; }
+    kernel::KernelState* runtime() const { return kernel_; }
+   private:
+    std::shared_ptr<State> state_;
+    std::atomic<bool>* cancel_;
+    kernel::KernelState* kernel_ = nullptr;
+  };
+  void Cancel() {
+    std::lock_guard lock(mutex);
+    canceled.store(true, std::memory_order_release);
+    for (const auto& [flag, count] : worker_cancellations) {
+      flag->store(true, std::memory_order_release);
+    }
+  }
+  bool Pending() {
+    std::lock_guard lock(mutex);
+    return !closed;
+  }
+  bool Close() {
+    decltype(jobs) retired;
+    std::optional<vfs::InstalledSystemOperationGate::Reservation> released;
+    {
+      std::unique_lock lock(mutex);
+      if (closed) { return true; }
+      if (close_draining) {
+        if (close_thread == std::this_thread::get_id()) { return false; }
+        drained.wait(lock, [&] { return closed; });
+        return true;
+      }
+      closing = true;
+      canceled.store(true, std::memory_order_release);
+      for (const auto& [flag, count] : worker_cancellations) {
+        flag->store(true, std::memory_order_release);
+      }
+      // These workers only run retained native input/storage operations and
+      // never invoke UI or Emulator callbacks. Refuse an invalid self-drain
+      // instead of ever waiting for the calling thread to finish itself.
+      const auto self = worker_threads.find(std::this_thread::get_id());
+      if (self != worker_threads.end() && self->second) { return false; }
+      close_draining = true;
+      close_thread = std::this_thread::get_id();
+      drained.wait(lock, [&] { return active == 0; });
+      retired.swap(jobs);
+      if (admission) {
+        released.emplace(std::move(*admission));
+        admission.reset();
+      }
+      kernel_owner = nullptr;
+    }
+    // Real input descriptors, roots and MVA flocks unwind outside metadata
+    // locks, before Shutdown deletes the original Kernel and its registry.
+    retired.clear();
+    released.reset();
+    {
+      std::lock_guard lock(mutex);
+      closed = true;
+      close_draining = false;
+      drained.notify_all();
+    }
+    return true;
+  }
+};
+
+namespace {
+X_STATUS ImportFailure(Emulator::ContentInstallEntry& entry,
+                       const std::error_code& error,
+                       std::string message = {}) {
+  const auto actual = error ? error : std::make_error_code(std::errc::io_error);
+  const auto status = vfs::HostStorageError(actual);
+  std::lock_guard lock(*entry.mutex_);
+  entry.installation_state_ = Emulator::InstallState::failed;
+  entry.installation_result_ = status;
+  entry.installation_error_message_ =
+      message.empty() ? actual.message() : std::move(message);
+  return status;
+}
+}  // namespace
+
+Emulator::HostContentImport::HostContentImport(std::shared_ptr<State> state)
+    : state_(std::move(state)) {}
+Emulator::HostContentImport::~HostContentImport() {
+  // A final worker-held token is released after Install's Worker has drained.
+  // This cannot depend on a live Emulator/window or a UI event-loop callback.
+  state_->Close();
+}
+void Emulator::HostContentImport::Cancel() { state_->Cancel(); }
+
+X_STATUS Emulator::HostContentImport::Prepare(
+    const std::filesystem::path& path, ContentInstallEntry& entry,
+    const std::optional<ContentImportTarget>& target) {
+  State::Worker work(state_, &entry.cancelled_);
+  if (!work) {
+    return ImportFailure(entry, std::make_error_code(std::errc::operation_canceled));
+  }
+  std::optional<kernel::xam::ContentImportTarget> destination;
+  if (target) {
+    destination.emplace();
+    destination->device_id = target->device_id;
+    destination->title_id = target->title_id;
+    destination->owner_xuid = target->owner_xuid;
+    destination->content_types = target->content_types;
+    destination->expected_title_version = target->expected_title_version;
+  }
+  {
+    std::lock_guard lock(*entry.mutex_);
+    if (entry.import_job_id_) {
+      return vfs::HostStorageError(
+          std::make_error_code(std::errc::device_or_resource_busy));
+    }
+  }
+  std::error_code error;
+  std::unique_ptr<State::Job> job;
+  std::string name;
+  std::filesystem::path selected_path, package_path, header_path;
+  std::vector<uint8_t> icon;
+  uint64_t bytes = 0;
+  XContentType type = XContentType::kInvalid;
+  try {
+    job = work.runtime()->content_manager()->PrepareHostImport(
+        path, destination, error);
+    if (job) {
+      const auto& summary = job->summary();
+      const auto display = summary.descriptor.display_name();
+      // Invalid UTF16 is a malformed package field, not a UI exception or a
+      // reason to publish a job whose presentation cannot be completed.
+      bool valid = true;
+      for (size_t i = 0; i < display.size(); ++i) {
+        const auto unit = uint16_t(display[i]);
+        if (unit >= 0xD800 && unit <= 0xDBFF) {
+          if (++i == display.size() || uint16_t(display[i]) < 0xDC00 ||
+              uint16_t(display[i]) > 0xDFFF) { valid = false; break; }
+        } else if (unit >= 0xDC00 && unit <= 0xDFFF) {
+          valid = false; break;
+        }
+      }
+      if (!valid) { error = std::make_error_code(std::errc::bad_message); }
+      else {
+        name = xe::to_utf8(display);
+        selected_path = path;
+        package_path = summary.package_path;
+        header_path = summary.header_path;
+        icon = summary.icon;
+        bytes = summary.bytes;
+        type = summary.descriptor.content_type;
+      }
+    }
+  } catch (const std::bad_alloc&) {
+    error = std::make_error_code(std::errc::not_enough_memory);
+  } catch (const std::system_error& failed) {
+    error = failed.code();
+  } catch (const std::exception&) {
+    error = std::make_error_code(std::errc::bad_message);
+  }
+  if (!job || error) { return ImportFailure(entry, error); }
+  uint64_t id = 0;
+  {
+    std::lock_guard lock(state_->mutex);
+    if (!state_->closing && !state_->canceled.load(std::memory_order_acquire) &&
+        !entry.cancelled_.load(std::memory_order_acquire) && state_->next_job) {
+      id = state_->next_job++;
+    }
+  }
+  // Allocate the node outside the state lock. Insertion then transfers only
+  // metadata; a failure cannot destroy native/source owners under that lock.
+  decltype(state_->jobs) prepared;
+  if (id) {
+    try {
+      prepared.emplace(id, std::move(job));
+    } catch (const std::bad_alloc&) {
+      return ImportFailure(entry, std::make_error_code(std::errc::not_enough_memory));
+    }
+    std::lock_guard lock(state_->mutex);
+    if (state_->closing || state_->canceled.load(std::memory_order_acquire)) {
+      id = 0;
+    } else {
+      state_->jobs.insert(prepared.extract(id));
+    }
+  }
+  if (!id) {
+    return ImportFailure(entry, std::make_error_code(std::errc::operation_canceled));
+  }
+  {
+    std::lock_guard lock(*entry.mutex_);
+    // Every fallible conversion/allocation completed before job insertion.
+    // Preserve the existing entry mutex while publishing detached values.
+    entry.path_.swap(selected_path);
+    entry.name_.swap(name);
+    entry.data_installation_path_.swap(package_path);
+    entry.header_installation_path_.swap(header_path);
+    entry.content_type_ = type;
+    entry.icon_data_.swap(icon);
+    entry.content_size_.store(bytes, std::memory_order_release);
+    entry.currently_installed_size_.store(0, std::memory_order_release);
+    entry.installation_result_ = X_STATUS_SUCCESS;
+    entry.installation_state_ = InstallState::pending;
+    entry.installation_error_message_.clear();
+    entry.import_job_id_ = id;
+  }
+  return X_STATUS_SUCCESS;
+}
+
+X_STATUS Emulator::HostContentImport::Install(ContentInstallEntry& entry) {
+  State::Worker work(state_, &entry.cancelled_);
+  if (!work) {
+    return ImportFailure(entry, std::make_error_code(std::errc::operation_canceled));
+  }
+  uint64_t id = 0;
+  {
+    std::lock_guard lock(*entry.mutex_);
+    id = std::exchange(entry.import_job_id_, 0);
+    entry.installation_state_ = InstallState::installing;
+  }
+  std::unique_ptr<State::Job> job;
+  {
+    std::lock_guard lock(state_->mutex);
+    const auto found = state_->jobs.find(id);
+    if (found != state_->jobs.end()) {
+      job = std::move(found->second);
+      state_->jobs.erase(found);
+    }
+  }
+  if (!job) {
+    return ImportFailure(entry, std::make_error_code(std::errc::invalid_argument),
+                         "The prepared import is unavailable or already consumed.");
+  }
+  std::error_code error;
+  try {
+    error = job->Execute(&entry.cancelled_, &entry.currently_installed_size_);
+  } catch (const std::bad_alloc&) {
+    error = std::make_error_code(std::errc::not_enough_memory);
+  } catch (const std::system_error& failed) {
+    error = failed.code();
+  } catch (const std::exception&) {
+    error = std::make_error_code(std::errc::io_error);
+  }
+  if (error || !job->complete()) {
+    return ImportFailure(entry, error,
+        job->recovery_pending()
+            ? "Import requires managed-storage recovery; existing content was preserved."
+            : std::string{});
+  }
+  const bool profile = job->summary().descriptor.content_type == XContentType::kProfile;
+  // Dispose the exact input/destination owners before ending the active-worker
+  // interval. Shutdown cannot finish its drain and publish a new Kernel early.
+  job.reset();
+  work.runtime()->BroadcastNotification(kXNotificationLiveContentInstalled, 0);
+  if (profile) { work.runtime()->xam_state()->profile_manager()->ReloadProfiles(); }
+  {
+    std::lock_guard lock(*entry.mutex_);
+    entry.installation_result_ = X_STATUS_SUCCESS;
+    entry.installation_state_ = InstallState::installed;
+    entry.installation_error_message_.clear();
+  }
+  return X_STATUS_SUCCESS;
+}
+
+std::shared_ptr<Emulator::HostContentImport>
+Emulator::TryBeginHostContentImport(std::error_code& error) {
+  error.clear();
+  std::unique_lock lock(launch_mutex_, std::try_to_lock);
+  if (!lock.owns_lock() || host_runtime_captures_ || HostContentImportPending() ||
+      !kernel_state_ || !file_system_ ||
+      title_execution_state_.snapshot().phase !=
+          kernel::TitleExecutionState::Phase::kUnloaded ||
+      kernel_state_->HasNativeImportDomains() ||
+      kernel_state_->HasNativeSystemAllocationAuthorities()) {
+    error = std::make_error_code(std::errc::device_or_resource_busy); return {};
+  }
+  auto admission = system_operations_.TryInstall();
+  if (!admission) {
+    error = std::make_error_code(std::errc::device_or_resource_busy); return {};
+  }
+  auto state = std::make_shared<HostContentImport::State>(
+      kernel_state_.get(), std::move(*admission));
+  auto result = std::shared_ptr<HostContentImport>(
+      new HostContentImport(state));
+  host_content_import_ = std::move(state);
+  return result;
+}
+bool Emulator::HostContentImportPending() const {
+  const auto state = host_content_import_;
+  return state && state->Pending();
+}
+bool Emulator::CloseHostContentImportBeforeShutdown() {
+  const auto state = host_content_import_;
+  if (state && !state->Close()) { return false; }
+  host_content_import_.reset();
+  return true;
+}
+
+bool Emulator::InstallLifecycle(std::shared_ptr<EmulatorLifecycle> lifecycle) {
+  if (lifecycle_ || !lifecycle || !lifecycle->Install(this)) {
+    return false;
+  }
+  lifecycle_ = std::move(lifecycle);
+  return true;
+}
+bool Emulator::ShutdownOnOwnedWorker(EmulatorLifecycle::Work& work) {
+  if (!lifecycle_ || !lifecycle_->IsActive(work, this, true)) {
+    return false;
+  }
+  if (!ShutdownInternal(true)) {
+    return false;
+  }
+  return lifecycle_->MarkShutdownReturned(work, this);
+}
+void Emulator::PrepareTitleStop(bool close_ui) {
+  title_execution_state_.BeginStopping();
+  if (!kernel_state_ ||
+      native_stop_phase_returned_kernel_ == kernel_state_.get()) {
+    return;
+  }
+  // Preserve already-captured receipts before a strict native stop can fail
+  // or wait. This existing reporter reads cached host observations only.
+  kernel::NativeSystemUiService::ReportForEmulatorOnHostExit(this);
   kernel::NativeSystemUiService::SealHostUiFallbackForKernelOrFailStop(
       kernel_state_.get());
-
-  if (kernel_state_) {
-    kernel_state_->ShutdownNativeGuideBootstrapProbe();
+  if (close_ui) {
+    on_title_closing();
   }
+  kernel_state_->ShutdownNativeGuideBootstrapProbe();
   StopNativeSystemBeforeProviderShutdown();
+  // This records only that the existing phase returned, not native drainage.
+  // Exact Service/Kernel guards continue to distinguish retained work.
+  native_stop_phase_returned_kernel_ = kernel_state_.get();
+}
+void Emulator::Shutdown() { (void)ShutdownInternal(false); }
+bool Emulator::ShutdownInternal(bool owned_ui_close) {
+  std::lock_guard<std::recursive_mutex> profile_capture_boundary(launch_mutex_);
+  if (host_runtime_captures_ || !CloseHostContentImportBeforeShutdown()) {
+    XELOGE("Shutdown refused inside an active host catalog/import operation");
+    return false;
+  }
+  if(title_cache_owner_)title_cache_owner_->Retire();
+  if(!RetireTitleCaches(false))XELOGW("Cache namespace withdrawal remains pending during Kernel stop");
+  XELOGI("Emulator::Shutdown: starting teardown");
+  const uint64_t closing_generation = title_execution_state_.BeginStopping();
+  PrepareTitleStop(owned_ui_close || relaunching_);
+  if (owned_ui_close && kernel_state_) {
+    // The native path already performs this join. Also close the ordinary
+    // scheduler cohort before final provider destruction; this is idempotent.
+    for (const auto& thread :
+         kernel_state_->object_table()->GetObjectsByType<kernel::XThread>(
+             kernel::XObject::Type::Thread)) {
+      if (!thread->is_host_thread() && thread->thread()) {
+        XELOGE("Owned shutdown cannot join an OS-backed guest thread");
+        return false;
+      }
+    }
+    kernel_state_->ShutdownDispatchThread();
+    if (graphics_system_) {
+      graphics_system_->StopFrameLimiter();
+      if (!graphics_system_->StopInterruptCallbacksAndWait()) {
+        return false;
+      }
+    }
+    if (audio_system_) {
+      audio_system_->StopWorker();
+    }
+    kernel::XTimer::CancelAll();
+    kernel_state_->guest_scheduler()->Shutdown();
+    for (const auto& thread :
+         kernel_state_->object_table()->GetObjectsByType<kernel::XThread>(
+             kernel::XObject::Type::Thread)) {
+      if (!thread->is_host_thread()) {
+        thread->Terminate(0);
+      }
+    }
+    kernel::XTimer::CancelAll();
+  }
+  // Native Avatar cleanup must still see its exact title owner above.
+  title_execution_owner_.store(nullptr, std::memory_order_release);
 
   // During relaunch, notify listeners before teardown so they can disconnect
   // UI resources while subsystems are still alive. Skip during normal
   // destructor — the UI loop may not be running.
-  if (relaunching_) {
+  if (relaunching_ || owned_ui_close) {
     // Normal relaunch/reset already stopped the CP. Repeat the idempotent
     // boundary here so an error path cannot release UI uploads/drawers before
     // native GPU retirement or the actual device-stop proof.
@@ -570,8 +1017,12 @@ void Emulator::Shutdown() {
   graphics_system_.reset();
   audio_system_.reset();
 
+  native_stop_phase_returned_kernel_ = nullptr;
   kernel_state_.reset();
   file_system_.reset();
+  title_cache_metadata_device_.reset();
+  if(title_cache_owner_ && title_cache_owner_->CloseNativeAfterIoDrained())title_cache_owner_.reset();
+  title_cache_source_ids_={};title_cache_source_generations_={};
   mounted_system_generation_ = 0;
   patcher_.reset();
   plugin_loader_.reset();
@@ -591,6 +1042,7 @@ void Emulator::Shutdown() {
   title_execution_state_.CompleteStop(closing_generation);
 
   XELOGI("Emulator::Shutdown: teardown complete");
+  return !kernel_state_ && !graphics_system_ && !audio_system_ && !memory_;
 }
 
 uint32_t Emulator::main_thread_id() {
@@ -617,6 +1069,15 @@ X_STATUS Emulator::Setup(
         graphics_system_factory,
     std::function<std::vector<std::unique_ptr<hid::InputDriver>>(ui::Window*)>
         input_driver_factory) {
+  std::lock_guard<std::recursive_mutex> runtime_boundary(launch_mutex_);
+  if (host_runtime_captures_ || HostContentImportPending()) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
+  if(title_cache_owner_){
+    if(!title_cache_owner_->CloseNativeAfterIoDrained())return X_STATUS_UNSUCCESSFUL;
+    title_cache_owner_.reset();title_cache_metadata_device_.reset();
+    title_cache_source_ids_={};title_cache_source_generations_={};
+  }
   if (setup_purpose_ == SetupPurpose::kGraphicsReplay &&
       (require_cpu_backend || !storage_root_.empty() || !content_root_.empty() ||
        !cache_root_.empty())) {
@@ -955,8 +1416,10 @@ X_STATUS Emulator::TerminateTitle() {
 }
 
 const std::unique_ptr<vfs::Device> Emulator::CreateVfsDevice(
-    const std::filesystem::path& path, const std::string_view mount_path) {
+    const std::filesystem::path& path, const std::string_view mount_path,
+    std::shared_ptr<const filesystem::ConsoleStorageVolume> forced_volume) {
   std::unique_ptr<vfs::Device> device;
+  auto volume=forced_volume ? forced_volume : filesystem::ConsoleStorageVolume::ExternalPackage();
   // Must check if the type has changed e.g. XamSwapDisc
   switch (GetFileSignature(path)) {
     case FileSignatureType::XEX0:
@@ -977,6 +1440,7 @@ const std::unique_ptr<vfs::Device> Emulator::CreateVfsDevice(
           std::error_code source_error;
           source_directory =
               source->DirectoryRoot(path.parent_path(), source_error);
+          if (!forced_volume) { volume=filesystem::ConsoleStorageVolume::InstalledSystem(); }
           if (!source_directory || source_error) {
             return nullptr;
           }
@@ -985,9 +1449,11 @@ const std::unique_ptr<vfs::Device> Emulator::CreateVfsDevice(
       if (!source_directory && kernel_state_) {
         bool managed = false;
         std::error_code source_error;
-        source_directory = kernel_state_->content_manager()->sources().CaptureManagedDirectory(
-            path.parent_path(), !cvars::allow_game_relative_writes, managed, source_error);
+        source_directory = kernel_state_->content_manager()->sources().CaptureSourceDirectory(
+            path.parent_path(), !cvars::allow_game_relative_writes, managed, source_error,
+            forced_volume ? nullptr : &volume);
         if (source_error || (managed && !source_directory)) { return nullptr; }
+        if (!managed && !forced_volume) { volume=filesystem::ConsoleStorageVolume::ExternalPackage(); }
       }
       const bool read_only =
           (source_directory && source_directory->read_only()) || !cvars::allow_game_relative_writes;
@@ -999,13 +1465,21 @@ const std::unique_ptr<vfs::Device> Emulator::CreateVfsDevice(
     case FileSignatureType::LIVE:
     case FileSignatureType::CON:
     case FileSignatureType::PIRS: {
-      device =
-          vfs::XContentContainerDevice::CreateContentDevice(mount_path, path);
+      if (!forced_volume && kernel_state_) {
+        bool managed=false; std::error_code source_error;
+        auto parent=kernel_state_->content_manager()->sources().CaptureSourceDirectory(
+            path.parent_path(),true,managed,source_error,&volume);
+        if (source_error || (managed && !parent)) { return nullptr; }
+        if (!managed) { volume=filesystem::ConsoleStorageVolume::ExternalPackage(); }
+      }
+      device = vfs::XContentContainerDevice::CreateContentDevice(mount_path, path);
     } break;
     case FileSignatureType::XISO: {
+      if (!forced_volume) { volume=filesystem::ConsoleStorageVolume::OpticalMedia(); }
       device = std::make_unique<vfs::DiscImageDevice>(mount_path, path);
     } break;
     case FileSignatureType::ZAR: {
+      if (!forced_volume) { volume=filesystem::ConsoleStorageVolume::OpticalMedia(); }
       device = std::make_unique<vfs::DiscZarchiveDevice>(mount_path, path);
     } break;
     case FileSignatureType::EXE:
@@ -1018,6 +1492,7 @@ const std::unique_ptr<vfs::Device> Emulator::CreateVfsDevice(
   // The launched title's own storage, and the only mount given request timing,
   // since nothing streams content through the save, profile or cache mounts.
   if (device) {
+    if (!device->SetStorageVolume(std::move(volume))) { return nullptr; }
     device->drive_timing().Configure();
   }
   return device;
@@ -1196,6 +1671,7 @@ X_STATUS Emulator::LaunchPath(const std::filesystem::path& path,
   }
   // A relaunch must not tear down what this mounts into and loads from.
   std::lock_guard<std::recursive_mutex> launch_lock(launch_mutex_);
+  if (host_runtime_captures_) { return X_STATUS_UNSUCCESSFUL; }
   auto launch_reservation = system_operations_.TryLaunch();
   if (!launch_reservation) {
     XELOGW("Title launch refused during system installation");
@@ -1408,25 +1884,20 @@ void Emulator::EjectDisc() {
     std::lock_guard<std::mutex> lock(inserted_disc_mutex_);
     inserted_disc_.reset();
   }
-  // So nothing opens or mounts from the disc while it goes away.
-  auto global_lock = global_critical_region::AcquireDirect();
-  const vfs::Device* device = file_system_->GetDevice(kDiscDrivePath);
-  if (!device) {
-    return;
+  auto device = file_system_->AcquireDevice(kDiscDrivePath);
+  if (!device) { return; }
+  if (kernel_state_) {
+    const auto status = kernel_state_->RetireMountedDeviceTree(device);
+    if (XFAILED(status)) { XELOGW("Disc retirement did not complete: {:08X}", status); }
+  } else {
+    // Pre-Kernel setup has no guest/native/HLE owner to drain.
+    file_system_->UnregisterDevice(kDiscDrivePath, device.get());
   }
-  for (const auto& file :
-       kernel_state_->object_table()->GetObjectsByType<kernel::XFile>(
-           kernel::XObject::Type::File)) {
-    if (file->entry()->device() == device) {
-      file->ReleaseHandle();
-    }
-  }
-  kernel_state_->content_manager()->ClosePackagesMountedFrom(device);
-  file_system_->UnregisterDevice(kDiscDrivePath);
 }
 
 bool Emulator::InsertDisc(const std::filesystem::path& path) {
-  auto device = CreateVfsDevice(path, kDiscDrivePath);
+  auto device = CreateVfsDevice(path, kDiscDrivePath,
+      filesystem::ConsoleStorageVolume::OpticalMedia());
   if (!device || !device->Initialize()) {
     XELOGE("Unable to put {} in the drive, it is an unsupported format",
            xe::strip_pii(xe::path_to_utf8(path)));
@@ -1608,8 +2079,8 @@ X_STATUS Emulator::LaunchDiscPackage(const std::filesystem::path& path,
     return result;
   }
 
-  vfs::Entry* entry = file_system_->ResolvePath(
-      xe::utf8::join_guest_paths(kDiscMountPath, package_path));
+  const auto parent=file_system_->AcquirePathDevice(kDiscMountPath);
+  vfs::Entry* entry = parent ? parent->ResolvePath(package_path) : nullptr;
   if (!entry) {
     XELOGE("Package {} is not on the disc.", package_path);
     return X_STATUS_NO_SUCH_FILE;
@@ -1618,6 +2089,7 @@ X_STATUS Emulator::LaunchDiscPackage(const std::filesystem::path& path,
   auto package = vfs::XContentContainerDevice::CreateContentDevice(
       kPackageMountPath, entry);
   if (package) {
+    if (!package->SetStorageVolume(parent->storage_volume())) { return X_STATUS_INVALID_DEVICE_REQUEST; }
     package->drive_timing().Configure();
   }
   if (const X_STATUS result =
@@ -1797,206 +2269,16 @@ uint32_t Emulator::DataMigration(const uint64_t xuid) {
 }
 
 X_STATUS Emulator::ProcessContentPackageHeader(
-    const std::filesystem::path& path, ContentInstallEntry& installation_info) {
-  installation_info.name_ = "Invalid Content Package!";
-  installation_info.content_type_ = XContentType::kInvalid;
-  installation_info.data_installation_path_ = path.filename();
-
-  const auto header = vfs::XContentContainerDevice::ReadContainerHeader(path);
-
-  if (!header || !header->content_header.is_magic_valid()) {
-    installation_info.installation_state_ = InstallState::failed;
-    installation_info.installation_result_ = X_STATUS_INVALID_PARAMETER;
-    installation_info.installation_error_message_ = "Invalid Package Type!";
-    XELOGE("Failed to initialize device");
-    return X_STATUS_INVALID_PARAMETER;
-  }
-
-  // Always install savefiles to user signed to slot 0.
-  const auto profile =
-      kernel_state_->xam_state()->profile_manager()->GetProfile(
-          static_cast<uint8_t>(0));
-
-  uint64_t xuid = header->content_metadata.profile_id;
-  if (header->content_metadata.content_type == XContentType::kSavedGame &&
-      profile) {
-    xuid = profile->xuid();
-  }
-
-  installation_info.data_installation_path_ = fmt::format(
-      "{:016X}/{:08X}/{:08X}/{}", xuid,
-      header->content_metadata.execution_info.title_id.get(),
-      static_cast<uint32_t>(header->content_metadata.content_type.get()),
-      path.filename());
-
-  installation_info.header_installation_path_ = fmt::format(
-      "{:016X}/{:08X}/Headers/{:08X}/{}", xuid,
-      header->content_metadata.execution_info.title_id.get(),
-      static_cast<uint32_t>(header->content_metadata.content_type.get()),
-      path.filename());
-
-  installation_info.name_ =
-      xe::to_utf8(header->content_metadata.display_name(XLanguage::kEnglish));
-  installation_info.content_type_ =
-      static_cast<XContentType>(header->content_metadata.content_type);
-  installation_info.content_size_ = header->content_metadata.content_size;
-  installation_info.installation_state_ = InstallState::pending;
-
-  if (header->content_metadata.title_thumbnail_size > 0 &&
-      header->content_metadata.title_thumbnail_size <=
-          vfs::XContentMetadata::kThumbLengthV1) {
-    installation_info.icon_data_.assign(
-        header->content_metadata.title_thumbnail,
-        header->content_metadata.title_thumbnail +
-            header->content_metadata.title_thumbnail_size);
-  }
-
-  return X_STATUS_SUCCESS;
+    const std::filesystem::path&, ContentInstallEntry& entry) {
+  return ImportFailure(entry,
+      std::make_error_code(std::errc::operation_not_permitted),
+      "Use the owned idle content-import workflow.");
 }
-
 X_STATUS Emulator::InstallContentPackage(
-    const std::filesystem::path& path, ContentInstallEntry& installation_info) {
-  {
-    std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-    installation_info.installation_state_ = InstallState::preparing;
-  }
-
-  // Check if installation was cancelled before starting
-  if (installation_info.cancelled_.load()) {
-    std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-    installation_info.installation_state_ = InstallState::failed;
-    installation_info.installation_error_message_ = "Installation cancelled";
-    installation_info.installation_result_ = X_ERROR_CANCELLED;
-    return X_ERROR_CANCELLED;
-  }
-
-  std::unique_ptr<vfs::XContentContainerDevice> device =
-      vfs::XContentContainerDevice::CreateContentDevice("", path);
-
-  if (!device || !device->Initialize()) {
-    std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-    installation_info.installation_state_ = InstallState::failed;
-    installation_info.installation_error_message_ =
-        "Device initialization failed!";
-    installation_info.installation_result_ = X_STATUS_ACCESS_DENIED;
-    XELOGE("Failed to initialize device");
-    return X_STATUS_INVALID_PARAMETER;
-  }
-
-  const std::filesystem::path installation_path =
-      content_root() / installation_info.data_installation_path_;
-
-  const std::filesystem::path header_path =
-      content_root() / installation_info.header_installation_path_;
-
-  if (!std::filesystem::exists(content_root())) {
-    const std::error_code ec = xe::filesystem::CreateFolder(content_root());
-    if (ec) {
-      std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-      installation_info.installation_state_ = InstallState::failed;
-      installation_info.installation_error_message_ = ec.message();
-      installation_info.installation_result_ = X_STATUS_ACCESS_DENIED;
-      return X_STATUS_ACCESS_DENIED;
-    }
-  }
-
-  const auto disk_space = std::filesystem::space(content_root());
-  if (disk_space.available < installation_info.content_size_.load() * 1.1f) {
-    std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-    installation_info.installation_state_ = InstallState::failed;
-    installation_info.installation_error_message_ = "Insufficient disk space!";
-    installation_info.installation_result_ = X_STATUS_DISK_FULL;
-    return X_STATUS_DISK_FULL;
-  }
-
-  if (std::filesystem::exists(installation_path)) {
-    // TODO(Gliniak): Popup
-    // Do you want to overwrite already existing data?
-  } else {
-    std::error_code error_code;
-    std::filesystem::create_directories(installation_path, error_code);
-    if (error_code) {
-      std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-      installation_info.installation_state_ = InstallState::failed;
-      installation_info.installation_error_message_ =
-          "Cannot Create Content Directory!";
-      installation_info.installation_result_ = error_code.value();
-      return error_code.value();
-    }
-  }
-
-  installation_info.content_size_.store(device->data_size());
-  {
-    std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-    installation_info.installation_state_ = InstallState::installing;
-  }
-
-  vfs::VirtualFileSystem::ExtractContentHeader(device.get(), header_path);
-
-  // Lambda to handle cleanup - defined once, used in both cancellation paths
-  auto cleanup_and_fail = [&]() {
-    std::error_code ec;
-    bool cleanup_failed = false;
-
-    if (std::filesystem::exists(installation_path)) {
-      std::filesystem::remove_all(installation_path, ec);
-      if (ec) {
-        cleanup_failed = true;
-      }
-    }
-
-    if (std::filesystem::exists(header_path)) {
-      std::filesystem::remove(header_path, ec);
-      if (ec) {
-        cleanup_failed = true;
-      }
-    }
-
-    // Set state AFTER cleanup is done, so dialog doesn't pop up prematurely
-    std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-    installation_info.installation_result_ = X_ERROR_CANCELLED;
-    installation_info.installation_error_message_ =
-        cleanup_failed ? "Installation cancelled (cleanup failed)"
-                       : "Installation cancelled";
-    installation_info.installation_state_ = InstallState::failed;
-  };
-
-  // Check for cancellation before extracting files
-  if (installation_info.cancelled_.load()) {
-    cleanup_and_fail();
-    return X_ERROR_CANCELLED;
-  }
-
-  X_STATUS error_code = vfs::VirtualFileSystem::ExtractContentFiles(
-      device.get(), installation_path,
-      installation_info.currently_installed_size_,
-      [&installation_info]() { return installation_info.cancelled_.load(); });
-
-  // Check for cancellation after extraction
-  if (installation_info.cancelled_.load() || error_code == X_ERROR_CANCELLED) {
-    cleanup_and_fail();
-    return X_ERROR_CANCELLED;
-  }
-
-  if (error_code != X_ERROR_SUCCESS) {
-    std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-    installation_info.installation_state_ = InstallState::failed;
-    return error_code;
-  }
-
-  installation_info.currently_installed_size_.store(
-      installation_info.content_size_.load());
-  {
-    std::lock_guard<std::mutex> lock(*installation_info.mutex_);
-    installation_info.installation_state_ = InstallState::installed;
-  }
-  kernel_state()->BroadcastNotification(kXNotificationLiveContentInstalled, 0);
-
-  if (installation_info.content_type_ == XContentType::kProfile) {
-    kernel_state_->xam_state()->profile_manager()->ReloadProfiles();
-  }
-
-  return error_code;
+    const std::filesystem::path&, ContentInstallEntry& entry) {
+  return ImportFailure(entry,
+      std::make_error_code(std::errc::operation_not_permitted),
+      "Use the owned idle content-import workflow.");
 }
 
 void Emulator::Pause() {
@@ -2164,6 +2446,47 @@ bool Emulator::RestoreFromFile(const std::filesystem::path& path) {
   return true;
 }
 
+bool Emulator::RelaunchSystemApplication(
+    kernel::KernelState* expected_kernel, uint64_t generation,
+    const std::string& guest_path, uint32_t launch_flags,
+    std::vector<uint8_t> launch_data) {
+#if XE_PLATFORM_MAC
+  (void)expected_kernel; (void)generation; (void)guest_path;
+  (void)launch_flags; (void)launch_data;
+  return false;
+#else
+  if (kernel::XThread::IsInThread() ||
+      kernel::XThread::GetCurrentFiberThread() ||
+      global_critical_region::is_held_by_current_thread() || !lifecycle_ ||
+      !lifecycle_->IsActivePreparedWorker(this, generation) ||
+      guest_path.empty() || guest_path.find('\0') != std::string::npos) {
+    return false;
+  }
+  std::lock_guard<std::recursive_mutex> launch_lock(launch_mutex_);
+  const auto current = [&] {
+    const auto execution = title_execution_state_.snapshot();
+    return expected_kernel && kernel_state_.get() == expected_kernel &&
+           title_execution_owner_.load(std::memory_order_acquire) == expected_kernel &&
+           execution.generation == generation &&
+           execution.phase == kernel::TitleExecutionState::Phase::kRunning &&
+           !host_runtime_captures_ && !HostContentImportPending() &&
+           lifecycle_->IsActivePreparedWorker(this, generation);
+  };
+  if (!current()) { return false; }
+  // No guest frame or borrowed Entry survives this call. The explicit Kernel
+  // is still owned here; the target retains its exact device across teardown.
+  auto target = kernel::xam::CaptureSystemLaunchTarget(*expected_kernel, guest_path);
+  if (!target || !target->owner || target->owner->namespace_retiring() ||
+      !current()) {
+    return false;
+  }
+  RelaunchTitle(xe::path_to_utf8(target->host_path), target->launch_module,
+                launch_flags, std::move(launch_data), true,
+                target->package_path);
+  return true;  // Existing RelaunchTitle owns actual failure/launch reporting.
+#endif
+}
+
 void Emulator::RelaunchTitle(const std::string& host_path,
                              const std::string& launch_module,
                              uint32_t launch_flags,
@@ -2173,8 +2496,20 @@ void Emulator::RelaunchTitle(const std::string& host_path,
   // Each UI launch and guest launch request relaunches on its own thread, so a
   // burst of them queues here. One a newer request replaced while it waited is
   // dropped.
+  {
+    std::unique_lock precheck(launch_mutex_, std::try_to_lock);
+    if (precheck.owns_lock() &&
+        (host_runtime_captures_ || HostContentImportPending())) {
+      XELOGW("Relaunch refused during a host runtime/import operation");
+      return;
+    }
+  }
   const uint64_t request = ++relaunch_requests_;
   std::lock_guard<std::recursive_mutex> launch_lock(launch_mutex_);
+  if (host_runtime_captures_ || HostContentImportPending()) {
+    XELOGW("Relaunch refused during a host catalog/import operation");
+    return;
+  }
   if (request != relaunch_requests_.load()) {
     XELOGI("RelaunchTitle: skipping {}, a newer request replaces it",
            xe::strip_pii(host_path));
@@ -2186,15 +2521,8 @@ void Emulator::RelaunchTitle(const std::string& host_path,
       xe::strip_pii(host_path), launch_module, package_path);
 
   // Tell WaitUntilExit not to fire on_exit when main thread dies.
-  title_execution_state_.BeginStopping();
-  kernel::NativeSystemUiService::SealHostUiFallbackForKernelOrFailStop(
-      kernel_state_.get());
   relaunching_ = true;
-  on_title_closing();
-
-  kernel_state_->ShutdownNativeGuideBootstrapProbe();
-
-  StopNativeSystemBeforeProviderShutdown();
+  PrepareTitleStop(true);
 
   // Stop the dispatch thread gracefully before force-terminating threads,
   // otherwise TerminateThread corrupts the CV it's blocked on.
@@ -2292,20 +2620,25 @@ void Emulator::RelaunchTitle(const std::string& host_path,
 }
 
 void Emulator::ResetTitle() {
-  // Drops relaunches requested before the reset.
+  {
+    std::unique_lock precheck(launch_mutex_, std::try_to_lock);
+    if (precheck.owns_lock() &&
+        (host_runtime_captures_ || HostContentImportPending())) {
+      XELOGW("ResetTitle refused during a host runtime/import operation");
+      return;
+    }
+  }
+  // Drops relaunches requested before an admitted reset.
   ++relaunch_requests_;
   std::lock_guard<std::recursive_mutex> launch_lock(launch_mutex_);
+  if (host_runtime_captures_ || HostContentImportPending()) {
+    XELOGW("ResetTitle refused during a host catalog/import operation");
+    return;
+  }
   XELOGI("ResetTitle: stopping title and resetting kernel");
 
-  title_execution_state_.BeginStopping();
-  kernel::NativeSystemUiService::SealHostUiFallbackForKernelOrFailStop(
-      kernel_state_.get());
   relaunching_ = true;
-  on_title_closing();
-
-  kernel_state_->ShutdownNativeGuideBootstrapProbe();
-
-  StopNativeSystemBeforeProviderShutdown();
+  PrepareTitleStop(true);
 
   kernel_state_->ShutdownDispatchThread();
 
@@ -2430,7 +2763,8 @@ bool Emulator::RefreshInstalledSystemSource(bool installed) {
     const auto host_path = root->path();
     auto device = std::make_unique<vfs::HostPathDevice>(
         mounts[i], host_path, true, false, "FATX", std::move(root));
-    if (!device->Initialize() || !device->AdmitGuestStorage(error) || error) {
+    if (!device->SetStorageVolume(filesystem::ConsoleStorageVolume::InstalledSystem()) ||
+        !device->Initialize() || !device->AdmitGuestStorage(error) || error) {
       return false;
     }
     staged.push_back(std::move(device));
@@ -2485,6 +2819,112 @@ bool Emulator::RefreshInstalledSystemSource(bool installed) {
 #endif
 }
 
+bool Emulator::RetireTitleCaches(bool release_native) {
+  if(title_cache_owner_)title_cache_owner_->Retire();
+  bool drained=true;
+  if(file_system_ && title_cache_metadata_device_){
+    X_STATUS status;
+    auto plan=file_system_->PrepareDeviceRetirement(title_cache_metadata_device_,true,status,vfs::DeviceRetirementPolicy::kWithdraw);
+    if(!plan || XFAILED(status) || XFAILED(file_system_->CommitDeviceRetirement(*plan)) ||
+        XFAILED(file_system_->RetireDeviceBackings(*plan)))drained=false;
+    else title_cache_metadata_device_.reset();
+  }
+  if(kernel_state_ && file_system_){
+    auto& registry=kernel_state_->content_manager()->sources();
+    for(size_t i=0;i<3;++i)if(!title_cache_source_ids_[i].empty()){
+      if(registry.WithdrawCache(title_cache_source_ids_[i],title_cache_source_generations_[i],*file_system_)){
+        title_cache_source_ids_[i].clear();title_cache_source_generations_[i]=0;
+      }else drained=false;
+    }
+  }
+  if(release_native && title_cache_owner_){
+    if(!drained || !title_cache_owner_->CloseNativeAfterIoDrained())return false;
+    title_cache_owner_.reset();
+  }
+  return drained;
+}
+X_STATUS Emulator::PrepareTitleCaches() {
+  if(!cvars::mount_cache)return X_STATUS_SUCCESS;
+  const auto current=title_id();
+  filesystem::CacheProductIdentity::Kind kind=filesystem::CacheProductIdentity::Kind::kXbox360;
+  uint32_t product=current;
+  if(current==kXeFuTitleId){
+    kind=filesystem::CacheProductIdentity::Kind::kXboxOriginal;
+    product=xbox_game_?xbox_game_->title_id:0;
+  }else if(kernel::IsSystemTitle(current) || kernel::IsXNTitle(current)){
+    // No current launch-bound XNA product provider exists. SYSTEM SysCache is
+    // unrelated and never exported to TITLE as a substitute.
+    product=0;
+  }
+  if(!product)return X_STATUS_SUCCESS;
+  const auto generation=title_execution_state_.snapshot().generation;
+  if(!generation || !kernel_state_ || !file_system_)return X_STATUS_UNSUCCESSFUL;
+  const auto storage_path=storage_root_.native();
+  if(std::find(storage_path.begin(),storage_path.end(),0)!=storage_path.end())return X_STATUS_INVALID_PARAMETER;
+  std::error_code error;
+  auto storage=filesystem::HostStorageRoot::Open(storage_root_,false,error,
+      filesystem::CacheStorageOwner::kMinimumFreeBytes);
+  if(!storage || error)return error?vfs::HostStorageError(error):X_STATUS_UNSUCCESSFUL;
+  const auto prepare=[&](const std::shared_ptr<filesystem::HostStorageRoot>& parent,const std::string& leaf){
+    auto root=parent->Subroot(leaf,false,error);
+    if(!root && error==std::errc::no_such_file_or_directory){
+      error=parent->Create(leaf,true);
+      if(error && error!=std::errc::file_exists)return std::shared_ptr<filesystem::HostStorageRoot>{};
+      root=parent->Subroot(leaf,false,error);
+    }
+    return root;
+  };
+  const filesystem::CacheProductIdentity identity(kind,product,generation);
+  filesystem::CacheStorageOwner::Options options;
+  constexpr std::array<const char*,3> folders{"cache","cache0","cache1"};
+  for(size_t i=0;i<3;++i){options.role_parents[i]=prepare(storage,folders[i]);
+    if(!options.role_parents[i] || error)return error?vfs::HostStorageError(error):X_STATUS_UNSUCCESSFUL;}
+  auto private_base=prepare(storage,".xenia-cache-owners-v1");
+  if(!private_base || error)return error?vfs::HostStorageError(error):X_STATUS_UNSUCCESSFUL;
+  options.private_parent=prepare(private_base,identity.key());
+  if(!options.private_parent || error)return error?vfs::HostStorageError(error):X_STATUS_UNSUCCESSFUL;
+  title_cache_owner_=filesystem::CacheStorageOwner::Open(identity,std::move(options),error);
+  if(!title_cache_owner_)return error?vfs::HostStorageError(error):X_STATUS_UNSUCCESSFUL;
+  const auto fail=[&](std::error_code why){
+    RetireTitleCaches(true);return why?vfs::HostStorageError(why):X_STATUS_UNSUCCESSFUL;
+  };
+  if(error){
+    std::error_code inspect_error;const auto roles=title_cache_owner_->PendingFormats(inspect_error);
+    if(inspect_error || roles.empty())return fail(inspect_error?inspect_error:error);
+    for(const auto role:roles){
+      auto handoff=title_cache_owner_->InspectRecovery(role);
+      if(!handoff || handoff->receipt().error)return fail(handoff?handoff->receipt().error:std::make_error_code(std::errc::permission_denied));
+      const auto recovered=filesystem::CacheStorageOwner::ResumeFormat(*handoff);
+      if(recovered.error || !recovered.complete)return fail(recovered.error);
+    }
+  }
+  auto& registry=kernel_state_->content_manager()->sources();
+  constexpr std::array<const char*,3> roles{"legacy","cache0","cache1"};
+  constexpr std::array<const char*,3> mounts{R"(\CACHE)",R"(\CACHE0)",R"(\CACHE1)"};
+  for(size_t i=0;i<3;++i){
+    auto root=title_cache_owner_->CaptureRoot(filesystem::CacheStorageOwner::Role(i),error);
+    if(!root || error)return fail(error);
+    if(title_cache_registration_generation_==UINT64_MAX)return fail(std::make_error_code(std::errc::value_too_large));
+    const auto registration=++title_cache_registration_generation_;
+    kernel::xam::ContentSource source;
+    source.id="cache-v1:"+identity.key()+":"+roles[i];source.device_id=1;
+    source.device_type=kernel::xam::DeviceType::HDD;source.kind=kernel::xam::ContentSourceKind::kCache;
+    source.root=root->path();source.guest_volume_root=mounts[i];source.guest_root=mounts[i];
+    source.name=u"Title Cache";source.read_only=false;source.reserved_bytes=filesystem::CacheStorageOwner::kMinimumFreeBytes;
+    if(!registry.RegisterCache(source,title_cache_owner_,filesystem::CacheStorageOwner::Role(i),registration,*file_system_))
+      return fail(std::make_error_code(std::errc::device_or_resource_busy));
+    title_cache_source_ids_[i]=std::move(source.id);title_cache_source_generations_[i]=registration;
+  }
+  const auto legacy=registry.Source(title_cache_source_ids_[0]);
+  const auto volume=legacy?registry.CaptureStorageVolume(*legacy):nullptr;
+  auto device=vfs::CacheMetadataDevice::Create(title_cache_owner_,volume,error);
+  if(!device || error)return fail(error);
+  std::shared_ptr<vfs::Device> registered;
+  const auto status=file_system_->RegisterDeviceExclusive(std::move(device),registered);
+  if(XFAILED(status))return fail(std::make_error_code(std::errc::device_or_resource_busy));
+  title_cache_metadata_device_=std::move(registered);return X_STATUS_SUCCESS;
+}
+
 void Emulator::MountStandardDrives() {
   auto fs = file_system_.get();
 
@@ -2496,22 +2936,6 @@ void Emulator::MountStandardDrives() {
       (storage_root_ / "content").lexically_normal();
   auto owned_storage =
       filesystem::HostStorageRoot::Open(storage_root_, false, content_ec);
-  const auto prepare_directory =
-      [&](const std::filesystem::path& relative) {
-        if (!owned_storage) {
-          return std::shared_ptr<filesystem::HostStorageRoot>{};
-        }
-        auto root = owned_storage->Subroot(relative, false, content_ec);
-        if (root || content_ec != std::errc::no_such_file_or_directory) {
-          return root;
-        }
-        const auto created = owned_storage->Create(relative, true);
-        if (created && created != std::errc::file_exists) {
-          content_ec = created;
-          return std::shared_ptr<filesystem::HostStorageRoot>{};
-        }
-        return owned_storage->Subroot(relative, false, content_ec);
-      };
   auto hdd = kernel_state_->content_manager()->sources().Source("hdd");
   if (owned_storage && default_content_root && (!hdd || !hdd->available)) {
     content_ec = owned_storage->Create("content", true);
@@ -2521,15 +2945,16 @@ void Emulator::MountStandardDrives() {
   if (hdd && hdd->available && hdd->storage && hdd_volume &&
       hdd_volume->profile_writable() && hdd_volume->public_root()) {
     const auto& volume_storage = hdd_volume->public_root();
+    const auto identity=kernel_state_->content_manager()->sources().CaptureStorageVolume(*hdd);
     auto volume = std::make_unique<vfs::HostPathDevice>(
         "\\Device\\Harddisk0\\Partition1", volume_storage->path(), false,
         false, "FATX", volume_storage, hdd->storage,
         vfs::HostPathDevice::ControlRole::kFolderVolume);
-    if (volume->Initialize()) { fs->RegisterDevice(std::move(volume)); }
+    if (volume->SetStorageVolume(identity) && volume->Initialize()) { fs->RegisterDevice(std::move(volume)); }
     auto content = std::make_unique<vfs::HostPathDevice>(
         "\\Device\\Harddisk0\\Partition1\\Content", content_root_, false, true,
         "FATX", hdd->storage, hdd->storage);
-    if (content->Initialize()) {
+    if (content->SetStorageVolume(identity) && content->Initialize()) {
       fs->RegisterDevice(std::move(content));
     }
   } else {
@@ -2550,28 +2975,9 @@ void Emulator::MountStandardDrives() {
     }
   }
 
-  if (cvars::mount_cache) {
-    // Preserve the three existing named-cache directories. They use their own
-    // physical backing geometry, even when Content lives on another disk.
-    for (const auto& [mount, folder] :
-         {std::pair{"\\CACHE0", "cache0"}, std::pair{"\\CACHE1", "cache1"},
-          std::pair{"\\CACHE", "cache"}}) {
-      auto storage = prepare_directory(folder);
-      if (!storage) {
-        XELOGE("Unable to prepare managed {} path: {}", folder,
-               content_ec.message());
-        continue;
-      }
-      auto device = std::make_unique<vfs::HostPathDevice>(
-          mount, storage_root_ / folder, false, false, "FATX", storage, storage,
-          vfs::HostPathDevice::ControlRole::kFolderVolume);
-      if (!device->Initialize() || !fs->RegisterDevice(std::move(device))) {
-        XELOGE("Unable to register {} path", folder);
-        continue;
-      }
-      fs->RegisterSymbolicLink(std::string(folder) + ":", mount);
-    }
-  }
+  // Cache product metadata is not known here. Preserve all original cache,
+  // cache0 and cache1 trees; title views are prepared only after actual launch
+  // metadata is recovered. No global/SYSTEM or previous-product fallback.
 
   if (cvars::mount_memory_unit) {
     const auto mu =
@@ -2582,6 +2988,7 @@ void Emulator::MountStandardDrives() {
       XELOGW("Configured memory unit is unavailable or uninitialized");
     } else {
       const auto owner = kernel_state_->content_manager()->Volume("memory-unit");
+      const auto identity=kernel_state_->content_manager()->sources().CaptureStorageVolume(*mu);
       auto volume_storage = owner && owner->profile_writable()
                                 ? owner->public_root() : nullptr;
       if (volume_storage) {
@@ -2589,7 +2996,7 @@ void Emulator::MountStandardDrives() {
             "\\Device\\Mass0", volume_storage->path(), false, false, "FATX",
             std::move(volume_storage), mu->storage,
           vfs::HostPathDevice::ControlRole::kFolderVolume);
-        if (volume->Initialize() && fs->RegisterDevice(std::move(volume))) {
+        if (volume->SetStorageVolume(identity) && volume->Initialize() && fs->RegisterDevice(std::move(volume))) {
           fs->RegisterSymbolicLink("MU:", "\\Device\\Mass0");
           fs->RegisterSymbolicLink("\\MU", "\\Device\\Mass0");
         }
@@ -2597,7 +3004,7 @@ void Emulator::MountStandardDrives() {
       auto content = std::make_unique<vfs::HostPathDevice>(
           "\\Device\\Mass0\\Content", mu->source.root, false, true, "FATX",
           mu->storage, mu->storage);
-      if (content->Initialize()) {
+      if (content->SetStorageVolume(identity) && content->Initialize()) {
         fs->RegisterDevice(std::move(content));
       }
     }
@@ -2978,29 +3385,54 @@ bool Emulator::ExceptionCallback(Exception* ex) {
   return false;
 }
 
-void Emulator::WaitUntilExit() {
+void Emulator::WaitUntilExit() { (void)WaitUntilExit(nullptr); }
+Emulator::ExitWait Emulator::WaitUntilExit(threading::WaitHandle* control) {
   while (true) {
-    if (main_thread_) {
-      // Use wait_handle() rather than thread(): a fiber-backed main thread has
-      // no host thread, only an exit event.
-      xe::threading::Wait(main_thread_->wait_handle(), false);
+    kernel::object_ref<kernel::XThread> main;
+    {
+      std::lock_guard<std::recursive_mutex> lock(launch_mutex_);
+      main = main_thread_;
     }
-
+    if (main) {
+      if (control) {
+        threading::WaitHandle* handles[]{main->wait_handle(), control};
+        const auto waited = threading::WaitAny(handles, 2, false);
+        if (waited.first != threading::WaitResult::kSuccess ||
+            waited.second == 1) {
+          return ExitWait::kControl;
+        }
+      } else {
+        xe::threading::Wait(main->wait_handle(), false);
+      }
+    }
     if (restoring_) {
+      if (control) {
+        while (restoring_) {
+          if (threading::Wait(control, false, std::chrono::milliseconds(10)) ==
+              threading::WaitResult::kSuccess) {
+            return ExitWait::kControl;
+          }
+        }
+        continue;
+      }
       restore_fence_.Wait();
     } else if (relaunching_) {
-      // RelaunchTitle is running on another thread - wait for it to finish
-      // and set the new main_thread_, then loop back to wait on it.
       while (relaunching_) {
-        xe::threading::Sleep(std::chrono::milliseconds(10));
+        if (control &&
+            threading::Wait(control, false, std::chrono::milliseconds(10)) ==
+                threading::WaitResult::kSuccess) {
+          return ExitWait::kControl;
+        }
+        if (!control) {
+          xe::threading::Sleep(std::chrono::milliseconds(10));
+        }
       }
     } else {
-      // Not restoring/relaunching and the thread exited. We're finished.
       break;
     }
   }
-
   on_exit();
+  return ExitWait::kTitleExited;
 }
 
 std::string Emulator::RemountAndResolveLaunchPath(
@@ -3095,15 +3527,27 @@ X_STATUS Emulator::CompleteLaunch(const std::filesystem::path& path,
   }
   bool accepted = false;
   struct FailedPreparation {
+    Emulator& emulator;
     kernel::TitleExecutionState& state;
     uint64_t generation;
     bool& accepted;
     ~FailedPreparation() {
       if (!accepted) {
+        // A failed launch may already have published its exact product views.
+        // Close admission before dropping the launch generation. Native owners
+        // remain retained until ordinary real IO/Kernel teardown can drain.
+        if(emulator.title_cache_owner_ &&
+            emulator.title_cache_owner_->product().launch_generation()==generation){
+          emulator.title_cache_owner_->Retire();
+          try {
+            if(!emulator.RetireTitleCaches(false))
+              XELOGW("Failed launch cache namespace withdrawal remains pending");
+          }catch(...){XELOGE("Failed launch cache withdrawal retained after exception");}
+        }
         state.CancelPreparing(generation);
       }
     }
-  } failed_preparation{title_execution_state_, generation, accepted};
+  } failed_preparation{*this, title_execution_state_, generation, accepted};
   const bool boot_animation = std::exchange(boot_animation_requested_, false);
   // The window icon and on_launch listeners need the UI thread.
   X_STATUS result = X_STATUS_UNSUCCESSFUL;
@@ -3289,15 +3733,21 @@ static std::optional<std::string> PrepareInstalledNativeSystemRoot(
     XELOGE("Native system UI SystemRoot does not identify installed Flash");
     return std::nullopt;
   }
-  if (!file_system.FindSymbolicLink("media:", target) &&
-      !file_system.RegisterSymbolicLink("media:", "\\SystemRoot")) {
+  // SYSTEM DOS paths are a separate namespace; NtCreateFile captures a
+  // native SYSTEM caller's media: as \System??\media:, never the TITLE alias.
+  constexpr std::string_view system_media = "\\System??\\media:";
+  if (!file_system.FindSymbolicLink(system_media, target) &&
+      !file_system.RegisterSymbolicLink(system_media, "\\SystemRoot")) {
     return std::nullopt;
   }
-  if (file_system.ResolvePath("media:") != flash_root) {
-    XELOGE(
-        "Native system UI media alias conflicts with installed system "
-        "resources");
+  if (file_system.ResolvePath(system_media) != flash_root) {
+    XELOGE("Native system UI SYSTEM media alias conflicts with installed Flash");
     return std::nullopt;
+  }
+  // Keep the legacy TITLE font alias when it is unclaimed. A title's own
+  // media alias remains independent and is never replaced by SYSTEM startup.
+  if (!file_system.IsSymbolicLinkRegistered("media:")) {
+    file_system.RegisterSymbolicLink("media:", "\\SystemRoot");
   }
   std::string root_path = "\\SystemRoot\\xam.xex";
   auto* image = file_system.ResolvePath(root_path);
@@ -3429,6 +3879,7 @@ bool Emulator::StartNativeSystemUiBeforeTitle() try {
   }
   const auto fail = [&](const std::string& reason) {
     XELOGE("Native system UI pre-title startup failed: {}", reason);
+    service->ReportProfileIdentityRefusalOnCoordinator(kernel_state_.get());
     service->BeginStop();  // Whole actual bootstrap/provider stop stays at the
                            // existing Kernel boundary.
     return false;
@@ -3442,6 +3893,30 @@ bool Emulator::StartNativeSystemUiBeforeTitle() try {
     if (!status.failure.empty() || status.stopping || graphics.stopping ||
         graphics.retired || !supported(capacity) ||
         capacity.backend_epoch != initial.backend_epoch) {
+      // These are the already-fetched coordinator observations, not a new
+      // native admission or a linearized cross-subsystem lifetime proof.
+      if (!kernel::XThread::IsInThread() &&
+          !kernel::XThread::GetCurrentFiberThread() &&
+          !global_critical_region::is_held_by_current_thread()) {
+        XELOGE(
+            "Native system UI coordinator failure observations: "
+            "service_failure_present={} service_stopping={} "
+            "boot_admitted={} title_heap_ready={} source_frame_ready={} "
+            "transport_stopping={} transport_retired={} transport_ready={} "
+            "transport_mode={} transport_blocker={} transport_epoch={} "
+            "capacity_supported={} immutable_input_supported={} "
+            "capacity_state={} capacity_epoch={} stop_proof_epoch={} "
+            "stop_proof_stopped={} initial_epoch={}; advisory only",
+            !status.failure.empty(), status.stopping, status.boot_admitted,
+            status.title_heap_ready, status.source_frame_ready,
+            graphics.stopping, graphics.retired, graphics.ready,
+            uint32_t(graphics.mode), uint32_t(graphics.blocker),
+            graphics.backend_epoch, capacity.supported,
+            capacity.immutable_input_snapshot_supported,
+            uint32_t(capacity.state), capacity.backend_epoch,
+            capacity.backend_stop_proof.backend_epoch(),
+            capacity.backend_stop_proof.stopped(), initial.backend_epoch);
+      }
       return fail(status.failure.empty()
                       ? "transport/backend stopped or startup failed"
                       : status.failure);
@@ -3463,6 +3938,7 @@ bool Emulator::StartNativeSystemUiBeforeTitle() try {
         graphics.backend_epoch == initial.backend_epoch && receiver &&
         receiver->IsRegistered() && ui_notifications &&
         ui_notifications->IsAccepting()) {
+      service->ReportProfileIdentityRefusalOnCoordinator(kernel_state_.get(),"ForegroundReady");
       XELOGI(
           "Native system UI startup prerequisites established before "
           "foreground resume: backend_epoch={}",
@@ -3653,6 +4129,8 @@ void Emulator::ResetTitleState() {
 
 X_STATUS Emulator::PrepareLaunch(const std::filesystem::path& path,
                                  const std::string_view module_path) {
+  if(!RetireTitleCaches(true))return vfs::HostStorageError(
+      std::make_error_code(std::errc::device_or_resource_busy));
   // Per-title config has been applied by now and no guest code has been
   // translated yet, which is the only window where this can be picked up.
   processor_->RefreshTraceCountsEnabled();
@@ -3672,7 +4150,8 @@ X_STATUS Emulator::PrepareLaunch(const std::filesystem::path& path,
       auto content = std::make_unique<vfs::HostPathDevice>(
           kContentMount, content_root_, false, true, "FATX", source->storage,
           source->storage);
-      if (content->Initialize()) {
+      const auto identity=kernel_state_->content_manager()->sources().CaptureStorageVolume(*source);
+      if (content->SetStorageVolume(identity) && content->Initialize()) {
         file_system_->RegisterDevice(std::move(content));
       }
     }
@@ -3693,7 +4172,7 @@ X_STATUS Emulator::PrepareLaunch(const std::filesystem::path& path,
     }
     auto device =
         std::make_unique<vfs::HostPathDevice>(mount_path, host_path, true);
-    if (device->Initialize()) {
+    if (device->SetStorageVolume(filesystem::ConsoleStorageVolume::InstalledSystem()) && device->Initialize()) {
       file_system_->RegisterDevice(std::move(device));
     }
   }
@@ -3712,17 +4191,8 @@ X_STATUS Emulator::PrepareLaunch(const std::filesystem::path& path,
     file_system_->RegisterSymbolicLink("\\SystemRoot", "\\Device\\Flash");
   }
 
-  // Setup NullDevices for raw HDD partition accesses
-  // Cache/STFC code baked into games tries reading/writing to these
-  // By using a NullDevice that just returns success to all IO requests it
-  // should allow games to believe cache/raw disk was accessed successfully
-  auto null_paths = {std::string("\\Partition0"), std::string("\\Cache0"),
-                     std::string("\\Cache1")};
-  auto null_device =
-      std::make_unique<vfs::NullDevice>("\\Device\\Harddisk0", null_paths);
-  if (null_device->Initialize()) {
-    file_system_->RegisterDevice(std::move(null_device));
-  }
+  // Raw cache metadata is installed later from the exact launch product.
+  // Unsupported/unidentified products have no stale raw-device fallback.
 
   ResetTitleState();
 
@@ -3980,6 +4450,9 @@ X_STATUS Emulator::PrepareLaunch(const std::filesystem::path& path,
       IsXeFuDispatcher(vfs::ExtractXexMetadata(
           reinterpret_cast<const uint8_t*>(module->xex_header()),
           module->xex_header()->header_size));
+
+  const auto cache_status=PrepareTitleCaches();
+  if(XFAILED(cache_status))return cache_status;
 
   // Initialize shader storage asynchronously - pipeline compilation happens in
   // background while the game goes through its normal startup (loading screens,

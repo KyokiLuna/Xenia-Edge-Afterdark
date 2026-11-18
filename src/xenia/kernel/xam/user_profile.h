@@ -200,7 +200,9 @@ class UserProfile {
   uint64_t xuid_;
   std::atomic<std::shared_ptr<const X_XAMACCOUNTINFO>> account_info_;
 
-  std::shared_ptr<ProfileGpdModelAuthority> gpd_model_;
+  // Identity/display objects may escape a frame/Kernel. Native/model owners
+  // belong to the actual PM roster envelope, never this metadata projection.
+  std::weak_ptr<ProfileGpdModelAuthority> gpd_model_;
   std::vector<Property> properties_;  // Includes contexts!
   std::mutex prop_mutex;              // 5841089C
 

@@ -1,20 +1,36 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "xenia/kernel/xam/profile_gpd_transaction.h"
 #include "xenia/base/mutex.h"
+#include "xenia/base/logging.h"
+#include "xenia/kernel/xam/tile_service.h"
+#include <algorithm>
+#include <array>
+#include <cstdio>
 #include "xenia/base/xdbf_view.h"
 #include "xenia/vfs/devices/host_path_device.h"
 #include <set>
 namespace xe::kernel::xam {
 namespace {
 std::error_code Error(std::errc code) { return std::make_error_code(code); }
+GpdSnapshotLoad LoadCurrentFile(const std::shared_ptr<ProfileStorageLease>& lease,
+    uint32_t title, const filesystem::SnapshotPublicationSet* members) {
+  const GpdSnapshotIdentity identity{lease->xuid(), lease->source_generation(), title};
+  if (!members) { return GpdSnapshotStore::Load(identity, lease->view()); }
+  GpdSnapshotLoad out; out.identity = identity;
+  if (members->base() != lease->view()) { out.error = Error(std::errc::invalid_argument); return out; }
+  char leaf[13]; std::snprintf(leaf, sizeof(leaf), "%08X.gpd", title);
+  out.token = members->Capture(leaf, GpdSnapshotStore::kMaximumBytes, out.error, true);
+  if (!out.error && out.token->exists()) { out.error = ValidateGpdSnapshot(out.token->bytes()); }
+  return out;
+}
 std::optional<std::map<uint32_t, GpdSnapshotLoad>>
 LoadCurrentModels(const std::shared_ptr<ProfileStorageLease> &lease,
                   const std::map<uint32_t, GpdSnapshotLoad> *previous,
-                  std::error_code &error) {
+                  std::error_code &error,
+                  const filesystem::SnapshotPublicationSet* members = nullptr) {
   error.clear();
   std::map<uint32_t, GpdSnapshotLoad> loads;
-  auto dashboard = GpdSnapshotStore::Load(
-      {lease->xuid(), lease->source_generation(), kDashboardID}, lease->view());
+  auto dashboard = LoadCurrentFile(lease, kDashboardID, members);
   if (!dashboard.readable()) {
     error = dashboard.error ? dashboard.error
                             : Error(std::errc::no_such_file_or_directory);
@@ -50,8 +66,7 @@ LoadCurrentModels(const std::shared_ptr<ProfileStorageLease> &lease,
   uint64_t aggregate = dashboard.token->bytes().size();
   loads.emplace(kDashboardID, std::move(dashboard));
   for (auto id : titles) {
-    auto load = GpdSnapshotStore::Load(
-        {lease->xuid(), lease->source_generation(), id}, lease->view());
+    auto load = LoadCurrentFile(lease, id, members);
     if (load.error) {
       error = load.error;
       return {};
@@ -66,7 +81,92 @@ LoadCurrentModels(const std::shared_ptr<ProfileStorageLease> &lease,
   }
   return loads;
 }
+// A known broken host producer wrote exactly 24 ASCII hex characters plus
+// NUL in UTF-16LE. A valid BE key can never satisfy this predicate. Retain
+// every unrecognized, truncated, custom or ambiguous value without coercion.
+std::optional<std::pair<std::u16string, std::array<uint32_t, 3>>> LegacyLittleEndianKey(
+    const UserSetting& setting) {
+  const auto bytes = setting.get_extended_data();
+  if (bytes.size() != 50 || bytes[48] || bytes[49]) { return {}; }
+  std::u16string key;
+  std::array<uint32_t, 3> fields{};
+  for (size_t i = 0; i != 24; ++i) {
+    const uint8_t c = bytes[i * 2];
+    if (bytes[i * 2 + 1]) { return {}; }
+    uint32_t digit;
+    if (c >= '0' && c <= '9') { digit = c - '0'; }
+    else if (c >= 'A' && c <= 'F') { digit = c - 'A' + 10; }
+    else if (c >= 'a' && c <= 'f') { digit = c - 'a' + 10; }
+    else { return {}; }
+    key.push_back(char16_t(c));
+    fields[i / 8] = (fields[i / 8] << 4) | digit;
+  }
+  return std::pair{std::move(key), fields};
+}
 }  // namespace
+std::error_code ProfileGpdWriter::RepairLegacyPictureKeys(
+    std::shared_ptr<const vfs::InstalledSystemSource::Snapshot> installed) const {
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    return Error(std::errc::operation_would_block);
+  }
+  if (!model || !owner || !recovery) { return Error(std::errc::no_such_device); }
+  std::error_code error;
+  const auto captured = model->CaptureRead(error);
+  if (!captured) { return error; }
+  ProfileGpdMutation command;
+  command.kind = ProfileGpdMutationKind::kSetSettings;
+  command.title_id = kDashboardID;
+  std::vector<uint32_t> indexes;
+  for (const auto id : {UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY,
+                        UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE}) {
+    std::optional<UserSetting> stored;
+    if (UserSetting::ReadFromGpd(captured->models->dashboard, uint32_t(id), stored)
+        != X_ERROR_SUCCESS) {
+      XELOGW("Profile {:016X}: unreadable picture key {:08X} retained without repair",
+             model->xuid(), uint32_t(id));
+      continue;
+    }
+    if (!stored) { continue; }
+    const auto corrected = LegacyLittleEndianKey(*stored);
+    if (!corrected) { continue; }
+    const auto& fields = corrected->second;
+    const uint32_t index = fields[1] & 0xFFFF;
+    if (fields[0] != kDashboardID || fields[1] != (0x00020000u | index) ||
+        fields[2] != (0x00010000u | index) || index >= TileService::kStockCount) {
+      XELOGW("Profile {:016X}: unrecognized legacy picture tuple {:08X} retained without repair",
+             model->xuid(), uint32_t(id));
+      continue;
+    }
+    command.settings.emplace_back(id, corrected->first);
+    indexes.push_back(index);
+  }
+  // Valid BE, custom and unknown metadata need no source and no write.
+  if (command.settings.empty()) { return {}; }
+  X_HRESULT status;
+  const auto stock = TileService::CaptureStockSource(std::move(installed), status);
+  if (!stock || status != X_E_SUCCESS) { return Error(std::errc::no_such_device); }
+  // Revalidate the actual tuple against genuine installed resources. Repair
+  // changes only its proven byte order; it does not create/replace any image.
+  for (const auto index : indexes) {
+    for (bool small : {false, true}) {
+      const auto picture = TileService::ReadStock(*stock, {index, small});
+      if (picture.status != X_E_SUCCESS || picture.bytes.empty()) {
+        return Error(std::errc::no_such_file_or_directory);
+      }
+    }
+  }
+  command.request_id = model->AllocateRequestId(error);
+  if (error) { return error; }
+  // Existing checked upsert/journal preserves the old GPD as recovery bytes,
+  // unknown headers/suffixes, actual source, identity and model-version CAS.
+  const auto attempt = Submit(std::move(command), captured->origin.stamp);
+  if (attempt.error) { return attempt.error; }
+  if (attempt.state != ProfileGpdTransactionAttempt::State::kCommitted &&
+      attempt.state != ProfileGpdTransactionAttempt::State::kAlreadyCommitted) {
+    return Error(std::errc::operation_would_block);
+  }
+  return {};
+}
 std::error_code ProfileGpdWriter::Reload() const {
   if (xe::global_critical_region::is_held_by_current_thread()) {
     return Error(std::errc::operation_would_block);
@@ -83,7 +183,7 @@ std::error_code ProfileGpdWriter::Reload() const {
   if (pending) {
     return Error(std::errc::device_or_resource_busy);
   }
-  auto error = ProfileGpdTransaction::ReplayBeforeLoad(lease, owner, recovery);
+  auto error = ProfileGpdTransaction::ReplayBeforeLoad(lease, owner, recovery, metadata);
   if (error) {
     return error;
   }
@@ -95,7 +195,9 @@ std::error_code ProfileGpdWriter::Reload() const {
   if (!current) {
     return error;
   }
-  auto prepared = model->PrepareLoaded(std::move(*current), error);
+  auto pictures = CaptureProfilePictures(lease->view(), error);
+  if (!pictures) { return error; }
+  auto prepared = model->PrepareLoaded(std::move(*current), error, std::move(pictures));
   if (!prepared) {
     return error;
   }
@@ -187,6 +289,15 @@ ProfileGpdTransactionAttempt ProfileGpdWriter::Submit(
   if (!model || !owner || !recovery) {
     out.error = Error(std::errc::no_such_device);
     return out;
+  }
+  if (command.kind == ProfileGpdMutationKind::kSetPictures) {
+    const auto existing = model->Pending(out.error);
+    if (out.error) { return out; }
+    if (!existing) {
+      const auto read = model->CaptureRead(out.error);
+      if (!read) { return out; }
+      if (!read->pictures && (out.error = Reload())) { return out; }
+    }
   }
   auto admitted = CaptureCurrentOrigin(command, out.error);
   if (!admitted) {
@@ -282,7 +393,7 @@ ProfileGpdTransactionAttempt ProfileGpdWriter::ExecutePending(
     }
     return out;
   }
-  auto transaction = model->AcquireTransaction(owner, recovery, out.error);
+  auto transaction = model->AcquireTransaction(owner, recovery, out.error, metadata);
   return transaction ? transaction->Attempt() : out;
 }
 DurableAchievementEvent::DurableAchievementEvent(
@@ -311,7 +422,7 @@ std::shared_ptr<ProfileGpdTransaction> ProfileGpdTransaction::Create(
     std::shared_ptr<ProfileGpdPendingMutation> pending,
     std::shared_ptr<const filesystem::ProfileIntentOwner> owner,
     std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery,
-    std::error_code& error) {
+    std::error_code& error, std::shared_ptr<filesystem::ContentMutationOwner> metadata) {
   error.clear();
   if (!model || !pending || !owner || !recovery ||
       pending->origin().owner.lock() != model ||
@@ -325,12 +436,19 @@ std::shared_ptr<ProfileGpdTransaction> ProfileGpdTransaction::Create(
     error = owner->error() ? owner->error() : recovery->error();
     return {};
   }
+  if (!metadata && std::any_of(pending->command().picture_changes.begin(),
+      pending->command().picture_changes.end(), [](const auto& edit) {
+        return edit.kind == filesystem::ProfileArtifactKind::kThumbnail;
+      })) {
+    error = Error(std::errc::no_such_device); return {};
+  }
   auto result =
       std::shared_ptr<ProfileGpdTransaction>(new ProfileGpdTransaction);
   result->model_ = model;
   result->pending_ = std::move(pending);
   result->owner_ = std::move(owner);
   result->recovery_ = std::move(recovery);
+  result->metadata_ = std::move(metadata);
   return result;
 }
 ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
@@ -374,11 +492,15 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
   for (const auto &[title, load] : *original) {
     original_tokens.push_back(load.token);
   }
+  if (pending_->command().kind == ProfileGpdMutationKind::kSetPictures && pending_->pictures_before()) {
+    for (const auto& [name, token] : *pending_->pictures_before()) { original_tokens.push_back(token); }
+  }
   if (!store_ && attempted_journal_.empty()) {
     bool current = false;
     {
-      const auto checked =
-          lease->view()->ValidateSnapshotBatch(original_tokens, out.error);
+      const auto checked = artifact_admission_
+          ? artifact_admission_->members()->Validate(original_tokens, out.error)
+          : lease->view()->ValidateSnapshotBatch(original_tokens, out.error);
       current = checked && model->IsCurrent(pending_->origin());
       if (!current && !out.error) {
         out.error = Error(std::errc::operation_canceled);
@@ -418,12 +540,54 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
     }
     mutations.push_back({action, file.before, file.intended});
   }
-  if (!mutations.empty()) {
+  if (!mutations.empty() || !plan->pictures.empty()) {
     if (!store_) {
       try {
-        store_ = GpdDurableIntentStore::Prepare(
-            owner_, recovery_, Binding(*lease, *owner_), std::move(mutations),
-            out.error, attempted_journal_, original_tokens);
+        if (!plan->pictures.empty()) {
+          using Kind = filesystem::ProfileArtifactKind;
+          using Action = filesystem::ProfileArtifactAction;
+          std::vector<filesystem::ProfileArtifactExpected> expected;
+          std::vector<filesystem::ProfileArtifactMutation> edits;
+          for (const auto& [title, file] : plan->files) {
+            // Keep one genuine GPD member even for picture-only edits; all
+            // other unchanged models remain final guard dependencies.
+            if (file.action == ProfileGpdFileAction::kUnchanged && title != kDashboardID) { continue; }
+            expected.push_back({Kind::kGpd, title, file.before.token});
+            Action action = Action::kObserve;
+            switch (file.action) {
+              case ProfileGpdFileAction::kReplace: action = Action::kReplace; break;
+              case ProfileGpdFileAction::kCreate: action = Action::kCreate; break;
+              case ProfileGpdFileAction::kDelete: action = Action::kDelete; break;
+              case ProfileGpdFileAction::kUnchanged: break;
+            }
+            edits.push_back({Kind::kGpd, title, action, file.intended});
+          }
+          static constexpr std::array<const char*, 7> names{
+              "tile_64.png", "tile_32.png", "pp_64.png", "pp_32.png",
+              "avtr_64.png", "avtr_32.png", "__thumbnail.png"};
+          bool thumbnail = false;
+          for (const auto& edit : plan->pictures) {
+            const auto index = uint64_t(edit.kind) - uint64_t(Kind::kPublic64);
+            if (index >= names.size() || !pending_->pictures_before()) {
+              out.error = Error(std::errc::invalid_argument); break;
+            }
+            if (edit.kind == Kind::kThumbnail) { thumbnail = true; }
+            else { expected.push_back({edit.kind, 0, pending_->pictures_before()->at(names[size_t(index)])}); }
+            edits.push_back(edit);
+          }
+          if (!out.error && !artifact_admission_) {
+            artifact_admission_ = GpdDurableIntentStore::AcquireArtifacts(
+                owner_, recovery_, metadata_, Binding(*lease, *owner_), std::move(expected), thumbnail, out.error);
+          }
+          if (!out.error && artifact_admission_) {
+            store_ = GpdDurableIntentStore::PrepareArtifacts(artifact_admission_, std::move(edits),
+                out.error, attempted_journal_, original_tokens);
+          }
+        } else {
+          store_ = GpdDurableIntentStore::Prepare(
+              owner_, recovery_, Binding(*lease, *owner_), std::move(mutations),
+              out.error, attempted_journal_, original_tokens);
+        }
       } catch (...) {
         preparation_uncertain_ = !attempted_journal_.empty();
         out.error = Error(std::errc::io_error);
@@ -466,14 +630,17 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
   if (!dependencies) {
     return out;
   }
-  auto current = LoadCurrentModels(lease, dependencies.get(), out.error);
+  const auto* members = artifact_admission_ ? artifact_admission_->members().get() : nullptr;
+  auto current = LoadCurrentModels(lease, dependencies.get(), out.error, members);
   if (!current) {
     return out;
   }
   std::vector<std::shared_ptr<const filesystem::HostStorageSnapshotToken>>
       tokens;
+  auto pictures = CaptureProfilePictures(lease->view(), out.error, members);
+  if (!pictures) { return out; }
   auto prepared_model =
-      model->PrepareCommit(pending_, std::move(*current), out.error);
+      model->PrepareCommit(pending_, std::move(*current), out.error, std::move(pictures));
   if (!prepared_model) {
     if (!store_ && attempted_journal_.empty()) {
       model->DiscardUnpublished(pending_, this);
@@ -498,8 +665,8 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
         new DurableAchievementEvent(pending_, std::move(origin)));
   }
   {
-    auto checked =
-        lease->view()->ValidateSnapshotBatch(std::move(tokens), out.error);
+    auto checked = members ? members->Validate(std::move(tokens), out.error)
+                           : lease->view()->ValidateSnapshotBatch(std::move(tokens), out.error);
     if (!checked) {
       return out;
     }
@@ -526,6 +693,9 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
   out.state =
       plan->already_unlocked ? State::kAlreadyUnlocked : State::kCommitted;
   out.event = std::move(event);  // Recovered history never enters this path.
+  // Both model and namespace guards have dropped before actual target/CM
+  // admissions release; exact retries now use the retained committed receipt.
+  if (artifact_admission_) { store_.reset(); artifact_admission_.reset(); }
   return out;
 }
 std::error_code ProfileGpdTransaction::ReleaseForRecovery() {
@@ -541,12 +711,14 @@ std::error_code ProfileGpdTransaction::ReleaseForRecovery() {
     return Error(std::errc::operation_not_permitted);
   }
   store_.reset();  // Preserve journal/plan, release only actual target lease.
+  artifact_admission_.reset();
   return {};
 }
 std::error_code ProfileGpdTransaction::ReplayBeforeLoad(
     std::shared_ptr<ProfileStorageLease> lease,
     std::shared_ptr<const filesystem::ProfileIntentOwner> owner,
-    std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery) {
+    std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery,
+    std::shared_ptr<filesystem::ContentMutationOwner> metadata) {
   if (xe::global_critical_region::is_held_by_current_thread()) {
     return Error(std::errc::operation_would_block);
   }
@@ -579,7 +751,7 @@ std::error_code ProfileGpdTransaction::ReplayBeforeLoad(
       continue;
     }
     auto store = GpdDurableIntentStore::Recover(owner, recovery, row.journal,
-                                                binding, lease->view(), error);
+                                                binding, lease->view(), error, metadata);
     if (!store) {
       return error ? error : Error(std::errc::state_not_recoverable);
     }

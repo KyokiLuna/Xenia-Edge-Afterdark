@@ -8,6 +8,7 @@
  */
 
 #include <winternl.h>
+#include <new>
 #include "xenia/base/assert.h"
 #include "xenia/base/chrono_steady_cast.h"
 #include "xenia/base/logging.h"
@@ -530,7 +531,7 @@ std::unique_ptr<Timer> Timer::CreateSynchronizationTimer() {
 
 class Win32Thread : public Win32Handle<Thread> {
  public:
-  explicit Win32Thread(HANDLE handle) : Win32Handle(handle) {}
+  explicit Win32Thread(HANDLE handle) noexcept : Win32Handle(handle) {}
   ~Win32Thread() = default;
 
   void set_name(std::string name) override {
@@ -627,15 +628,25 @@ DWORD WINAPI ThreadStartRoutine(LPVOID parameter) {
 
 std::unique_ptr<Thread> Thread::Create(CreationParameters params,
                                        std::function<void()> start_routine) {
-  auto start_data = new ThreadStartData({std::move(start_routine)});
+  // Reserve the owning C++ wrapper before starting the native thread. A
+  // post-CreateThread allocation failure must not leave an untracked worker.
+  auto release_storage = [](void* pointer) { ::operator delete(pointer); };
+  std::unique_ptr<void, decltype(release_storage)> storage(
+      ::operator new(sizeof(Win32Thread)), release_storage);
+  auto start_data = std::make_unique<ThreadStartData>(
+      ThreadStartData{std::move(start_routine)});
   HANDLE handle =
-      CreateThread(NULL, params.stack_size, ThreadStartRoutine, start_data,
+      CreateThread(NULL, params.stack_size, ThreadStartRoutine, start_data.get(),
                    params.create_suspended ? CREATE_SUSPENDED : 0, NULL);
   if (handle) {
-    return std::make_unique<Win32Thread>(handle);
+    // The native thread may already have consumed this block. release only
+    // transfers bookkeeping; no pointer dereference or allocation follows.
+    start_data.release();
+    auto* thread = new (storage.get()) Win32Thread(handle);
+    storage.release();
+    return std::unique_ptr<Thread>(thread);
   } else {
     LOG_LASTERROR();
-    delete start_data;
     return nullptr;
   }
 }

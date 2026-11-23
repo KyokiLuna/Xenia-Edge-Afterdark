@@ -103,6 +103,9 @@ CMakeUserPresets.json
 # ==============================================================================
 
 .vagrant
+
+# Private runtime console settings and signing identity; never source content.
+**/.xenia-console-v1/
 /attic/
 /content/
 /third_party/binutils/binutils-2.24.tar.gz

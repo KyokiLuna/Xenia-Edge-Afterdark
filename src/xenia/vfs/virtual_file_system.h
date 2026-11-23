@@ -21,11 +21,28 @@
 #include "xenia/vfs/device.h"
 #include "xenia/vfs/entry.h"
 #include "xenia/vfs/file.h"
+#include "xenia/vfs/file_open_context.h"
 
 namespace xe::kernel::xam { class ContentManager; class ProfileManager; }
 
 namespace xe {
 namespace vfs {
+
+// A metadata-only creation identity. It retains neither the VFS nor a
+// device/backing, and cleanup can withdraw only this exact published link.
+class SymbolicLinkToken final {
+ public:
+  SymbolicLinkToken(const SymbolicLinkToken&) = delete;
+ private:
+  friend class VirtualFileSystem;
+  SymbolicLinkToken(std::shared_ptr<const uint8_t> owner, std::string alias,
+                   std::shared_ptr<const uint8_t> identity)
+      : owner_(std::move(owner)), alias_(std::move(alias)),
+        identity_(std::move(identity)) {}
+  const std::shared_ptr<const uint8_t> owner_;
+  const std::string alias_;
+  const std::shared_ptr<const uint8_t> identity_;
+};
 
 // One-use read-routing proof from the actual HLE source-selection producer.
 // No public type/boolean override can manufacture a selected-source boundary.
@@ -157,6 +174,14 @@ class VirtualFileSystem {
   // One owned alias+longest whole-component mount snapshot; metadata only.
   std::shared_ptr<Device> AcquirePathDevice(std::string_view path);
 
+  // Bind an alias to an ALREADY registered exact physical device. No pathname
+  // reopen or host I/O; unknown/future OS aliases retain the ordinary API below.
+  // Output stays empty on failure. A retired binding is a tombstone until an
+  // explicit delete: a replacement at the same mount path never inherits it.
+  X_STATUS RegisterDeviceSymbolicLink(std::string_view path,
+      std::string_view target, const std::shared_ptr<Device>& expected,
+      std::shared_ptr<const SymbolicLinkToken>& issued);
+  bool UnregisterSymbolicLink(const SymbolicLinkToken& expected);
   bool RegisterSymbolicLink(const std::string_view path,
                             const std::string_view target);
   bool UnregisterSymbolicLink(const std::string_view path);
@@ -183,7 +208,11 @@ class VirtualFileSystem {
                     FileDisposition creation_disposition,
                     uint32_t desired_access, bool is_directory,
                     bool is_non_directory, File** out_file,
-                    FileAction* out_action);
+                    FileAction* out_action,
+                    // Independently issued exact source/managed-view constraints
+                    // captured on the original caller, before host IO offload.
+                    // A present unrecognized view never falls through to raw IO.
+                    const FileOpenContext& open_context = {});
 
   static X_STATUS ExtractContentFile(Entry* entry,
                                      std::filesystem::path base_path,
@@ -201,9 +230,6 @@ class VirtualFileSystem {
   // Metadata-only expected-owner withdrawal for a failed atomic package
   // publication. The caller retains the returned owner until outside GCRC.
   std::shared_ptr<Device> DetachDevice(std::string_view, const Device*);
-  // Already canonical owned names; metadata-only/no allocation after closure commit.
-  void UnregisterExpectedSymbolicLink(std::string_view alias,
-      std::string_view target, const Device* expected);
   X_STATUS CommitPreparedDevice(PreparedDeviceRegistration&,bool exclusive,
       std::shared_ptr<Device>* registered,
       const std::shared_ptr<Device>& expected = {},
@@ -218,7 +244,16 @@ class VirtualFileSystem {
   uint64_t device_epoch_ = 0;
   std::mutex preparation_mutex_;
   std::shared_ptr<std::stop_source> preparation_stop_ = std::make_shared<std::stop_source>();
-  std::unordered_map<std::string, std::string> symlinks_;
+  struct SymbolicLink {
+    std::string target;
+    // Weak identity comparisons never lock a stale backing under GCRC.
+    std::weak_ptr<Device> device;
+    const Device* expected_device = nullptr;
+    std::shared_ptr<const uint8_t> identity;
+  };
+  bool SymbolicLinkCurrent(const SymbolicLink&) const;
+  bool SymbolicLinkAllowsPath(const SymbolicLink&, std::string_view) const;
+  std::unordered_map<std::string, SymbolicLink> symlinks_;
 
   // The root of the device mounted at exactly |path|, null when none is.
   Entry* ResolveMountRoot(const std::string_view path);

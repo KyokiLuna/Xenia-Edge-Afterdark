@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <optional>
 #include <atomic>
+#include <memory>
 namespace xe::kernel {
 class NativeProfileIdentityOwner;
 namespace test { class NativeProfileIdentityTaskTestAccess; }
@@ -173,7 +174,7 @@ class NativeProfileIdentityTasks final {
   uint32_t FirstFailureReason() const { return first_failure_reason_; }
   bool IsProfileTransportSubject(uint64_t generation) const noexcept {
     for(const auto& node:nodes_)if(node && node->birth.generation==generation &&
-        !node->freed && !node->free_entered && !node->transport_only && !node->foreign_avatar && !node->periodic_factory)
+        !node->freed && !node->free_entered && !node->transport_only && !node->foreign_avatar && !node->periodic_factory && !node->execution_only)
       return ClassifyCallback(node->callback)==CallbackClaim::kCanonicalProfile;
     return false;
   }
@@ -187,7 +188,7 @@ class NativeProfileIdentityTasks final {
     for(const auto& node:nodes_)if(node && node->birth.generation==generation &&
         !node->freed && !node->free_entered)return node->birth.origin==1 &&
         !node->created_persistent && !node->resident_physical && !node->transport_only &&
-        !node->continuation_ticket && !node->periodic_factory && ClassifyCallback(node->callback)==CallbackClaim::kOutside;
+        !node->continuation_ticket && !node->periodic_factory && !node->execution_only && ClassifyCallback(node->callback)==CallbackClaim::kOutside;
     return false;
   }
   // Process2 is actual native SYSTEM, supplied by the concrete XThread owner.
@@ -234,6 +235,8 @@ class NativeProfileIdentityTasks final {
     for (const auto& call:detached_) { if (call) { return false; } }
     for (const auto& call:external_) { if (call) { return false; } }
     for (const auto& call:periodic_dispatches_) { if (call) { return false; } }
+    for (const auto& call:execution_dispatches_) { if(call) { return false; } }
+    for (const auto& call:execution_controls_) { if(call) { return false; } }
     return true;
   }
  private:
@@ -484,27 +487,50 @@ class NativeProfileIdentityTasks final {
     uint32_t callback=0,argument=0,parameters=0,output=0,allocation_output=0;
     uint64_t birth=0;
     bool allocation_entered=false,allocation_returned=false,publish_entered=false;
-    bool created_persistent=false,resident_physical=false,transport_only=false,continuation_ticket=false;
+    bool created_persistent=false,resident_physical=false,transport_only=false,continuation_ticket=false,execution_only=false;
     uint64_t periodic_factory=0;
+    std::array<uint32_t,2> periodic_options{};
+    uint32_t periodic_process=0;
     std::optional<ProfileProducer> producer;
+    std::optional<Birth> execution_birth;
+  };
+  struct PeriodicAllocation {
+    uint64_t factory=0;Birth birth;Frame schedule,allocation;
+    std::array<uint32_t,2> options{};
+    uint32_t process=0,flags=0,period=0;
+  };
+  // Context/lifetime only. Issued after an original periodic body is admitted,
+  // or from its exact already-bound Task allocation/producer parent. This is
+  // never a Task reference, CloseReceipt, callback/read source or completion.
+  // The complete owning Work keeps it until that same body's own return.
+  struct PeriodicFrameContext {
+    Frame frame;uint64_t factory=0;uint32_t object=0;
+    std::optional<PeriodicAllocation> allocation;
+    bool Matches(Frame actual,uint64_t expected_factory) const noexcept {
+      return factory && factory==expected_factory && object && frame.valid() &&
+          actual==frame;
+    }
   };
   struct Node {
     Birth birth;
     uint32_t callback=0,argument=0;
     Frame work;
     bool published=false,started=false,returned=false,freed=false;
+    bool execution_only=false,execution_publication=false;
+    uint32_t execution_flags=0;uint64_t execution_active=0;
     bool delete_entered=false,delete_returned=false,free_entered=false,free_returned=false;
     bool created_persistent=false,resident_physical=false,persistent_callback_bound=false,persistent_active=false,transport_only=false,continuation_ticket=false,foreign_avatar=false;
     Frame persistent_work;
     uint32_t persistent_output=0;
     uint64_t periodic_factory=0;bool periodic_stopped=false;
+    std::optional<PeriodicAllocation> periodic_allocation;
     std::optional<ProfileProducer> producer;
   };
-  struct DetachedAllocation { uint64_t serial=0,origin=0;Frame frame;uint32_t output=0;bool foreign_avatar=false; };
+  struct DetachedAllocation { uint64_t serial=0,origin=0;Frame frame;uint32_t output=0;bool foreign_avatar=false,execution_only=false;uint32_t callback=0,argument=0; };
   struct ExternalWork { Frame frame;Birth birth; };
-  struct PeriodicDispatch {Frame frame;Birth birth;bool callback_returned=false;uint64_t factory=0;};
-  struct Close { Frame frame; uint64_t birth=0; };
-  struct Deletion { Frame frame,free; uint64_t birth=0; };
+  struct PeriodicDispatch {Frame frame;Birth birth;bool callback_returned=false;uint64_t factory=0;PeriodicAllocation allocation;};
+  struct Close { Frame frame; uint64_t birth=0;bool execution_only=false; };
+  struct Deletion { Frame frame,free; uint64_t birth=0;bool execution_only=false; };
   struct Modification {
     Frame frame;uint64_t birth=0;
     enum class Kind {kPersistentBinding,kTimedOptions};
@@ -524,7 +550,7 @@ class NativeProfileIdentityTasks final {
     if(!source){if(observation)observation->kind=2;return false;}
     for(const auto& node:nodes_)if(node && node->birth.origin==source &&
         (!node->freed || node->persistent_active ||
-         (!node->created_persistent && !node->resident_physical && !node->periodic_factory && !node->returned))){
+         (!node->created_persistent && !node->resident_physical && !node->periodic_factory && !node->execution_only && !node->returned))){
       if(observation){
         observation->kind=3;observation->available|=2;observation->task=node->birth.task;
         observation->generation=node->birth.generation;observation->callback=node->callback;
@@ -562,6 +588,7 @@ class NativeProfileIdentityTasks final {
   bool Match(const Frame& frame) const { return frame.valid() && frame.root==root_; }
   static bool Address(uint32_t at) { return at>=0x1000 && !(at&3) && at<=UINT32_MAX-0x48; }
   void Lose(uint32_t line,uint32_t reason) {
+    if(neutral_depth_){if(neutral_failures_!=UINT64_MAX)++neutral_failures_;return;}
     if(!first_failure_line_){first_failure_line_=line;first_failure_reason_=reason;}
     lost_=true;
   }
@@ -594,13 +621,13 @@ class NativeProfileIdentityTasks final {
   // Other actual SYSTEM-root consumers use the SAME native allocator. Record
   // their real output generation at B9A18 before any callback can execute;
   // this grants execution identity only, never a prepared profile/data origin.
-  uint64_t BeginDetachedAllocation(Frame frame,uint64_t earlier_origin,uint32_t output,bool foreign_avatar=false) {
+  uint64_t BeginDetachedAllocation(Frame frame,uint64_t earlier_origin,uint32_t output,bool foreign_avatar=false,bool execution_only=false,uint32_t callback=0,uint32_t argument=0) {
     if (lost_ || !Match(frame) || frame.function!=0x816B9A18 || !earlier_origin ||
-        (foreign_avatar && earlier_origin!=1) || !Address(output)) { Lose(__LINE__,4);return 0; }
+        ((foreign_avatar || execution_only) && earlier_origin!=1) || (foreign_avatar && execution_only) || !Address(output)) { Lose(__LINE__,4);return 0; }
     for (const auto& row:detached_) if (row && row->frame==frame) { Lose(__LINE__,4);return 0; }
     const auto serial=Next();if (!serial) { return 0; }
     for (auto& row:detached_) if (!row) {
-      row=DetachedAllocation{serial,earlier_origin,frame,output,foreign_avatar};return serial;
+      row=DetachedAllocation{serial,earlier_origin,frame,output,foreign_avatar,execution_only,callback,argument};return serial;
     }
     Lose(__LINE__,4);return 0;
   }
@@ -618,7 +645,7 @@ class NativeProfileIdentityTasks final {
       const auto generation=Next();if (!generation) { return {}; }
       for (auto& node:nodes_) if (!node || node->freed) {
         const Birth result{generation,row->origin,*actual_output};
-        node=Node{result,0,0};node->foreign_avatar=row->foreign_avatar;row.reset();return result;
+        node=Node{result,row->callback,row->argument};node->foreign_avatar=row->foreign_avatar;node->execution_only=row->execution_only;row.reset();return result;
       }
       Lose(__LINE__,21);return {};
     }
@@ -647,6 +674,343 @@ class NativeProfileIdentityTasks final {
     }
     Lose(__LINE__,22);return false;
   }
+  // A generic native Task owns execution identity ONLY. Its opaque DWORD
+  // argument is not a pointer/read scope and its lifetime never pins a roster.
+  // The concrete owner separately retains actual producer/Modify code leases.
+  // Native queues, references, TLS, callback selection and results stay native.
+  bool IsExecutionSubject(uint64_t generation) const noexcept {
+    const auto* node=FindBirthConst(generation);
+    return node && node->execution_only && node->birth.origin==1 && !node->freed && !node->free_entered;
+  }
+  bool ExecutionClosed() const noexcept {
+    for(const auto& node:nodes_)if(node && node->execution_only && !node->freed)return false;
+    for(const auto& call:schedules_)if(call && call->execution_only)return false;
+    for(const auto& call:execution_controls_)if(call)return false;
+    for(const auto& call:execution_dispatches_)if(call)return false;
+    for(const auto& call:closes_)if(call && call->execution_only)return false;
+    for(const auto& call:deletions_)if(call && call->execution_only)return false;
+    return true;
+  }
+  uint64_t BeginExecutionSchedule(Frame frame,uint32_t callback,uint32_t argument,
+      uint32_t parameters,uint32_t output) {
+    if(lost_ || !Match(frame) || frame.function!=0x816BA440 || !Address(callback) ||
+       (parameters && !Address(parameters)) || !Address(output))return 0;
+    for(const auto& call:schedules_)if(call && call->frame==frame)return 0;
+    if(!next_ || next_==UINT64_MAX)return 0;
+    for(auto& call:schedules_)if(!call){
+      const auto serial=next_++;call=Schedule{serial,1,frame,{},callback,argument,parameters,output};
+      call->execution_only=true;return serial;
+    }
+    return 0;
+  }
+  uint64_t BeginExecutionCreate(Frame frame,uint32_t output) {
+    if(lost_ || !Match(frame) || frame.function!=0x816BA668 || !Address(output))return 0;
+    for(const auto& call:schedules_)if(call && call->frame==frame)return 0;
+    if(!next_ || next_==UINT64_MAX)return 0;
+    const auto serial=next_++;
+    for(auto& call:schedules_)if(!call){
+      call=Schedule{};call->serial=serial;call->origin=1;call->frame=frame;
+      call->output=output;call->created_persistent=true;call->execution_only=true;return serial;
+    }
+    return 0;
+  }
+  // Original successful allocator return is the sole generic birth issuer.
+  // Local observer uncertainty never poisons an unrelated typed profile use.
+  std::optional<Birth> ReturnExecutionAllocation(uint64_t serial,Frame frame,
+      uint32_t status,std::optional<uint32_t> output) {
+    auto* call=FindSchedule(serial);
+    if(lost_ || !call || !call->execution_only || !call->allocation_entered ||
+       call->allocation_returned || call->allocation!=frame)return {};
+    call->allocation_returned=true;
+    if(int32_t(status)<0)return {};
+    if(!output || !Address(*output) || ObservedTransportSubject(*output) || !next_ || next_==UINT64_MAX)return {};
+    for(auto& node:nodes_)if(!node || node->freed){
+      const Birth birth{next_++,1,*output};node=Node{birth,call->callback,call->argument};
+      node->execution_only=true;node->created_persistent=call->created_persistent;
+      call->birth=birth.generation;call->execution_birth=birth;return birth;
+    }
+    return {};
+  }
+  bool EnterExecutionAllocation(uint64_t serial,Frame frame,uint32_t parameters,uint32_t output) {
+    auto* call=FindSchedule(serial);
+    if(lost_ || !call || !call->execution_only || call->allocation_entered ||
+       ClassifyAllocationProducer(call->frame,frame,call->parameters,parameters,output)!=
+          (call->created_persistent?AllocationProducer::kPersistentCreate:AllocationProducer::kSchedule))return false;
+    call->allocation=frame;call->allocation_output=output;call->allocation_entered=true;return true;
+  }
+  bool BeforeExecutionPublication(uint64_t serial,Frame frame,uint32_t task,
+      uint32_t callback,uint32_t argument,std::optional<uint32_t> tagged) {
+    auto* call=FindSchedule(serial);auto* node=call?FindBirth(call->birth):nullptr;
+    if(lost_ || !call || !node || !call->execution_only || call->created_persistent ||
+       !call->allocation_returned || call->publish_entered || !Match(frame) ||
+       frame.function!=0x816B9BB8 || frame.lr!=0x816BA4D8 ||
+       frame.thread!=call->frame.thread || frame.pcr!=call->frame.pcr ||
+       call->frame.sp<0x90 || frame.sp!=call->frame.sp-0x90 || node->birth.task!=task ||
+       callback!=call->callback || argument!=call->argument || !tagged || *tagged!=(task|1u))return false;
+    call->publish_entered=true;node->published=true;return true;
+  }
+  bool ReturnExecutionProducer(uint64_t serial,Frame frame,uint32_t status,
+      std::optional<uint32_t> tagged={}) {
+    for(auto& call:schedules_)if(call && call->serial==serial){
+      if(lost_ || !call->execution_only || call->frame!=frame || !call->allocation_returned)return false;
+      if(int32_t(status)>=0){
+        if(call->created_persistent){
+          if(!call->execution_birth || !tagged || *tagged!=(call->execution_birth->task|1u))return false;
+        }else if(!call->publish_entered)return false;
+      }
+      call.reset();return true;
+    }
+    return false;
+  }
+  // Actual B9C14 is AFTER original callback/argument stores and BEFORE every
+  // initial mode's list/thread publication, including timed and serial paths.
+  // Entry intent is not a claim that any native field was written or queued.
+  bool ObserveExecutionPublication(Frame publication,Birth birth,Frame body,
+      uint32_t task,uint32_t callback,uint32_t argument,uint32_t flags) {
+    auto* node=FindBirth(birth.generation);
+    if(lost_ || !node || !SameBirth(node->birth,birth) || !node->execution_only ||
+       !node->published || node->freed || node->free_entered || node->execution_publication ||
+       publication.function!=0x816B9BB8 || body.function!=publication.function ||
+       body.root!=publication.root || body.thread!=publication.thread || body.pcr!=publication.pcr ||
+       publication.sp<0x80 || body.sp!=publication.sp-0x80 ||
+       !Match(body) || (body.lr!=0x816B9BC0 && body.lr!=0x816B9BF0) ||
+       task!=birth.task || callback!=node->callback || argument!=node->argument)return false;
+    node->execution_publication=true;node->execution_flags=flags;return true;
+  }
+  bool ObserveInlineExecutionPublication(Frame producer,Birth birth,Frame body,
+      uint32_t task,uint32_t callback,uint32_t argument) {
+    auto* node=FindBirth(birth.generation);
+    if(lost_ || !node || !SameBirth(node->birth,birth) || !node->execution_only ||
+       node->published || node->freed || node->free_entered || node->execution_publication ||
+       producer.function!=0x816B9D68 || body.function!=producer.function ||
+       body.root!=producer.root || body.thread!=producer.thread || body.pcr!=producer.pcr ||
+       producer.sp<0xA0 || body.sp!=producer.sp-0xA0 || !Match(body) ||
+       body.lr!=0x816B9E08 || task!=birth.task || callback!=node->callback || argument!=node->argument)return false;
+    node->published=true;node->execution_publication=true;return true;
+  }
+  // Existing fixed observer-frame scratch; no Task identity/birth registry.
+  // Exhaustion is deny-only and sticky until this actual owner retires. An
+  // unrecorded younger dispatcher must never expose an older capsule.
+  class ExecutionUnavailableFrames final {
+   public:
+    static constexpr size_t kCapacity=256;
+    void Record(Frame frame) noexcept {
+      for(const auto& value:frames_)if(value && *value==frame)return;
+      for(auto& value:frames_)if(!value){value=frame;return;}
+      overflow_=true;
+    }
+    bool Return(Frame frame) noexcept {
+      bool found=false;
+      for(auto& value:frames_)if(value && *value==frame){value.reset();found=true;}
+      return found; // Freed capacity cannot prove the lost frame returned.
+    }
+    bool Shadows(Root root,uint32_t thread,uint32_t pcr,uint32_t actual_sp,
+        uint32_t candidate_sp) const noexcept {
+      if(overflow_)return true;
+      for(const auto& frame:frames_)if(frame && frame->root==root && frame->thread==thread &&
+          frame->pcr==pcr && (frame->function==0x816B8B08 || frame->function==0x816B7DE8) &&
+          frame->sp<=candidate_sp && actual_sp<=frame->sp)return true;
+      return false;
+    }
+   private:
+    std::array<std::optional<Frame>,kCapacity> frames_{};bool overflow_=false;
+  };
+  // Temporarily isolates one ALREADY entered ambient profile read scope
+  // during a genuine nested source-neutral Task invocation. The owner binds
+  // this only from its exact active Work/read object and keeps that Work
+  // strongly alive; it issues no ticket, read capability or native Task ref.
+  // Resource holders retire with returned Work outside State/GCRC locks.
+  class ExecutionReadCell final {
+   public:
+    enum class Phase {kEmpty,kSuspended,kTransferred,kForwarded,kRestored,kUncertain};
+    ExecutionReadCell()=default;
+    ExecutionReadCell(const ExecutionReadCell&)=delete;
+    ExecutionReadCell& operator=(const ExecutionReadCell&)=delete;
+    Phase phase() const noexcept {return phase_;}
+    bool pending() const noexcept {return phase_==Phase::kSuspended || phase_==Phase::kTransferred || phase_==Phase::kUncertain;}
+    const void* scope() const noexcept {return scope_;}
+    const void* owner() const noexcept {return owner_.get();}
+    const Frame& origin() const noexcept {return origin_;}
+    const Frame& restoration() const noexcept {return restoration_;}
+    bool Suspend(Frame origin,Frame invocation,std::shared_ptr<void> owner,
+        const std::shared_ptr<void>& actual_owner,void* scope,std::atomic<void*>& cell) noexcept {
+      if(phase_!=Phase::kEmpty || !origin.valid() || !invocation.valid() ||
+         origin.root!=invocation.root || origin.thread!=invocation.thread ||
+         origin.pcr!=invocation.pcr || origin.sp<=invocation.sp || !scope ||
+         !owner || !actual_owner || owner.get()!=actual_owner.get() ||
+         owner.owner_before(actual_owner) || actual_owner.owner_before(owner) ||
+         (invocation.function!=0x816B8B08 && invocation.function!=0x816B7DE8))return false;
+      void* expected=scope;
+      if(!cell.compare_exchange_strong(expected,nullptr,std::memory_order_acq_rel))return false;
+      // shared_ptr move is noexcept. No ref gap/final release follows the CAS.
+      owner_=std::move(owner);scope_=scope;origin_=origin;restoration_=invocation;
+      phase_=Phase::kSuspended;return true;
+    }
+    // Original BA058's inline dispatch returns BEFORE it restores parent
+    // currentTask. Transfer to its exact admitted original own-return instead
+    // of exposing the old read scope at callback/dispatcher return.
+    bool TransferInlineWait(Frame dispatcher,Frame wait,ExecutionReadCell& into) noexcept {
+      if(phase_!=Phase::kSuspended || restoration_!=dispatcher ||
+         dispatcher.function!=0x816B8B08 || wait.function!=0x816BA058 ||
+         !wait.valid() || wait.root!=dispatcher.root || wait.thread!=dispatcher.thread ||
+         wait.pcr!=dispatcher.pcr || wait.sp<0x80 || dispatcher.sp!=wait.sp-0x80 ||
+         dispatcher.lr!=0x816BA0DC || origin_.sp<=wait.sp || into.phase_!=Phase::kEmpty)return false;
+      into.owner_=std::move(owner_);into.scope_=scope_;into.origin_=origin_;
+      into.restoration_=wait;into.phase_=Phase::kTransferred;
+      scope_=nullptr;phase_=Phase::kForwarded;return true;
+    }
+    // The real originating Work has already retained its entered scope. This
+    // transfers ONLY the restoration obligation to that Work's genuine own
+    // return/actual-stop lane; no cell or native completion changes here.
+    bool DelegateToOrigin(const void* actual_owner,const void* still_owned_scope) noexcept {
+      if(!pending() || owner_.get()!=actual_owner || scope_!=still_owned_scope)return false;
+      scope_=nullptr;phase_=Phase::kForwarded;return true;
+    }
+    bool Restore(Frame actual,const void* still_owned_scope,std::atomic<void*>& cell) noexcept {
+      if((phase_!=Phase::kSuspended && phase_!=Phase::kTransferred) ||
+         actual!=restoration_ || still_owned_scope!=scope_)return false;
+      void* expected=nullptr;
+      if(!cell.compare_exchange_strong(expected,scope_,std::memory_order_acq_rel)){
+        phase_=Phase::kUncertain;return false;
+      }
+      scope_=nullptr;phase_=Phase::kRestored;return true;
+    }
+    // Only the enclosing private actual-CPU-stop retirement may call this.
+    // Reverse actual entry order first detaches any deeper genuine scope.
+    bool RestoreAtActualStop(const void* still_owned_scope,std::atomic<void*>& cell) noexcept {
+      if(!pending())return phase_==Phase::kEmpty || phase_==Phase::kForwarded || phase_==Phase::kRestored;
+      if(!scope_ || still_owned_scope!=scope_)return false;
+      void* expected=nullptr;
+      if(!cell.compare_exchange_strong(expected,scope_,std::memory_order_acq_rel))return false;
+      scope_=nullptr;phase_=Phase::kRestored;return true;
+    }
+   private:
+    Phase phase_=Phase::kEmpty;Frame origin_,restoration_;
+    std::shared_ptr<void> owner_;void* scope_=nullptr;
+  };
+  // Shared by BOTH genuine scope-owning exits: ordinary native own-return
+  // and the authenticated render iteration end. No PPC/data access is allowed
+  // between successful restoration and that actual scope's immediate Leave.
+  static bool SuppressReadCellForScopeLeave(bool& fallback,void* still_owned_scope,
+      std::atomic<void*>& cell) noexcept {
+    if(!still_owned_scope)return false;
+    void* expected=still_owned_scope;
+    if(!cell.compare_exchange_strong(expected,nullptr,std::memory_order_acq_rel))return false;
+    fallback=true;return true;
+  }
+  static bool RestoreReadCellForScopeLeave(bool& fallback,void* still_owned_scope,
+      std::atomic<void*>& cell) noexcept {
+    if(!fallback)return true;
+    if(!still_owned_scope)return false;
+    void* expected=nullptr;
+    if(!cell.compare_exchange_strong(expected,still_owned_scope,std::memory_order_acq_rel))return false;
+    fallback=false;return true;
+  }
+  struct ExecutionDispatch {
+    uint64_t serial=0;Frame frame;Birth birth;
+    bool selected=false,callback_returned=false;
+    uint32_t callback=0,argument=0,result=0;
+  };
+  struct CurrentExecution {
+    Root root;Birth birth;uint64_t invocation=0;
+    Frame dispatcher;uint32_t body_sp=0,callback=0,argument=0,callback_lr=0;
+  };
+  std::optional<CurrentExecution> CaptureCurrentExecution(uint64_t serial,
+      uint32_t actual_thread,uint32_t actual_pcr,uint32_t actual_sp,uint32_t actual_task) const noexcept {
+    if(!actual_sp || (actual_sp&15))return {};
+    for(const auto& call:execution_dispatches_)if(call && call->serial==serial){
+      const uint32_t depth=call->frame.function==0x816B8B08?0x70u:0x80u;
+      if(!call->selected || call->callback_returned || !call->birth.generation ||
+         call->frame.thread!=actual_thread || call->frame.pcr!=actual_pcr ||
+         call->birth.task!=actual_task || call->frame.sp<depth || actual_sp>call->frame.sp-depth)return {};
+      return CurrentExecution{root_,call->birth,call->serial,call->frame,
+          call->frame.sp-depth,call->callback,call->argument,
+          call->frame.function==0x816B8B08?0x816B8B64u:0x816B7EA4u};
+    }
+    return {};
+  }
+  struct ExecutionControl {
+    Frame frame;Birth birth;uint32_t mask=0,callback=0,argument=0;
+  };
+  uint64_t BeginExecutionDispatch(Frame frame,Birth birth) {
+    const auto* node=FindBirthConst(birth.generation);
+    if(lost_ || !Match(frame) || (frame.function!=0x816B8B08 && frame.function!=0x816B7DE8) || !node ||
+       !SameBirth(node->birth,birth) || !node->execution_only || node->freed || node->free_entered)return 0;
+    for(const auto& call:execution_dispatches_)if(call && call->frame==frame)return 0;
+    const auto serial=Next();if(!serial)return 0;
+    for(auto& call:execution_dispatches_)if(!call){call=ExecutionDispatch{serial,frame,birth};return serial;}
+    return 0;
+  }
+  // Registers at the genuine common mtctr, AFTER lwz argument/callback. The
+  // owner also matches an already retained producer/rebind module generation.
+  // Do not resample Task bytes or assume Modify made the pair atomically.
+  bool ExecutionCallbackSelected(uint64_t serial,Frame body,uint32_t task,
+      uint32_t callback,uint32_t argument) {
+    for(auto& call:execution_dispatches_)if(call && call->serial==serial){
+      auto* node=FindBirth(call->birth.generation);
+      if(lost_ || call->selected || !node || !SameBirth(node->birth,call->birth) ||
+         node->freed || node->free_entered || node->execution_active || !Address(callback) ||
+         !ExecutionBody(*call,body,task) ||
+         (call->frame.function==0x816B8B08 ? body.lr!=0x816B8B48 :
+          body.lr!=0x816B7E4C && body.lr!=0x816B7E90))return false;
+      call->selected=true;call->callback=callback;call->argument=argument;
+      node->execution_active=serial;return true;
+    }
+    return false;
+  }
+  bool ExecutionCallbackReturned(uint64_t serial,Frame body,uint32_t task,uint32_t result) {
+    for(auto& call:execution_dispatches_)if(call && call->serial==serial){
+      auto* node=FindBirth(call->birth.generation);
+      if(lost_ || !call->selected || call->callback_returned || !node ||
+         !SameBirth(node->birth,call->birth) || node->freed || node->free_entered ||
+         node->execution_active!=serial || !ExecutionBody(*call,body,task) ||
+         body.lr!=(call->frame.function==0x816B8B08?0x816B8B64u:0x816B7EA4u))return false;
+      call->callback_returned=true;call->result=result;node->execution_active=0;return true;
+    }
+    return false;
+  }
+  bool ReturnExecutionDispatch(uint64_t serial,Frame frame,Birth birth) {
+    for(auto& call:execution_dispatches_)if(call && call->serial==serial){
+      if(lost_ || call->frame!=frame || !SameBirth(call->birth,birth) ||
+         (call->selected && !call->callback_returned))return false;
+      // This exact retained record survives real native free/reuse. No read
+      // from a replacement Task can settle this older own-return.
+      call.reset();return true;
+    }
+    return false;
+  }
+  bool BeginExecutionControl(Frame frame,Birth birth,uint32_t mask=0,
+      uint32_t callback=0,uint32_t argument=0) {
+    const auto* node=FindBirthConst(birth.generation);
+    if(lost_ || !Match(frame) || !node || !SameBirth(node->birth,birth) ||
+       !node->execution_only || node->freed || node->free_entered)return false;
+    switch(frame.function){
+      case 0x816B9AA8:case 0x816B9F08:case 0x816BA058:
+      case 0x816B7B68:case 0x816B7600:break;
+      default:return false;
+    }
+    if(frame.function==0x816B9AA8 && (mask&1) && !Address(callback))return false;
+    for(const auto& call:execution_controls_)if(call && call->frame==frame)return false;
+    for(auto& call:execution_controls_)if(!call){
+      call=ExecutionControl{frame,birth,mask,mask&1?callback:0u,mask&2?argument:0u};return true;
+    }
+    return false;
+  }
+  bool ReturnExecutionControl(Frame frame,Birth birth) {
+    for(auto& call:execution_controls_)if(call && call->frame==frame){
+      if(lost_ || !SameBirth(call->birth,birth))return false;
+      // Void/residue and Cancel return are NOT completion/ref/free receipts.
+      // Retain the admitted old birth even if original postwork freed it.
+      call.reset();return true;
+    }
+    return false;
+  }
+  static bool ExecutionBody(const ExecutionDispatch& call,Frame body,uint32_t task) noexcept {
+    return body.valid() && body.root==call.frame.root && body.thread==call.frame.thread &&
+        body.pcr==call.frame.pcr && body.function==call.frame.function &&
+        call.frame.sp>=(call.frame.function==0x816B8B08?0x70u:0x80u) &&
+        body.sp==call.frame.sp-(call.frame.function==0x816B8B08?0x70u:0x80u) && task==call.birth.task;
+  }
   uint64_t BeginSchedule(Frame frame,uint64_t earlier_origin,uint32_t callback,
       uint32_t argument,uint32_t parameters,uint32_t output) {
     return BeginScheduleImpl(frame,earlier_origin,callback,argument,parameters,output,false,false);
@@ -665,9 +1029,9 @@ class NativeProfileIdentityTasks final {
     return BeginScheduleImpl(frame,source,0x81696558,ticket,0,output,false,true);
   }
   uint64_t BeginScheduleImpl(Frame frame,uint64_t earlier_origin,uint32_t callback,
-      uint32_t argument,uint32_t parameters,uint32_t output,bool transport_only,bool continuation_ticket) {
+      uint32_t argument,uint32_t parameters,uint32_t output,bool transport_only,bool continuation_ticket,bool execution_only=false) {
     if (lost_ || !Match(frame) || frame.function!=0x816BA440 || !earlier_origin ||
-        !Address(callback) || (!continuation_ticket && argument && !Address(argument)) ||
+        !Address(callback) || (!continuation_ticket && !execution_only && argument && !Address(argument)) ||
         (parameters && !Address(parameters)) || !Address(output)) { Lose(__LINE__,9); return 0; }
     for (const auto& old:schedules_) {
       if (old && old->frame==frame) { Lose(__LINE__,9); return 0; }
@@ -675,7 +1039,7 @@ class NativeProfileIdentityTasks final {
     const auto serial=Next();if (!serial) { return 0; }
     for (auto& value:schedules_) { if (!value) {
       value=Schedule{serial,earlier_origin,frame,{},callback,argument,parameters,output};
-      value->transport_only=transport_only;value->continuation_ticket=continuation_ticket;
+      value->transport_only=transport_only;value->continuation_ticket=continuation_ticket;value->execution_only=execution_only;
       value->resident_physical=(callback==0x816F4298 && frame.lr==0x816F4610 && output==0x81AAC29C) ||
           (callback==0x816F4410 && frame.lr==0x816F4644 && output==0x81AAC298);
       return serial;
@@ -683,25 +1047,105 @@ class NativeProfileIdentityTasks final {
     Lose(__LINE__,9); return 0;
   }
   uint64_t BeginPeriodicSchedule(Frame frame,PeriodicFactory& factory,uint32_t callback,
-      uint32_t argument,uint32_t parameters,uint32_t output) {
-    if(!factory.MatchesSchedule(frame,callback,argument,parameters,output))return 0;
+      uint32_t argument,uint32_t parameters,uint32_t output,
+      std::array<uint32_t,2> options,uint32_t actual_process) {
+    if(!factory.MatchesSchedule(frame,callback,argument,parameters,output) ||
+        options!=std::array<uint32_t,2>{8,5000} || actual_process!=2)return 0;
     const auto serial=BeginScheduleImpl(frame,1,callback,argument,parameters,output,false,false);
     auto* call=FindSchedule(serial);
     if(!call || !factory.EnterSchedule(frame)){Lose(__LINE__,30);return 0;}
-    call->periodic_factory=factory.serial;return serial;
+    call->periodic_factory=factory.serial;call->periodic_options=options;
+    call->periodic_process=actual_process;return serial;
+  }
+  // Matched successful ORIGINAL Create output, before native publication.
+  // The original normalizer executes process/TLS affiliation itself. Preserve
+  // that output on this exact birth instead of predicting affiliation or
+  // accepting either value afresh at each consumer.
+  bool BindPeriodicAllocation(uint64_t serial,Frame allocation,Birth actual,
+      std::array<uint32_t,2> native_state) {
+    auto* call=FindSchedule(serial);auto* node=FindBirth(actual.generation);
+    if(lost_ || !call || !node || !call->periodic_factory ||
+       call->periodic_options!=std::array<uint32_t,2>{8,5000} || call->periodic_process!=2 ||
+       !call->allocation_returned || call->allocation!=allocation || call->publish_entered ||
+       node->published || node->periodic_allocation || node->freed || node->free_entered ||
+       node->birth.task!=actual.task || node->birth.origin!=actual.origin || actual.origin!=1 ||
+       call->birth!=actual.generation || node->periodic_factory!=call->periodic_factory ||
+       (native_state[0]!=0x04A00008 && native_state[0]!=0x02A00008) || native_state[1]!=5000)return false;
+    node->periodic_allocation=PeriodicAllocation{call->periodic_factory,actual,
+        call->frame,allocation,call->periodic_options,call->periodic_process,native_state[0],native_state[1]};
+    return true;
+  }
+  bool MatchesPeriodicAllocation(Birth actual,uint64_t factory,
+      std::array<uint32_t,2> native_state) const noexcept {
+    const auto* node=FindBirthConst(actual.generation);
+    if(lost_ || !node || !node->periodic_allocation)return false;
+    const auto& receipt=*node->periodic_allocation;
+    return factory && node->periodic_factory==factory && receipt.factory==factory &&
+        receipt.birth.generation==actual.generation && receipt.birth.origin==actual.origin &&
+        receipt.birth.task==actual.task && node->birth.origin==actual.origin && node->birth.task==actual.task &&
+        receipt.schedule.root==root_ && receipt.allocation.root==root_ &&
+        receipt.options==std::array<uint32_t,2>{8,5000} && receipt.process==2 &&
+        native_state==std::array<uint32_t,2>{receipt.flags,receipt.period};
+  }
+  bool RetainsPeriodicLifetime(const PeriodicFactory& factory,Birth birth) const noexcept {
+    const auto* node=FindBirthConst(birth.generation);
+    return factory.serial && factory.root==root_ && factory.object && node &&
+        SameBirth(node->birth,birth) && node->published && !node->free_entered && !node->freed &&
+        node->callback==0x81909CF8 && node->argument==factory.object && node->periodic_allocation &&
+        MatchesPeriodicAllocation(birth,factory.serial,
+            {node->periodic_allocation->flags,node->periodic_allocation->period});
+  }
+  std::optional<PeriodicFrameContext> RetainPeriodicSubjectContext(Frame frame,
+      const PeriodicFactory& factory,Birth birth) const noexcept {
+    if(!Match(frame) || !RetainsPeriodicLifetime(factory,birth))return {};
+    switch(frame.function){
+      case 0x819068D0:case 0x816B8B08:case 0x816B7600:
+      case 0x816B9F08:case 0x816BA058:case 0x816B7490:
+      case 0x816B7D98:case 0x816B7500:case 0x816E6AB0:break;
+      default:return {}; // No new factory/Schedule/Create/publication authority.
+    }
+    return PeriodicFrameContext{frame,factory.serial,factory.object,
+        FindBirthConst(birth.generation)->periodic_allocation};
+  }
+  static std::optional<PeriodicFrameContext> RetainAdmittedPeriodicFactory(
+      Frame frame,const PeriodicFactory& factory) noexcept {
+    if(!frame.valid() || !factory.serial || factory.failed || !factory.enabling ||
+        factory.enable!=frame || factory.root!=frame.root || frame.function!=0x8190A358)return {};
+    return PeriodicFrameContext{frame,factory.serial,factory.object,{}};
+  }
+  // Only the exact in-flight producer's native children inherit context after
+  // admission closes. A new factory call is never such a child. State still
+  // proves the parent is the active admitted owning Work before using this.
+  static std::optional<PeriodicFrameContext> RetainPeriodicProducerChild(
+      Frame frame,const PeriodicFrameContext& parent) noexcept {
+    if(!parent.Matches(parent.frame,parent.factory) || parent.allocation || !frame.valid() ||
+        frame.root!=parent.frame.root || frame.thread!=parent.frame.thread ||
+        frame.pcr!=parent.frame.pcr)return {};
+    bool child=false;
+    if(parent.frame.function==0x8190A358)
+      child=frame.function==0x816BA440 && parent.frame.sp>=0x70 &&
+          frame.sp==parent.frame.sp-0x70 && frame.lr==0x8190A3B0;
+    else if(parent.frame.function==0x816BA440)
+      child=parent.frame.sp>=0x90 && frame.sp==parent.frame.sp-0x90 &&
+          ((frame.function==0x816B9A18 && frame.lr==0x816BA46C) ||
+           (frame.function==0x816B9BB8 && frame.lr==0x816BA4D8));
+    if(!child)return {};
+    return PeriodicFrameContext{frame,parent.factory,parent.object,{}};
   }
   bool IsPeriodicSubject(uint64_t generation,uint64_t factory=0) const noexcept {
     for(const auto& node:nodes_)if(node && node->birth.generation==generation && !node->freed && !node->free_entered)
       return node->periodic_factory && (!factory || node->periodic_factory==factory) && node->birth.origin==1;
     return false;
   }
-  std::optional<Birth> BeginPeriodicDispatch(Frame frame,uint32_t actual_task,uint32_t callback,uint32_t argument) {
+  std::optional<Birth> BeginPeriodicDispatch(Frame frame,uint32_t actual_task,uint32_t callback,uint32_t argument,
+      std::array<uint32_t,2> native_state) {
     auto* node=FindLiveTask(actual_task);
     if(lost_ || !Match(frame) || frame.function!=0x816B8B08 || !node || !node->periodic_factory ||
         !node->published || node->persistent_active || node->birth.origin!=1 ||
-        node->callback!=callback || node->argument!=argument)return {};
+        node->callback!=callback || node->argument!=argument ||
+        !MatchesPeriodicAllocation(node->birth,node->periodic_factory,native_state))return {};
     for(auto& call:periodic_dispatches_)if(!call){
-      call=PeriodicDispatch{frame,node->birth,false,node->periodic_factory};node->persistent_active=true;node->persistent_work=frame;return node->birth;
+      call=PeriodicDispatch{frame,node->birth,false,node->periodic_factory,*node->periodic_allocation};node->persistent_active=true;node->persistent_work=frame;return node->birth;
     }
     Lose(__LINE__,31);return {};
   }
@@ -717,9 +1161,19 @@ class NativeProfileIdentityTasks final {
     }
     return false;
   }
-  bool ReturnPeriodicDispatch(Frame frame,Birth birth) {
+  bool ReturnPeriodicDispatch(Frame frame,Birth birth,
+      std::optional<std::array<uint32_t,2>> native_state) {
+    // A real free/reuse can replace the numeric Node before this older
+    // dispatch returns. Its own entry keeps the exact immutable allocation
+    // witness; no word from the replacement Task can complete the old call.
     for(auto& call:periodic_dispatches_)if(call && call->frame==frame && call->birth.generation==birth.generation &&
         call->birth.task==birth.task && call->birth.origin==birth.origin){
+      const auto* retained=FindBirthConst(birth.generation);
+      const auto& allocation=call->allocation;
+      if(!SameBirth(allocation.birth,birth) || allocation.factory!=call->factory)return false;
+      const bool live=retained && !retained->free_entered && !retained->freed;
+      if(live ? !native_state || !MatchesPeriodicAllocation(birth,call->factory,*native_state) :
+          bool(native_state) || !call->callback_returned)return false;
       // Without the exact postcallback cut, originalB8B08 reached its canceled
       // skip path; it must still own a live nonserial periodic generation.
       if(!call->callback_returned){
@@ -827,7 +1281,7 @@ class NativeProfileIdentityTasks final {
     for (auto& value:nodes_) { if (!value || value->freed) {
       const Birth birth{generation,call->origin,*actual_output};
       value=Node{birth,call->callback,call->argument};
-      value->created_persistent=call->created_persistent;value->resident_physical=call->resident_physical;
+      value->created_persistent=call->created_persistent;value->resident_physical=call->resident_physical;value->execution_only=call->execution_only;
       value->transport_only=call->transport_only;value->continuation_ticket=call->continuation_ticket;
       value->persistent_output=call->created_persistent?call->output:0;
       value->periodic_factory=call->periodic_factory;
@@ -848,7 +1302,8 @@ class NativeProfileIdentityTasks final {
         frame.thread!=call->frame.thread || frame.pcr!=call->frame.pcr ||
         frame.sp+0x90!=call->frame.sp || node->birth.task!=actual_task ||
         callback!=call->callback || argument!=call->argument ||
-        !actual_tagged_output || *actual_tagged_output!=(actual_task|1u)) { Lose(__LINE__,3);return false; }
+        !actual_tagged_output || *actual_tagged_output!=(actual_task|1u) ||
+        (node->periodic_factory && !node->periodic_allocation)) { Lose(__LINE__,3);return false; }
     call->publish_entered=true;node->published=true;
     if(node->producer)node->producer->published=true;
     return true;
@@ -871,6 +1326,9 @@ class NativeProfileIdentityTasks final {
       node->producer->schedule_returned=true;
       node->producer->schedule_succeeded=int32_t(actual_hresult)>=0;
     }
+    if(const auto* node=FindBirthConst(call->birth);node && node->periodic_factory &&
+        int32_t(actual_hresult)>=0 && (!actual_native_state ||
+        !MatchesPeriodicAllocation(node->birth,node->periodic_factory,*actual_native_state)))return false;
     // A failed Schedule can still have a real allocated/published Task: its
     // native zero-ref Close is independently required; never discard its node.
     for (auto& value:schedules_) { if (value && value->serial==schedule) { value.reset();return true; } }
@@ -974,7 +1432,7 @@ class NativeProfileIdentityTasks final {
   }
   std::optional<Birth> EnterWork(Frame frame,uint32_t actual_current_task,uint32_t actual_argument) {
     auto* node=FindLiveTask(actual_current_task);
-    if (lost_ || !node || node->created_persistent || node->transport_only || node->periodic_factory || !Match(frame) || !node->published || node->started ||
+    if (lost_ || !node || node->created_persistent || node->transport_only || node->periodic_factory || node->execution_only || !Match(frame) || !node->published || node->started ||
         frame.function!=node->callback || actual_argument!=node->argument) { Lose(__LINE__,15);return {}; }
     node->work=frame;node->started=true;return node->birth;
   }
@@ -988,7 +1446,7 @@ class NativeProfileIdentityTasks final {
     auto* node=FindLiveTask(actual_task);
     if (lost_ || !node || !Match(frame) || frame.function!=0x816B7490) { Lose(__LINE__,12);return false; }
     for (const auto& old:closes_) { if (old && old->frame==frame) { Lose(__LINE__,12);return false; } }
-    for (auto& value:closes_) { if (!value) { value=Close{frame,node->birth.generation};return true; } }
+    for (auto& value:closes_) { if (!value) { value=Close{frame,node->birth.generation,node->execution_only};return true; } }
     Lose(__LINE__,12);return false;
   }
   // Actual zero-ref Close invokes slot0(task,1). These exact deleting
@@ -1003,7 +1461,7 @@ class NativeProfileIdentityTasks final {
     if(lost_ || !node || !Match(frame) || flags!=1 ||
        (frame.function!=0x816B7D98 && frame.function!=0x816B7500) ||
        frame.lr!=0x816B74E8 || node->delete_entered ||
-       ((node->started && !node->returned) || node->persistent_active)){Lose(__LINE__,13);return false;}
+       ((node->started && !node->returned) || node->persistent_active || node->execution_active)){Lose(__LINE__,13);return false;}
     bool parent=false;
     for(const auto& close:closes_)if(close && close->birth==node->birth.generation &&
         close->frame.thread==frame.thread && close->frame.pcr==frame.pcr &&
@@ -1011,7 +1469,7 @@ class NativeProfileIdentityTasks final {
     for(const auto& work:external_)if(work && work->birth.generation==node->birth.generation){Lose(__LINE__,13);return false;}
     for(const auto& modify:modifications_)if(modify && modify->birth==node->birth.generation){Lose(__LINE__,13);return false;}
     if(!parent){Lose(__LINE__,13);return false;}
-    for(auto& d:deletions_)if(!d){d=Deletion{frame,{},node->birth.generation};node->delete_entered=true;return true;}
+    for(auto& d:deletions_)if(!d){d=Deletion{frame,{},node->birth.generation,node->execution_only};node->delete_entered=true;return true;}
     Lose(__LINE__,13);return false;
   }
   bool EnterTaskFree(Frame frame,uint32_t actual_task) {
@@ -1053,7 +1511,7 @@ class NativeProfileIdentityTasks final {
       });
       if (lost_ || !node || node->freed ||
           (actual_remaining_references && node->delete_entered) ||
-          (!actual_remaining_references && ((node->started && !node->returned) || node->persistent_active || external ||
+          (!actual_remaining_references && ((node->started && !node->returned) || node->persistent_active || node->execution_active || external ||
               !node->delete_returned || !node->free_returned))) {
         Lose(__LINE__,19);return false;
       }
@@ -1069,6 +1527,19 @@ class NativeProfileIdentityTasks final {
     } }
     Lose(__LINE__,19);return false;
   }
+  // Concrete owner holds its ONE metadata mutex while using this local
+  // execution-only observer lane. The native body still runs unchanged;
+  // failure cannot poison an unrelated typed profile capability/ledger.
+  class NeutralObservation final {
+   public:
+    explicit NeutralObservation(NativeProfileIdentityTasks& ledger) noexcept:ledger_(ledger){++ledger_.neutral_depth_;}
+    ~NeutralObservation(){--ledger_.neutral_depth_;}
+    NeutralObservation(const NeutralObservation&)=delete;
+    NeutralObservation& operator=(const NeutralObservation&)=delete;
+   private:NativeProfileIdentityTasks& ledger_;
+  };
+  uint32_t neutral_depth_=0;
+  uint64_t neutral_failures_=0;
   Root root_;
   bool lost_=false;
   uint32_t first_failure_line_=0,first_failure_reason_=0;
@@ -1078,6 +1549,8 @@ class NativeProfileIdentityTasks final {
   std::array<std::optional<DetachedAllocation>,kCapacity> detached_{};
   std::array<std::optional<ExternalWork>,kCapacity> external_{};
   std::array<std::optional<PeriodicDispatch>,kCapacity> periodic_dispatches_{};
+  std::array<std::optional<ExecutionDispatch>,kCapacity> execution_dispatches_{};
+  std::array<std::optional<ExecutionControl>,kCapacity> execution_controls_{};
   std::array<std::optional<Close>,kCapacity> closes_{};
   std::array<std::optional<Deletion>,kCapacity> deletions_{};
   std::array<std::optional<Modification>,kCapacity> modifications_{};

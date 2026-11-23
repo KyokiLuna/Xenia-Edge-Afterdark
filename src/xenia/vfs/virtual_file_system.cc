@@ -589,6 +589,87 @@ auto LongestAlias(const Links& links, std::string_view path) {
 }
 }  // namespace
 
+namespace {
+bool MountPathMatches(std::string_view path, std::string_view mount_path);
+}
+
+bool VirtualFileSystem::SymbolicLinkCurrent(const SymbolicLink& link) const {
+  if (!link.expected_device) { return true; }
+  // Compare control-block identity without weak.lock(): the last strong
+  // reference must never be destroyed in this namespace interval.
+  return std::ranges::any_of(devices_, [&](const auto& device) {
+    return device.get() == link.expected_device &&
+           !link.device.owner_before(device) &&
+           !device.owner_before(link.device) && !device->namespace_retiring();
+  });
+}
+
+bool VirtualFileSystem::SymbolicLinkAllowsPath(const SymbolicLink& link,
+                                               std::string_view path) const {
+  if (!link.expected_device) { return true; }
+  const Device* selected = nullptr;
+  for (const auto& device : devices_) {
+    if (MountPathMatches(path, device->mount_path()) &&
+        (!selected || device->mount_path().size() > selected->mount_path().size())) {
+      selected = device.get();
+    }
+  }
+  // A nested mount must be a real child of the selected source. A different
+  // same-prefix device or a chained generic alias cannot borrow its authority.
+  for (auto* node = selected; node; node = node->mount_parent().get()) {
+    if (node == link.expected_device) {
+      return SymbolicLinkCurrent(link) && !selected->namespace_retiring();
+    }
+  }
+  return false;
+}
+
+X_STATUS VirtualFileSystem::RegisterDeviceSymbolicLink(std::string_view path,
+    std::string_view target, const std::shared_ptr<Device>& expected,
+    std::shared_ptr<const SymbolicLinkToken>& issued) {
+  if (issued || !expected) { return X_STATUS_INVALID_PARAMETER; }
+  try {
+    const auto alias = NamespacePath(path);
+  const auto destination = NamespacePath(target);
+  if (!alias || !destination ||
+      !MountPathMatches(*destination, expected->mount_path())) {
+    return X_STATUS_OBJECT_NAME_INVALID;
+  }
+    auto identity = std::make_shared<const uint8_t>(0);
+    auto token = std::shared_ptr<const SymbolicLinkToken>(
+        new SymbolicLinkToken(registration_owner_, *alias, identity));
+    SymbolicLink row;
+    row.target = *destination;
+    row.device = expected;
+    row.expected_device = expected.get();
+    row.identity = std::move(identity);
+    auto lock = global_critical_region_.Acquire();
+    if (!SymbolicLinkCurrent(row)) {
+      return HostStorageError(std::make_error_code(std::errc::no_such_device));
+    }
+    if (std::ranges::any_of(symlinks_, [&](const auto& link) {
+          return xe::utf8::equal_case(*alias, link.first);
+        })) {
+      return X_STATUS_OBJECT_NAME_COLLISION;
+    }
+    symlinks_.emplace(*alias, std::move(row));
+    issued = std::move(token);
+    return X_STATUS_SUCCESS;
+  } catch (...) { return X_STATUS_NO_MEMORY; }
+}
+
+bool VirtualFileSystem::UnregisterSymbolicLink(const SymbolicLinkToken& expected) {
+  if (expected.owner_ != registration_owner_) { return false; }
+  auto lock = global_critical_region_.Acquire();
+  const auto found = std::ranges::find_if(symlinks_, [&](const auto& link) {
+    return xe::utf8::equal_case(expected.alias_, link.first) &&
+           link.second.identity == expected.identity_;
+  });
+  if (found == symlinks_.end()) { return false; }
+  symlinks_.erase(found);
+  return true;
+}
+
 bool VirtualFileSystem::RegisterSymbolicLink(const std::string_view path,
                                              const std::string_view target) {
   const auto normalized = NamespacePath(path);
@@ -606,21 +687,12 @@ bool VirtualFileSystem::RegisterSymbolicLink(const std::string_view path,
     return false;
   }
 
-  symlinks_.insert({*normalized, *normalized_target});
+  SymbolicLink link;
+  link.target = *normalized_target;
+  symlinks_.emplace(*normalized, std::move(link));
   XELOGD("Registered symbolic link: {} => {}", path, target);
 
   return true;
-}
-
-void VirtualFileSystem::UnregisterExpectedSymbolicLink(std::string_view alias,
-    std::string_view target, const Device* expected) {
-  auto lock = global_critical_region_.Acquire();
-  const auto actual = expected ? AcquireDevice(expected->mount_path()) : nullptr;
-  if (!expected || (actual && actual.get() != expected)) { return; }
-  const auto found = std::ranges::find_if(symlinks_, [&](const auto& link) {
-    return xe::utf8::equal_case(alias, link.first) && xe::utf8::equal_case(target, link.second);
-  });
-  if (found != symlinks_.end()) { symlinks_.erase(found); }
 }
 
 bool VirtualFileSystem::UnregisterSymbolicLink(const std::string_view path) {
@@ -635,7 +707,7 @@ bool VirtualFileSystem::UnregisterSymbolicLink(const std::string_view path) {
   if (it == symlinks_.end()) {
     return false;
   }
-  XELOGD("Unregistered symbolic link: {} => {}", it->first, it->second);
+  XELOGD("Unregistered symbolic link: {} => {}", it->first, it->second.target);
 
   symlinks_.erase(it);
   return true;
@@ -662,10 +734,10 @@ bool VirtualFileSystem::FindSymbolicLink(const std::string_view path,
   }
   auto global_lock = global_critical_region_.Acquire();
   const auto it = LongestAlias(std::as_const(symlinks_), *normalized);
-  if (it == symlinks_.cend()) {
+  if (it == symlinks_.cend() || !SymbolicLinkCurrent(it->second)) {
     return false;
   }
-  target = it->second;
+  target = it->second.target;
   return true;
 }
 
@@ -676,11 +748,15 @@ X_STATUS VirtualFileSystem::TranslateSymbolicPath(std::string_view path,
     return X_STATUS_OBJECT_NAME_INVALID;
   }
   // Never retain an iterator/reference into a concurrently mutable namespace.
-  std::vector<std::pair<std::string, std::string>> links;
+  // Keep the same namespace interval through binding validation. Only weak
+  // device identities, strings and metadata tags are copied or destroyed here.
+  auto namespace_lock = global_critical_region_.Acquire();
+  std::vector<std::pair<std::string, SymbolicLink>> links;
   {
     auto global_lock = global_critical_region_.Acquire();
     links.assign(symlinks_.begin(), symlinks_.end());
   }
+  std::vector<const SymbolicLink*> bindings;
   std::vector<std::string> visited;
   for (size_t depth = 0; depth <= 32; ++depth) {
     if (std::ranges::any_of(visited, [&](const auto& before) {
@@ -691,16 +767,25 @@ X_STATUS VirtualFileSystem::TranslateSymbolicPath(std::string_view path,
     visited.push_back(*normalized);
     const auto it = LongestAlias(std::as_const(links), *normalized);
     if (it == links.cend()) {
+      for (const auto* bound : bindings) {
+        if (!SymbolicLinkAllowsPath(*bound, *normalized)) {
+          return HostStorageError(std::make_error_code(std::errc::no_such_device));
+        }
+      }
       output = std::move(*normalized);
       return X_STATUS_SUCCESS;
     }
     if (depth == 32) {
       return X_STATUS_OBJECT_PATH_NOT_FOUND;
     }
+    if (!SymbolicLinkCurrent(it->second)) {
+      return HostStorageError(std::make_error_code(std::errc::no_such_device));
+    }
+    if (it->second.expected_device) { bindings.push_back(&it->second); }
     const auto suffix = normalized->substr(it->first.size());
     const auto next = suffix.empty()
-                          ? it->second
-                          : xe::utf8::join_guest_paths(it->second, suffix);
+                          ? it->second.target
+                          : xe::utf8::join_guest_paths(it->second.target, suffix);
     if (next.size() > kMaximumTranslatedPath) {
       return X_STATUS_BUFFER_TOO_SMALL;
     }
@@ -747,21 +832,24 @@ std::shared_ptr<Device> VirtualFileSystem::AcquirePathDevice(std::string_view pa
     std::string translated;
     if (XFAILED(TranslateSymbolicPath(path,translated))) { return {}; }
     for (const auto& device : devices_) {
-      if (!device->namespace_retiring() && MountPathMatches(translated,device->mount_path()) &&
+      if (MountPathMatches(translated,device->mount_path()) &&
           (!selected || device->mount_path().size()>selected->mount_path().size())) {
         selected=device;
       }
     }
+    // A withdrawing most-specific mount is a denial, never permission to
+    // reopen its parent's stale cached subtree under the same path.
+    if(selected && selected->namespace_retiring())return {};
   }
   return selected;
 }
 
 Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
+  auto global_lock = global_critical_region_.Acquire();
   std::string normalized_path;
   if (XFAILED(TranslateSymbolicPath(path, normalized_path))) {
     return nullptr;
   }
-  auto global_lock = global_critical_region_.Acquire();
 
   // Find the device with the longest matching mount path. Devices nest, e.g.
   // \Device\Harddisk0\Partition1\Content lives inside \Device\Harddisk0, so the
@@ -800,11 +888,11 @@ X_STATUS VirtualFileSystem::RenameEntry(Entry* entry,
 }
 
 Entry* VirtualFileSystem::ResolveMountRoot(const std::string_view path) {
+  auto global_lock = global_critical_region_.Acquire();
   std::string normalized_path;
   if (XFAILED(TranslateSymbolicPath(path, normalized_path))) {
     return nullptr;
   }
-  auto global_lock = global_critical_region_.Acquire();
   for (const auto& d : devices_) {
     std::string_view mount_path = d->mount_path();
     if (!mount_path.empty() && mount_path.back() == '\\') {
@@ -867,11 +955,13 @@ bool VirtualFileSystem::DeletePath(const std::string_view path) {
 }
 
 X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry,
-                                     const std::string_view path,
+                                     const std::string_view requested_path,
                                      FileDisposition creation_disposition,
                                      uint32_t desired_access, bool is_directory,
                                      bool is_non_directory, File** out_file,
-                                     FileAction* out_action) {
+                                     FileAction* out_action,
+                                     const FileOpenContext& open_context) {
+  const auto& expected_source = open_context.expected_device;
   const bool caller_owns_namespace =
       xe::global_critical_region::is_held_by_current_thread();
   auto lifetime_lock = global_critical_region_.Acquire();
@@ -880,6 +970,27 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry,
 
   if (root_entry && root_entry->device()->namespace_retiring()) {
     return HostStorageError(std::make_error_code(std::errc::no_such_device));
+  }
+  std::string redirected_path;
+  std::string_view path=requested_path;
+  if(root_entry && !path.empty()) {
+    // RootDirectory is a retained Entry, but a relative path may cross a real
+    // registered child mount. Resolve that same absolute guest path through
+    // the common namespace instead of its parent's stale cached children.
+    // Source constraints below still reject foreign or retiring descendants.
+    const auto absolute=xe::utf8::join_guest_paths(root_entry->absolute_path(),path);
+    std::string translated;
+    const auto translated_status=TranslateSymbolicPath(absolute,translated);
+    if(XFAILED(translated_status))return translated_status;
+    Device* selected=nullptr;
+    for(const auto& device:devices_)
+      if(MountPathMatches(translated,device->mount_path()) &&
+          (!selected || device->mount_path().size()>selected->mount_path().size()))selected=device.get();
+    if(selected && selected->namespace_retiring())
+      return HostStorageError(std::make_error_code(std::errc::no_such_device));
+    if(selected && selected!=root_entry->device()) {
+      redirected_path=absolute;path=redirected_path;root_entry=nullptr;
+    }
   }
 
   // Cleanup access.
@@ -932,6 +1043,37 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry,
   // the old readonly-disc/package write-to-read compatibility downgrade.
   const auto* requested_device=entry?entry->device():
       (parent_entry?parent_entry->device():nullptr);
+  if (expected_source) {
+    // The operation captured this exact registered source BEFORE releasing its
+    // caller/worker boundary for blocking IO. A new mount at the same string,
+    // an unrelated nested device, or a detached intermediate ancestor cannot
+    // borrow it. All checks precede managed dispatch and filesystem mutation.
+    const bool registered = std::any_of(devices_.begin(), devices_.end(),
+        [&](const auto& device) {
+          return device == expected_source &&
+              !device.owner_before(expected_source) &&
+              !expected_source.owner_before(device);
+        });
+    bool descendant = false;
+    for (auto* node = requested_device; node; node = node->mount_parent().get()) {
+      if (node == expected_source.get()) { descendant = true; break; }
+    }
+    if (!registered || expected_source->namespace_retiring() ||
+        !requested_device || requested_device->namespace_retiring() || !descendant) {
+      *out_action = FileAction::kDoesNotExist;
+      return HostStorageError(std::make_error_code(std::errc::no_such_device));
+    }
+    // Native source-bound creation must report genuine read-only failure. The
+    // older generic disc/package downgrade below cannot weaken this request.
+    const bool mutation = creation_disposition != FileDisposition::kOpen &&
+        (creation_disposition != FileDisposition::kOpenIf || !entry);
+    constexpr uint32_t read = FileAccess::kGenericRead | FileAccess::kGenericExecute |
+        FileAccess::kFileReadData | 0x8u | 0x20u | 0x80u | 0x20000u | 0x100000u;
+    if (requested_device->is_read_only() && (mutation || (desired_access & ~read))) {
+      *out_action = FileAction::kDoesNotExist;
+      return X_STATUS_ACCESS_DENIED;
+    }
+  }
   if(requested_device && requested_device->requires_strict_read_only_open()) {
     constexpr uint32_t read=FileAccess::kGenericRead|FileAccess::kGenericExecute|
         FileAccess::kFileReadData|0x8u|0x20u|0x80u|0x20000u|0x100000u;
@@ -977,9 +1119,19 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry,
             std::make_error_code(std::errc::device_or_resource_busy));
       }
       lifetime_lock.unlock();
-      return service->Open(std::move(managed_device), std::move(managed_guest_path),
-          creation_disposition, desired_access, is_directory, out_file, out_action);
+      return service->OpenWithContext(std::move(managed_device), std::move(managed_guest_path),
+          creation_disposition, desired_access, is_directory, out_file, out_action,
+          open_context);
     }
+  }
+
+  // An issued native managed view must be consumed by its existing exact-leaf
+  // policy. An unknown/missing/retired policy cannot turn that capability into
+  // a raw pathname open, even for an otherwise writable device.
+  if (open_context.managed_authority) {
+    if (out_file) *out_file = nullptr;
+    if (out_action) *out_action = FileAction::kDoesNotExist;
+    return X_STATUS_ACCESS_DENIED;
   }
 
   // A selected root cannot be replaced. Check alias roots too: a bare alias
@@ -1014,11 +1166,12 @@ X_STATUS VirtualFileSystem::OpenFile(Entry* root_entry,
     // If the entry does not exist on the host then remove the cached entry. A
     // device mounted there has its own folder.
     if (parent_entry && entry->device() == parent_entry->device()) {
-      const xe::vfs::HostPathEntry* host_path =
-          dynamic_cast<const xe::vfs::HostPathEntry*>(parent_entry);
+      const auto* host_path = dynamic_cast<const xe::vfs::HostPathEntry*>(entry);
 
       if (host_path) {
-        auto const file_path = host_path->host_path() / entry->name();
+        // A logical HDD child may retain an installed read-only source. The
+        // primary parent's host path is not that child's physical backing.
+        auto const& file_path = host_path->host_path();
 
         if (!std::filesystem::exists(file_path)) {
           // Remove cached entry

@@ -81,6 +81,13 @@ struct FiberStack {
   size_t total = 0;      // whole allocation, including the floor page
   void* high = nullptr;  // one past the top (what make_fcontext wants)
   size_t usable = 0;     // total minus the floor page
+#if XE_FIBER_ASAN
+  // Owned stacks exclude their floor page. Adopted stacks have no owned high
+  // address and base is already the actual native thread's stack bottom.
+  const void* SanitizerBottom() const noexcept {
+    return high ? static_cast<const char*>(high) - usable : base;
+  }
+#endif
 };
 
 // Live stacks, for growth and for classifying a fault address as an overflow.
@@ -269,6 +276,10 @@ class FcontextFiber : public Fiber {
   }
 
   ~FcontextFiber() override {
+    // An adopted wrapper does not free the native stack, but its TLS identity
+    // must not survive the wrapper. Destroying an executing owned stack is
+    // still outside Fiber's lifetime contract.
+    if (!owns_stack_ && current_fiber_ == this) { current_fiber_ = nullptr; }
     if (owns_stack_) {
       FreeFiberStack(stack_);
     }
@@ -280,9 +291,12 @@ class FcontextFiber : public Fiber {
     // CreateFromThread or a prior switch).
     assert_not_null(prev);
     assert_true(prev != this);
+    // This exact SwitchTo invocation makes prev the return destination if
+    // entry_ later returns, including a fiber resumed by a different caller.
+    resumer_ = prev;
     current_fiber_ = this;
 #if XE_FIBER_ASAN
-    __sanitizer_start_switch_fiber(&prev->asan_fake_stack_, stack_.base,
+    __sanitizer_start_switch_fiber(&prev->asan_fake_stack_, stack_.SanitizerBottom(),
                                    stack_.usable);
 #endif
     // Enter this fiber, handing it |prev| so it can record where prev resumes.
@@ -311,6 +325,7 @@ class FcontextFiber : public Fiber {
   void ResetContext() {
     fctx_ = make_fcontext(stack_.high, stack_.usable,
                           &FcontextFiber::EntryTrampoline);
+    resumer_ = nullptr; // A restarted entry must acquire a real new caller.
   }
 
   static void EntryTrampoline(fcontext_transfer_t t) {
@@ -326,19 +341,27 @@ class FcontextFiber : public Fiber {
     self->entry_();
     self->terminated_ = true;
 
-    // The start routine returned. In normal use the guest scheduler switches
-    // away before this point, so this is only a safety net: hand control back
-    // to whoever last resumed us. Resuming a terminated fiber is undefined.
+    // The entry really returned. The latest SwitchTo caller, not necessarily
+    // the first entry's caller, is suspended waiting for this transfer. Its
+    // SwitchTo consumes transfer.data as the DEPARTING fiber and saves that
+    // fiber's continuation. Passing the destination would corrupt its fctx_.
+    auto* resumer = self->resumer_;
+    assert_not_null(resumer);
+    assert_true(resumer != self);
+    current_fiber_ = resumer;
 #if XE_FIBER_ASAN
-    // Passing null frees this dying fiber's fake stack.
-    __sanitizer_start_switch_fiber(nullptr, prev->stack_.base,
-                                   prev->stack_.usable);
+    // A genuine entry return retires this fake stack. Do not reuse its saved
+    // handle after Restart; a suspended/abandoned entry keeps its own handle.
+    self->asan_fake_stack_ = nullptr;
+    __sanitizer_start_switch_fiber(nullptr, resumer->stack_.SanitizerBottom(),
+                                   resumer->stack_.usable);
 #endif
-    jump_fcontext(prev->fctx_, prev);
+    jump_fcontext(resumer->fctx_, self);
   }
 
   std::function<void()> entry_;
   fcontext_t fctx_ = nullptr;
+  FcontextFiber* resumer_ = nullptr; // actual latest suspended SwitchTo caller
   FiberStack stack_;
   bool owns_stack_ = false;
   bool terminated_ = false;

@@ -40,6 +40,7 @@
 #include "xenia/kernel/xam/xam_module.h"
 #include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xam/xam_state.h"
+#include "xenia/kernel/xam/xdbf/spa_info.h"
 #include "xenia/kernel/xam/profile_account_snapshot.h"
 #include "xenia/vfs/virtual_file_system.h"
 #include "xenia/vfs/devices/host_path_device.h"
@@ -1335,6 +1336,39 @@ class ProfileSettingsReadTestAccess final {
   static auto SelectedAccount(ProfileManager& pm, uint64_t xuid) {
     return pm.CaptureRosterAccount(xuid);
   }
+  static auto CaptureIdentityForRebindProbe(ProfileManager& pm, uint64_t xuid,
+                                            std::error_code& error) {
+    return pm.CaptureAccountIdentity(xuid, error);
+  }
+  static auto EnterNative(ProfileManager& pm, const std::shared_ptr<ProfileRosterIntent>& intent,
+      const std::shared_ptr<const ProfileRosterNativeBinding>& binding, std::error_code& error) {
+    return pm.EnterNativeRoster(intent, binding, error);
+  }
+  static bool Publish(const std::shared_ptr<ProfileRosterPublicationCell>& cell) {
+    return cell && cell->PublishFromNative();
+  }
+  static auto Protocol(const std::shared_ptr<ProfileRosterIntent>& intent,
+      const std::shared_ptr<const ProfileRosterNativeBinding>& binding,
+      uint32_t value = 0, bool wrong_nonce = false) {
+    return ProfileRosterNativeCompletion::ForProtocol(intent, binding,
+        binding->nonce() + uint64_t(wrong_nonce), value);
+  }
+  static auto Joined(const std::shared_ptr<ProfileRosterIntent>& intent,
+      const std::shared_ptr<const ProfileRosterNativeBinding>& binding) {
+    return ProfileRosterNativeCompletion::ForJoined(intent, binding, binding->nonce());
+  }
+  static auto CommitProtocol(ProfileManager& pm, const std::shared_ptr<ProfileRosterIntent>& intent,
+      const ProfileRosterNativeCompletion& completion) {
+    return pm.PublishNativeRosterProtocol(intent, completion);
+  }
+  static auto Finalize(ProfileManager& pm, const std::shared_ptr<ProfileRosterIntent>& intent,
+      const ProfileRosterNativeCompletion& completion) {
+    return pm.FinalizeNativeRoster(intent, completion);
+  }
+  static auto Scope(const std::shared_ptr<ProfileRosterNativeReadTicket>& ticket,
+      const std::shared_ptr<const ProfileRosterNativeBinding>& binding) {
+    return ProfileRosterNativeReadScope::Prepare(ticket, binding);
+  }
 };
 namespace {
 constexpr uint32_t kReadAppearance = 0x63E80045;  // INFO2, opaque 1000 bytes.
@@ -1383,6 +1417,55 @@ void ReadFixtureUnknown(std::vector<uint8_t>& wire) {
   xe::store_and_swap<uint32_t>(wire.data() + tail + 4, remaining - 4);
   wire.insert(wire.end(), {0xca, 0xfe, 0, 0x7f});
   REQUIRE_FALSE(ValidateGpdSnapshot(wire));
+}
+// A real SPA container: title header, English XSTR, and one achievement. The normal
+// SpaInfo parser, XamState loader, and ProfileGpdTitleData capture consume it;
+// no mocked title accessor or prebuilt ProfileGpdTitleData bypasses that path.
+std::shared_ptr<const SpaInfo> InstallRosterSpa(ProfileAbiRuntime& runtime,
+                                               uint32_t title) {
+  constexpr std::string_view name = "Roster Actual SPA";
+  constexpr size_t data = sizeof(XdbfHeader) + 3 * sizeof(XdbfEntry);
+  constexpr size_t title_size = sizeof(XdbfSectionHeader) + sizeof(TitleHeaderData);
+  constexpr size_t strings_size = sizeof(XdbfSectionHeaderEx) +
+                                  sizeof(XdbfStringTableEntry) + name.size();
+  constexpr size_t achievements_size = sizeof(XdbfSectionHeaderEx) + sizeof(AchievementTableEntry);
+  std::vector<uint8_t> bytes(data + title_size + strings_size + achievements_size, 0);
+  auto u16 = [&](size_t at, uint16_t value) { xe::store_and_swap<uint16_t>(bytes.data() + at, value); };
+  auto u32 = [&](size_t at, uint32_t value) { xe::store_and_swap<uint32_t>(bytes.data() + at, value); };
+  auto u64 = [&](size_t at, uint64_t value) { xe::store_and_swap<uint64_t>(bytes.data() + at, value); };
+  u32(0, kXdbfSignatureXdbf); u32(4, 0x10000); u32(8, 3); u32(12, 3);
+  const size_t first = sizeof(XdbfHeader), second = first + sizeof(XdbfEntry);
+  const size_t third = second + sizeof(XdbfEntry);
+  u16(first, uint16_t(SpaSection::kMetadata)); u64(first + 2, kXdbfIdXthd);
+  u32(first + 10, 0); u32(first + 14, title_size);
+  u16(second, uint16_t(SpaSection::kStringTable)); u64(second + 2, uint64_t(XLanguage::kEnglish));
+  u32(second + 10, title_size); u32(second + 14, strings_size);
+  u16(third, uint16_t(SpaSection::kMetadata)); u64(third + 2, kXdbfIdXach);
+  u32(third + 10, title_size + strings_size); u32(third + 14, achievements_size);
+  u32(data, kXdbfSignatureXthd); u32(data + 4, 1); u32(data + 8, title_size);
+  u32(data + 12, title); u32(data + 16, uint32_t(TitleType::kFull));
+  u16(data + 20, 1); u32(data + 28, uint32_t(TitleFlags::kAlwaysIncludeInProfile));
+  const size_t strings = data + title_size;
+  u32(strings, kXdbfSignatureXstr); u32(strings + 4, 1); u32(strings + 8, strings_size);
+  u16(strings + 12, 1); u16(strings + 14, kXdbfIdTitle); u16(strings + 16, name.size());
+  std::memcpy(bytes.data() + strings + 18, name.data(), name.size());
+  const size_t achievements = strings + strings_size;
+  u32(achievements, kXdbfSignatureXach); u32(achievements + 4, 1);
+  u32(achievements + 8, achievements_size); u16(achievements + 12, 1);
+  const size_t achievement = achievements + sizeof(XdbfSectionHeaderEx);
+  u16(achievement, 1); u16(achievement + 2, kXdbfIdTitle);
+  u16(achievement + 4, kXdbfIdTitle); u16(achievement + 6, kXdbfIdTitle);
+  u32(achievement + 8, 1); u16(achievement + 12, 5);
+  REQUIRE(XdbfTableView::Parse(bytes));
+  SpaInfo parsed(bytes);
+  REQUIRE(parsed.title_id() == title); REQUIRE(parsed.include_in_profile());
+  REQUIRE_FALSE(parsed.is_system_app());
+  runtime.emulator->kernel_state()->xam_state()->LoadSpaInfo(&parsed);
+  auto loaded = runtime.emulator->kernel_state()->xam_state()->AcquireSpaInfo();
+  REQUIRE(loaded); REQUIRE(loaded->title_id() == title);
+  REQUIRE(loaded->title_name() == name);
+  REQUIRE(loaded->achievement_count() == 1); REQUIRE(loaded->total_gamerscore() == 5);
+  return loaded;
 }
 struct ReadFixtureProfile {
   uint64_t xuid;
@@ -2774,6 +2857,697 @@ TEST_CASE("Duplicate profile discovery refuses unscoped choice while preserving 
     REQUIRE_FALSE(error);
     primary.Unchanged(); unsigned_profile.Unchanged();
   }
+}
+#endif
+
+#if XE_PLATFORM_LINUX
+namespace {
+ProfileAccountFieldEdits HostRename(std::string name) {
+  ProfileAccountFieldEdits edits;
+  edits.gamertag = std::move(name);
+  return edits;
+}
+std::string HostAccountMount(uint64_t xuid) {
+  return fmt::format("User_{:016X}:", xuid);
+}
+void RestartHostAccountRuntime(ProfileAbiRuntime& runtime) {
+  runtime.emulator.reset();
+  REQUIRE(KernelState::shared() == nullptr);
+  runtime.emulator = std::make_unique<Emulator>("", runtime.root.path,
+      runtime.root.path / "content", runtime.root.path / "cache");
+  REQUIRE(runtime.emulator->Setup(nullptr, nullptr, false, {}, {}, {}) == X_STATUS_SUCCESS);
+}
+}
+TEST_CASE("Host Account edits publish one durable local field transaction and survive restart without Live provisioning",
+          "[kernel][profile_account][host_edit][persistence][restart]") {
+  ProfileAbiRuntime runtime;
+  constexpr uint64_t uid = 0xe000000000000401ull;
+  X_XAMACCOUNTINFO account{};
+  account.ToggleLiveFlag(true);
+  account.network_id = 0x87654321;
+  account.SetCountry(XOnlineCountry(0));
+  account.SetLanguage(XLanguage(0));
+  REQUIRE(uint64_t(account.xuid_online) == 0);
+  const auto before = SeedOwnedAccount(runtime, uid, account);
+  const auto save = runtime.root.path / "content" / fmt::format("{:016X}", uid) /
+      "1234ABCD" / "00000001" / "existing-save";
+  const std::vector<uint8_t> save_bytes{0x91, 0, 0xff, 0x32};
+  REQUIRE(std::filesystem::create_directories(save.parent_path()));
+  ReadFixtureWrite(save, save_bytes);
+  auto* pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  REQUIRE(pm->LoadAccount(uid));
+  std::error_code error;
+  auto old_inputs = pm->PrepareNativeLogonAccounts(error);
+  REQUIRE(old_inputs); REQUIRE(old_inputs->OwnershipCurrent());
+  auto edits = HostRename("A");
+  edits.country = XOnlineCountry(1); edits.language = XLanguage(1);
+  auto pending = pm->PrepareAccountEdit(uid, edits, error);
+  REQUIRE(pending); REQUIRE_FALSE(error);
+  CHECK(pending->result().phase == ProfileAccountEditPhase::kPrepared);
+  CHECK_FALSE(pending->result().published);
+  CHECK(OwnedAccountDisk(runtime, uid) == before);
+  const auto result = pending->Commit();
+  REQUIRE(result.committed());
+  CHECK(result.published); CHECK(result.durable); CHECK(result.cache_published);
+  CHECK_FALSE(result.unchanged); CHECK_FALSE(result.mount_release_pending);
+  CHECK_FALSE(runtime.emulator->file_system()->AcquireDevice(HostAccountMount(uid)));
+  CHECK_FALSE(old_inputs->OwnershipCurrent());
+  const auto metadata = pm->CaptureCachedAccount(uid, error);
+  REQUIRE(metadata); REQUIRE_FALSE(error);
+  const auto& actual = metadata->account();
+  CHECK(actual.GetGamertagString() == "A");
+  const auto* name_bytes = reinterpret_cast<const uint8_t*>(actual.gamertag);
+  CHECK(name_bytes[0] == 0); CHECK(name_bytes[1] == 'A');
+  CHECK(std::all_of(name_bytes + 2, name_bytes + sizeof(actual.gamertag),
+                    [](uint8_t byte) { return byte == 0; }));
+  X_XAMACCOUNTINFO expected;
+  REQUIRE_FALSE(edits.Apply(account, expected));
+  CHECK(std::memcmp(&actual, &expected, sizeof(expected)) == 0);
+  CHECK(actual.IsLiveEnabled() == account.IsLiveEnabled());
+  CHECK(actual.GetSubscriptionTier() == account.GetSubscriptionTier());
+  CHECK(uint64_t(actual.xuid_online) == 0);  // No implicit SetLiveDefaults.
+  const auto persisted = OwnedAccountDisk(runtime, uid);
+  REQUIRE(persisted.size() == before.size());
+  CHECK(std::equal(before.begin() + ProfileAccountSnapshot::kPrefixBytes,
+      before.end(), persisted.begin() + ProfileAccountSnapshot::kPrefixBytes));
+  REQUIRE_FALSE(result.recovery.empty());
+  const auto recovery_root = runtime.emulator->kernel_state()->content_manager()->
+      Volume("hdd")->recovery()->root()->path();
+  CHECK(ReadFixtureDisk(recovery_root / result.recovery) == before);
+  CHECK(ReadFixtureDisk(save) == save_bytes);
+
+  const auto stamp = pm->PrepareNativeLogonAccounts(error);
+  REQUIRE(stamp);
+  const auto modified = std::filesystem::last_write_time(runtime.root.path / "content" /
+      ProfileStorageLease::ProfileRelative(uid) / "Account");
+  auto unchanged = pm->PrepareAccountEdit(uid, {}, error);
+  REQUIRE(unchanged); REQUIRE_FALSE(error);
+  const auto no_op = unchanged->Commit();
+  REQUIRE(no_op.committed()); CHECK(no_op.unchanged);
+  CHECK_FALSE(no_op.published); CHECK_FALSE(no_op.cache_published);
+  CHECK(stamp->OwnershipCurrent());
+  CHECK(OwnedAccountDisk(runtime, uid) == persisted);
+  CHECK(std::filesystem::last_write_time(runtime.root.path / "content" /
+      ProfileStorageLease::ProfileRelative(uid) / "Account") == modified);
+  RestartHostAccountRuntime(runtime);  // Escaped handles retain values only.
+  pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  REQUIRE(pm->LoadAccount(uid));
+  const auto restarted = pm->CaptureCachedAccount(uid, error);
+  REQUIRE(restarted);
+  CHECK(std::memcmp(&restarted->account(), &expected, sizeof(expected)) == 0);
+  CHECK(OwnedAccountDisk(runtime, uid) == persisted);
+  CHECK(ReadFixtureDisk(save) == save_bytes);
+  CHECK(pending->Commit().error == std::errc::operation_canceled);
+  CHECK(pending->result().phase == ProfileAccountEditPhase::kCommitted);
+}
+TEST_CASE("Two prepared host Account edits cannot overwrite a concurrent name or opaque Account snapshot",
+          "[kernel][profile_account][host_edit][stale][transaction]") {
+  ProfileAbiRuntime runtime;
+  constexpr uint64_t uid = 0xe000000000000402ull;
+  X_XAMACCOUNTINFO account{};
+  const auto before = SeedOwnedAccount(runtime, uid, account);
+  auto* pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  REQUIRE(pm->LoadAccount(uid));
+  std::error_code error;
+  const auto form = ProfileAccountFieldValues::From(account);
+  auto first_edits = HostRename("First"); first_edits.country = XOnlineCountry(7);
+  auto first = pm->PrepareAccountEdit(uid, first_edits, error); REQUIRE(first);
+  auto stale = pm->PrepareAccountEdit(uid, HostRename("Second"), error); REQUIRE(stale);
+  REQUIRE(first->Commit().committed());
+  const auto committed = OwnedAccountDisk(runtime, uid);
+  REQUIRE(committed != before);
+  const auto refused = stale->Commit();
+  CHECK_FALSE(refused.committed()); REQUIRE(refused.error);
+  CHECK_FALSE(refused.published); CHECK_FALSE(refused.durable);
+  CHECK(OwnedAccountDisk(runtime, uid) == committed);
+  const auto refused_again = stale->Commit();
+  CHECK_FALSE(refused_again.committed()); CHECK_FALSE(refused_again.published);
+  if (!refused.stage.empty() || !refused.recovery.empty()) {
+    REQUIRE_FALSE(refused_again.prior_artifacts.empty());
+    CHECK(refused_again.prior_artifacts.front().stage == refused.stage);
+    CHECK(refused_again.prior_artifacts.front().recovery == refused.recovery);
+  }
+  CHECK(OwnedAccountDisk(runtime, uid) == committed);
+  REQUIRE(pm->CaptureCachedAccount(uid, error));
+  CHECK(pm->CaptureCachedAccount(uid, error)->account().GetGamertagString() == "First");
+  CHECK(pm->CaptureCachedAccount(uid, error)->account().GetCountry() == XOnlineCountry(7));
+  REQUIRE(stale->Cancel().phase == ProfileAccountEditPhase::kCanceled);
+  // A NEW explicit retry captures current storage but carries only fields the
+  // old form actually edited; its untouched country must stay at First's7.
+  auto desired = form; desired.gamertag = "Second";
+  auto delta = ProfileAccountFieldEdits::Between(form, desired);
+  REQUIRE(delta.gamertag); REQUIRE_FALSE(delta.country); REQUIRE_FALSE(delta.language);
+  auto retry = pm->PrepareAccountEdit(uid, std::move(delta), error); REQUIRE(retry);
+  REQUIRE(retry->Commit().committed());
+  const auto value = pm->CaptureCachedAccount(uid, error); REQUIRE(value);
+  CHECK(value->account().GetGamertagString() == "Second");
+  CHECK(value->account().GetCountry() == XOnlineCountry(7));
+  CHECK(value->account().passport_password[7] == account.passport_password[7]);
+  const auto final = OwnedAccountDisk(runtime, uid);
+  CHECK(std::equal(before.end() - 4, before.end(), final.end() - 4));
+}
+TEST_CASE("Invalid or canceled host Account edits leave disk and cache untouched and dropped handles release their issued mount",
+          "[kernel][profile_account][host_edit][cancel][invalid]") {
+  ProfileAbiRuntime runtime;
+  constexpr uint64_t uid = 0xe000000000000403ull;
+  X_XAMACCOUNTINFO account{};
+  const auto before = SeedOwnedAccount(runtime, uid, account);
+  auto* pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  REQUIRE(pm->LoadAccount(uid));
+  std::error_code error;
+  const auto metadata = pm->CaptureCachedAccount(uid, error); REQUIRE(metadata);
+  const auto stamp = pm->PrepareNativeLogonAccounts(error); REQUIRE(stamp);
+  for (const auto& name : {std::string(), std::string(16, 'A'), std::string("1Bad"),
+                          std::string("Bad\0Name", 8), std::string("Bad!")}) {
+    CHECK_FALSE(pm->PrepareAccountEdit(uid, HostRename(name), error));
+    CHECK(error == std::errc::invalid_argument);
+    CHECK_FALSE(runtime.emulator->file_system()->AcquireDevice(HostAccountMount(uid)));
+  }
+  auto pending = pm->PrepareAccountEdit(uid, HostRename("Canceled"), error); REQUIRE(pending);
+  CHECK(pending->result().mount_release_pending);
+  const auto canceled = pending->Cancel();
+  CHECK(canceled.phase == ProfileAccountEditPhase::kCanceled);
+  CHECK_FALSE(canceled.error); CHECK_FALSE(canceled.published);
+  CHECK_FALSE(canceled.mount_release_pending);
+  CHECK_FALSE(pending->Commit().committed());
+  CHECK(pending->Commit().phase == ProfileAccountEditPhase::kCanceled);
+  pending = pm->PrepareAccountEdit(uid, HostRename("Dropped"), error); REQUIRE(pending);
+  pending.reset();  // Actual public handle destructor, not a helper-only cancel.
+  CHECK_FALSE(runtime.emulator->file_system()->AcquireDevice(HostAccountMount(uid)));
+  REQUIRE(pm->MountProfile(uid)); REQUIRE(pm->DismountProfile(uid));
+  CHECK(pm->CaptureCachedAccount(uid, error) == metadata);
+  CHECK(stamp->OwnershipCurrent());
+  CHECK(OwnedAccountDisk(runtime, uid) == before);
+}
+TEST_CASE("Host Account edit cleanup cannot retire another prepared writer managed file or roster pause",
+          "[kernel][profile_account][host_edit][rundown][ownership]") {
+  ProfileAbiRuntime runtime;
+  constexpr uint64_t uid = 0xe000000000000404ull;
+  X_XAMACCOUNTINFO account{};
+  const auto before = SeedOwnedAccount(runtime, uid, account);
+  auto* pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  REQUIRE(pm->LoadAccount(uid));
+  std::error_code error;
+  auto edit = pm->PrepareAccountEdit(uid, HostRename("Never Saved"), error); REQUIRE(edit);
+  const auto snapshot = pm->CaptureDurableAccount(uid, error); REQUIRE(snapshot);
+  const auto identity = snapshot->identity();
+  auto* fs = runtime.emulator->file_system();
+  const auto actual_device = fs->AcquireDevice(HostAccountMount(uid)); REQUIRE(actual_device);
+  SECTION("a genuine staged writer keeps its cancellation state and can commit") {
+    auto next = account;
+    string_util::copy_and_swap_truncating(next.gamertag, u"Other Writer", xe::countof(next.gamertag));
+    auto wire = before; ProfileManager::EncryptAccountFile(&next, wire.data());
+    ProfileAccountWriter writer(identity, runtime.emulator->kernel_state()->content_manager()->
+        Volume("hdd")->recovery());
+    auto prepared = writer.PrepareRaw(snapshot->token(), wire, error); REQUIRE(prepared);
+    REQUIRE_FALSE(identity->writes_drained());
+    const auto canceled = edit->Cancel();
+    CHECK(canceled.phase == ProfileAccountEditPhase::kCanceled);
+    CHECK(canceled.mount_release_pending); CHECK_FALSE(identity->retired());
+    CHECK(fs->AcquireDevice(HostAccountMount(uid)) == actual_device);
+    const auto actual = writer.Commit(*prepared);
+    REQUIRE(actual.durable); REQUIRE_FALSE(actual.error);
+    CHECK(OwnedAccountDisk(runtime, uid) == wire);
+    prepared.reset(); REQUIRE(identity->writes_drained());
+  }
+  SECTION("an actual managed guest Account file still publishes through the cache lane") {
+    vfs::File* raw = nullptr; vfs::FileAction action{};
+    REQUIRE(fs->OpenFile(nullptr, HostAccountMount(uid) + "\\Account",
+        vfs::FileDisposition::kOverwrite, vfs::FileAccess::kGenericRead |
+        vfs::FileAccess::kGenericWrite, false, true, &raw, &action) == X_STATUS_SUCCESS);
+    auto destroy = [](vfs::File* file) { if (file) { file->Destroy(); } };
+    std::unique_ptr<vfs::File, decltype(destroy)> file(raw, destroy); REQUIRE(file);
+    const auto canceled = edit->Cancel();
+    CHECK(canceled.mount_release_pending); CHECK_FALSE(identity->retired());
+    auto next = account;
+    string_util::copy_and_swap_truncating(next.gamertag, u"Guest Writer", xe::countof(next.gamertag));
+    auto wire = before; ProfileManager::EncryptAccountFile(&next, wire.data());
+    size_t count = 0;
+    REQUIRE(file->WriteSync(wire, 0, &count) == X_STATUS_SUCCESS);
+    CHECK(count == wire.size()); CHECK(OwnedAccountDisk(runtime, uid) == wire);
+    const auto cached = pm->CaptureCachedAccount(uid, error); REQUIRE(cached);
+    CHECK(cached->account().GetGamertagString() == "Guest Writer");
+    file.reset();
+  }
+  SECTION("a real roster pause is not changed into retirement by cancel") {
+    auto paused = identity->PauseForRoster(error); REQUIRE(paused);
+    const auto serial = identity->write_serial();
+    const auto canceled = edit->Cancel();
+    CHECK(canceled.mount_release_pending); CHECK_FALSE(identity->retired());
+    CHECK_FALSE(identity->EnterWrite(error));
+    CHECK(error == std::errc::device_or_resource_busy);
+    CHECK(identity->write_serial() == serial);
+    CHECK(OwnedAccountDisk(runtime, uid) == before);
+    paused.reset();
+  }
+  const auto settled = edit->Cancel();
+  CHECK(settled.phase == ProfileAccountEditPhase::kCanceled);
+  CHECK_FALSE(settled.mount_release_pending);
+  CHECK(identity->retired());
+  CHECK_FALSE(fs->AcquireDevice(HostAccountMount(uid)));
+}
+TEST_CASE("Host Account edit release never decrements a replacement mount and escaped handles cannot borrow a stopped manager",
+          "[kernel][profile_account][host_edit][generation][lifetime]") {
+  ProfileAbiRuntime runtime;
+  constexpr uint64_t uid = 0xe000000000000405ull;
+  X_XAMACCOUNTINFO account{};
+  const auto before = SeedOwnedAccount(runtime, uid, account);
+  auto* pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  REQUIRE(pm->LoadAccount(uid));
+  std::error_code error;
+  auto old = pm->PrepareAccountEdit(uid, HostRename("Old Request"), error); REQUIRE(old);
+  SECTION("actual old namespace closure followed by a replacement generation") {
+    const auto old_device = runtime.emulator->file_system()->AcquireDevice(HostAccountMount(uid));
+    REQUIRE(old_device);
+    REQUIRE(pm->DismountProfile(uid));  // Actual namespace/view retirement.
+    REQUIRE(old_device->namespace_retiring());
+    REQUIRE(pm->MountProfile(uid));
+    const auto replacement = runtime.emulator->file_system()->AcquireDevice(HostAccountMount(uid));
+    REQUIRE(replacement); REQUIRE(replacement != old_device);
+    const auto released = old->Cancel();
+    CHECK(released.phase == ProfileAccountEditPhase::kCanceled);
+    CHECK_FALSE(released.mount_release_pending);
+    CHECK(runtime.emulator->file_system()->AcquireDevice(HostAccountMount(uid)) == replacement);
+    CHECK(OwnedAccountDisk(runtime, uid) == before);
+    REQUIRE(pm->DismountProfile(uid));
+  }
+  SECTION("external VFS closure settles the same old PM record before remount") {
+    auto* fs = runtime.emulator->file_system();
+    const auto old_device = fs->AcquireDevice(HostAccountMount(uid)); REQUIRE(old_device);
+    REQUIRE(fs->UnregisterDevice(HostAccountMount(uid)));
+    REQUIRE(old_device->namespace_retiring());
+    CHECK_FALSE(fs->AcquireDevice(HostAccountMount(uid)));
+    const auto released = old->Cancel();
+    CHECK(released.phase == ProfileAccountEditPhase::kCanceled);
+    CHECK_FALSE(released.mount_release_pending);
+    REQUIRE(pm->MountProfile(uid));
+    const auto replacement = fs->AcquireDevice(HostAccountMount(uid)); REQUIRE(replacement);
+    CHECK(replacement != old_device);
+    CHECK(OwnedAccountDisk(runtime, uid) == before);
+    CHECK_FALSE(old->Cancel().mount_release_pending);
+    CHECK(fs->AcquireDevice(HostAccountMount(uid)) == replacement);
+    REQUIRE(pm->DismountProfile(uid));
+  }
+  SECTION("real manager stop revokes native owners retained by a live UI handle") {
+    RestartHostAccountRuntime(runtime);
+    const auto retired = old->result();
+    CHECK(retired.phase == ProfileAccountEditPhase::kRetired);
+    CHECK(retired.error == std::errc::operation_canceled);
+    CHECK_FALSE(retired.published); CHECK_FALSE(retired.mount_release_pending);
+    CHECK(old->Commit().error == std::errc::operation_canceled);
+    CHECK(old->Cancel().error == std::errc::operation_canceled);
+    pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+    REQUIRE(pm->LoadAccount(uid));
+    auto fresh = pm->PrepareAccountEdit(uid, HostRename("New Owner"), error); REQUIRE(fresh);
+    REQUIRE(fresh->Commit().committed());
+    const auto actual = OwnedAccountDisk(runtime, uid);
+    CHECK(actual != before);
+    CHECK(old->Cancel().error == std::errc::operation_canceled);
+    CHECK(OwnedAccountDisk(runtime, uid) == actual);
+  }
+}
+TEST_CASE("Host Account edits reject actual source retirement and cannot revive it during cleanup",
+          "[kernel][profile_account][host_edit][source][retirement]") {
+  ProfileAbiRuntime runtime;
+  const auto source = RegisterDiscoverySource(runtime);
+  constexpr uint64_t uid = 0xe000000000000406ull;
+  const auto before = SeedDiscoveryAccount(source.storage->path(), uid, u"Removed Source");
+  auto* pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  pm->ReloadProfiles();
+  std::error_code error;
+  const auto metadata = pm->CaptureCachedAccount(uid, error); REQUIRE(metadata);
+  REQUIRE(metadata->source_id() == source.source.id);
+  auto pending = pm->PrepareAccountEdit(uid, HostRename("Cannot Save"), error); REQUIRE(pending);
+  source.storage->Retire();
+  const auto refused = pending->Commit();
+  CHECK(refused.phase == ProfileAccountEditPhase::kRetired);
+  CHECK(refused.error == std::errc::operation_canceled);
+  CHECK_FALSE(refused.published); CHECK_FALSE(refused.committed());
+  CHECK(source.storage->retiring());
+  CHECK(pm->CaptureCachedAccount(uid, error) == metadata);
+  CHECK(ReadFixtureDisk(source.storage->path() /
+      ProfileStorageLease::ProfileRelative(uid) / "Account") == before);
+  CHECK_FALSE(pending->Commit().committed());
+}
+TEST_CASE("Host Account rename updates the real signed-in projection without changing roster identity GPDs or avatar appearance",
+          "[kernel][profile_account][host_edit][roster][save_isolation]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime, 0xe000000000000407ull, 37);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;
+  auto before = pm.CaptureRosterExpected(error); REQUIRE(before.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({profile.xuid, 0, 0, 0}), before).error);
+  before = pm.CaptureRosterExpected(error); REQUIRE(before.roster);
+  const auto model = pm.AcquireProfileGpdModel(uint8_t(0), error); REQUIRE(model);
+  const auto origin = model->CaptureOrigin(error); REQUIRE(origin);
+  const auto inputs = pm.PrepareNativeLogonAccounts(error); REQUIRE(inputs);
+  const auto identity = inputs->accounts()[0]->identity();
+  auto pending = pm.PrepareAccountEdit(profile.xuid, HostRename("A"), error); REQUIRE(pending);
+  REQUIRE(pending->Commit().committed());
+  CHECK(pm.CaptureProfile(uint8_t(0))->name() == "A");
+  const auto after = pm.CaptureRosterExpected(error); REQUIRE(after.roster);
+  CHECK(after.roster->epoch() == before.roster->epoch());
+  CHECK(after.roster->slots() == before.roster->slots());
+  CHECK(model->IsCurrent(*origin)); CHECK_FALSE(identity->retired());
+  CHECK_FALSE(inputs->OwnershipCurrent());
+  CHECK(ReadFixtureDisk(profile.path / "FFFE07D1.gpd") == profile.dashboard);
+  CHECK(ReadFixtureDisk(profile.path / "1234ABCD.gpd") == profile.title);
+  auto appearance = pm.CaptureProfileSettingsRead(uint8_t(0), kReadTitle, error); REQUIRE(appearance);
+  const auto setting = appearance->users().front().Setting(kReadTitle, kReadAppearance, error);
+  REQUIRE(setting);
+  CHECK(std::ranges::equal(setting->get_extended_data(), profile.appearance));
+}
+#endif
+
+#if XE_PLATFORM_LINUX
+TEST_CASE("A physically published host Account edit retains its exact receipt through cache busy cancel drop and owner stop",
+          "[kernel][profile_account][host_edit][cache_retry][publication]") {
+  ProfileAbiRuntime runtime;
+  constexpr uint64_t uid = 0xe000000000000408ull;
+  X_XAMACCOUNTINFO account{};
+  const auto before = SeedOwnedAccount(runtime, uid, account);
+  auto* pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  REQUIRE(pm->LoadAccount(uid));
+  std::error_code error;
+  const auto original = pm->CaptureCachedAccount(uid, error); REQUIRE(original);
+  auto pending = pm->PrepareAccountEdit(uid, HostRename("Cache Pending"), error); REQUIRE(pending);
+  ProfileAccountEditResult physical;
+  {
+    HeldRosterMetadata held(*pm);  // Same real metadata mutex as cache admission.
+    REQUIRE(held.ready.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+    physical = pending->Commit();
+    CHECK(physical.phase == ProfileAccountEditPhase::kDurablePendingCache);
+    CHECK(physical.published); CHECK(physical.durable); CHECK_FALSE(physical.cache_published);
+    CHECK(physical.error == std::errc::device_or_resource_busy);
+    const auto refused = pending->Cancel();
+    CHECK(refused.error == std::errc::operation_in_progress);
+    CHECK(refused.published); CHECK(refused.durable);
+    CHECK(refused.phase == ProfileAccountEditPhase::kDurablePendingCache);
+    CHECK(refused.mount_release_pending);
+  }  // Always releases and joins before real fixture/PM destruction.
+  const auto published = OwnedAccountDisk(runtime, uid);
+  REQUIRE(published != before);
+  CHECK(pm->CaptureCachedAccount(uid, error) == original);
+  SECTION("retry publishes only the original durable snapshot into cache") {
+    const auto result = pending->Commit();
+    REQUIRE(result.committed()); CHECK(result.cache_published);
+    CHECK(result.stage == physical.stage); CHECK(result.recovery == physical.recovery);
+    CHECK(OwnedAccountDisk(runtime, uid) == published);
+    const auto value = pm->CaptureCachedAccount(uid, error); REQUIRE(value);
+    CHECK(value->account().GetGamertagString() == "Cache Pending");
+  }
+  SECTION("dropping the UI leaves the real pending receipt in the manager registry") {
+    pending.reset();
+    REQUIRE(pm->MountProfile(uid));  // Reaps abandoned actual cache publication.
+    const auto value = pm->CaptureCachedAccount(uid, error); REQUIRE(value);
+    CHECK(value->account().GetGamertagString() == "Cache Pending");
+    CHECK(OwnedAccountDisk(runtime, uid) == published);
+    REQUIRE(pm->DismountProfile(uid));
+  }
+  SECTION("actual owner stop preserves physical outcome without pinning an old native source") {
+    RestartHostAccountRuntime(runtime);
+    const auto result = pending->result();
+    CHECK(result.phase == ProfileAccountEditPhase::kRetired);
+    CHECK(result.published); CHECK(result.durable); CHECK_FALSE(result.cache_published);
+    CHECK(result.error == std::errc::operation_canceled);
+    CHECK(result.stage == physical.stage); CHECK(result.recovery == physical.recovery);
+    CHECK_FALSE(result.mount_release_pending);
+    CHECK_FALSE(pending->Commit().committed());
+    pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+    REQUIRE(pm->LoadAccount(uid));
+    const auto value = pm->CaptureCachedAccount(uid, error); REQUIRE(value);
+    CHECK(value->account().GetGamertagString() == "Cache Pending");
+    CHECK(OwnedAccountDisk(runtime, uid) == published);
+  }
+}
+TEST_CASE("Native protocol commits selected maps without claiming image joins or old-owner retirement",
+          "[kernel][profile][roster][native][protocol][retirement]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime, 0xe000000000000151ull, 51);
+  ReadFixtureProfile b(runtime, 0xe000000000000152ull, 52);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid, 0, 0, 0}), expected).error);
+  auto old_model = pm.AcquireProfileGpdModel(uint8_t(0), error); REQUIRE(old_model);
+  const auto old_origin = old_model->CaptureOrigin(error); REQUIRE(old_origin);
+  auto old_writer = pm.CaptureGpdWriter(a.xuid, error); REQUIRE(old_writer.model == old_model);
+  // Capture a genuine command before PrepareRoster pauses this old writer.
+  ProfileGpdMutation refused; refused.kind = ProfileGpdMutationKind::kSetSetting;
+  refused.title_id = kDashboardID; refused.request_id = old_model->AllocateRequestId(error);
+  REQUIRE(refused.request_id); refused.setting.emplace(static_cast<UserSettingId>(kReadScalar), int32_t(99));
+  REQUIRE_FALSE(error);
+  expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  auto intent = pm.PrepareRoster(RosterDesired({b.xuid, 0, 0, 0}), expected, error);
+  REQUIRE(intent); REQUIRE_FALSE(error);
+  auto old_ticket = ProfileSettingsReadTestAccess::Ticket(*intent, *binding, error); REQUIRE(old_ticket);
+  REQUIRE(ProfileSettingsReadTestAccess::Scope(old_ticket, binding));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Protocol(intent, binding));
+  auto cell = ProfileSettingsReadTestAccess::EnterNative(pm, intent, binding, error); REQUIRE(cell);
+  CHECK_FALSE(pm.CaptureProfile(uint8_t(0)));
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  CHECK_FALSE(pm.CaptureProfile(uint8_t(0)));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Joined(intent, binding));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Protocol(intent, binding, 0, true));
+  auto protocol = ProfileSettingsReadTestAccess::Protocol(intent, binding, 0x80000001u); REQUIRE(protocol);
+  CHECK(ProfileSettingsReadTestAccess::Finalize(pm, intent, *protocol).error);
+  const auto committed = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
+  REQUIRE_FALSE(committed.error);
+  CHECK(committed.phase == ProfileRosterPhase::kPublished);
+  CHECK(committed.native_protocol_returned); CHECK(committed.native_protocol_value == 0x80000001u);
+  CHECK(committed.selected_reads_available); CHECK(committed.maps_committed); CHECK(committed.writers_available);
+  CHECK_FALSE(committed.owners_retired);
+  CheckRoster(pm, {b.xuid, 0, 0, 0});
+  auto new_model = pm.AcquireProfileGpdModel(uint8_t(0), error); REQUIRE(new_model);
+  CHECK(new_model != old_model); CHECK(new_model->xuid() == b.xuid);
+  CHECK(pm.CaptureGpdWriter(b.xuid, error).model == new_model);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::CaptureIdentityForRebindProbe(pm, a.xuid, error)); REQUIRE(error);
+  CHECK(old_model->IsCurrent(*old_origin));
+  CHECK_FALSE(old_model->AllocateRequestId(error));
+  CHECK(error == std::errc::device_or_resource_busy);
+  const auto denied = old_writer.Submit(refused);
+  REQUIRE(denied.error); CHECK(denied.error == std::errc::device_or_resource_busy);
+  REQUIRE(ProfileSettingsReadTestAccess::Scope(old_ticket, binding));
+  CHECK_FALSE(pm.CaptureRosterExpected(error).roster); REQUIRE(error);
+  auto joined = ProfileSettingsReadTestAccess::Joined(intent, binding); REQUIRE(joined);
+  CHECK(ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *joined).error);
+  const auto finished = ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined);
+  REQUIRE_FALSE(finished.error); CHECK(finished.phase == ProfileRosterPhase::kCommitted);
+  CHECK(finished.owners_retired); CHECK_FALSE(old_model->IsCurrent(*old_origin));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(old_ticket, binding));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Protocol(intent, binding));
+  CHECK(ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol).error);
+  CheckRoster(pm, {b.xuid, 0, 0, 0}); a.Unchanged(); b.Unchanged();
+}
+TEST_CASE("A genuine pending unchanged model delays host maps without hiding the published read row",
+          "[kernel][profile][roster][native][protocol][pending_model]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime, 0xe000000000000153ull, 53);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  const auto desired = RosterDesired({a.xuid, 0, 0, 0});
+  REQUIRE_FALSE(pm.AdoptRoster(desired, expected).error);
+  auto writer = pm.CaptureGpdWriter(a.xuid, error); REQUIRE(writer.model);
+  const auto before = writer.model->CaptureOrigin(error); REQUIRE(before);
+  expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  auto intent = pm.PrepareRoster(desired, expected, error); REQUIRE(intent);
+  auto cell = ProfileSettingsReadTestAccess::EnterNative(pm, intent, binding, error); REQUIRE(cell);
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  ProfileGpdMutation command; command.kind = ProfileGpdMutationKind::kSetSetting;
+  command.title_id = kDashboardID; command.request_id = writer.model->AllocateRequestId(error);
+  REQUIRE(command.request_id); command.setting.emplace(static_cast<UserSettingId>(kReadScalar), int32_t(93));
+  bool retry = false;
+  auto pending = writer.model->Begin(command, retry, error); REQUIRE(pending); REQUIRE_FALSE(error); CHECK_FALSE(retry);
+  auto protocol = ProfileSettingsReadTestAccess::Protocol(intent, binding); REQUIRE(protocol);
+  const auto busy = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
+  CHECK(busy.error == std::errc::device_or_resource_busy); CHECK(busy.selected_reads_available);
+  CHECK_FALSE(busy.maps_committed); CHECK_FALSE(busy.writers_available); CHECK_FALSE(busy.owners_retired);
+  CheckRoster(pm, desired.xuids);
+  CHECK(pm.AcquireProfileGpdModel(uint8_t(0), error) == writer.model);
+  CHECK_FALSE(pm.CaptureGpdWriter(a.xuid, error).model); REQUIRE(error);
+  const auto written = writer.ExecutePending(pending); REQUIRE_FALSE(written.error);
+  CHECK(written.state == ProfileGpdTransactionAttempt::State::kCommitted);
+  const auto advanced = writer.model->CaptureOrigin(error); REQUIRE(advanced);
+  CHECK(advanced->stamp.model_version > before->stamp.model_version);
+  const auto committed = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
+  REQUIRE_FALSE(committed.error); CHECK(committed.maps_committed); CHECK(committed.writers_available);
+  CHECK(committed.phase == ProfileRosterPhase::kPublished); CHECK_FALSE(committed.owners_retired);
+  REQUIRE(pm.AcquireProfileGpdModel(uint8_t(0), error) == writer.model);
+  const auto read = pm.CaptureGpdRead(uint8_t(0), error); REQUIRE(read);
+  const auto value = read->Setting(kDashboardID, kReadScalar, error); REQUIRE(value);
+  CHECK(std::get<int32_t>(value->get_host_data()) == 93);
+  auto joined = ProfileSettingsReadTestAccess::Joined(intent, binding); REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined).error);
+  CHECK(ReadFixtureDisk(a.path / "Account") == a.account);
+  CHECK(ReadFixtureDisk(a.path / "1234ABCD.gpd") == a.title);
+  CHECK(ReadFixtureDisk(a.path / "FFFE07D1.gpd") != a.dashboard);
+}
+TEST_CASE("Native roster title effects retain a real SPA command through closed-writer retry",
+          "[kernel][profile][roster][native][protocol][spa][persistence]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime, 0xe000000000000158ull, 58);
+  ReadFixtureProfile b(runtime, 0xe000000000000159ull, 59);
+  auto* xam = runtime.emulator->kernel_state()->xam_state();
+  auto& pm = *xam->profile_manager();
+  auto* tracker = xam->user_tracker();
+  std::error_code error;
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid, 0, 0, 0}), expected).error);
+  expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  const auto old_epoch = expected.roster->epoch();
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  uint64_t selected_xuid = b.xuid;
+  bool same_row = false;
+  SECTION("new selected user receives the real AddUser title effect") {}
+  SECTION("initial unchanged alignment repairs the title effect refused while preparing") {
+    selected_xuid = a.xuid; same_row = true;
+  }
+  auto intent = pm.PrepareRoster(RosterDesired({selected_xuid, 0, 0, 0}), expected, error);
+  REQUIRE(intent); REQUIRE_FALSE(error);
+  constexpr uint32_t title = 0x4d5300aa;
+  // The real UpdateSpaInfo path runs while the ordinary capture is excluded.
+  // It may not bypass the roster gate; this Operation owns its later effect.
+  auto spa = InstallRosterSpa(runtime, title); REQUIRE(spa);
+  auto cell = ProfileSettingsReadTestAccess::EnterNative(pm, intent, binding, error); REQUIRE(cell);
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  auto protocol = ProfileSettingsReadTestAccess::Protocol(intent, binding); REQUIRE(protocol);
+  ProfileRosterResult busy;
+  uint64_t next_after_first = 0, next_after_second = 0;
+  std::shared_ptr<ProfileGpdModelAuthority> model;
+  {
+    auto held = xe::global_critical_region::AcquireDirect();
+    busy = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
+    REQUIRE(busy.error == std::errc::operation_would_block);
+    CHECK(busy.maps_committed); CHECK(busy.selected_reads_available);
+    CHECK_FALSE(busy.writers_available); CHECK_FALSE(busy.owners_retired);
+    model = pm.AcquireProfileGpdModel(uint8_t(0), error); REQUIRE(model);
+    REQUIRE(model->xuid() == selected_xuid);
+    // The command's real model-issued ID is retained after preparation. A
+    // second busy attempt must not allocate another command/request identity.
+    next_after_first = model->AllocateRequestId(error); REQUIRE(next_after_first); REQUIRE_FALSE(error);
+    const auto again = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
+    REQUIRE(again.error == std::errc::operation_would_block);
+    next_after_second = model->AllocateRequestId(error); REQUIRE_FALSE(error);
+    CHECK(next_after_second == next_after_first + 1);
+    CHECK_FALSE(model->Pending(error)); REQUIRE_FALSE(error);
+    CHECK_FALSE(pm.CaptureGpdWriter(selected_xuid, error).model); REQUIRE(error);
+  }
+  CHECK_FALSE(tracker->AddUser(selected_xuid)); // tracking alone did not settle the effect
+  a.Unchanged(); b.Unchanged();
+  const auto committed = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
+  REQUIRE_FALSE(committed.error); CHECK(committed.maps_committed); CHECK(committed.writers_available);
+  CHECK(committed.phase == ProfileRosterPhase::kPublished); CHECK_FALSE(committed.owners_retired);
+  CHECK(intent->prepared_roster()->epoch() == old_epoch + (same_row ? 0 : 1));
+  const auto read = model->CaptureRead(error); REQUIRE(read); REQUIRE_FALSE(error);
+  const auto* actual_title = read->models->dashboard.GetTitleInfo(title); REQUIRE(actual_title);
+  CHECK(actual_title->last_played.is_valid());
+  CHECK(actual_title->achievements_count == 1); CHECK(actual_title->gamerscore_total == 5);
+  CHECK(read->models->dashboard.GetTitleName(title) == u"Roster Actual SPA");
+  REQUIRE(read->models->titles.contains(title));
+  CHECK(read->models->titles.at(title).GetString(kXdbfIdTitle) == u"Roster Actual SPA");
+  const auto saved_dashboard = ReadFixtureDisk((same_row ? a.path : b.path) / "FFFE07D1.gpd");
+  const auto view = XdbfTableView::Parse(saved_dashboard); REQUIRE(view);
+  const auto opaque = view->Find(0xfedc, 0x2a); REQUIRE(opaque);
+  const std::vector<uint8_t> expected_opaque{0xca, 0xfe, 0, 0x7f};
+  CHECK(std::vector<uint8_t>(opaque->begin(), opaque->end()) == expected_opaque);
+  const auto titles = tracker->GetPlayedTitles(selected_xuid);
+  REQUIRE(titles.size() == 1); CHECK(titles[0].id == title);
+  CHECK(titles[0].title_name == u"Roster Actual SPA"); CHECK(titles[0].WasTitlePlayed());
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol).error);
+  const auto again = model->CaptureRead(error); REQUIRE(again);
+  CHECK(again->origin.stamp.model_version == read->origin.stamp.model_version);
+  CHECK(ReadFixtureDisk((same_row ? a.path : b.path) / "FFFE07D1.gpd") == saved_dashboard);
+  auto joined = ProfileSettingsReadTestAccess::Joined(intent, binding); REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined).error);
+  CHECK(ReadFixtureDisk(a.path / "Account") == a.account);
+  CHECK(ReadFixtureDisk(b.path / "Account") == b.account);
+  CHECK(ReadFixtureDisk(a.path / "1234ABCD.gpd") == a.title);
+  CHECK(ReadFixtureDisk(b.path / "1234ABCD.gpd") == b.title);
+  const auto appearance = read->models->Setting(kDashboardID, kReadAppearance, error); REQUIRE(appearance);
+  CHECK(std::ranges::equal(appearance->get_extended_data(), same_row ? a.appearance : b.appearance));
+}
+TEST_CASE("Published native slot swaps read one exact row before and after canonical commitment",
+          "[kernel][profile][roster][native][protocol][swap]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime, 0xe000000000000156ull, 56);
+  ReadFixtureProfile b(runtime, 0xe000000000000157ull, 57);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid, b.xuid, 0, 0}), expected).error);
+  auto old_a = pm.AcquireProfileGpdModel(uint8_t(0), error); REQUIRE(old_a);
+  auto old_b = pm.AcquireProfileGpdModel(uint8_t(1), error); REQUIRE(old_b);
+  expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  auto intent = pm.PrepareRoster(RosterDesired({b.xuid, a.xuid, 0, 0}), expected, error); REQUIRE(intent);
+  auto cell = ProfileSettingsReadTestAccess::EnterNative(pm, intent, binding, error); REQUIRE(cell);
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  CHECK_FALSE(pm.CaptureProfile(uint8_t(0))); CHECK_FALSE(pm.CaptureProfile(uint8_t(1)));
+  auto protocol = ProfileSettingsReadTestAccess::Protocol(intent, binding); REQUIRE(protocol);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol).error);
+  CheckRoster(pm, {b.xuid, a.xuid, 0, 0});
+  const auto new_b = pm.AcquireProfileGpdModel(uint8_t(0), error); REQUIRE(new_b);
+  const auto new_a = pm.AcquireProfileGpdModel(uint8_t(1), error); REQUIRE(new_a);
+  CHECK(new_b != old_b); CHECK(new_a != old_a);
+  CHECK(new_b->user_slot() == 0); CHECK(new_a->user_slot() == 1);
+  CHECK(pm.GetUserIndexAssignedToProfile(a.xuid) == 1);
+  CHECK(pm.GetUserIndexAssignedToProfile(b.xuid) == 0);
+  for (uint8_t slot = 0; slot != 2; ++slot) {
+    const auto model = slot ? new_a : new_b;
+    const auto row = intent->prepared_roster()->slots()[slot];
+    CHECK(model->xuid() == row.xuid); CHECK(model->sign_in_generation() == row.sign_in_generation);
+    CHECK(model->storage()->source_id() == row.source_id);
+    CHECK(model->storage()->source_generation() == row.source_generation);
+    const auto read = pm.CaptureGpdRead(slot, error); REQUIRE(read);
+    const auto scalar = read->Setting(kDashboardID, kReadScalar, error); REQUIRE(scalar);
+    CHECK(std::get<int32_t>(scalar->get_host_data()) == (slot ? 56 : 57));
+    CHECK(pm.CaptureGpdWriter(row.xuid, error).model == model);
+  }
+  auto joined = ProfileSettingsReadTestAccess::Joined(intent, binding); REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined).error);
+  CHECK(pm.AcquireProfileGpdModel(uint8_t(0), error) == new_b);
+  CHECK(pm.AcquireProfileGpdModel(uint8_t(1), error) == new_a);
+  a.Unchanged(); b.Unchanged();
+}
+TEST_CASE("Native joined retirement keeps a busy old File and reuses its exact map commitment",
+          "[kernel][profile][roster][native][protocol][busy_file]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime, 0xe000000000000154ull, 54);
+  ReadFixtureProfile b(runtime, 0xe000000000000155ull, 55);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid, 0, 0, 0}), expected).error);
+  auto old_model = pm.AcquireProfileGpdModel(uint8_t(0), error); REQUIRE(old_model);
+  const auto old_origin = old_model->CaptureOrigin(error); REQUIRE(old_origin);
+  const auto alias = fmt::format(kDefaultMountFormat, a.xuid) + ':';
+  vfs::File* file = nullptr; vfs::FileAction action{};
+  REQUIRE(runtime.emulator->file_system()->OpenFile(nullptr, alias + "\\Account",
+      vfs::FileDisposition::kOpen, vfs::FileAccess::kGenericRead, false, false,
+      &file, &action) == X_STATUS_SUCCESS);
+  REQUIRE(file);
+  std::unique_ptr<vfs::File, void(*)(vfs::File*)> held(file, [](vfs::File* value) { value->Destroy(); });
+  expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  auto intent = pm.PrepareRoster(RosterDesired({b.xuid, 0, 0, 0}), expected, error); REQUIRE(intent);
+  auto cell = ProfileSettingsReadTestAccess::EnterNative(pm, intent, binding, error); REQUIRE(cell);
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  auto protocol = ProfileSettingsReadTestAccess::Protocol(intent, binding); REQUIRE(protocol);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol).error);
+  const auto selected = pm.CaptureProfile(uint8_t(0)); REQUIRE(selected); REQUIRE(selected->xuid() == b.xuid);
+  CHECK(old_model->IsCurrent(*old_origin));
+  auto joined = ProfileSettingsReadTestAccess::Joined(intent, binding); REQUIRE(joined);
+  const auto busy = ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined);
+  CHECK(busy.error == std::errc::device_or_resource_busy); CHECK(busy.phase == ProfileRosterPhase::kFinalizing);
+  CHECK(busy.maps_committed); CHECK(busy.writers_available); CHECK_FALSE(busy.owners_retired);
+  CHECK(pm.CaptureProfile(uint8_t(0)) == selected); CHECK_FALSE(old_model->IsCurrent(*old_origin));
+  held.reset();
+  const auto done = ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined);
+  REQUIRE_FALSE(done.error); CHECK(done.phase == ProfileRosterPhase::kCommitted); CHECK(done.owners_retired);
+  CHECK(pm.CaptureProfile(uint8_t(0)) == selected); a.Unchanged(); b.Unchanged();
 }
 #endif
 

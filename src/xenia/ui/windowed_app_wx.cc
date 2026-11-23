@@ -25,6 +25,7 @@
 #include "xenia/base/logging.h"
 #include "xenia/ui/windowed_app.h"
 #include "xenia/ui/windowed_app_context_wx.h"
+#include "xenia/ui/wx_locale.h"
 
 #if XE_PLATFORM_WIN32
 DECLARE_bool(enable_console);
@@ -103,6 +104,7 @@ bool XeniaWxApp::OnInit() {
   }
 #endif
 
+  app_initialization_entered_ = true;
   if (!app_->OnInitialize()) {
     return false;
   }
@@ -114,11 +116,33 @@ bool XeniaWxApp::OnInit() {
   return true;
 }
 
-int XeniaWxApp::OnExit() {
-  if (app_) {
-    app_->InvokeOnDestroy();
-    app_.reset();
+void XeniaWxApp::DestroyWindowedApp() {
+  if (!app_) {
+    return;
   }
+  // The owner and context remain live while pending callbacks and the app's
+  // actual shutdown checks run. Failed argument parsing never entered the app.
+  if (app_initialization_entered_) {
+    app_->InvokeOnDestroy();
+  }
+  app_.reset();
+}
+
+void XeniaWxApp::DoDelayedCleanup() {
+  // wx CallOnExit deletes every remaining top-level window before OnExit.
+  // Retire our adapters first, while their frame, panel and GTK IM context
+  // still exist. wx then owns deletion of the deferred frame. This hook may
+  // run more than once; a retired app is never invoked again.
+  DestroyWindowedApp();
+  wxApp::DoDelayedCleanup();
+  // Also runs when OnInit fails and wx skips OnExit. Keep translations alive
+  // through app and pending-window destruction, then retire them while wx's
+  // locale and module state still exists. Repeated cleanup is harmless.
+  ShutdownWxLocale();
+}
+
+int XeniaWxApp::OnExit() {
+  DestroyWindowedApp();
   app_context_.reset();
 
 #if XE_PLATFORM_WIN32

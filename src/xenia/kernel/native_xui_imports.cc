@@ -69,7 +69,18 @@ bool IsNativeSystemUiFamily(const cpu::Export& entry) {
     case 0x251:  // XamLoadSysApp.
     case 0x252:  // XamUnloadSysApp.
     case 0x253:  // XamReloadSysApp.
+    // Both Resolve records belong to the same original FE worker/copy/Task
+    // family; native SYSTEM consumers retain the actual268/276 ABI.
+    case 0x268:  // XamContentResolve, public134-byte descriptor.
+    case 0x276:  // XamContentResolveInternal, native200-byte descriptor.
     case 0x2E9:  // XamShowMessageBox, callback-owned SYSTEM selector warning.
+    // Native image/cache outputs are native objects consumed by native XUI.
+    // Keep their allocator, instance cache and teardown in the same XAM.
+    case 0x2F2:  // XamReadImage, shared native 32/64 tile-image cache.
+    case 0x2F4:  // XamDecompressPNGToTexture, native image decoder/output.
+    case 0x803:  // XamInitializeGameTileCache, caller-owned native cache.
+    case 0x804:  // XamDestroyGameTileCache, matching native cache destructor.
+    case 0x805:  // XamReadGameTileImage, same native instance-cache objects.
     case 0x460:  // lstrcpynW, native UI UTF16 result-buffer copy.
     case 0x489:  // XMemAlloc.
     case 0x48A:  // XMemFree aliases native XamFree.

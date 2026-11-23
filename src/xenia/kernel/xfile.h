@@ -18,6 +18,8 @@
 #include <vector>
 
 #include "xenia/kernel/guest_scheduler.h"
+#include "xenia/kernel/util/host_call_outcome.h"
+#include "xenia/kernel/util/io_request_completion.h"
 #include "xenia/kernel/xiocompletion.h"
 #include "xenia/vfs/device.h"
 #include "xenia/vfs/entry.h"
@@ -162,11 +164,13 @@ class XFile : public XObject {
   // critical region).
   X_STATUS Read(uint32_t buffer_guess_address, uint32_t buffer_length,
                 uint64_t byte_offset, uint32_t* out_bytes_read,
-                uint32_t apc_context, bool notify_completion = true);
+                uint32_t apc_context, bool notify_completion = true,
+                util::IoTransferReceipt* receipt = nullptr);
 
   X_STATUS ReadScatter(uint32_t segments_guest_address, uint32_t length,
                        uint64_t byte_offset, uint32_t* out_bytes_read,
-                       uint32_t apc_context, bool notify_completion = true);
+                       uint32_t apc_context, bool notify_completion = true,
+                util::IoTransferReceipt* receipt = nullptr);
 
   // Clears the handle's wait state, as every new request does.
   void ResetWaitState() { async_event_->Reset(); }
@@ -178,24 +182,28 @@ class XFile : public XObject {
   // admission executes default fn(false) inline as before. CancelPostedIo
   // still invokes fn(true), including for callers supplying on_drop.
   void PostIo(XThread* thread, std::function<void(bool cancelled)> fn,
-              std::function<void()> on_drop = {});
+              std::function<void()> on_drop = {},
+              std::function<void()> on_resource_failure = {});
   // Cancels the requests |thread| posted that have yet to start.
   void CancelPostedIo(XThread* thread);
   // True while a request |thread| posted has yet to complete.
   bool HasPostedIo(XThread* thread);
   // Signals this file's wait handle. Posts to its completion port only for a
   // request with an APC context.
-  void NotifyCompletion(X_STATUS status, uint32_t num_bytes,
-                        uint32_t apc_context);
+  HostCallOutcome NotifyCompletion(X_STATUS status, uint32_t num_bytes,
+                        uint32_t apc_context,
+                        util::IoNotificationReceipt* receipt = nullptr);
 
   // Write() appends when given this offset.
   static constexpr uint64_t kEndOfFile = uint64_t(1) << 63;
   X_STATUS Write(uint32_t buffer_guess_address, uint32_t buffer_length,
                  uint64_t byte_offset, uint32_t* out_bytes_written,
-                 uint32_t apc_context, bool notify_completion = true);
+                 uint32_t apc_context, bool notify_completion = true,
+                util::IoTransferReceipt* receipt = nullptr);
 
+  X_STATUS QueryInformation(vfs::File::Information* output);
   X_STATUS SetLength(size_t length);
-  X_STATUS Flush();
+  X_STATUS Flush(util::IoTransferReceipt* receipt = nullptr);
   // Async HostPath queue barrier. Failure rejects WITHOUT completion. After
   // SUCCESS, completion runs exactly once (possibly inline): genuine backend
   // Flush for writable handles, ordered drain-only for readonly, CANCELLED on
@@ -209,7 +217,8 @@ class XFile : public XObject {
       uint32_t code) const;
   X_STATUS DeviceControl(uint32_t code, uint32_t input_address,
                          uint32_t input_length, uint32_t output_address,
-                         uint32_t output_length, uint32_t* transferred);
+                         uint32_t output_length, uint32_t* transferred,
+                         util::IoTransferReceipt* receipt = nullptr);
   // Sets the FILETIMEs that aren't 0.
   X_STATUS SetTimes(uint64_t create_timestamp, uint64_t access_timestamp,
                     uint64_t write_timestamp);
@@ -228,7 +237,9 @@ class XFile : public XObject {
   bool is_buffered() const { return is_buffered_; }
 
  protected:
-  void NotifyIOCompletionPorts(XIOCompletion::IONotification& notification);
+  HostCallOutcome NotifyIOCompletionPorts(
+      XIOCompletion::IONotification& notification,
+      util::IoNotificationReceipt* receipt);
 
   xe::threading::WaitHandle* GetWaitHandle() override {
     return async_event_.get();
@@ -242,7 +253,16 @@ class XFile : public XObject {
 
   // Runs |fn| as a synchronous request on this file's device. See
   // KernelState::RunBlockingIo.
-  void RunSynchronousIo(const std::function<void()>& fn);
+  template <typename Fn>
+  [[nodiscard]] HostCallOutcome RunSynchronousIo(Fn&& fn) {
+    std::function<void()> owned;
+    if (InvokeHostCall([&] { owned = std::forward<Fn>(fn); }) !=
+        HostCallOutcome::kReturned) {
+      return HostCallOutcome::kAdmissionFailed;
+    }
+    return RunSynchronousIoOwned(std::move(owned));
+  }
+  [[nodiscard]] HostCallOutcome RunSynchronousIoOwned(std::function<void()> fn);
 
   // Runs the requests PostIo queued until none are left.
   void RunPostedIo(bool admission_shutdown = false);
@@ -250,6 +270,7 @@ class XFile : public XObject {
   // admission shutdown preserves their inline serial execution. Both settle
   // explicit owned drop handlers as cancelled, outside queue locks.
   void DropPostedIo(GuestScheduler::HostCallDropReason);
+  void FailPostedIoAdmission();
 
   // Books this read on the medium and returns when it would be delivered, or
   // 0 for a read this does not model.
@@ -262,17 +283,20 @@ class XFile : public XObject {
   // themselves except ReadInternal, which runs under one its caller holds.
   X_STATUS ReadInternal(uint32_t buffer_guest_address, uint32_t buffer_length,
                         uint64_t byte_offset, uint32_t* out_bytes_read,
-                        uint32_t apc_context, bool notify_completion);
+                        uint32_t apc_context, bool notify_completion,
+                        util::IoTransferReceipt* receipt);
   X_STATUS QueryDirectoryInternal(X_FILE_DIRECTORY_INFORMATION* out_info,
                                   size_t length,
                                   const std::string_view file_name,
                                   bool restart);
   X_STATUS ReadScatterInternal(uint32_t segments_guest_address, uint32_t length,
                                uint64_t byte_offset, uint32_t* out_bytes_read,
-                               uint32_t apc_context, bool notify_completion);
+                               uint32_t apc_context, bool notify_completion,
+                        util::IoTransferReceipt* receipt);
   X_STATUS WriteInternal(uint32_t buffer_guest_address, uint32_t buffer_length,
                          uint64_t byte_offset, uint32_t* out_bytes_written,
-                         uint32_t apc_context, bool notify_completion);
+                         uint32_t apc_context, bool notify_completion,
+                        util::IoTransferReceipt* receipt);
 
   vfs::File* file_ = nullptr;
   // The handle's wait state. Manual reset like NT's file object event, so every
@@ -287,9 +311,11 @@ class XFile : public XObject {
     XThread* thread;
     std::function<void(bool)> complete;
     std::function<void()> on_drop;
+    std::function<void()> on_resource_failure;
   };
   std::deque<PostedIo> posted_;
   bool posted_running_ = false;
+  bool posted_executing_ = false;  // nullptr is also a valid host issuer.
   // The thread that issued the request running now.
   XThread* posted_running_thread_ = nullptr;
   std::mutex completion_port_lock_;

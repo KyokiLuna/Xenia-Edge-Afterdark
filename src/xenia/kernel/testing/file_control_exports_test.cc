@@ -14,10 +14,13 @@
 #include <initializer_list>
 #include <memory>
 #include <string>
+#include <stdexcept>
+#include <new>
 #include <utility>
 #include <cstring>
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/base/cvar.h"
+#include "xenia/base/memory.h"
 #include "xenia/base/platform.h"
 #include "xenia/base/host_storage.h"
 #include "xenia/emulator.h"
@@ -28,12 +31,28 @@
 #include "xenia/kernel/xiocompletion.h"
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/devices/host_path_file.h"
+#include "xenia/vfs/devices/host_path_entry.h"
+#include "xenia/kernel/util/host_call_outcome.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
+#include "xenia/kernel/util/io_request_completion.h"
 #include "xenia/vfs/devices/null_device.h"
 #include "xenia/vfs/virtual_file_system.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_module.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/memory.h"
+
+namespace xe::kernel {
+class GuestSchedulerIoTestAccess {
+ public:
+  static void FailNext(GuestScheduler& scheduler, uint32_t point) {
+    scheduler.io_admission_failure_point_.store(point, std::memory_order_relaxed);
+  }
+  static std::unique_lock<std::mutex> LockPool(GuestScheduler& scheduler) {
+    return std::unique_lock<std::mutex>(scheduler.io_pool_lock_);
+  }
+};
+}  // namespace xe::kernel
 
 namespace xe::kernel::xboxkrnl::test {
 TEST_CASE("File control registered ABI rejects absent handles without output",
@@ -908,5 +927,762 @@ TEST_CASE("Shutdown drops owned flush while preserving legacy drop and admission
   f.CheckNoCompletion();
   f.CheckBytes();
 }
+
+TEST_CASE("Registered retained metadata reports the opened file with exact fixed outputs",
+          "[kernel][file_control][file_information][abi]") {
+  FileInfoFixture f;
+  NativeAllocationObservation observer(f.storage->path()/"sample.bin");
+  const auto original_creation=f.file->entry()->create_timestamp();
+  const auto retired=f.storage->path()/"retained.bin";
+  std::filesystem::rename(f.storage->path()/"sample.bin",retired);
+  WriteNativeReplacement(f.storage->path()/"sample.bin");
+  // A stale/shared Entry may now describe the replacement; the registered
+  // syscall must still match its original FD and readable bytes.
+  f.file->entry()->update();
+  REQUIRE(f.file->entry()->size()>f.original.size());
+  const auto check=[&](bool iosb) {
+    const auto native=observer.Read();
+    std::memset(f.Page(),0xA5,0x1000);
+    const auto position=f.file->position();
+    REQUIRE(f.Query(f.file->handle(),iosb?f.kIosb:0,f.kInfo,96,
+                    XFileNetworkOpenInformation) == X_STATUS_SUCCESS);
+    const auto* info=reinterpret_cast<const X_FILE_NETWORK_OPEN_INFORMATION*>(
+        f.Page()+(f.kInfo-f.kPage));
+    CHECK(uint64_t(info->end_of_file)==uint64_t(native.st_size));
+    CHECK(uint64_t(info->allocation_size)==ExpectedNativeGuestAllocation(native,f));
+    CHECK(uint64_t(info->creation_time)==original_creation);
+    CHECK(uint64_t(info->last_access_time)==
+        (uint64_t(native.st_atim.tv_sec)+11644473600ull)*10000000ull+
+         uint64_t(native.st_atim.tv_nsec)/100);
+    CHECK(uint64_t(info->last_write_time)==
+        (uint64_t(native.st_mtim.tv_sec)+11644473600ull)*10000000ull+
+         uint64_t(native.st_mtim.tv_nsec)/100);
+    CHECK(uint64_t(info->change_time)==
+        (uint64_t(native.st_ctim.tv_sec)+11644473600ull)*10000000ull+
+         uint64_t(native.st_ctim.tv_nsec)/100);
+    CHECK(uint32_t(info->pad)==0);
+    for(size_t i=0;i<0x1000;++i) {
+      const bool payload=i>=f.kInfo-f.kPage && i<f.kInfo-f.kPage+56;
+      const bool status=iosb && i>=f.kIosb-f.kPage && i<f.kIosb-f.kPage+8;
+      if(!payload && !status) REQUIRE(f.Page()[i]==0xA5);
+    }
+    if(iosb) {
+      const auto* status=reinterpret_cast<const X_IO_STATUS_BLOCK*>(f.Page()+(f.kIosb-f.kPage));
+      CHECK(uint32_t(status->status)==X_STATUS_SUCCESS);
+      CHECK(uint32_t(status->information)==56);
+    }
+    CHECK(f.file->position()==position);f.CheckNoCompletion();
+  };
+  check(true);
+  REQUIRE(std::filesystem::remove(retired));
+  CHECK(observer.Read().st_nlink==0);
+  check(false);f.CheckBytes();
+}
+TEST_CASE("Registered retained metadata rejects bad and retired outputs without mutation",
+          "[kernel][file_control][file_information][validation]") {
+  FileInfoFixture f;
+  const auto unchanged=[&](uint32_t handle,uint32_t iosb,uint32_t output,
+                           uint32_t length,X_STATUS expected) {
+    std::memset(f.Page(),0xA5,0x1000);
+    std::array<uint8_t,0x1000> before;
+    std::memcpy(before.data(),f.Page(),before.size());
+    CHECK(f.Query(handle,iosb,output,length,XFileNetworkOpenInformation)==expected);
+    CHECK(std::memcmp(before.data(),f.Page(),before.size())==0);
+    CHECK(f.file->position()==0);
+  };
+  unchanged(0xDEADBEEF,f.kIosb,0,55,X_STATUS_INFO_LENGTH_MISMATCH);
+  unchanged(0xDEADBEEF,f.kIosb,0,56,X_STATUS_INVALID_HANDLE);
+  for(uint32_t output:{0u,f.kPage+0x1000,f.kPage+0xFE0,0xFFFFFFFCu})
+    unchanged(f.file->handle(),f.kIosb,output,56,X_STATUS_ACCESS_VIOLATION);
+  for(uint32_t iosb:{f.kPage+0x1000,f.kPage+0xFFC,0xFFFFFFFCu})
+    unchanged(f.file->handle(),iosb,f.kInfo,56,X_STATUS_ACCESS_VIOLATION);
+  for(uint32_t iosb:{f.kInfo,f.kInfo+48})
+    unchanged(f.file->handle(),iosb,f.kInfo,56,X_STATUS_INVALID_PARAMETER);
+  { auto lock=global_critical_region::AcquireDirect();
+    unchanged(f.file->handle(),f.kIosb,f.kInfo,56,X_STATUS_INVALID_DEVICE_REQUEST);
+  }
+  f.storage->Retire();
+  unchanged(f.file->handle(),f.kIosb,f.kInfo,56,X_STATUS(0xC000009D));
+  f.CheckNoCompletion();
+}
+
+TEST_CASE("Host invocation failures are explicit and actual serial/pool workers survive",
+          "[kernel][file_control][host_io][failure]") {
+  FileInfoFixture f;
+  auto* kernel = f.emulator->kernel_state();
+  CHECK(kernel->RunBlockingIo([] { throw std::runtime_error("inline IO"); },
+      GuestScheduler::BlockingCallClass::kConcurrent) ==
+        HostCallOutcome::kExecutionFailed);
+  CHECK(HostCallFailureStatus(HostCallOutcome::kExecutionFailed) ==
+        X_STATUS_UNSUCCESSFUL);
+  using Class = GuestScheduler::BlockingCallClass;
+  for (const auto kind : {Class::kSerial, Class::kConcurrent}) {
+    CAPTURE(int(kind));
+    // Exceed the real four-worker pool bound. Replacing a dead worker with a
+    // newly started one cannot make this test pass indefinitely.
+    for (unsigned iteration = 0; iteration < 6; ++iteration) {
+      CAPTURE(iteration);
+      auto results = std::make_shared<FileQueueResults>();
+      auto worker_seen = std::make_shared<std::atomic<unsigned>>(0);
+      auto entered = std::shared_ptr<threading::Event>(
+          threading::Event::CreateManualResetEvent(false));
+      REQUIRE(kernel->guest_scheduler()->PostHostCall([worker_seen, entered] {
+        if (GuestScheduler::CurrentThreadIsBlockingCallWorker()) { ++*worker_seen; }
+        entered->Set();
+        throw std::runtime_error("actual worker IO");
+      }, kind));
+      REQUIRE(threading::Wait(entered.get(), false, std::chrono::seconds(5)) ==
+              threading::WaitResult::kSuccess);
+      REQUIRE(kernel->guest_scheduler()->PostHostCall([results, worker_seen] {
+        if (GuestScheduler::CurrentThreadIsBlockingCallWorker()) { ++*worker_seen; }
+        results->Record(1, X_STATUS_SUCCESS);
+      }, kind));
+      REQUIRE(results->Wait(1));
+      CHECK(worker_seen->load() == 2);
+    }
+  }
+  CHECK_FALSE(GuestScheduler::CurrentThreadIsBlockingCallWorker());
+  f.CheckNoCompletion();
+  f.CheckBytes();
+}
+
+TEST_CASE("IO admission resource failure never publishes a borrowed call or drops it as cancelled",
+          "[kernel][file_control][host_io][admission]") {
+  using Class = GuestScheduler::BlockingCallClass;
+  for (uint32_t point : {1u, 2u, 3u, 4u}) {
+    CAPTURE(point);
+    FileInfoFixture f;
+    auto* scheduler = f.emulator->kernel_state()->guest_scheduler();
+    auto body = std::make_shared<std::atomic<unsigned>>(0);
+    auto dropped = std::make_shared<std::atomic<unsigned>>(0);
+    auto owner = std::make_shared<int>(42);
+    std::weak_ptr<int> released = owner;
+    GuestSchedulerIoTestAccess::FailNext(*scheduler, point);
+    const auto kind = point <= 2 ? Class::kSerial : Class::kConcurrent;
+    CHECK_FALSE(scheduler->PostHostCall([body, owner = std::move(owner)] { ++*body; }, kind,
+        [dropped](GuestScheduler::HostCallDropReason) { ++*dropped; }));
+    CHECK(released.expired());
+    CHECK(body->load() == 0);
+    CHECK(dropped->load() == 0);
+    auto next = std::make_shared<FileQueueResults>();
+    REQUIRE(scheduler->PostHostCall([next] { next->Record(1, X_STATUS_SUCCESS); }, kind));
+    REQUIRE(next->Wait(1));
+    CHECK(body->load() == 0);
+    CHECK(dropped->load() == 0);
+    f.CheckNoCompletion();
+  }
+}
+
+TEST_CASE("Precommit failure preserves earlier and later actual serial FIFO owners",
+          "[kernel][file_control][host_io][admission]") {
+  FileInfoFixture f;
+  auto* scheduler = f.emulator->kernel_state()->guest_scheduler();
+  auto gate = std::make_shared<FileQueueGate>();
+  FileQueueGateRelease release{gate};
+  auto results = std::make_shared<FileQueueResults>();
+  using Class = GuestScheduler::BlockingCallClass;
+  REQUIRE(scheduler->PostHostCall([gate] { gate->Enter(); }, Class::kSerial));
+  REQUIRE(gate->Wait(1));
+  REQUIRE(scheduler->PostHostCall([results] { results->Record(1, X_STATUS_SUCCESS); }, Class::kSerial));
+  GuestSchedulerIoTestAccess::FailNext(*scheduler, 2);
+  CHECK_FALSE(scheduler->PostHostCall([results] { results->Record(2, X_STATUS_SUCCESS); }, Class::kSerial));
+  REQUIRE(scheduler->PostHostCall([results] { results->Record(3, X_STATUS_SUCCESS); }, Class::kSerial));
+  gate->Release();
+  REQUIRE(results->Wait(2));
+  std::lock_guard lock(results->mutex);
+  REQUIRE(results->rows.size() == 2);
+  CHECK(results->rows[0].first == 1);
+  CHECK(results->rows[1].first == 3);
+}
+
+namespace {
+class CompletionFaultFile final : public vfs::HostPathFile {
+ public:
+  CompletionFaultFile(uint32_t access, vfs::HostPathEntry* entry,
+                      std::unique_ptr<filesystem::FileHandle> handle)
+      : HostPathFile(access, entry, std::move(handle)) {}
+  bool throw_after_write = false;
+  bool throw_after_flush = false;
+  std::atomic<X_STATUS> injected_write_status{X_STATUS_UNSUCCESSFUL};
+  std::atomic<size_t> injected_write_bytes{0};
+  std::atomic<X_STATUS> injected_flush_status{X_STATUS_UNSUCCESSFUL};
+  X_STATUS WriteSync(std::span<const uint8_t> bytes, size_t offset,
+                     size_t* count) override {
+    const auto status = HostPathFile::WriteSync(bytes, offset, count);
+    if (throw_after_write) {
+      injected_write_status.store(status, std::memory_order_relaxed);
+      injected_write_bytes.store(*count, std::memory_order_relaxed);
+      throw std::runtime_error("after real backend write");
+    }
+    return status;
+  }
+  X_STATUS Flush() override {
+    const auto status = HostPathFile::Flush();
+    if (std::exchange(throw_after_flush, false)) {
+      injected_flush_status.store(status, std::memory_order_relaxed);
+      throw std::runtime_error("after actual flush");
+    }
+    return status;
+  }
+};
+CompletionFaultFile* InstallCompletionFaultFile(FileInfoFixture& f) {
+  f.file->ReleaseHandle(); f.file.reset();
+  auto* entry = static_cast<vfs::HostPathEntry*>(f.emulator->file_system()->ResolvePath(
+      std::string(FileInfoFixture::kMount) + "\\sample.bin"));
+  REQUIRE(entry);
+  std::error_code error;
+  // This direct backend fixture bypasses VirtualFileSystem::OpenFile's
+  // generic-mask normalization; give both layers the actual read/write bits.
+  constexpr uint32_t access = filesystem::FileAccess::kGenericRead |
+                              filesystem::FileAccess::kGenericWrite;
+  auto handle = f.storage->OpenFile("sample.bin", access, error);
+  REQUIRE(handle); REQUIRE_FALSE(error);
+  auto* backend = new CompletionFaultFile(access, entry, std::move(handle));
+  f.file = object_ref<XFile>(new XFile(f.emulator->kernel_state(), backend,
+                                       false, false, true));
+  return backend;
+}
+}
+
+TEST_CASE("Actual backend IO effects and known counts survive distinct host failure cuts",
+          "[kernel][file_control][host_io][completion]") {
+  FileInfoFixture f;
+  util::IoRequestCompletion state;
+  SECTION("Known normal read survives later request postprocessing throw") {
+    const auto status = util::CompleteIoRequestOwned(
+        state, true, false, util::InlineIoFailurePolicy::kRejectWithoutCompletion,
+        [&](uint32_t* count, util::IoTransferReceipt* receipt) {
+          const auto read = f.file->Read(f.kInfo, uint32_t(f.original.size()), 0,
+                                          count, 0, false, receipt);
+          if (XSUCCEEDED(read)) { throw std::runtime_error("postprocessing"); }
+          return read;
+        },
+        [&](X_STATUS result, uint32_t count) {
+          return util::WriteGuestIoStatus(*f.emulator->memory(), f.kIosb, result, count);
+        },
+        [&](X_STATUS result, uint32_t count) {
+          f.file->NotifyCompletion(result, count, 0, &state.notifications);
+        });
+    CHECK(status == X_STATUS_UNSUCCESSFUL);
+    CHECK(state.transfer_call == HostCallOutcome::kExecutionFailed);
+    CHECK(state.transfer.backend_entered);
+    CHECK(state.transfer.backend_returned);
+    CHECK(state.transfer.count_known);
+    CHECK(state.transfer.bytes == f.original.size());
+    CHECK(state.operation_count_known);
+    CHECK(state.operation_bytes == f.original.size());
+    CHECK(xe::load_and_swap<uint32_t>(f.Page() + 0x80) == X_STATUS_UNSUCCESSFUL);
+    CHECK(xe::load_and_swap<uint32_t>(f.Page() + 0x84) == f.original.size());
+    CHECK(std::equal(f.original.begin(), f.original.end(), f.Page() + 0x100));
+  }
+  SECTION("Exception inside actual backend after write is not proof of zero mutation") {
+    auto* backend = InstallCompletionFaultFile(f);
+    backend->throw_after_write = true;
+    const std::array<uint8_t, 2> changed{0xE1, 0xB2};
+    std::memcpy(f.Page() + 0x100, changed.data(), changed.size());
+    uint32_t count = 0;
+    CHECK(f.file->Write(f.kInfo, uint32_t(changed.size()), 0, &count, 0, false,
+                         &state.transfer) == X_STATUS_UNSUCCESSFUL);
+    CHECK(state.transfer.invocation == HostCallOutcome::kExecutionFailed);
+    CHECK(state.transfer.backend_entered);
+    CHECK_FALSE(state.transfer.backend_returned);
+    CHECK_FALSE(state.transfer.count_known);
+    CHECK(backend->injected_write_status.load() == X_STATUS_SUCCESS);
+    CHECK(backend->injected_write_bytes.load() == changed.size());
+    std::array<uint8_t, 6> actual{};
+    size_t actual_count = 0;
+    REQUIRE(backend->ReadSync(actual, 0, &actual_count) == X_STATUS_SUCCESS);
+    CHECK(actual_count == actual.size());
+    CHECK(std::equal(changed.begin(), changed.end(), actual.begin()));
+  }
+}
+
+TEST_CASE("Attempted IOSB publication is never replayed after real store then throw",
+          "[kernel][file_control][host_io][completion]") {
+  FileInfoFixture f;
+  util::IoRequestCompletion state;
+  unsigned stores = 0, notices = 0;
+  auto transfer = [&](uint32_t* count, util::IoTransferReceipt* receipt) {
+    return f.file->Read(f.kInfo, uint32_t(f.original.size()), 0, count, 0, false, receipt);
+  };
+  auto publish = [&](X_STATUS status, uint32_t count) {
+    ++stores;
+    const auto actual = util::WriteGuestIoStatus(*f.emulator->memory(), f.kIosb, status, count);
+    if (XSUCCEEDED(actual)) { throw std::runtime_error("after stored IOSB"); }
+    return actual;
+  };
+  auto notify = [&](X_STATUS status, uint32_t count) {
+    ++notices;
+    CHECK(status == X_STATUS_UNSUCCESSFUL);
+    CHECK(count == 0);
+    f.file->NotifyCompletion(status, count, 0, &state.notifications);
+  };
+  CHECK(util::CompleteIoRequestOwned(state, true, false,
+      util::InlineIoFailurePolicy::kRejectWithoutCompletion,
+      transfer, publish, notify) == X_STATUS_UNSUCCESSFUL);
+  CHECK(state.publication_call == HostCallOutcome::kExecutionFailed);
+  // These actual prior bytes survive; publication is uncertain, never absent.
+  CHECK(xe::load_and_swap<uint32_t>(f.Page() + 0x80) == X_STATUS_SUCCESS);
+  CHECK(xe::load_and_swap<uint32_t>(f.Page() + 0x84) == f.original.size());
+  CHECK(util::CompleteIoRequestOwned(state, true, false,
+      util::InlineIoFailurePolicy::kRejectWithoutCompletion,
+      transfer, publish, notify) == X_STATUS_INVALID_PARAMETER);
+  CHECK(stores == 1); CHECK(notices == 1);
+}
+
+TEST_CASE("Independent completion channels proceed once after ordinary earlier failure",
+          "[kernel][file_control][host_io][completion]") {
+  FileInfoFixture f;
+  util::IoNotificationReceipt receipt;
+  auto external = threading::Event::CreateManualResetEvent(false);
+  unsigned apc_attempts = 0, file_attempts = 0, event_attempts = 0;
+  // This exercises the actual common channel protocol and real file/event
+  // signal, not a valid native APC/Task or a fabricated guest thread.
+  util::CompleteIoNotifications(receipt, true,
+      [&] { ++apc_attempts; throw std::runtime_error("APC allocation"); },
+      [&] { ++file_attempts; f.file->NotifyCompletion(X_STATUS_SUCCESS, 0, 0, &receipt); },
+      true, [&] { ++event_attempts; external->Set(); });
+  CHECK(apc_attempts == 1); CHECK(file_attempts == 1); CHECK(event_attempts == 1);
+  CHECK(receipt.apc == HostCallOutcome::kExecutionFailed);
+  CHECK(receipt.file_event == HostCallOutcome::kReturned);
+  CHECK(receipt.external_event == HostCallOutcome::kReturned);
+  uint64_t zero = 0;
+  CHECK(f.file->Wait(0, 0, 0, &zero) == X_STATUS_SUCCESS);
+  CHECK(threading::Wait(external.get(), false, std::chrono::milliseconds(0)) == threading::WaitResult::kSuccess);
+}
+
+TEST_CASE("Actual file FIFO continues after a failed request and an entered flush failure",
+          "[kernel][file_control][host_io][queued_flush]") {
+  FileInfoFixture f;
+  auto* backend = InstallCompletionFaultFile(f);
+  backend->throw_after_flush = true;
+  auto gate = std::make_shared<FileQueueGate>();
+  FileQueueGateRelease release{gate};
+  auto results = std::make_shared<FileQueueResults>();
+  f.file->PostIo(nullptr, [gate](bool) { gate->Enter(); });
+  REQUIRE(gate->Wait(1));
+  CHECK(f.file->HasPostedIo(nullptr));
+  f.file->PostIo(nullptr, [](bool) { throw std::runtime_error("legacy request body"); });
+  REQUIRE(f.file->FlushQueued([results](X_STATUS status) { results->Record(1, status); }) == X_STATUS_SUCCESS);
+  REQUIRE(f.file->FlushQueued([results](X_STATUS status) { results->Record(2, status); }) == X_STATUS_SUCCESS);
+  gate->Release();
+  REQUIRE(results->Wait(2));
+  CHECK(backend->injected_flush_status.load() == X_STATUS_SUCCESS);
+  { std::lock_guard lock(results->mutex);
+    REQUIRE(results->rows.size() == 2);
+    CHECK(results->rows[0] == std::make_pair(1u, X_STATUS_UNSUCCESSFUL));
+    CHECK(results->rows[1] == std::make_pair(2u, X_STATUS_SUCCESS));
+  }
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (f.file->HasPostedIo(nullptr) && std::chrono::steady_clock::now() < deadline) { std::this_thread::yield(); }
+  CHECK_FALSE(f.file->HasPostedIo(nullptr));
+  f.CheckNoCompletion();
+  f.CheckBytes();
+}
+
+TEST_CASE("Actual file queue resource failure reports its own unstarted outcome",
+          "[kernel][file_control][host_io][admission][queued_flush]") {
+  FileInfoFixture f;
+  auto results = std::make_shared<FileQueueResults>();
+  GuestSchedulerIoTestAccess::FailNext(*f.emulator->kernel_state()->guest_scheduler(), 4);
+  REQUIRE(f.file->FlushQueued([results](X_STATUS status) { results->Record(1, status); }) == X_STATUS_SUCCESS);
+  REQUIRE(results->Wait(1));
+  { std::lock_guard lock(results->mutex);
+    REQUIRE(results->rows.size() == 1);
+    CHECK(results->rows[0] == std::make_pair(1u, X_STATUS_INSUFFICIENT_RESOURCES));
+  }
+  CHECK_FALSE(f.file->HasPostedIo(nullptr));
+  f.CheckNoCompletion(); f.CheckBytes();
+}
+
+
+namespace {
+struct CopyFailureControl {
+  unsigned copies = 0, fail_at = 0;
+};
+struct ThrowingFlushCompletion {
+  std::shared_ptr<CopyFailureControl> control;
+  std::function<void(X_STATUS)> completion;
+  ThrowingFlushCompletion(std::shared_ptr<CopyFailureControl> c,
+                          std::function<void(X_STATUS)> fn)
+      : control(std::move(c)), completion(std::move(fn)) {}
+  ThrowingFlushCompletion(const ThrowingFlushCompletion& from)
+      : control(from.control), completion(from.completion) {
+    if (++control->copies == control->fail_at) { throw std::bad_alloc(); }
+  }
+  ThrowingFlushCompletion(ThrowingFlushCompletion&&) noexcept = default;
+  void operator()(X_STATUS status) const { completion(status); }
+};
+}
+
+TEST_CASE("Flush callback preparation failure is an unstarted rejection before file queue admission",
+          "[kernel][file_control][host_io][admission][queued_flush]") {
+  FileInfoFixture f;
+  auto control = std::make_shared<CopyFailureControl>();
+  auto results = std::make_shared<FileQueueResults>();
+  std::function<void(X_STATUS)> completion = ThrowingFlushCompletion(control,
+      [results](X_STATUS status) { results->Record(1, status); });
+  // First copy is the caller's argument; second is the actual body capture
+  // inside FlushQueued. The rejected body must never reach PostIo.
+  control->fail_at = control->copies + 2;
+  CHECK(f.file->FlushQueued(completion) == X_STATUS_INSUFFICIENT_RESOURCES);
+  { std::lock_guard lock(results->mutex); CHECK(results->rows.empty()); }
+  CHECK_FALSE(f.file->HasPostedIo(nullptr));
+  f.CheckNoCompletion(); f.CheckBytes();
+}
+
+TEST_CASE("Batch callable conversion failure after earlier admission settles one slot and preserves later FIFO",
+          "[kernel][file_control][host_io][admission][queued_flush][batch]") {
+  FileInfoFixture f;
+  auto gate = std::make_shared<FileQueueGate>();
+  FileQueueGateRelease release{gate};
+  f.file->PostIo(nullptr, [gate](bool) { gate->Enter(); });
+  REQUIRE(gate->Wait(1));
+  auto results = std::make_shared<FileQueueResults>();
+  auto remaining = std::make_shared<std::atomic<unsigned>>(3);
+  auto first_error = std::make_shared<std::atomic<X_STATUS>>(X_STATUS_SUCCESS);
+  std::array<std::shared_ptr<util::IoBatchArrival>, 3> slots;
+  for (auto& slot : slots) { slot = std::make_shared<util::IoBatchArrival>(); }
+  const auto make_arrival = [&](unsigned i) {
+    return [slot = slots[i], results, remaining, first_error, i](X_STATUS status) {
+      slot->CompleteOnce(status, [&](X_STATUS actual) {
+        if (XFAILED(actual)) {
+          X_STATUS success = X_STATUS_SUCCESS;
+          first_error->compare_exchange_strong(success, actual);
+        }
+        remaining->fetch_sub(1);
+        results->Record(i + 1, actual);
+      });
+    };
+  };
+  auto first = make_arrival(0), rejected = make_arrival(1), last = make_arrival(2);
+  util::SubmitIoBatchItem([&] { return f.file->FlushQueued(first); }, first);
+  CHECK(remaining->load() == 3);  // Earlier real item is admitted behind gate.
+  auto control = std::make_shared<CopyFailureControl>();
+  std::function<void(X_STATUS)> completion = ThrowingFlushCompletion(control, rejected);
+  control->fail_at = control->copies + 1;  // Actual caller argument conversion.
+  util::SubmitIoBatchItem([&] { return f.file->FlushQueued(completion); }, rejected);
+  CHECK(remaining->load() == 2);
+  util::SubmitIoBatchItem([&] { return f.file->FlushQueued(last); }, last);
+  gate->Release();
+  REQUIRE(results->Wait(3));
+  // A second observer cannot replay a settled slot or decrement remaining.
+  rejected(X_STATUS_SUCCESS);
+  CHECK(remaining->load() == 0);
+  CHECK(first_error->load() == X_STATUS_INSUFFICIENT_RESOURCES);
+  { std::lock_guard lock(results->mutex);
+    REQUIRE(results->rows.size() == 3);
+    CHECK(results->rows[0] == std::make_pair(2u, X_STATUS_INSUFFICIENT_RESOURCES));
+    CHECK(results->rows[1] == std::make_pair(1u, X_STATUS_SUCCESS));
+    CHECK(results->rows[2] == std::make_pair(3u, X_STATUS_SUCCESS));
+  }
+  f.CheckNoCompletion(); f.CheckBytes();
+}
+
+
+TEST_CASE("Unstarted multi-item resource settlement continues after a failed owner without replay",
+          "[kernel][file_control][host_io][admission][owners]") {
+  FileInfoFixture f;
+  auto* scheduler = f.emulator->kernel_state()->guest_scheduler();
+  auto lock = GuestSchedulerIoTestAccess::LockPool(*scheduler);
+  auto results = std::make_shared<FileQueueResults>();
+  auto bodies = std::make_shared<std::atomic<unsigned>>(0);
+  std::thread first([&] {
+    f.file->PostIo(nullptr, [bodies](bool) { ++*bodies; }, {},
+        [results] { results->Record(1, X_STATUS_INSUFFICIENT_RESOURCES);
+                    throw std::runtime_error("first resource owner"); });
+  });
+  struct ReleaseJoin {
+    std::unique_lock<std::mutex>& lock;
+    std::thread& thread;
+    ~ReleaseJoin() { if (lock.owns_lock()) { lock.unlock(); }
+                    if (thread.joinable()) { thread.join(); } }
+  } release{lock, first};
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!f.file->HasPostedIo(nullptr) && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::yield();
+  }
+  const bool queued = f.file->HasPostedIo(nullptr);
+  if (queued) {
+    for (unsigned i : {2u, 3u}) {
+      f.file->PostIo(nullptr, [bodies](bool) { ++*bodies; }, {},
+          [results, i] { results->Record(i, X_STATUS_INSUFFICIENT_RESOURCES); });
+    }
+  }
+  GuestSchedulerIoTestAccess::FailNext(*scheduler, 4);
+  lock.unlock(); first.join();
+  REQUIRE(queued); REQUIRE(results->Wait(3));
+  { std::lock_guard rows(results->mutex);
+    REQUIRE(results->rows.size() == 3);
+    for (unsigned i = 0; i < 3; ++i) {
+      CHECK(results->rows[i] == std::make_pair(i + 1, X_STATUS_INSUFFICIENT_RESOURCES));
+    }
+  }
+  CHECK(bodies->load() == 0);
+  CHECK_FALSE(f.file->HasPostedIo(nullptr));
+  REQUIRE(f.file->FlushQueued([results](X_STATUS status) { results->Record(4, status); }) == X_STATUS_SUCCESS);
+  REQUIRE(results->Wait(4));
+  f.CheckNoCompletion(); f.CheckBytes();
+}
+
+TEST_CASE("Unstarted cancellation attempts later owners after an earlier completion throws",
+          "[kernel][file_control][host_io][cancel][owners]") {
+  FileInfoFixture f;
+  auto gate = std::make_shared<FileQueueGate>();
+  FileQueueGateRelease release{gate};
+  auto results = std::make_shared<FileQueueResults>();
+  f.file->PostIo(nullptr, [gate](bool) { gate->Enter(); });
+  REQUIRE(gate->Wait(1));
+  f.file->PostIo(nullptr, [results](bool cancelled) {
+    results->Record(1, cancelled ? X_STATUS_CANCELLED : X_STATUS_SUCCESS);
+    throw std::runtime_error("cancelled owner");
+  });
+  f.file->PostIo(nullptr, [results](bool cancelled) {
+    results->Record(2, cancelled ? X_STATUS_CANCELLED : X_STATUS_SUCCESS);
+  });
+  f.file->CancelPostedIo(nullptr);
+  gate->Release();
+  REQUIRE(results->Wait(2));
+  { std::lock_guard lock(results->mutex);
+    REQUIRE(results->rows.size() == 2);
+    CHECK(results->rows[0] == std::make_pair(1u, X_STATUS_CANCELLED));
+    CHECK(results->rows[1] == std::make_pair(2u, X_STATUS_CANCELLED));
+  }
+  f.CheckNoCompletion(); f.CheckBytes();
+}
+
+TEST_CASE("Actual queued shutdown continues independent file and scheduler drop owners after ordinary failure",
+          "[kernel][file_control][host_io][scheduler_drop][owners]") {
+  FileInfoFixture f;
+  auto* scheduler = f.emulator->kernel_state()->guest_scheduler();
+  using Class = GuestScheduler::BlockingCallClass;
+  using Reason = GuestScheduler::HostCallDropReason;
+  auto gate = std::make_shared<FileQueueGate>();
+  FileQueueGateRelease release{gate};
+  for (unsigned i = 0; i < 4; ++i) {
+    REQUIRE(scheduler->PostHostCall([gate] { gate->Enter(); }, Class::kConcurrent));
+  }
+  REQUIRE(gate->Wait(4));
+  auto results = std::make_shared<FileQueueResults>();
+  auto bodies = std::make_shared<std::atomic<unsigned>>(0);
+  f.file->PostIo(nullptr, [bodies](bool) { ++*bodies; }, [results] {
+    results->Record(1, X_STATUS_CANCELLED);
+    throw std::runtime_error("first file drop owner");
+  });
+  f.file->PostIo(nullptr, [bodies](bool) { ++*bodies; }, [results] {
+    results->Record(2, X_STATUS_CANCELLED);
+  });
+  REQUIRE(scheduler->PostHostCall([bodies] { ++*bodies; }, Class::kConcurrent,
+      [results](Reason reason) {
+        results->Record(3, reason == Reason::kQueuedShutdown ? X_STATUS_CANCELLED : X_STATUS_UNSUCCESSFUL);
+        throw std::runtime_error("first scheduler drop owner");
+      }));
+  REQUIRE(scheduler->PostHostCall([bodies] { ++*bodies; }, Class::kConcurrent,
+      [results](Reason reason) {
+        results->Record(4, reason == Reason::kQueuedShutdown ? X_STATUS_CANCELLED : X_STATUS_UNSUCCESSFUL);
+      }));
+  std::atomic<bool> shutdown_failed{false};
+  std::thread shutdown([&] {
+    try { scheduler->Shutdown(); }
+    catch (const std::exception&) { shutdown_failed.store(true); }
+  });
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!scheduler->shutting_down() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::yield();
+  }
+  const bool stopping = scheduler->shutting_down();
+  gate->Release(); shutdown.join();
+  REQUIRE(stopping); CHECK_FALSE(shutdown_failed.load());
+  REQUIRE(results->Wait(4));
+  { std::lock_guard lock(results->mutex);
+    REQUIRE(results->rows.size() == 4);
+    for (unsigned i = 0; i < 4; ++i) {
+      CHECK(results->rows[i] == std::make_pair(i + 1, X_STATUS_CANCELLED));
+    }
+  }
+  CHECK(bodies->load() == 0);
+  CHECK_FALSE(f.file->HasPostedIo(nullptr));
+  f.CheckNoCompletion(); f.CheckBytes();
+}
+
+namespace {
+// A real HostPathFile/managed-root handle with a deliberately stale detached
+// Entry. This models an immutable/managed retained view without path refresh;
+// actual metadata and bytes still come from the owned backend, not a mock EOF.
+class StaleConsumerEntry final : public vfs::HostPathEntry {
+ public:
+  StaleConsumerEntry(vfs::Device* device,vfs::Entry* parent,
+      const std::filesystem::path& path,size_t stale)
+      : HostPathEntry(device,parent,"sample.bin",path) {
+    size_=stale;allocation_size_=stale;attributes_=vfs::kFileAttributeNormal;
+  }
+  void update() override {++updates;}
+  uint32_t updates=0;
+};
+class RetainedConsumerFile final : public vfs::File {
+ public:
+  RetainedConsumerFile(std::unique_ptr<StaleConsumerEntry> entry,
+      std::unique_ptr<filesystem::FileHandle> handle)
+      : File(filesystem::FileAccess::kGenericRead|filesystem::FileAccess::kGenericWrite,entry.get()),
+        entry_owner_(std::move(entry)),
+        backend_(std::make_unique<vfs::HostPathFile>(file_access_,entry_owner_.get(),std::move(handle))) {}
+  void Destroy() override {delete this;}
+  X_STATUS QueryInformation(Information* output) const override {
+    ++queries;
+    if(XFAILED(query_failure)) {return query_failure;}
+    return backend_->QueryInformation(output);
+  }
+  X_STATUS ReadSync(std::span<uint8_t> bytes,size_t offset,size_t* count) override {
+    ++reads;if(before_read) {before_read();}
+    return backend_->ReadSync(bytes,offset,count);
+  }
+  X_STATUS WriteSync(std::span<const uint8_t> bytes,size_t offset,size_t* count) override {
+    ++writes;last_write_offset=offset;return backend_->WriteSync(bytes,offset,count);
+  }
+  X_STATUS Flush() override {return backend_->Flush();}
+  uint32_t entry_updates() const {return entry_owner_->updates;}
+  mutable uint32_t queries=0;uint32_t reads=0,writes=0;size_t last_write_offset=SIZE_MAX;
+  X_STATUS query_failure=X_STATUS_SUCCESS;
+  std::function<void()> before_read;
+ private:
+  // Backend must die first: its destructor releases this actual retained Entry.
+  std::unique_ptr<StaleConsumerEntry> entry_owner_;
+  std::unique_ptr<vfs::HostPathFile> backend_;
+};
+RetainedConsumerFile* InstallRetainedConsumerFile(FileInfoFixture& f,size_t stale) {
+  f.file->ReleaseHandle();f.file.reset();
+  const auto device=f.emulator->file_system()->AcquireDevice(FileInfoFixture::kMount);REQUIRE(device);
+  auto* root=device->ResolvePath("");REQUIRE(root);
+  std::error_code error;
+  auto handle=f.storage->OpenFile("sample.bin",filesystem::FileAccess::kGenericRead|filesystem::FileAccess::kGenericWrite,error);
+  REQUIRE(handle);REQUIRE_FALSE(error);
+  auto entry=std::make_unique<StaleConsumerEntry>(device.get(),root,f.storage->path()/"sample.bin",stale);
+  auto* backend=new RetainedConsumerFile(std::move(entry),std::move(handle));
+  f.file=object_ref<XFile>(new XFile(f.emulator->kernel_state(),backend,false,false,true));
+  return backend;
+}
+void BindConsumerCompletion(FileInfoFixture& f) {
+  auto* completion=reinterpret_cast<X_FILE_COMPLETION_INFORMATION*>(f.Page()+0x100);
+  completion->handle=f.port->handle();completion->key=0x719A5;
+  REQUIRE(f.Call(f.file->handle(),f.kIosb,f.kInfo,sizeof(*completion),XFileCompletionInformation)==X_STATUS_SUCCESS);
+}
+void CheckConsumerCompletion(FileInfoFixture& f,X_STATUS status,uint32_t bytes) {
+  XIOCompletion::IONotification notification{};
+  REQUIRE(f.port->WaitForNotification(0,&notification));
+  CHECK(notification.key_context==0x719A5);CHECK(notification.apc_context==0xC019);
+  CHECK(notification.status==status);CHECK(notification.num_bytes==bytes);
+  CHECK_FALSE(f.port->WaitForNotification(0,&notification));
+  uint64_t timeout=0;CHECK(f.file->Wait(0,0,0,&timeout)==X_STATUS_SUCCESS);
+  f.file->ResetWaitState();f.CheckNoCompletion();
+}
+struct ConsumerPhysicalWatch {
+  Memory& memory;uint32_t physical=0,length=0;void* callback=nullptr;
+  uint32_t providers=0,supplies=0,unlocked_writes=0,locked_writes=0;
+  bool unlocked=false,in_guest_ram=false,supplied_unlocked=false;
+  static constexpr uint32_t kAddress=0xE1000000;
+  explicit ConsumerPhysicalWatch(Memory& m):memory(m) {
+    const auto host_page=uint32_t(xe::memory::page_size());
+    length=host_page*2;REQUIRE(length>=0x2000);
+    memory.SetPhysicalAliasSkipHostProtect(true);
+    REQUIRE(memory.LookupHeap(kAddress)->AllocFixed(kAddress,length,host_page,
+        kMemoryAllocationReserve|kMemoryAllocationCommit,kMemoryProtectRead|kMemoryProtectWrite));
+    physical=memory.GetPhysicalAddress(kAddress);REQUIRE(physical!=UINT32_MAX);
+    std::memset(memory.TranslatePhysical(physical),0x31,length);
+    callback=memory.RegisterPhysicalMemoryReadCallback([](void* raw,uint32_t start,uint32_t size,Memory::PhysicalAccess access) {
+      auto& self=*static_cast<ConsumerPhysicalWatch*>(raw);
+      const uint64_t begin=std::max(uint64_t(start),uint64_t(self.physical));
+      const uint64_t end=std::min(uint64_t(start)+size,uint64_t(self.physical)+self.length);
+      if(begin>=end || access==Memory::PhysicalAccess::kDiscard) {return;}
+      const bool unlocked=!global_critical_region::is_held_by_current_thread();
+      ++self.providers;self.unlocked|=unlocked;
+      if(access==Memory::PhysicalAccess::kWrite) {
+        if(unlocked) {++self.unlocked_writes;} else {++self.locked_writes;}
+      }
+      // One retained pending resolve owns this whole range. As with actual
+      // ProvideResolveOutput, the first supply makes all its owned pages
+      // current; the later locked kWrite recheck must not recopy old data
+      // over bytes the real backend has just read into the physical alias.
+      if(!self.in_guest_ram) {
+        std::memset(self.memory.TranslatePhysical(self.physical),0xA5,self.length);
+        self.in_guest_ram=true;++self.supplies;self.supplied_unlocked=unlocked;
+      }
+    },this);
+    REQUIRE(callback);memory.EnablePhysicalMemoryAccessCallbacks(physical,length,true,true);
+  }
+  ~ConsumerPhysicalWatch() {
+    if(callback) {memory.UnregisterPhysicalMemoryReadCallback(callback);}
+    memory.LookupHeap(kAddress)->Release(kAddress);
+  }
+};
+}
+TEST_CASE("XFile append uses actual retained EOF and query refusal completes once without a backend write",
+          "[kernel][file_control][retained_metadata][append][completion]") {
+  FileInfoFixture f;auto* backend=InstallRetainedConsumerFile(f,1);
+  BindConsumerCompletion(f);f.file->set_position(19);
+  const std::array<uint8_t,3> suffix{0x71,0,0x93};std::memcpy(f.Page()+0x100,suffix.data(),suffix.size());
+  util::IoTransferReceipt receipt;uint32_t count=0xDEADBEEF;
+  SECTION("actual retained EOF overrides stale Entry without path refresh") {
+    REQUIRE(f.file->Write(f.kInfo,uint32_t(suffix.size()),XFile::kEndOfFile,&count,0xC019,true,&receipt)==X_STATUS_SUCCESS);
+    CHECK(count==suffix.size());CHECK(backend->queries==1);CHECK(backend->entry_updates()==0);
+    CHECK(backend->writes==1);CHECK(backend->last_write_offset==f.original.size());
+    CHECK(f.file->position()==f.original.size()+suffix.size());
+    CHECK(receipt.invocation==HostCallOutcome::kReturned);CHECK(receipt.backend_entered);
+    CHECK(receipt.backend_returned);CHECK(receipt.count_known);CHECK(receipt.bytes==suffix.size());
+    std::array<uint8_t,9> actual{};size_t read=0;
+    REQUIRE(f.file->file()->ReadSync(actual,0,&read)==X_STATUS_SUCCESS);REQUIRE(read==actual.size());
+    CHECK(std::equal(f.original.begin(),f.original.end(),actual.begin()));
+    CHECK(std::equal(suffix.begin(),suffix.end(),actual.begin()+f.original.size()));
+    CheckConsumerCompletion(f,X_STATUS_SUCCESS,uint32_t(suffix.size()));
+  }
+  SECTION("retained query failure has zero transfer unchanged position and one normal failed completion") {
+    backend->query_failure=X_STATUS_INVALID_HANDLE;
+    REQUIRE(f.file->Write(f.kInfo,uint32_t(suffix.size()),XFile::kEndOfFile,&count,0xC019,true,&receipt)==X_STATUS_INVALID_HANDLE);
+    CHECK(count==0);CHECK(f.file->position()==19);CHECK(backend->queries==1);
+    CHECK(backend->entry_updates()==0);CHECK(backend->writes==0);
+    CHECK(receipt.invocation==HostCallOutcome::kReturned);CHECK_FALSE(receipt.backend_entered);
+    CHECK_FALSE(receipt.backend_returned);CHECK_FALSE(receipt.count_known);
+    CHECK(std::memcmp(f.Page()+0x100,suffix.data(),suffix.size())==0);
+    f.CheckBytes();CheckConsumerCompletion(f,X_STATUS_INVALID_HANDLE,0);
+  }
+}
+TEST_CASE("XFile physical read prepares real partial-page edges from retained EOF and query refusal preserves guest output",
+          "[kernel][file_control][retained_metadata][physical][completion]") {
+  FileInfoFixture f;auto* backend=InstallRetainedConsumerFile(f,0);
+  BindConsumerCompletion(f);f.file->set_position(23);
+  ConsumerPhysicalWatch watch(*f.emulator->memory());bool provider_before_backend=false;
+  backend->before_read=[&]{
+    provider_before_backend=watch.in_guest_ram && watch.supplies==1 &&
+        watch.unlocked_writes!=0 && watch.locked_writes==0;
+  };
+  util::IoTransferReceipt receipt;uint32_t count=0xDEADBEEF;
+  const uint32_t requested=uint32_t(xe::memory::page_size());
+  SECTION("real retained tiny EOF prepares neighbor page before actual backend read") {
+    REQUIRE(f.file->Read(watch.kAddress,requested,0,&count,0xC019,true,&receipt)==X_STATUS_SUCCESS);
+    CHECK(count==f.original.size());CHECK(backend->queries==1);CHECK(backend->reads==1);
+    CHECK(provider_before_backend);CHECK(watch.providers!=0);CHECK(watch.unlocked);
+    CHECK(watch.supplies==1);CHECK(watch.supplied_unlocked);
+    CHECK(watch.unlocked_writes!=0);CHECK(watch.locked_writes!=0);
+    const auto* actual=watch.memory.TranslatePhysical(watch.physical);
+    CHECK(std::equal(f.original.begin(),f.original.end(),actual));
+    CHECK(actual[f.original.size()]==0xA5);CHECK(actual[requested-1]==0xA5);
+    CHECK(f.file->position()==f.original.size());CHECK(receipt.backend_entered);
+    CHECK(receipt.backend_returned);CHECK(receipt.count_known);CHECK(receipt.bytes==f.original.size());
+    CheckConsumerCompletion(f,X_STATUS_SUCCESS,uint32_t(f.original.size()));
+  }
+  SECTION("real query error reaches no edge provider no data backend and preserves every guest byte") {
+    backend->query_failure=X_STATUS_INVALID_HANDLE;
+    REQUIRE(f.file->Read(watch.kAddress,requested,0,&count,0xC019,true,&receipt)==X_STATUS_INVALID_HANDLE);
+    CHECK(count==0);CHECK(f.file->position()==23);CHECK(backend->queries==1);CHECK(backend->reads==0);
+    CHECK(watch.providers==0);CHECK_FALSE(provider_before_backend);
+    CHECK(watch.supplies==0);CHECK_FALSE(watch.in_guest_ram);
+    CHECK(watch.unlocked_writes==0);CHECK(watch.locked_writes==0);
+    const auto* actual=watch.memory.TranslatePhysical(watch.physical);
+    CHECK(std::all_of(actual,actual+watch.length,[](uint8_t value){return value==0x31;}));
+    CHECK(receipt.invocation==HostCallOutcome::kReturned);CHECK_FALSE(receipt.backend_entered);
+    CHECK_FALSE(receipt.backend_returned);CHECK_FALSE(receipt.count_known);
+    CheckConsumerCompletion(f,X_STATUS_INVALID_HANDLE,0);
+  }
+}
+
 }  // namespace xe::kernel::xboxkrnl::test
 #endif  // XE_PLATFORM_LINUX

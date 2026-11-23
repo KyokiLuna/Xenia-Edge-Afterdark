@@ -1,5 +1,6 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "xenia/kernel/native_profile_identity_owner.h"
+#include "xenia/kernel/native_xmsg_provenance.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -8,6 +9,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include "third_party/mbedtls/include/mbedtls/sha256.h"
@@ -15,6 +17,7 @@
 #include "xenia/base/logging.h"
 #include "xenia/base/mutex.h"
 #include "xenia/cpu/guest_call_abi.h"
+#include "xenia/cpu/processor.h"
 #include "xenia/cpu/thread_state.h"
 #include "xenia/gpu/native_frame_execution.h"
 #include "xenia/kernel/native_system_graphics_transport.h"
@@ -24,6 +27,12 @@
 #include "xenia/kernel/native_avatar_service.h"
 #include "xenia/kernel/native_identity_listener_bridge.h"
 #include "xenia/kernel/native_identity_tile_work.h"
+#include "xenia/kernel/native_identity_image_observation.h"
+#include "xenia/kernel/native_identity_image_journal.h"
+#include "xenia/kernel/native_identity_image_frame.h"
+#include "xenia/kernel/native_frame_lease_probe.h"
+#include "xenia/kernel/native_identity_image_code.h"
+#include "xenia/kernel/native_identity_default_image.h"
 #include "xenia/kernel/native_profile_identity_code.h"
 #include "xenia/kernel/native_profile_identity_contract.h"
 #include "xenia/kernel/native_profile_identity_hooks.h"
@@ -56,6 +65,31 @@ using Frame=Tasks::Frame;
 using Events=NativeIdentityEventLedger;
 using PaintObservation=gpu::NativeFramePaintDrainObservation;
 using PaintStage=PaintObservation::Stage;
+using AllocationFact=NativeProfileIdentityOwner::TaskAllocationReturnObservation;
+struct TaskAllocationCut {
+ const void* owner=nullptr;cpu::ppc::PPCContext* context=nullptr;
+ cpu::ThreadState* cpu=nullptr;AllocationFact fact;bool available=false;
+};
+// Scalar cut scratch, not a Task/identity registry. Only the private common
+// return adapter can consume it, on this exact host thread before PPC resumes.
+thread_local TaskAllocationCut task_allocation_cut;
+void ClearTaskAllocationCut() noexcept {task_allocation_cut={};}
+struct PublishTaskAllocationCut {
+ const void* owner;cpu::ppc::PPCContext& context;std::optional<AllocationFact> value;
+ ~PublishTaskAllocationCut(){
+  if(value)task_allocation_cut={owner,&context,context.thread_state,*value,true};
+ }
+};
+AllocationFact AllocationReturnFact(Frame allocator,Frame producer,uint32_t status,
+    std::optional<Tasks::Birth> birth) noexcept {
+ const auto frame=[](Frame value){return AllocationFact::FrameFact{
+     value.thread,value.pcr,value.sp,value.lr,value.function};};
+ AllocationFact fact{{allocator.root.kernel,allocator.root.domain,allocator.root.generation},
+     frame(allocator),frame(producer),status};
+ if(int32_t(status)>=0 && birth){fact.task=birth->task;fact.birth_generation=birth->generation;
+  fact.birth_origin=birth->origin;fact.validated_birth=true;}
+ return fact;
+}
 static_assert(X_PROCTYPE_SYSTEM==2); // native Task/process ABI metadata policy
 constexpr uint32_t kAbort=0x80004004u;
 constexpr uint64_t kBootUnjoinedSource=1;
@@ -83,6 +117,25 @@ class IdentityPixelGuard final : public gpu::NativeFramePresentationGuard {
   const std::shared_ptr<const IdentityPixelLifetime> lifetime_;
   std::atomic<bool> revoked_{false};
 };
+// Metadata attached to the EXISTING immutable Source/pixel guard. It owns no
+// native object, buffer, module, cache, request or roster. Mutable capture bits
+// below are guarded only by the same actual Owner mutex.
+class IdentityImageFrameGuard final : public gpu::NativeFramePresentationGuard {
+ public:
+  IdentityImageFrameGuard(std::shared_ptr<const gpu::NativeFramePresentationGuard> parent,
+      std::weak_ptr<NativeProfileIdentityOwner> owner,Tasks::Root root,uint64_t source,uint64_t render,
+      std::array<std::optional<identity_detail::NativeImageDraw>,64> draws)
+      :parent(std::move(parent)),owner(std::move(owner)),root(root),source(source),render(render),draws(std::move(draws)){}
+  bool IsLive() const noexcept override {return parent && parent->IsLive();}
+  bool IsRevoked() const noexcept override {return !parent || parent->IsRevoked();}
+  const std::shared_ptr<const gpu::NativeFramePresentationGuard> parent;
+  const std::weak_ptr<NativeProfileIdentityOwner> owner;
+  const Tasks::Root root;const uint64_t source,render;
+  const std::array<std::optional<identity_detail::NativeImageDraw>,64> draws;
+  mutable bool captured=false,completed=false;
+  mutable uintptr_t request=0;mutable uint64_t backend=0;
+  mutable gpu::NativeFrameSubmissionIdentity identity;
+};
 XThread* ActualThread() noexcept {
  auto* thread=XThread::GetCurrentFiberThread();
  return thread?thread:(XThread::IsInThread()?XThread::GetCurrentThread():nullptr);
@@ -97,6 +150,16 @@ std::optional<uint64_t> Qword(Memory& memory,uint32_t at) {
     memory.QueryRangeAccess(at,8)==memory::PageAccess::kNoAccess)return {};
  return xe::byte_swap(std::atomic_ref<uint64_t>(*memory.TranslateVirtual<uint64_t*>(at)).load(std::memory_order_acquire));
 }
+bool CommonTaskFunction(uint32_t at) noexcept {
+ switch(at){
+  case 0x816BA440:case 0x816BA668:case 0x816B9D68:
+  case 0x816B9A18:case 0x816B9BB8:case 0x816B9AA8:
+  case 0x816B8B08:case 0x816B7DE8:case 0x816B7600:case 0x816B7B68:
+  case 0x816B9F08:case 0x816BA058:case 0x816B7490:
+  case 0x816B7D98:case 0x816B7500:case 0x816E6AB0:return true;
+  default:return false;
+ }
+}
 bool ProfileCallback(uint32_t at) noexcept {
  return Tasks::ClassifyCallback(at)==Tasks::CallbackClaim::kCanonicalProfile;
 }
@@ -110,20 +173,17 @@ Listeners::Registers ListenerRegisters(const cpu::ppc::PPCContext& c) noexcept {
  out.kernel=reinterpret_cast<uintptr_t>(c.kernel_state);out.lr=c.lr;
  std::copy(std::begin(c.r),std::end(c.r),out.r.begin());return out;
 }
-// Native lis/addi may sign-extend a DWORD in a64-bit GPR. Validate canonical
-// native32 bits instead of rejecting actual8000000E or truncating arbitrary64.
-bool DwordIs(uint64_t actual,uint32_t expected) noexcept {
- return uint32_t(actual)==expected &&
-     (actual==uint64_t(expected) || actual==uint64_t(int64_t(int32_t(expected))));
-}
+using identity_detail::DwordIs;
 uint32_t NativeAtomicWord(const uint32_t* word) noexcept {
  return xe::byte_swap(std::atomic_ref<uint32_t>(*const_cast<uint32_t*>(word)).load(std::memory_order_acquire));
 }
 uint64_t NativeAtomicQword(const uint64_t* word) noexcept {
  return xe::byte_swap(std::atomic_ref<uint64_t>(*const_cast<uint64_t*>(word)).load(std::memory_order_acquire));
 }
-uint64_t Abort(cpu::ppc::PPCContext& c) noexcept {
- c.r[3]=uint64_t(int64_t(int32_t(kAbort)));return 0;
+uint64_t Abort(cpu::ppc::PPCContext& c,uint32_t entry=0) noexcept {
+ // XNotifyGetNext returns BOOL. An HRESULT is nonzero and would make its
+ // original caller read untouched output words as a successful dequeue.
+ c.r[3]=entry==0x816A8C00?0:uint64_t(int64_t(int32_t(kAbort)));return 0;
 }
 bool CheckIdentityCode(GuestRuntimeCallExecutor& calls) {
  auto module=calls.module();
@@ -148,6 +208,115 @@ bool CheckIdentityCode(GuestRuntimeCallExecutor& calls) {
   for(size_t i=0;i<digest.size();++i)
    if(code.sha256[i*2]!=hex[digest[i]>>4] || code.sha256[i*2+1]!=hex[digest[i]&15])return false;
  }
+ return true;
+}
+// Functional authentication of the common original Task lifecycle. Raw page
+// bytes AND actual translated code are checked; load generation alone is not
+// an immutability receipt. Neutral failure remains local to that observation.
+bool CheckTaskExecutionCode(GuestRuntimeCallExecutor& calls) {
+ static constexpr uint32_t group[]={0x816BA440,0x816B9A18,0x816B9BB8,0x816B99C0,0x816B9958,0x816B9890,0x816B88D8,0x816B7600,0x816B8B08,0x816B8A88,0x816B8BA0,0x816B8F50,0x816B8D98,0x816B8EE0,0x816B91A8,0x816B9748,0x816B8998,0x816B82B0,0x816B8320,0x816B8530,0x816B9AA8,0x816BA6B0,0x816BA530,0x816BA3C0,0x816B9F08,0x816BA658,0x816BA058,0x816BA660,0x816B7490,0x816B7B80,0x816B7D98,0x816B7D28,0x816B7500,0x816E6AB0,0x816B8D28,0x816B8FC8,0x816B9018,0x816B9218,0x816BA8D0,0x816B77B0,0x816B79E8,0x816B7A28,0x816B9258,0x816B9D68,0x816B7DE8,0x816B9528,0x816B9668,0x816BA668,0x816B7B68,0x816B8098,0x816B7F30,0x816B7EF0,0x816B92C8,0x816B94A0};
+ const auto module=calls.module();auto* memory=calls.kernel()->memory();
+ if(!module || !module->xex_module() || !module->native_import_ready())return false;
+ auto read=global_critical_region::AcquireDirect();
+ for(uint32_t at:group){
+  const auto found=std::find_if(std::begin(identity_detail::kNativeIdentityCode),
+      std::end(identity_detail::kNativeIdentityCode),[&](const auto& item){return item.address==at;});
+  if(found==std::end(identity_detail::kNativeIdentityCode) ||
+     memory->QueryRangeAccess(at,found->bytes)==memory::PageAccess::kNoAccess)return false;
+  // XEX section ownership is page based. Keep the full byte/hash and
+  // instruction-level actual CPU/bridge checks, without retaining/releasing
+  // the same Kernel module once for every four-byte instruction.
+  for(uint64_t page=at;page<uint64_t(at)+found->bytes;page=(page&~uint64_t(0xFFF))+0x1000){
+   xex2_section_type type;
+   if(calls.kernel()->GetUserModuleForAddress(uint32_t(page)).get()!=module.get() ||
+      !module->xex_module()->GetPageSectionType(uint32_t(page),&type) || type!=XEX_SECTION_CODE)return false;
+  }
+  for(uint32_t n=0;n<found->bytes;n+=4)
+   if(calls.kernel()->processor()->LookupModule(at+n)!=module->xex_module() ||
+      module->xex_module()->TranslateCode(at+n)!=memory->TranslateVirtual<const uint8_t*>(at+n))return false;
+  std::array<uint8_t,32> sum{};
+  if(mbedtls_sha256(memory->TranslateVirtual<const uint8_t*>(at),found->bytes,sum.data(),0))return false;
+  constexpr char hex[]="0123456789abcdef";
+  for(size_t n=0;n<sum.size();++n)
+   if(found->sha256[n*2]!=hex[sum[n]>>4] || found->sha256[n*2+1]!=hex[sum[n]&15])return false;
+ }
+ static constexpr identity_detail::NativeIdentityCodeExtent tables[]={
+  {0x815F8BA8,256,"32a16c3960c589a3660475aac6f0eae6c7a770f073af5a04b16d912d6d1b41ef"},
+  {0x815F8CA8,96,"e95a45d8ae4db6a8ab804f604c8e967158e1513d90da3cb9a595fd105196d18d"},
+  {0x815F8D08,80,"f46eace64e7aa320c1ff489f5159ae819551c9dd75d12612bac9be5ba27756db"},
+  {0x815F8D58,224,"8eceeec04134e3abc579c387802ad636f27a7b9a501acc16061d2b86d01be5d1"},
+  {0x815F8E38,240,"f6d3716b2a24b411696e247df1ba2aa70464a5bf2620d4189e3f8a39c664b0e1"},
+  {0x815F8F88,112,"1f1b58ff7f87578600f839c2ac3ed9fb33a3949f91d9a7df76bccb8b173b5b5e"},
+ };
+ for(const auto& item:tables){xex2_section_type type;
+  if(calls.kernel()->GetUserModuleForAddress(item.address).get()!=module.get() ||
+     !module->xex_module()->GetPageSectionType(item.address,&type) || type!=XEX_SECTION_READONLY_DATA ||
+     memory->QueryRangeAccess(item.address,item.bytes)==memory::PageAccess::kNoAccess)return false;
+  std::array<uint8_t,32> sum{};
+  if(mbedtls_sha256(memory->TranslateVirtual<const uint8_t*>(item.address),item.bytes,sum.data(),0))return false;
+  constexpr char hex[]="0123456789abcdef";
+  for(size_t n=0;n<sum.size();++n)
+   if(item.sha256[n*2]!=hex[sum[n]>>4] || item.sha256[n*2+1]!=hex[sum[n]&15])return false;
+ }
+ return true;
+}
+bool NativeMemoryKeyMatches(Memory& memory,uint32_t at,uint32_t address,
+    uint32_t bytes,uint64_t version) noexcept {
+ return identity_detail::NativeImageFullKeyMatches(memory,at,address,bytes,version);
+}
+template<typename Character,size_t Count>
+bool ReadImageLabel(Memory& memory,uint32_t pointer,std::array<Character,Count>& output){
+ std::array<Character,Count> owned{};
+ for(size_t i=0;i<Count;++i){
+  std::array<uint8_t,sizeof(Character)> bytes;
+  if(uint64_t(pointer)+(i+1)*sizeof(Character)>0x100000000ull ||
+     !internal::ReadNativeWaitSnapshot(memory,pointer+uint32_t(i*sizeof(Character)),bytes))return false;
+  uint16_t value=bytes[0];
+  if constexpr(sizeof(Character)==2)value=uint16_t((uint16_t(bytes[0])<<8)|bytes[1]);
+  owned[i]=Character(value);if(!value){output=owned;return true;}
+ }
+ return false;
+}
+template<typename Character,size_t Count>
+std::basic_string_view<Character> ImageLabel(const std::array<Character,Count>& label){
+ return {label.data(),size_t(std::find(label.begin(),label.end(),Character{})-label.begin())};
+}
+bool NativeSectionUrlMatches(Memory& memory,uint32_t pointer,uint32_t module,
+    std::u16string_view section,std::u16string_view entry){
+ std::array<char16_t,128> expected{},actual{};size_t n=0;
+ const auto put=[&](char16_t c){if(n>=expected.size()-1)return false;expected[n++]=c;return true;};
+ for(auto c:std::u16string_view(u"section://"))if(!put(c))return false;
+ bool started=false;constexpr char16_t hex[]=u"0123456789ABCDEF";
+ for(int shift=28;shift>=0;shift-=4){const auto digit=(module>>shift)&15;
+  if(digit || started || !shift){started=true;if(!put(hex[digit]))return false;}}
+ if(!put(u','))return false;for(auto c:section)if(!put(c))return false;
+ if(!put(u'#'))return false;for(auto c:entry)if(!put(c))return false;
+ return ReadImageLabel(memory,pointer,actual) && ImageLabel(actual)==std::u16string_view(expected.data(),n);
+}
+const identity_detail::NativeImageCodeExtent* NativeImageCode(uint32_t at) noexcept {
+ for(const auto& e:identity_detail::kNativeImageCode)if(e.address==at)return &e;
+ return nullptr;
+}
+bool CheckImageBody(GuestRuntimeCallExecutor& calls,uint32_t at) {
+ const auto* body=NativeImageCode(at);const auto module=calls.module();
+ auto* memory=calls.kernel()->memory();
+ if(!body || !module || !module->xex_module() || !module->native_import_ready() ||
+    !module->load_generation() || module->load_generation()!=calls.load_generation())return false;
+ auto global=global_critical_region::AcquireDirect();
+ if(memory->QueryRangeAccess(at,body->bytes)==memory::PageAccess::kNoAccess)return false;
+ for(uint64_t page=at;page<uint64_t(at)+body->bytes;page=(page&~uint64_t(0xFFF))+0x1000){
+  xex2_section_type type;
+  if(calls.kernel()->GetUserModuleForAddress(uint32_t(page)).get()!=module.get() ||
+     !module->xex_module()->GetPageSectionType(uint32_t(page),&type) || type!=XEX_SECTION_CODE)return false;
+ }
+ for(uint32_t n=0;n<body->bytes;n+=4)
+  if(calls.kernel()->processor()->LookupModule(at+n)!=module->xex_module() ||
+     module->xex_module()->TranslateCode(at+n)!=memory->TranslateVirtual<const uint8_t*>(at+n))return false;
+ std::array<uint8_t,32> sum{};
+ if(mbedtls_sha256(memory->TranslateVirtual<const uint8_t*>(at),body->bytes,sum.data(),0))return false;
+ constexpr char hex[]="0123456789abcdef";
+ for(size_t n=0;n<sum.size();++n)
+  if(body->sha256[n*2]!=hex[sum[n]>>4] || body->sha256[n*2+1]!=hex[sum[n]&15])return false;
  return true;
 }
 // The ref-only permission depends on these finite native bodies, including
@@ -222,7 +391,8 @@ bool CheckPeriodicCode(GuestRuntimeCallExecutor& calls) {
    0x81907C98,0x81907B18,0x8190AAC0,0x8190B528,0x8190B530,0x81909B68,
    0x81913EF8,0x819133B0,0x8190E510,0x8190E310,0x81913F18,0x819114B8,0x8190D248,
    0x816BA658,0x816BA660,0x816B9F08,0x816B8A88,0x816B8F50,0x816B7600,
-   0x816BA440,0x816B9A18,0x816B9BB8};
+   0x816BA440,0x816B9A18,0x816B9BB8,0x816B99C0,0x816B9958,0x816B9890,
+   0x816B8D98};
  const auto module=calls.module();auto* memory=calls.kernel()->memory();
  auto guard=global_critical_region::AcquireDirect();
  for(uint32_t at:group){
@@ -242,6 +412,7 @@ bool CheckPeriodicCode(GuestRuntimeCallExecutor& calls) {
  static constexpr identity_detail::NativeIdentityCodeExtent data[]={
   {0x815F8BA8,656,"1bcd1649e45d1214bf3b9b652ecd1ceca8ae9d7ccdbaef8bc1c0ab6111dad8fd"},
   {0x8162F258,44,"5030476dd87105eb88ec480de45348067a8d7aa6374357889b1b71235ad54950"},
+  {0x815F8F88,112,"1f1b58ff7f87578600f839c2ac3ed9fb33a3949f91d9a7df76bccb8b173b5b5e"},
  };
  for(const auto& item:data){
   xex2_section_type type;
@@ -279,6 +450,8 @@ struct NativeIdentityTileWork::Data {
  uint32_t provider=0,output=0,size_address=0,capacity=0,user=0,type=0;
  std::atomic<uint32_t> status{0x80004005u},required{0};
  std::atomic<bool> claimed{false},published{false},written{false};
+ std::atomic<uint64_t> image_store_allocation{0},image_store_publication{0};
+ std::atomic<uint64_t> image_first_allocation{0},image_first_publication{0};
 };
 NativeIdentityTileWork::NativeIdentityTileWork(std::shared_ptr<Data> data):data_(std::move(data)){}
 void NativeIdentityTileWork::RecordPublication(uint32_t status,uint32_t required,bool written) noexcept {
@@ -287,6 +460,10 @@ void NativeIdentityTileWork::RecordPublication(uint32_t status,uint32_t required
  data_->status.store(status,std::memory_order_relaxed);
  data_->required.store(required,std::memory_order_relaxed);
  data_->written.store(written,std::memory_order_relaxed);
+ if(!status && written){
+  data_->image_first_allocation.store(data_->image_store_allocation.load(std::memory_order_acquire),std::memory_order_relaxed);
+  data_->image_first_publication.store(data_->image_store_publication.load(std::memory_order_acquire),std::memory_order_relaxed);
+ }
  data_->published.store(true,std::memory_order_release);
 }
 // A bound cell never owns/drops resources from a getter hook. The actual
@@ -338,6 +515,13 @@ struct NativeProfileIdentityOwner::State {
   object_ref<UserModule> module;
   std::shared_ptr<KernelState::UserModuleExecutionLease> lease;
   uint64_t load_generation=0;
+ };
+ // Parallel resource holders for the SAME scalar Task ledger. These are
+ // execution-only module lifetimes, never a second Task/source registry.
+ struct ExecutionTarget {uint32_t callback=0;CodeOwner code;};
+ struct ExecutionLifetime {
+  Tasks::Birth birth{};std::vector<std::shared_ptr<ExecutionTarget>> targets;
+  bool uncertain=false,native_freed=false;
  };
  struct EventLifetime {
   std::shared_ptr<KernelState::UserModuleExecutionLease> code;
@@ -445,9 +629,20 @@ struct NativeProfileIdentityOwner::State {
   std::optional<Tasks::CommonStartProducer> creation;
   std::shared_ptr<Work> creation_parent;
   bool creation_only=false,execution_options=false,profile_producer=false;
+  bool execution_only=false,execution_uncertain=false,execution_control=false,execution_code_proven=false;
+  bool execution_title=false;
+  std::optional<NativeXmsgProvenance::TitleTaskProducerFact> execution_title_producer;
+  bool execution_read_fallback=false;
+  uint64_t execution_dispatch=0;
+  Tasks::ExecutionReadCell execution_read;
+  std::shared_ptr<Work> execution_read_owner,execution_wait_parent,execution_producer;
+  std::shared_ptr<ExecutionLifetime> execution_lifetime;
+  std::shared_ptr<ExecutionTarget> execution_target;
+
   std::optional<Tasks::ProfileControl> profile_control;
   std::shared_ptr<Work> control_creator,control_parent;
   uint64_t periodic_factory=0;PeriodicRole periodic_role=PeriodicRole::kNone;
+  std::optional<Tasks::PeriodicFrameContext> periodic_context;
   bool periodic_body_admitted=false;
   std::shared_ptr<TaskReference::Data> reference_release;
   bool reference_only=false;
@@ -464,6 +659,7 @@ struct NativeProfileIdentityOwner::State {
   bool listener_reference_started=false,listener_unregistered_destruction=false;
   std::optional<Events::Work> listener_work;
   std::shared_ptr<const NativeIdentityEventWorkSource> listener_source;
+  std::shared_ptr<Work> listener_parent;
   std::optional<Listeners::Dependencies> listener_dependencies;
   bool owns_task_work=false,owns_persistent_work=false,host_body=false,registered_executor=false;
   bool physical_work=false,prebody_parked=false,transport_unclaimed=false,transport_only=false,identity_continuation=false,task_release=false,foreign_task_cleanup=false,foreign_avatar_task=false;
@@ -471,8 +667,14 @@ struct NativeProfileIdentityOwner::State {
   CodeOwner caller_code;
   std::shared_ptr<const NativeAvatarService::CleanupTaskCreationProof> avatar_allocation;
   uint64_t provider_generation=0;
+  std::optional<identity_detail::NativeImageInput> image_key_candidate,image_default_result;
+  uint64_t image_uri_generation=0;
+  uint32_t image_event=0,image_modified=0;
+
   std::shared_ptr<NativeIdentityTileWork::Data> tile;
   bool render_iteration=false;
+  std::array<std::optional<identity_detail::NativeImageDraw>,64> image_draws;
+  bool image_draws_unavailable=false;
   std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard;
   bool normal_return=false,uncertain=false;
  };
@@ -515,7 +717,14 @@ struct NativeProfileIdentityOwner::State {
   std::atomic<bool> want_final_barrier{false},execution_quiescent{false};
   std::shared_ptr<const NativeIdentityEventSource> old_event_source;
   std::optional<Events::Origin> old_event_origin;
-  std::shared_ptr<const xam::ProfileRosterNativeCompletion> joined;
+  // The exact matched C838 own-return is a host commitment fact, not the
+  // listener/provider/frame/GPU join and not public224's input-copy return.
+  bool protocol_returned=false;
+  uint64_t protocol_work=0;
+  Frame protocol_frame{};
+  Tasks::Birth protocol_birth{};
+  uint32_t protocol_value=0;
+  std::shared_ptr<const xam::ProfileRosterNativeCompletion> protocol,joined;
   std::shared_ptr<IdentityPixelGuard> old_pixels,hidden_pixels,new_pixels;
   std::shared_ptr<const NativeIdentityEventSource> event_source;
   std::optional<Events::Origin> event_origin;
@@ -541,6 +750,11 @@ struct NativeProfileIdentityOwner::State {
   bool constructing=true,initialized=false,buffer_revoked=false,revoked=false,destroyed=false;
   bool completed_empty=false;uint32_t completed_status=0;
   std::shared_ptr<NativeIdentityTileWork::Data> last_output;
+  uint64_t image_uri_generation=0;
+  identity_detail::NativeEncodedImageEpoch image_epoch;
+  std::optional<identity_detail::EncodedImageSource> image_output;
+  std::optional<identity_detail::NativeImageInput> image_key;
+  uint64_t image_key_generation=0;
  };
  struct CountedAllocation {
   uint64_t generation=0;
@@ -553,10 +767,158 @@ struct NativeProfileIdentityOwner::State {
   bool free_entered=false,free_returned=false;
  };
  explicit State(Config c):config(std::move(c)),kernel(config.catalog->calls()->kernel()),
-   root{config.allocation->owner().kernel_epoch,config.domain->id(),config.domain->root().generation},tasks(root){}
+   root{config.allocation->owner().kernel_epoch,config.domain->id(),config.domain->root().generation},images(root),tasks(root){}
  Config config;
+ const bool profile_enabled=bool(config.factory_binding);
+ std::shared_ptr<NativeIdentityTileObserverSlot> image_slot;
+ using ImageObject=identity_detail::NativeImageJournal::Object;
+ using ImageInput=identity_detail::NativeImageInput;
+ using ImageTransfer=identity_detail::NativeDecodedImageTransfer;
+ struct ImageCall {
+  Frame frame;uint32_t body_sp=0;uintptr_t context=0,cpu=0;
+  uint64_t serial=0,parent=0,render=0,draw_selection=0;
+  std::array<uint64_t,8> args{};
+  std::optional<ImageObject> object,other,dc;
+  std::optional<identity_detail::NativeImageJournal::Selection> selection;
+  std::optional<ImageInput> input;
+  std::optional<ImageTransfer> copied;
+  std::optional<identity_detail::NativeImageJournal::Draw> emitted_draw;
+  std::optional<identity_detail::EncodedImageSource> borrowed;
+  uint32_t native_texture=0,device=0,sampler=0,slot_offset=0,tail=0,prior_texture=0,prior_cursor=0;
+  uint32_t copied_bytes=0,copy_calls=0,copy_returns=0;
+  uint32_t packet_address=0,packet_header=0,packet_viz=0,packet_initiator=0,packet_base=0,packet_size=0;
+  std::array<uint32_t,6> texture_fetch{};
+  bool packet_returned=false;
+  uint32_t source_pointer=0,copy_destination=0,copy_length=0;
+  uint32_t key_pointer=0,png_context=0,read_state=0,index_destination=0,stride=0;
+  uint32_t address_output=0,size_output=0,module=0;
+  uint64_t key_provider=0,key_generation=0,uri_generation=0;
+  bool uncertain=false,error=false,copy_entered=false,copy_returned=false;
+  bool native_call_entered=false,native_call_returned=false;
+  bool native_store_entered=false,draw_store_entered=false;
+  bool default_format=false,section_called=false,section_returned=false;
+  std::array<char,32> section_name{};
+  std::array<char16_t,32> section_label{},entry_label{};
+  uint64_t initializer=0,resource_open=0,module_generation=0,default_source=0,default_birth=0;
+  uint32_t default_index=UINT32_MAX,row_output=0,stream=0;
+  uint32_t section_address=0,section_size=0,section_status=0x80004005,open_status=0x80004005;
+ };
+ struct ImageString {
+  uint64_t generation=0;uint32_t pointer=0,field=0;
+  ImageInput input;bool live=false;
+ };
+ struct ImageDefaultRow {
+  uint32_t address=0,size=0,module=0,section=0,section_size=0;
+  uint64_t module_generation=0;bool observed=false;
+ };
+ std::array<std::optional<ImageCall>,256> image_calls;
+ std::array<ImageString,256> image_strings;
+ std::array<std::optional<identity_detail::NativeDefaultImageRow>,3> image_defaults;
+ uint64_t next_image_call=0,next_image_string=0;
+ ImageCall* ImageBySerial(uint64_t serial){
+  for(auto& c:image_calls)if(c && c->serial==serial)return &*c;return nullptr;
+ }
+ ImageCall* ImageAt(const Frame& frame,uintptr_t context,bool body){
+  ImageCall* found=nullptr;
+  for(auto& c:image_calls)if(c && c->frame.root==frame.root &&
+      c->frame.thread==frame.thread && c->frame.pcr==frame.pcr &&
+      c->frame.function==frame.function && c->context==context &&
+      (body?c->body_sp==frame.sp:c->frame.sp==frame.sp && c->frame.lr==frame.lr))
+    if(!found || c->serial>found->serial)found=&*c;
+  return found;
+ }
+ ImageCall* ImageParent(const Frame& frame,uintptr_t context){
+  ImageCall* found=nullptr;
+  for(auto& c:image_calls)if(c && !c->uncertain && c->context==context &&
+      c->frame.root==frame.root && c->frame.thread==frame.thread &&
+      c->frame.pcr==frame.pcr && c->body_sp==frame.sp &&
+      frame.lr>c->frame.function && NativeImageCode(c->frame.function) &&
+      uint64_t(frame.lr)<=uint64_t(c->frame.function)+NativeImageCode(c->frame.function)->bytes &&
+      (!found || c->serial>found->serial))found=&*c;
+  return found;
+ }
+ void LoseImageObservation() noexcept {
+  if(image_slot)image_slot->unavailable_.store(true,std::memory_order_release);
+ }
+ void RevokeImageString(uint32_t pointer,uint32_t field=0) noexcept {
+  for(auto& key:image_strings)if(key.live &&
+      ((pointer && key.pointer==pointer) || (field && key.field==field)))key.live=false;
+ }
+ struct ImageKeyCapture {
+  ImageInput input;uint64_t provider=0,uri_generation=0,string_generation=0;
+ };
+ std::optional<ImageKeyCapture> ImageInputAt(uint32_t pointer) const {
+  if(!pointer)return {};
+  std::optional<ImageKeyCapture> found;
+  for(const auto& provider:providers)if(provider && provider->image_key &&
+      !provider->revoked && !provider->destroyed &&
+      provider->image_key_generation==provider->image_uri_generation &&
+      pointer==provider->object+0x10){
+   ImageKeyCapture actual{*provider->image_key,provider->object,provider->image_uri_generation,0};
+   if(found && found->input!=actual.input)return {};found=actual;
+  }
+  for(const auto& key:image_strings)if(key.live && key.pointer==pointer){
+   ImageKeyCapture actual{key.input,0,0,key.generation};
+   if(found && found->input!=actual.input)return {};found=actual;
+  }
+  return found;
+ }
+ bool ImageInputStillCurrent(const ImageCall& call) const {
+  if(!call.input || !call.input->valid())return false;
+  const auto actual=ImageInputAt(call.key_pointer);
+  return actual && actual->input==*call.input && actual->provider==call.key_provider &&
+      actual->uri_generation==call.uri_generation && actual->string_generation==call.key_generation;
+ }
+ bool ImageBytesCurrent(const ImageInput& input) const {
+  if(!input.valid() || input.root()!=root)return false;
+  if(input.provider){
+   for(const auto& provider:providers)if(provider &&
+       provider->generation==input.provider->provider && !provider->revoked &&
+       !provider->destroyed && provider->image_epoch.Current(*input.provider))return true;
+   return false;
+  }
+  // The section issuer separately authenticated the actual resource/entry
+  // tuple. This existing root code/domain owner keeps its original bytes
+  // resident through this synchronous use; no new native reference is taken.
+  return input.section && root_code && config.domain && config.catalog &&
+      config.domain->root().hmodule==input.section->module &&
+      config.domain->root().generation==input.section->module_generation &&
+      config.catalog->calls()->module()->load_generation()==input.section->module_generation;
+ }
+ ImageCall* ImageDecoder(const ImageCall& nested,uint32_t png) {
+  ImageCall* found=nullptr;
+  for(auto& decoder:image_calls)if(decoder && !decoder->uncertain && !decoder->error &&
+      decoder->frame.function==0x81784D80 && decoder->input && decoder->png_context==png &&
+      decoder->context==nested.context && decoder->cpu==nested.cpu &&
+      decoder->frame.root==nested.frame.root && decoder->frame.thread==nested.frame.thread &&
+      decoder->frame.pcr==nested.frame.pcr && nested.frame.sp<=decoder->body_sp &&
+      (!found || decoder->serial>found->serial))found=&*decoder;
+  return found;
+ }
+ bool RememberImageString(uint32_t pointer,uint32_t field,const ImageInput& input){
+  if(!pointer || !field || !input.valid() || input.root()!=root ||
+     next_image_string==UINT64_MAX){LoseImageObservation();return false;}
+  const auto version=input.provider?input.provider->version:input.section->version;
+  if(!NativeMemoryKeyMatches(*kernel->memory(),pointer,input.address(),input.size(),version))return false;
+  const auto slot=std::find_if(image_strings.begin(),image_strings.end(),
+      [](const auto& r){return !r.live;});
+  if(slot==image_strings.end()){LoseImageObservation();return false;}
+  *slot={++next_image_string,pointer,field,input,true};return true;
+ }
+ std::optional<Frame> ImageShape(cpu::ppc::PPCContext& c,uint32_t at) const {
+  auto* thread=ActualThread();
+  if(!thread || thread->kernel_state()!=kernel || c.kernel_state!=kernel ||
+     c.processor!=kernel->processor() || c.thread_state!=thread->thread_state() ||
+     thread->thread_state()->context()!=&c || c.r[13]!=thread->pcr_ptr() ||
+     !DwordIs(c.r[1],uint32_t(c.r[1])) || (uint32_t(c.r[1])&15) ||
+     !DwordIs(c.lr,uint32_t(c.lr)) || (uint32_t(c.lr)&3) ||
+     uint32_t(c.r[1])<thread->stack_limit() || uint32_t(c.r[1])>thread->stack_base())return {};
+  return Frame{root,thread->thread_id(),thread->pcr_ptr(),uint32_t(c.r[1]),uint32_t(c.lr),at};
+ }
+
  KernelState* kernel;
  const Tasks::Root root;
+ identity_detail::NativeImageJournal images;
  std::shared_ptr<KernelState::UserModuleExecutionLease> root_code;
  CodeOwner prepared_title;
  uint64_t prepared_title_generation=0;
@@ -758,13 +1120,94 @@ struct NativeProfileIdentityOwner::State {
   first_denial_state.store(2,std::memory_order_release);
  }
  uint64_t Deny(cpu::ppc::PPCContext& c,uint32_t entry,uint32_t line) noexcept {
-  RecordDenial(c,entry,line);return Abort(c);
+  RecordDenial(c,entry,line);return Abort(c,entry);
  }
 
  enum class RenderPhase {kOpen,kDrainingOld,kClosingOld,kOldPaused,kHiddenRefresh,kClosingPrepared,kPreparedPaused,kClosingStop,kStopPaused};
+ // These receipts observe original cuts only. No pointer in the payload is
+ // dereferenced by the reporter, and no reporter acquires the owner mutex.
+ struct QueryObservation {
+  bool enabled=false,source_retired=false,parked=false;
+  uint32_t reason=0,loops=0,phase=0,active=0,expected=0,attempt=0,flags=0;
+  uint32_t old_evaluated=0,old_truth=0,task=0,first_loss=0;
+  uint64_t observation=0,job=0,source=0,current_read=0,next_work=0,sp=0,lr=0,pcr=0;
+  uint64_t context_thread_state=0,expected_thread_state=0,actual_thread=0;
+  Frame frame;Tasks::Birth birth{};
+  WorkBlocker work_blocker;Tasks::SourceBlocker source_blocker;
+  std::array<uint64_t,PaintObservation::kCount> paint{};
+  bool Failed(uint32_t why,bool value) noexcept {
+   if(enabled && value)reason=why;return value;
+  }
+  bool Old(uint32_t bit,bool value) noexcept {
+   if(enabled){old_evaluated|=1u<<bit;if(value)old_truth|=1u<<bit;}return value;
+  }
+  XThread* Actual(XThread* value) noexcept {
+   if(enabled)actual_thread=reinterpret_cast<uintptr_t>(value);return value;
+  }
+ };
+ uint64_t query_observation=0; // original State mutex, advisory correlation only
+ std::atomic<uint64_t> bootstrap_handoff{0}; // turn:32, actual cut:32
+ struct QueryExitCell {std::atomic<uint32_t> state{0};QueryObservation payload;};
+ QueryExitCell first_parked_query_exit;
+ void ReportQuery(const QueryObservation& q,bool exiting) noexcept try {
+  if(!q.enabled || (exiting && q.reason==24))return;
+  if(exiting && q.parked){
+   uint32_t empty=0;
+   if(first_parked_query_exit.state.compare_exchange_strong(empty,1,std::memory_order_relaxed)){
+    first_parked_query_exit.payload=q;
+    first_parked_query_exit.state.store(2,std::memory_order_release);
+   }
+  }
+  if(global_critical_region::is_held_by_current_thread())return; // scalar capture only at an unsafe logging cut
+  const uint64_t bootstrap=bootstrap_handoff.load(std::memory_order_acquire);
+  const auto first_capture=first_parked_query_exit.state.load(std::memory_order_acquire);
+  const auto emit=[&](const QueryObservation& v,uint32_t kind){
+   // Loop/attempt/turn are payload, never transition keys. Sampling stays
+   // bounded when a parked manager keeps observing the same original cut.
+   const uint64_t key=v.job^(uint64_t(v.reason)<<48)^(uint64_t(v.phase)<<40)^uint32_t(bootstrap);
+   static std::array<NativeSystemUiTraceLimiter,2> summary,context,conditions;
+   summary[kind].EmitTransition(key,"identity","frame_query_handoff",
+    {{"kind",kind},{"observation",v.observation},{"exiting",kind==1 || exiting},{"reason",v.reason},{"loops",v.loops},
+     {"parked",v.parked},{"source_retired",v.source_retired},{"render_phase",v.phase},
+     {"job_serial",v.job},{"job_source",v.source},{"current_read",v.current_read},
+     {"active",v.active},{"expected",v.expected},{"flags",v.flags},{"next_work",v.next_work},
+     {"bootstrap_turn",bootstrap>>32},{"bootstrap_cut",uint32_t(bootstrap)},{"first_loss_at_loop_cut",v.first_loss},
+     {"first_parked_exit_state",first_capture}});
+   context[kind].EmitTransition(key,"identity","frame_query_context",
+    {{"kind",kind},{"observation",v.observation},{"reason",v.reason},{"job_serial",v.job},{"task",v.task},
+     {"frame_thread",v.frame.thread},{"frame_pcr",v.frame.pcr},{"frame_sp",v.frame.sp},
+     {"frame_lr",v.frame.lr},{"frame_function",v.frame.function},{"birth",v.birth.generation},
+     {"birth_task",v.birth.task},{"birth_origin",v.birth.origin},{"raw_sp",v.sp},{"raw_lr",v.lr},
+     {"raw_pcr",v.pcr},{"context_thread_state",v.context_thread_state},
+     {"expected_thread_state",v.expected_thread_state},{"actual_thread",v.actual_thread}});
+   conditions[kind].EmitTransition(key^v.old_evaluated^(uint64_t(v.old_truth)<<16),"identity","frame_query_old_predicates",
+    {{"kind",kind},{"observation",v.observation},{"job_serial",v.job},{"evaluated",v.old_evaluated},{"predicate_true",v.old_truth},
+     {"work_available",v.work_blocker.available},{"work_closed",v.work_blocker.closed},
+     {"work_reason",v.work_blocker.reason},{"work",v.work_blocker.serial},{"work_source",v.work_blocker.source},
+     {"work_state",v.work_blocker.state},{"source_available",v.source_blocker.available},
+     {"source_closed",v.source_blocker.closed},{"source_reason",v.source_blocker.kind},
+     {"source",v.source_blocker.source},{"source_generation",v.source_blocker.generation},
+     {"source_task",v.source_blocker.task},{"source_serial",v.source_blocker.serial}});
+   static_assert(PaintObservation::kCount==13);
+   static std::array<NativeSystemUiTraceLimiter,2> paint;
+   // Existing attempt-tagged atomic words, captured under the original Query
+   // metadata lock. Decode with NativeFramePaintDrainObservation; never read
+   // the Bootstrap writer's non-atomic scratch or add a guest/fence read.
+   paint[kind].EmitTransition(key,"identity","frame_query_preentry",
+    {{"kind",kind},{"observation",v.observation},{"job_serial",v.job},{"attempt",v.attempt},
+     {"bootstrap_turn",bootstrap>>32},{"bootstrap_cut",uint32_t(bootstrap)},
+     {"paint0",v.paint[0]},{"paint1",v.paint[1]},{"paint2",v.paint[2]},
+     {"paint3",v.paint[3]},{"paint4",v.paint[4]},{"paint5",v.paint[5]},
+     {"paint6",v.paint[6]},{"paint7",v.paint[7]},{"paint8",v.paint[8]},
+     {"paint9",v.paint[9]},{"paint10",v.paint[10]},{"paint11",v.paint[11]},{"paint12",v.paint[12]}});
+  };
+  emit(q,0);
+  if(first_capture==2)emit(first_parked_query_exit.payload,1);
+ }catch(...){/* Observation failure never changes the original result. */}
+
  RenderPhase render_phase=RenderPhase::kOpen;
- const std::shared_ptr<IdentityPixelLifetime> pixel_lifetime=std::make_shared<IdentityPixelLifetime>();
- std::shared_ptr<IdentityPixelGuard> pixels=std::make_shared<IdentityPixelGuard>(kInitialReadSource,false,pixel_lifetime);
+ const std::shared_ptr<IdentityPixelLifetime> pixel_lifetime=profile_enabled?std::make_shared<IdentityPixelLifetime>():nullptr;
+ std::shared_ptr<IdentityPixelGuard> pixels=profile_enabled?std::make_shared<IdentityPixelGuard>(kInitialReadSource,false,pixel_lifetime):nullptr;
  bool render_query_parked=false;
  object_ref<XThread> parked_render_thread;
  uint32_t parked_render_pcr=0,parked_render_sp=0;
@@ -806,6 +1249,10 @@ struct NativeProfileIdentityOwner::State {
  std::unique_ptr<Listeners> listeners;
  std::shared_ptr<Job> job;
  std::vector<std::shared_ptr<Work>> active,host_retired;
+ std::vector<std::shared_ptr<ExecutionLifetime>> execution_lifetimes;
+ std::vector<std::shared_ptr<Work>> execution_retained;
+ std::atomic<bool> execution_unavailable{false};
+ Tasks::ExecutionUnavailableFrames unavailable_execution_frames;
  // Fixed native App registration owns this class instance for the retained
  // root/load generation. No arbitrary heap object or writable pointer issues it.
  uint32_t periodic_object=0;uint64_t next_periodic=1;
@@ -887,7 +1334,7 @@ struct NativeProfileIdentityOwner::State {
  void Lose(uint32_t line) noexcept {
   uint32_t empty=0;first_loss_line.compare_exchange_strong(empty,line,std::memory_order_relaxed);
   uncertain.store(true,std::memory_order_release);
-  pixel_lifetime->closed.store(true,std::memory_order_release);
+  if(pixel_lifetime)pixel_lifetime->closed.store(true,std::memory_order_release);
  }
  void BindTaskDiagnostic(Work& work,cpu::ppc::PPCContext& c,std::optional<uint32_t> native_task) noexcept {
   if(!task_diagnostics_enabled){task_diagnostic_unavailable.fetch_or(1,std::memory_order_relaxed);return;}
@@ -985,10 +1432,24 @@ struct NativeProfileIdentityOwner::State {
   *slot=std::move(work->read);return true;
  }
 
+ // Actual native words only while this exact allocated Task is still live.
+ // An older dispatch may return after free/reuse; never read replacement bytes.
+ std::optional<std::array<uint32_t,2>> LivePeriodicState(Tasks::Birth birth) const {
+  const auto* node=tasks.FindBirthConst(birth.generation);
+  if(!node || !Tasks::SameBirth(node->birth,birth) || !node->periodic_factory ||
+      node->free_entered || node->freed)return {};
+  const auto flags=Word(*kernel->memory(),birth.task+8),period=Word(*kernel->memory(),birth.task+0xC);
+  if(!flags || !period)return {};
+  return std::array<uint32_t,2>{*flags,*period};
+ }
+ bool PeriodicAllocationCurrent(Tasks::Birth birth,uint64_t factory) const {
+  const auto words=LivePeriodicState(birth);
+  return words && tasks.MatchesPeriodicAllocation(birth,factory,*words);
+ }
  bool IdentityWorkEmpty(WorkBlocker* observation=nullptr) const {
   if(observation){*observation={};observation->available=1;}
   const bool empty=std::none_of(active.begin(),active.end(),[&](const auto& work){
-   if(!work->physical_work){
+   if(!work->physical_work && !work->execution_only){
     if(observation){
      observation->available|=2;observation->reason=1;observation->serial=work->serial;
      observation->source=work->source;observation->frame=work->frame;observation->birth=work->birth;
@@ -1009,17 +1470,32 @@ struct NativeProfileIdentityOwner::State {
  }
  std::shared_ptr<Work> Latest(uint32_t thread,uint32_t function=0) const {
   for(auto i=active.rbegin();i!=active.rend();++i)
-   if((*i)->frame.thread==thread && (!function || (*i)->frame.function==function) &&
+   if(!(*i)->normal_return && (*i)->frame.thread==thread && (!function || (*i)->frame.function==function) &&
        (function || (!(*i)->transport_unclaimed && !(*i)->creation_only && !(*i)->execution_options && !(*i)->profile_control && !(*i)->periodic_factory)))return *i;
   return {};
  }
  uint64_t EarlierSource(uint32_t thread) const {
   const auto prior=Latest(thread);return prior?prior->source:kBootUnjoinedSource;
  }
- std::optional<Events::Work> EarlierListenerWork(uint32_t thread) const {
+ std::shared_ptr<Work> EarlierListenerParent(uint32_t thread) const {
   for(auto i=active.rbegin();i!=active.rend();++i)
-   if((*i)->frame.thread==thread && (*i)->listener_work)return (*i)->listener_work;
+   if((*i)->frame.thread==thread && (*i)->listener_work)return *i;
   return {};
+ }
+ std::optional<Events::Work> EarlierListenerWork(uint32_t thread) const {
+  const auto parent=EarlierListenerParent(thread);
+  return parent?parent->listener_work:std::nullopt;
+ }
+ std::shared_ptr<Work> SynchronousListenerParent(const Work& child,const Events::WorkKey& key) const {
+  const auto parent=EarlierListenerParent(child.frame.thread);
+  // Inspect only the innermost earlier owner. A scheduler callback on a
+  // different actual Task, or a tail/equal stack frame, remains independent;
+  // never skip it to borrow an older frame that happens to have our source.
+  if(!parent || parent->thread.get()!=child.thread.get() || parent->normal_return || parent->uncertain ||
+     parent->frame.root!=child.frame.root || parent->frame.pcr!=key.pcr ||
+     parent->birth.generation!=key.task_allocation_generation || parent->birth.task!=key.task ||
+     parent->frame.sp<=key.sp || parent->serial>=key.invocation)return {};
+  return parent;
  }
  // The innermost deleting frame decides this call. A neutral nested
  // destructor cannot borrow an older owned frame or its allocation generation.
@@ -1031,6 +1507,59 @@ struct NativeProfileIdentityOwner::State {
     return !work->transport_unclaimed && tasks.OwnsDeletingFrame(work->frame)?work:nullptr;
   }
   return {};
+ }
+ std::shared_ptr<ExecutionLifetime> ExecutionLifetimeFor(Tasks::Birth birth) const {
+  for(const auto& item:execution_lifetimes)if(item && Tasks::SameBirth(item->birth,birth))return item;
+  return {};
+ }
+ std::shared_ptr<ExecutionTarget> RetainExecutionTarget(uint32_t callback) const {
+  if(callback<4 || (callback&3))return {};
+  auto target=std::make_shared<ExecutionTarget>();
+  auto read=global_critical_region::AcquireDirect();
+  auto module=kernel->GetUserModuleForAddress(callback);xex2_section_type section;
+  if(!module || !module->xex_module() || !module->load_generation() ||
+     !module->xex_module()->GetPageSectionType(callback,&section) || section!=XEX_SECTION_CODE ||
+     module->xex_module()->TranslateCode(callback)!=kernel->memory()->TranslateVirtual<const uint8_t*>(callback) ||
+     kernel->memory()->QueryRangeAccess(callback,4)==memory::PageAccess::kNoAccess ||
+     !config.domain->Contains({module->hmodule_ptr(),module->load_generation()}))return {};
+  auto lease=kernel->AcquireUserModuleExecutionLease(module);if(!lease)return {};
+  target->callback=callback;
+  target->code={module,std::move(lease),module->load_generation()};return target;
+ }
+ std::shared_ptr<ExecutionTarget> ExecutionTargetFor(
+     const std::shared_ptr<ExecutionLifetime>& lifetime,uint32_t callback) const {
+  if(!lifetime || lifetime->uncertain)return {};
+  for(const auto& target:lifetime->targets)if(target && target->callback==callback &&
+      target->code.module && target->code.lease && target->code.load_generation &&
+      target->code.module->load_generation()==target->code.load_generation)return target;
+  return {};
+ }
+ // A resource/unavailable neutral observer may suppress an older ambient
+ // read only through its ALREADY active real scope owner. That Work remains
+ // strongly held in active until its genuine own-return or actual CPU-stop.
+ // Restoration immediately followed by Leave grants no child read access.
+ void SuspendAmbientOnUnavailable(cpu::ppc::PPCContext& c,uint32_t thread) noexcept {
+  if(!c.thread_state)return;
+  void* current=c.thread_state->native_profile_roster_read_.load(std::memory_order_acquire);
+  if(!current)return;
+  for(const auto& parent:active)if(parent && parent->frame.thread==thread &&
+      !parent->normal_return && parent->read.get()==current){
+   if(Tasks::SuppressReadCellForScopeLeave(parent->execution_read_fallback,
+       current,c.thread_state->native_profile_roster_read_))parent->uncertain=true;
+   return;
+  }
+ }
+ bool RestoreOwnedReadOnUnwind(const std::shared_ptr<Work>& work) noexcept {
+  if(!work->execution_read_fallback)return true;
+  if(!work->read || !work->thread || !work->thread->thread_state())return false;
+  return Tasks::RestoreReadCellForScopeLeave(work->execution_read_fallback,
+      work->read.get(),work->thread->thread_state()->native_profile_roster_read_);
+ }
+ void MarkNeutralUnavailable(Frame frame,cpu::ppc::PPCContext& c) noexcept {
+  execution_unavailable.store(true,std::memory_order_release);
+  unavailable_execution_frames.Record(frame);
+  if(frame.function==0x816B8B08 || frame.function==0x816B7DE8)
+   SuspendAmbientOnUnavailable(c,frame.thread);
  }
  struct TaskClaim {
   bool transport=false,relevant=true,unsupported_descendant=false;
@@ -1048,8 +1577,12 @@ struct NativeProfileIdentityOwner::State {
   TaskClaim claim;claim.transport=true;
   const auto parent=[&](uint32_t function){return Latest(thread,function);};
   const auto protected_parent=[&]{
-   for(const auto& work:active)if(work && work->frame.thread==thread && !work->transport_unclaimed && !work->creation_only && !work->execution_options && !work->profile_control && !work->periodic_factory &&
+   for(auto i=active.rbegin();i!=active.rend();++i){const auto& work=*i;
+    if(!work || work->frame.thread!=thread)continue;
+    if(work->execution_only)return false;
+    if(!work->transport_unclaimed && !work->creation_only && !work->execution_options && !work->profile_control && !work->periodic_factory &&
        (work->read || work->commit || (job && job->native_entered && work->source==job->source)))return true;
+   }
    return false;
   };
   const auto subject=tasks.ObservedTransportSubject(uint32_t(c.r[3]));
@@ -1327,6 +1860,24 @@ struct NativeProfileIdentityOwner::State {
   }
   return claim;
  }
+ // Caller holds State only. This grants context lifetime, never a reference,
+ // native result, allocation or profile-read/source. Entry is still checked by
+ // the existing full family guard and exact native allocation/return ledger.
+ std::optional<Tasks::PeriodicFrameContext> PeriodicContextForEntry(
+     const Frame& frame,const TaskClaim& claim) const {
+  if(!claim.relevant || claim.unsupported_descendant || !claim.periodic_factory)return {};
+  const auto* factory=Periodic(claim.periodic_factory);if(!factory)return {};
+  const auto* node=claim.subject?tasks.FindBirthConst(claim.subject):nullptr;
+  if(frame.function==0x819068D0)node=tasks.FindBirthConst(factory->birth.generation);
+  if(node)if(auto context=tasks.RetainPeriodicSubjectContext(frame,*factory,node->birth))return context;
+  const uint32_t parent_function=frame.function==0x816BA440?0x8190A358u:
+      (frame.function==0x816B9A18 || frame.function==0x816B9BB8)?0x816BA440u:0u;
+  const auto parent=parent_function?Latest(frame.thread,parent_function):nullptr;
+  if(!parent || parent->periodic_factory!=factory->serial || !parent->periodic_body_admitted ||
+      parent->normal_return || !parent->periodic_context ||
+      !parent->periodic_context->Matches(parent->frame,factory->serial))return {};
+  return Tasks::RetainPeriodicProducerChild(frame,*parent->periodic_context);
+ }
  ModifyOptionsPayload ModifyOptionsSnapshot(const cpu::ppc::PPCContext& c,
      const TaskClaim& claim,uint32_t stage,uint32_t line) const noexcept {
   ModifyOptionsPayload d;d.available=1;d.stage=stage;d.line=line;
@@ -1386,7 +1937,9 @@ struct NativeProfileIdentityOwner::State {
       job->original_caller.get()==thread && parent && parent->source==job->source;
  }
  std::optional<Frame> ReadFrame(cpu::ppc::PPCContext& c,uint32_t function,
-                                bool allow_title=false,CodeOwner* caller_code=nullptr,bool retained_task_cleanup=false) const {
+                                bool allow_title=false,CodeOwner* caller_code=nullptr,bool retained_task_cleanup=false,
+                                const Tasks::PeriodicFrameContext* periodic_context=nullptr,
+                                uint64_t periodic_factory=0) const {
   if(retired.load(std::memory_order_acquire) || !kernel || !config.catalog || !config.domain || !config.allocation)return {};
   auto* thread=ActualThread();
   const auto calls=config.catalog->calls();
@@ -1397,11 +1950,16 @@ struct NativeProfileIdentityOwner::State {
      c.r[1]>UINT32_MAX || (c.r[1]&15) || c.lr>UINT32_MAX || c.lr<4 || (c.lr&3) ||
      (thread->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM &&
       !(allow_title && thread->native_frame_thread_identity().process_type==X_PROCTYPE_TITLE)) ||
-     !config.domain->active() || (!retained_task_cleanup && !config.allocation->IsAccepting()) ||
+     !config.domain->active() ||
      config.domain->root()!=NativeImportDomain::Member{calls->module()->hmodule_ptr(),calls->load_generation()} ||
      kernel->GetUserModuleForAddress(function).get()!=calls->module().get())return {};
   const Frame frame{root,thread->thread_id(),thread->pcr_ptr(),uint32_t(c.r[1]),uint32_t(c.lr),function};
-  if(!frame.valid())return {};
+  if(!frame.valid() || (!retained_task_cleanup &&
+      !(periodic_context && periodic_context->Matches(frame,periodic_factory)) &&
+      !config.allocation->IsAccepting()))return {};
+  // New allocation admission and an already-retained native frame's context
+  // lifetime are separate. Every root/domain/thread/caller check still runs;
+  // no periodic context is a CloseReceipt or a native reference.
   // The sentinel is only a shape. Exact earlier registration is joined in
   // GuardEntry while holding this owner's metadata lock.
   if(c.lr!=0xBCBCBCBC){
@@ -1486,7 +2044,7 @@ NativeProfileIdentityOwner::BeforeNativeTaskReferenceAcquire(KernelState* kernel
   if(!kernel || ActualThread()!=&thread || thread.kernel_state()!=kernel || !producer ||
       global_critical_region::is_held_by_current_thread() ||
       thread.native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM)return {{},nullptr,false};
-  const auto owner=Lookup(kernel);if(!owner)return {{},nullptr,true};
+  const auto owner=NativeSystemUiService::CaptureTaskExecutionOwner(kernel);if(!owner)return {{},nullptr,true};
   auto& s=*owner->state_;
   // The existing exact retained Unload Control may already be executing when
   // identity BeginStop runs. This is its getter reference, never new work.
@@ -1613,7 +2171,7 @@ NativeProfileIdentityOwner::TaskCloseUse NativeProfileIdentityOwner::BeforeNativ
   if(!kernel || ActualThread()!=&thread || thread.kernel_state()!=kernel ||
       global_critical_region::is_held_by_current_thread() || tagged_target<0x1000 ||
       (tagged_target&3)!=1)return TaskCloseUse({},nullptr,false);
-  const auto owner=Lookup(kernel);
+  const auto owner=NativeSystemUiService::CaptureTaskExecutionOwner(kernel);
   if(!owner)return TaskCloseUse({},nullptr,true);
   auto& s=*owner->state_;
   const auto reject=[&](uint32_t reason){s.RecordTaskCloseRefusal(reason,tagged_target);
@@ -1784,7 +2342,18 @@ void NativeProfileIdentityOwner::ReportFirstRefusalOnCoordinator() const noexcep
  }catch(...){/* Diagnostics never change native admission/results/ownership. */}
 }
 
+void NativeProfileIdentityOwner::ObserveBootstrapHandoff(HandoffStage stage,bool begin_turn) noexcept {
+ if(!cvars::native_system_ui_trace)return;
+ auto& word=state_->bootstrap_handoff;
+ const auto prior=word.load(std::memory_order_relaxed);
+ if(uint32_t(prior)==UINT32_MAX)return; // saturated observation, never reused
+ auto turn=uint32_t(prior>>32);
+ if(begin_turn){if(turn==UINT32_MAX){word.store(UINT64_MAX,std::memory_order_release);return;}++turn;}
+ if(turn)word.store((uint64_t(turn)<<32)|uint32_t(stage),std::memory_order_release);
+}
+
 void NativeProfileIdentityOwner::ReportAlignmentOnHost(const char* boundary) const noexcept {
+ if(!state_->profile_enabled)return;
  if(XThread::GetCurrentFiberThread() || global_critical_region::is_held_by_current_thread())return;
  try {
   state_->ReportTaskOperands(boundary);
@@ -1976,6 +2545,916 @@ std::shared_ptr<NativeProfileIdentityOwner> NativeProfileIdentityOwner::CreateBe
  if(error)error->clear();return owner;
 }
 
+std::optional<NativeProfileIdentityOwner::SaveSelectionCandidates>
+NativeProfileIdentityOwner::CaptureSaveSelectionCandidates() const noexcept try {
+ const auto& s=*state_;std::lock_guard lock(s.mutex);
+ if(!s.profile_enabled || s.retired.load(std::memory_order_acquire))return {};
+ return SaveSelectionCandidates{s.current_roster,s.job?s.job->intent:nullptr,s.job?s.job->source:0};
+}catch(...){return {};}
+
+bool NativeProfileIdentityOwner::HasProfileIdentityAuthority() const noexcept {
+ return state_->profile_enabled && !state_->retired.load(std::memory_order_acquire);
+}
+std::shared_ptr<NativeProfileIdentityOwner> NativeProfileIdentityOwner::CreateExecutionBeforeWorkers(
+    Config config,std::string* error) {
+ const auto fail=[&](const char* why)->std::shared_ptr<NativeProfileIdentityOwner>{if(error)*error=why;return {};};
+ if(!config.catalog || !config.domain || !config.allocation || config.renderer || config.factory_binding)
+  return fail("Common Task factory requires execution-only owners");
+ const auto calls=config.catalog->calls();auto* kernel=calls?calls->kernel():nullptr;
+ auto* thread=ActualThread();
+ if(!kernel || !thread || thread->kernel_state()!=kernel ||
+    thread->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM ||
+    thread->thread_id()!=config.allocation->bootstrap_thread_id() ||
+    !config.domain->active() || !config.allocation->IsAccepting() ||
+    !config.allocation->MatchesDomain(config.domain) ||
+    config.domain->root()!=NativeImportDomain::Member{calls->module()->hmodule_ptr(),calls->load_generation()} ||
+    !CheckTaskExecutionCode(*calls))return fail("Actual common Task root/domain/code unavailable");
+ auto state=std::make_shared<State>(std::move(config));
+ state->root_code=kernel->AcquireUserModuleExecutionLease(calls->module());
+ state->resident_domain=state->config.domain->Acquire();
+ if(!state->root_code || !state->resident_domain)return fail("Common Task execution lifetime unavailable");
+ state->active.reserve(256);state->host_retired.reserve(256);
+ state->expected.reserve(64);state->retired_expected.reserve(64);
+ state->execution_lifetimes.reserve(Tasks::kCapacity);
+ auto owner=std::shared_ptr<NativeProfileIdentityOwner>(new NativeProfileIdentityOwner(std::move(state)));
+ kernel->RetainNativeResourceUntilTeardown(owner);
+ if(error)error->clear();return owner;
+}
+
+bool NativeProfileIdentityOwner::BindImageObserverSlot(
+    const std::shared_ptr<NativeIdentityTileObserverSlot>& slot) noexcept {
+ try{
+  if(!slot || slot->kernel_!=state_->kernel)return false;
+  const auto installed=state_->kernel->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  if(!installed || installed.get()!=slot.get() || installed.owner_before(slot) ||
+     slot.owner_before(installed))return false;
+  std::lock_guard lock(state_->mutex);
+  const auto actual=slot->current_.load(std::memory_order_acquire);
+  const auto self=weak_from_this();
+  if(state_->retired.load() || (state_->image_slot &&
+     (state_->image_slot.get()!=slot.get() || state_->image_slot.owner_before(slot) ||
+      slot.owner_before(state_->image_slot))) ||
+     (!actual.expired() && (actual.owner_before(self) || self.owner_before(actual))))return false;
+  state_->image_slot=slot;slot->current_.store(self,std::memory_order_release);return true;
+ }catch(...){if(slot)slot->unavailable_.store(true,std::memory_order_release);return false;}
+}
+void NativeProfileIdentityOwner::ObserveImageTileWrite(
+    const std::shared_ptr<NativeIdentityTileObserverSlot>& slot,
+    const std::array<std::pair<uint32_t,uint32_t>,2>& spans,uint32_t phase,
+    const NativeIdentityTileWork* actual_work) noexcept {
+ try{
+  if(!global_critical_region::is_held_by_current_thread() || !slot || phase>3)return;
+  auto& s=*state_;std::lock_guard lock(s.mutex);
+  if(s.retired.load() || slot->kernel_!=s.kernel)return;
+  const auto current=slot->current_.load(std::memory_order_acquire);
+  const auto self=weak_from_this();
+  if(s.retired.load() || !s.image_slot || s.image_slot.get()!=slot.get() ||
+     s.image_slot.owner_before(slot) || slot.owner_before(s.image_slot) || current.owner_before(self) ||
+     self.owner_before(current))return;
+  // This is deny-only producer overlap, not adoption or a permission lookup.
+  // GuestIo already owns GCRC. Its existing overlap helper accounts for actual
+  // physical aliases while all provider fields remain under the one owner.
+  for(const auto& provider:s.providers){
+   if(!provider || !provider->initialized || provider->destroyed)continue;
+   const bool overlap=std::any_of(spans.begin(),spans.end(),[&](const auto& span){
+    return span.second && (util::GuestIoRangesOverlap(*s.kernel->memory(),span.first,
+        span.second,provider->buffer,provider->capacity) ||
+        util::GuestIoRangesOverlap(*s.kernel->memory(),span.first,span.second,
+            provider->object,0xD8));
+   });
+   if(!overlap)continue;
+   provider->image_epoch.Invalidate();provider->image_output.reset();
+   if(provider->image_uri_generation==UINT64_MAX)
+    slot->unavailable_.store(true,std::memory_order_release);
+   else ++provider->image_uri_generation;
+   const auto data=actual_work?actual_work->data_:nullptr;
+   if(data && provider->last_output.get()==data.get() &&
+      !provider->last_output.owner_before(data) && !data.owner_before(provider->last_output) &&
+      data->provider_generation==provider->generation &&
+      data->provider==provider->object && data->output==provider->buffer &&
+      data->capacity==provider->capacity){
+    data->image_store_publication.store(0,std::memory_order_release);
+    if(phase==2 && provider->image_epoch.live()){
+     data->image_store_allocation.store(provider->image_epoch.allocation(),std::memory_order_relaxed);
+     data->image_store_publication.store(provider->image_epoch.publication(),std::memory_order_release);
+    }
+   }
+  }
+ }catch(...){slot->unavailable_.store(true,std::memory_order_release);}
+}
+NativeIdentityTilePublication::NativeIdentityTilePublication(KernelState* kernel,
+    std::array<Span,2> spans,const NativeIdentityTileWork* actual_work) noexcept
+    :kernel_(kernel),spans_(spans),actual_work_(actual_work){
+ // A caller already inside GCRC cannot promise an out-of-GCRC final
+ // Owner release. Keep only metadata aliases and deny current image credit
+ // at EVERY actual cut, including owner replacement before/after stores.
+ borrow_owners_=!global_critical_region::is_held_by_current_thread();
+ Observe(0);
+}
+NativeIdentityTilePublication::~NativeIdentityTilePublication(){
+ if(stores_entered_ && !stores_settled_)StoresUncertain();
+ // Inline strong Owner/slot holders retire only here, after GuestIo's GCRC.
+}
+void NativeIdentityTilePublication::Observe(uint32_t phase) noexcept {
+ const size_t index=phase==0?0:phase==1?1:2;
+ try{
+  if(!kernel_)return;
+  // A call-attempt capture may precede the aggregate IO. Actual pre/poststore
+  // cuts reload the Kernel alias, so null/stale earlier captures grant nothing.
+  auto global=global_critical_region::AcquireDirect();
+  slots_[index]=kernel_->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  const auto& slot=slots_[index];if(!slot || slot->kernel_!=kernel_)return;
+  if(!borrow_owners_){slot->unavailable_.store(true,std::memory_order_release);return;}
+  owners_[index]=slot->current_.load(std::memory_order_acquire).lock();
+  if(owners_[index])owners_[index]->ObserveImageTileWrite(slot,
+      {{{spans_[0].address,spans_[0].bytes},{spans_[1].address,spans_[1].bytes}}},phase,actual_work_);
+ }catch(...){if(slots_[index])slots_[index]->unavailable_.store(true,std::memory_order_release);}
+}
+void NativeIdentityTilePublication::BeforeStores() noexcept {
+ if(stores_entered_)return;stores_entered_=true;Observe(1);
+}
+void NativeIdentityTilePublication::StoresCommitted() noexcept {
+ if(!stores_entered_ || stores_settled_)return;stores_settled_=true;stores_committed_=true;Observe(2);
+}
+void NativeIdentityTilePublication::StoresUncertain() noexcept {
+ if(!stores_entered_ || stores_settled_)return;stores_settled_=true;Observe(3);
+}
+
+void NativeProfileIdentityOwner::ObserveImageEntry(void* raw,uint32_t at) noexcept {
+ if(!raw)return;auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ std::shared_ptr<NativeIdentityTileObserverSlot> slot,current_slot;
+ std::shared_ptr<NativeProfileIdentityOwner> owner;
+ try{
+  if(!c.kernel_state)return;
+  slot=c.kernel_state->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  if(!slot || slot->kernel_!=c.kernel_state)return;
+  owner=slot->current_.load(std::memory_order_acquire).lock();if(!owner)return;
+  auto& state=*owner->state_;if(!state.profile_enabled)return;
+  struct Borrow {State* state=nullptr;~Borrow(){if(state)state->hooks.fetch_sub(1,std::memory_order_acq_rel);}} borrow;
+  std::shared_ptr<GuestRuntimeCallExecutor> calls;
+  std::shared_ptr<NativeImportDomain> domain;
+  {
+   std::lock_guard lock(state.mutex);
+   if(state.retired.load() || !state.config.catalog || state.hooks.load()==UINT64_MAX)return;
+   state.hooks.fetch_add(1,std::memory_order_acq_rel);borrow.state=&state;
+   calls=state.config.catalog->calls();domain=state.config.domain;
+  }
+  if(at==0x8172D590){
+   const auto actual=state.ImageShape(c,at);if(!actual)return;
+   std::lock_guard lock(state.mutex);
+   const auto* parent=state.ImageParent(*actual,reinterpret_cast<uintptr_t>(&c));
+   if(!parent || !((parent->frame.function==0x816B0B50 && actual->lr==0x816B0B88 && parent->input) ||
+       (parent->frame.function==0x81839C18 && actual->lr==0x81839C50 && parent->copied) ||
+       (parent->frame.function==0x8183A180 &&
+        (actual->lr==0x8183A1E4 || actual->lr==0x8183A210) && parent->copied)))return;
+  }
+  auto global=global_critical_region::AcquireDirect();
+  if(!calls || !CheckImageBody(*calls,at)){slot->unavailable_.store(true,std::memory_order_release);return;}
+  const auto frame=state.ImageShape(c,at);
+  if(!frame){slot->unavailable_.store(true,std::memory_order_release);return;}
+  std::optional<uint32_t> actual_task;
+  if(domain && CheckTaskReferenceCode(*calls))actual_task=NativeProfileIdentityTaskContext::Read(*calls,*domain,at,c);
+  current_slot=c.kernel_state->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  std::lock_guard lock(state.mutex);
+  const auto current=slot->current_.load(std::memory_order_acquire);const auto self=owner->weak_from_this();
+  if(state.retired.load() || state.image_slot.get()!=slot.get() || current_slot.get()!=slot.get() ||
+     current_slot.owner_before(slot) || slot.owner_before(current_slot) ||
+     current.owner_before(self) || self.owner_before(current) || slot->unavailable_.load())return;
+  const auto* code=NativeImageCode(at);
+  if(!code || frame->sp<code->frame_bytes || state.next_image_call==UINT64_MAX){state.LoseImageObservation();return;}
+  const auto empty=std::find_if(state.image_calls.begin(),state.image_calls.end(),[](const auto& v){return !v;});
+  if(empty==state.image_calls.end()){state.LoseImageObservation();return;}
+  State::ImageCall call;call.frame=*frame;call.body_sp=frame->sp-code->frame_bytes;
+  call.context=reinterpret_cast<uintptr_t>(&c);call.cpu=reinterpret_cast<uintptr_t>(c.thread_state);
+  call.serial=++state.next_image_call;
+  std::copy(std::begin(c.r)+3,std::begin(c.r)+11,call.args.begin());
+  // Only operands used by this observation are typed DWORDs/pointers. Other
+  // original argument words remain opaque and execution is never denied.
+  uint32_t used=0;
+  switch(at){
+   case 0x817B4A80:case 0x817ADD70:case 0x817ACA98:case 0x8177C870:used=3;break;
+   case 0x817B4A50:case 0x8177EA08:case 0x81780C50:case 0x81780CE0:case 0x8177EB58:
+   case 0x8177E728:case 0x81783688:case 0x81780DD0:case 0x817C7B38:
+   case 0x8177D1D0:case 0x81785308:case 0x8177D000:case 0x81798740:
+   case 0x81798788:case 0x81839590:
+   case 0x81839780:case 0x81839C60:used=1;break;
+   case 0x817CC858:case 0x817CDF08:case 0x8177D288:case 0x8178E138:
+   case 0x816B0B50:case 0x8172D590:case 0x817DB560:case 0x817DD2E0:case 0x816C8E10:
+   case 0x81798270:used=7;break;
+   case 0x81839C18:used=0x09;break; // R3 device/R6 vertex pointer; scalars are native MULLW operands
+   case 0x8183A180:used=0xA1;break; // R3 device/R8 index pointer/R10 vertex pointer
+   case 0x8177E778:case 0x816C8D68:used=3;break;
+   case 0x817851B8:case 0x816C82C8:case 0x817836D8:used=15;break;
+   case 0x81784D80:used=31;break;
+  }
+  for(size_t i=0;i<call.args.size();++i)if((used&(1u<<i)) && !DwordIs(call.args[i],uint32_t(call.args[i]))){
+   state.LoseImageObservation();return;
+  }
+  if(auto* parent=state.ImageParent(*frame,call.context)){
+   const auto branch=Word(*state.kernel->memory(),frame->lr-4);
+   bool actual_call=branch && *branch==0x4E800421;
+   if(branch && (*branch&0xFC000001u)==0x48000001u){
+    int32_t delta=int32_t(*branch&0x03FFFFFCu);if(delta&0x02000000)delta|=int32_t(0xFC000000u);
+    const uint32_t target=(*branch&2)?uint32_t(delta):uint32_t(frame->lr-4+delta);
+    actual_call=target==at;
+   }
+   if(actual_call)call.parent=parent->serial;
+  }
+  if(actual_task)if(const auto* task=state.tasks.FindLiveTask(*actual_task))
+   for(auto i=state.active.rbegin();i!=state.active.rend();++i){const auto& render=*i;
+    if(render->render_iteration && !render->normal_return && !render->uncertain &&
+       render->frame.thread==frame->thread && render->frame.pcr==frame->pcr &&
+       frame->sp<=render->frame.sp && render->birth.task==*actual_task &&
+       render->birth.generation==task->birth.generation){call.render=render->serial;break;}
+   }
+  const auto capture_key=[&](uint64_t actual){
+   if(!DwordIs(actual,uint32_t(actual)))return;
+   if(const auto key=state.ImageInputAt(uint32_t(actual))){
+    const auto version=key->input.provider?key->input.provider->version:key->input.section->version;
+    if(!NativeMemoryKeyMatches(*state.kernel->memory(),uint32_t(actual),key->input.address(),key->input.size(),version))return;
+    call.key_pointer=uint32_t(actual);call.input=key->input;
+    call.key_provider=key->provider;call.uri_generation=key->uri_generation;call.key_generation=key->string_generation;}
+  };
+  using Kind=identity_detail::NativeImageJournal::Kind;
+  if(at==0x8177EA08 || at==0x81780C50){
+   if(DwordIs(call.args[0],uint32_t(call.args[0])))
+    call.object=state.images.BeginNativeObject(at==0x8177EA08?Kind::kBrush:Kind::kDc,uint32_t(call.args[0]));
+  }else if(at==0x817B4A50 || at==0x8177EB58 || at==0x8177E728 || at==0x81783688 || at==0x81780DD0){
+   const auto kind=at==0x817B4A50?Kind::kInterface:at==0x8177EB58?Kind::kBrush:
+       at==0x8177E728?Kind::kWrapper:Kind::kDc;
+   call.object=state.images.Current(kind,uint32_t(call.args[0]));
+   if(call.object)state.images.RetireObject(*call.object);
+  }else if(at==0x817ADD70){
+   call.object=state.images.Current(Kind::kInterface,uint32_t(call.args[0]));
+  }else if(at==0x817ACA98){
+   capture_key(call.args[1]);state.RevokeImageString(0,uint32_t(call.args[0]));
+   if(call.args[0]>=4)call.object=state.images.Current(Kind::kInterface,uint32_t(call.args[0])-4);
+   if(call.object)state.images.BeforePathChange(*call.object);
+  }else if(at==0x817C7B38){
+   if(call.args[0]>=4)call.object=state.images.Current(Kind::kInterface,uint32_t(call.args[0])-4);
+   if(call.object)state.images.WithdrawResource(*call.object);
+  }else if(at==0x817CDF08 || at==0x817CC858){
+   capture_key(call.args[2]);
+  }else if(at==0x8177D288){
+   call.object=state.images.Current(Kind::kBrush,uint32_t(call.args[0]));capture_key(call.args[2]);
+   if(call.object)state.images.WithdrawResource(*call.object);
+  }else if(at==0x8177D1D0){
+   call.object=state.images.Current(Kind::kBrush,uint32_t(call.args[0]));
+   if(call.object)state.images.WithdrawResource(*call.object);
+  }else if(at==0x8177E778){
+   const auto old=state.images.Current(Kind::kWrapper,uint32_t(call.args[0]));
+   const auto old_copy=old?state.images.Copied(*old):std::optional<State::ImageTransfer>{};
+   auto* parent=state.ImageBySerial(call.parent);
+   const bool original_creation=parent && parent->frame.function==0x817836D8 && frame->lr==0x81783758;
+   if(old || original_creation){call.object=state.images.BeginNativeObject(Kind::kWrapper,uint32_t(call.args[0]));
+    if(parent && parent->copied && parent->copied->texture==uint32_t(call.args[1]))call.copied=parent->copied;
+    else if(old_copy && old_copy->texture==uint32_t(call.args[1]))call.copied=old_copy;
+   }
+  }else if(at==0x817851B8 || at==0x816C82C8 || at==0x817836D8){
+   capture_key(call.args[1]);
+  }else if(at==0x81784D80){
+   auto* parent=state.ImageBySerial(call.parent);
+   if(parent && parent->frame.function==0x817851B8 && frame->lr==0x817852A0 &&
+      parent->input && state.ImageInputStillCurrent(*parent) &&
+      DwordIs(call.args[0],parent->input->address()) &&
+      DwordIs(call.args[1],parent->input->size()) &&
+      DwordIs(call.args[3],uint32_t(parent->args[3])) && state.ImageBytesCurrent(*parent->input)){
+    call.input=parent->input;call.read_state=call.body_sp+0x98;
+   }
+  }else if(at==0x8178E138){
+   auto* decoder=state.ImageBySerial(call.parent);
+   if(decoder && decoder->frame.function==0x81784D80 && frame->lr==0x81784F18 &&
+      decoder->input && DwordIs(call.args[0],uint32_t(call.args[0])) && call.args[0] &&
+      DwordIs(call.args[1],decoder->read_state) && DwordIs(call.args[2],0x816B0B50)){
+    const auto pointer=Word(*state.kernel->memory(),decoder->read_state);
+    const auto remaining=Word(*state.kernel->memory(),decoder->read_state+4);
+    if(pointer && remaining && *pointer==decoder->input->address() && *remaining==decoder->input->size()){
+     call.png_context=uint32_t(call.args[0]);call.read_state=decoder->read_state;
+     decoder->png_context=call.png_context;
+    }
+   }
+  }else if(at==0x816B0B50){
+   if(DwordIs(call.args[0],uint32_t(call.args[0])))
+    if(auto* decoder=state.ImageDecoder(call,uint32_t(call.args[0]))){
+     call.parent=decoder->serial;call.png_context=decoder->png_context;call.read_state=decoder->read_state;
+     call.input=decoder->input;
+    }
+  }else if(at==0x8172D590){
+   auto* parent=state.ImageBySerial(call.parent);bool matches=false;
+   if(parent && parent->frame.function==0x816B0B50 && parent->input && parent->copy_entered &&
+      frame->lr==0x816B0B88){
+    matches=DwordIs(call.args[0],parent->copy_destination) && DwordIs(call.args[1],parent->source_pointer) &&
+        DwordIs(call.args[2],parent->copy_length) && !parent->copy_calls &&
+        !util::GuestIoRangesOverlap(*state.kernel->memory(),uint32_t(call.args[0]),uint32_t(call.args[2]),
+            parent->input->address(),parent->input->size());
+   }else if(parent && parent->frame.function==0x81839C18 && parent->packet_returned && frame->lr==0x81839C50){
+    // Original39C44 MULLW consumes low32 and sign-extends its DWORD result.
+    // Parent scalar high words are deliberately opaque; actual memcpy operands
+    // still have their independently checked canonical DWORD/pointer forms.
+    const uint32_t length=uint32_t(uint64_t(uint32_t(parent->args[2]))*uint32_t(parent->args[4]));
+    matches=DwordIs(call.args[0],parent->copy_destination) &&
+        DwordIs(call.args[1],uint32_t(parent->args[3])) && DwordIs(call.args[2],length) && !parent->copy_calls;
+   }else if(parent && parent->frame.function==0x8183A180 && parent->packet_returned && parent->stride){
+    if(frame->lr==0x8183A1E4){
+     // Original3A1D0/1D8 MULLW;3A1DC ADD. Preserve the low32 address
+     // arithmetic including negative base offsets. A noncanonical full actual
+     // ADD result cannot pass this independently checked memcpy entry.
+     const uint32_t offset=uint32_t(uint64_t(uint32_t(parent->args[2]))*parent->stride);
+     const uint32_t source=uint32_t(uint64_t(uint32_t(parent->args[7]))+offset);
+     const uint32_t length=uint32_t(uint64_t(uint32_t(parent->args[3]))*parent->stride);
+     matches=!parent->copy_calls && DwordIs(call.args[0],parent->copy_destination) &&
+         DwordIs(call.args[1],source) && DwordIs(call.args[2],length);
+    }else if(frame->lr==0x8183A210){
+     const uint32_t width=(uint32_t(parent->args[6])&4)?4:2;
+     // Original3A200 MULLW,3A204 ADDI,3A208 RLWINM: each DWORD
+     // wraps as native, then low2 alignment bits clear.
+     const uint32_t product=uint32_t(uint64_t(uint32_t(parent->args[4]))*width);
+     const uint32_t rounded=product+uint32_t(3);
+     const uint32_t length=rounded&~uint32_t(3);
+     matches=parent->copy_calls==1 && parent->copy_returns==1 &&
+         DwordIs(call.args[0],parent->index_destination) && DwordIs(call.args[1],uint32_t(parent->args[5])) &&
+         DwordIs(call.args[2],length);
+    }
+   }
+   if(matches){call.copy_entered=true;call.copy_destination=uint32_t(call.args[0]);
+    call.source_pointer=uint32_t(call.args[1]);call.copy_length=uint32_t(call.args[2]);++parent->copy_calls;
+   }else{call.uncertain=true;if(parent)parent->uncertain=true;}
+  }else if(at==0x81785308){
+   if(DwordIs(call.args[0],uint32_t(call.args[0])))
+    if(auto* decoder=state.ImageDecoder(call,uint32_t(call.args[0]))){
+     decoder->error=true;call.parent=decoder->serial;
+    }
+  }else if(at==0x816C8D68){
+   const bool range=DwordIs(call.args[0],uint32_t(call.args[0])) && DwordIs(call.args[1],uint32_t(call.args[1])) &&
+       uint64_t(uint32_t(call.args[0]))+uint64_t(uint32_t(call.args[1]))*16<=0x100000000ull;
+   for(uint32_t i=0;i<state.image_defaults.size();++i)
+    if(!range || (uint32_t(call.args[0])<0x81A82724u+i*16 &&
+       uint64_t(uint32_t(call.args[0]))+uint64_t(uint32_t(call.args[1]))*16>0x81A82714u+i*16))state.image_defaults[i].reset();
+  }else if(at==0x817DB560){
+   auto* init=state.ImageBySerial(call.parent);
+   if(init && init->frame.function==0x816C8D68 && frame->lr==0x816C8DBC && init->default_format &&
+      DwordIs(call.args[0],init->body_sp+0x60) && DwordIs(call.args[1],init->body_sp+0x50) &&
+      DwordIs(call.args[2],init->body_sp+0x54) && NativeSectionUrlMatches(*state.kernel->memory(),
+       uint32_t(call.args[0]),init->module,ImageLabel(init->section_label),ImageLabel(init->entry_label))){
+    call.initializer=init->serial;call.resource_open=call.serial;call.row_output=init->row_output;
+    call.default_index=init->default_index;call.module=init->module;call.module_generation=init->module_generation;
+   }
+  }else if(at==0x817DAF80 || at==0x817DD2E0){
+   auto* parent=state.ImageBySerial(call.parent);
+   const bool edge=parent && ((at==0x817DAF80 && parent->frame.function==0x817DB560 && frame->lr==0x817DB630) ||
+       (at==0x817DD2E0 && parent->frame.function==0x817DAF80 && frame->lr==0x817DB054));
+   if(edge && parent->initializer && parent->resource_open){
+    call.initializer=parent->initializer;call.resource_open=parent->resource_open;
+    call.row_output=parent->row_output;call.default_index=parent->default_index;
+    call.module=parent->module;call.module_generation=parent->module_generation;
+   }
+  }else if(at==0x816C8E10){
+   const auto work=state.Latest(frame->thread,0x816921C8);
+   if(work && !work->uncertain && !work->normal_return && frame->lr==0x81692330 &&
+      work->frame.sp>=0xB0 && work->frame.sp-0xB0==frame->sp && work->frame.pcr==frame->pcr &&
+      DwordIs(call.args[0],uint32_t(call.args[0])) && uint32_t(call.args[0])<3 &&
+      DwordIs(call.args[1],work->first+0x90) && DwordIs(call.args[2],work->first+0x94)){
+    const auto provider=state.FindProvider(work->first);
+    if(provider && provider->generation==work->provider_generation && !provider->revoked && !provider->destroyed){
+     call.default_index=uint32_t(call.args[0]);call.default_source=work->source;call.default_birth=provider->generation;
+     call.key_provider=provider->object;call.uri_generation=provider->image_uri_generation;
+    }
+   }
+  }else if(at==0x81780CE0){
+   call.dc=state.images.Current(Kind::kDc,uint32_t(call.args[0]));
+   if(call.dc)state.images.WithdrawResource(*call.dc); // real reset, same object birth
+  }else if(at==0x8177C870){
+   call.dc=state.images.Current(Kind::kDc,uint32_t(call.args[0]));
+   call.other=state.images.Current(Kind::kWrapper,uint32_t(call.args[1]));
+   if(call.dc){call.selection=state.images.BeginDcSelection(*call.dc);
+    const auto prior=Word(*state.kernel->memory(),call.dc->address+0x250);
+    if(prior)call.prior_texture=*prior;
+   }
+   if(call.other)call.copied=state.images.Copied(*call.other);
+   if(call.copied)call.native_texture=call.copied->texture;
+  }else if(at==0x8177D000){
+   call.dc=state.images.Current(Kind::kDc,uint32_t(call.args[0]));
+  }else if(at==0x81798270 || at==0x81798740 || at==0x81798788){
+   auto* parent=state.ImageBySerial(call.parent);
+   const bool texture=at==0x81798270 && parent && parent->frame.function==0x8177C870 && frame->lr==0x8177C8D4;
+   const bool draw=at!=0x81798270 && parent && parent->frame.function==0x8177D000 &&
+       frame->lr==(at==0x81798740?0x8177D060:0x8177D08C);
+   if(texture)parent->native_call_entered=true;
+   if((texture || draw) && parent->dc){
+    const auto low=Word(*state.kernel->memory(),parent->dc->address+0x1CC);
+    if(low && DwordIs(call.args[0],*low)){
+     call.dc=parent->dc;call.other=parent->other;call.selection=parent->selection;
+     call.copied=texture?parent->copied:state.images.Copied(*parent->dc);
+     if(draw)call.draw_selection=state.images.SelectionSerial(*parent->dc);
+     if(call.copied)call.native_texture=call.copied->texture;
+    }
+   }
+  }else if(at==0x81839780 || at==0x81839C60){
+   auto* parent=state.ImageBySerial(call.parent);
+   const auto original=at==0x81839780?0x81839C18u:0x8183A180u;
+   const auto edge=at==0x81839780?0x81839C3Cu:0x8183A1C8u;
+   if(parent && parent->frame.function==original && frame->lr==edge && parent->dc && parent->copied &&
+      DwordIs(call.args[0],parent->device)){
+    call.dc=parent->dc;call.copied=parent->copied;call.device=parent->device;call.native_texture=parent->native_texture;
+    call.draw_selection=parent->draw_selection;
+   }
+  }else if(at==0x81839590 || at==0x81839C18 || at==0x8183A180){
+   auto* parent=state.ImageBySerial(call.parent);
+   const auto wrapper=at==0x81839590?0x81798270u:at==0x81839C18?0x81798740u:0x81798788u;
+   const auto edge=at==0x81839590?0x81798298u:at==0x81839C18?0x81798774u:0x817987C4u;
+   if(parent && parent->frame.function==wrapper && frame->lr==edge &&
+      parent->native_call_entered && parent->dc && parent->copied &&
+      DwordIs(call.args[0],parent->device)){
+    call.dc=parent->dc;call.other=parent->other;call.selection=parent->selection;call.copied=parent->copied;
+    call.device=parent->device;call.native_texture=parent->native_texture;call.sampler=parent->sampler;
+    call.draw_selection=parent->draw_selection;
+    const auto before=Word(*state.kernel->memory(),call.device+0x30);if(before)call.prior_cursor=*before;
+    if(at==0x8183A180){const auto stride=Word(*state.kernel->memory(),frame->sp+0x54);if(stride)call.stride=*stride;}
+   }
+  }
+  *empty=std::move(call);
+ }catch(...){if(slot)slot->unavailable_.store(true,std::memory_order_release);}
+}
+void NativeProfileIdentityOwner::ObserveImageReturn(void* raw,uint32_t at) noexcept {
+ if(!raw)return;auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ std::shared_ptr<NativeIdentityTileObserverSlot> slot,current_slot;
+ std::shared_ptr<NativeProfileIdentityOwner> owner;
+ try{
+  if(!c.kernel_state)return;
+  slot=c.kernel_state->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  if(!slot || slot->kernel_!=c.kernel_state)return;
+  owner=slot->current_.load(std::memory_order_acquire).lock();if(!owner)return;
+  auto& state=*owner->state_;if(!state.profile_enabled)return;
+  struct Borrow {State* state=nullptr;~Borrow(){if(state)state->hooks.fetch_sub(1,std::memory_order_acq_rel);}} borrow;
+  std::shared_ptr<GuestRuntimeCallExecutor> calls;
+  {
+   std::lock_guard lock(state.mutex);
+   if(state.retired.load() || !state.config.catalog || state.hooks.load()==UINT64_MAX)return;
+   state.hooks.fetch_add(1,std::memory_order_acq_rel);borrow.state=&state;calls=state.config.catalog->calls();
+  }
+  if(at==0x8172D590){
+   const auto actual=state.ImageShape(c,at);if(!actual)return;
+   std::lock_guard lock(state.mutex);
+   if(!state.ImageAt(*actual,reinterpret_cast<uintptr_t>(&c),false))return;
+  }
+  auto global=global_critical_region::AcquireDirect();
+  if(!calls || !CheckImageBody(*calls,at)){slot->unavailable_.store(true,std::memory_order_release);return;}
+  const auto frame=state.ImageShape(c,at);
+  if(!frame){slot->unavailable_.store(true,std::memory_order_release);return;}
+  current_slot=c.kernel_state->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  std::lock_guard lock(state.mutex);
+  const auto current=slot->current_.load(std::memory_order_acquire);const auto self=owner->weak_from_this();
+  if(state.retired.load() || current_slot.get()!=slot.get() ||
+     current_slot.owner_before(slot) || slot.owner_before(current_slot) ||
+     current.owner_before(self) || self.owner_before(current) || slot->unavailable_.load())return;
+  auto* call=state.ImageAt(*frame,reinterpret_cast<uintptr_t>(&c),false);if(!call)return;
+  using Kind=identity_detail::NativeImageJournal::Kind;
+  const uint32_t value=uint32_t(c.r[3]);
+  if(at==0x817B4A80 && !value && DwordIs(call->args[1],uint32_t(call->args[1]))){
+   const auto output=Word(*state.kernel->memory(),uint32_t(call->args[1]));
+   if(output && *output)if(const auto object=state.images.BeginNativeObject(Kind::kInterface,*output))
+    state.images.FinishNativeObject(*object,true);
+  }else if((at==0x8177EA08 || at==0x81780C50) && call->object){
+   state.images.FinishNativeObject(*call->object,DwordIs(c.r[3],uint32_t(call->args[0])));
+  }else if(at==0x817ACA98 && !value && call->input && state.ImageInputStillCurrent(*call)){
+   const auto output=Word(*state.kernel->memory(),uint32_t(call->args[0]));
+   if(output && *output && state.RememberImageString(*output,uint32_t(call->args[0]),*call->input)){
+    if(call->object)state.images.CopyOwnedPath(*call->object,*call->input,true);}
+  }else if(at==0x8177E778 && call->object){
+   const auto output=Word(*state.kernel->memory(),call->object->address+8);
+   const bool assigned=output && *output==uint32_t(call->args[1]);
+   state.images.FinishNativeObject(*call->object,assigned);
+   if(assigned && call->copied)state.images.FinishWrapperAssignment(*call->object,*call->copied,true);
+  }else if(at==0x8177D288 && call->object && call->input && int32_t(value)>=0){
+   const auto actual=Word(*state.kernel->memory(),call->object->address+0x14);
+   const auto wrapper=actual?state.images.Current(Kind::kWrapper,*actual):std::optional<State::ImageObject>{};
+   if(wrapper)state.images.AdoptKnownWinner(*call->object,*wrapper,*call->input,true);
+  }
+  else if(at==0x817CC858 && !value && call->input && state.ImageInputStillCurrent(*call)){
+   const auto output=Word(*state.kernel->memory(),uint32_t(call->args[0]));
+   if(output && *output)state.RememberImageString(*output,uint32_t(call->args[0]),*call->input);
+  }else if(at==0x8178E138 && call->png_context){
+   auto* decoder=state.ImageBySerial(call->parent);
+   const auto callback=Word(*state.kernel->memory(),call->png_context+0x550);
+   const auto data=Word(*state.kernel->memory(),call->png_context+0x554);
+   if(!decoder || !callback || *callback!=0x816B0B50 || !data || *data!=call->read_state)
+    {if(decoder)decoder->uncertain=true;}
+  }else if(at==0x816B0B50){
+   auto* decoder=state.ImageBySerial(call->parent);
+   const auto pointer=Word(*state.kernel->memory(),call->read_state);
+   const auto remaining=Word(*state.kernel->memory(),call->read_state+4);
+   const bool returned=decoder && call->input && call->copy_entered && !call->uncertain &&
+       call->copy_calls==1 && call->copy_returns==1 &&
+       pointer && remaining && *pointer==uint64_t(call->source_pointer)+call->copy_length &&
+       *remaining==call->input->size()-decoder->copied_bytes-call->copy_length;
+   if(decoder){
+    if(returned && decoder->copy_returns!=UINT32_MAX &&
+       uint64_t(decoder->copied_bytes)+call->copy_length<=decoder->input->size()){
+     ++decoder->copy_returns;decoder->copied_bytes+=call->copy_length;call->copy_returned=true;
+    }else decoder->uncertain=true;
+   }
+  }else if(at==0x8172D590){
+   auto* parent=state.ImageBySerial(call->parent);
+   if(parent && call->copy_entered && !call->uncertain && DwordIs(c.r[3],call->copy_destination) &&
+      parent->copy_returns<parent->copy_calls)++parent->copy_returns;
+   else if(parent)parent->uncertain=true;
+  }else if(at==0x81784D80){
+   auto* parent=state.ImageBySerial(call->parent);
+   const auto texture=DwordIs(call->args[3],uint32_t(call->args[3]))?
+       Word(*state.kernel->memory(),uint32_t(call->args[3])):std::optional<uint32_t>{};
+   const bool actual_output=int32_t(value)>=0 && !call->uncertain && !call->error &&
+       call->input && texture && *texture && call->copy_calls && call->copied_bytes &&
+       call->copy_calls==call->copy_returns && state.ImageBytesCurrent(*call->input);
+   if(actual_output && parent && parent->frame.function==0x817851B8){
+    // This genuine decoder creates a new native texture. A reused native
+    // object address cannot preserve an older future adoption/draw birth.
+    state.images.RevokeNativeTexture(*texture);
+    for(const auto& work:state.active)for(auto& draw:work->image_draws)
+     if(draw && draw->draw.copied.texture==*texture)draw.reset();
+    parent->copied=State::ImageTransfer{*call->input,call->serial,*texture};
+   }
+   // A failed nonlocal PNG return abandons nested observer metadata only.
+   // It never synthesizes a missing callback/memcpy return or native cleanup.
+   for(auto& nested:state.image_calls)if(nested && nested->serial!=call->serial &&
+       nested->context==call->context && nested->cpu==call->cpu &&
+       nested->frame.thread==call->frame.thread && nested->frame.pcr==call->frame.pcr &&
+       nested->frame.sp<=call->body_sp)nested.reset();
+  }else if((at==0x817851B8 || at==0x816C82C8) && int32_t(value)>=0 && call->copied){
+   const auto texture=Word(*state.kernel->memory(),uint32_t(call->args[3]));
+   auto* parent=state.ImageBySerial(call->parent);
+   if(texture && *texture==call->copied->texture && parent &&
+      ((at==0x817851B8 && parent->frame.function==0x816C82C8 && call->frame.lr==0x816C8320) ||
+       (at==0x816C82C8 && parent->frame.function==0x817836D8 && call->frame.lr==0x8178371C &&
+        uint32_t(call->args[3])==parent->body_sp+0x50)))parent->copied=call->copied;
+  }
+  else if(at==0x81839590 && call->dc && call->selection){
+   auto* parent=state.ImageBySerial(call->parent);
+   const auto stored=call->device<=UINT32_MAX-call->slot_offset?
+       Word(*state.kernel->memory(),call->device+call->slot_offset):std::optional<uint32_t>{};
+   if(parent && call->native_store_entered && stored && *stored==call->native_texture &&
+      parent->frame.function==0x81798270){parent->native_store_entered=true;parent->native_call_returned=true;}
+  }else if((at==0x81839C18 || at==0x8183A180) && call->dc && call->copied){
+   auto* parent=state.ImageBySerial(call->parent);
+   const auto actual=Word(*state.kernel->memory(),call->device+0x30);
+   const auto texture=Word(*state.kernel->memory(),call->device+0x3278);
+   const bool another_setter=std::any_of(state.image_calls.begin(),state.image_calls.end(),[&](const auto& other){
+    return other && other->serial!=call->serial && other->frame.function==0x81839590 &&
+        DwordIs(other->args[0],call->device);
+   });
+   if(parent && !call->uncertain && call->draw_store_entered && actual && *actual==call->tail &&
+      texture && *texture==call->native_texture && !another_setter && call->draw_selection &&
+      state.images.SelectionSerial(*call->dc)==call->draw_selection &&
+      state.images.Copied(*call->dc)==call->copied &&
+      call->copy_calls==(at==0x81839C18?1u:2u) && call->copy_returns==call->copy_calls){
+    parent->draw_store_entered=true;parent->tail=call->tail;parent->prior_cursor=call->prior_cursor;
+    parent->native_call_returned=true;parent->packet_returned=call->packet_returned;
+    if(call->render==parent->render)
+     parent->emitted_draw=state.images.ObserveRetainedDrawCall(*call->dc,call->draw_selection,*call->copied,
+         call->render,call->serial,call->device,call->tail,true);
+    parent->packet_address=call->packet_address;parent->packet_header=call->packet_header;
+    parent->packet_viz=call->packet_viz;parent->packet_initiator=call->packet_initiator;
+    parent->texture_fetch=call->texture_fetch;
+   }
+  }else if(at==0x81798270 && call->dc && call->selection){
+   auto* parent=state.ImageBySerial(call->parent);
+   if(parent && parent->frame.function==0x8177C870 && call->native_call_entered &&
+      call->native_call_returned && call->native_store_entered && !call->uncertain){
+    parent->device=call->device;parent->native_call_returned=true;parent->native_store_entered=true;
+   }
+  }else if(at==0x8177C870 && call->dc && call->selection){
+   const auto actual=Word(*state.kernel->memory(),call->dc->address+0x250);
+   const auto low=Word(*state.kernel->memory(),call->dc->address+0x1CC);
+   const auto device=low?Word(*state.kernel->memory(),*low+0xC):std::optional<uint32_t>{};
+   const bool known=actual && device && call->other && call->copied && *actual==call->native_texture;
+   const bool stored=known && call->native_call_returned && call->native_store_entered && call->device==*device;
+   const bool same=known && !call->native_call_entered && call->prior_texture==*actual;
+   // Every genuine C870 return settles this one observation attempt. A
+   // missing/unknown input grants nothing, while an absent return stays pending.
+   state.images.SelectDcTexture(*call->selection,call->other.value_or(State::ImageObject{}),
+       device.value_or(0),actual.value_or(0),stored,same);
+  }else if((at==0x81798740 || at==0x81798788) && call->dc && call->copied && call->render &&
+      call->native_call_entered && call->native_call_returned && call->draw_store_entered && !call->uncertain){
+   // The inner actual upload/store/own-return froze A. A later independent
+   // B selection cannot rewrite that emitted fact; genuine native object and
+   // Source/pin currentness are checked again at immutable frame capture.
+   const auto observed=call->emitted_draw;
+   if(observed && observed->selection==call->draw_selection && observed->render==call->render &&
+      observed->copied==*call->copied && observed->copied.texture==call->native_texture)for(const auto& work:state.active)if(work->serial==call->render &&
+       work->render_iteration && !work->normal_return && !work->uncertain &&
+       work->source==observed->copied.input.source()){
+    const auto empty=std::find_if(work->image_draws.begin(),work->image_draws.end(),[](const auto& v){return !v;});
+    if(empty==work->image_draws.end())work->image_draws_unavailable=true;
+    else if(call->packet_returned)*empty=identity_detail::NativeImageDraw{*observed,call->packet_address,
+        call->packet_header,call->packet_viz,call->packet_initiator,call->texture_fetch};
+    break;
+   }
+  }
+  else if((at==0x81839780 || at==0x81839C60) && call->packet_address && !call->uncertain){
+   auto* parent=state.ImageBySerial(call->parent);
+   const auto header=Word(*state.kernel->memory(),call->packet_address);
+   const auto viz=Word(*state.kernel->memory(),call->packet_address+4);
+   const auto initiator=Word(*state.kernel->memory(),call->packet_address+8);
+   bool actual=parent && header && *header==call->packet_header && viz && *viz==call->packet_viz &&
+       initiator && *initiator==call->packet_initiator;
+   if(at==0x81839C60){
+    const auto base=Word(*state.kernel->memory(),call->packet_address+12),size=Word(*state.kernel->memory(),call->packet_address+16);
+    actual=actual && base && *base==call->packet_base && size && *size==call->packet_size;
+   }
+   if(actual){parent->packet_returned=true;parent->packet_address=call->packet_address;
+    parent->packet_header=call->packet_header;parent->packet_viz=call->packet_viz;parent->packet_initiator=call->packet_initiator;
+    if(at==0x81839780 && DwordIs(c.r[3],uint32_t(c.r[3])) && c.r[3])parent->copy_destination=uint32_t(c.r[3]);
+    if(at==0x81839C60 && !value){
+     const auto vertices=Word(*state.kernel->memory(),parent->body_sp+0x60),indices=Word(*state.kernel->memory(),parent->body_sp+0x64);
+     if(vertices && indices){parent->copy_destination=*vertices;parent->index_destination=*indices;}
+    }
+   }
+  }else if((at==0x817DD2E0 || at==0x817DAF80) && int32_t(value)>=0 && call->section_returned){
+   auto* parent=state.ImageBySerial(call->parent);
+   if(parent && parent->initializer==call->initializer && parent->resource_open==call->resource_open){
+    parent->section_called=true;parent->section_returned=true;parent->section_name=call->section_name;
+    parent->section_address=call->section_address;parent->section_size=call->section_size;
+    parent->section_status=call->section_status;
+   }
+  }else if(at==0x817DB560 && int32_t(value)>=0 && call->section_returned){
+   auto* init=state.ImageBySerial(call->initializer);
+   const auto stream=Word(*state.kernel->memory(),uint32_t(call->args[1]));
+   if(init && init->frame.function==0x816C8D68 && init->default_format &&
+      init->row_output==call->row_output && stream && *stream){
+    init->resource_open=call->serial;init->stream=*stream;init->open_status=value;
+    init->section_returned=true;init->section_name=call->section_name;
+    init->section_address=call->section_address;init->section_size=call->section_size;
+    init->section_status=call->section_status;
+   }
+  }else if(at==0x816C8E10 && !value && call->default_index<state.image_defaults.size()){
+   const auto work=state.Latest(frame->thread,0x816921C8);
+   const auto provider=state.FindProvider(uint32_t(call->key_provider));
+   const auto address=Word(*state.kernel->memory(),uint32_t(call->args[1]));
+   const auto size=Word(*state.kernel->memory(),uint32_t(call->args[2]));
+   const auto version=provider?Qword(*state.kernel->memory(),provider->object+0xA0):std::optional<uint64_t>{};
+   const auto& row=state.image_defaults[call->default_index];
+   if(row && work && work->source==call->default_source && work->provider_generation==call->default_birth &&
+      provider && provider->generation==call->default_birth && !provider->revoked && !provider->destroyed &&
+      provider->image_uri_generation==call->uri_generation && address && size && version && state.config.domain){
+    const auto member=state.config.domain->root();
+    const auto original=row->AtOriginalFallback({state.root,member.hmodule,member.generation,
+        call->default_index,provider->generation,work->source,*version,*address,*size,value});
+    if(original)work->image_default_result=State::ImageInput{{},original};
+   }
+  }
+  // These are original native call/store facts. Completion/pixels require
+  // the exact independently captured native record and real GPU Source join.
+  for(auto& entry:state.image_calls)if(entry && &*entry==call){entry.reset();break;}
+ }catch(...){if(slot)slot->unavailable_.store(true,std::memory_order_release);}
+}
+
+void NativeProfileIdentityOwner::ObserveImageInstruction(void* raw,uint32_t site) noexcept {
+ if(!raw || site>=kImageObservationSites.size())return;
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);const auto point=kImageObservationSites[site];
+ std::shared_ptr<NativeIdentityTileObserverSlot> slot,current_slot;
+ std::shared_ptr<NativeProfileIdentityOwner> owner;
+ try{
+  if(!c.kernel_state)return;
+  slot=c.kernel_state->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  if(!slot || slot->kernel_!=c.kernel_state)return;
+  owner=slot->current_.load(std::memory_order_acquire).lock();if(!owner)return;
+  auto& state=*owner->state_;if(!state.profile_enabled)return;
+  struct Borrow {State* state=nullptr;~Borrow(){if(state)state->hooks.fetch_sub(1,std::memory_order_acq_rel);}} borrow;
+  std::shared_ptr<GuestRuntimeCallExecutor> calls;
+  std::shared_ptr<NativeImportDomain> domain;
+  {
+   std::lock_guard lock(state.mutex);
+   if(state.retired.load() || !state.config.catalog || state.hooks.load()==UINT64_MAX)return;
+   state.hooks.fetch_add(1,std::memory_order_acq_rel);borrow.state=&state;
+   calls=state.config.catalog->calls();domain=state.config.domain;
+  }
+  auto global=global_critical_region::AcquireDirect();
+  if(!calls || !CheckImageBody(*calls,point.function)){
+   slot->unavailable_.store(true,std::memory_order_release);return;
+  }
+  const auto frame=state.ImageShape(c,point.function);
+  const auto original=Word(*state.kernel->memory(),point.address);
+  if(!frame || !original || *original!=point.word){slot->unavailable_.store(true,std::memory_order_release);return;}
+  std::optional<uint32_t> actual_task;
+  if(site==14 && domain && CheckTaskReferenceCode(*calls))
+   actual_task=NativeProfileIdentityTaskContext::Read(*calls,*domain,point.function,c);
+  current_slot=c.kernel_state->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  std::lock_guard lock(state.mutex);
+  const auto current=slot->current_.load(std::memory_order_acquire);const auto self=owner->weak_from_this();
+  if(state.retired.load() || state.image_slot.get()!=slot.get() || current_slot.get()!=slot.get() ||
+     current_slot.owner_before(slot) || slot.owner_before(current_slot) ||
+     current.owner_before(self) || self.owner_before(current) || slot->unavailable_.load())return;
+  auto& memory=*state.kernel->memory();
+  if(site==14){
+   // BEFORE the original event key store, bind the actual formatter output to
+   // this exact admitted Query, current Provider birth and committed bytes.
+   const auto work=state.Latest(frame->thread,0x816921C8);
+   if(!work || work->uncertain || work->normal_return || !actual_task ||
+      work->birth.task!=*actual_task || work->frame.pcr!=frame->pcr ||
+      work->frame.sp<0xB0 || work->frame.sp-0xB0!=frame->sp ||
+      !DwordIs(c.r[31],work->first) || !DwordIs(c.r[25],work->image_event) ||
+      !DwordIs(c.r[24],work->image_modified) || !DwordIs(c.r[30],work->first+0x10))return;
+   const auto provider=state.FindProvider(work->first);
+   if(!provider || provider->generation!=work->provider_generation || provider->revoked || provider->destroyed)return;
+   const auto ready=Word(memory,provider->object+0x90),size=Word(memory,provider->object+0x94);
+   const auto version=Qword(memory,provider->object+0xA0);
+   if(!ready || !*ready || !size || !*size || !version ||
+      !NativeMemoryKeyMatches(memory,provider->object+0x10,*ready,*size,*version))return;
+   std::optional<State::ImageInput> input;
+   if(provider->last_output){
+    const auto& output=provider->last_output;
+    const auto terminal=Word(memory,provider->object+0xB8),extended=Word(memory,provider->object+0xD0);
+    if(output->provider_generation==provider->generation && output->source==work->source &&
+       output->published.load(std::memory_order_acquire) && !output->status.load(std::memory_order_relaxed) &&
+       output->written.load(std::memory_order_relaxed) && terminal && !*terminal && extended && !*extended &&
+       *ready==provider->buffer && *size==output->required.load(std::memory_order_relaxed) &&
+       *version==output->version){
+     const auto encoded=provider->image_epoch.Capture(provider->generation,output->source,*version,*size,
+         output->image_first_allocation.load(std::memory_order_acquire),
+         output->image_first_publication.load(std::memory_order_acquire));
+     if(encoded)input=State::ImageInput{encoded,{}};
+    }
+   }
+   if(!input && work->image_default_result && work->image_default_result->section &&
+      work->image_default_result->source()==work->source &&
+      work->image_default_result->section->provider==provider->generation &&
+      work->image_default_result->section->version==*version &&
+      work->image_default_result->address()==*ready && work->image_default_result->size()==*size)
+    input=work->image_default_result;
+   if(input && state.ImageBytesCurrent(*input)){
+    work->image_key_candidate=input;work->image_uri_generation=provider->image_uri_generation;
+   }
+   return;
+  }
+  auto* call=state.ImageAt(*frame,reinterpret_cast<uintptr_t>(&c),true);
+  if(!call){state.LoseImageObservation();return;} // missing nested work cannot borrow older credit
+  if(site==0){
+   auto* decoder=state.ImageBySerial(call->parent);
+   const bool scalar=DwordIs(c.r[3],uint32_t(c.r[3])) && DwordIs(c.r[4],uint32_t(c.r[4])) &&
+       DwordIs(c.r[5],uint32_t(c.r[5])) && DwordIs(c.r[31],call->read_state);
+   const auto pointer=Word(memory,call->read_state),remaining=Word(memory,call->read_state+4);
+   const bool actual=decoder && decoder->input && call->input && scalar && !call->copy_entered &&
+       !decoder->error && !decoder->uncertain && decoder->copy_calls==decoder->copy_returns &&
+       state.ImageBytesCurrent(*call->input) && pointer && remaining &&
+       *pointer==uint64_t(call->input->address())+decoder->copied_bytes &&
+       *remaining==call->input->size()-decoder->copied_bytes &&
+       DwordIs(c.r[4],*pointer) && DwordIs(c.r[3],uint32_t(call->args[1])) &&
+       DwordIs(c.r[5],uint32_t(call->args[2])) && uint32_t(c.r[5])<=*remaining &&
+       !util::GuestIoRangesOverlap(memory,uint32_t(c.r[3]),uint32_t(c.r[5]),
+           call->input->address(),call->input->size()) && decoder->copy_calls!=UINT32_MAX;
+   if(actual){call->source_pointer=uint32_t(c.r[4]);call->copy_destination=uint32_t(c.r[3]);
+    call->copy_length=uint32_t(c.r[5]);call->copy_entered=true;++decoder->copy_calls;}
+   else {call->uncertain=true;if(decoder)decoder->uncertain=true;}
+  }
+  else if(site==1 || site==3 || site==5){
+   if(call->native_call_entered){call->uncertain=true;return;}
+   if(!call->dc || !call->copied || !DwordIs(c.r[3],uint32_t(c.r[3])) || !c.r[3])return;
+   const auto low=Word(memory,call->dc->address+0x1CC);
+   const auto device=low?Word(memory,*low+0xC):std::optional<uint32_t>{};
+   if(!device || !DwordIs(c.r[3],*device))return;
+   if(site==1 && (!DwordIs(c.r[4],0) || !DwordIs(c.r[5],call->native_texture)))return;
+   if(site!=1 && (!call->draw_selection || state.images.SelectionSerial(*call->dc)!=call->draw_selection ||
+      state.images.Copied(*call->dc)!=call->copied)){call->uncertain=true;return;}
+   call->device=*device;call->sampler=site==1?uint32_t(c.r[4]):0;call->native_call_entered=true;
+  }else if(site==2 || site==4 || site==6){
+   // A forced wrapper zero is not interpreted. The actual inner own-return
+   // already retained the factual native store/upload branch above.
+   if(!call->native_call_entered || !call->native_call_returned)call->uncertain=true;
+  }else if(site==11){
+   if(!call->dc || !call->selection || !call->copied || call->native_store_entered ||
+      !DwordIs(c.r[31],call->device) || !DwordIs(c.r[5],call->native_texture) ||
+      !DwordIs(c.r[29],(call->sampler+0xC9Eu)*4u))return;
+   call->slot_offset=uint32_t(c.r[29]);call->native_store_entered=true;
+  }else if(site==12 || site==13){
+   if(!call->dc || !call->copied || call->draw_store_entered || !call->draw_selection ||
+      state.images.SelectionSerial(*call->dc)!=call->draw_selection || state.images.Copied(*call->dc)!=call->copied ||
+      !DwordIs(c.r[31],call->device) || !DwordIs(c.r[11],uint32_t(c.r[11])) || !c.r[11])return;
+   const auto texture=Word(memory,call->device+0x3278);
+   if(!texture || *texture!=call->native_texture)return;
+   if(!call->packet_returned)return;
+   for(uint32_t n=0;n<call->texture_fetch.size();++n){
+    const auto word=Word(memory,call->device+0x480+n*4);if(!word)return;call->texture_fetch[n]=*word;
+   }
+   call->tail=uint32_t(c.r[11]);call->draw_store_entered=true;
+  }
+  else if(site==7){
+   call->default_format=false;call->section_returned=false;call->resource_open=0;call->stream=0;
+   if(!DwordIs(c.r[31],uint32_t(c.r[31])) || uint32_t(c.r[31])<0x81A8271C ||
+      (uint32_t(c.r[31])-0x81A8271C)%16 || !domain)return;
+   const auto index=(uint32_t(c.r[31])-0x81A8271C)/16;
+   if(index>=state.image_defaults.size())return;
+   state.image_defaults[index].reset();
+   const auto member=domain->root();
+   if(!DwordIs(c.r[3],member.hmodule) || member.generation!=state.root.generation ||
+      calls->module()->hmodule_ptr()!=member.hmodule || calls->module()->load_generation()!=member.generation ||
+      !DwordIs(c.r[4],uint32_t(c.r[4])) || !DwordIs(c.r[5],uint32_t(c.r[5])) ||
+      !DwordIs(call->args[0],0x81A82714) || !DwordIs(call->args[1],3))return;
+   const auto section=Word(memory,uint32_t(c.r[31])-8),entry=Word(memory,uint32_t(c.r[31])-4);
+   if(!section || !entry || !DwordIs(c.r[4],*section) || !DwordIs(c.r[5],*entry) ||
+      !ReadImageLabel(memory,*section,call->section_label) || !ReadImageLabel(memory,*entry,call->entry_label))return;
+   call->module=member.hmodule;call->module_generation=member.generation;
+   call->initializer=call->serial;call->default_index=index;call->row_output=uint32_t(c.r[31]);call->default_format=true;
+  }else if(site==8){
+   if(!call->initializer || !call->resource_open || call->section_called || !domain)return;
+   const auto member=domain->root();
+   if(!DwordIs(c.r[3],member.hmodule) || member.generation!=call->module_generation ||
+      !DwordIs(c.r[5],call->body_sp+0x5C) || !DwordIs(c.r[6],call->body_sp+0x58) ||
+      !DwordIs(c.r[4],uint32_t(c.r[4])) || !ReadImageLabel(memory,uint32_t(c.r[4]),call->section_name))return;
+   call->address_output=uint32_t(c.r[5]);call->size_output=uint32_t(c.r[6]);call->section_called=true;
+  }else if(site==9){
+   if(!call->section_called || call->section_returned || !DwordIs(c.r[3],uint32_t(c.r[3])))return;
+   const auto address=Word(memory,call->address_output),size=Word(memory,call->size_output);
+   uint32_t root_address=0,root_size=0;
+   if(int32_t(uint32_t(c.r[3]))<0 || !address || !size ||
+      calls->module()->GetSection(ImageLabel(call->section_name),&root_address,&root_size)!=X_STATUS_SUCCESS ||
+      root_address!=*address || root_size!=*size)return;
+   call->section_address=*address;call->section_size=*size;call->section_status=uint32_t(c.r[3]);call->section_returned=true;
+  }else if(site==10){
+   if(!call->default_format || !call->section_returned || !call->resource_open || !call->stream ||
+      !DwordIs(c.r[31],call->row_output) || !DwordIs(c.r[3],uint32_t(c.r[3])))return;
+   const auto stream=Word(memory,call->body_sp+0x50),address=Word(memory,call->row_output),size=Word(memory,call->row_output+4);
+   if(!stream || *stream!=call->stream || !address || !size)return;
+   const identity_detail::NativeDefaultRootSection current{state.root,call->module,call->module_generation,
+       ImageLabel(call->section_name),call->section_address,call->section_size};
+   const identity_detail::NativeDefaultRowObservation row{state.root,call->serial,call->default_index,
+       call->row_output,call->module,call->module_generation,ImageLabel(call->section_label),ImageLabel(call->entry_label)};
+   const identity_detail::NativeDefaultResourceOpenObservation opened{state.root,call->serial,call->resource_open,
+       call->row_output,call->module,call->stream,call->open_status,ImageLabel(call->section_label),ImageLabel(call->entry_label)};
+   const identity_detail::NativeDefaultGetSectionObservation section{state.root,call->module,call->module_generation,
+       ImageLabel(call->section_name),call->section_address,call->section_size,call->section_status};
+   const identity_detail::NativeDefaultGetBufferObservation buffer{state.root,call->serial,call->resource_open,
+       call->row_output,call->stream,*address,*size,uint32_t(c.r[3])};
+   state.image_defaults[call->default_index]=identity_detail::NativeDefaultImageRow::Observe(current,row,opened,section,buffer);
+  }
+  else if(site==15 || site==16){
+   if(!call->dc || !call->copied || call->packet_address || !DwordIs(c.r[31],call->device) ||
+      !DwordIs(c.r[30],uint32_t(c.r[30])) || uint64_t(uint32_t(c.r[30]))+24>0x100000000ull ||
+      !DwordIs(c.r[11],site==15?0xC0012200u:0xC0032200u))return;
+   if(site==15){
+    if(!DwordIs(c.r[29],uint32_t(c.r[29])) || !DwordIs(c.r[10],uint32_t(c.r[10])) ||
+       !DwordIs(c.r[9],uint32_t(c.r[9])))return;
+    call->packet_viz=uint32_t(c.r[29]);call->packet_initiator=uint32_t(c.r[10])|uint32_t(c.r[9])|0x80u;
+   }else{
+    if(!DwordIs(c.r[24],uint32_t(c.r[24])) || !DwordIs(c.r[29],uint32_t(c.r[29])) ||
+       !DwordIs(c.r[25],uint32_t(c.r[25])) || !DwordIs(c.r[27],uint32_t(c.r[27])))return;
+    call->packet_viz=uint32_t(c.r[24]);call->packet_initiator=uint32_t(c.r[29]);
+    call->packet_base=uint32_t(c.r[25]);call->packet_size=uint32_t(c.r[27]);
+   }
+   call->packet_address=uint32_t(c.r[30])+4;call->packet_header=uint32_t(c.r[11]);
+  }
+  // All original instructions execute independently of observation results.
+ }catch(...){if(slot)slot->unavailable_.store(true,std::memory_order_release);}
+}
+
+void NativeProfileIdentityOwner::ObserveImageAllocationFree(void* raw) noexcept {
+ if(!raw)return;
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ std::shared_ptr<NativeIdentityTileObserverSlot> slot,current_slot;
+ std::shared_ptr<NativeProfileIdentityOwner> owner;
+ try{
+  if(!c.kernel_state)return;
+  slot=c.kernel_state->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  if(!slot || slot->kernel_!=c.kernel_state)return;
+  owner=slot->current_.load(std::memory_order_acquire).lock();if(!owner)return;
+  auto& state=*owner->state_;
+  if(!state.profile_enabled || !DwordIs(c.r[3],uint32_t(c.r[3])))return;
+  struct Borrow {State* state=nullptr;~Borrow(){if(state)state->hooks.fetch_sub(1,std::memory_order_acq_rel);}} borrow;
+  std::shared_ptr<GuestRuntimeCallExecutor> calls;
+  {
+   std::lock_guard lock(state.mutex);
+   if(state.retired.load() || !state.config.catalog || state.hooks.load()==UINT64_MAX)return;
+   state.hooks.fetch_add(1,std::memory_order_acq_rel);borrow.state=&state;
+   calls=state.config.catalog->calls();
+  }
+  auto global=global_critical_region::AcquireDirect();
+  if(!calls || !CheckImageBody(*calls,0x816E6AB0)){
+   slot->unavailable_.store(true,std::memory_order_release);return;
+  }
+  const auto frame=state.ImageShape(c,0x816E6AB0);if(!frame)return;
+  current_slot=c.kernel_state->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  std::lock_guard lock(state.mutex);
+  const auto actual=slot->current_.load(std::memory_order_acquire);
+  const auto self=owner->weak_from_this();
+  if(state.retired.load() || current_slot.get()!=slot.get() ||
+     current_slot.owner_before(slot) || slot.owner_before(current_slot) ||
+     actual.owner_before(self) || self.owner_before(actual))return;
+  const auto pointer=uint32_t(c.r[3]);if(!pointer)return;
+  // Entry revokes future observation before ORIGINAL free. It is neither a
+  // successful deallocation receipt nor a native reference/cancellation call.
+  state.RevokeImageString(pointer);state.images.RevokeNativeTexture(pointer);
+  for(const auto& work:state.active)for(auto& draw:work->image_draws)
+   if(draw && draw->draw.copied.texture==pointer)draw.reset();
+  for(const auto& provider:state.providers)if(provider &&
+      (provider->buffer==pointer || provider->object==pointer)){
+   provider->image_epoch.Revoke();provider->image_output.reset();provider->image_key.reset();
+  }
+  for(const auto kind:{identity_detail::NativeImageJournal::Kind::kInterface,
+      identity_detail::NativeImageJournal::Kind::kBrush,
+      identity_detail::NativeImageJournal::Kind::kWrapper,
+      identity_detail::NativeImageJournal::Kind::kDc})
+   if(const auto object=state.images.Current(kind,pointer))state.images.RetireObject(*object);
+ }catch(...){if(slot)slot->unavailable_.store(true,std::memory_order_release);}
+}
+
 std::shared_ptr<NativeProfileIdentityOwner> NativeProfileIdentityOwner::Lookup(KernelState* kernel) {
  return NativeSystemUiService::CaptureProfileIdentityOwner(kernel);
 }
@@ -1984,7 +3463,7 @@ NativeProfileIdentityOwner::ObserveSharedContinuationSchedule(
     NativeSystemTaskContinuation& continuation,XThread& bootstrap,
     std::span<const uint32_t> args) noexcept {
  try{
-  const auto owner=Lookup(bootstrap.kernel_state());
+  const auto owner=NativeSystemUiService::CaptureTaskExecutionOwner(bootstrap.kernel_state());
   if(!owner)return {true,{}}; // No identity observer means no identity claim.
   auto& s=*owner->state_;
   std::shared_ptr<NativeSystemTaskContinuation> bound;
@@ -2400,7 +3879,8 @@ xam::ProfileRosterResult NativeProfileIdentityOwner::SubmitPrepared(
   auto* actual=ActualThread();
   for(;;){
    const auto result=intent->result();
-   if(result.phase==xam::ProfileRosterPhase::kCommitted || result.phase==xam::ProfileRosterPhase::kCanceled ||
+   if((result.maps_committed && result.writers_available) ||
+      result.phase==xam::ProfileRosterPhase::kCommitted || result.phase==xam::ProfileRosterPhase::kCanceled ||
       result.phase==xam::ProfileRosterPhase::kUncertain)return result;
    if(state_->stopping.load(std::memory_order_acquire)){
     auto pending=result;pending.error=std::make_error_code(std::errc::operation_canceled);return pending;
@@ -2809,6 +4289,552 @@ GuestRuntime::ExecutionResult NativeSystemTaskContinuation::InvokeOwnedProfileId
 }
 
 
+// Observe source-neutral original Task operations. True means ONLY that the
+// optional profile guard must not claim this native invocation; it is never
+// a synthetic native success, reference, callback or data permission.
+bool NativeProfileIdentityOwner::ObserveExecutionEntry(void* raw,uint32_t at) noexcept {
+ if(!raw || (!CommonTaskFunction(at) && !ProfileCallback(at)))return false;
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ std::shared_ptr<NativeProfileIdentityOwner> owner;
+ std::optional<Frame> shape;bool handled=false;
+ try {
+  owner=NativeSystemUiService::CaptureTaskExecutionOwner(c.kernel_state);
+  if(!owner)return false;auto& s=*owner->state_;auto* thread=ActualThread();
+  if(!thread || s.retired.load(std::memory_order_acquire))return false;
+  const auto actual_process=thread->native_frame_thread_identity().process_type;
+  if(actual_process!=X_PROCTYPE_SYSTEM && actual_process!=X_PROCTYPE_TITLE)return false;
+  // The shared Core entry observer precedes this guard. No family callback,
+  // source/writer grant or invented SYSTEM context is involved in this fact.
+  const auto common_xmsg=NativeXmsgProvenance::Lookup(c.kernel_state);
+  const auto title_producer=actual_process==X_PROCTYPE_TITLE && common_xmsg?
+      NativeXmsgProvenance::CaptureTitleTaskProducer(&c,at):
+      std::optional<NativeXmsgProvenance::TitleTaskProducerFact>{};
+  shape=s.TransportShape(c,at);if(!shape)return false;
+  s.hooks.fetch_add(1,std::memory_order_acq_rel);
+  struct Exit{State& s;~Exit(){s.hooks.fetch_sub(1,std::memory_order_acq_rel);}} exit{s};
+  enum class Kind {kSchedule,kCreate,kInline,kAllocation,kPublication,kDispatch,kControl,kClose,kDelete,kFree,kCallback};
+  Kind kind=Kind::kCallback;Tasks::Birth birth{};
+  std::shared_ptr<State::Work> parent;
+  {
+   std::lock_guard lock(s.mutex);
+   const uint32_t task=at==0x816B7DE8?uint32_t(c.r[4]):
+       at==0x816B7B68?(uint32_t(c.r[3])&~1u):uint32_t(c.r[3]);
+   const auto subject=s.tasks.ObservedTransportSubject(task);
+   const bool neutral=subject && s.tasks.IsExecutionSubject(subject->generation);
+   if(neutral)birth=*subject;
+   if(at==0x816BA440){
+    if(c.lr==0xBCBCBCBC)return false; // actual registered continuation keeps its existing owner
+    const auto claim=s.ClaimTaskTransport(at,c,thread->thread_id());
+    const auto earlier=s.Latest(thread->thread_id());
+    if(claim.periodic_factory || claim.profile_producer ||
+       (Tasks::ClassifyCallback(c.r[3])==Tasks::CallbackClaim::kCanonicalProfile && earlier &&
+        !earlier->execution_only && (earlier->read || earlier->commit || earlier->physical_work)))return false;
+    kind=Kind::kSchedule;
+   }else if(at==0x816BA668){
+    if(s.profile_enabled && (c.lr==0x816F4568 || c.lr==0x816F45B0))return false;
+    kind=Kind::kCreate;
+   }else if(at==0x816B9D68){
+    // The old passive CommonStartProducer remains its sole owner until the
+    // common XMsg extraction deliberately replaces that whole chain.
+    if(!common_xmsg && s.profile_enabled && s.ClaimTaskTransport(at,c,thread->thread_id()).creation_only)return false;
+    kind=Kind::kInline;
+   }else if(at==0x816B9A18){
+    parent=s.Latest(thread->thread_id(),c.lr==0x816BA46C?0x816BA440u:
+        c.lr==0x816BA688?0x816BA668u:c.lr==0x816B9E08?0x816B9D68u:0u);
+    if(!parent || !parent->execution_only || !parent->frame.function)return false;
+    kind=Kind::kAllocation;
+   }else if(at==0x816B9BB8){
+    parent=s.Latest(thread->thread_id(),0x816BA440);
+    if(!parent || !parent->execution_only || !parent->schedule)return false;
+    kind=Kind::kPublication;
+   }else if(at==0x816B8B08 || at==0x816B7DE8){
+    if(subject && !neutral)return false;
+    kind=Kind::kDispatch;
+    if(!subject)birth={0,1,task}; // factual scalar argument, NOT an issued allocation birth
+   }else if(at==0x816B9AA8 || at==0x816B9F08 || at==0x816BA058 || at==0x816B7600 || at==0x816B7B68){
+    if(!neutral)return false;kind=Kind::kControl;
+   }else if(at==0x816B7490){
+    if(!neutral || s.ClaimTaskTransport(at,c,thread->thread_id()).retained_cleanup)return false;
+    // Preserve an ALREADY issued real getter/task-reference release receipt.
+    // Generic execution birth is not permission to consume that owner's ref.
+    kind=Kind::kClose;
+   }else if(at==0x816B7D98 || at==0x816B7500){if(!neutral)return false;kind=Kind::kDelete;
+   }else if(at==0x816E6AB0){
+    parent=s.TaskFreeParent(thread->thread_id());
+    if(!parent || !parent->execution_only)return false;
+    birth=parent->birth;kind=Kind::kFree;
+   }else if(ProfileCallback(at)){
+    const auto earlier=s.Latest(thread->thread_id());
+    if(!earlier || !earlier->execution_only)return false;
+    // This marks only the innermost neutral execution, never an older data
+    // scope. Actual bounded profile consumers retain their own real issuer.
+    parent=earlier;birth=earlier->birth;kind=Kind::kCallback;
+   }else return false;
+   if(actual_process==X_PROCTYPE_TITLE){
+    const bool producer=title_producer && title_producer->actual_process==X_PROCTYPE_TITLE &&
+        title_producer->root==NativeXmsgProvenance::RootFact{s.root.kernel,s.root.domain,s.root.generation} &&
+        title_producer->frame==NativeXmsgProvenance::FrameFact{shape->thread,shape->pcr,shape->sp,shape->lr,at} &&
+        title_producer->capture && title_producer->copy &&
+        title_producer->callback==0x816A2C80 && title_producer->argument &&
+        (kind==Kind::kSchedule || kind==Kind::kInline);
+    const bool child=parent && parent->execution_only && parent->execution_title &&
+        (kind==Kind::kAllocation || kind==Kind::kPublication || kind==Kind::kCallback);
+    // A current SAME-ledger neutral birth permits observing real native
+    // controls/dispatch/close only, never creating a new allocation/source.
+    const bool known=neutral && birth.generation && s.ExecutionLifetimeFor(birth) &&
+        kind!=Kind::kSchedule && kind!=Kind::kCreate && kind!=Kind::kInline;
+    if(!common_xmsg || (!producer && !child && !known))return false;
+   }
+   handled=true;
+  }
+  // Existing Avatar service independently owns its typed Request/Control.
+  // Preserve that real producer annotation on the SAME common birth; it is
+  // not profile/read authority or a callback whitelist.
+  std::shared_ptr<const NativeAvatarService::CleanupTaskCreationProof> avatar;
+  if(kind==Kind::kAllocation)avatar=NativeAvatarService::CaptureOwnedTaskAllocation(s.kernel,c);
+  State::CodeOwner caller;
+  const bool retained=birth.generation || parent;
+  const auto frame=s.ReadFrame(c,at,actual_process==X_PROCTYPE_TITLE,&caller,retained);
+  const bool code=frame && CheckTaskExecutionCode(*s.config.catalog->calls());
+  auto work=std::make_shared<State::Work>();work->frame=*shape;work->source=kBootUnjoinedSource;
+  work->execution_only=true;work->execution_title=actual_process==X_PROCTYPE_TITLE;
+  work->execution_title_producer=title_producer;
+  work->execution_uncertain=!code;work->execution_code_proven=code;work->birth=birth;
+  work->execution_producer=parent;
+  work->thread=retain_object(thread);work->domain=s.config.domain->Acquire();
+  work->caller_code.module=caller.module;work->caller_code.load_generation=caller.load_generation;
+  // Caller identity has no future guest-code access; its temporary lease
+  // drops after this entry's locks. Declared callback targets remain owned.
+  work->first=uint32_t(c.r[3]);work->second=uint32_t(c.r[4]);
+  if(avatar && avatar->Matches(c)){work->avatar_allocation=avatar;work->foreign_avatar_task=true;}
+  const bool selected_target=kind==Kind::kSchedule || kind==Kind::kInline ||
+      (at==0x816B9AA8 && (uint32_t(c.r[4])&1));
+  if(code && selected_target){
+   const uint64_t raw_target=at==0x816B9AA8?c.r[5]:c.r[3];
+   if(DwordIs(raw_target,uint32_t(raw_target)))work->execution_target=s.RetainExecutionTarget(uint32_t(raw_target));
+   if(!work->execution_target)work->execution_uncertain=true;
+  }
+  std::lock_guard lock(s.mutex);
+  if(s.active.size()>=256 || std::any_of(s.active.begin(),s.active.end(),[&](const auto& old){return old->frame==*shape;})){
+   for(const auto& old:s.active)if(old->execution_only && old->frame==*shape){
+    old->execution_uncertain=true;if(old->execution_lifetime)old->execution_lifetime->uncertain=true;
+   }
+   s.MarkNeutralUnavailable(*shape,c);return true;
+  }
+  work->serial=s.next_work++;
+  if(!work->serial || !s.next_work){s.MarkNeutralUnavailable(*shape,c);return true;}
+  s.active.push_back(work); // retain BEFORE any scalar birth/publication admission
+  if(birth.generation)work->execution_lifetime=s.ExecutionLifetimeFor(birth);
+  if(!work->domain)work->execution_uncertain=true;
+  Tasks::NeutralObservation observation(s.tasks);
+  bool exact=!work->execution_uncertain;
+  if(exact && kind==Kind::kSchedule){
+   exact=DwordIs(c.r[3],work->first) && DwordIs(c.r[4],work->second) &&
+       DwordIs(c.r[5],uint32_t(c.r[5])) && DwordIs(c.r[6],uint32_t(c.r[6]));
+   work->output=uint32_t(c.r[6]);
+   if(exact)work->schedule=s.tasks.BeginExecutionSchedule(*shape,work->first,work->second,uint32_t(c.r[5]),work->output);
+   exact=exact && work->schedule;
+  }else if(exact && kind==Kind::kCreate){
+   work->output=work->first;exact=DwordIs(c.r[3],work->first);
+   if(exact)work->schedule=s.tasks.BeginExecutionCreate(*shape,work->output);
+   exact=exact && work->schedule;
+  }else if(exact && kind==Kind::kInline){
+   work->output=uint32_t(c.r[5]);
+   exact=DwordIs(c.r[3],work->first) && DwordIs(c.r[4],work->second) &&
+       DwordIs(c.r[5],work->output) && (!work->output || !(work->output&3));
+  }else if(exact && kind==Kind::kAllocation){
+   work->output=work->second;
+   if(parent->schedule){work->schedule=parent->schedule;
+    exact=s.tasks.EnterExecutionAllocation(work->schedule,*shape,work->first,work->output);
+   }else{
+    exact=parent->frame.function==0x816B9D68 &&
+        Tasks::ClassifyAllocationProducer(parent->frame,*shape,parent->output,work->first,work->output)==Tasks::AllocationProducer::kInline;
+    if(exact)work->detached_allocation=s.tasks.BeginDetachedAllocation(*shape,1,work->output,false,true,parent->first,parent->second);
+    exact=exact && work->detached_allocation;
+   }
+   work->execution_target=parent->execution_target;
+  }else if(exact && kind==Kind::kPublication){
+   work->schedule=parent->schedule;work->output=uint32_t(c.r[5]);
+   const auto* call=s.tasks.FindSchedule(work->schedule);const auto* node=call?s.tasks.FindBirthConst(call->birth):nullptr;
+   exact=node && node->execution_only && DwordIs(c.r[3],work->first) &&
+       DwordIs(c.r[4],work->second) && DwordIs(c.r[5],work->output) &&
+       s.tasks.BeforeExecutionPublication(work->schedule,*shape,work->first,work->second,work->output,Word(*s.kernel->memory(),parent->output));
+   if(node){work->birth=node->birth;work->execution_lifetime=s.ExecutionLifetimeFor(node->birth);}
+  }else if(exact && kind==Kind::kDispatch){
+   exact=birth.generation && work->execution_lifetime && DwordIs(c.r[at==0x816B7DE8?4:3],birth.task);
+   if(exact)work->execution_dispatch=s.tasks.BeginExecutionDispatch(*shape,birth);
+   exact=exact && work->execution_dispatch;
+   if(at==0x816B8B08){const auto wait=s.Latest(shape->thread,0x816BA058);
+    if(wait && wait->execution_only && wait->execution_control &&
+       Tasks::SameBirth(wait->birth,birth) && shape->lr==0x816BA0DC &&
+       wait->frame.sp>=0x80 && shape->sp==wait->frame.sp-0x80)work->execution_wait_parent=wait;
+   }
+  }else if(exact && kind==Kind::kControl){
+   const auto fields=Tasks::DecodeModifyFields(work->second);
+   exact=DwordIs(c.r[3],at==0x816B7B68?(birth.task|1u):birth.task) ||
+       (at==0x816B7B68 && DwordIs(c.r[3],birth.task));
+   if(at==0x816B9AA8){
+    exact=exact && DwordIs(c.r[4],work->second) && (!fields.callback || DwordIs(c.r[5],uint32_t(c.r[5]))) &&
+        (!fields.argument || DwordIs(c.r[6],uint32_t(c.r[6]))) &&
+        (!fields.options || (DwordIs(c.r[7],uint32_t(c.r[7])) && c.r[7]>=0x1000 && !(c.r[7]&3)));
+    if(exact && fields.callback){
+     if(!work->execution_lifetime || !work->execution_target)exact=false;
+     else {
+      const auto& target=work->execution_target;
+      const bool retained=std::any_of(work->execution_lifetime->targets.begin(),work->execution_lifetime->targets.end(),
+          [&](const auto& old){return old && old->callback==target->callback &&
+              old->code.module.get()==target->code.module.get() && old->code.load_generation==target->code.load_generation;});
+      if(!retained)work->execution_lifetime->targets.push_back(target); // BEFORE original native mask1 store
+      // A duplicate newly acquired lease stays in this Work until host reap;
+      // never release its last resource reference under State/GCRC.
+     }
+    }
+   }
+   if(exact)exact=s.tasks.BeginExecutionControl(*shape,birth,at==0x816B9AA8?work->second:0,
+       uint32_t(c.r[5]),uint32_t(c.r[6]));
+   work->execution_control=exact;
+   if(exact && at==0x816B7600){
+    const auto tail=s.Latest(shape->thread,0x816B7B68);
+    if(tail && tail->execution_only && tail->execution_control &&
+        Tasks::SameBirth(tail->birth,birth) && tail->frame.root==shape->root &&
+        tail->frame.thread==shape->thread && tail->frame.pcr==shape->pcr &&
+        tail->frame.sp==shape->sp && tail->frame.lr==shape->lr &&
+        DwordIs(c.r[3],birth.task) && DwordIs(c.r[4],0x815F8E38) && c.r[5]==15 && !c.r[6])
+     work->tail_reschedule=tail; // genuine frameless original tail, not a new return
+   }
+  }else if(exact && kind==Kind::kClose){exact=s.tasks.EnterClose(*shape,work->first);
+  }else if(exact && kind==Kind::kDelete){exact=s.tasks.EnterDeletingDestructor(*shape,work->first,uint32_t(c.r[4]));
+  }else if(exact && kind==Kind::kFree){exact=s.tasks.EnterTaskFree(*shape,work->first);
+  }
+  if(!exact){work->execution_uncertain=true;s.execution_unavailable.store(true,std::memory_order_release);}
+  if(kind==Kind::kDispatch){
+   void* scope=c.thread_state->native_profile_roster_read_.load(std::memory_order_acquire);
+   if(scope){
+    for(const auto& origin:s.active)if(origin.get()!=work.get() && origin->read.get()==scope &&
+        origin->frame.thread==shape->thread && !origin->normal_return){
+     if(work->execution_read.Suspend(origin->frame,*shape,origin,origin,scope,c.thread_state->native_profile_roster_read_))
+      work->execution_read_owner=origin;
+     break;
+    }
+    if(!work->execution_read.pending())s.SuspendAmbientOnUnavailable(c,shape->thread);
+   }
+  }
+  return true;
+ }catch(...){
+  if(handled && owner && shape){auto& s=*owner->state_;std::lock_guard lock(s.mutex);
+   const auto found=std::find_if(s.active.begin(),s.active.end(),[&](const auto& active){return active->execution_only && active->frame==*shape;});
+   if(found!=s.active.end()){
+    (*found)->execution_uncertain=true;
+    if((*found)->execution_lifetime)(*found)->execution_lifetime->uncertain=true;
+    s.execution_unavailable.store(true,std::memory_order_release);
+    if(shape->function==0x816B8B08 || shape->function==0x816B7DE8)s.SuspendAmbientOnUnavailable(c,shape->thread);
+   }else s.MarkNeutralUnavailable(*shape,c);
+  }
+  return handled;
+ }
+}
+
+bool NativeProfileIdentityOwner::ObserveExecutionReturn(void* raw,uint32_t at) noexcept {
+ if(!raw || (!CommonTaskFunction(at) && !ProfileCallback(at)))return false;
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ std::shared_ptr<NativeProfileIdentityOwner> owner;
+ std::shared_ptr<State::Work> work;
+ try {
+  owner=NativeSystemUiService::CaptureTaskExecutionOwner(c.kernel_state);
+  if(!owner)return false;auto& s=*owner->state_;
+  const auto shape=s.TransportShape(c,at);if(!shape)return false;
+  s.hooks.fetch_add(1,std::memory_order_acq_rel);
+  struct Exit{State& s;~Exit(){s.hooks.fetch_sub(1,std::memory_order_acq_rel);}} exit{s};
+  PublishTaskAllocationCut allocation_cut{owner.get(),c,{}};
+  {
+   std::lock_guard lock(s.mutex);
+   const bool unavailable_return=s.unavailable_execution_frames.Return(*shape);
+   for(auto i=s.active.rbegin();i!=s.active.rend();++i)if((*i)->frame==*shape){
+    if(!(*i)->execution_only)return false;work=*i;break;
+   }
+   if(!work)return unavailable_return;
+   if(work->normal_return)return true; // duplicate observation is not another native receipt
+  }
+  State::CodeOwner caller;
+  const auto frame=s.ReadFrame(c,at,work->execution_title,&caller,true);
+  const bool code=frame && *frame==work->frame &&
+      caller.module.get()==work->caller_code.module.get() &&
+      caller.load_generation==work->caller_code.load_generation &&
+      CheckTaskExecutionCode(*s.config.catalog->calls());
+  // Real parent context, sampled only at an original restoration own-return.
+  // It is never written or supplied by the host.
+  const auto actual_task=(at==0x816BA058 || at==0x816B7DE8) && code?
+      NativeProfileIdentityTaskContext::Read(*s.config.catalog->calls(),*s.config.domain,at,c,work->execution_title):std::optional<uint32_t>{};
+  std::shared_ptr<State::ExecutionLifetime> prepared;
+  const uint32_t value=uint32_t(c.r[3]);
+  if(at==0x816B9A18 && code && int32_t(value)>=0){
+   prepared=std::make_shared<State::ExecutionLifetime>();prepared->targets.reserve(1);
+   if(work->execution_target)prepared->targets.push_back(work->execution_target);
+  }
+  auto read=global_critical_region::AcquireDirect();
+  std::lock_guard lock(s.mutex);
+  Tasks::NeutralObservation observation(s.tasks);
+  bool exact=code && work->execution_code_proven && !work->execution_uncertain;
+  if(exact && at==0x816B9A18){
+   const auto output=int32_t(value)>=0?Word(*s.kernel->memory(),work->output):std::optional<uint32_t>{};
+   const auto born=work->schedule?s.tasks.ReturnExecutionAllocation(work->schedule,*shape,value,output):
+       work->detached_allocation?s.tasks.ReturnDetachedAllocation(work->detached_allocation,*shape,value,output):std::optional<Tasks::Birth>{};
+   exact=int32_t(value)<0 || bool(born);
+   if(born){
+    if(work->avatar_allocation)if(auto* node=s.tasks.FindBirth(born->generation))node->foreign_avatar=true;
+    exact=prepared && work->execution_producer &&
+        (work->execution_target || work->execution_producer->frame.function==0x816BA668);
+    if(exact){
+     prepared->birth=*born;s.execution_lifetimes.push_back(prepared);work->execution_lifetime=prepared;work->birth=*born;
+     work->execution_producer->birth=*born;work->execution_producer->execution_lifetime=prepared;
+    }
+   }
+  }else if(exact && (at==0x816BA440 || at==0x816BA668)){
+   const auto tagged=at==0x816BA668 && int32_t(value)>=0?Word(*s.kernel->memory(),work->output):std::optional<uint32_t>{};
+   exact=s.tasks.ReturnExecutionProducer(work->schedule,*shape,value,tagged);
+  }else if(exact && (at==0x816B8B08 || at==0x816B7DE8)){
+   exact=s.tasks.ReturnExecutionDispatch(work->execution_dispatch,*shape,work->birth);
+  }else if(exact && work->execution_control){
+   exact=s.tasks.ReturnExecutionControl(*shape,work->birth);
+   if(exact && work->tail_reschedule){
+    const auto& tail=work->tail_reschedule;
+    exact=tail->execution_only && tail->execution_control && !tail->normal_return &&
+        s.tasks.ReturnExecutionControl(tail->frame,tail->birth);
+    if(exact){
+     tail->normal_return=true;
+     const auto old=std::find(s.active.begin(),s.active.end(),tail);
+     if(old!=s.active.end()){s.host_retired.push_back(tail);s.active.erase(old);}else exact=false;
+    }
+   }
+  }else if(exact && at==0x816B7490){
+   exact=s.tasks.ReturnClose(*shape,value);
+   if(exact && !value && work->execution_lifetime)work->execution_lifetime->native_freed=true;
+  }else if(exact && (at==0x816B7D98 || at==0x816B7500)){exact=s.tasks.ReturnDeletingDestructor(*shape);
+  }else if(exact && at==0x816E6AB0){exact=s.tasks.ReturnTaskFree(*shape);}
+  // Any read still current at a neutral dispatcher return belongs to an
+  // independently entered bounded typed scope whose own-return is missing.
+  // Suppress ONLY that exact retained owner before PPC resumes, even when no
+  // older scope existed at dispatcher entry. Never fake its Leave/return.
+  bool unexpected_read=false;
+  if(at==0x816B8B08 || at==0x816B7DE8 || (at==0x816BA058 && work->execution_read.pending())){
+   unexpected_read=c.thread_state && c.thread_state->native_profile_roster_read_.load(std::memory_order_acquire);
+   s.SuspendAmbientOnUnavailable(c,shape->thread);
+  }
+  // A valid body own-return can restore context independently of whether a
+  // neutral callback/argument observation was available. It cannot fabricate
+  // a missing Task completion or immutable allocation receipt.
+  if(work->execution_read.pending()){
+   const auto origin=work->execution_read_owner;auto* cpu=work->thread?work->thread->thread_state():nullptr;
+   bool restored=false;
+   // An independently unreturned deeper scope must retire before the older
+   // origin can become ambient again. Delegate both exact owners rather than
+   // invert their genuine reverse-stop/restore-to-Leave order.
+   if(origin && origin->read && cpu && code && work->execution_code_proven && !unexpected_read){
+    if(at==0x816B8B08 && work->execution_wait_parent && !work->execution_wait_parent->normal_return){
+     auto& wait=work->execution_wait_parent;
+     restored=work->execution_read.TransferInlineWait(*shape,wait->frame,wait->execution_read);
+     if(restored)wait->execution_read_owner=origin;
+    }else if((at==0x816B7DE8 || at==0x816BA058) && actual_task &&
+        origin->birth.generation && origin->birth.task==*actual_task){
+     const auto live=s.tasks.ObservedTransportSubject(*actual_task);
+     restored=live && Tasks::SameBirth(*live,origin->birth) &&
+         work->execution_read.Restore(*shape,origin->read.get(),cpu->native_profile_roster_read_);
+     if(restored)origin->execution_read_fallback=false; // exact cell is restored now
+    }
+   }
+   if(!restored && origin && origin->read &&
+       work->execution_read.DelegateToOrigin(origin.get(),origin->read.get())){
+    // The exact originating scope remains in its actual active Work. Its
+    // normal own-return restores only to Leave immediately, or actual-stop
+    // reverse detachment settles it. No child obtains the old read ticket.
+    origin->execution_read_fallback=true;origin->uncertain=true;
+   }
+  }
+  if(!exact){work->execution_uncertain=true;s.execution_unavailable.store(true,std::memory_order_release);
+   if(work->execution_lifetime)work->execution_lifetime->uncertain=true;
+  }
+  if(exact && at==0x816B9A18 && work->execution_producer)
+   allocation_cut.value=AllocationReturnFact(*shape,work->execution_producer->frame,value,
+       work->birth.generation?std::optional<Tasks::Birth>{work->birth}:std::nullopt);
+  // Entry intent whose native field store may have occurred retains its code
+  // holder until real final free or actual CPU-stop when its join is unknown.
+  const auto* node=work->birth.generation?s.tasks.FindBirthConst(work->birth.generation):nullptr;
+  const bool hold_target=work->execution_uncertain && work->execution_target &&
+      (!node || !node->freed) && (at==0x816B9AA8 || at==0x816BA440 || at==0x816B9D68 || at==0x816B9A18);
+  work->normal_return=true; // factual ORIGINAL body return, not callback/service success
+  const auto found=std::find(s.active.begin(),s.active.end(),work);
+  if(found!=s.active.end()){
+   // Returned immutable resource holders are NOT active caller/source frames.
+   // In particular a later Task may reuse this worker's identical SP/LR.
+   if(hold_target || work->execution_read.pending())s.execution_retained.push_back(work);
+   else s.host_retired.push_back(work);
+   s.active.erase(found);
+  }
+  s.changed.notify_all();return true;
+ }catch(...){
+  if(owner){std::lock_guard lock(owner->state_->mutex);
+   owner->state_->execution_unavailable.store(true,std::memory_order_release);
+   if(work){
+    work->execution_uncertain=true;work->normal_return=true;
+    if(work->execution_lifetime)work->execution_lifetime->uncertain=true;
+    if(at==0x816B8B08 || at==0x816B7DE8 || (at==0x816BA058 && work->execution_read.pending()))
+     owner->state_->SuspendAmbientOnUnavailable(c,work->frame.thread);
+    const auto origin=work->execution_read_owner;
+    if(work->execution_read.pending() && origin && origin->read &&
+        work->execution_read.DelegateToOrigin(origin.get(),origin->read.get())){
+     origin->execution_read_fallback=true;origin->uncertain=true;
+    }
+    // Keep this returned holder in active on allocation/setup failure rather
+    // than risk a last-owner release. Latest excludes its factual own-return;
+    // a later worker reusing the same SP/LR cannot borrow it as a caller.
+   }
+  }
+  return bool(work);
+ }
+}
+
+// These functional cuts observe registers the original native code already
+// loaded. Neutral observer uncertainty is LOCAL: original PPC still executes,
+// no HRESULT/Task completion is synthesized, and no data capability is issued.
+void NativeProfileIdentityOwner::ObserveTaskExecutionInstruction(void* raw,uint32_t site) noexcept {
+ ClearTaskAllocationCut();
+ if(!raw || site>=kTaskExecutionSites.size())return;
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ std::shared_ptr<State::Work> work;
+ std::shared_ptr<NativeProfileIdentityOwner> owner;
+ try {
+  owner=NativeSystemUiService::CaptureTaskExecutionOwner(c.kernel_state);if(!owner)return;auto& s=*owner->state_;
+  if(s.retired.load(std::memory_order_acquire))return;
+  s.hooks.fetch_add(1,std::memory_order_acq_rel);
+  struct Exit{State& s;~Exit(){s.hooks.fetch_sub(1,std::memory_order_acq_rel);}} exit{s};
+  auto* thread=ActualThread();
+  if(!thread || thread->kernel_state()!=s.kernel || c.processor!=s.kernel->processor() ||
+     c.thread_state!=thread->thread_state() || c.thread_state->context()!=&c ||
+     !DwordIs(c.r[13],thread->pcr_ptr()) || !DwordIs(c.r[1],uint32_t(c.r[1])) ||
+     !DwordIs(c.lr,uint32_t(c.lr)))return;
+  const auto function=kTaskExecutionSites[site].function;
+  std::shared_ptr<State::ExecutionTarget> actual_target;
+  bool target_current=false;
+  if(site==2 || site==4){
+   {std::lock_guard lock(s.mutex);
+    work=s.Latest(thread->thread_id(),function);
+    if(work && work->execution_only && !work->normal_return && !work->execution_uncertain &&
+        c.r[11]==uint64_t(uint32_t(c.r[11])) && c.r[3]==uint64_t(uint32_t(c.r[3])))
+     actual_target=s.ExecutionTargetFor(work->execution_lifetime,uint32_t(c.r[11]));
+   }
+   if(actual_target){
+    auto read=global_critical_region::AcquireDirect();xex2_section_type section;
+    const auto& code=actual_target->code;
+    target_current=code.module && code.module->xex_module() && code.lease && code.load_generation &&
+        code.module->load_generation()==code.load_generation &&
+        s.kernel->GetUserModuleForAddress(actual_target->callback).get()==code.module.get() &&
+        s.config.domain->Contains({code.module->hmodule_ptr(),code.load_generation}) &&
+        code.module->xex_module()->GetPageSectionType(actual_target->callback,&section) && section==XEX_SECTION_CODE &&
+        code.module->xex_module()->TranslateCode(actual_target->callback)==
+            s.kernel->memory()->TranslateVirtual<const uint8_t*>(actual_target->callback);
+   }
+  }
+  // Revalidate the real producer/dispatch cut as well as the selected target.
+  // Load generation alone does not prove unchanged code/bridge translation.
+  const bool current_code=CheckTaskExecutionCode(*s.config.catalog->calls());
+  std::lock_guard lock(s.mutex);
+  const auto latest=s.Latest(thread->thread_id(),function);
+  if(work && latest.get()!=work.get())return;
+  work=latest;
+  if(!work || !work->execution_only || work->normal_return || work->execution_uncertain ||
+     work->frame.pcr!=thread->pcr_ptr())return;
+  if(!current_code){work->execution_uncertain=true;
+   if(work->execution_lifetime)work->execution_lifetime->uncertain=true;return;}
+  Frame body{s.root,thread->thread_id(),thread->pcr_ptr(),uint32_t(c.r[1]),uint32_t(c.lr),function};
+  bool exact=false;
+  if(site==0){
+   exact=DwordIs(c.r[31],work->birth.task) && DwordIs(c.r[30],work->second) &&
+       DwordIs(c.r[29],work->output) && DwordIs(c.r[10],uint32_t(c.r[10])) &&
+       s.tasks.ObserveExecutionPublication(work->frame,work->birth,body,
+           uint32_t(c.r[31]),uint32_t(c.r[30]),uint32_t(c.r[29]),uint32_t(c.r[10]));
+  }else if(site==1){
+   exact=DwordIs(c.r[30],work->birth.task) && DwordIs(c.r[28],work->first) &&
+       DwordIs(c.r[27],work->second) &&
+       s.tasks.ObserveInlineExecutionPublication(work->frame,work->birth,body,
+           uint32_t(c.r[30]),uint32_t(c.r[28]),uint32_t(c.r[27]));
+  }else if(site==2 || site==4){
+   // Both original lwz operands are zero-extended DWORDs. Do not normalize
+   // arbitrary upper bits or resample concurrent Task+30/+34 stores.
+   auto target=target_current?actual_target:nullptr;
+   exact=target && DwordIs(c.r[31],work->birth.task) &&
+       s.tasks.ExecutionCallbackSelected(work->execution_dispatch,body,
+           uint32_t(c.r[31]),uint32_t(c.r[11]),uint32_t(c.r[3]));
+   if(exact)work->execution_target=std::move(target);
+  }else{
+   exact=DwordIs(c.r[31],work->birth.task) && work->execution_target &&
+       s.tasks.ExecutionCallbackReturned(work->execution_dispatch,body,
+           uint32_t(c.r[31]),uint32_t(c.r[3]));
+  }
+  if(!exact){work->execution_uncertain=true;
+   if(work->execution_lifetime)work->execution_lifetime->uncertain=true;}
+ }catch(...){
+  // No success/backfilled receipt, no global profile poison, no native skip.
+  // The enclosing retained Work/resource holder survives until real cleanup.
+  if(owner && work){std::lock_guard lock(owner->state_->mutex);
+   work->execution_uncertain=true;
+   if(work->execution_lifetime)work->execution_lifetime->uncertain=true;
+  }
+ }
+}
+std::optional<NativeProfileIdentityOwner::TaskExecutionObservation>
+NativeProfileIdentityOwner::CurrentTaskExecution(void* raw,uint32_t actual_task) noexcept try {
+ if(!raw || !actual_task)return {};
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);const auto owner=NativeSystemUiService::CaptureTaskExecutionOwner(c.kernel_state);
+ if(!owner)return {};auto& s=*owner->state_;auto* thread=ActualThread();
+ if(!thread || thread->kernel_state()!=s.kernel || c.processor!=s.kernel->processor() ||
+    c.thread_state!=thread->thread_state() || c.thread_state->context()!=&c ||
+    !DwordIs(c.r[13],thread->pcr_ptr()) || !DwordIs(c.r[1],uint32_t(c.r[1])))return {};
+ std::lock_guard lock(s.mutex);
+ // Only the innermost original dispatcher decides. Never skip an unrelated
+ // nested Task and borrow an older equal callback or a current roster.
+ for(auto i=s.active.rbegin();i!=s.active.rend();++i){const auto& work=*i;
+  if(!work || work->normal_return || work->frame.thread!=thread->thread_id() ||
+      (work->frame.function!=0x816B8B08 && work->frame.function!=0x816B7DE8))continue;
+  // An actually entered younger dispatcher shadows this frame even when its
+  // observer could not allocate/issue a Work or invocation serial. A stale
+  // uncertain marker may refuse a fact, but can never lend an older one.
+  if(s.unavailable_execution_frames.Shadows(s.root,thread->thread_id(),thread->pcr_ptr(),
+      uint32_t(c.r[1]),work->frame.sp))return {};
+  if(!work->execution_only || !work->execution_dispatch || work->execution_uncertain ||
+     work->birth.task!=actual_task || !work->execution_lifetime ||
+     work->execution_lifetime->uncertain || !work->execution_target)return {};
+  const auto fact=s.tasks.CaptureCurrentExecution(work->execution_dispatch,
+      thread->thread_id(),thread->pcr_ptr(),uint32_t(c.r[1]),actual_task);
+  const auto& target=work->execution_target;
+  if(!fact || !Tasks::SameBirth(fact->birth,work->birth) || fact->dispatcher!=work->frame ||
+     fact->callback!=target->callback || !target->code.module || !target->code.lease ||
+     target->code.module->load_generation()!=target->code.load_generation)return {};
+  return TaskExecutionObservation{fact->root.kernel,fact->root.domain,fact->root.generation,
+      fact->birth.generation,fact->invocation,target->code.load_generation,
+      fact->birth.task,fact->dispatcher.thread,fact->dispatcher.pcr,fact->dispatcher.sp,fact->body_sp,
+      fact->callback,fact->argument,target->code.module->hmodule_ptr(),fact->callback_lr};
+ }
+ return {};
+}catch(...){return {};}
+
+std::optional<NativeProfileIdentityOwner::TaskAllocationReturnObservation>
+NativeProfileIdentityOwner::TakeTaskAllocationReturnAtNativeCut(void* raw) noexcept {
+ const auto cut=task_allocation_cut;ClearTaskAllocationCut(); // consume even on refusal
+ if(!cut.available || raw!=cut.context || !raw)return {};
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);auto* thread=ActualThread();
+ if(!thread || !c.kernel_state || c.thread_state!=cut.cpu || !cut.cpu ||
+    cpu::ThreadState::Get()!=cut.cpu || thread->thread_state()!=cut.cpu ||
+    cut.cpu->context()!=&c || thread->kernel_state()!=c.kernel_state ||
+    thread->thread_id()!=cut.fact.allocator.thread || thread->pcr_ptr()!=cut.fact.allocator.pcr ||
+    !DwordIs(c.r[1],cut.fact.allocator.sp) || !DwordIs(c.lr,cut.fact.allocator.lr) ||
+    !DwordIs(c.r[13],cut.fact.allocator.pcr) || uint32_t(c.r[3])!=cut.fact.native_status ||
+    cut.fact.allocator.function!=0x816B9A18)return {};
+ const auto owner=NativeSystemUiService::CaptureTaskExecutionOwner(c.kernel_state);
+ if(!owner || owner.get()!=cut.owner || owner->state_->root!=Tasks::Root{
+     cut.fact.root.kernel,cut.fact.root.domain,cut.fact.root.generation})return {};
+ return cut.fact;
+}
+
 void NativeProfileIdentityOwner::ObserveTaskDiagnosticInstruction(void* raw,uint32_t site) noexcept {
  if(!raw || site>=kTaskDiagnosticSites.size())return;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);auto* actual_cpu=c.thread_state;if(!actual_cpu)return;
@@ -2919,13 +4945,22 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
  const auto owner=Lookup(thread.kernel_state());
  if(!owner)return result;
  result.managed=true;auto& s=*owner->state_;
+ State::QueryObservation observation;observation.enabled=cvars::native_system_ui_trace;
+ observation.source_retired=source_retired;
+ struct Reporter {State& state;State::QueryObservation& value;
+  ~Reporter(){state.ReportQuery(value,true);}} reporter{s,observation};
  try{
-  if(s.retired.load(std::memory_order_acquire) ||
-     global_critical_region::is_held_by_current_thread() || ActualThread()!=&thread)return result;
+  if(observation.Failed(1,s.retired.load(std::memory_order_acquire)) ||
+     observation.Failed(2,global_critical_region::is_held_by_current_thread()) ||
+     observation.Failed(3,observation.Actual(ActualThread())!=&thread))return result;
   auto& c=*thread.thread_state()->context();
+  if(observation.enabled){observation.sp=c.r[1];observation.lr=c.lr;observation.pcr=c.r[13];
+   observation.context_thread_state=reinterpret_cast<uintptr_t>(c.thread_state);}
   const auto frame=s.ReadFrame(c,0x816CD6E8);
   const auto task=NativeProfileIdentityTaskContext::Read(*s.config.catalog->calls(),*s.config.domain,0x816CD6E8,c);
-  if(!frame || frame->lr!=lr || !task)return result;
+  if(observation.enabled){if(frame)observation.frame=*frame;if(task)observation.task=*task;}
+  if(observation.Failed(4,!frame) || observation.Failed(5,frame->lr!=lr) ||
+     observation.Failed(6,!task))return result;
   // Poll has already performed genuine Source retirement. Waiting here parks
   // the actual manager before its resource load, outside owner/native locks.
   // Query==0 iterations also borrow a source: the native state body after
@@ -2935,14 +4970,33 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
    {
     std::lock_guard lock(s.mutex);
     const bool captured=s.job && (s.job->native_entered || s.job->entering || s.job->transport_running);
-    if(s.retired.load() || s.uncertain.load() || (s.stopping.load() && !captured))return result;
+    if(observation.enabled && !observation.observation){
+     if(s.query_observation==UINT64_MAX)observation.enabled=false;
+     else observation.observation=++s.query_observation;
+    }
+    if(observation.enabled){
+     if(observation.loops!=UINT32_MAX)++observation.loops;
+     observation.phase=uint32_t(s.render_phase);observation.active=uint32_t(s.active.size());
+     observation.expected=uint32_t(s.expected.size());observation.current_read=s.current_read_source;
+     observation.next_work=s.next_work;observation.flags=uint32_t(captured);
+     observation.old_evaluated=observation.old_truth=0;observation.work_blocker={};observation.source_blocker={};
+     observation.first_loss=s.first_loss_line.load(std::memory_order_relaxed);
+     observation.job=observation.source=0;observation.attempt=0;observation.paint={};
+     if(s.job){observation.job=s.job->serial;observation.source=s.job->source;observation.attempt=s.job->preentry_attempt;
+      for(uint32_t i=0;i<PaintObservation::kCount;++i)
+       observation.paint[i]=s.job->preentry_observation.Snapshot(PaintStage(i),observation.attempt);}
+    }
+    if(observation.Failed(7,s.retired.load()) || observation.Failed(8,s.uncertain.load()) ||
+       observation.Failed(9,s.stopping.load() && !captured))return result;
     const auto* node=s.tasks.FindLiveTask(*task);
-    if(!node){s.Lose(__LINE__);return result;}
-    if(s.render_phase==State::RenderPhase::kDrainingOld && source_retired &&
-       s.job && s.wake && s.native_pending && s.IdentityWorkEmpty() &&
-       s.expected.empty() && s.tasks.SourceDescendantsClosed(s.current_read_source) && s.job->old_event_origin &&
-       s.listeners->SourceOnlyProducer(*s.job->old_event_origin) &&
-       s.wake->InvocationsDrained(NativeAtomicWord(s.native_pending))){
+    if(!node){observation.reason=10;s.Lose(__LINE__);return result;}
+    if(observation.enabled)observation.birth=node->birth;
+    if(observation.Old(0,s.render_phase==State::RenderPhase::kDrainingOld) && observation.Old(1,source_retired) &&
+       observation.Old(2,bool(s.job)) && observation.Old(3,bool(s.wake)) && observation.Old(4,bool(s.native_pending)) &&
+       observation.Old(5,s.IdentityWorkEmpty(observation.enabled?&observation.work_blocker:nullptr)) &&
+       observation.Old(6,s.expected.empty()) && observation.Old(7,s.tasks.SourceDescendantsClosed(s.current_read_source,observation.enabled?&observation.source_blocker:nullptr)) &&
+       observation.Old(8,bool(s.job->old_event_origin)) && observation.Old(9,s.listeners->SourceOnlyProducer(*s.job->old_event_origin)) &&
+       observation.Old(10,s.wake->InvocationsDrained(NativeAtomicWord(s.native_pending)))){
       s.render_phase=State::RenderPhase::kClosingOld;
     }
     if(s.render_phase==State::RenderPhase::kHiddenRefresh && source_retired &&
@@ -2963,9 +5017,10 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
       s.render_query_parked=true;s.parked_render_thread=retain_object(&thread);
       s.parked_render_pcr=frame->pcr;s.parked_render_sp=frame->sp;
       s.parked_render_birth=node->birth.generation;
+      observation.parked=true;observation.phase=uint32_t(s.render_phase);observation.reason=11;
       return result; // Real unavailable Query; no new iteration/source is admitted.
     }
-    if(s.render_phase==State::RenderPhase::kStopPaused)return result;
+    if(s.render_phase==State::RenderPhase::kStopPaused){observation.reason=11;return result;}
     const bool closing=s.render_phase==State::RenderPhase::kClosingOld ||
         s.render_phase==State::RenderPhase::kOldPaused ||
         s.render_phase==State::RenderPhase::kClosingPrepared ||
@@ -2976,21 +5031,24 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
      s.render_query_parked=true;s.parked_render_thread=retain_object(&thread);
      s.parked_render_pcr=frame->pcr;s.parked_render_sp=frame->sp;
      s.parked_render_birth=node->birth.generation;
+     observation.parked=true;
      if(s.render_phase==State::RenderPhase::kClosingOld)s.render_phase=State::RenderPhase::kOldPaused;
      if(s.render_phase==State::RenderPhase::kClosingPrepared)s.render_phase=State::RenderPhase::kPreparedPaused;
+     if(observation.enabled)observation.phase=uint32_t(s.render_phase);
     }else if(!closing || !source_retired){
-     if(iterations || s.active.size()>=256 || !s.next_work || s.next_work==UINT64_MAX){s.Lose(__LINE__);return result;}
+     if(observation.Failed(12,iterations) || observation.Failed(13,s.active.size()>=256) ||
+        observation.Failed(14,!s.next_work || s.next_work==UINT64_MAX)){s.Lose(__LINE__);return result;}
      work=std::make_shared<State::Work>();work->frame=*frame;work->serial=s.next_work++;
      work->source=s.pixels->source();work->presentation_guard=s.pixels;
      work->render_iteration=true;work->thread=retain_object(&thread);
      work->domain=s.config.domain->Acquire();
      const auto birth=s.tasks.BeginExternalWork(*frame,*task);
-     if(!birth || !work->domain){s.Lose(__LINE__);return result;}
+     if(observation.Failed(15,!birth) || observation.Failed(16,!work->domain)){s.Lose(__LINE__);return result;}
      work->birth=work->external_birth=*birth;
      auto lifetime=std::make_shared<State::EventLifetime>();
      lifetime->code=s.root_code;lifetime->domain=s.config.domain->Acquire();
      lifetime->thread=work->thread;if(s.job)lifetime->intent=s.job->intent;
-     if(!lifetime->domain){s.Lose(__LINE__);return result;}
+     if(!lifetime->domain){observation.reason=17;s.Lose(__LINE__);return result;}
      const Events::Root eroot{s.root.kernel,s.root.domain,s.root.generation};
      const Events::WorkKey key{eroot,birth->generation,work->serial,frame->thread,
          frame->pcr,birth->task,frame->sp,frame->lr,frame->function};
@@ -2998,27 +5056,37 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
      work->listener_source=std::shared_ptr<const NativeIdentityEventWorkSource>(
          new NativeIdentityEventWorkSource(key,s.listeners->RetainEarlierSource(work->source),lifetime));
      work->listener_work=s.listeners->AdoptWholeWork(work->listener_source);
-     if(!work->listener_work){s.Lose(__LINE__);return result;}
+     if(!work->listener_work){observation.reason=18;s.Lose(__LINE__);return result;}
      auto* pool=&s.boot_reads;
      if(s.job)pool=work->source==s.job->source?&s.job->writer_reads:&s.job->old_reads;
      const auto slot=std::find_if(pool->begin(),pool->end(),[](const auto& p){return bool(p);});
-     if(slot==pool->end()){s.Lose(__LINE__);return result;}
+     if(slot==pool->end()){observation.reason=19;s.Lose(__LINE__);return result;}
      work->read_pool=pool;work->read=std::move(*slot);
      s.active.push_back(work); // Retain before actual ThreadState attachment.
      if(!work->read->Enter(s.kernel,&thread,c.thread_state,birth->task,birth->generation,
          work->serial,s.config.catalog->calls()->module()->hmodule_ptr(),s.root.generation)){
-      work->uncertain=true;s.Lose(__LINE__);return result;
+      observation.reason=20;work->uncertain=true;s.Lose(__LINE__);return result;
      }
      s.render_query_parked=false;
-     result.guard=work->presentation_guard;result.admitted=true;return result;
+     observation.reason=24;result.guard=work->presentation_guard;result.admitted=true;return result;
     }
    }
    // A stop request releases this pause without claiming iteration, clear,
    // GPU completion, or restored pixels. Existing admitted work stays owned.
+   s.ReportQuery(observation,false); // independently live while Bootstrap may be blocked
    thread.Delay(0,0,uint64_t(-10000ll));
-   if(ActualThread()!=&thread || c.thread_state!=thread.thread_state())return result;
+   if(observation.Failed(21,observation.Actual(ActualThread())!=&thread))return result;
+   // This getter was the original RHS of the short-circuited comparison.
+   // It is still evaluated only after the original ActualThread check passes.
+   auto* expected_thread_state=thread.thread_state();
+   auto* context_thread_state=c.thread_state;
+   if(observation.enabled){
+    observation.expected_thread_state=reinterpret_cast<uintptr_t>(expected_thread_state);
+    observation.context_thread_state=reinterpret_cast<uintptr_t>(context_thread_state);
+   }
+   if(observation.Failed(22,context_thread_state!=expected_thread_state))return result;
   }
- }catch(...){s.Lose(__LINE__);return result;}
+ }catch(...){observation.reason=23;s.Lose(__LINE__);return result;}
 }
 NativeProfileIdentityOwner::FrameQueryAdmission
 NativeProfileIdentityOwner::CaptureNativeFrameGuard(XThread& thread) noexcept {
@@ -3035,12 +5103,118 @@ NativeProfileIdentityOwner::CaptureNativeFrameGuard(XThread& thread) noexcept {
      const auto facts=s.listeners->CaptureDependencies(*work->listener_work);
      if(!facts || facts->unknown)s.Lose(__LINE__); // Suppress every image before Set.
     }
-    result.guard=work->presentation_guard;result.admitted=bool(result.guard);return result;
+    result.guard=work->presentation_guard;result.admitted=bool(result.guard);
+    // Optional observation allocation cannot reject an otherwise admitted
+    // native frame. The base visibility guard and execution remain unchanged.
+    try{
+     if(!work->image_draws_unavailable && s.image_slot && !s.image_slot->unavailable_.load() &&
+        std::any_of(work->image_draws.begin(),work->image_draws.end(),[](const auto& d){return bool(d);}))
+      result.guard=std::make_shared<IdentityImageFrameGuard>(result.guard,owner,s.root,
+          work->source,work->serial,work->image_draws);
+    }catch(...){}
+    return result;
    }
   }
  }catch(...){s.Lose(__LINE__);}
  return result;
 }
+void NativeProfileIdentityOwner::ObserveNativeImageFrameCaptured(XThread& thread,
+    const gpu::NativeFrameExecutionRequest& request,const NativeCompletedFrameRecord& record) noexcept {
+ const auto image=std::dynamic_pointer_cast<const IdentityImageFrameGuard>(request.presentation_guard());
+ if(!image)return;const auto owner=image->owner.lock();if(!owner)return;auto& s=*owner->state_;
+ std::shared_ptr<NativeIdentityTileObserverSlot> current_slot;
+ try{
+  if(ActualThread()!=&thread || thread.kernel_state()!=s.kernel || !record.native_end_completed ||
+     !request.plan() || request.plan()->is_overlay_control() ||
+     request.input_provenance()!=gpu::NativeFrameInputProvenance::kImmutableSnapshot ||
+     !request.input_snapshot() || !request.input_snapshot()->valid() || !request.identity().valid() ||
+     request.identity().owner.kernel_epoch!=s.root.kernel ||
+     request.identity().owner.module_generation!=s.root.generation ||
+     !record.primary_physical_address || record.primary.size()!=request.plan()->words().size()*4 ||
+     record.primary_physical_address<record.record_physical_address ||
+     uint64_t(record.primary_physical_address)+record.primary.size()>
+         uint64_t(record.record_physical_address)+record.record_allocation_bytes ||
+     !record.record_allocation_bytes || uint64_t(record.record_physical_address)+record.record_allocation_bytes>0x20000000ull)return;
+  for(size_t i=0;i<request.plan()->words().size();++i)
+   if(xe::load_and_swap<uint32_t>(record.primary.data()+i*4)!=request.plan()->words()[i])return;
+  // Canonicalization occurs now, while the real captured full-record pin and
+  // immutable primary protect the existing Source. No native pointer is used
+  // by the later completion acknowledgment.
+  auto global=global_critical_region::AcquireDirect();
+  current_slot=s.kernel->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  std::lock_guard lock(s.mutex);
+  if(s.retired.load() || image->root!=s.root || image->captured || !s.image_slot || s.image_slot->unavailable_.load() ||
+     !s.config.domain || request.identity().owner.module_hmodule!=s.config.domain->root().hmodule ||
+     current_slot.get()!=s.image_slot.get() || current_slot.owner_before(s.image_slot) || s.image_slot.owner_before(current_slot))return;
+  const auto current=s.image_slot->current_.load(std::memory_order_acquire);const auto self=owner->weak_from_this();
+  if(current.owner_before(self) || self.owner_before(current))return;
+  const auto render=std::find_if(s.active.begin(),s.active.end(),[&](const auto& work){
+   return work->serial==image->render && work->render_iteration && work->thread.get()==&thread &&
+       work->source==image->source && !work->normal_return && !work->uncertain;
+  });
+  if(render==s.active.end())return;
+  const auto* task=s.tasks.FindLiveTask((*render)->birth.task);
+  if(!task || task->birth.generation!=(*render)->birth.generation)return;
+  bool match=false;
+  for(const auto& candidate:image->draws){
+   if(!candidate || candidate->draw.render!=image->render || candidate->draw.dc.root!=s.root ||
+      candidate->draw.copied.input.source()!=image->source || candidate->draw.dc.address!=record.dc ||
+      candidate->draw.device!=record.device ||
+      s.images.Current(identity_detail::NativeImageJournal::Kind::kDc,record.dc)!=
+          std::optional(candidate->draw.dc) || !s.images.NativeTextureOwned(candidate->draw.copied))continue;
+   auto actual=*candidate;
+   if(actual.packet_address>=0x20000000){
+    const auto* heap=s.kernel->memory()->LookupHeap(actual.packet_address);
+    if(!heap || heap->heap_type()!=HeapType::kGuestPhysical)continue;
+    actual.packet_address=s.kernel->memory()->GetPhysicalAddress(actual.packet_address);
+   }
+   if(actual.packet_address<record.record_physical_address ||
+      uint64_t(actual.packet_address)+12>uint64_t(record.record_physical_address)+record.record_allocation_bytes ||
+      !identity_detail::ImageDrawMatchesPlan(actual,record.primary_physical_address,*request.plan()))continue;
+   const auto offset=(actual.packet_address-record.primary_physical_address)/4;
+   for(const auto& parsed:request.plan()->inventory().draws)if(parsed.packet_dword_offset==offset && parsed.pixel_shader &&
+       *parsed.pixel_shader<request.shaders().size()){
+    const auto& shader=request.shaders()[*parsed.pixel_shader];
+    if(shader.load.stage!=gpu::xenos::ShaderType::kPixel)continue;
+    const auto reads=gpu::NativeDrawReadInventory::TextureReads(parsed,&shader.metadata);
+    if(reads.error!=gpu::NativeDrawReadInventory::Error::kNone)continue;
+    for(const auto& read:reads.reads)if(read.slot==0 && read.fetch_words==actual.fetch)match=true;
+   }
+  }
+  if(match){image->request=reinterpret_cast<uintptr_t>(&request);image->identity=request.identity();
+   image->backend=request.backend_epoch();image->captured=true;}
+ }catch(...){/* optional original-use observation unavailable; native frame unchanged */}
+}
+void NativeProfileIdentityOwner::ObserveNativeImageFrameCompleted(
+    const gpu::NativeFrameExecutionRequest& request,const gpu::NativeFrameExecutionResult& result) noexcept {
+ // This call is placed only AFTER genuine Complete + Session::RetireComplete
+ // + actual transport invocation success. It does not retire or submit GPU IO.
+ const auto image=std::dynamic_pointer_cast<const IdentityImageFrameGuard>(request.presentation_guard());
+ if(!image)return;const auto owner=image->owner.lock();if(!owner)return;auto& s=*owner->state_;
+ std::shared_ptr<NativeIdentityTileObserverSlot> current_slot;
+ try{
+  if(result.status!=gpu::NativeFrameExecutionResult::Status::kSubmitted || !result.title_state_restored ||
+     result.completion.status()!=gpu::GpuCompletionStatus::kComplete ||
+     result.completion.backend_epoch()!=request.backend_epoch() ||
+     result.completion.native_frame_identity()!=std::optional(request.identity()) ||
+     !gpu::NativeFrameOperationsMatchPlan(*request.plan(),result))return;
+  if(s.retired.load() || !request.IsPresentationOwnerCurrent())return;
+  current_slot=s.kernel->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
+  std::lock_guard lock(s.mutex);
+  if(s.retired.load() || !s.image_slot || s.image_slot->unavailable_.load() || image->root!=s.root ||
+     current_slot.get()!=s.image_slot.get() || current_slot.owner_before(s.image_slot) || s.image_slot.owner_before(current_slot) ||
+     !image->captured || image->completed || image->request!=reinterpret_cast<uintptr_t>(&request) ||
+     image->identity!=request.identity() || image->backend!=request.backend_epoch())return;
+  const auto current=s.image_slot->current_.load(std::memory_order_acquire);const auto self=owner->weak_from_this();
+  if(current.owner_before(self) || self.owner_before(current))return;
+  image->completed=true;
+  if(s.job && s.job->source==image->source && s.job->native_returned &&
+     !s.job->canceled && !s.job->execution_uncertain){
+   s.job->render_refresh_observed.store(true,std::memory_order_release);s.changed.notify_all();
+  }
+ }catch(...){/* no receipt, no synthesized return or pixel permission */}
+}
+
 void NativeProfileIdentityOwner::ObserveRenderIterationEnd(void* raw) noexcept {
  if(!raw)return;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
@@ -3057,8 +5231,15 @@ void NativeProfileIdentityOwner::ObserveRenderIterationEnd(void* raw) noexcept {
    if((*i)->render_iteration && (*i)->thread.get()==thread){work=*i;break;}
   if(!work)return; // Unmanaged/denied Query did not acquire an iteration.
   if(work->frame.sp!=c.r[1] || work->frame.pcr!=c.r[13] || !task || *task!=work->birth.task ||
-     !s.tasks.ReturnExternalWork(work->frame,work->external_birth) ||
-     !work->read || !work->read->Leave()){work->uncertain=true;s.Lose(__LINE__);return;}
+     !work->read){work->uncertain=true;s.Lose(__LINE__);return;}
+  // The genuine authenticated CD920 iteration boundary owns this read just
+  // like an original function own-return. A delegated neutral restoration
+  // restores only to Leave immediately, with no PPC/data access between.
+  if(work->execution_read_fallback && !s.RestoreOwnedReadOnUnwind(work)){
+   work->uncertain=true;return; // retain that exact owner; no global neutral poison
+  }
+  if(!s.tasks.ReturnExternalWork(work->frame,work->external_birth) ||
+      !work->read->Leave()){work->uncertain=true;s.Lose(__LINE__);return;}
   if(work->listener_work){
    work->listener_dependencies=s.listeners->CaptureDependencies(*work->listener_work);
    const Events::Root root{s.root.kernel,s.root.domain,s.root.generation};
@@ -3066,7 +5247,7 @@ void NativeProfileIdentityOwner::ObserveRenderIterationEnd(void* raw) noexcept {
    const Events::WorkKey key{root,work->birth.generation,work->serial,f.thread,
        f.pcr,work->birth.task,f.sp,f.lr,f.function};
    if(!work->listener_dependencies || work->listener_dependencies->unknown ||
-      !s.listeners->FinishWholeWorkNormally(*work->listener_work,key)){
+      !s.listeners->FinishWholeWorkNormally(*work->listener_work,key,work->listener_source)){
     work->uncertain=true;s.Lose(__LINE__);return;
    }
    if(s.job && work->source==s.job->source){
@@ -3091,6 +5272,7 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
     XThread::GetCurrentFiberThread() || global_critical_region::is_held_by_current_thread())return false;
  std::vector<std::shared_ptr<State::Work>> retired;
  std::vector<std::shared_ptr<State::Expected>> retired_calls;
+ std::vector<std::shared_ptr<State::ExecutionLifetime>> retired_execution;
  struct ReferenceReapGate {State& state;bool active=false;
   ~ReferenceReapGate(){if(active)state.task_close_frames.fetch_sub(1,std::memory_order_acq_rel);}
  } reference_reap{s};
@@ -3099,6 +5281,25 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
   std::lock_guard lock(s.mutex);
   if(s.retired.load() || s.uncertain.load() || s.tasks.lost() ||
      (s.wake && s.wake->lost()) || (s.listeners && s.listeners->lost()))return false;
+  for(auto i=s.active.begin();i!=s.active.end();){const auto& work=*i;
+   if(work->execution_only && work->normal_return && !work->execution_read.pending() &&
+       work->execution_lifetime && work->execution_lifetime->native_freed){
+    s.host_retired.push_back(work);i=s.active.erase(i);
+   }else ++i;
+  }
+  for(auto i=s.execution_retained.begin();i!=s.execution_retained.end();){const auto& work=*i;
+   if(work->normal_return && !work->execution_read.pending() &&
+       work->execution_lifetime && work->execution_lifetime->native_freed){
+    s.host_retired.push_back(work);i=s.execution_retained.erase(i);
+   }else ++i;
+  }
+  for(auto i=s.execution_lifetimes.begin();i!=s.execution_lifetimes.end();){const auto& lifetime=*i;
+   const bool running=std::any_of(s.active.begin(),s.active.end(),[&](const auto& work){
+    return work->execution_only && work->execution_lifetime==lifetime && !work->normal_return;
+   });
+   if(lifetime && lifetime->native_freed && !running){retired_execution.push_back(lifetime);i=s.execution_lifetimes.erase(i);}
+   else ++i;
+  }
   retired.swap(s.host_retired);
   // Expected receipts have separate native Data/callback ownership. Preserve
   // their original Step boundary; pending maintenance retires Work only.
@@ -3120,8 +5321,8 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
  // pre-body reservations, never unreturned native work. Destroy them on this
  // real OS Bootstrap host phase after dropping State/GCRC, including while
  // its real scheduled identity call is still pending.
- retired.clear();retired_calls.clear();
- auto listener_retired=s.listeners->ReapOnHostOutsideGuestLocks();
+ retired.clear();retired_calls.clear();retired_execution.clear();
+ if(s.listeners){auto listener_retired=s.listeners->ReapOnHostOutsideGuestLocks();}
  return true;
 }catch(...){return false;} // Maintenance is never a native result/readiness source.
 
@@ -3131,8 +5332,14 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
     bootstrap.thread_id()!=s.config.allocation->bootstrap_thread_id() ||
     bootstrap.native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM ||
     global_critical_region::is_held_by_current_thread())return false;
+ if(!s.profile_enabled)return ReapReturnedOnBootstrap(bootstrap);
+ ObserveBootstrapHandoff(HandoffStage::kStepAdmission);
+ ObserveBootstrapHandoff(HandoffStage::kRefusalReport);
  ReportFirstRefusalOnBootstrap(bootstrap);
+ ObserveBootstrapHandoff(HandoffStage::kRefusalReported);
+ ObserveBootstrapHandoff(HandoffStage::kReap);
  if(!ReapReturnedOnBootstrap(bootstrap))return false;
+ ObserveBootstrapHandoff(HandoffStage::kReaped);
  auto* pm=s.kernel->xam_state()->profile_manager();
  std::shared_ptr<State::Job> job;
  std::shared_ptr<xam::ProfileRosterIntent> cleanup;
@@ -3285,6 +5492,7 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   // source release. Exact entered op/account/backing/code survives to real stop.
   s.changed.notify_all();return true;
  }
+ ObserveBootstrapHandoff(HandoffStage::kPreentry);
  bool old_paused=false;
  auto& observation=job->preentry_observation;
  const auto observed=[&](PaintStage stage,uint32_t bit,bool value) noexcept {
@@ -3309,6 +5517,7 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   observation.Finish(PaintStage::kOldPaused,old_paused);
  }
  if(old_paused && !job->old_paint_drained){
+  ObserveBootstrapHandoff(HandoffStage::kPaint);
   observation.Begin(PaintStage::kOldPaint);
   const auto transport=NativeSystemGraphicsTransport::Lookup(s.kernel);
   if(observed(PaintStage::kOldPaint,0,!transport) ||
@@ -3316,6 +5525,7 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
    observation.Finish(PaintStage::kOldPaint,false);return true;
   }
   observation.Finish(PaintStage::kOldPaint,true);
+  ObserveBootstrapHandoff(HandoffStage::kPaintReturned);
   std::lock_guard lock(s.mutex);
   observation.Begin(PaintStage::kPostPaint);job->preentry_work_blockers[1]={};
   if(observed(PaintStage::kPostPaint,0,s.job!=job) || observed(PaintStage::kPostPaint,1,s.render_phase!=State::RenderPhase::kOldPaused) ||
@@ -3354,8 +5564,10 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
  }
  if(run_host){
   if(!continuation){observation.Finish(PaintStage::kContinuation,false);return true;}
+  ObserveBootstrapHandoff(HandoffStage::kContinuation);
   const auto result=continuation->InvokeOwnedProfileIdentityAndWait(*this,job->serial,
       [self=shared_from_this()](XThread& actual){return self->ExecutePreparedOn(actual);});
+  ObserveBootstrapHandoff(HandoffStage::kContinuationReturned);
   {std::lock_guard lock(s.mutex);job->transport_running=false;
    const bool failed=observed(PaintStage::kContinuation,8,!result.succeeded);
    observation.Finish(PaintStage::kContinuation,result.succeeded);
@@ -3364,6 +5576,26 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
  phase=job->intent->result().phase;
  if(phase!=xam::ProfileRosterPhase::kPublished && phase!=xam::ProfileRosterPhase::kFinalizing &&
     phase!=xam::ProfileRosterPhase::kCommitted)return true;
+ // Native protocol/map work is independent of visual refresh and final
+ // resource retirement. Keep the one Job/Operation and all existing owners.
+ bool protocol_ready=false;
+ {
+  std::lock_guard lock(s.mutex);
+  protocol_ready=s.job==job && job->protocol_returned && job->protocol_work &&
+      job->protocol_frame.root==s.root && job->protocol_frame.function==0x8199C838 &&
+      job->protocol_birth.generation && job->protocol_birth.task &&
+      !job->execution_uncertain && !s.uncertain.load() &&
+      s.published_source.load(std::memory_order_acquire)==job->source;
+ }
+ if(protocol_ready){
+  if(!job->protocol){
+   job->protocol=xam::ProfileRosterNativeCompletion::ForProtocol(job->intent,
+       s.config.factory_binding,s.config.factory_binding->nonce(),job->protocol_value);
+   if(!job->protocol)return false;
+  }
+  const auto committed=pm->PublishNativeRosterProtocol(job->intent,*job->protocol);
+  if(committed.phase==xam::ProfileRosterPhase::kUncertain){s.Lose(__LINE__);return false;}
+ }
  {
   std::lock_guard lock(s.mutex);
   if(s.job!=job || s.published_source.load(std::memory_order_acquire)!=job->source)return false;
@@ -3379,7 +5611,9 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   // An output is either actual freshly written bytes or the native consumer's
   // exact cleared-pointer handling of a real failed read. These are never
   // conflated with successful image/asset readiness.
-  if(job->native_returned && !job->transport_running && job->render_refresh_observed && providers &&
+  const auto host_duties=job->intent->result();
+  if(job->protocol_returned && host_duties.maps_committed && host_duties.writers_available &&
+     job->native_returned && !job->transport_running && job->render_refresh_observed && providers &&
      s.tasks.SourceDescendantsClosed(job->source) && s.wake && s.native_pending &&
      s.wake->InvocationsDrained(NativeAtomicWord(s.native_pending)))job->want_final_barrier=true;
  }
@@ -3446,7 +5680,7 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
 
 void NativeProfileIdentityOwner::BeginStop() noexcept {
  state_->stopping.store(true,std::memory_order_release);
- state_->pixel_lifetime->closed.store(true,std::memory_order_release);
+ if(state_->pixel_lifetime)state_->pixel_lifetime->closed.store(true,std::memory_order_release);
  try{std::lock_guard lock(state_->mutex);
   if(state_->pixels)state_->pixels->Revoke();
   if(state_->job && state_->job->new_pixels)state_->job->new_pixels->Revoke();
@@ -3466,7 +5700,8 @@ bool NativeProfileIdentityOwner::Drained() const noexcept {
       !state_->uncertain.load(std::memory_order_acquire) &&
       !state_->hooks.load(std::memory_order_acquire) &&
       !state_->identity_executor_frames.load(std::memory_order_acquire) &&
-      state_->PeriodicStopped() &&
+      state_->PeriodicStopped() && state_->tasks.ExecutionClosed() &&
+      !state_->execution_unavailable.load(std::memory_order_acquire) &&
       !state_->listener_object_frames.load(std::memory_order_acquire) &&
       !state_->task_close_frames.load(std::memory_order_acquire) &&
       !state_->public_calls.load(std::memory_order_acquire) &&
@@ -3492,7 +5727,7 @@ bool NativeProfileIdentityOwner::StopPeriodicOnBootstrap(XThread& bootstrap) noe
   const auto* function=s.config.catalog->periodic_service_stop();
   const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
   for(;;){
-   uint64_t serial=0;uint32_t object=0;bool pending=false;
+   uint64_t serial=0;uint32_t object=0;bool pending=false,retained_lifetime=false;
    {
     std::lock_guard lock(s.mutex);
     if(s.retired.load() || !s.stopping.load() || s.tasks.lost())return false;
@@ -3500,6 +5735,7 @@ bool NativeProfileIdentityOwner::StopPeriodicOnBootstrap(XThread& bootstrap) noe
      if(row->failed)return false;
      if(row->enabling || row->stopping){pending=true;break;}
      if(!row->enabled || !row->birth.generation)return false;
+     retained_lifetime=s.tasks.RetainsPeriodicLifetime(*row,row->birth);
      serial=row->serial;object=row->object;break;
     }
     if(!serial && !pending)return true; // No native factory ever issued, or actual stops returned.
@@ -3509,7 +5745,7 @@ bool NativeProfileIdentityOwner::StopPeriodicOnBootstrap(XThread& bootstrap) noe
     bootstrap.Delay(0,0,uint64_t(-160000ll));continue;
    }
    if(!function || function->address!=0x819068D0 || !s.config.domain->active() ||
-       !s.config.allocation->IsAccepting() || !s.PeriodicObjectCurrent(object) ||
+       (!s.config.allocation->IsAccepting() && !retained_lifetime) || !s.PeriodicObjectCurrent(object) ||
        !CheckPeriodicCode(*s.config.catalog->calls()))return false;
    auto expected=std::make_shared<State::Expected>();
    expected->source=kBootUnjoinedSource;expected->thread=retain_object(&bootstrap);
@@ -3557,7 +5793,7 @@ bool NativeProfileIdentityOwner::RetainedForActualKernelStop() const noexcept {
      s.identity_executor_frames.load(std::memory_order_acquire) ||
      s.listener_object_frames.load(std::memory_order_acquire) ||
      s.task_close_frames.load(std::memory_order_acquire) || !s.kernel || !s.config.catalog || !s.config.domain || !s.config.allocation ||
-     !s.config.factory_binding || !s.root_code || !s.resident_domain)return false;
+     (s.profile_enabled && !s.config.factory_binding) || !s.root_code || !s.resident_domain)return false;
   if(std::any_of(s.counted.begin(),s.counted.end(),[](const auto& row){
      return row && ((!row->allocated && !row->failed) || (row->delete_entered && !row->free_returned));
    }))return false; // Unreturned Ob primitive/deleter host frames are not covered.
@@ -3568,7 +5804,16 @@ bool NativeProfileIdentityOwner::RetainedForActualKernelStop() const noexcept {
        (!d->thread || !d->code || !d->domain))))return false;
   // A live native modal wait has no proved heap-only host-frame coverage.
   // Its genuine return is required; never cancel/Complete/Close it by fiat.
+  for(const auto& work:s.execution_retained)if(!work || !work->normal_return || work->execution_read.pending())return false;
   for(const auto& work:s.active){
+   // A neutral hook has already returned to original PPC. Its heap-only
+   // metadata/code/thread owners remain retained until the separate real
+   // CPU-stop barrier; this is not a native callback/Task completion receipt
+   // and does not certify an arbitrary active HLE/public/IO frame.
+   if(work && work->execution_only){
+    if(!work->thread || !work->domain || !work->frame.valid() || work->frame.root!=s.root)return false;
+    continue;
+   }
    if(!work || work->transport_unclaimed || work->transport_only || work->creation_only || work->execution_options || work->profile_control || work->periodic_factory || work->task_release || work->foreign_task_cleanup || work->foreign_avatar_task || !work->thread || !work->domain || !work->frame.valid() || work->frame.root!=s.root ||
       (work->frame.function==0x816F3A40 && !work->prebody_parked))return false;
   }
@@ -3580,7 +5825,8 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
  // timeout, ordinary Leave failure or BeginStop flag can invoke this proof.
  if(global_critical_region::is_held_by_current_thread())return false;
  try{
-  std::vector<std::shared_ptr<State::Work>> active,retired;
+  std::vector<std::shared_ptr<State::Work>> active,retired,execution_retained;
+  std::vector<std::shared_ptr<State::ExecutionLifetime>> execution_lifetimes;
   std::vector<std::shared_ptr<State::Expected>> expected,retired_expected;
   std::array<std::shared_ptr<TaskReference::Data>,64> references;
   std::shared_ptr<State::Job> job;
@@ -3601,6 +5847,13 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
    // top CAS restores its real previous scope. A mismatch retains everything.
    for(auto i=state_->active.rbegin();i!=state_->active.rend();++i){
     const auto& work=*i;
+    if(work->execution_read_fallback && !state_->RestoreOwnedReadOnUnwind(work))return false;
+    if(work->execution_read.pending()){
+     const auto parent=work->execution_read_owner;
+     auto* cpu=work->thread?work->thread->thread_state():nullptr;
+     if(!parent || !parent->read || !cpu ||
+        !work->execution_read.RestoreAtActualStop(parent->read.get(),cpu->native_profile_roster_read_))return false;
+    }
     if(work->read && !work->read->DetachAtActualKernelStop())return false;
    }
    if(state_->listeners && !state_->listeners->DetachCellsAtActualKernelStop())return false;
@@ -3624,6 +5877,8 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
    state_->stopping.store(true,std::memory_order_release);
    state_->public_calls.store(0,std::memory_order_release);
    active.swap(state_->active);retired.swap(state_->host_retired);
+   execution_lifetimes.swap(state_->execution_lifetimes);
+   execution_retained.swap(state_->execution_retained);
    expected.swap(state_->expected);retired_expected.swap(state_->retired_expected);
    job=std::move(state_->job);bootstrap_cleanup=std::move(state_->bootstrap_cleanup);
    listeners=std::move(state_->listeners);
@@ -3645,10 +5900,12 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
    if(work->event_lifetime){work->event_lifetime->intent.reset();work->event_lifetime->domain={};
     work->event_lifetime->code.reset();work->event_lifetime->thread.reset();}
    work->commit.reset();work->event_lifetime.reset();work->listener_source.reset();
-   work->listener_dependencies.reset();work->listener_frame.reset();work->listener_cell=nullptr;
+   work->listener_dependencies.reset();work->listener_parent.reset();work->listener_frame.reset();work->listener_cell=nullptr;
    work->listener_allocation.reset();
    work->tail_reschedule.reset();work->tail_wake.reset();work->presentation_guard.reset();
    work->creation_parent.reset();work->creation.reset();work->reference_release.reset();
+   work->execution_target.reset();work->execution_lifetime.reset();
+   work->execution_read_owner.reset();work->execution_wait_parent.reset();work->execution_producer.reset();
    work->caller_code.lease.reset();work->caller_code.module.reset();
    if(work->avatar_allocation)work->avatar_allocation->RetireAfterActualKernelStop();
    work->avatar_allocation.reset();
@@ -3656,6 +5913,7 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
   };
   for(const auto& work:active)release_work(work);
   for(const auto& work:retired)release_work(work);
+  for(const auto& work:execution_retained)release_work(work);
   for(const auto& call:expected)call->thread.reset();
   for(const auto& call:retired_expected)call->thread.reset();
   for(const auto& d:references)if(d){
@@ -3676,10 +5934,16 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
   for(const auto& row:retired_counted)if(row){row->creator.reset();row->domain={};}
   // No native Close/free/body-return fact is added. The same actual Kernel and
   // Memory remain alive throughout these host releases, outside all locks.
-  active.clear();retired.clear();expected.clear();retired_expected.clear();
+  active.clear();retired.clear();execution_retained.clear();expected.clear();retired_expected.clear();
+  for(const auto& lifetime:execution_lifetimes)if(lifetime)lifetime->targets.clear();
+  execution_lifetimes.clear();
   listeners.reset();job.reset();bootstrap_cleanup.reset();
   state_->boot_source.reset();state_->boot_origin.reset();
   counted={};retired_counted.clear();state_->providers={};
+  // Actual all-CPU/GPU-stop retires only these value observations. It does
+  // not fabricate missing native calls, reference releases or healthy drain.
+  state_->image_calls={};state_->image_strings={};state_->image_defaults={};
+  state_->images.RetireMetadataAfterActualStop();
   state_->boot_reads={};state_->current_ticket.reset();state_->current_roster.reset();
   state_->resident_domain={};state_->root_code.reset();state_->provider_binding.reset();
   state_->prepared_title={};state_->apc_code_until_actual_stop.clear();
@@ -3814,8 +6078,10 @@ uint64_t NativeProfileIdentityOwner::EnterFiniteInputBoundary(void* raw,uint32_t
      const Events::Root root{s.root.kernel,s.root.domain,s.root.generation};
      const Events::WorkKey key{root,node->birth.generation,work->serial,frame->thread,frame->pcr,
          node->birth.task,frame->sp,frame->lr,at};
+     work->listener_parent=s.SynchronousListenerParent(*work,key);
      work->listener_source=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(
-         key,s.listeners->RetainEarlierSource(work->source),lifetime));
+         key,s.listeners->RetainEarlierSource(work->source),lifetime,
+         work->listener_parent?work->listener_parent->listener_source:nullptr));
      work->listener_work=s.listeners->AdoptWholeWork(work->listener_source);
      if(!work->listener_work){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
      work->read_pool=pool;work->read=std::move(*slot);
@@ -3834,8 +6100,11 @@ uint64_t NativeProfileIdentityOwner::EnterFiniteInputBoundary(void* raw,uint32_t
 }
 
 uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noexcept {
+ ClearTaskAllocationCut();
  if(!raw || address>UINT32_MAX)return 1;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);const auto at=uint32_t(address);
+ if(ObservesNativeIdentityImage(at)){ObserveImageEntry(raw,at);return 1;}
+ if(at==0x816E6AB0)ObserveImageAllocationFree(raw);
  if(at==0x816B8098 || at==0x816B7F30){
   auto* d=c.thread_state?static_cast<TaskReference::Data*>(
       c.thread_state->native_identity_task_reference_cell_.load(std::memory_order_acquire)):nullptr;
@@ -3850,8 +6119,12 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
       c.thread_state->native_identity_listener_cell_.load(std::memory_order_acquire)):nullptr;
   return !cell || Listeners::FastEnter(cell,ListenerRegisters(c),at)?1:Abort(c);
  }
+ if((at==0x816A2CF0 || at==0x816A2A48) && NativeXmsgProvenance::Lookup(c.kernel_state))return 1;
+ if(ObserveExecutionEntry(raw,at))return 1;
  try{
-  const auto owner=Lookup(c.kernel_state);if(!owner)return 1;
+  auto owner=Lookup(c.kernel_state);
+  if(!owner && CommonTaskFunction(at))owner=NativeSystemUiService::CaptureTaskExecutionOwner(c.kernel_state);
+  if(!owner)return 1;
   auto& s=*owner->state_;
   if(s.retired.load(std::memory_order_acquire))return s.Deny(c,at,__LINE__);
   if(s.kernel->GetUserModuleForAddress(at).get()!=s.config.catalog->calls()->module().get())return 1;
@@ -3922,12 +6195,21 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
     s.Lose(__LINE__);return cleanup?1:s.Deny(c,at,__LINE__);
    }
   }
+  if((task_claim.periodic_factory || task_claim.periodic_role!=State::PeriodicRole::kNone) &&
+      !CheckPeriodicCode(*s.config.catalog->calls())){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+  std::optional<Tasks::PeriodicFrameContext> periodic_context;
+  if(task_claim.periodic_factory)if(const auto shape=s.TransportShape(c,at)){
+   std::lock_guard lock(s.mutex);
+   if(s.ClaimTaskTransport(at,c,actual_thread_id,periodic_handle)==task_claim)
+    periodic_context=s.PeriodicContextForEntry(*shape,task_claim);
+  }
   State::CodeOwner caller_code;
   const bool avatar_allocation=avatar_cleanup && avatar_cleanup->Matches(c);
   const auto frame=s.ReadFrame(c,at,ListenerOuter(at) || at==0x8199C630 || at==0x8199E3E0 ||
                               task_claim.title_task_lifetime || avatar_allocation,
                               (task_claim.transport || ListenerOuter(at))?&caller_code:nullptr,
-                              task_claim.retained_cleanup);
+                              task_claim.retained_cleanup,periodic_context?&*periodic_context:nullptr,
+                              task_claim.periodic_factory);
   if(!frame){
    auto* actual=ActualThread();
    if(actual && actual->kernel_state()==s.kernel &&
@@ -3940,7 +6222,7 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
   if(!profile_control_code){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
   const bool periodic_object_current=task_claim.periodic_role==State::PeriodicRole::kFactory ||
       task_claim.periodic_role==State::PeriodicRole::kStop ?
-      s.PeriodicObjectCurrent(uint32_t(c.r[3])) && CheckPeriodicCode(*s.config.catalog->calls()):true;
+      s.PeriodicObjectCurrent(uint32_t(c.r[3])):true;
   const auto current_task=NativeProfileIdentityTaskContext::Read(
       *s.config.catalog->calls(),*s.config.domain,at,c);
   const bool avatar_cleanup_current=avatar_cleanup && avatar_cleanup->Matches(c) &&
@@ -3954,6 +6236,7 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
   work->creation_only=task_claim.creation_only;work->execution_options=task_claim.execution_options;
   work->profile_producer=task_claim.profile_producer;
   work->periodic_factory=task_claim.periodic_factory;work->periodic_role=task_claim.periodic_role;
+  work->periodic_context=std::move(periodic_context);
   work->thread=retain_object(ActualThread());work->domain=s.config.domain->Acquire();
   auto memory_read=global_critical_region::AcquireDirect();
   work->first=uint32_t(c.r[3]);work->second=uint32_t(c.r[4]);
@@ -4114,19 +6397,24 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
   }else if(at==0x819068D0 && work->periodic_role==State::PeriodicRole::kStop){
    auto* factory=s.Periodic(work->periodic_factory);const auto handle=Word(*memory,work->first+0xC);
    if(!factory || !periodic_object_current || !handle ||
+       !s.PeriodicAllocationCurrent(factory->birth,factory->serial) ||
        !factory->BeginStop(*frame,work->first,*handle)){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
    work->birth=factory->birth;
   }else if(at==0x816B8B08 && work->periodic_role==State::PeriodicRole::kDispatcher){
    const auto callback=Word(*memory,work->first+0x30),argument=Word(*memory,work->first+0x34),flags=Word(*memory,work->first+8);
    const auto* node=s.tasks.FindLiveTask(work->first);const auto* factory=s.Periodic(work->periodic_factory);
-   if(!node || !factory || !callback || !argument || !flags || *flags!=0x04A0000Cu ||
-       node->periodic_factory!=factory->serial || node->argument!=factory->object ||
-       *callback!=node->callback || *argument!=node->argument){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
-   const auto birth=s.tasks.BeginPeriodicDispatch(*frame,work->first,*callback,*argument);
+   const auto period=Word(*memory,work->first+0xC);
+   if(!node || !factory || !callback || !argument || !flags || !period ||
+       !Tasks::SameBirth(node->birth,factory->birth) || node->periodic_factory!=factory->serial ||
+       node->argument!=factory->object || *callback!=node->callback || *argument!=node->argument ||
+       !s.tasks.MatchesPeriodicAllocation(node->birth,factory->serial,{*flags,*period})){
+    s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+   const auto birth=s.tasks.BeginPeriodicDispatch(*frame,work->first,*callback,*argument,{*flags,*period});
    if(!birth){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}work->birth=*birth;
   }else if(at==0x816B7600 && work->periodic_role==State::PeriodicRole::kBoundary){
    const auto dispatch=s.Latest(frame->thread,0x816B8B08);
    if(!dispatch || !dispatch->periodic_body_admitted || dispatch->periodic_factory!=work->periodic_factory ||
+       !s.PeriodicAllocationCurrent(dispatch->birth,work->periodic_factory) ||
        !DwordIs(c.r[3],dispatch->birth.task) || !DwordIs(c.r[4],0x815F8D58) || c.r[5]!=14 || c.r[6] ||
        !s.tasks.PeriodicCallbackReturned(dispatch->frame,*frame,dispatch->birth)){
     s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
@@ -4134,7 +6422,8 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
    work->birth=dispatch->birth;
   }else if((at==0x816B9F08 || at==0x816BA058) && work->periodic_factory){
    auto* factory=s.Periodic(work->periodic_factory);
-   if(!factory || !factory->MatchesStopChild(*frame,at,work->first)){
+   if(!factory || !s.PeriodicAllocationCurrent(factory->birth,factory->serial) ||
+       !factory->MatchesStopChild(*frame,at,work->first)){
     s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
    }
    work->birth=factory->birth;
@@ -4231,9 +6520,11 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
    const auto provider=s.FindProvider(work->first);
    if(!provider || provider->constructing || (provider->revoked && !cleanup))return cleanup?1:s.Deny(c,at,__LINE__);
    work->provider_generation=provider->generation;
-   if(at==0x816934F8)provider->revoked=true;
-   else if(at==0x81693568){
+   if(at==0x816934F8){
+    provider->revoked=true;provider->image_epoch.Revoke();provider->image_output.reset();
+   }else if(at==0x81693568){
     if(provider->initialized && !provider->buffer_revoked)return s.Deny(c,at,__LINE__);
+    provider->image_epoch.Revoke();provider->image_output.reset();
    }else if(at==0x81693CD8){
     const auto message=work->second<=UINT32_MAX-4?Word(*memory,work->second+4):std::nullopt;
     if(!message)return s.Deny(c,at,__LINE__);
@@ -4243,9 +6534,19 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
       return old->provider_generation==provider->generation && old->frame.function==0x816921C8;
      });
      if(!terminal || *terminal==997 || querying)return s.Deny(c,at,__LINE__);
-     provider->buffer_revoked=true;
+     provider->buffer_revoked=true;provider->image_epoch.Revoke();provider->image_output.reset();
     }
    }else{
+    // Query can rewrite its borrowed URI even when it leaves encoded A8
+    // bytes untouched. Keep key-copy continuity separate from buffer use.
+    if(provider->image_uri_generation==UINT64_MAX){
+     if(s.image_slot)s.image_slot->unavailable_.store(true,std::memory_order_release);
+    }else ++provider->image_uri_generation;
+    provider->image_key.reset();
+    work->image_uri_generation=provider->image_uri_generation;
+    if(DwordIs(c.r[4],uint32_t(c.r[4])) && DwordIs(c.r[5],uint32_t(c.r[5]))){
+     work->image_event=uint32_t(c.r[4]);work->image_modified=uint32_t(c.r[5]);
+    }
     if(!provider->initialized || provider->buffer_revoked ||
        std::any_of(s.active.begin(),s.active.end(),[&](const auto& old){
         return old->provider_generation==provider->generation && old->frame.function==0x816921C8;
@@ -4328,9 +6629,10 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
    }
    if(work->periodic_factory){
     auto* factory=s.Periodic(work->periodic_factory);
-    if(!factory || Word(*memory,uint32_t(c.r[5]))!=8u || Word(*memory,uint32_t(c.r[5])+4)!=5000u){
-     s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
-    work->schedule=s.tasks.BeginPeriodicSchedule(*frame,*factory,work->first,work->second,uint32_t(c.r[5]),work->output);
+    const auto options=Word(*memory,uint32_t(c.r[5])),period=Word(*memory,uint32_t(c.r[5])+4);
+    if(!factory || !options || !period){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+    work->schedule=s.tasks.BeginPeriodicSchedule(*frame,*factory,work->first,work->second,
+        uint32_t(c.r[5]),work->output,{*options,*period},work->thread->native_frame_thread_identity().process_type);
    }else
    work->schedule=work->transport_only ?
        s.tasks.BeginSharedContinuationSchedule(*frame,work->second,work->output):
@@ -4393,6 +6695,9 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
    const auto parent=s.Latest(frame->thread,0x816BA440);
    if(!parent || !parent->schedule)return 1;
    work->schedule=parent->schedule;
+   if(const auto* node=s.tasks.FindLiveTask(work->first);node && node->periodic_factory &&
+       !s.PeriodicAllocationCurrent(node->birth,node->periodic_factory)){
+    s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
    if(!s.tasks.BeforePublication(work->schedule,*frame,work->first,work->second,
        uint32_t(c.r[5]),Word(*memory,parent->output))){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
    if(const auto* call=s.tasks.FindSchedule(work->schedule);call && call->producer){
@@ -4442,6 +6747,11 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
    if(callback==0x816F2618)s.wake=std::unique_ptr<Wake>(new Wake(s.root,*birth,s.current_read_source));
   }else if(at==0x816B7490){
    if(!work->reference_only && !s.tasks.FindLiveTask(work->first))return 1;
+   if(!work->reference_only && work->periodic_factory){
+    const auto* node=s.tasks.FindLiveTask(work->first);
+    if(!node || !s.PeriodicAllocationCurrent(node->birth,work->periodic_factory)){
+     s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+   }
    if(!work->reference_only && !s.tasks.EnterClose(*frame,work->first)){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
    if(!work->reference_only)if(const auto target=s.tasks.ObservedTransportSubject(work->first))s.tasks.ObserveProfileOwnerClose(*frame,*target);
    if(work->task_release && !work->reference_only){
@@ -4497,10 +6807,9 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
    const auto reschedule=s.Latest(frame->thread,0x816B7B68);
    const auto wake=s.Latest(frame->thread,0x816F25E0);
    if(!reschedule || !wake || !reschedule->wake || !wake->wake)return 1;
-   if(reschedule->frame.sp!=frame->sp || reschedule->frame.lr!=frame->lr ||
-      wake->frame.sp!=frame->sp || wake->frame.lr!=frame->lr ||
-      c.r[3]!=(reschedule->first&~1u) || c.r[4]!=0x815F8E38u || c.r[5]!=0xFu || c.r[6] ||
-      wake->wake->serial!=reschedule->wake->serial){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+   if(!s.wake || !s.wake->MatchesNativeRescheduleTail(*wake->wake,*reschedule->wake,
+       wake->frame,reschedule->frame,*frame,reschedule->first,{c.r[3],c.r[4],c.r[5],c.r[6]})){
+    s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
    work->wake=reschedule->wake;work->tail_reschedule=reschedule;work->tail_wake=wake;
   }else if(at==0x816F2618){
    const auto* node=current_task?s.tasks.FindLiveTask(*current_task):nullptr;
@@ -4522,8 +6831,10 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
    const Events::Root root{s.root.kernel,s.root.domain,s.root.generation};
    const Events::WorkKey key{root,node->birth.generation,work->serial,frame->thread,
        frame->pcr,*current_task,frame->sp,frame->lr,at};
+   work->listener_parent=s.SynchronousListenerParent(*work,key);
    work->listener_source=std::shared_ptr<const NativeIdentityEventWorkSource>(
-       new NativeIdentityEventWorkSource(key,earlier,work->event_lifetime));
+       new NativeIdentityEventWorkSource(key,earlier,work->event_lifetime,
+           work->listener_parent?work->listener_parent->listener_source:nullptr));
    work->listener_work=s.listeners->AdoptWholeWork(work->listener_source);
    if(!work->listener_work){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
   }
@@ -4620,15 +6931,26 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
   if(work->reference_release && !work->reference_release->receipt.EnterRelease(*frame)){
    s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
   }
-  if(work->periodic_role!=State::PeriodicRole::kNone)work->periodic_body_admitted=true;
+  if(work->periodic_role!=State::PeriodicRole::kNone){
+   if(work->periodic_role==State::PeriodicRole::kFactory){
+    const auto* factory=s.Periodic(work->periodic_factory);
+    if(factory)work->periodic_context=Tasks::RetainAdmittedPeriodicFactory(*frame,*factory);
+   }
+   if(!work->periodic_context || !work->periodic_context->Matches(*frame,work->periodic_factory)){
+    s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
+   }
+   work->periodic_body_admitted=true;
+  }
   if(work->profile_control)work->profile_control->body_admitted=true;
   return 1;
- }catch(...){if(const auto owner=Lookup(c.kernel_state)){owner->state_->Lose(__LINE__);return owner->state_->Deny(c,at,__LINE__);}return Abort(c);}
+ }catch(...){if(const auto owner=Lookup(c.kernel_state)){owner->state_->Lose(__LINE__);return owner->state_->Deny(c,at,__LINE__);}return Abort(c,at);}
 }
 
 void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexcept {
+ ClearTaskAllocationCut();
  if(!raw || address>UINT32_MAX)return;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);const auto at=uint32_t(address);
+ if(ObservesNativeIdentityImage(at)){ObserveImageReturn(raw,at);return;}
  if(at==0x816B8098 || at==0x816B7F30){
   auto* d=c.thread_state?static_cast<TaskReference::Data*>(
       c.thread_state->native_identity_task_reference_cell_.load(std::memory_order_acquire)):nullptr;
@@ -4640,11 +6962,17 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
       c.thread_state->native_identity_listener_cell_.load(std::memory_order_acquire)):nullptr;
   if(cell)Listeners::FastReturn(cell,ListenerRegisters(c),at);return;
  }
+ if((at==0x816A2CF0 || at==0x816A2A48) && NativeXmsgProvenance::Lookup(c.kernel_state))return;
+ if(ObserveExecutionReturn(raw,at))return;
  try{
-  const auto owner=Lookup(c.kernel_state);if(!owner)return;auto& s=*owner->state_;
+  auto owner=Lookup(c.kernel_state);
+  if(!owner && CommonTaskFunction(at))owner=NativeSystemUiService::CaptureTaskExecutionOwner(c.kernel_state);
+  if(!owner)return;auto& s=*owner->state_;
   if(s.retired.load(std::memory_order_acquire))return;
   s.hooks.fetch_add(1,std::memory_order_acq_rel);
   struct Exit{State& s;~Exit(){s.hooks.fetch_sub(1,std::memory_order_acq_rel);}} exit{s};
+  PublishTaskAllocationCut allocation_cut{owner.get(),c,{}};
+  std::optional<AllocationFact> allocation_fact;
   const auto shape=s.TransportShape(c,at);
   std::shared_ptr<State::Work> work;
   uint32_t diagnostic_thread=0,diagnostic_pcr=0;
@@ -4679,6 +7007,7 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    if(work->profile_control && !work->profile_control->body_admitted)return;
   }
   if((work->profile_control || work->profile_producer) && !CheckProfileControlCode(*s.config.catalog->calls())){s.Lose(__LINE__);return;}
+  if(work->periodic_factory && !CheckPeriodicCode(*s.config.catalog->calls())){s.Lose(__LINE__);return;}
   State::CodeOwner caller_code;
   // A stored child caller remains the same leased object/load generation on
   // its own return. Never recapture another child as replacement provenance.
@@ -4690,7 +7019,9 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
       work->frame.function==0x816B7600;
   const auto frame=s.ReadFrame(c,at,ListenerOuter(at) || at==0x8199C630 || at==0x8199E3E0 ||
                               work->foreign_avatar_task,
-                              (transport || ListenerOuter(at))?&caller_code:nullptr,work->task_release);
+                              (transport || ListenerOuter(at))?&caller_code:nullptr,work->task_release,
+                              work->periodic_body_admitted && work->periodic_context?&*work->periodic_context:nullptr,
+                              work->periodic_factory);
   if(!frame){
    s.RecordReturnPartial(c,at,10,__LINE__,diagnostic_thread,diagnostic_pcr);
    s.Lose(__LINE__);return;
@@ -4736,17 +7067,25 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
   }else if(at==0x8190A358 && work->periodic_role==State::PeriodicRole::kFactory){
    auto* factory=s.Periodic(work->periodic_factory);
    const auto handle=Word(*s.kernel->memory(),work->first+0xC),enabled=Word(*s.kernel->memory(),work->first+0x30);
-   exact=factory && handle && enabled && factory->ReturnEnable(*frame,*handle,*enabled);
+   exact=factory && handle && enabled && s.PeriodicAllocationCurrent(factory->birth,factory->serial) &&
+       factory->ReturnEnable(*frame,*handle,*enabled);
   }else if(at==0x819068D0 && work->periodic_role==State::PeriodicRole::kStop){
    auto* factory=s.Periodic(work->periodic_factory);
    const auto handle=Word(*s.kernel->memory(),work->first+0xC),enabled=Word(*s.kernel->memory(),work->first+0x30),busy=Word(*s.kernel->memory(),work->first+0x2C);
    exact=factory && handle && enabled && busy && factory->ReturnStop(*frame,*handle,*enabled,*busy);
   }else if(at==0x816B8B08 && work->periodic_role==State::PeriodicRole::kDispatcher){
-   exact=s.tasks.ReturnPeriodicDispatch(*frame,work->birth);
+   std::optional<std::array<uint32_t,2>> state;
+   const auto* node=s.tasks.FindBirthConst(work->birth.generation);
+   if(node && !node->free_entered && !node->freed){
+    const auto flags=Word(*s.kernel->memory(),node->birth.task+8),period=Word(*s.kernel->memory(),node->birth.task+0xC);
+    if(flags && period)state=std::array<uint32_t,2>{*flags,*period};
+   }
+   exact=s.tasks.ReturnPeriodicDispatch(*frame,work->birth,state);
   }else if((at==0x816B9F08 || at==0x816BA058) && work->periodic_factory){
    auto* factory=s.Periodic(work->periodic_factory);
    const bool native_return=at==0x816B9F08 || s.tasks.PeriodicWaitReturned(work->birth);
-   exact=factory && factory->ReturnStopChild(*frame,work->birth,native_return);
+   exact=factory && s.PeriodicAllocationCurrent(work->birth,factory->serial) &&
+       factory->ReturnStopChild(*frame,work->birth,native_return);
   }else if(at==0x816A2CF0 && work->creation_only){
    exact=work->creation && work->creation->ReturnStart(*frame);
   }else if(at==0x816A2A48 && work->creation_only){
@@ -4799,6 +7138,8 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
        s.kernel->memory()->QueryRangeAccess(*buffer,*capacity)!=memory::PageAccess::kNoAccess){
      provider->buffer=*buffer;provider->capacity=*capacity;provider->type=*type;
      provider->listener=*listener;provider->initialized=true;provider->buffer_revoked=false;
+     provider->image_epoch.Allocate(s.root,provider->generation,*buffer,*capacity);
+     provider->image_output.reset();
     }
    }else if(exact && at==0x816934F8){
     const auto terminal=Word(*s.kernel->memory(),provider->object+0xB8);
@@ -4821,6 +7162,10 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
        version && *version==output->version && output->provider_generation==provider->generation){
      provider->completed_source=output->source;provider->completed_version=*version;
      provider->completed_empty=false;provider->completed_status=0;
+     provider->image_output=provider->image_epoch.Capture(provider->generation,
+         output->source,*version,*size,
+         output->image_first_allocation.load(std::memory_order_acquire),
+         output->image_first_publication.load(std::memory_order_acquire));
     }else if(output->published.load(std::memory_order_acquire) &&
        int32_t(output->status.load(std::memory_order_relaxed))<0 &&
        !output->written.load(std::memory_order_relaxed) && terminal && *terminal!=997 &&
@@ -4833,6 +7178,16 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
       // success is fabricated and no old pointer is accepted as fresh output.
     }
    }
+   if(exact && at==0x816921C8 && provider && work->image_key_candidate &&
+      provider->image_uri_generation==work->image_uri_generation &&
+      work->image_event<=UINT32_MAX-0x10 && work->image_modified){
+    const auto key=Word(*s.kernel->memory(),work->image_event+0x10);
+    const auto modified=Word(*s.kernel->memory(),work->image_modified);
+    if(key && *key==provider->object+0x10 && modified && *modified==1){
+     provider->image_key=work->image_key_candidate;
+     provider->image_key_generation=provider->image_uri_generation;
+    }
+   }
   }else if(at==0x816B9A18){
    const auto output=Word(*s.kernel->memory(),work->output);
    std::optional<Tasks::Birth> allocated;
@@ -4843,7 +7198,16 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
     const auto start=inlined?inlined->creation_parent:nullptr;
     exact=start && start->creation && start->creation->ReturnAllocation(*frame);
    }
+   if(allocated && work->periodic_factory){
+    const auto flags=Word(*s.kernel->memory(),allocated->task+8),period=Word(*s.kernel->memory(),allocated->task+0xC);
+    exact=exact && flags && period && s.tasks.BindPeriodicAllocation(work->schedule,*frame,*allocated,{*flags,*period});
+   }
    if(allocated){diagnostic_birth=*allocated;birth_kind=3;}
+   const auto* producer=work->schedule?s.tasks.FindSchedule(work->schedule):nullptr;
+   const auto inline_producer=work->creation_parent?work->creation_parent:
+       (frame->lr==0x816B9E08?s.Latest(frame->thread,0x816B9D68):nullptr);
+   const auto producer_frame=producer?producer->frame:inline_producer?inline_producer->frame:Frame{};
+   if(producer_frame.valid())allocation_fact=AllocationReturnFact(*frame,producer_frame,value,allocated);
    if(allocated && c.thread_state){
     auto* d=s.OwnTaskDiagnostic(c.thread_state->native_identity_task_diagnostic_cell_.load(std::memory_order_acquire));
     if(d && d->context==&c && d->value.allocation_task==allocated->task){
@@ -4852,7 +7216,7 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    }
   }else if(at==0x816BA440){
    std::optional<std::array<uint32_t,2>> native_state;
-   if(work->profile_producer && int32_t(value)>=0){
+   if((work->profile_producer || work->periodic_factory) && int32_t(value)>=0){
     const auto* call=s.tasks.FindSchedule(work->schedule);
     const auto* node=call?s.tasks.FindBirthConst(call->birth):nullptr;
     if(node && !node->freed && !node->delete_entered && !node->free_entered){
@@ -4888,6 +7252,10 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
   }
   else if(at==0x816B7490){
    exact=work->reference_only || s.tasks.ReturnClose(*frame,value);
+   if(exact && !value && !work->reference_only){
+    const auto* node=s.tasks.FindBirthConst(work->release_generation);
+    if(node && node->execution_only)if(const auto lifetime=s.ExecutionLifetimeFor(node->birth))lifetime->native_freed=true;
+   }
    if(work->reference_release)exact=exact && work->reference_release->receipt.ReturnRelease(*frame,c.r[3]);
    if(work->periodic_role==State::PeriodicRole::kOwnerClose){
     auto* factory=s.Periodic(work->periodic_factory);
@@ -4915,7 +7283,8 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    auto* factory=s.Periodic(work->periodic_factory);
    const auto* call=s.tasks.FindSchedule(work->schedule);
    const auto* node=call?s.tasks.FindBirth(call->birth):nullptr;
-   exact=factory && node && node->periodic_factory==factory->serial && factory->ObserveBirth(node->birth);
+   exact=factory && node && node->periodic_factory==factory->serial &&
+       node->periodic_allocation && factory->ObserveBirth(node->birth);
   }
   if(exact && work->external_birth.generation){
    exact=s.tasks.ReturnExternalWork(*frame,work->external_birth);if(!exact)return_phase=2;
@@ -4925,7 +7294,7 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    const Events::Root root{s.root.kernel,s.root.domain,s.root.generation};
    const Events::WorkKey key{root,work->birth.generation,work->serial,frame->thread,
        frame->pcr,work->birth.task,frame->sp,frame->lr,at};
-   exact=work->listener_dependencies && s.listeners->FinishWholeWorkNormally(*work->listener_work,key);
+   exact=work->listener_dependencies && s.listeners->FinishWholeWorkNormally(*work->listener_work,key,work->listener_source);
    if(!exact)return_phase=work->listener_dependencies?4:3;
   }
   if(work->commit){
@@ -4940,6 +7309,10 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    s.RecordReturnFailure(c,at,*frame,*work,diagnostic_birth,birth_kind,exact,
        !exact?return_phase:s.tasks.lost()?6u:7u,__LINE__);
    s.Lose(__LINE__);work->uncertain=true;return;
+  }
+  if(allocation_fact)allocation_cut.value=*allocation_fact;
+  if(work->read && work->execution_read_fallback && !s.RestoreOwnedReadOnUnwind(work)){
+   work->uncertain=true;return; // retain this real data owner, not global neutral poison
   }
   if(work->read && !work->read->Leave()){
    s.RecordReturnFailure(c,at,*frame,*work,diagnostic_birth,birth_kind,false,12,__LINE__);
@@ -4957,6 +7330,25 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
     s.Lose(__LINE__);return;
    }
    (*expected)->returned=true;
+  }
+  if(work->commit){
+   const auto& commit=*work->commit;
+   const auto job=s.job;
+   const bool protocol=at==0x8199C838 && job && !job->execution_uncertain &&
+       !job->protocol_returned && work->source==job->source &&
+       commit.intent==job->intent && commit.publication==job->publication &&
+       commit.owner==&s && commit.context==&c && commit.thread_state==c.thread_state &&
+       commit.source==job->source && commit.claimed_nonce==s.config.factory_binding->nonce() &&
+       commit.worker_birth==work->birth.generation && commit.whole_work==work->serial &&
+       commit.publisher_returned.load(std::memory_order_acquire) &&
+       commit.phase.load(std::memory_order_acquire)==State::Commit::Phase::kPublished;
+   if(!protocol){
+    s.RecordReturnFailure(c,at,*frame,*work,diagnostic_birth,birth_kind,false,17,__LINE__);
+    s.Lose(__LINE__);work->uncertain=true;return;
+   }
+   job->protocol_work=work->serial;job->protocol_frame=*frame;
+   job->protocol_birth=work->birth;job->protocol_value=value;
+   job->protocol_returned=true;
   }
   const auto retire=[&](std::shared_ptr<State::Work>& item){
    const auto i=std::find(s.active.begin(),s.active.end(),item);

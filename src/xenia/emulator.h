@@ -60,6 +60,7 @@ namespace gpu {
 class GraphicsSystem;
 }  // namespace gpu
 namespace kernel {
+namespace test { class NativeStorageTitleLifecycleTestAccess; }
 class ConsoleDataOwner;
 namespace xam {
 struct ProfileGpdReadModels;
@@ -739,6 +740,7 @@ class Emulator {
 
  private:
   friend class app::EmulatorApp;
+  friend class kernel::test::NativeStorageTitleLifecycleTestAccess;
   bool InstallLifecycle(std::shared_ptr<EmulatorLifecycle> lifecycle);
   bool ShutdownOnOwnedWorker(EmulatorLifecycle::Work&);
   bool ShutdownInternal(bool owned_ui_close);

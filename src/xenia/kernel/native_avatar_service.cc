@@ -53,6 +53,7 @@ enum class AvatarPublicReason : uint8_t {
   kExecutionFailed,
   kReturned,
   kException,
+  kAssetSizesUnavailable,
 };
 struct AvatarPublicObservation {
   NativeSystemUiPublicCall call;
@@ -79,6 +80,7 @@ struct AvatarPublicObservation {
       case AvatarPublicReason::kExecutionFailed: event = "execution_failed"; break;
       case AvatarPublicReason::kReturned: event = "public_return"; break;
       case AvatarPublicReason::kException: event = "public_exception"; break;
+      case AvatarPublicReason::kAssetSizesUnavailable: event = "denied_native_asset_sizes"; break;
       case AvatarPublicReason::kUnobserved: return;
     }
     static xe::NativeSystemUiTraceLimiter trace;
@@ -419,6 +421,10 @@ struct NativeAvatarService::State {
     std::vector<uint64_t> args;
     Frame original;
     std::vector<CodeOwner> caller_code;
+    // Captured before the delegated entry installs its synthetic return LR.
+    // These counts belong only to this exact argument/caller/Session scope.
+    std::optional<NativeAvatarAssetSizes> asset_sizes;
+    std::shared_ptr<Session> sizing_session;
     bool bootstrap_close = false;
   };
   explicit State(Config c) : config(std::move(c)) {}
@@ -737,23 +743,23 @@ struct NativeAvatarService::State {
   void LeaveResident(cpu::ppc::PPCContext&, const Frame&, uint32_t);
   bool EnterInternal(cpu::ppc::PPCContext&, const Frame&, uint32_t);
   void LeaveInternal(cpu::ppc::PPCContext&, const Frame&, uint32_t);
-  std::optional<std::pair<uint32_t,uint32_t>> NativeSizes(XThread&,uint16_t);
+  std::optional<NativeAvatarAssetSizes> NativeSizes(XThread&,uint16_t);
 };
 
-std::optional<std::pair<uint32_t,uint32_t>>
+std::optional<NativeAvatarAssetSizes>
 NativeAvatarService::State::NativeSizes(XThread& thread, uint16_t mask) {
   const uint32_t scratch = config.kernel->memory()->SystemHeapAlloc(8);
   if (!scratch) return {};
-  std::optional<std::pair<uint32_t,uint32_t>> sizes;
+  std::optional<NativeAvatarAssetSizes> sizes;
   try {
     const std::array<uint64_t,3> args{mask,scratch,scratch+4};
     const auto called = NativeAvatarService::TryInvokeOnOriginalCaller(
         config.kernel,NativeSystemUiPublicCall::kAvatarGetAssetsResultSize,args);
     if (called.disposition == NativeSystemUiPublicCallResult::Disposition::kReturned &&
         int32_t(called.value) >= 0) {
-      const auto cpu = Word(*config.kernel->memory(),scratch);
-      const auto gpu = Word(*config.kernel->memory(),scratch+4);
-      if (cpu && *cpu && gpu) sizes = std::pair{*cpu,*gpu};
+      sizes = NativeAvatarAssetSizes::CaptureActualReturn(mask,true,called.value,
+          Word(*config.kernel->memory(),scratch),
+          Word(*config.kernel->memory(),scratch+4));
     }
   } catch (...) { Poison(__LINE__,1,{},nullptr,0); }
   // The nested normal return has already reaped its finished backing token.
@@ -839,9 +845,13 @@ bool NativeAvatarService::State::EnterPublic(
       case NativeSystemUiPublicCall::kAvatarGetAssetsResultSize:
         add(uint32_t(args[1]),4,true); add(uint32_t(args[2]),4,true); break;
       case NativeSystemUiPublicCall::kAvatarGetAssets: {
-        // Execute the actual native calculator; cached caller size records or
-        // guessed model layouts cannot supply an output extent.
-        const auto sizes = NativeSizes(*frame.thread,uint16_t(args[1]));
+        // A host-delegated call already ran the real calculator while its
+        // authentic caller LR was present. Never query again from the guest
+        // call sentinel. Direct native callers retain their original path.
+        if (invocation && invocation->sizing_session != captured_session) return false;
+        const auto observed = invocation ? invocation->asset_sizes :
+            NativeSizes(*frame.thread,uint16_t(args[1]));
+        const auto sizes = observed ? observed->ForMask(uint16_t(args[1])) : std::nullopt;
         if (!sizes) return false;
         add(uint32_t(args[0]),1000,false);
         add(uint32_t(args[3]),sizes->first,true);
@@ -2409,10 +2419,31 @@ NativeSystemUiPublicCallResult NativeAvatarService::TryInvokeOnOriginalCaller(
     const auto code=state.RetainCode(frame->lr-4,frame->process==X_PROCTYPE_TITLE);
     if(!code)return observation.Finish(AvatarPublicReason::kCallerCode, denied);
     invocation->caller_code.push_back(*code);
+    if (call == NativeSystemUiPublicCall::kAvatarGetAssets) {
+      {
+        std::lock_guard lock(state.mutex);
+        if (state.stopping || state.uncertain || !state.f3_ready || !state.session ||
+            !state.session->ready || state.session->shutdown_entered)
+          return observation.Finish(AvatarPublicReason::kOwnerState, denied);
+        invocation->sizing_session = state.session;
+      }
+      // Execute the genuine synchronous 5E0 producer BEFORE 5E1 delegation.
+      // ExecuteGuestCall restores this same actual caller's registers/SP/LR;
+      // no Owner lock crosses either guest invocation.
+      invocation->asset_sizes = state.NativeSizes(*thread,uint16_t(arguments[1]));
+      const auto restored = ActualFrame(*thread->thread_state()->context(),kernel);
+      if (!invocation->asset_sizes || !restored || *restored != *frame ||
+          !state.RootCurrent(profile->address) || !state.ReaderCurrent() ||
+          !state.TitleCurrent())
+        return observation.Finish(AvatarPublicReason::kAssetSizesUnavailable, denied);
+    }
     {
       std::lock_guard lock(state.mutex);
       if(state.stopping || state.uncertain || !state.f3_ready ||
-         state.invocations.size()>=64)
+         state.invocations.size()>=64 ||
+         (call==NativeSystemUiPublicCall::kAvatarGetAssets &&
+          (state.session!=invocation->sizing_session || !state.session ||
+           !state.session->ready || state.session->shutdown_entered)))
         return observation.Finish(AvatarPublicReason::kOwnerState, denied);
       state.invocations[thread].push_back(invocation);
     }

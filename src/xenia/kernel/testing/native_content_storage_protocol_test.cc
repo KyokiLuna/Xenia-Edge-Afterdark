@@ -278,4 +278,51 @@ TEST_CASE("Native storage processed profiles bound bootstrap IDs and expansion",
   CHECK_FALSE(capacity.Pending(1));
 }
 
+TEST_CASE("Native optical processing uses its original producer and generated ID without borrowing title-media number2",
+          "[native_storage_protocol][processing][optical][abi]") {
+  auto optical=ProcessingCall();
+  optical.frame.lr=0x8167EA50;optical.frame.packet=optical.frame.sp+0x50;
+  optical.path_pointer=0x815F39F4;optical.path="\\Device\\CdRom0";optical.type=4;
+  REQUIRE(NativeStorageProcessingProtocol::SingleVolumeProfile(optical.frame,4));
+  CHECK_FALSE(NativeStorageProcessingProtocol::SingleVolumeProfile(optical.frame,1));
+  CHECK_FALSE(NativeStorageProcessingProtocol::SingleVolumeProfile(optical.frame,16));
+  NativeStorageProcessingProtocol protocol;REQUIRE(protocol.Begin(optical));
+  const auto returned=FinishProcessing(protocol,optical,1,73);REQUIRE(returned);
+  CHECK(returned->succeeded);CHECK(returned->native_id==73);
+  CHECK(returned->call.delivery_cookie==optical.delivery_cookie);
+  CHECK_FALSE(FinishProcessing(protocol,optical,1,73));
+  // Raw B3C8 reserves native2 for NetworkStorageCache. Canonical ODD2 is a
+  // separate host presentation policy, never an optical native output.
+  NativeStorageProcessingProtocol reserved;REQUIRE(reserved.Begin(optical));
+  CHECK_FALSE(FinishProcessing(reserved,optical,1,2));
+}
+TEST_CASE("Optical processing failure removal changed payload and foreign producer never become a usable insertion",
+          "[native_storage_protocol][processing][optical][failure]") {
+  auto optical=ProcessingCall();
+  optical.frame.lr=0x8167EA50;optical.frame.packet=optical.frame.sp+0x50;
+  optical.path_pointer=0x815F39F4;optical.path="\\Device\\CdRom0";optical.type=4;
+  SECTION("an actual failed insertion ignores stale packet output") {
+    NativeStorageProcessingProtocol protocol;REQUIRE(protocol.Begin(optical));
+    const auto result=FinishProcessing(protocol,optical,0,73);REQUIRE(result);
+    CHECK_FALSE(result->succeeded);CHECK(result->native_id==0);
+  }
+  SECTION("actual removal ignores its unspecified output") {
+    optical.transition=2;NativeStorageProcessingProtocol protocol;REQUIRE(protocol.Begin(optical));
+    const auto result=FinishProcessing(protocol,optical,1,73);REQUIRE(result);
+    CHECK(result->succeeded);CHECK(result->native_id==0);
+  }
+  SECTION("same call cannot retarget after entry") {
+    NativeStorageProcessingProtocol protocol;REQUIRE(protocol.Begin(optical));
+    CHECK_FALSE(protocol.Complete(optical.frame,1,optical.path_pointer,1,4,73,"\\Device\\CdRom1"));
+  }
+  SECTION("worker LR or wrong packet cannot substitute for EA08") {
+    optical.frame.lr=0x8167EC40;
+    CHECK_FALSE(NativeStorageProcessingProtocol::SingleVolumeProfile(optical.frame,4));
+    NativeStorageProcessingProtocol protocol;REQUIRE(protocol.Begin(optical));
+    CHECK_FALSE(FinishProcessing(protocol,optical,1,73));
+  }
+  // These are pure protocol observations; only Driver's authenticated native
+  // caller and actual existing optical VFS capability can construct a proof.
+}
+
 }  // namespace xe::kernel::test

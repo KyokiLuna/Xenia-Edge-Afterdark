@@ -15,6 +15,7 @@
 #undef CreateFile
 
 #include "xenia/base/filesystem.h"
+#include "xenia/base/retained_file_metadata.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/platform_win.h"
 #include "xenia/base/string.h"
@@ -101,6 +102,45 @@ bool TruncateStdioFile(FILE* file, uint64_t length) {
     }
   }
   return true;
+}
+
+std::optional<RetainedFileMetadata> QueryRetainedFileMetadata(
+    const FileHandle& file, std::error_code& error) {
+  const auto authority = file.QueryInfo(error);
+  if (!authority || error) {
+    if (!error) error = std::make_error_code(std::errc::io_error);
+    return std::nullopt;
+  }
+  const HANDLE handle = reinterpret_cast<HANDLE>(file.native_handle());
+  if (!handle || handle == INVALID_HANDLE_VALUE) {
+    error = std::make_error_code(std::errc::operation_not_supported);
+    return std::nullopt;
+  }
+  BY_HANDLE_FILE_INFORMATION identity{};
+  FILE_BASIC_INFO basic{};
+  FILE_STANDARD_INFO standard{};
+  if (!GetFileInformationByHandle(handle, &identity) ||
+      !GetFileInformationByHandleEx(handle, FileBasicInfo, &basic, sizeof(basic)) ||
+      !GetFileInformationByHandleEx(handle, FileStandardInfo, &standard,
+                                    sizeof(standard))) {
+    error = {int(GetLastError()), std::system_category()};
+    return std::nullopt;
+  }
+  const uint64_t id = (uint64_t(identity.nFileIndexHigh) << 32) |
+                       identity.nFileIndexLow;
+  if (identity.dwVolumeSerialNumber != authority->filesystem_id ||
+      id != authority->file_id || bool(standard.Directory) != authority->directory) {
+    error = std::make_error_code(std::errc::state_not_recoverable);
+    return std::nullopt;
+  }
+  if (standard.EndOfFile.QuadPart < 0 || standard.AllocationSize.QuadPart < 0) {
+    error = std::make_error_code(std::errc::value_too_large);
+    return std::nullopt;
+  }
+  error.clear();
+  return RetainedFileMetadata{uint64_t(standard.EndOfFile.QuadPart),
+      uint64_t(standard.AllocationSize.QuadPart), uint64_t(basic.LastAccessTime.QuadPart),
+      uint64_t(basic.LastWriteTime.QuadPart), uint64_t(basic.ChangeTime.QuadPart)};
 }
 
 class Win32FileHandle : public FileHandle {

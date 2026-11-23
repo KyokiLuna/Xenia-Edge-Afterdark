@@ -26,6 +26,8 @@
 #include "xenia/cpu/processor.h"
 #include "xenia/cpu/xex_module.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/console_signing_identity.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_crypt.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
@@ -517,40 +519,40 @@ namespace {
 }
 }  // namespace
 
-void XeCryptRandom_entry(lpvoid_t buf, dword_t buf_size) {
-  uint32_t remaining = buf_size;
-  if (!remaining) {
-    return;  // A null or inaccessible pointer is not accessed for zero bytes.
-  }
-  auto* output = buf.as<uint8_t*>();
-  std::array<uint8_t, 256> entropy;
-  while (remaining) {
-    // getentropy has a 256-byte limit and fills the complete chunk on success.
-    // The same bounded size fits Windows ULONG without narrowing a large size.
-    const uint32_t count = std::min(remaining, uint32_t(256));
+bool XeCryptHostRandom(std::span<uint8_t> output) {
+  size_t offset = 0;
+  while (offset < output.size()) {
+    const size_t count = std::min(output.size() - offset, size_t(256));
 #if XE_PLATFORM_WIN32
-    if (!BCRYPT_SUCCESS(BCryptGenRandom(nullptr, entropy.data(), count,
-                                        BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
-      FailXeCryptRandom();
-    }
+    const bool ok = BCRYPT_SUCCESS(BCryptGenRandom(nullptr, output.data() + offset,
+        ULONG(count), BCRYPT_USE_SYSTEM_PREFERRED_RNG));
 #elif XE_PLATFORM_LINUX || XE_PLATFORM_MAC
     int result;
-    do {
-      result = ::getentropy(entropy.data(), count);
-    } while (result == -1 && errno == EINTR);
-    if (result != 0) {
-      FailXeCryptRandom();
-    }
+    do { result = ::getentropy(output.data() + offset, count); }
+    while (result == -1 && errno == EINTR);
+    const bool ok = result == 0;
 #endif
-    // Guest pages can be host-readonly for CPU write watches. A system call
-    // writing directly there may return EFAULT without the normal user fault
-    // handler. Preserve existing guest-write semantics with an ordinary copy
-    // only after the entire host chunk has been generated successfully.
-    std::memcpy(output, entropy.data(), count);
-    output += count;
-    remaining -= count;
+    if (!ok) {
+      mbedtls_platform_zeroize(output.data(), output.size());
+      return false;
+    }
+    offset += count;
   }
-  mbedtls_platform_zeroize(entropy.data(), entropy.size());
+  return true;
+}
+void XeCryptRandom_entry(lpvoid_t buf, dword_t buf_size) {
+  uint32_t remaining = buf_size;
+  if (!remaining) return;
+  auto* output = buf.as<uint8_t*>();
+  std::array<uint8_t,256> entropy;
+  while (remaining) {
+    const uint32_t count = std::min(remaining,uint32_t(entropy.size()));
+    if (!XeCryptHostRandom(std::span(entropy.data(),count))) FailXeCryptRandom();
+    // Preserve the original ordinary guest-copy semantics for CPU write watches.
+    std::memcpy(output,entropy.data(),count);
+    output += count; remaining -= count;
+  }
+  mbedtls_platform_zeroize(entropy.data(),entropy.size());
 }
 DECLARE_XBOXKRNL_EXPORT1(XeCryptRandom, kNone, kImplemented);
 
@@ -933,57 +935,39 @@ dword_result_t XeKeysGetConsoleType_entry(lpdword_t type_out) {
 }
 DECLARE_XBOXKRNL_EXPORT1(XeKeysGetConsoleType, kNone, kImplemented);
 
-dword_result_t XeKeysGetConsoleID_entry(pointer_t<XE_CONSOLE_ID> raw_bytes,
-                                        lpstring_t hex_string) {
-  // We dont care about KV or using official keys
-  if (raw_bytes) {
-    raw_bytes.Zero();
-    raw_bytes->RefurbBits = 0b0011;
-    raw_bytes->ManufactureMonth = 0b1001;
-    raw_bytes->ManufactureYear = 0b0001;
-    raw_bytes->MacIndex3 = 0b01000000;
-    raw_bytes->MacIndex4 = 0b01100110;
-    raw_bytes->MacIndex5 = 0b01111110;
-    raw_bytes->Crc = 0b0000;
-  }
-  if (hex_string) {
-    std::string key = "245149100000";
-    std::memcpy(hex_string, key.c_str(), 0xC);
-  }
-  return X_STATUS_SUCCESS;
+dword_result_t XeKeysGetConsoleID_entry(dword_t raw_bytes,dword_t text,
+                                         const ppc_context_t& context) {
+  auto* kernel=context->kernel_state;
+  const auto identity=kernel?kernel->console_signing_identity():nullptr;
+  if(!identity)return X_STATUS_UNSUCCESSFUL;
+  return ConsoleSigningIdGuest(*kernel->memory(),*identity,raw_bytes,text);
 }
-DECLARE_XBOXKRNL_EXPORT1(XeKeysGetConsoleID, kNone, kImplemented);
+DECLARE_XBOXKRNL_EXPORT1(XeKeysGetConsoleID,kNone,kImplemented);
 
-dword_result_t XeKeysConsolePrivateKeySign_entry(
-    lpvoid_t hash, pointer_t<XE_CONSOLE_CERTIFICATE> output) {
-  if (!hash) {
-    return false;
-  }
-
-  if (!output) {
-    return false;
-  }
-
-  output.Zero();
-  output->console_id.RefurbBits = 0b0011;
-  output->console_id.ManufactureMonth = 0b1001;
-  output->console_id.ManufactureYear = 0b0001;
-  output->console_id.MacIndex3 = 0b01000000;
-  output->console_id.MacIndex4 = 0b01100110;
-  output->console_id.MacIndex5 = 0b01111110;
-  output->console_id.Crc = 0b0000;
-  output->console_type = Retail;
-  output->manufacture_date[0] = 2;
-  output->manufacture_date[1] = 0;
-  output->manufacture_date[2] = 0;
-  output->manufacture_date[3] = 5;
-  output->manufacture_date[4] = 1;
-  output->manufacture_date[5] = 1;
-  output->manufacture_date[6] = 2;
-  output->manufacture_date[7] = 2;
-  return true;
+dword_result_t XeKeysGetConsoleCertificate_entry(dword_t output,
+                                                  const ppc_context_t& context) {
+  auto* kernel=context->kernel_state;
+  const auto identity=kernel?kernel->console_signing_identity():nullptr;
+  if(!identity)return X_STATUS_UNSUCCESSFUL;
+  return ConsoleSigningCertificateGuest(*kernel->memory(),*identity,output);
 }
-DECLARE_XBOXKRNL_EXPORT1(XeKeysConsolePrivateKeySign, kNone, kSketchy);
+DECLARE_XBOXKRNL_EXPORT1(XeKeysGetConsoleCertificate,kNone,kImplemented);
+
+dword_result_t XeKeysConsolePrivateKeySign_entry(dword_t hash,dword_t output,
+                                                  const ppc_context_t& context) {
+  auto* kernel=context->kernel_state;
+  const auto identity=kernel?kernel->console_signing_identity():nullptr;
+  return identity && ConsoleSigningSignGuest(*kernel->memory(),*identity,hash,output)?1:0;
+}
+DECLARE_XBOXKRNL_EXPORT1(XeKeysConsolePrivateKeySign,kNone,kImplemented);
+
+dword_result_t XeKeysConsoleSignatureVerification_entry(dword_t hash,
+    dword_t signature,dword_t difference,const ppc_context_t& context) {
+  auto* kernel=context->kernel_state;
+  const auto identity=kernel?kernel->console_signing_identity():nullptr;
+  return identity && ConsoleSigningVerifyGuest(*kernel->memory(),*identity,hash,signature,difference)?1:0;
+}
+DECLARE_XBOXKRNL_EXPORT1(XeKeysConsoleSignatureVerification,kNone,kImplemented);
 
 }  // namespace xboxkrnl
 }  // namespace kernel

@@ -158,6 +158,34 @@ TEST_CASE("Failed audio execution stays quarantined until audio stop",
   CHECK(state.WaitForCleanup());
 }
 
+TEST_CASE("Entered audio cleanup failure stays quarantined across callback stop and wakes waiters false",
+          "[audio][lifecycle][host_io]") {
+  auto module = std::make_shared<int>(1);
+  std::weak_ptr<int> weak = module;
+  State state({41, 81, 2, 0x1000}, module);
+  module.reset();
+  REQUIRE(state.CompletePreparation());
+  REQUIRE(state.Activate());
+  state.Retire();
+  REQUIRE(state.WaitForQuiescence());
+  REQUIRE(state.ClaimCleanup());
+  auto waiter = std::async(std::launch::async, [&] { return state.WaitForCleanup(); });
+  CHECK(waiter.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready);
+  state.FailCleanup();
+  REQUIRE(waiter.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+  CHECK_FALSE(waiter.get());
+  CHECK(state.phase() == State::Phase::kCleanupFailed);
+  CHECK_FALSE(state.WaitForQuiescence());
+  CHECK_FALSE(state.ClaimCleanup());
+  CHECK_FALSE(weak.expired());
+  state.Retire(true);  // Actual callback worker join is not backend stop proof.
+  state.CompleteCleanup();
+  CHECK(state.phase() == State::Phase::kCleanupFailed);
+  CHECK_FALSE(state.WaitForCleanup());
+  CHECK_FALSE(state.BeginCallback());
+  CHECK_FALSE(weak.expired());
+}
+
 TEST_CASE("Audio retirement also fences an unfinished preparation",
           "[audio][lifecycle]") {
   State state({5, 9, 2, 0x1000}, std::make_shared<int>(1));

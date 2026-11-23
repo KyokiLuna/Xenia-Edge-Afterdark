@@ -235,10 +235,15 @@ class NativeSystemUiService
   friend class NativeAvatarService;
   friend class NativeMediaService;
   friend class NativeProfileIdentityOwner;
+  friend class NativeSystemTaskContinuation;
   // Usable by actual admitted bootstrap/cleanup before public BootAdmitted.
   // Lookup supplies ownership only; it creates no native readiness.
   static std::shared_ptr<NativeProfileIdentityOwner>
   CaptureProfileIdentityOwner(KernelState*);
+  // Common native execution facts remain available without the optional
+  // profile-identity plan. Both aliases share one actual Task ledger.
+  static std::shared_ptr<NativeProfileIdentityOwner>
+  CaptureTaskExecutionOwner(KernelState*);
   static std::shared_ptr<NativeAvatarService> CaptureAvatarService(KernelState*);
   static std::shared_ptr<NativeMediaService> CaptureMediaService(KernelState*);
   static bool AvatarFamilyRequested(KernelState*);

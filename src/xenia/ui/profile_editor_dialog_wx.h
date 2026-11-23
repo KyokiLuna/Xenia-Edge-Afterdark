@@ -18,6 +18,7 @@
 #include <wx/dialog.h>
 
 #include "xenia/kernel/xam/user_settings.h"
+#include "xenia/kernel/xam/profile_account_snapshot.h"
 #include "xenia/kernel/xam/xam.h"
 #include "xenia/xbox.h"
 
@@ -62,6 +63,7 @@ class ProfileEditorDialog : public wxDialog {
   void RefreshIconBitmap();
   void OnChangeIcon();
   void OnSave();
+  bool SaveAccountData(kernel::xam::ProfileManager&);
   bool IsGamertagValid() const;
   void UpdateGamertagValidation();
 
@@ -85,6 +87,10 @@ class ProfileEditorDialog : public wxDialog {
   wxChoice* gamer_zone_combo_ = nullptr;
   wxChoice* subscription_tier_combo_ = nullptr;
   wxButton* save_button_ = nullptr;
+  wxButton* cancel_button_ = nullptr;
+  kernel::xam::ProfileAccountFieldValues account_form_original_;
+  kernel::xam::ProfileAccountFieldValues account_pending_values_;
+  std::shared_ptr<kernel::xam::HostProfileAccountEdit> account_edit_;
 };
 
 }  // namespace app

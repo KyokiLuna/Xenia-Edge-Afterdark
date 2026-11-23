@@ -217,7 +217,8 @@ bool NativeStorageProcessingProtocol::SingleVolumeProfile(
   if (!frame.valid()) { return false; }
   return (frame.lr == 0x8167EC40 && uint64_t(frame.sp) + 0x50 == frame.packet &&
           (type == 1 || type == 16)) ||
-         (frame.lr == 0x8167EE2C && uint64_t(frame.sp) + 0x60 == frame.packet && type == 1);
+         (frame.lr == 0x8167EE2C && uint64_t(frame.sp) + 0x60 == frame.packet && type == 1) ||
+         (frame.lr == 0x8167EA50 && uint64_t(frame.sp) + 0x50 == frame.packet && type == 4);
 }
 bool NativeStorageProcessingProtocol::Begin(NativeStorageProcessingCall call) {
   if (stopped_ || !call.frame.valid() || call.path.empty() ||

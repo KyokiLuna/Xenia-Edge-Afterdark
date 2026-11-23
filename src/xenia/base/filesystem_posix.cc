@@ -9,6 +9,7 @@
 
 #include "xenia/base/assert.h"
 #include "xenia/base/filesystem.h"
+#include "xenia/base/retained_file_metadata.h"
 #include "xenia/base/logging.h"
 #include "xenia/base/string.h"
 
@@ -167,6 +168,71 @@ bool CreateEmptyFile(const std::filesystem::path& path) {
     return true;
   }
   return false;
+}
+
+std::optional<RetainedFileMetadata> QueryRetainedFileMetadata(
+    const FileHandle& file, std::error_code& error) {
+  const auto authority = file.QueryInfo(error);
+  if (!authority || error) {
+    if (!error) error = std::make_error_code(std::errc::io_error);
+    return std::nullopt;
+  }
+  const intptr_t descriptor = file.native_handle();
+  if (descriptor < 0 || descriptor > std::numeric_limits<int>::max()) {
+    error = std::make_error_code(std::errc::operation_not_supported);
+    return std::nullopt;
+  }
+  struct stat value{};
+  if (::fstat(int(descriptor), &value)) {
+    error = {errno, std::generic_category()};
+    return std::nullopt;
+  }
+  if (uint64_t(value.st_dev) != authority->filesystem_id ||
+      uint64_t(value.st_ino) != authority->file_id ||
+      bool(S_ISDIR(value.st_mode)) != authority->directory ||
+      bool(S_ISREG(value.st_mode)) != authority->regular) {
+    error = std::make_error_code(std::errc::state_not_recoverable);
+    return std::nullopt;
+  }
+  if ((!S_ISREG(value.st_mode) && !S_ISDIR(value.st_mode)) ||
+      value.st_size < 0 || value.st_blocks < 0 ||
+      uint64_t(value.st_blocks) > UINT64_MAX / 512) {
+    error = std::make_error_code(std::errc::value_too_large);
+    return std::nullopt;
+  }
+  const auto timestamp = [&](const timespec& time, uint64_t& result) {
+    // FILETIME counts100ns since1601. Reject unrepresentable observations;
+    // signed overflow or a made-up timestamp is not a successful query.
+    constexpr int64_t epoch = 11644473600LL;
+    if (time.tv_sec < -epoch || time.tv_nsec < 0 || time.tv_nsec >= 1000000000) {
+      return false;
+    }
+    const uint64_t seconds = time.tv_sec < 0
+        ? uint64_t(epoch - uint64_t(-int64_t(time.tv_sec)))
+        : uint64_t(time.tv_sec) + uint64_t(epoch);
+    const uint64_t fraction = uint64_t(time.tv_nsec) / 100;
+    if (seconds > (UINT64_MAX - fraction) / 10000000) return false;
+    result = seconds * 10000000 + fraction;
+    return true;
+  };
+  RetainedFileMetadata result{};
+#if XE_PLATFORM_MAC
+  const bool times = timestamp(value.st_atimespec, result.access_timestamp) &&
+      timestamp(value.st_mtimespec, result.write_timestamp) &&
+      timestamp(value.st_ctimespec, result.change_timestamp);
+#else
+  const bool times = timestamp(value.st_atim, result.access_timestamp) &&
+      timestamp(value.st_mtim, result.write_timestamp) &&
+      timestamp(value.st_ctim, result.change_timestamp);
+#endif
+  if (!times) {
+    error = std::make_error_code(std::errc::value_too_large);
+    return std::nullopt;
+  }
+  result.size = uint64_t(value.st_size);
+  result.allocated_bytes = uint64_t(value.st_blocks) * 512;
+  error.clear();
+  return result;
 }
 
 class PosixFileHandle : public FileHandle {

@@ -4,10 +4,8 @@
 #include <mutex>
 #include "xenia/base/host_storage.h"
 #include "xenia/base/managed_device_identity.h"
-namespace xe::kernel::xam {
-class GpdDurableIntentStore;
-}
 namespace xe::filesystem {
+class ProfilePublicationIntentStore;
 class ManagedStorageBootstrap;
 class ManagedBootstrapCreationPermit;
 // Explicit Emulator bootstrap BEFORE any guest mount. Distinct from console
@@ -36,7 +34,7 @@ class ProfileIntentOwner final {
   const auto& managed_identity() const { return managed_identity_; }
 
  private:
-  friend class xe::kernel::xam::GpdDurableIntentStore;
+  friend class ProfilePublicationIntentStore;
   friend class ManagedVolumeAuthority;
   friend class ManagedStorageBootstrap;
   static std::unique_ptr<ProfileIntentOwner> OpenInternal(

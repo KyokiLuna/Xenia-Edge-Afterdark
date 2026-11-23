@@ -37,6 +37,7 @@
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/app_manager.h"
+#include "xenia/kernel/xam/xam_module.h"
 #include "xenia/kernel/xam/xam_state.h"
 #include "xenia/kernel/xam/xam_system_link.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_memory.h"
@@ -94,7 +95,8 @@ KernelState* kernel_state() { return shared_kernel_state_; }
 KernelState::KernelState(
     Emulator* emulator, std::shared_ptr<ConsoleSettingsStore> console_settings,
     std::error_code console_settings_error,
-    std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery_owner)
+    std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery_owner,
+    std::shared_ptr<ConsoleSigningIdentity> signing_identity)
     : emulator_(emulator),
       memory_(emulator->memory()),
       dispatch_thread_running_(false),
@@ -108,6 +110,7 @@ KernelState::KernelState(
   // Explicit authority already protected by Emulator before VFS construction.
   // Keep it independent of XConfig and alive before XamState/profile discovery.
   snapshot_recovery_owner_ = std::move(recovery_owner);
+  console_signing_identity_ = std::move(signing_identity);
   // Signing in a Live-enabled profile on boot reads the console's country and
   // language.
   notification_preferences_ =
@@ -172,6 +175,12 @@ KernelState::~KernelState() {
   for (auto& dpcs : processor_dpcs_) {
     dpcs.thread.reset();
     dpcs.event.reset();
+  }
+
+  // The object table reset below would otherwise join the System Link worker
+  // under the global critical region, which the worker's callbacks need.
+  if (auto xam = GetKernelModule<xam::XamModule>("xam.xex")) {
+    xam->ShutdownSystemLink();
   }
 
   executable_module_.reset();
@@ -274,24 +283,36 @@ constexpr uint32_t kWaitReasonExecutive = 0;
 constexpr uint32_t kUserMode = 1;
 }  // namespace
 
-void KernelState::RunBlockingIo(const std::function<void()>& fn,
+HostCallOutcome KernelState::RunBlockingIoImpl(std::function<void()> fn,
                                 GuestScheduler::BlockingCallClass call_class,
                                 bool alertable) {
   if (!GuestScheduler::CurrentThreadOffloadsBlockingCalls()) {
-    fn();
-    return;
+    return InvokeHostCall(fn);
   }
-  auto event = AcquireIoEvent();
+  object_ref<XEvent> event;
+  if (InvokeHostCall([&] { event = AcquireIoEvent(); }) !=
+      HostCallOutcome::kReturned || !event) {
+    return HostCallOutcome::kAdmissionFailed;
+  }
   // The worker writes into this frame so only |done| ends the wait, even on a
   // terminate.
   std::atomic<bool> done{false};
-  guest_scheduler_->PostHostCall(
-      [&fn, &done, signal = retain_object(event.get())]() {
-        fn();
+  HostCallOutcome outcome = HostCallOutcome::kUnstarted;
+  bool accepted = false;
+  const auto submitted = InvokeHostCall([&] {
+    accepted = guest_scheduler_->PostHostCall(
+      [fn = std::move(fn), &done, &outcome, signal = retain_object(event.get())]() {
+        outcome = InvokeHostCall(fn);
         done.store(true, std::memory_order_release);
         signal->Set(kIoDiskIncrement, false);
       },
       call_class);
+  });
+  if (submitted != HostCallOutcome::kReturned || !accepted) {
+    // Exact precommit resource failure: no closure owns this frame.
+    ReleaseIoEvent(std::move(event));
+    return HostCallOutcome::kAdmissionFailed;
+  }
   uint32_t wait_alertable = alertable ? 1 : 0;
   while (!done.load(std::memory_order_acquire)) {
     X_STATUS status = event->Wait(kWaitReasonExecutive, kUserMode,
@@ -308,6 +329,7 @@ void KernelState::RunBlockingIo(const std::function<void()>& fn,
     }
   }
   ReleaseIoEvent(std::move(event));
+  return outcome;
 }
 
 object_ref<XEvent> KernelState::AcquireIoEvent() {
@@ -320,17 +342,22 @@ object_ref<XEvent> KernelState::AcquireIoEvent() {
     }
   }
   auto event = object_ref<XEvent>(new XEvent(this, true));
-  event->Initialize(false, false);
+  try { event->Initialize(false, false); }
+  catch (...) { event->ReleaseHandle(); throw; }
   // One signal per request would crowd the guest signals out of the ring.
   event->set_signal_ring_quiet(true);
   return event;
 }
 
 void KernelState::ReleaseIoEvent(object_ref<XEvent> event) {
-  // The completion can land after |done|, leaving it armed for the next user.
-  event->Reset();
-  std::lock_guard<std::mutex> lock(io_event_lock_);
-  idle_io_events_.push_back(std::move(event));
+  // Pooling is optional after the actual invocation is done. If the pool
+  // cannot grow, close this event instead of changing the backend's result.
+  const auto pooled = InvokeHostCall([&] {
+    event->Reset();
+    std::lock_guard<std::mutex> lock(io_event_lock_);
+    idle_io_events_.push_back(std::move(event));
+  });
+  if (pooled != HostCallOutcome::kReturned && event) { event->ReleaseHandle(); }
 }
 
 void KernelState::ShutdownDispatchThread() {
@@ -2660,20 +2687,27 @@ void KernelState::StartProcessorDpcThread(uint8_t cpu) {
   dpcs.started.store(true, std::memory_order_release);
 }
 
+std::deque<KernelState::QueuedDpc>::iterator KernelState::ProcessorDpcs::Find(
+    uint32_t dpc_ptr) {
+  return std::find_if(
+      queue.begin(), queue.end(),
+      [dpc_ptr](const QueuedDpc& entry) { return entry.dpc_ptr == dpc_ptr; });
+}
+
 bool KernelState::QueueProcessorDpc(uint8_t cpu, uint32_t dpc_ptr,
                                     uint32_t arg1, uint32_t arg2) {
   auto& dpcs = processor_dpcs_[cpu];
   {
     std::lock_guard lock(dpcs.lock);
-    if (std::find(dpcs.queue.begin(), dpcs.queue.end(), dpc_ptr) !=
-        dpcs.queue.end()) {
+    if (dpcs.Find(dpc_ptr) != dpcs.queue.end()) {
       return false;
     }
-    auto dpc = memory()->TranslateVirtual<XDPC*>(dpc_ptr);
-    dpc->arg1 = arg1;
-    dpc->arg2 = arg2;
-    dpcs.queue.push_back(dpc_ptr);
+    dpcs.queue.push_back({dpc_ptr, arg1, arg2});
   }
+  // Only the guest's copy, the runner takes the arguments from the queue.
+  auto dpc = memory()->TranslateVirtual<XDPC*>(dpc_ptr);
+  dpc->arg1 = arg1;
+  dpc->arg2 = arg2;
   dpcs.event->Set(0, false);
   return true;
 }
@@ -2684,14 +2718,13 @@ bool KernelState::IsProcessorDpcQueued(uint8_t cpu, uint32_t dpc_ptr) {
     return false;
   }
   std::lock_guard lock(dpcs.lock);
-  return std::find(dpcs.queue.begin(), dpcs.queue.end(), dpc_ptr) !=
-         dpcs.queue.end();
+  return dpcs.Find(dpc_ptr) != dpcs.queue.end();
 }
 
 bool KernelState::RemoveProcessorDpc(uint32_t dpc_ptr) {
   for (auto& dpcs : processor_dpcs_) {
     std::lock_guard lock(dpcs.lock);
-    auto it = std::find(dpcs.queue.begin(), dpcs.queue.end(), dpc_ptr);
+    auto it = dpcs.Find(dpc_ptr);
     if (it != dpcs.queue.end()) {
       dpcs.queue.erase(it);
       return true;
@@ -2710,19 +2743,16 @@ void KernelState::RunProcessorDpcs(uint8_t cpu) {
     while (true) {
       // Its arguments are taken as it leaves the queue, so KeInsertQueueDpc
       // may queue it again before it runs.
-      uint32_t dpc_ptr, arg1, arg2;
+      QueuedDpc entry;
       {
         std::lock_guard lock(dpcs.lock);
         if (dpcs.queue.empty()) {
           break;
         }
-        dpc_ptr = dpcs.queue.front();
+        entry = dpcs.queue.front();
         dpcs.queue.pop_front();
-        auto dpc = memory()->TranslateVirtual<XDPC*>(dpc_ptr);
-        arg1 = dpc->arg1;
-        arg2 = dpc->arg2;
       }
-      xboxkrnl::xeRunDpc(context, dpc_ptr, arg1, arg2);
+      xboxkrnl::xeRunDpc(context, entry.dpc_ptr, entry.arg1, entry.arg2);
     }
     EndDPCImpersonation(context, dpc_scope);
   }

@@ -112,24 +112,17 @@ class UserData {
         return std::u16string();
       }
 
-      // Calculate the number of UTF-16 characters from byte size
-      size_t char_count = get_extended_data().size() / sizeof(char16_t);
-
-      const char16_t* str_begin =
-          reinterpret_cast<const char16_t*>(get_extended_data().data());
-
-      // Create string from data with explicit size instead of relying on null
-      // terminator
-      std::u16string input_str(str_begin, char_count);
-
-      // Swap bytes for each character
-      std::u16string output_str;
-      output_str.reserve(input_str.size());
-      for (const auto& ch : input_str) {
-        output_str.push_back(xe::byte_swap(ch));
+      // Decode the wire format explicitly; byte storage need not be aligned
+      // as char16_t and the host's byte order is not the guest's ABI.
+      const auto bytes = get_extended_data();
+      std::u16string result;
+      result.reserve(bytes.size() / 2);
+      for (size_t i = 0; i + 1 < bytes.size(); i += 2) {
+        result.push_back(char16_t((uint16_t(bytes[i]) << 8) | bytes[i + 1]));
       }
-
-      return output_str;
+      // Preserve the explicit-length accessor contract, including a stored
+      // terminator. Host presentation may remove that terminator separately.
+      return result;
     }
 
     return 0;

@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <utility>
 namespace xe::kernel {
 struct ValidatedGuestRuntimePlan;
 enum class NativeSystemUiPublicCall : uint16_t;
@@ -34,6 +35,28 @@ struct NativeAvatarBridgeProfile {
   uint32_t address, bytes;
   std::string_view sha256;
 };
+// Counts from one genuine synchronous 5E0 return, not asset readiness or an
+// allocation capability. The Service retains the exact Invocation, caller and
+// Session separately and revalidates them before borrowing any 5E1 output.
+class NativeAvatarAssetSizes final {
+ public:
+  static std::optional<NativeAvatarAssetSizes> CaptureActualReturn(
+      uint16_t mask, bool returned, uint32_t status,
+      std::optional<uint32_t> cpu, std::optional<uint32_t> gpu) noexcept {
+    if (!returned || int32_t(status) < 0 || !cpu || !*cpu || !gpu) return {};
+    return NativeAvatarAssetSizes(mask, *cpu, *gpu);
+  }
+  std::optional<std::pair<uint32_t,uint32_t>> ForMask(uint16_t mask) const noexcept {
+    if (mask != mask_) return {};
+    return std::pair{cpu_, gpu_};
+  }
+ private:
+  NativeAvatarAssetSizes(uint16_t mask, uint32_t cpu, uint32_t gpu)
+      : mask_(mask), cpu_(cpu), gpu_(gpu) {}
+  uint16_t mask_;
+  uint32_t cpu_, gpu_;
+};
+
 // One full-entry family: six common profile exports and real content open/close.
 std::span<const NativeAvatarBridgeProfile> NativeAvatarBridgeProfiles();
 const NativeAvatarBridgeProfile* NativeAvatarBridge(uint16_t ordinal);

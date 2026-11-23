@@ -11,7 +11,10 @@
 #include "xenia/kernel/native_avatar_service.h"
 #include "xenia/kernel/native_profile_identity_contract.h"
 #include "xenia/kernel/native_profile_identity_owner.h"
+#include "xenia/kernel/native_identity_tile_work.h"
 #include "xenia/kernel/native_media_service.h"
+#include "xenia/kernel/native_content_resolve.h"
+#include "xenia/kernel/native_xmsg_provenance.h"
 #include "xenia/kernel/xam/profile_manager.h"
 #include "xenia/kernel/xam/xam_state.h"
 
@@ -423,8 +426,10 @@ struct NativeSystemUiService::State {
   std::atomic<bool> stopping{false};
   Snapshot status;
   struct KernelAdmission {
+    explicit KernelAdmission(KernelState* kernel):image_observer(kernel) {}
     std::atomic<bool> closed{false};
     std::weak_ptr<NativeSystemUiService> service;
+    NativeIdentityTileObserverSlot image_observer;
   };
   std::shared_ptr<KernelAdmission> admission;
   gpu::GpuBackendStopProof backend_stop;
@@ -454,7 +459,10 @@ struct NativeSystemUiService::State {
   bool profile_identity_requested = false;
   std::shared_ptr<const xam::ProfileRosterNativeBinding> profile_identity_binding;
   std::shared_ptr<NativeProfileIdentityOwner> profile_identity;
+  std::shared_ptr<NativeProfileIdentityOwner> task_execution;
   std::shared_ptr<NativeMediaService> media;
+  std::shared_ptr<NativeContentResolve> content_resolve;
+  std::shared_ptr<NativeXmsgProvenance> xmsg_provenance;
   // Retained even after partial/uncertain initialization. All native XMsg
   // users stop with this Kernel before these holders/Memory are reclaimed.
   std::shared_ptr<GuestRuntime> title_heap_runtime;
@@ -474,6 +482,8 @@ struct NativeSystemUiService::State {
     std::shared_ptr<NativeSystemTaskContinuation> continuation;
     std::shared_ptr<NativeAvatarService> avatar;
     std::shared_ptr<NativeMediaService> media;
+    std::shared_ptr<NativeContentResolve> content_resolve;
+    std::shared_ptr<NativeXmsgProvenance> xmsg_provenance;
     std::shared_ptr<NativeSystemAllocationAuthority> allocation;
     std::shared_ptr<NativeImportDomain> domain;
     std::shared_ptr<const NativeSystemUiStartupCatalog> catalog;
@@ -510,7 +520,8 @@ struct NativeSystemUiService::State {
       cpu::ThreadState* cpu=nullptr;
       KernelState* kernel=nullptr;
       Emulator* emulator=nullptr;
-      uint32_t pcr=0,user=0,flags=0;
+      XThread* thread=nullptr;  // Retained by the enclosing invocation.
+      uint32_t pcr=0,process=0,user=0,flags=0;
       NativeEditorLoaderStack stack;
       const uint8_t* native_data=nullptr;
       const char* native_path=nullptr;
@@ -563,7 +574,12 @@ struct NativeSystemUiService::State {
       // No new resident resource may be appended during actual Kernel
       // teardown, including a late stopped call after exact withdrawal.
       if(kernel->guest_scheduler()->shutting_down())return {};
-      admission = std::make_shared<KernelAdmission>();
+      admission = std::make_shared<KernelAdmission>(kernel);
+      // Preserve the established registry -> GCRC order. The aggregate writer
+      // reloads this exact metadata slot atomically, without registry lookup.
+      kernel->native_identity_tile_observer_slot_.store(
+          std::shared_ptr<NativeIdentityTileObserverSlot>(admission,&admission->image_observer),
+          std::memory_order_release);
       kernel->RetainNativeResourceUntilTeardown(admission);
       registry[kernel] = admission;
     }
@@ -580,6 +596,8 @@ struct NativeSystemUiService::State {
     std::shared_ptr<NativeSystemAllocationAuthority> owner;
     std::shared_ptr<NativeProfileIdentityOwner> identity;
     std::shared_ptr<NativeMediaService> media_owner;
+    std::shared_ptr<NativeContentResolve> resolve_owner;
+    std::shared_ptr<NativeXmsgProvenance> xmsg_owner;
     std::shared_ptr<NativeAvatarService> avatar_owner;
     std::shared_ptr<NativeManagedFormatFrontdoor> format_owner;
     std::shared_ptr<NativeNotificationPreferenceCoordinator> preference_owner;
@@ -593,9 +611,9 @@ struct NativeSystemUiService::State {
       status.boot_admitted = status.source_frame_ready =
           status.title_heap_ready = false;
       owner = allocation;
-      identity = profile_identity;
-      media_owner = media;
-      if (identity || media_owner) {
+      identity = task_execution;
+      media_owner = media;resolve_owner=content_resolve;xmsg_owner=xmsg_provenance;
+      if (identity || media_owner || resolve_owner || xmsg_owner) {
         stopping.store(true, std::memory_order_release);
         avatar_owner = avatar;
         format_owner = format_frontdoor;
@@ -604,19 +622,23 @@ struct NativeSystemUiService::State {
         diagnostic_owner = config.diagnostic;
       }
     }
-    if (identity || media_owner) {
+    if (identity || media_owner || resolve_owner || xmsg_owner) {
       // Seal every new ingress without PPC. Captured identity descendants may
       // still need the real observer, Task/provider and owned allocation to
       // return. Uncertain work is retained; Poison never invents its drain.
       if (identity) identity->BeginStop();
       if (media_owner) media_owner->BeginStop();
+      if (resolve_owner) resolve_owner->BeginStop();
+      if (xmsg_owner) xmsg_owner->BeginStop();
       if (avatar_owner) avatar_owner->BeginStop();
       if (format_owner) format_owner->BeginStop();
       if (preference_owner) preference_owner->BeginStop();
       if (prepared_owner) prepared_owner->CloseExternalRequests();
       if (diagnostic_owner) diagnostic_owner->CloseExternalRequests();
       if ((identity && !identity->Drained()) ||
-          (media_owner && !media_owner->Drained())) return false;
+          (media_owner && !media_owner->Drained()) ||
+          (resolve_owner && !resolve_owner->Drained() && !resolve_owner->RetainedForActualKernelStop()) ||
+          (xmsg_owner && !xmsg_owner->Drained() && !xmsg_owner->RetainedForActualKernelStop())) return false;
     }
     if (owner) {
       owner->CloseAdmission();
@@ -1383,41 +1405,64 @@ int NativeSystemUiService::Bootstrap(const std::shared_ptr<State>& state) {
     std::shared_ptr<NativeProfileIdentityOwner> identity;
     std::shared_ptr<NativeMediaService> media;
     std::shared_ptr<NativeAvatarService> diagnostic_avatar;
-    { std::lock_guard lock(state->mutex); identity = state->profile_identity; media = state->media;
+    { std::lock_guard lock(state->mutex); identity = state->task_execution; media = state->media;
       diagnostic_avatar=state->avatar; }
+    using Handoff=NativeProfileIdentityOwner::HandoffStage;
+    const auto observe=[&](Handoff stage){if(identity)identity->ObserveBootstrapHandoff(stage);};
+    if(identity)identity->ObserveBootstrapHandoff(Handoff::kOwnersCaptured,true);
     // Existing actual OS Bootstrap only, outside all owner/PM/native locks.
     if(thread && XThread::IsInThread(thread) && !XThread::GetCurrentFiberThread() &&
        !global_critical_region::is_held_by_current_thread()){
-      if(identity)identity->ReportAlignmentOnHost("Bootstrap");
+      if(identity){observe(Handoff::kAlignmentReport);identity->ReportAlignmentOnHost("Bootstrap");observe(Handoff::kAlignmentReported);}
+      observe(Handoff::kProfileReport);
       state->config.kernel->xam_state()->profile_manager()->ReportNativeProfileDiagnostics("Bootstrap");
-      if(diagnostic_avatar)diagnostic_avatar->ReportDiagnosticsOnHost("Bootstrap");
+      observe(Handoff::kProfileReported);
+      if(diagnostic_avatar){observe(Handoff::kAvatarReport);diagnostic_avatar->ReportDiagnosticsOnHost("Bootstrap");observe(Handoff::kAvatarReported);}
     }
     if (!identity && !media) return true;
-    if (!native_startup_observed || !thread)
+    if(identity && !identity->HasProfileIdentityAuthority() && !media)
+      return thread && identity->StepOnBootstrap(*thread);
+    if (!native_startup_observed || !thread){
+      observe(Handoff::kStartupUnavailable);
       return progress_failed("native-startup-or-bootstrap-unavailable");
+    }
     // One fair original-bootstrap turn services each owner before the delay.
     // Both use the SAME actual Schedule/Wait/Close continuation transport.
+    observe(Handoff::kStepGate);
     if (identity && !(state->IsStopping() &&
-        (identity->Drained() || identity->RetainedForActualKernelStop())) &&
-        !identity->StepOnBootstrap(*thread))
-      return progress_failed("identity-step");
-    if (media && !media->StepOnBootstrap(*thread))
-      return progress_failed("media-step");
+        (identity->Drained() || identity->RetainedForActualKernelStop()))){
+      observe(Handoff::kStepCall);
+      const bool stepped=identity->StepOnBootstrap(*thread);
+      observe(stepped?Handoff::kStepReturnedTrue:Handoff::kStepReturnedFalse);
+      if(!stepped)return progress_failed("identity-step");
+    }
+    if (media){
+      observe(Handoff::kMediaStep);
+      const bool stepped=media->StepOnBootstrap(*thread);
+      observe(stepped?Handoff::kMediaReturnedTrue:Handoff::kMediaReturnedFalse);
+      if(!stepped)return progress_failed("media-step");
+    }
+    observe(Handoff::kProgressReturned);
     return true;
   };
   const auto stop_owned_on_bootstrap = [&] {
     std::shared_ptr<NativeProfileIdentityOwner> identity;
     std::shared_ptr<NativeMediaService> media;
     std::shared_ptr<NativeAvatarService> avatar;
+    std::shared_ptr<NativeContentResolve> resolve;
+    std::shared_ptr<NativeXmsgProvenance> xmsg;
     {
       std::lock_guard lock(state->mutex);
-      identity = state->profile_identity; media = state->media; avatar = state->avatar;
+      identity = state->task_execution; media = state->media; avatar = state->avatar;
+      resolve=state->content_resolve;xmsg=state->xmsg_provenance;
     }
-    if (!identity && !media && !avatar) return true;
+    if (!identity && !media && !avatar && !resolve && !xmsg) return true;
     state->stopping.store(true, std::memory_order_release);
     if (identity && thread) identity->ReportFirstRefusalOnBootstrap(*thread);
     if (identity) identity->BeginStop();
     if (media) media->BeginStop();
+    if (resolve) resolve->BeginStop();
+    if (xmsg) xmsg->BeginStop();
     if (avatar) avatar->BeginStop();
     if (!thread) return false;
     NativeInputDriver::SealCallbackAdmissionForKernel(state->config.kernel);
@@ -1428,7 +1473,9 @@ int NativeSystemUiService::Bootstrap(const std::shared_ptr<State>& state) {
     if (identity && !identity->StopPeriodicOnBootstrap(*thread)) return false;
     const auto owned_drained = [&] {
       return (!identity || identity->Drained() || identity->RetainedForActualKernelStop()) &&
-             (!media || media->Drained());
+             (!media || media->Drained()) &&
+             (!resolve || resolve->Drained() || resolve->RetainedForActualKernelStop()) &&
+             (!xmsg || xmsg->Drained() || xmsg->RetainedForActualKernelStop());
     };
     if (!native_startup_observed && !owned_drained())
       return false;  // Partial FE cannot mint a usable native Task.
@@ -1478,7 +1525,8 @@ int NativeSystemUiService::Bootstrap(const std::shared_ptr<State>& state) {
     bool retained = false;
     {
       std::lock_guard lock(state->mutex);
-      retained = bool(state->profile_identity) || bool(state->media) || bool(state->avatar);
+      retained = bool(state->task_execution) || bool(state->media) || bool(state->avatar) ||
+          bool(state->content_resolve) || bool(state->xmsg_provenance);
     }
     if (!retained) return true;
     // Shared original-bootstrap progress prevents an avatar idle wait from
@@ -1645,19 +1693,31 @@ int NativeSystemUiService::Bootstrap(const std::shared_ptr<State>& state) {
       std::lock_guard lock(state->mutex);
       identity_binding = state->profile_identity_binding;
     }
-    if (identity_binding) {
-      auto identity = NativeProfileIdentityOwner::CreateBeforeWorkers(
-          {catalog, domain, allocation, notification_observer, identity_binding},
-          &error);
-      if (!identity) return fail("Native identity exact owner install: " + error);
-      {
-        std::lock_guard lock(state->mutex);
-        state->profile_identity = identity;
-      }
-      if (state->IsStopping()) {
-        identity->BeginStop();
-        return fail("Service stopped after native identity owner install");
-      }
+    auto execution = identity_binding ?
+        NativeProfileIdentityOwner::CreateBeforeWorkers(
+            {catalog,domain,allocation,notification_observer,identity_binding},&error):
+        NativeProfileIdentityOwner::CreateExecutionBeforeWorkers(
+            {catalog,domain,allocation,{},{}},&error);
+    if(!execution)return fail("Native shared Task execution owner install: "+error);
+    std::shared_ptr<NativeIdentityTileObserverSlot> image_slot;
+    {std::lock_guard lock(state->mutex);if(state->admission)
+      image_slot=std::shared_ptr<NativeIdentityTileObserverSlot>(state->admission,
+          &state->admission->image_observer);}
+    // Observation unavailability never rejects the original native startup.
+    execution->BindImageObserverSlot(image_slot);
+    {
+      std::lock_guard lock(state->mutex);
+      state->task_execution=execution;
+      if(identity_binding)state->profile_identity=execution;
+    }
+    if(state->IsStopping()){
+      execution->BeginStop();return fail("Service stopped after shared Task owner install");
+    }
+    auto xmsg=NativeXmsgProvenance::CreateBeforeWorkers({catalog,domain,allocation},&error);
+    if(!xmsg)return fail("Common native XMsg provenance owner install: "+error);
+    {std::lock_guard lock(state->mutex);state->xmsg_provenance=xmsg;}
+    if(state->IsStopping()){
+      xmsg->BeginStop();return fail("Service stopped after XMsg provenance install");
     }
     const std::weak_ptr<State> weak = state;
     NativeInputDriver::Config input_config;
@@ -1798,6 +1858,13 @@ int NativeSystemUiService::Bootstrap(const std::shared_ptr<State>& state) {
                   {"root_load_generation", allocation->root_load_generation()},
                   {"domain_id", domain->id()},
                   {"input_generation", input->trace_input_generation()}});
+    }
+    if (catalog->system_content()) {
+      auto resolve = NativeContentResolve::CreateBeforeWorkers(
+          {catalog, domain, allocation}, &error);
+      if (!resolve) return fail("Native content Resolve ownership: " + error);
+      { std::lock_guard lock(state->mutex); state->content_resolve = resolve; }
+      if (state->IsStopping()) resolve->BeginStop();
     }
     if (catalog->system_content()) {
       auto media = NativeMediaService::CreateBeforeWorkers({catalog, domain, allocation}, &error);
@@ -3268,6 +3335,8 @@ void NativeSystemUiService::BeginStop() noexcept {
   std::shared_ptr<NativeAvatarService> avatar;
   std::shared_ptr<NativeProfileIdentityOwner> identity;
   std::shared_ptr<NativeMediaService> media;
+  std::shared_ptr<NativeContentResolve> content_resolve;
+  std::shared_ptr<NativeXmsgProvenance> xmsg_provenance;
   std::shared_ptr<NativeNotificationPreferenceCoordinator> preferences;
   std::shared_ptr<NativeSystemUiPreparedTransport> prepared;
   std::shared_ptr<NativeSystemUiDiagnosticObservation> diagnostic;
@@ -3278,8 +3347,10 @@ void NativeSystemUiService::BeginStop() noexcept {
     continuation = state_->continuation;
     format_frontdoor = state_->format_frontdoor;
     avatar = state_->avatar;
-    identity = state_->profile_identity;
+    identity = state_->task_execution;
     media = state_->media;
+    content_resolve = state_->content_resolve;
+    xmsg_provenance = state_->xmsg_provenance;
     prepared = state_->prepared;
     diagnostic = state_->config.diagnostic;
     observer = state_->notification_observer;
@@ -3299,6 +3370,8 @@ void NativeSystemUiService::BeginStop() noexcept {
   if (continuation) continuation->BeginStop();
   if (identity) identity->BeginStop();
   if (media) media->BeginStop();
+  if (content_resolve) content_resolve->BeginStop();
+  if (xmsg_provenance) xmsg_provenance->BeginStop();
   if (avatar) avatar->BeginStop();
   if (format_frontdoor) format_frontdoor->BeginStop();
   if (preferences) {
@@ -3431,11 +3504,25 @@ NativeSystemUiService::CaptureProfileIdentityOwner(KernelState* kernel) {
   return service->state_->retired || service->state_->config.kernel != kernel
              ? nullptr : service->state_->profile_identity;
 }
+std::shared_ptr<NativeProfileIdentityOwner>
+NativeSystemUiService::CaptureTaskExecutionOwner(KernelState* kernel) {
+  std::shared_ptr<NativeSystemUiService> service;
+  {
+    std::lock_guard lock(State::registry_mutex);
+    const auto it = State::registry.find(kernel);
+    const auto admission = it == State::registry.end() ? nullptr : it->second.lock();
+    service = admission ? admission->service.lock() : nullptr;
+  }
+  if (!service) return {};
+  std::lock_guard lock(service->state_->mutex);
+  return service->state_->retired || service->state_->config.kernel != kernel
+             ? nullptr : service->state_->task_execution;
+}
 bool NativeSystemUiService::BindProfileIdentityContinuation(
     const std::shared_ptr<State>& state,
     const std::shared_ptr<NativeSystemTaskContinuation>& continuation) {
   std::shared_ptr<NativeProfileIdentityOwner> identity;
-  { std::lock_guard lock(state->mutex); identity = state->profile_identity; }
+  { std::lock_guard lock(state->mutex); identity = state->task_execution; }
   return !identity || identity->BindContinuation(continuation);
 }
 std::shared_ptr<NativeMediaService> NativeSystemUiService::CaptureMediaService(KernelState* kernel) {
@@ -3525,6 +3612,8 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
     std::shared_ptr<NativeSystemUiDiagnosticObservation> diagnostic;
     std::shared_ptr<NativeSystemAllocationAuthority> allocation;
     std::shared_ptr<NativeContentStorageDriver> storage;
+    std::shared_ptr<NativeContentResolve> content_resolve;
+    std::shared_ptr<NativeXmsgProvenance> xmsg_provenance;
     std::shared_ptr<NativeNotificationPresentationObserver> observer;
     {
       std::lock_guard lock(state_->mutex);
@@ -3537,6 +3626,8 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
       diagnostic = state_->config.diagnostic;
       allocation = state_->allocation;
       storage = state_->storage;
+      content_resolve = state_->content_resolve;
+      xmsg_provenance = state_->xmsg_provenance;
       observer = state_->notification_observer;
     }
     {
@@ -3557,13 +3648,17 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
     // late continuation install cannot escape this snapshot/rundown.
     // Native Task/Complete stay runnable for normal cleanup. Covered retained
     // work remains explicitly unjoined to actual stop; this grants no success.
-    const auto identity = CaptureProfileIdentityOwner(state_->config.kernel);
+    const auto identity = CaptureTaskExecutionOwner(state_->config.kernel);
     const bool identity_drained = !identity || identity->Drained();
     if (!identity_drained && !identity->RetainedForActualKernelStop()) return false;
     const auto avatar=CaptureAvatarService(state_->config.kernel);
     if(avatar && !avatar->Drained())return false;
     const auto media=CaptureMediaService(state_->config.kernel);
     if(media && !media->Drained())return false;
+    const bool resolve_drained=!content_resolve || content_resolve->Drained();
+    if(!resolve_drained && !content_resolve->RetainedForActualKernelStop())return false;
+    const bool xmsg_drained=!xmsg_provenance || xmsg_provenance->Drained();
+    if(!xmsg_drained && !xmsg_provenance->RetainedForActualKernelStop())return false;
     if (format_frontdoor && !format_frontdoor->Drain()) return false;
     bool continuation_drained = true;
     if (continuation) {
@@ -3601,14 +3696,17 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
     // Recheck the exact identity owner after all host callback drains. Strong
     // holders below are a retained-stop fact, never normal native completion.
     if (!identity_drained && !identity->RetainedForActualKernelStop()) return false;
+    if(!resolve_drained && !content_resolve->RetainedForActualKernelStop())return false;
+    if(!xmsg_drained && !xmsg_provenance->RetainedForActualKernelStop())return false;
     std::lock_guard lock(state_->mutex);
-    if (state_->config.kernel == nullptr || state_->profile_identity != identity ||
-        state_->continuation != continuation || !state_->status.bootstrap_joined) return false;
-    if (identity_drained && continuation_drained) {
+    if (state_->config.kernel == nullptr || state_->task_execution != identity ||
+        state_->continuation != continuation || state_->content_resolve!=content_resolve ||
+        state_->xmsg_provenance!=xmsg_provenance || !state_->status.bootstrap_joined) return false;
+    if (identity_drained && continuation_drained && resolve_drained && xmsg_drained) {
       state_->status.stop_drained = true;
     } else {
       state_->retained_stop.emplace(State::RetainedStop{
-          state_->config.kernel,state_->bootstrap,identity,continuation,avatar,media,
+          state_->config.kernel,state_->bootstrap,identity,continuation,avatar,media,content_resolve,xmsg_provenance,
           state_->allocation,state_->domain,state_->catalog,state_->calls,
           state_->prepared,state_->config.diagnostic});
       state_->status.stop_retained = true;
@@ -3626,6 +3724,8 @@ bool NativeSystemUiService::RetireAfterKernelStop() noexcept {
     std::shared_ptr<NativeSystemUiStartupRuntime> startup;
     std::shared_ptr<NativeProfileIdentityOwner> identity;
     std::shared_ptr<NativeMediaService> media;
+    std::shared_ptr<NativeContentResolve> content_resolve;
+    std::shared_ptr<NativeXmsgProvenance> xmsg_provenance;
     std::shared_ptr<NativeSystemTaskContinuation> continuation_owner;
     std::shared_ptr<GuestRuntime> title_runtime;
     gpu::GpuBackendStopProof stop;
@@ -3644,8 +3744,10 @@ bool NativeSystemUiService::RetireAfterKernelStop() noexcept {
       if (state_->retained_stop) {
         const auto& held = *state_->retained_stop;
         if (held.kernel != kernel || held.bootstrap.get() != state_->bootstrap.get() ||
-            held.identity != state_->profile_identity || held.continuation != state_->continuation ||
+            held.identity != state_->task_execution || held.continuation != state_->continuation ||
             held.avatar != state_->avatar || held.media != state_->media ||
+            held.content_resolve != state_->content_resolve ||
+            held.xmsg_provenance != state_->xmsg_provenance ||
             held.allocation != state_->allocation || held.domain != state_->domain ||
             held.catalog != state_->catalog || held.calls != state_->calls ||
             held.prepared != state_->prepared || held.diagnostic != state_->config.diagnostic) return false;
@@ -3654,8 +3756,10 @@ bool NativeSystemUiService::RetireAfterKernelStop() noexcept {
       prepared = state_->prepared;
       diagnostic = state_->config.diagnostic;
       startup = state_->startup;
-      identity = state_->profile_identity;
+      identity = state_->task_execution;
       media = state_->media;
+      content_resolve = state_->content_resolve;
+      xmsg_provenance = state_->xmsg_provenance;
       title_runtime = state_->title_heap_runtime;
       stop = state_->backend_stop;
     }
@@ -3690,6 +3794,8 @@ bool NativeSystemUiService::RetireAfterKernelStop() noexcept {
     }
     if (identity && !identity->RetireAfterActualKernelStop()) return false;
     if (media && !media->RetireAfterActualKernelStop()) return false;
+    if (content_resolve && !content_resolve->RetireAfterActualKernelStop()) return false;
+    if (xmsg_provenance && !xmsg_provenance->RetireAfterActualKernelStop()) return false;
     const auto avatar = CaptureAvatarService(kernel);
     if (avatar && !avatar->RetireAfterActualKernelStop()) return false;
     // Identity first detaches/revokes heap-held read/commit cells, then this
@@ -3723,6 +3829,8 @@ bool NativeSystemUiService::RetireAfterKernelStop() noexcept {
     std::shared_ptr<NativeAvatarService> retired_avatar;
     std::shared_ptr<NativeProfileIdentityOwner> retired_identity;
     std::shared_ptr<NativeMediaService> retired_media;
+    std::shared_ptr<NativeContentResolve> retired_content_resolve;
+    std::shared_ptr<NativeXmsgProvenance> retired_xmsg_provenance;
     std::shared_ptr<const xam::ProfileRosterNativeBinding> retired_identity_binding;
     Config retired_config;
     std::shared_ptr<State::KernelAdmission> retired_admission;
@@ -3757,6 +3865,8 @@ bool NativeSystemUiService::RetireAfterKernelStop() noexcept {
       retired_config = std::move(state_->config);
       state_->config.kernel = nullptr;
       retired_admission=std::move(state_->admission);
+      if(retired_admission)
+        retired_admission->image_observer.current_.store({},std::memory_order_release);
       bootstrap = std::move(state_->bootstrap);
       root = std::move(state_->root);
       prepared_title_module = std::move(state_->prepared_title_module);
@@ -3764,8 +3874,11 @@ bool NativeSystemUiService::RetireAfterKernelStop() noexcept {
       title_runtime = std::move(state_->title_heap_runtime);
       calls = std::move(state_->calls);
       retired_avatar = std::move(state_->avatar);
-      retired_identity = std::move(state_->profile_identity);
+      retired_identity = std::move(state_->task_execution);
+      state_->profile_identity.reset();
       retired_media = std::move(state_->media);
+      retired_content_resolve = std::move(state_->content_resolve);
+      retired_xmsg_provenance = std::move(state_->xmsg_provenance);
       retired_identity_binding = std::move(state_->profile_identity_binding);
       state_->profile_identity_requested = false;
       current_users = std::move(state_->current_users);
@@ -3870,7 +3983,9 @@ uint64_t NativeSystemUiService::GuardEditorLoaderEntry(void* raw,uint64_t addres
   };
   if ((address!=0x8169F4A8 && !launch) || cell->lost ||
       cell->context!=&c || cell->cpu!=c.thread_state || cell->kernel!=c.kernel_state ||
-      c.r[13]!=cell->pcr ||
+      c.r[13]!=cell->pcr || !cell->thread || !XThread::IsInThread(cell->thread) ||
+      cell->thread->thread_state()!=cell->cpu ||
+      cell->thread->native_frame_thread_identity().process_type!=cell->process ||
       !MatchesNativeEditorLoaderEdge(launch,cell->stack.producer_sp,c.r[1],c.lr) ||
       !cell->producer || !cell->command || !cell->payload) return deny();
   if (!launch) {
@@ -4041,10 +4156,8 @@ NativeSystemUiService::TryInvokePublicRegistersOnOriginalCaller(
         return denied;
       }
       const auto process = thread->native_frame_thread_identity().process_type;
-      if (editor && (process != X_PROCTYPE_SYSTEM ||
-          global_critical_region::is_held_by_current_thread())) {
-        // TITLE's nonreturning transfer and native-lock entry remain unclosed.
-        // Do not allocate/prepare a host command under inherited native locks.
+      if (editor && global_critical_region::is_held_by_current_thread()) {
+        // Never allocate/prepare the copied handoff under inherited locks.
         return denied;
       }
       if (process != X_PROCTYPE_TITLE && process != X_PROCTYPE_SYSTEM) {
@@ -4067,6 +4180,7 @@ NativeSystemUiService::TryInvokePublicRegistersOnOriginalCaller(
     // stay real.
     Result result = denied;
     bool executed = false, healthy = true;
+    bool editor_title_transfer = false;
     uint32_t signin_raw_flags=0,signin_decision=0,signin_helper_value=0,signin_sender_value=0;
     try {
       const uint32_t lr = uint32_t(thread->thread_state()->context()->lr);
@@ -4146,6 +4260,7 @@ NativeSystemUiService::TryInvokePublicRegistersOnOriginalCaller(
                     !=memory::PageAccess::kReadWrite) goto public_execution_done;
             cell->context=thread->thread_state()->context();cell->cpu=thread->thread_state();
             cell->kernel=kernel;cell->emulator=kernel->emulator();cell->pcr=thread->pcr_ptr();
+            cell->thread=thread;cell->process=thread->native_frame_thread_identity().process_type;
             cell->user=uint32_t(arguments[0]);cell->flags=uint32_t(arguments[1]);cell->stack=*layout;
             cell->native_data=kernel->memory()->TranslateVirtual<const uint8_t*>(layout->data);
             cell->native_path=kernel->memory()->TranslateVirtual<const char*>(layout->path);
@@ -4165,7 +4280,7 @@ NativeSystemUiService::TryInvokePublicRegistersOnOriginalCaller(
                   if (!emulator->RelaunchSystemApplication(expected,generation,
                       std::string(payload->path.data(),payload->path_length),0,
                       std::vector<uint8_t>(payload->data.begin(),payload->data.end())))
-                    XELOGE("Copied SYSTEM Editor request could not resolve/admit its owned target; title replacement was not started");
+                    XELOGE("Copied Editor request could not resolve/admit its owned target; title replacement was not started");
                 });
             if (!command) goto public_execution_done;
             cell->command.emplace(std::move(*command));
@@ -4202,18 +4317,24 @@ NativeSystemUiService::TryInvokePublicRegistersOnOriginalCaller(
           }
           executed = true;  // A false/throw after this point is uncertain.
           if (ingress) { ingress->MarkExecutionAttempt(); }
-          const auto native =
-              invocation->calls->ExecuteDeferredPublicRegistersOnOriginalCaller(
-                  *thread, call, arguments);
+          const auto native = invocation->editor
+              ? invocation->calls->ExecuteEditorOnOriginalCaller(*thread, arguments)
+              : invocation->calls->ExecuteDeferredPublicRegistersOnOriginalCaller(
+                    *thread, call, arguments);
           healthy = native.succeeded;
           if (invocation->editor && native.succeeded) {
             auto& cell=*invocation->editor;void* exact=&cell;
             const bool withdrawn=cell.cpu->native_editor_handoff_cell_.compare_exchange_strong(
                 exact,nullptr,std::memory_order_acq_rel);
-            healthy=withdrawn && !cell.lost;
+            healthy=withdrawn && !cell.lost &&
+                thread->thread_state()==cell.cpu &&
+                thread->native_frame_thread_identity().process_type==cell.process;
             if (healthy && cell.requested && cell.payload->accepted) {
               if (uint32_t(native.return_value)!=0) healthy=false;
-              else cell.payload->sealed.store(true,std::memory_order_release);
+              else {
+                cell.payload->sealed.store(true,std::memory_order_release);
+                editor_title_transfer=cell.process==X_PROCTYPE_TITLE;
+              }
             }
           }
           // Failed/partial execution keeps the exact invocation/cell/Producer;
@@ -4324,8 +4445,14 @@ NativeSystemUiService::TryInvokePublicRegistersOnOriginalCaller(
     // Actual public own-return and resource/counter retirement precede this
     // Producer wake. The prepared command cannot run native stop before it.
     editor_producer.reset();
-    // No guest wait/PPC follows decrement. Scheduler shutdown joins actual CPU
-    // dispatch workers before reclaiming the ordinary wrapper's trivial tail.
+    if (healthy && editor_title_transfer) {
+      // Only the outer fixed7DB shim consumes this. Its Service/shared owners
+      // unwind normally before the common never-return TITLE park begins.
+      result.disposition=Disposition::kTransferred;
+    }
+    // This Service performs no guest wait/PPC after decrement. Shutdown joins
+    // actual CPU workers before reclaiming either the SYSTEM shim's return
+    // tail or the TITLE shim's subsequent resource-free handoff park.
     selector_trace("return", result, executed, healthy);
     return result;
   } catch (...) {

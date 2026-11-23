@@ -41,12 +41,15 @@ class NativeIdentityEventWorkSource final {
   friend class NativeIdentityListenerBridgeTestAccess;
   NativeIdentityEventWorkSource(NativeIdentityEventLedger::WorkKey key,
       std::shared_ptr<const NativeIdentityEventSource> earlier_source,
-      std::shared_ptr<const void> whole_work_lifetime)
+      std::shared_ptr<const void> whole_work_lifetime,
+      std::shared_ptr<const NativeIdentityEventWorkSource> earlier_parent = {})
       : key_(key), earlier_(std::move(earlier_source)),
-        lifetime_(std::move(whole_work_lifetime)) {}
+        lifetime_(std::move(whole_work_lifetime)), parent_(std::move(earlier_parent)) {}
   const NativeIdentityEventLedger::WorkKey key_;
   const std::shared_ptr<const NativeIdentityEventSource> earlier_;
   const std::shared_ptr<const void> lifetime_;
+  // Exact earlier whole native invocation; not a current-source inference.
+  const std::shared_ptr<const NativeIdentityEventWorkSource> parent_;
   mutable std::atomic<bool> adopted_{false};
 };
 
@@ -278,19 +281,43 @@ class NativeIdentityListenerBridge final {
     if (!source->adopted_.compare_exchange_strong(unadopted,true)) { Lose(__LINE__,3);return {}; }
     auto origin=SourceOrigin(source->earlier_);
     if (source->earlier_ && !origin) { Lose(__LINE__,3);return {}; }
-    auto work=ledger_.BeginWork(source->key_,origin);
+    std::optional<Work> parent;
+    if (source->parent_) {
+      for (const auto& row:works_) if (row.source && !row.finished &&
+          row.source.get()==source->parent_.get() &&
+          !row.source.owner_before(source->parent_) && !source->parent_.owner_before(row.source)) {
+        if (parent || row.cells.load()) { Lose(__LINE__,3);return {}; }
+        parent=row.id;
+      }
+      if (!parent) { Lose(__LINE__,3);return {}; }
+    }
+    auto work=ledger_.BeginWork(source->key_,origin,parent);
     if (!work) { Lose(__LINE__,3);return {}; }
-    if (works_[work->slot].source && (!works_[work->slot].finished ||
-        works_[work->slot].cells.load() || !RetireResource(works_[work->slot].source))) { Lose(__LINE__,3);return {}; }
+    // Matched whole return already withdrew only our duplicate while the
+    // actual Work owner retained it. A live/stale resource is never recycled.
+    if (works_[work->slot].source || works_[work->slot].cells.load()) { Lose(__LINE__,3);return {}; }
     works_[work->slot].finished=false;
     works_[work->slot].source=std::move(source);works_[work->slot].id=*work;
     return work;
   }
-  bool FinishWholeWorkNormally(Work work,WorkKey actual_return) {
+  bool FinishWholeWorkNormally(Work work,WorkKey actual_return,
+      const std::shared_ptr<const NativeIdentityEventWorkSource>& retained_return) {
     std::lock_guard lock(mutex_);
     auto* row=WorkFor(work);
-    if (!row || row->cells.load() || !ledger_.FinishWorkNormally(work,actual_return)) { Lose(__LINE__,4);return false; }
-    row->finished=true;return true;
+    // The real outer Work retains this exact nonaliasing control block until
+    // its existing host retirement. A value-equal source, foreign control
+    // block, or reference to our own member cannot prove an independent pin.
+    const bool retained=row && retained_return && &retained_return!=&row->source &&
+        row->source.get()==retained_return.get() &&
+        !row->source.owner_before(retained_return) && !retained_return.owner_before(row->source);
+    if (!row || row->cells.load() || !retained ||
+        !ledger_.FinishWorkNormally(work,actual_return)) { Lose(__LINE__,4);return false; }
+    row->finished=true;
+    // Normal return and all cell withdrawals are genuine. Drop only our
+    // duplicate: retained_return still owns the same source/lifetime, so no
+    // resource destructor can run under this mutex or the caller's GCRC.
+    // The actual Work still uses its ordinary out-of-lock host-retire path.
+    row->source.reset();return true;
   }
   std::optional<Dependencies> CaptureDependencies(Work work) {
     std::lock_guard lock(mutex_);

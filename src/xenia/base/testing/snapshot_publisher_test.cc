@@ -1,5 +1,7 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "xenia/base/testing/snapshot_fixture.h"
+#include "xenia/base/snapshot_publication_set.h"
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -481,4 +483,199 @@ TEST_CASE("Complete recovery reopen reclaims its exact retained bootstrap receip
 }
 
 }
+#endif
+
+#if XE_PLATFORM_LINUX
+namespace xe::filesystem::test {
+
+TEST_CASE("A scoped publication keeps Account and two artifact reservations behind one genuine original-view batch",
+          "[snapshot_publication][scoped_set][lifetime]") {
+  SnapshotFixture f;
+  const std::array<uint8_t, 3> account{1, 0, 2}, old{3, 0, 4}, next{5, 0, 6};
+  REQUIRE_FALSE(f.profile->WriteNewFile("Account", account).error);
+  REQUIRE_FALSE(f.profile->WriteNewFile("FFFE07D1.gpd", old).error);
+  REQUIRE_FALSE(f.profile->WriteNewFile("tile_64.png", old).error);
+  std::error_code error;
+  auto base = f.profile->ReserveSnapshotFile(f.Token("Account"), error); REQUIRE(base);
+  auto gpd = base->CaptureSnapshot("FFFE07D1.gpd", 4096, error); REQUIRE(gpd);
+  auto tile = base->CaptureSnapshot("tile_64.png", 4096, error); REQUIRE(tile);
+  auto set = SnapshotPublicationSet::Reserve(base, {gpd, tile}, error);
+  REQUIRE(set); REQUIRE_FALSE(error);
+  CHECK_FALSE(f.profile->ContentNamespaceReady("Account"));
+  CHECK_FALSE(base->ContentNamespaceReady("FFFE07D1.gpd"));
+  CHECK_FALSE(base->ContentNamespaceReady("tile_64.png"));
+  const auto gpd_write = set->Publish(*f.owner, gpd, next);
+  REQUIRE_FALSE(gpd_write.error); REQUIRE(gpd_write.durable); REQUIRE(gpd_write.current);
+  CHECK(gpd_write.current->root() == base);
+  CHECK_FALSE(base->ContentNamespaceReady("tile_64.png"));
+  CHECK(std::ranges::equal(gpd->bytes(), old)); CHECK(std::ranges::equal(tile->bytes(), old));
+  const auto tile_write = set->Publish(*f.owner, tile, next);
+  REQUIRE_FALSE(tile_write.error); REQUIRE(tile_write.durable); REQUIRE(tile_write.current);
+  CHECK(tile_write.current->root() == base);
+  auto batch = set->Validate({gpd_write.current, tile_write.current}, error);
+  REQUIRE(batch); REQUIRE_FALSE(error);
+  CHECK(batch->root() == base);
+  CHECK(batch->tokens() == std::vector<std::shared_ptr<const HostStorageSnapshotToken>>{
+      gpd_write.current, tile_write.current});
+  set.reset();  // Batch retains the exact access owner until its native guard releases.
+  CHECK_FALSE(base->ContentNamespaceReady("tile_64.png"));
+  batch.reset();
+  CHECK(base->ContentNamespaceReady("tile_64.png"));
+  CHECK(base->ContentNamespaceReady("FFFE07D1.gpd"));
+  CHECK_FALSE(f.profile->ContentNamespaceReady("Account"));
+  CHECK(f.Bytes("FFFE07D1.gpd") == std::vector<uint8_t>(next.begin(), next.end()));
+  CHECK(f.Bytes("tile_64.png") == std::vector<uint8_t>(next.begin(), next.end()));
+  std::vector<uint8_t> bytes;
+  REQUIRE_FALSE(base->ReadFile("Account", 4096, bytes));
+  CHECK(bytes == std::vector<uint8_t>(account.begin(), account.end()));
+  base->Retire(); REQUIRE_FALSE(base->ReleaseRetiredSnapshotReservation());
+  CHECK(f.profile->ContentNamespaceReady("Account"));
+}
+TEST_CASE("Scoped publication refuses changed retries and cannot rebind a fresh token over its retained before bytes",
+          "[snapshot_publication][scoped_set][stale]") {
+  SnapshotFixture f;
+  const std::array<uint8_t, 3> old{1, 0, 2}, next{3, 0, 4}, competing{5, 0, 6};
+  REQUIRE_FALSE(f.profile->WriteNewFile("target", old).error);
+  auto before = f.Token("target"); std::error_code error;
+  auto set = SnapshotPublicationSet::Reserve(f.profile, {before}, error); REQUIRE(set);
+  SECTION("same captured operation retries without another physical replacement") {
+    const auto first = set->Publish(*f.owner, before, next);
+    REQUIRE_FALSE(first.error); REQUIRE(first.current);
+    const auto retry = set->RetryDurability(first.current);
+    REQUIRE_FALSE(retry.error); REQUIRE(retry.published); REQUIRE(retry.durable);
+    REQUIRE(retry.current); CHECK(retry.current == first.current);
+    const auto repeated = set->Publish(*f.owner, before, next);
+    REQUIRE_FALSE(repeated.error); REQUIRE(repeated.current);
+    CHECK(repeated.current == first.current);
+    CHECK(repeated.durable); CHECK(repeated.phase == SnapshotPublicationPhase::kComplete);
+    CHECK(set->Delete(*f.owner, before).error == std::errc::invalid_argument);
+    SnapshotFixture foreign;
+    CHECK(set->Publish(*foreign.owner, before, next).error == std::errc::invalid_argument);
+    CHECK(repeated.current->info().file_id == first.current->info().file_id);
+    CHECK(repeated.recovery == first.recovery); CHECK(repeated.stage == first.stage);
+    CHECK(set->Publish(*f.owner, before, competing).error == std::errc::invalid_argument);
+    const auto actual = set->Capture("target", 4096, error); REQUIRE(actual);
+    CHECK(std::ranges::equal(actual->bytes(), next));
+    const auto unowned_retry = set->RetryDurability(actual);
+    CHECK(unowned_retry.error == std::errc::invalid_argument);
+    CHECK_FALSE(unowned_retry.published);
+  }
+  SECTION("an uncooperative native write remains preserved rather than becoming a fresh expected token") {
+    // Deliberately outside the cooperating HostStorage admission. The common
+    // CAS and immutable submission must still refuse changed exact bytes.
+    std::ofstream native(f.profile->path() / "target", std::ios::binary | std::ios::trunc);
+    native.write(reinterpret_cast<const char*>(competing.data()), competing.size());
+    REQUIRE(native.good()); native.close();
+    const auto fresh = set->Capture("target", 4096, error); REQUIRE(fresh);
+    CHECK(std::ranges::equal(fresh->bytes(), competing));
+    const auto rebound = set->Publish(*f.owner, fresh, next);
+    CHECK(rebound.error == std::errc::state_not_recoverable);
+    CHECK_FALSE(rebound.published);
+    const auto original = set->Publish(*f.owner, before, next);
+    CHECK(original.error == std::errc::state_not_recoverable); CHECK_FALSE(original.published);
+    const auto actual = set->Capture("target", 4096, error); REQUIRE(actual);
+    CHECK(std::ranges::equal(actual->bytes(), competing));
+  }
+}
+TEST_CASE("Scoped member admission respects the real parent depth bound and releases partial acquisition on a file conflict",
+          "[snapshot_publication][scoped_set][admission]") {
+  SnapshotFixture f;
+  const std::array<uint8_t, 1> value{0x3a}; std::error_code error;
+  std::vector<std::shared_ptr<HostStorageRoot>> parents;
+  std::shared_ptr<const HostStorageRoot> base = f.profile;
+  for (unsigned i = 0; i != 2; ++i) {
+    const auto name = "parent" + std::to_string(i);
+    REQUIRE_FALSE(f.profile->WriteNewFile(name, value).error);
+    auto token = base->CaptureSnapshot(name, 4096, error); REQUIRE(token);
+    auto parent = base->ReserveSnapshotFile(token, error); REQUIRE(parent);
+    parents.push_back(parent); base = std::move(parent);
+  }
+  std::vector<std::shared_ptr<const HostStorageSnapshotToken>> tokens;
+  for (unsigned i = 0; i != 7; ++i) {
+    const auto name = "member" + std::to_string(i);
+    REQUIRE_FALSE(f.profile->WriteNewFile(name, value).error);
+    auto token = base->CaptureSnapshot(name, 4096, error); REQUIRE(token); tokens.push_back(token);
+  }
+  CHECK_FALSE(SnapshotPublicationSet::Reserve(base, tokens, error));
+  CHECK(error == std::errc::operation_not_supported);
+  CHECK(base->ContentNamespaceReady("member0"));
+  SECTION("six additional members genuinely fit the unchanged limit") {
+    tokens.resize(6);
+    auto set = SnapshotPublicationSet::Reserve(base, tokens, error); REQUIRE(set);
+    CHECK_FALSE(error); CHECK_FALSE(base->ContentNamespaceReady("member5"));
+    set.reset(); CHECK(base->ContentNamespaceReady("member5"));
+  }
+  SECTION("a real foreign file open on the second member unwinds only new reservations") {
+    auto open = f.profile->OpenFile("member1", FileAccess::kGenericRead, error); REQUIRE(open);
+    tokens.resize(2);
+    CHECK_FALSE(SnapshotPublicationSet::Reserve(base, tokens, error));
+    CHECK(error == std::errc::device_or_resource_busy);
+    CHECK(base->ContentNamespaceReady("member0"));
+    CHECK_FALSE(f.profile->ContentNamespaceReady("parent0"));
+  }
+  for (auto i = parents.rbegin(); i != parents.rend(); ++i) {
+    (*i)->Retire(); REQUIRE_FALSE((*i)->ReleaseRetiredSnapshotReservation());
+  }
+}
+TEST_CASE("Scoped empty writes remain distinct from deletion and a retired source cannot publish",
+          "[snapshot_publication][scoped_set][empty_delete][retirement]") {
+  SnapshotFixture f; std::error_code error;
+  SECTION("nonnull owned empty data creates an actual file which can later be deleted") {
+    auto missing = f.Token("zero"); REQUIRE_FALSE(missing->exists());
+    auto create = SnapshotPublicationSet::Reserve(f.profile, {missing}, error); REQUIRE(create);
+    const auto written = create->Publish(*f.owner, missing, std::span<const uint8_t>{});
+    REQUIRE_FALSE(written.error); REQUIRE(written.published); REQUIRE(written.durable);
+    REQUIRE(written.current); CHECK(written.current->exists()); CHECK(written.current->bytes().empty());
+    CHECK(create->Delete(*f.owner, missing).error == std::errc::invalid_argument);
+    create.reset();
+    auto existing = f.Token("zero"); REQUIRE(existing->exists());
+    auto remove = SnapshotPublicationSet::Reserve(f.profile, {existing}, error); REQUIRE(remove);
+    const auto deleted = remove->Delete(*f.owner, existing);
+    REQUIRE_FALSE(deleted.error); REQUIRE(deleted.published); REQUIRE(deleted.durable);
+    REQUIRE(deleted.current); CHECK_FALSE(deleted.current->exists());
+    CHECK(deleted.kind == SnapshotMutationKind::kDelete);
+    CHECK(remove->Publish(*f.owner, existing, std::span<const uint8_t>{}).error ==
+          std::errc::invalid_argument);
+    const auto retried = remove->RetryDurability(deleted.current);
+    REQUIRE_FALSE(retried.error); CHECK(retried.published); CHECK(retried.durable);
+    const auto same_delete = remove->Delete(*f.owner, existing);
+    REQUIRE_FALSE(same_delete.error); CHECK(same_delete.current == deleted.current);
+    remove.reset(); CHECK_FALSE(f.Token("zero")->exists());
+  }
+  SECTION("a real durability retry after retirement retains the physical publication duty") {
+    const std::array<uint8_t, 2> old{1, 2}, next{3, 4};
+    REQUIRE_FALSE(f.profile->WriteNewFile("target", old).error);
+    const auto before = f.Token("target");
+    auto set = SnapshotPublicationSet::Reserve(f.profile, {before}, error); REQUIRE(set);
+    const auto first = set->Publish(*f.owner, before, next);
+    REQUIRE_FALSE(first.error); REQUIRE(first.published); REQUIRE(first.durable);
+    REQUIRE(first.current);
+    f.profile->Retire();
+    const auto retry = set->RetryDurability(first.current);
+    CHECK(retry.error); CHECK(retry.published); CHECK_FALSE(retry.durable);
+    CHECK(retry.current == first.current);
+    const auto retained = set->Publish(*f.owner, before, next);
+    CHECK(retained.error == retry.error); CHECK(retained.published); CHECK_FALSE(retained.durable);
+    CHECK(retained.stage == first.stage); CHECK(retained.recovery == first.recovery);
+    std::ifstream input(f.profile->path() / "target", std::ios::binary); REQUIRE(input);
+    CHECK(std::vector<uint8_t>(std::istreambuf_iterator<char>(input), {}) ==
+          std::vector<uint8_t>(next.begin(), next.end()));
+  }
+  SECTION("actual base retirement cancels the original captured authority") {
+    const std::array<uint8_t, 2> old{1, 2}, next{3, 4};
+    REQUIRE_FALSE(f.profile->WriteNewFile("target", old).error);
+    const auto before = f.Token("target");
+    auto set = SnapshotPublicationSet::Reserve(f.profile, {before}, error); REQUIRE(set);
+    f.profile->Retire();
+    const auto refused = set->Publish(*f.owner, before, next);
+    CHECK(refused.error); CHECK_FALSE(refused.published);
+    CHECK_FALSE(set->Capture("target", 4096, error)); CHECK(error);
+    std::ifstream input(f.profile->path() / "target", std::ios::binary);
+    REQUIRE(input);
+    CHECK(std::vector<uint8_t>(std::istreambuf_iterator<char>(input), {}) ==
+          std::vector<uint8_t>(old.begin(), old.end()));
+  }
+}
+
+}  // namespace xe::filesystem::test
 #endif

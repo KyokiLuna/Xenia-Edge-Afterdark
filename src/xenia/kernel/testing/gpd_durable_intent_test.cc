@@ -994,5 +994,308 @@ TEST_CASE("Native two-filesystem volume pairs GPDs with its own same-FS redo and
   volume.reset();
   std::filesystem::remove_all(path, error);
 }
+
+namespace {
+using ArtifactKind = filesystem::ProfileArtifactKind;
+using ArtifactAction = filesystem::ProfileArtifactAction;
+using ArtifactExpected = filesystem::ProfileArtifactExpected;
+using ArtifactMutation = filesystem::ProfileArtifactMutation;
+using ArtifactAdmission = filesystem::ProfileArtifactAdmission;
+struct ArtifactFixture {
+  filesystem::test::SnapshotScratch scratch;
+  std::shared_ptr<filesystem::HostStorageRoot> parent, source, profile;
+  std::shared_ptr<const filesystem::ManagedVolumeAuthority> volume;
+  GpdIntentBinding binding;
+  std::vector<uint8_t> old_dash = Wire(kDashboard, u"artifact old dashboard");
+  std::vector<uint8_t> next_dash = Wire(kDashboard, u"artifact next dashboard");
+  // These format-neutral bytes deliberately include zeros and arbitrary tails.
+  // The storage owner preserves them; native PNG validation is a separate duty.
+  std::vector<uint8_t> old_image{0x89, 0x50, 0, 0x41, 0xFF, 0x7F};
+  std::vector<uint8_t> next_image{0x89, 0x50, 0, 0x42, 0x81, 0x01, 0xFE};
+  static constexpr std::array<const char*, 6> names{
+      "tile_64.png", "tile_32.png", "pp_64.png", "pp_32.png", "avtr_64.png", "avtr_32.png"};
+  static constexpr std::array<ArtifactKind, 6> kinds{
+      ArtifactKind::kPublic64, ArtifactKind::kPublic32, ArtifactKind::kPersonal64,
+      ArtifactKind::kPersonal32, ArtifactKind::kAvatar64, ArtifactKind::kAvatar32};
+  ArtifactFixture() {
+    parent = scratch.Root();
+    REQUIRE_FALSE(parent->Create("content", true));
+    OpenVolume();
+    std::error_code error;
+    const auto relative = GpdDurableIntentStore::ProfileRelative(kXuid);
+    std::filesystem::path prefix;
+    for (const auto& component : relative) {
+      prefix /= component; REQUIRE_FALSE(source->Create(prefix, true));
+    }
+    profile = source->Subroot(relative, false, error); REQUIRE(profile); REQUIRE_FALSE(error);
+    REQUIRE_FALSE(profile->WriteNewFile(Leaf(kDashboard), old_dash).error);
+    for (const auto name : names) { REQUIRE_FALSE(profile->WriteNewFile(name, old_image).error); }
+    REQUIRE_FALSE(profile->WriteNewFile("__thumbnail.png", old_image).error);
+    const std::array<uint8_t, 9> account{0x41,0,0x11,0xFF,0x37,5,0,0x71,0xE3};
+    REQUIRE_FALSE(profile->WriteNewFile("Account", account).error);
+  }
+  void OpenVolume() {
+    std::error_code error;
+    filesystem::ManagedVolumeAuthority::Options options;
+    options.content = parent->Subroot("content", false, error); REQUIRE(options.content); REQUIRE_FALSE(error);
+    options.state_parent_override = parent;
+    options.source_id = "managed-artifact-A"; options.device_id = 1;
+    volume = filesystem::ManagedVolumeAuthority::Open(std::move(options));
+    REQUIRE(volume); REQUIRE_FALSE(volume->error()); REQUIRE(volume->profile_writable());
+    source = volume->content();
+    const auto& identity = volume->identity();
+    binding = {"managed-artifact-A", 1, kXuid, 1,
+        GpdDurableIntentStore::ProfileRelative(kXuid),
+        {identity->uuid(), identity->content_epoch(), identity->directory_file_id()}};
+  }
+  auto Token(const char* name) {
+    std::error_code error; auto token = profile->CaptureSnapshot(name, 1 << 20, error, true);
+    REQUIRE(token); REQUIRE_FALSE(error); return token;
+  }
+  std::vector<ArtifactExpected> Main(bool six_images = true) {
+    std::vector<ArtifactExpected> out{{ArtifactKind::kGpd, kDashboard, Token("FFFE07D1.gpd")}};
+    const size_t count = six_images ? names.size() : 2;
+    for (size_t i = 0; i != count; ++i) { out.push_back({kinds[i], 0, Token(names[i])}); }
+    return out;
+  }
+  std::shared_ptr<ArtifactAdmission> Acquire(bool six_images = true, bool thumbnail = true) {
+    std::error_code error;
+    auto held = GpdDurableIntentStore::AcquireArtifacts(volume->intents(), volume->recovery(),
+        volume->mutations(), binding, Main(six_images), thumbnail, error);
+    REQUIRE(held); REQUIRE_FALSE(error); return held;
+  }
+  std::vector<ArtifactMutation> Mutations(const ArtifactAdmission& held, bool all = true) {
+    std::vector<ArtifactMutation> out;
+    for (const auto& item : held.expected()) {
+      out.push_back({item.kind, item.title_id, all ? ArtifactAction::kReplace : ArtifactAction::kObserve,
+          all ? item.kind == ArtifactKind::kGpd ? next_dash : next_image : std::vector<uint8_t>{}});
+    }
+    return out;
+  }
+  auto Prepare(const std::shared_ptr<ArtifactAdmission>& held, std::filesystem::path& path) {
+    std::error_code error; auto store = GpdDurableIntentStore::PrepareArtifacts(
+        held, Mutations(*held), error, path);
+    REQUIRE(store); REQUIRE_FALSE(error); REQUIRE_FALSE(path.empty()); return store;
+  }
+  std::vector<uint8_t> Bytes(const char* name) {
+    std::vector<uint8_t> bytes; REQUIRE_FALSE(profile->ReadFile(name, 1 << 20, bytes)); return bytes;
+  }
+  void Restart() {
+    profile.reset(); source.reset(); volume.reset();
+    OpenVolume();
+    std::error_code error; profile = source->Subroot(binding.profile_relative, false, error);
+    REQUIRE(profile); REQUIRE_FALSE(error);
+  }
+};
+}  // namespace
+
+TEST_CASE("Typed04 joins six PNGs GPD and real CM thumbnail beside mounted Account",
+          "[gpd_durable_intent][profile_artifacts][namespace]") {
+  ArtifactFixture f;
+  const auto account_before = f.Bytes("Account");
+  std::error_code error;
+  auto account = f.Token("Account");
+  f.profile = f.profile->ReserveSnapshotFile(account, error);
+  REQUIRE(f.profile); REQUIRE_FALSE(error);
+  // The original model owns a distinct genuine token for the same thumbnail
+  // observation before CM issues its own admission projection.
+  auto thumbnail_dependency = f.Token("__thumbnail.png");
+  auto held = f.Acquire();
+  REQUIRE(held->expected().size() == 8);
+  REQUIRE_FALSE(f.volume->mutations()->idle());
+  const auto exact_thumb = held->expected().back();
+  REQUIRE(exact_thumb.kind == ArtifactKind::kThumbnail);
+  REQUIRE(exact_thumb.token->root() == f.profile);
+  auto blocked = f.volume->mutations()->WriteMetadata(
+      filesystem::ContentMutationOwner::Kind::kThumbnail, f.binding.profile_relative,
+      f.volume->mutations()->CaptureMetadata(filesystem::ContentMutationOwner::Kind::kThumbnail,
+          f.binding.profile_relative, f.binding.profile_relative / "__thumbnail.png", error), f.next_image);
+  REQUIRE(blocked.error);
+  std::filesystem::path journal;
+  const std::array<std::shared_ptr<const filesystem::HostStorageSnapshotToken>,1> dependencies{thumbnail_dependency};
+  auto store = GpdDurableIntentStore::PrepareArtifacts(held, f.Mutations(*held), error, journal, dependencies);
+  REQUIRE(store); REQUIRE_FALSE(error); REQUIRE_FALSE(journal.empty());
+  std::vector<uint8_t> raw; REQUIRE_FALSE(f.volume->intents()->root()->ReadFile(journal, 1 << 20, raw));
+  REQUIRE(std::string(raw.begin(), raw.begin() + 8) == "XPGDI04\n");
+  const auto applied = store->Advance();
+  REQUIRE_FALSE(applied.error); REQUIRE(applied.intent_durable); REQUIRE(applied.done_durable);
+  REQUIRE(applied.all_durable_sequentially_observed); REQUIRE(applied.files.size() == 8);
+  REQUIRE(std::all_of(applied.files.begin(), applied.files.end(), [](const auto& file) {
+    return file.publication.published && file.publication.durable;
+  }));
+  store.reset(); held.reset();
+  REQUIRE(f.volume->mutations()->idle());
+  REQUIRE(f.Bytes("FFFE07D1.gpd") == f.next_dash);
+  for (const auto name : ArtifactFixture::names) { REQUIRE(f.Bytes(name) == f.next_image); }
+  REQUIRE(f.Bytes("__thumbnail.png") == f.next_image);
+  REQUIRE(f.Bytes("Account") == account_before);
+}
+
+TEST_CASE("Dropping unprepared typed admission is cancellation without persistent artifacts",
+          "[gpd_durable_intent][profile_artifacts][cancel]") {
+  ArtifactFixture f;
+  std::error_code error;
+  const auto before = GpdDurableIntentStore::Scan(*f.volume->intents(), error);
+  REQUIRE_FALSE(error); REQUIRE(before.empty());
+  auto held = f.Acquire(false);
+  REQUIRE_FALSE(f.volume->mutations()->idle());
+  auto raw = f.profile->OpenFile("tile_64.png", filesystem::FileAccess::kFileWriteData, error);
+  REQUIRE_FALSE(raw); REQUIRE(error == std::errc::device_or_resource_busy);
+  held.reset();
+  REQUIRE(f.volume->mutations()->idle());
+  raw = f.profile->OpenFile("tile_64.png", filesystem::FileAccess::kFileWriteData, error);
+  REQUIRE(raw); REQUIRE_FALSE(error); raw.reset();
+  REQUIRE(f.Bytes("tile_64.png") == f.old_image);
+  REQUIRE(GpdDurableIntentStore::Scan(*f.volume->intents(), error).empty()); REQUIRE_FALSE(error);
+}
+
+TEST_CASE("Actual MVA reopen replays04 before guest admission including a partial PNG tuple",
+          "[gpd_durable_intent][profile_artifacts][restart]") {
+  ArtifactFixture f;
+  auto first = f.Token("tile_64.png");
+  auto held = f.Acquire(false);
+  std::filesystem::path journal; auto store = f.Prepare(held, journal);
+  store.reset(); held.reset();
+  // A real durable first-member CAS models a process stopping between tuple
+  // publications. No old live store, reservation or retry token is reused.
+  const auto partial = filesystem::SnapshotPublisher::Publish(
+      *f.volume->recovery(), first, f.next_image);
+  REQUIRE_FALSE(partial.error); REQUIRE(partial.published); REQUIRE(partial.durable);
+  first.reset();
+  f.Restart();
+  REQUIRE(f.Bytes("FFFE07D1.gpd") == f.next_dash);
+  REQUIRE(f.Bytes("tile_64.png") == f.next_image);
+  REQUIRE(f.Bytes("tile_32.png") == f.next_image);
+  REQUIRE(f.Bytes("__thumbnail.png") == f.next_image);
+  std::error_code error; auto rows = GpdDurableIntentStore::Scan(*f.volume->intents(), error);
+  REQUIRE_FALSE(error); REQUIRE(rows.size() == 1); REQUIRE(rows.front().format_version == 4);
+  REQUIRE(rows.front().done_record_valid);
+  // Reopening a completed history preserves a later legitimate image.
+  const std::vector<uint8_t> later{7,0,9,0xFF};
+  const auto changed = filesystem::SnapshotPublisher::Publish(*f.volume->recovery(), f.Token("tile_64.png"), later);
+  REQUIRE_FALSE(changed.error); REQUIRE(changed.durable);
+  f.Restart(); REQUIRE(f.Bytes("tile_64.png") == later);
+}
+
+TEST_CASE("Third-state PNG blocks whole04 replay before unrelated GPD or thumbnail mutation",
+          "[gpd_durable_intent][profile_artifacts][conflict]") {
+  ArtifactFixture f;
+  auto before = f.Token("tile_32.png");
+  auto held = f.Acquire(false); std::filesystem::path journal; auto store = f.Prepare(held, journal);
+  store.reset(); held.reset();
+  const std::vector<uint8_t> foreign{0xFF,0,0xB1,0x74};
+  const auto changed = filesystem::SnapshotPublisher::Publish(*f.volume->recovery(), before, foreign);
+  REQUIRE_FALSE(changed.error); REQUIRE(changed.durable); before.reset();
+  std::error_code error;
+  auto resumed = GpdDurableIntentStore::Recover(f.volume->intents(), f.volume->recovery(),
+      journal, f.binding, f.profile, error, f.volume->mutations());
+  REQUIRE(resumed); REQUIRE_FALSE(error);
+  const auto refused = resumed->Advance(); REQUIRE(refused.error == std::errc::state_not_recoverable);
+  REQUIRE_FALSE(refused.done_durable);
+  REQUIRE(std::none_of(refused.files.begin(), refused.files.end(), [](const auto& file) {
+    return file.publication.published;
+  }));
+  resumed.reset();
+  REQUIRE(f.Bytes("FFFE07D1.gpd") == f.old_dash);
+  REQUIRE(f.Bytes("tile_32.png") == foreign); REQUIRE(f.Bytes("__thumbnail.png") == f.old_image);
+}
+
+TEST_CASE("Issued04 admission rejects another CM source and stale captured member before any journal",
+          "[gpd_durable_intent][profile_artifacts][source]") {
+  ArtifactFixture f, other;
+  std::error_code error;
+  auto refused = GpdDurableIntentStore::AcquireArtifacts(f.volume->intents(), f.volume->recovery(),
+      other.volume->mutations(), f.binding, f.Main(false), true, error);
+  REQUIRE_FALSE(refused); REQUIRE(error == std::errc::permission_denied);
+  auto captured = f.Main(false);
+  const auto replaced = filesystem::SnapshotPublisher::Publish(*f.volume->recovery(),
+      captured[1].token, f.old_image);
+  REQUIRE_FALSE(replaced.error); REQUIRE(replaced.published);
+  refused = GpdDurableIntentStore::AcquireArtifacts(f.volume->intents(), f.volume->recovery(),
+      f.volume->mutations(), f.binding, captured, true, error);
+  REQUIRE_FALSE(refused); REQUIRE(error == std::errc::state_not_recoverable);
+  REQUIRE(f.volume->mutations()->idle());
+  REQUIRE(GpdDurableIntentStore::Scan(*f.volume->intents(), error).empty()); REQUIRE_FALSE(error);
+  REQUIRE(f.Bytes("FFFE07D1.gpd") == f.old_dash);
+}
+
+TEST_CASE("Typed04 preserves explicit absent observation and distinguishes empty write from delete",
+          "[gpd_durable_intent][profile_artifacts][delete]") {
+  ArtifactFixture f;
+  auto missing = f.Token("avtr_32.png");
+  const auto erased = filesystem::SnapshotPublisher::Delete(*f.volume->recovery(), missing);
+  REQUIRE_FALSE(erased.error); REQUIRE(erased.durable); missing.reset();
+  auto held = f.Acquire(); auto mutations = f.Mutations(*held, false);
+  for (auto& mutation : mutations) {
+    if (mutation.kind == ArtifactKind::kPublic64) {
+      mutation.action = ArtifactAction::kReplace; mutation.intended.clear();
+    }
+    if (mutation.kind == ArtifactKind::kPublic32) { mutation.action = ArtifactAction::kDelete; }
+  }
+  std::error_code error; std::filesystem::path journal;
+  auto store = GpdDurableIntentStore::PrepareArtifacts(held, mutations, error, journal);
+  REQUIRE(store); REQUIRE_FALSE(error);
+  const auto result = store->Advance(); REQUIRE_FALSE(result.error); REQUIRE(result.done_durable);
+  store.reset(); held.reset();
+  REQUIRE(f.Token("tile_64.png")->exists()); REQUIRE(f.Bytes("tile_64.png").empty());
+  REQUIRE_FALSE(f.Token("tile_32.png")->exists()); REQUIRE_FALSE(f.Token("avtr_32.png")->exists());
+  REQUIRE(f.Bytes("FFFE07D1.gpd") == f.old_dash); REQUIRE(f.Bytes("__thumbnail.png") == f.old_image);
+  f.Restart(); REQUIRE(f.Token("tile_64.png")->exists()); REQUIRE_FALSE(f.Token("tile_32.png")->exists());
+}
+
+TEST_CASE("Typed04 malformed member intent fails before journal and leaves exact admission reusable",
+          "[gpd_durable_intent][profile_artifacts][validation]") {
+  ArtifactFixture f; auto held = f.Acquire(false);
+  auto mutations = f.Mutations(*held);
+  mutations[0].title_id = 0;  // GPD identity cannot be smuggled as a fixed PNG.
+  std::error_code error; std::filesystem::path journal;
+  auto refused = GpdDurableIntentStore::PrepareArtifacts(held, mutations, error, journal);
+  REQUIRE_FALSE(refused); REQUIRE(error); REQUIRE(journal.empty());
+  REQUIRE(GpdDurableIntentStore::Scan(*f.volume->intents(), error).empty()); REQUIRE_FALSE(error);
+  auto store = f.Prepare(held, journal);
+  REQUIRE(store->Advance().done_durable); store.reset(); held.reset();
+  REQUIRE(f.Bytes("FFFE07D1.gpd") == f.next_dash);
+}
+
+TEST_CASE("Pre-guest04 replay preserves explicit legacy03 pending lease-driven history",
+          "[gpd_durable_intent][profile_artifacts][compatibility]") {
+  filesystem::test::SnapshotScratch scratch; auto parent = scratch.Root();
+  REQUIRE_FALSE(parent->Create("content", true)); std::error_code error;
+  const auto open = [&] {
+    filesystem::ManagedVolumeAuthority::Options options;
+    options.content = parent->Subroot("content", false, error); REQUIRE(options.content);
+    options.state_parent_override = parent; options.source_id = "managed-device-A"; options.device_id = 1;
+    return filesystem::ManagedVolumeAuthority::Open(std::move(options));
+  };
+  auto volume = open(); REQUIRE_FALSE(volume->error());
+  std::filesystem::path journal; std::vector<uint8_t> legacy_bytes;
+  {
+    Fixture f(volume); auto store = f.Prepare(error, journal); REQUIRE(store);
+    REQUIRE_FALSE(f.owner->root()->ReadFile(journal, 1 << 20, legacy_bytes));
+    REQUIRE(std::string(legacy_bytes.begin(), legacy_bytes.begin() + 8) == "XPGDI03\n");
+  }
+  volume.reset(); volume = open(); REQUIRE_FALSE(volume->error());
+  std::vector<uint8_t> bytes;
+  REQUIRE_FALSE(volume->intents()->root()->ReadFile(journal, 1 << 20, bytes)); REQUIRE(bytes == legacy_bytes);
+  const auto rows = GpdDurableIntentStore::Scan(*volume->intents(), error);
+  REQUIRE_FALSE(error); REQUIRE(rows.size() == 1); REQUIRE(rows.front().format_version == 3);
+  REQUIRE_FALSE(rows.front().done_record_valid);
+}
+
+TEST_CASE("New CM projection never replaces a conflicting old thumbnail dependency before04 intent",
+          "[gpd_durable_intent][profile_artifacts][dependencies]") {
+  ArtifactFixture f; auto old=f.Token("__thumbnail.png");
+  const std::vector<uint8_t> changed{0x89,0,0xFF,0x71};
+  const auto published=filesystem::SnapshotPublisher::Publish(*f.volume->recovery(),old,changed);
+  REQUIRE_FALSE(published.error); REQUIRE(published.durable);
+  auto held=f.Acquire(false);
+  std::error_code error; std::filesystem::path journal;
+  const std::array<std::shared_ptr<const filesystem::HostStorageSnapshotToken>,1> dependencies{old};
+  auto refused=GpdDurableIntentStore::PrepareArtifacts(held,f.Mutations(*held),error,journal,dependencies);
+  REQUIRE_FALSE(refused); REQUIRE(error==std::errc::state_not_recoverable); REQUIRE(journal.empty());
+  REQUIRE(GpdDurableIntentStore::Scan(*f.volume->intents(),error).empty()); REQUIRE_FALSE(error);
+  held.reset(); REQUIRE(f.volume->mutations()->idle());
+  REQUIRE(f.Bytes("FFFE07D1.gpd")==f.old_dash); REQUIRE(f.Bytes("__thumbnail.png")==changed);
+}
 }  // namespace xe::kernel::xam::test
 #endif

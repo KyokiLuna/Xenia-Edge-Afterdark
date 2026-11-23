@@ -85,6 +85,10 @@ ConsoleDataOwner::Open(std::shared_ptr<filesystem::HostStorageRoot> parent,
     return owner;
   }
   owner->settings_ = ConsoleSettingsStore::Open(owner->private_root_, error);
+  // Preserve readable preferences independently from an unavailable signing
+  // identity. No guest mount may expose either private payload on failure.
+  if (!error) owner->signing_identity_ = ConsoleSigningIdentity::Open(
+      owner->private_root_, owner->signing_error_);
   return owner;
 #endif
 }

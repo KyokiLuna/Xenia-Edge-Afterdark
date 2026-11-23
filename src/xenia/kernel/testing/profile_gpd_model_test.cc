@@ -3,11 +3,16 @@
 #include "xenia/base/xdbf_view.h"
 #include "xenia/kernel/xam/profile_gpd_model.h"
 #include "xenia/kernel/xam/profile_gpd_transaction.h"
+#include "xenia/kernel/xam/user_profile.h"
+#include "xenia/kernel/xam/profile_picture_codec.h"
+#include "xenia/kernel/testing/profile_picture_fixture.h"
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/file.h"
 #include "xenia/vfs/virtual_file_system.h"
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
+#include <string_view>
 #include <utility>
 #if XE_PLATFORM_LINUX
 namespace xe::kernel::test {
@@ -62,7 +67,7 @@ struct ModelFixture {
   std::vector<uint8_t> dashboard_wire, game_wire;
   static constexpr uint64_t kXuid = 0xe000000000000001ull;
   static constexpr uint32_t kTitle = 0x12345678;
-  explicit ModelFixture(bool unlocked = false, bool stale_summary = false) {
+  explicit ModelFixture(bool unlocked = false, bool stale_summary = false, bool canonical = false) {
     std::error_code setup_error;
     REQUIRE_FALSE(disk.parent->Create("content", true));
     source = disk.parent->Subroot("content", false, setup_error);
@@ -75,8 +80,11 @@ struct ModelFixture {
     REQUIRE_FALSE(intent_owner->error());
     recovery = std::shared_ptr<const filesystem::SnapshotRecoveryOwner>(
         std::move(disk.owner));
-    REQUIRE_FALSE(source->Create("profile", true));
-    disk.profile = source->Subroot("profile", false, setup_error);
+    const auto relative = canonical ? xam::ProfileStorageLease::ProfileRelative(kXuid)
+                                    : std::filesystem::path("profile");
+    std::filesystem::path prefix;
+    for (const auto& part : relative) { prefix /= part; REQUIRE_FALSE(source->Create(prefix, true)); }
+    disk.profile = source->Subroot(relative, false, setup_error);
     REQUIRE(disk.profile);
 
     metadata = std::make_shared<xam::ProfileGpdTitleData>();
@@ -187,6 +195,36 @@ struct ModelFixture {
     REQUIRE(bytes == game_wire);
   }
 };
+xam::ProfileGpdMutation ImageCommand(uint32_t title, uint64_t image,
+                                       uint64_t request,
+                                       std::vector<uint8_t> bytes = {}) {
+  xam::ProfileGpdMutation command;
+  command.kind = xam::ProfileGpdMutationKind::kUpsertImage;
+  command.title_id = title;
+  command.image_id = image;
+  command.request_id = request;
+  command.image_data = std::move(bytes);
+  return command;
+}
+void RequireOtherRecordsUnchanged(std::span<const uint8_t> before,
+                                  std::span<const uint8_t> after,
+                                  uint64_t changed_image) {
+  const auto old = XdbfTableView::Parse(before), next = XdbfTableView::Parse(after);
+  REQUIRE(old); REQUIRE(next);
+  for (size_t i = 0; i != old->entries_used; ++i) {
+    const auto* e = old->entries.data() + i * 18;
+    const uint16_t section = uint16_t(e[0]) << 8 | e[1];
+    const uint64_t id = uint64_t(XdbfTableView::U32(e + 2)) << 32 |
+                        XdbfTableView::U32(e + 6);
+    if (section == uint16_t(xam::GpdSection::kImage) && id == changed_image) {
+      continue;
+    }
+    const auto a = old->Find(section, id), b = next->Find(section, id);
+    REQUIRE(a); REQUIRE(b);
+    CHECK(std::vector<uint8_t>(a->begin(), a->end()) ==
+          std::vector<uint8_t>(b->begin(), b->end()));
+  }
+}
 class SettingOpaqueProbe : public xam::GpdInfo {
  public:
   SettingOpaqueProbe() : GpdInfo(0x12345678) {}
@@ -1066,6 +1104,637 @@ TEST_CASE("Roster preparation cannot discard an actual pending GPD command",
   auto paused = model->PauseForRoster(error);
   REQUIRE(paused); CHECK(actual.event->Current());
   paused.reset(); CHECK(actual.event->Current());
+}
+
+TEST_CASE("Legacy key repair preserves native custom malformed and unknown profile metadata",
+          "[kernel][profile_gpd_model][picture_key][repair]") {
+  ModelFixture f;
+  constexpr auto public_key = xam::UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY;
+  uint32_t id = uint32_t(public_key);
+  std::vector<uint8_t> raw;
+  const auto legacy = [](std::string_view text) {
+    std::vector<uint8_t> bytes;
+    for (uint8_t c : text) { bytes.push_back(c); bytes.push_back(0); }
+    bytes.insert(bytes.end(), {0,0}); return bytes;
+  };
+  SECTION("native BE key") {
+    xam::UserSetting native(public_key,std::u16string(u"FFFE07D10002000000010000"));
+    raw.assign(native.get_extended_data().begin(),native.get_extended_data().end());
+  }
+  SECTION("native BE personal key") {
+    id=uint32_t(xam::UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE);
+    xam::UserSetting native(static_cast<xam::UserSettingId>(id),std::u16string(u"FFFE07D10002000200010002"));
+    raw.assign(native.get_extended_data().begin(),native.get_extended_data().end());
+  }
+  SECTION("custom picture tuple") { raw=legacy("123456780002000000010000"); }
+  SECTION("unrecognized setting ID") {
+    id=uint32_t(xam::UserSettingId::XPROFILE_GAMERCARD_USER_BIO);
+    raw=legacy("FFFE07D10002000000010000");
+  }
+  SECTION("truncated legacy key") { raw=legacy("FFFE07D1"); }
+  SECTION("mixed byte order") { raw=legacy("FFFE07D10002000000010000");raw[9]=1; }
+  SECTION("unterminated key") { raw=legacy("FFFE07D10002000000010000");raw.back()=1; }
+  SECTION("unavailable stock index") { raw=legacy("FFFE07D10002000D0001000D"); }
+  SECTION("odd unreadable UTF16 payload") { raw={0x46,0,0x46}; }
+  class WireDatabase : public xam::GpdInfoProfile {
+   public:
+    explicit WireDatabase(std::vector<uint8_t> bytes):GpdInfoProfile(std::move(bytes)){}
+    void Insert(uint32_t id,std::span<const uint8_t> payload) {
+      xam::X_XDBF_GPD_SETTING_HEADER h{};
+      h.setting_id=id;h.setting_type=xam::X_USER_DATA_TYPE::WSTRING;
+      h.base_data.unicode.size=uint32_t(payload.size());h.base_data.unicode.ptr=0xDEADBEEF;
+      xam::Entry entry(id,uint16_t(xam::GpdSection::kSetting),uint32_t(sizeof(h)+payload.size()));
+      std::memcpy(entry.data.data(),&h,sizeof(h));
+      std::copy(payload.begin(),payload.end(),entry.data.begin()+sizeof(h));
+      UpsertEntry(&entry);
+    }
+  } db(f.dashboard_wire);
+  db.Insert(id,raw);f.dashboard_wire=SerializeModel(db);
+  f.NativeWrite(kDashboardID,f.dashboard_wire);
+  auto model=f.Authority();xam::ProfileGpdWriter writer{model,f.intent_owner,f.recovery};
+  std::error_code error;const auto before=model->CaptureRead(error);REQUIRE(before);
+  REQUIRE_FALSE(writer.RepairLegacyPictureKeys({}));
+  const auto after=model->CaptureRead(error);REQUIRE(after);
+  CHECK(after->origin.stamp.model_version==before->origin.stamp.model_version);
+  f.UnchangedOnDisk();
+  REQUIRE(xam::GpdDurableIntentStore::Scan(*f.intent_owner,error).empty());
+  REQUIRE_FALSE(error);
+}
+TEST_CASE("Eligible legacy stock key repair requires actual installed source before any write",
+          "[kernel][profile_gpd_model][picture_key][repair][failure]") {
+  ModelFixture f;
+  xam::GpdInfoProfile db(f.dashboard_wire);
+  const std::u16string text=u"FFFE07D10002000000010000";
+  std::vector<uint8_t> little;
+  for(char16_t c:text){little.push_back(uint8_t(c));little.push_back(0);}
+  little.insert(little.end(),{0,0});
+  xam::X_XDBF_GPD_SETTING_HEADER h{};
+  const bool personal=GENERATE(false,true);
+  h.setting_id=uint32_t(personal ? xam::UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE
+                                 : xam::UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY);
+  h.setting_type=xam::X_USER_DATA_TYPE::WSTRING;h.base_data.unicode.size=50;
+  xam::UserSetting value(&h,little);REQUIRE_FALSE(db.UpsertSettingPreserving(value));
+  f.dashboard_wire=SerializeModel(db);f.NativeWrite(kDashboardID,f.dashboard_wire);
+  auto model=f.Authority();xam::ProfileGpdWriter writer{model,f.intent_owner,f.recovery};
+  std::error_code error;const auto before=model->CaptureRead(error);REQUIRE(before);
+  REQUIRE(writer.RepairLegacyPictureKeys({})==std::errc::no_such_device);
+  const auto after=model->CaptureRead(error);REQUIRE(after);
+  CHECK(after->origin.stamp.model_version==before->origin.stamp.model_version);
+  f.UnchangedOnDisk();
+  REQUIRE(xam::GpdDurableIntentStore::Scan(*f.intent_owner,error).empty());REQUIRE_FALSE(error);
+  model->Retire();
+  REQUIRE(writer.RepairLegacyPictureKeys({})==std::errc::operation_canceled);
+  f.UnchangedOnDisk();
+}
+
+TEST_CASE("Typed image writer retains full keys opaque bytes and empty records across restart",
+          "[profile_gpd_transaction][image][persistence]") {
+  // These keys share their low32 bits; narrowing would replace the other one.
+  constexpr uint64_t first_id = 0x123400000007ull;
+  constexpr uint64_t second_id = 0xabcd00000007ull;
+  for (const uint32_t title : {kDashboardID, ModelFixture::kTitle}) {
+    ModelFixture f;
+    auto model = f.Authority();
+    xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+    std::error_code error;
+    auto before = xam::GpdSnapshotStore::Load({ModelFixture::kXuid, 7, title},
+                                              f.storage->view());
+    REQUIRE(before.readable());
+    const auto old_read = model->Read(error);
+    REQUIRE(old_read);
+    uint64_t request = 1000;
+    auto publish = [&](xam::ProfileGpdMutation command) {
+      const auto origin = writer.CaptureCurrentOrigin(command, error);
+      REQUIRE(origin); REQUIRE_FALSE(error);
+      const auto result = writer.Submit(std::move(command), origin->stamp);
+      REQUIRE_FALSE(result.error); REQUIRE_FALSE(result.event);
+      REQUIRE(result.state == xam::ProfileGpdTransactionAttempt::State::kCommitted);
+      return result;
+    };
+    const auto first = publish(ImageCommand(title, first_id, request++, {0, 0xff, 0x7f}));
+    REQUIRE(first.storage.intent_durable); REQUIRE(first.storage.done_durable);
+    REQUIRE(first.storage.files.size() == 1);
+    // The real intent retains the full original container for recovery.
+    std::vector<uint8_t> journal;
+    REQUIRE_FALSE(f.intent_owner->root()->ReadFile(first.storage.journal,
+                                                    4 * 1024 * 1024, journal));
+    REQUIRE(std::search(journal.begin(), journal.end(), before.token->bytes().begin(),
+                        before.token->bytes().end()) != journal.end());
+    publish(ImageCommand(title, second_id, request++, {0x30, 0x40}));
+    publish(ImageCommand(title, first_id, request++, {0xaa, 0xbb, 0xcc, 0xdd}));
+    auto loaded = xam::GpdSnapshotStore::Load({ModelFixture::kXuid, 7, title},
+                                              f.storage->view());
+    REQUIRE(loaded.readable());
+    auto table = XdbfTableView::Parse(loaded.token->bytes());
+    REQUIRE(table);
+    REQUIRE(table->Find(uint16_t(xam::GpdSection::kImage), first_id));
+    CHECK(std::vector<uint8_t>(table->Find(2, first_id)->begin(),
+                               table->Find(2, first_id)->end()) ==
+          std::vector<uint8_t>{0xaa, 0xbb, 0xcc, 0xdd});
+    CHECK(std::vector<uint8_t>(table->Find(2, second_id)->begin(),
+                               table->Find(2, second_id)->end()) ==
+          std::vector<uint8_t>{0x30, 0x40});
+    RequireOtherRecordsUnchanged(before.token->bytes(), loaded.token->bytes(), first_id);
+    // A nonnull zero-byte input is still a real namespace2 entry.
+    publish(ImageCommand(title, first_id, request++));
+    loaded = xam::GpdSnapshotStore::Load({ModelFixture::kXuid, 7, title},
+                                         f.storage->view());
+    table = XdbfTableView::Parse(loaded.token->bytes());
+    REQUIRE(table); REQUIRE(table->Find(2, first_id));
+    CHECK(table->Find(2, first_id)->empty());
+    const auto empty_read = model->Read(error);
+    REQUIRE(empty_read);
+    auto remove = ImageCommand(title, first_id, request++);
+    remove.kind = xam::ProfileGpdMutationKind::kDeleteImage;
+    publish(remove);
+    const auto deleted = xam::GpdSnapshotStore::Load({ModelFixture::kXuid, 7, title},
+                                                    f.storage->view());
+    const auto deleted_table = XdbfTableView::Parse(deleted.token->bytes());
+    REQUIRE(deleted_table); CHECK_FALSE(deleted_table->Find(2, first_id));
+    REQUIRE(deleted_table->Find(2, second_id));
+    RequireOtherRecordsUnchanged(loaded.token->bytes(), deleted.token->bytes(), first_id);
+    // An already absent desired-state delete is a no-write backend operation.
+    const auto rows = xam::GpdDurableIntentStore::Scan(*f.intent_owner, error);
+    REQUIRE_FALSE(error);
+    remove.request_id = request++;
+    publish(remove);
+    const auto after_noop = xam::GpdSnapshotStore::Load({ModelFixture::kXuid, 7, title},
+                                                       f.storage->view());
+    CHECK(after_noop.token->info().file_id == deleted.token->info().file_id);
+    CHECK(xam::GpdDurableIntentStore::Scan(*f.intent_owner, error).size() == rows.size());
+    REQUIRE_FALSE(error);
+    // Previously captured models remain immutable; no target image was added there.
+    const auto& prior = title == kDashboardID
+                            ? static_cast<const xam::GpdInfo&>(old_read->dashboard)
+                            : static_cast<const xam::GpdInfo&>(old_read->titles.at(title));
+    CHECK(prior.GetImage(first_id).empty());
+    CHECK(prior.GetImage(second_id).empty());
+    auto* cache_entry = f.fs.ResolvePath(title == kDashboardID
+                                          ? "Model:\\FFFE07D1.gpd"
+                                          : "Model:\\12345678.gpd");
+    REQUIRE(cache_entry); CHECK(cache_entry->size() == after_noop.token->bytes().size());
+    model->Retire();
+    auto restarted = xam::ProfileGpdModelAuthority::Create(
+        ModelFixture::kXuid, 0, 20, f.storage, error);
+    REQUIRE(restarted);
+    xam::ProfileGpdWriter next{restarted, f.intent_owner, f.recovery};
+    REQUIRE_FALSE(next.Reload());
+    const auto read = restarted->Read(error);
+    REQUIRE(read);
+    const auto& image_model = title == kDashboardID
+                                 ? static_cast<const xam::GpdInfo&>(read->dashboard)
+                                 : static_cast<const xam::GpdInfo&>(read->titles.at(title));
+    CHECK(std::vector<uint8_t>(image_model.GetImage(second_id).begin(),
+                               image_model.GetImage(second_id).end()) ==
+          std::vector<uint8_t>{0x30, 0x40});
+    CHECK(image_model.GetImage(first_id).empty());
+  }
+}
+TEST_CASE("Typed image ingress owns payload and refuses stale identity or changed retry",
+          "[profile_gpd_model][image][ownership][failure]") {
+  ModelFixture f;
+  auto model = f.Authority();
+  xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+  auto command = ImageCommand(ModelFixture::kTitle, 0x100000000ull, 1100, {1, 2, 3});
+  std::error_code error;
+  bool retry = false;
+  auto pending = model->Begin(command, retry, error);
+  REQUIRE(pending); REQUIRE_FALSE(error); REQUIRE_FALSE(retry);
+  command.image_data[0] = 99;
+  REQUIRE_FALSE(model->Begin(command, retry, error));
+  CHECK(error == std::errc::device_or_resource_busy);
+  command.image_data[0] = 1;
+  CHECK(model->Begin(command, retry, error) == pending); CHECK(retry);
+  command.image_id ^= uint64_t(1) << 40;
+  REQUIRE_FALSE(model->Begin(command, retry, error));
+  CHECK(error == std::errc::device_or_resource_busy);
+  auto plan = pending->BuildPlan(error);
+  REQUIRE(plan);
+  const auto table = XdbfTableView::Parse(plan->files.at(ModelFixture::kTitle).intended);
+  REQUIRE(table); REQUIRE(table->Find(2, 0x100000000ull));
+  CHECK(table->Find(2, 0x100000000ull)->front() == 1);
+  bool source_retired = false;
+  SECTION("sign-in retirement cancels original request") { model->Retire(); }
+  SECTION("managed source removal cancels original request") {
+    source_retired = true;
+    f.identity->Retire();
+  }
+  const auto result = writer.ExecutePending(pending);
+  CHECK(result.error == std::errc::operation_canceled);
+  CHECK_FALSE(result.event);
+  CHECK(xam::GpdDurableIntentStore::Scan(*f.intent_owner, error).empty());
+  if (source_retired) { CHECK(error == std::errc::operation_canceled); }
+  else { REQUIRE_FALSE(error); }
+  CHECK_FALSE(result.storage.intent_durable);
+  f.UnchangedOnDisk();
+}
+TEST_CASE("Image mutation rejects missing targets invalid deletes stale stamps and native write races",
+          "[profile_gpd_transaction][image][native_currentness][failure]") {
+  ModelFixture f;
+  std::error_code error;
+  SECTION("missing target cannot implicitly create a title GPD") {
+    REQUIRE_FALSE(f.storage->view()->Remove("12345678.gpd", false));
+    auto model = f.Authority();
+    xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+    const auto result = writer.Submit(ImageCommand(ModelFixture::kTitle, 8, 1200, {8}));
+    CHECK(result.error == std::errc::no_such_file_or_directory);
+    CHECK_FALSE(std::filesystem::exists(f.storage->view()->path() / "12345678.gpd"));
+    CHECK(xam::GpdDurableIntentStore::Scan(*f.intent_owner, error).empty());
+    REQUIRE_FALSE(error);
+  }
+  SECTION("delete cannot carry ignored write bytes") {
+    auto model = f.Authority();
+    xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+    auto command = ImageCommand(ModelFixture::kTitle, 8, 1201, {8});
+    command.kind = xam::ProfileGpdMutationKind::kDeleteImage;
+    const auto result = writer.Submit(command);
+    CHECK(result.error == std::errc::invalid_argument);
+    CHECK_FALSE(model->Pending(error));
+    CHECK(xam::GpdDurableIntentStore::Scan(*f.intent_owner, error).empty());
+    f.UnchangedOnDisk();
+  }
+  SECTION("a captured old model version cannot target a newer profile projection") {
+    auto model = f.Authority();
+    xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+    const auto origin = model->CaptureOrigin(error); REQUIRE(origin);
+    REQUIRE_FALSE(writer.Submit(ImageCommand(ModelFixture::kTitle, 8, 1202, {8})).error);
+    const auto stale = writer.Submit(ImageCommand(ModelFixture::kTitle, 9, 1203, {9}),
+                                     origin->stamp);
+    CHECK(stale.error == std::errc::operation_canceled);
+    const auto load = xam::GpdSnapshotStore::Load(
+        {ModelFixture::kXuid, 7, ModelFixture::kTitle}, f.storage->view());
+    const auto table = XdbfTableView::Parse(load.token->bytes()); REQUIRE(table);
+    CHECK(table->Find(2, 8)); CHECK_FALSE(table->Find(2, 9));
+  }
+  SECTION("real native write after Begin invalidates before bytes prior to any intent") {
+    auto model = f.Authority();
+    xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+    bool retry = false;
+    auto pending = model->Begin(ImageCommand(ModelFixture::kTitle, 8, 1204, {8}), retry, error);
+    REQUIRE(pending);
+    xam::GpdInfoTitle changed(ModelFixture::kTitle, f.game_wire);
+    changed.AddString(0x1234, u"actual native writer");
+    const auto bytes = SerializeModel(changed);
+    f.NativeWrite(ModelFixture::kTitle, bytes);
+    const auto refused = writer.ExecutePending(pending);
+    CHECK(refused.error); CHECK_FALSE(refused.event);
+    CHECK(xam::GpdDurableIntentStore::Scan(*f.intent_owner, error).empty());
+    REQUIRE_FALSE(error);
+    const auto actual = xam::GpdSnapshotStore::Load(
+        {ModelFixture::kXuid, 7, ModelFixture::kTitle}, f.storage->view());
+    CHECK(std::vector<uint8_t>(actual.token->bytes().begin(), actual.token->bytes().end()) == bytes);
+  }
+}
+TEST_CASE("Interrupted image publication replays actual durable intent before new model load",
+          "[profile_gpd_transaction][image][recovery][restart]") {
+  ModelFixture f;
+  auto model = f.Authority();
+  std::error_code error;
+  const auto old_read = model->Read(error); REQUIRE(old_read);
+  bool retry = false;
+  auto pending = model->Begin(ImageCommand(ModelFixture::kTitle, 0xffff00000007ull,
+                                            1300, {0x91, 0x92}), retry, error);
+  REQUIRE(pending);
+  auto plan = pending->BuildPlan(error); REQUIRE(plan);
+  const auto& file = plan->files.at(ModelFixture::kTitle);
+  REQUIRE(file.action == xam::ProfileGpdFileAction::kReplace);
+  std::vector<std::shared_ptr<const filesystem::HostStorageSnapshotToken>> dependencies;
+  for (const auto& [title, load] : *model->Dependencies(pending, error)) {
+    dependencies.push_back(load.token);
+  }
+  xam::GpdIntentBinding binding{
+      "fixture", 0xf00d, ModelFixture::kXuid, 7,
+      f.storage->view()->path().lexically_relative(f.source->path()),
+      {f.identity->uuid(), f.identity->content_epoch(), f.identity->directory_file_id()}};
+  std::filesystem::path journal;
+  auto store = xam::GpdDurableIntentStore::Prepare(
+      f.intent_owner, f.recovery, binding,
+      {{xam::GpdIntentAction::kReplace, file.before, file.intended}},
+      error, journal, dependencies);
+  REQUIRE(store); REQUIRE_FALSE(error);
+  // Simulate interruption after durable bytes but BEFORE model/cache commit.
+  const auto durable = store->Advance();
+  REQUIRE_FALSE(durable.error); REQUIRE(durable.done_durable);
+  CHECK(old_read->titles.at(ModelFixture::kTitle).GetImage(0xffff00000007ull).empty());
+  store.reset(); model->Retire();
+  auto restarted = xam::ProfileGpdModelAuthority::Create(
+      ModelFixture::kXuid, 0, 20, f.storage, error);
+  REQUIRE(restarted);
+  xam::ProfileGpdWriter writer{restarted, f.intent_owner, f.recovery};
+  REQUIRE_FALSE(writer.Reload());
+  const auto read = restarted->Read(error); REQUIRE(read);
+  CHECK(std::vector<uint8_t>(read->titles.at(ModelFixture::kTitle)
+                                 .GetImage(0xffff00000007ull).begin(),
+                             read->titles.at(ModelFixture::kTitle)
+                                 .GetImage(0xffff00000007ull).end()) ==
+        std::vector<uint8_t>{0x91, 0x92});
+  auto* cache_entry = f.fs.ResolvePath("Model:\\12345678.gpd");
+  REQUIRE(cache_entry); CHECK(cache_entry->size() == file.intended.size());
+  const auto rows = xam::GpdDurableIntentStore::Scan(*f.intent_owner, error);
+  REQUIRE_FALSE(error); REQUIRE(rows.size() == 1); CHECK(rows.front().done_record_valid);
+  REQUIRE_FALSE(writer.Reload());
+  CHECK(xam::GpdDurableIntentStore::Scan(*f.intent_owner, error).size() == 1);
+}
+
+namespace {
+void CommitPictureLoad(ModelFixture& f,
+    const std::shared_ptr<xam::ProfileGpdModelAuthority>& model,
+    std::shared_ptr<const xam::ProfileGpdPictureSnapshots> pictures) {
+  std::error_code error;
+  auto prepared = model->PrepareLoaded(f.Loads(), error, std::move(pictures));
+  REQUIRE(prepared); REQUIRE_FALSE(error);
+  auto cache = f.device->PrepareSnapshotCache(prepared->tokens(), error);
+  REQUIRE(cache); REQUIRE_FALSE(error);
+  auto checked = f.storage->view()->ValidateSnapshotBatch(prepared->tokens(), error);
+  REQUIRE(checked); REQUIRE_FALSE(error);
+  std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(std::move(checked));
+  auto model_commit = model->TryCommit(std::move(prepared), batch, error);
+  REQUIRE(model_commit); REQUIRE_FALSE(error);
+  auto cache_commit = f.device->TryCommitSnapshotCache(std::move(cache), batch, error);
+  REQUIRE(cache_commit); REQUIRE_FALSE(error);
+  REQUIRE(model_commit->Apply()); cache_commit->Apply();
+}
+std::vector<uint8_t> PictureBytes(const xam::ProfileGpdReadCapture& read, const char* name) {
+  REQUIRE(read.pictures); REQUIRE(read.pictures->contains(name));
+  const auto& token = read.pictures->at(name);
+  return {token->bytes().begin(), token->bytes().end()};
+}
+}  // namespace
+TEST_CASE("Real model and VFS publish one picture GPD tuple while older owned pictures remain intact",
+          "[profile_gpd_model][picture_tuple][persistence]") {
+  ModelFixture f; const std::vector<uint8_t> old_png{0x89,0x50,0,0xEE};
+  const std::vector<uint8_t> next_png{0x89,0x50,0,0xFF,4,0xAB,0,9};
+  REQUIRE_FALSE(f.storage->view()->WriteNewFile("pp_64.png", old_png).error);
+  REQUIRE_FALSE(f.storage->view()->WriteNewFile("__thumbnail.png", old_png).error);
+  auto model = f.Authority(); std::error_code error;
+  auto pictures = xam::CaptureProfilePictures(f.storage->view(), error);
+  REQUIRE(pictures); REQUIRE_FALSE(error); CommitPictureLoad(f, model, pictures);
+  const auto older = model->CaptureRead(error); REQUIRE(older); REQUIRE_FALSE(error);
+  REQUIRE(older->tokens.size() == f.Loads().size() + 7);
+  REQUIRE(PictureBytes(*older, "pp_64.png") == old_png);
+  REQUIRE(xam::CaptureProfilePicture(*older, xam::XTileType::kPersonalGamerTile) == old_png);
+  REQUIRE_FALSE(f.fs.ResolvePath("Model:\\__thumbnail.png"));
+  auto* cached = f.fs.ResolvePath("Model:\\pp_64.png"); REQUIRE(cached);
+  REQUIRE(cached->size() == old_png.size());
+  const auto changed = filesystem::SnapshotPublisher::Publish(
+      *f.recovery, pictures->at("pp_64.png"), next_png);
+  REQUIRE_FALSE(changed.error); REQUIRE(changed.durable);
+  // Physical replacement is not a model/cache publication or implicit reread.
+  REQUIRE(PictureBytes(*model->CaptureRead(error), "pp_64.png") == old_png);
+  xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+  REQUIRE_FALSE(writer.Reload());
+  const auto current = model->CaptureRead(error); REQUIRE(current); REQUIRE_FALSE(error);
+  REQUIRE(current->origin.stamp.model_version == older->origin.stamp.model_version + 1);
+  REQUIRE(PictureBytes(*current, "pp_64.png") == next_png);
+  REQUIRE(xam::CaptureProfilePicture(*current, xam::XTileType::kPersonalGamerTile) == next_png);
+  REQUIRE(xam::CaptureProfilePicture(*older, xam::XTileType::kPersonalGamerTile) == old_png);
+  REQUIRE(PictureBytes(*older, "pp_64.png") == old_png);
+  REQUIRE(f.fs.ResolvePath("Model:\\pp_64.png") == cached);
+  REQUIRE(cached->size() == next_png.size());
+  REQUIRE_FALSE(f.fs.ResolvePath("Model:\\__thumbnail.png"));
+  f.UnchangedOnDisk();
+  // A self-reader must not choose large in versionA and small in versionB.
+  // A has only a small picture; B has a different large and small picture.
+  // The shared actual reader keeps its ONE capture across either choice.
+  {
+    ModelFixture fallback;
+    const std::vector<uint8_t> small_a{0x11,0,0x22}, large_b{0x33,0,0x44}, small_b{0x55,0,0x66};
+    REQUIRE_FALSE(fallback.storage->view()->WriteNewFile("pp_32.png", small_a).error);
+    auto self_model = fallback.Authority();
+    auto initial = xam::CaptureProfilePictures(fallback.storage->view(), error); REQUIRE(initial);
+    CommitPictureLoad(fallback, self_model, initial);
+    const auto a = self_model->CaptureRead(error); REQUIRE(a);
+    xam::X_XAMACCOUNTINFO account{};
+    xam::UserProfile self(ModelFixture::kXuid, &account, self_model);
+    REQUIRE(self.GetSelfProfileIcon() == small_a);
+    const auto large = filesystem::SnapshotPublisher::Publish(*fallback.recovery, initial->at("pp_64.png"), large_b);
+    REQUIRE_FALSE(large.error); REQUIRE(large.durable);
+    const auto small = filesystem::SnapshotPublisher::Publish(*fallback.recovery, initial->at("pp_32.png"), small_b);
+    REQUIRE_FALSE(small.error); REQUIRE(small.durable);
+    xam::ProfileGpdWriter self_writer{self_model, fallback.intent_owner, fallback.recovery};
+    REQUIRE_FALSE(self_writer.Reload());
+    const auto b = self_model->CaptureRead(error); REQUIRE(b);
+    REQUIRE(b->origin.stamp.model_version == a->origin.stamp.model_version + 1);
+    REQUIRE(xam::CaptureSelfProfilePicture(*a) == small_a);
+    REQUIRE(xam::CaptureSelfProfilePicture(*b) == large_b);
+    REQUIRE(self.GetSelfProfileIcon() == large_b);
+    REQUIRE(xam::CaptureProfilePicture(*a, xam::XTileType::kGamerTile).empty());
+    REQUIRE(xam::CaptureProfilePicture(*b, xam::XTileType::kGamerTile).empty());
+  }
+}
+TEST_CASE("A picture replaced after prepare refuses the actual whole model and cache cut",
+          "[profile_gpd_model][picture_tuple][currentness]") {
+  ModelFixture f; const std::vector<uint8_t> first{1,0,3}, second{4,0,6,7};
+  REQUIRE_FALSE(f.storage->view()->WriteNewFile("tile_32.png", first).error);
+  auto model = f.Authority(); std::error_code error;
+  auto pictures = xam::CaptureProfilePictures(f.storage->view(), error); REQUIRE(pictures);
+  CommitPictureLoad(f, model, pictures);
+  const auto older = model->CaptureRead(error); REQUIRE(older);
+  auto prepared = model->PrepareLoaded(f.Loads(), error, pictures); REQUIRE(prepared);
+  auto cache = f.device->PrepareSnapshotCache(prepared->tokens(), error); REQUIRE(cache);
+  const auto replaced = filesystem::SnapshotPublisher::Publish(*f.recovery, pictures->at("tile_32.png"), second);
+  REQUIRE_FALSE(replaced.error); REQUIRE(replaced.published);
+  REQUIRE_FALSE(f.storage->view()->ValidateSnapshotBatch(prepared->tokens(), error));
+  REQUIRE(error == std::errc::state_not_recoverable);
+  const auto current = model->CaptureRead(error); REQUIRE(current);
+  REQUIRE(current->origin.stamp.model_version == older->origin.stamp.model_version);
+  REQUIRE(PictureBytes(*current, "tile_32.png") == first);
+  REQUIRE(f.fs.ResolvePath("Model:\\tile_32.png")->size() == first.size());
+  xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery}; REQUIRE_FALSE(writer.Reload());
+  REQUIRE(PictureBytes(*model->CaptureRead(error), "tile_32.png") == second);
+}
+TEST_CASE("Picture tuple rejects missing substituted or foreign members without replacing the model",
+          "[profile_gpd_model][picture_tuple][validation]") {
+  ModelFixture f, other; auto model = f.Authority(); std::error_code error;
+  const auto before = model->CaptureRead(error); REQUIRE(before);
+  auto genuine = xam::CaptureProfilePictures(f.storage->view(), error); REQUIRE(genuine);
+  auto changed = std::make_shared<xam::ProfileGpdPictureSnapshots>(*genuine);
+  SECTION("missing fixed member") { changed->erase("avtr_32.png"); }
+  SECTION("extra unrecognized member") { changed->emplace("other.png", genuine->at("tile_32.png")); }
+  SECTION("substituted known leaf") { changed->at("tile_64.png") = genuine->at("tile_32.png"); }
+  SECTION("real foreign directory token") {
+    auto foreign = xam::CaptureProfilePictures(other.storage->view(), error); REQUIRE(foreign);
+    changed->at("tile_64.png") = foreign->at("tile_64.png");
+  }
+  REQUIRE_FALSE(model->PrepareLoaded(f.Loads(), error, changed)); REQUIRE(error);
+  const auto after = model->CaptureRead(error); REQUIRE(after);
+  REQUIRE(after->origin.stamp.model_version == before->origin.stamp.model_version);
+  REQUIRE(after->models == before->models); REQUIRE(after->pictures == before->pictures);
+  f.UnchangedOnDisk();
+}
+TEST_CASE("Actual picture batch keeps case folded package thumbnail hidden from guest cache",
+          "[profile_gpd_model][picture_tuple][namespace]") {
+  ModelFixture f; const std::vector<uint8_t> thumb{0x89,0x50,0,0xA1};
+  REQUIRE_FALSE(f.storage->view()->WriteNewFile("__THUMBNAIL.PNG", thumb).error);
+  auto model = f.Authority(); std::error_code error;
+  auto pictures = xam::CaptureProfilePictures(f.storage->view(), error); REQUIRE(pictures); REQUIRE_FALSE(error);
+  REQUIRE(pictures->at("__thumbnail.png")->relative() == "__THUMBNAIL.PNG");
+  CommitPictureLoad(f, model, pictures);
+  const auto current = model->CaptureRead(error); REQUIRE(current);
+  REQUIRE(PictureBytes(*current, "__thumbnail.png") == thumb);
+  REQUIRE_FALSE(f.fs.ResolvePath("Model:\\__thumbnail.png"));
+  REQUIRE_FALSE(f.fs.ResolvePath("Model:\\__THUMBNAIL.PNG"));
+}
+
+namespace {
+xam::ProfilePicturePair ActualPicturePair(bool alternate = false) {
+  std::error_code error;
+  const auto pair = xam::PrepareHostProfilePicturePair(SyntheticProfilePicture64(alternate), error);
+  REQUIRE(pair); REQUIRE_FALSE(error); return *pair;
+}
+xam::ProfileGpdMutation PictureCommand(uint64_t request,
+    std::vector<uint8_t> large, std::vector<uint8_t> small) {
+  xam::ProfileGpdMutation command; command.kind = xam::ProfileGpdMutationKind::kSetPictures;
+  command.title_id = kDashboardID; command.request_id = request;
+  command.picture_changes = {
+      {filesystem::ProfileArtifactKind::kPersonal64, false, std::move(large)},
+      {filesystem::ProfileArtifactKind::kPersonal32, false, std::move(small)}};
+  return command;
+}
+}  // namespace
+TEST_CASE("Actual common writer joins settings and both fixed pictures through04 model cache and restart",
+          "[profile_gpd_transaction][picture_tuple][persistence]") {
+  ModelFixture f(false, false, true); auto model = f.Authority();
+  xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+  REQUIRE_FALSE(writer.Reload());
+  std::error_code error; const auto older = model->CaptureRead(error); REQUIRE(older); REQUIRE(older->pictures);
+  const auto pair = ActualPicturePair(); const auto large = pair.large, small = pair.small;
+  auto command = PictureCommand(0x1001, large, small);
+  command.settings.emplace_back(xam::UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE,
+                                std::u16string(u"FFFE07D10002000000010000"));
+  // The actual issued artifact reservation prevents an ordinary VFS writer
+  // from bypassing this profile's common publication admission.
+  {
+    const auto loads = model->CaptureLoads(error); REQUIRE(loads); REQUIRE_FALSE(error);
+    const auto& identity = f.storage->managed_identity(); REQUIRE(identity);
+    xam::GpdIntentBinding binding{f.storage->source_id(), f.storage->device_id(),
+        f.storage->xuid(), f.storage->source_generation(),
+        f.storage->view()->path().lexically_relative(f.storage->source()->path()),
+        {identity->uuid(), identity->content_epoch(), identity->directory_file_id()}};
+    auto admission = xam::GpdDurableIntentStore::AcquireArtifacts(
+        f.intent_owner, f.recovery, {}, std::move(binding),
+        {{filesystem::ProfileArtifactKind::kGpd, kDashboardID, loads->at(kDashboardID).token}}, false, error);
+    REQUIRE(admission); REQUIRE_FALSE(error);
+    vfs::File* forbidden = nullptr; vfs::FileAction action{};
+    const auto status = f.fs.OpenFile(nullptr, "Model:\\FFFE07D1.gpd", vfs::FileDisposition::kOpen,
+        vfs::FileAccess::kGenericRead | vfs::FileAccess::kGenericWrite, false, true, &forbidden, &action);
+    struct CloseForbidden { vfs::File*& file; ~CloseForbidden() { if (file) { file->Destroy(); } } } close_forbidden{forbidden};
+    REQUIRE(XFAILED(status)); REQUIRE_FALSE(forbidden);
+    REQUIRE(xam::GpdDurableIntentStore::Scan(*f.intent_owner, error).empty()); REQUIRE_FALSE(error);
+    const auto captured = admission->members()->Capture("FFFE07D1.gpd", xam::GpdSnapshotStore::kMaximumBytes, error, true);
+    REQUIRE(captured); REQUIRE_FALSE(error);
+    REQUIRE(std::ranges::equal(captured->bytes(), f.dashboard_wire));
+  }
+  f.UnchangedOnDisk();
+  // Conversely an actual already-open VFS write File excludes reservations.
+  // No native cached DB quiescence is inferred from this FileHandle test.
+  {
+    vfs::File* held = nullptr; vfs::FileAction action{};
+    const auto status = f.fs.OpenFile(nullptr, "Model:\\FFFE07D1.gpd", vfs::FileDisposition::kOpen,
+        vfs::FileAccess::kGenericRead | vfs::FileAccess::kGenericWrite, false, true, &held, &action);
+    struct CloseHeld { vfs::File*& file; ~CloseHeld() { if (file) { file->Destroy(); } } } close_held{held};
+    REQUIRE(status == X_STATUS_SUCCESS); REQUIRE(held);
+    const auto refused = writer.Submit(command);
+    REQUIRE(refused.error == std::errc::device_or_resource_busy);
+    REQUIRE_FALSE(refused.storage.intent_durable); REQUIRE_FALSE(refused.storage.done_durable);
+    REQUIRE(refused.attempted_journal.empty());
+    REQUIRE_FALSE(model->Pending(error)); REQUIRE_FALSE(error);
+    REQUIRE(xam::GpdDurableIntentStore::Scan(*f.intent_owner, error).empty()); REQUIRE_FALSE(error);
+    const auto unchanged = model->CaptureRead(error); REQUIRE(unchanged); REQUIRE_FALSE(error);
+    REQUIRE(unchanged->origin.stamp.model_version == older->origin.stamp.model_version);
+    REQUIRE(unchanged->pictures == older->pictures);
+    REQUIRE_FALSE(std::filesystem::exists(f.storage->view()->path() / "pp_64.png"));
+    REQUIRE_FALSE(std::filesystem::exists(f.storage->view()->path() / "pp_32.png"));
+    std::vector<uint8_t> held_bytes(f.dashboard_wire.size()); size_t count = 0;
+    REQUIRE(held->ReadSync(held_bytes, 0, &count) == X_STATUS_SUCCESS);
+    REQUIRE(count == held_bytes.size()); REQUIRE(held_bytes == f.dashboard_wire);
+    held->Destroy(); held = nullptr;
+  }
+  f.UnchangedOnDisk();
+  // The refused unpublished command is eligible for fresh admission using the
+  // exact same owned request after genuine file close; no retry bypass exists.
+  const auto committed = writer.Submit(command);
+  REQUIRE_FALSE(committed.error); REQUIRE(committed.state == xam::ProfileGpdTransactionAttempt::State::kCommitted);
+  REQUIRE(committed.storage.intent_durable); REQUIRE(committed.storage.done_durable);
+  REQUIRE(committed.storage.files.size() == 3);
+  const auto read = model->CaptureRead(error); REQUIRE(read); REQUIRE_FALSE(error);
+  REQUIRE(read->origin.stamp.model_version == older->origin.stamp.model_version + 1);
+  REQUIRE(PictureBytes(*read, "pp_64.png") == large); REQUIRE(PictureBytes(*read, "pp_32.png") == small);
+  REQUIRE_FALSE(older->pictures->at("pp_64.png")->exists());
+  REQUIRE(f.fs.ResolvePath("Model:\\pp_64.png")->size() == large.size());
+  auto key = read->models->Setting(kDashboardID,
+      uint32_t(xam::UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE), error);
+  REQUIRE(key); REQUIRE_FALSE(error);
+  auto expected_key = std::u16string(u"FFFE07D10002000000010000"); expected_key.push_back(0);
+  REQUIRE(std::get<std::u16string>(key->get_host_data()) == expected_key);
+  const auto rows = xam::GpdDurableIntentStore::Scan(*f.intent_owner, error);
+  REQUIRE_FALSE(error); REQUIRE(rows.size() == 1); REQUIRE(rows[0].format_version == 4); REQUIRE(rows[0].done_record_valid);
+  model->Retire(); REQUIRE_FALSE(model->ReleaseRetiredPublication());
+  auto restarted = f.Authority(); xam::ProfileGpdWriter again{restarted, f.intent_owner, f.recovery};
+  REQUIRE_FALSE(again.Reload());
+  const auto restored = restarted->CaptureRead(error); REQUIRE(restored);
+  REQUIRE(PictureBytes(*restored, "pp_64.png") == large); REQUIRE(PictureBytes(*restored, "pp_32.png") == small);
+  const auto restored_key = restored->models->Setting(kDashboardID,
+      uint32_t(xam::UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE), error);
+  REQUIRE(restored_key); REQUIRE(restored_key->Serialize() == key->Serialize());
+}
+TEST_CASE("Picture command deep ownership and same request conflicts use the actual shared pending admission",
+          "[profile_gpd_model][picture_tuple][lifetime]") {
+  ModelFixture f(false, false, true); auto model = f.Authority();
+  xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery}; REQUIRE_FALSE(writer.Reload());
+  const auto pair = ActualPicturePair(); const auto large = pair.large, small = pair.small;
+  auto input = PictureCommand(0x1002, large, small);
+  bool retry = false; std::error_code error;
+  auto pending = model->Begin(input, retry, error); REQUIRE(pending); REQUIRE_FALSE(error); REQUIRE_FALSE(retry);
+  input.picture_changes[0].bytes = ActualPicturePair(true).large;
+  REQUIRE_FALSE(model->Begin(input, retry, error)); REQUIRE(error == std::errc::device_or_resource_busy);
+  const auto plan = pending->BuildPlan(error); REQUIRE(plan); REQUIRE_FALSE(error);
+  REQUIRE(plan->pictures[0].intended == large); REQUIRE(plan->pictures[1].intended == small);
+  const auto actual = writer.ExecutePending(pending); REQUIRE_FALSE(actual.error);
+  REQUIRE(actual.state == xam::ProfileGpdTransactionAttempt::State::kCommitted);
+  REQUIRE(PictureBytes(*model->CaptureRead(error), "pp_64.png") == large);
+}
+TEST_CASE("Picture prepare cannot adopt third bytes as an intended PNG or an unedited fixed member",
+          "[profile_gpd_model][picture_tuple][intended]") {
+  ModelFixture f(false, false, true); auto model = f.Authority();
+  xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery}; REQUIRE_FALSE(writer.Reload());
+  std::error_code error; const auto older = model->CaptureRead(error); REQUIRE(older);
+  const auto pair = ActualPicturePair(), other = ActualPicturePair(true);
+  const auto large = pair.large, small = pair.small;
+  auto command = PictureCommand(0x1003, large, small);
+  bool retry = false; auto pending = model->Begin(command, retry, error); REQUIRE(pending);
+  const auto a = filesystem::SnapshotPublisher::Publish(*f.recovery, older->pictures->at("pp_64.png"), large);
+  REQUIRE_FALSE(a.error); REQUIRE(a.durable);
+  SECTION("wrong intended image") {
+    const auto b = filesystem::SnapshotPublisher::Publish(*f.recovery, older->pictures->at("pp_32.png"), other.small);
+    REQUIRE_FALSE(b.error); REQUIRE(b.durable);
+  }
+  SECTION("correct images but unedited public picture changed") {
+    const auto b = filesystem::SnapshotPublisher::Publish(*f.recovery, older->pictures->at("pp_32.png"), small);
+    REQUIRE_FALSE(b.error); REQUIRE(b.durable);
+    const auto c = filesystem::SnapshotPublisher::Publish(*f.recovery, older->pictures->at("tile_64.png"), other.large);
+    REQUIRE_FALSE(c.error); REQUIRE(c.durable);
+  }
+  auto pictures = xam::CaptureProfilePictures(f.storage->view(), error); REQUIRE(pictures);
+  REQUIRE_FALSE(model->PrepareCommit(pending, f.Loads(), error, pictures));
+  REQUIRE(error == std::errc::state_not_recoverable);
+  const auto unchanged = model->CaptureRead(error); REQUIRE(unchanged);
+  REQUIRE(unchanged->origin.stamp.model_version == older->origin.stamp.model_version);
+  REQUIRE(unchanged->pictures == older->pictures);
+}
+
+TEST_CASE("Shared picture writer rejects malformed PNG before pending admission or journal mutation",
+          "[profile_gpd_model][picture_tuple][validation]") {
+  ModelFixture f(false,false,true); auto model=f.Authority();
+  xam::ProfileGpdWriter writer{model,f.intent_owner,f.recovery}; REQUIRE_FALSE(writer.Reload());
+  std::error_code error; const auto before=model->CaptureRead(error); REQUIRE(before);
+  auto command=PictureCommand(0x1004,{0x89,0,1},{0x89,0,2});
+  const auto result=writer.Submit(command); REQUIRE(result.error);
+  REQUIRE_FALSE(model->Pending(error)); REQUIRE_FALSE(error);
+  REQUIRE(xam::GpdDurableIntentStore::Scan(*f.intent_owner,error).empty()); REQUIRE_FALSE(error);
+  const auto after=model->CaptureRead(error); REQUIRE(after);
+  REQUIRE(after->origin.stamp.model_version==before->origin.stamp.model_version);
+  REQUIRE(after->pictures==before->pictures); f.UnchangedOnDisk();
 }
 }  // namespace xe::kernel::test
 #endif

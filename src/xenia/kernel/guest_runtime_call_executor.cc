@@ -544,6 +544,31 @@ GuestRuntimeCallExecutor::ExecuteDeferredPublicRegistersOnOriginalCaller(
 }
 
 GuestRuntime::ExecutionResult
+GuestRuntimeCallExecutor::ExecuteEditorOnOriginalCaller(
+    XThread& thread, std::span<const uint64_t> args) {
+  constexpr auto call = NativeSystemUiPublicCall::kLaunchAvatarEditor;
+  const auto* profile = NativeSystemUiPublicProfile(call);
+  if (!profile || profile->family != NativeSystemPublicFamily::kAvatarEditor ||
+      !NativeSystemUiPublicArgumentsValid(call, args) ||
+      !NativeEditorLoaderPlanPairValid(state_->validated)) {
+    return Failure("Invalid fixed owned Editor prototype/loader pair");
+  }
+  const auto found = state_->validated.catalog.find(std::string(profile->identity));
+  const auto contract = state_->validated.contracts.find(std::string(profile->identity));
+  if (found == state_->validated.catalog.end() ||
+      contract == state_->validated.contracts.end() ||
+      state_->initialization.contains(found->first) ||
+      found->second.address != profile->address ||
+      found->second.arguments.size() != profile->argument_count ||
+      contract->second.caller !=
+          ValidatedGuestRuntimePlan::CallerPolicy::kOriginalTitleOrSystem) {
+    return Failure("Owned Editor requires its exact original caller contract");
+  }
+  return ExecuteRegisters(thread, found->second, args,
+                          profile->uint64_register_mask, false);
+}
+
+GuestRuntime::ExecutionResult
 GuestRuntimeCallExecutor::ExecuteManagedFormatRegistersOnOriginalCaller(
     XThread& thread, NativeSystemUiPublicCall call,
     std::span<const uint64_t> args) {

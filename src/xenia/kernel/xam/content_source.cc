@@ -217,6 +217,52 @@ struct ContentSourceRegistry::State : public std::enable_shared_from_this<State>
     std::map<std::string, MediaObservation> media;
     std::map<std::string, CacheObservation> caches;
   };
+  // Caller holds mutex. Return a borrowed internal row only in this scope;
+  // never acquire a weak source/backing owner or perform observing IO here.
+  const ContentSourceState* CachedVolumeLocked(
+      const std::shared_ptr<const filesystem::ConsoleStorageVolume>& volume) const {
+    using Volume=filesystem::ConsoleStorageVolume;
+    if(!volume || volume->origin()!=Volume::Origin::kRegisteredSource ||
+        !volume->device_id() || !volume->generation() || volume->source_id().empty() ||
+        !volume->available_cached())return nullptr;
+    const auto row=observed.find(volume->source_id());
+    const auto cap=capabilities.find(volume->source_id());
+    if(closed.load() || row==observed.end() || cap==capabilities.end() ||
+        cap->second.transitioning || !row->second.available || !row->second.storage ||
+        row->second.storage->retiring() || cap->second.root!=row->second.storage ||
+        cap->second.generation!=volume->generation() || row->second.generation!=volume->generation() ||
+        row->second.source.device_id!=volume->device_id() || row->second.source.device_type!=volume->type() ||
+        row->second.storage_volume!=volume || cap->second.storage_volume!=volume ||
+        row->second.storage_volume.owner_before(volume) || volume.owner_before(row->second.storage_volume) ||
+        cap->second.managed_identity!=row->second.managed_identity ||
+        cap->second.volume!=row->second.volume || !volume->available_cached())return nullptr;
+    return &row->second;
+  }
+  // Metadata-only selected-media description. This deliberately does NOT
+  // weaken CachedVolumeLocked's retained directory/source admission: a file
+  // selection still cannot acquire a HostStorageRoot or content package root.
+  const ContentSourceState* CachedDescriptionLocked(
+      const std::shared_ptr<const filesystem::ConsoleStorageVolume>& volume) const {
+    if(const auto* row=CachedVolumeLocked(volume))return row;
+    if(!volume || volume->origin()!=filesystem::ConsoleStorageVolume::Origin::kRegisteredSource ||
+        !volume->available_cached() || !volume->device_id() || !volume->generation())return nullptr;
+    const auto found=observed.find(volume->source_id());
+    const auto actual=capabilities.find(volume->source_id());
+    if(closed.load() || found==observed.end() || actual==capabilities.end())return nullptr;
+    const auto& row=found->second;const auto& cap=actual->second;
+    if(row.source.kind!=ContentSourceKind::kSelectedMedia || !row.source.read_only ||
+        !row.available || row.observation_error || cap.transitioning ||
+        cap.media_unavailable || cap.media_draining || !cap.media ||
+        !cap.media->current_cached() || row.selected_media!=cap.media ||
+        !cap.media_proof || !cap.media_proof->SourceCurrentCached() ||
+        !cap.media_accepting || !cap.media_accepting->load(std::memory_order_acquire) ||
+        row.generation!=volume->generation() || cap.generation!=volume->generation() ||
+        row.source.device_id!=volume->device_id() || row.source.device_type!=volume->type() ||
+        row.storage_volume!=volume || cap.storage_volume!=volume ||
+        row.storage_volume.owner_before(volume) || volume.owner_before(row.storage_volume) ||
+        !volume->available_cached())return nullptr;
+    return &row;
+  }
   // Caller holds mutex. Inspect weak ownership without locking the MVA: the
   // last actual owner must never be destroyed by this cached check under it.
   bool ProofCurrentLocked(const ManagedFormatSourceProof& proof,
@@ -552,7 +598,8 @@ struct ContentSourceRegistry::State : public std::enable_shared_from_this<State>
                          source->device_type, source->guest_volume_root,
                          value && value->available,
                          value ? value->managed_format_proof : nullptr,
-                         value && value->available && cap!=capabilities.end() ? cap->second.media_proof : nullptr});
+                         value && value->available && cap!=capabilities.end() ? cap->second.media_proof : nullptr,
+                         value && value->available ? value->storage_volume : nullptr});
     }
     if (devices != snapshot.devices) {
       if (snapshot.revision == UINT64_MAX) {
@@ -2030,6 +2077,145 @@ ContentSourceRegistry::CaptureStorageVolume(const ContentSourceState& expected) 
       cap->second.volume!=expected.volume || !expected.storage_volume->available_cached()) { return {}; }
   return expected.storage_volume;
 }
+
+std::optional<ContentSourceRegistry::SourceGenerationAdmission>
+ContentSourceRegistry::TryAdmitSourceGeneration(
+    const ContentSourceState& expected,std::error_code& error) const noexcept try {
+  error.clear();
+  if(!global_critical_region::is_held_by_current_thread()) {
+    error=std::make_error_code(std::errc::operation_would_block);return {};
+  }
+  // Selected-media attachment has its own issued use admission. It cannot
+  // borrow this managed/installed Content capability by filling a descriptor.
+  if(!expected.available || expected.selected_media || !expected.storage ||
+      !expected.storage_volume) {
+    error=std::make_error_code(std::errc::no_such_device);return {};
+  }
+  SourceGenerationAdmission admission(state_->mutex);
+  if(!admission.lock_.owns_lock()) {
+    error=std::make_error_code(std::errc::device_or_resource_busy);return {};
+  }
+  const auto cap=state_->capabilities.find(expected.source.id);
+  const auto row=state_->observed.find(expected.source.id);
+  if(state_->closed.load() || cap==state_->capabilities.end() || row==state_->observed.end()) {
+    error=std::make_error_code(std::errc::no_such_device);return {};
+  }
+  const auto& actual=row->second;
+  const auto same_owner=[](const auto& a,const auto& b) {
+    return a==b && !a.owner_before(b) && !b.owner_before(a);
+  };
+  if(cap->second.transitioning || !same_owner(cap->second.root,expected.storage) ||
+      cap->second.generation!=expected.generation || expected.storage->retiring() ||
+      !same_owner(cap->second.storage_volume,expected.storage_volume) || !actual.available ||
+      !same_owner(actual.storage,expected.storage) || actual.generation!=expected.generation ||
+      actual.source.device_id!=expected.source.device_id ||
+      actual.source.device_type!=expected.source.device_type ||
+      actual.source.root!=expected.source.root || actual.source.kind!=expected.source.kind ||
+      actual.source.read_only!=expected.source.read_only ||
+      actual.source.guest_root!=expected.source.guest_root ||
+      actual.source.guest_volume_root!=expected.source.guest_volume_root ||
+      !same_owner(cap->second.managed_identity,expected.managed_identity) ||
+      !same_owner(cap->second.volume,expected.volume) ||
+      !expected.storage_volume->available_cached()) {
+    error=std::make_error_code(std::errc::no_such_device);return {};
+  }
+  return std::optional<SourceGenerationAdmission>(std::move(admission));
+} catch(...) {error=std::make_error_code(std::errc::io_error);return {};}
+
+std::optional<ContentSourceRegistry::SourceGenerationAdmission>
+ContentSourceRegistry::TryAdmitSourceGeneration(
+    const ContentSourceDescription& expected,std::error_code& error) const noexcept {
+  return TryAdmitSourceGenerations(std::span<const ContentSourceDescription>(&expected,1),error);
+}
+std::optional<ContentSourceRegistry::SourceGenerationAdmission>
+ContentSourceRegistry::TryAdmitSourceGenerations(
+    std::span<const ContentSourceDescription> expected,std::error_code& error) const noexcept try {
+  error.clear();
+  if(!global_critical_region::is_held_by_current_thread()) {
+    error=std::make_error_code(std::errc::operation_would_block);return {};
+  }
+  if(expected.empty()) {error=std::make_error_code(std::errc::invalid_argument);return {};}
+  SourceGenerationAdmission admission(state_->mutex);
+  if(!admission.lock_.owns_lock()) {
+    error=std::make_error_code(std::errc::device_or_resource_busy);return {};
+  }
+  for(const auto& value:expected) {
+    const auto* row=state_->CachedDescriptionLocked(value.identity);
+    if(!row || row->generation!=value.generation ||
+        row->source.id!=value.source.id || row->source.kind!=value.source.kind ||
+        row->source.device_id!=value.source.device_id || row->source.device_type!=value.source.device_type ||
+        row->source.read_only!=value.source.read_only || row->source.root!=value.source.root ||
+        row->source.guest_root!=value.source.guest_root ||
+        row->source.guest_volume_root!=value.source.guest_volume_root) {
+      error=std::make_error_code(std::errc::no_such_device);return {};
+    }
+  }
+  return std::optional<SourceGenerationAdmission>(std::move(admission));
+} catch(...) {error=std::make_error_code(std::errc::io_error);return {};}
+
+std::optional<ContentSourceState> ContentSourceRegistry::CaptureSourceCached(
+    const std::shared_ptr<const filesystem::ConsoleStorageVolume>& volume,
+    std::error_code& error) const {
+  error.clear();
+  // All actual retained resource destruction follows the lock on every tail.
+  std::optional<ContentSourceState> captured;
+  std::unique_lock lock(state_->mutex,std::try_to_lock);
+  if(!lock.owns_lock()) {
+    error=std::make_error_code(std::errc::device_or_resource_busy);return {};
+  }
+  const auto* row=state_->CachedVolumeLocked(volume);
+  if(!row){error=std::make_error_code(std::errc::no_such_device);return {};}
+  captured=*row;return captured;
+}
+std::optional<ContentSourceDescription> ContentSourceRegistry::DescribeSourceCached(
+    const std::shared_ptr<const filesystem::ConsoleStorageVolume>& volume,
+    std::error_code& error) const {
+  error.clear();std::optional<ContentSourceDescription> described;
+  std::unique_lock lock(state_->mutex,std::try_to_lock);
+  if(!lock.owns_lock()) {
+    error=std::make_error_code(std::errc::device_or_resource_busy);return {};
+  }
+  const auto* row=state_->CachedDescriptionLocked(volume);
+  if(!row){error=std::make_error_code(std::errc::no_such_device);return {};}
+  described.emplace();described->source=row->source;described->generation=row->generation;
+  described->capacity_bytes=row->capacity_bytes;described->free_bytes=row->free_bytes;
+  described->identity=row->storage_volume;described->managed_format_proof=row->managed_format_proof;
+  return described;
+}
+
+std::vector<ContentSourceDescription> ContentSourceRegistry::DescribeSourcesCached(
+    uint32_t device_id,std::error_code& error) const {
+  error.clear();std::vector<ContentSourceDescription> described;
+  std::unique_lock lock(state_->mutex,std::try_to_lock);
+  if(!lock.owns_lock()) {
+    error=std::make_error_code(std::errc::device_or_resource_busy);return {};
+  }
+  for(const auto& [id,row]:state_->observed) {
+    if(row.source.device_id!=device_id)continue;
+    const auto* actual=state_->CachedDescriptionLocked(row.storage_volume);
+    if(!actual || actual!=&row)continue;
+    ContentSourceDescription value;
+    value.source=row.source;value.generation=row.generation;
+    value.capacity_bytes=row.capacity_bytes;value.free_bytes=row.free_bytes;
+    value.identity=row.storage_volume;value.managed_format_proof=row.managed_format_proof;
+    described.push_back(std::move(value));
+  }
+  return described;
+}
+bool ContentSourceRegistry::IsDescriptionCurrentCached(
+    const ContentSourceDescription& expected) const noexcept try {
+  std::unique_lock lock(state_->mutex,std::try_to_lock);
+  if(!lock.owns_lock())return false;
+  const auto* row=state_->CachedDescriptionLocked(expected.identity);
+  return row && row->generation==expected.generation &&
+      row->source.id==expected.source.id && row->source.kind==expected.source.kind &&
+      row->source.device_id==expected.source.device_id &&
+      row->source.device_type==expected.source.device_type &&
+      row->source.read_only==expected.source.read_only &&
+      row->source.root==expected.source.root &&
+      row->source.guest_root==expected.source.guest_root &&
+      row->source.guest_volume_root==expected.source.guest_volume_root;
+} catch(...) {return false;}
 
 std::shared_ptr<filesystem::HostStorageRoot>
 ContentSourceRegistry::CaptureManagedDirectory(

@@ -5,8 +5,10 @@
 #include <array>
 #include <bitset>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <filesystem>
 #include <vector>
 #include "xenia/base/snapshot_publisher.h"
@@ -33,6 +35,10 @@ class ProfileAccountIdentity final
     retired_.store(true, std::memory_order_release);
   }
   bool writes_drained() const { return !(writes_.load(std::memory_order_acquire) & kCountMask); }
+  // Host edit mount cleanup only: atomically close the same admission word
+  // only when no actual writer or roster pause owns it. Refusal changes none
+  // of that state and cannot cancel another producer just to drop our mount.
+  bool RetireIfIdle();
   // Reversible exclusion of real affected writers, not allocation/native
   // readiness. Only zero actual writers can enter this short pause.
   class RosterPause final {
@@ -132,6 +138,29 @@ class ProfileAccountMetadata final {
   const uint64_t source_generation_;
   const std::filesystem::path source_root_;
 };
+// Host editor values contain only known editable fields. They grant no source,
+// snapshot, mount or writer authority and never include a replaceable XUID.
+struct ProfileAccountFieldValues final {
+  std::string gamertag;
+  XOnlineCountry country = XOnlineCountry(0);
+  XLanguage language = XLanguage(0);
+  static ProfileAccountFieldValues From(const X_XAMACCOUNTINFO&);
+};
+struct ProfileAccountFieldEdits final {
+  std::optional<std::string> gamertag;
+  std::optional<XOnlineCountry> country;
+  std::optional<XLanguage> language;
+  static ProfileAccountFieldEdits Between(const ProfileAccountFieldValues&,
+                                          const ProfileAccountFieldValues&);
+  bool empty() const;
+  std::error_code Validate() const;
+  // Strong output guarantee, including when before and output alias. A rename
+  // clears only its explicit fixed field; no generic/raw normalization or Live
+  // defaults/provisioning. Every unedited byte stays from the actual snapshot.
+  std::error_code Apply(const X_XAMACCOUNTINFO& before,
+                        X_XAMACCOUNTINFO& output) const;
+};
+
 struct ProfileAccountAttempt {
   std::error_code error;
   filesystem::SnapshotPublicationReceipt storage;
@@ -235,6 +264,51 @@ class NativeLogonAccountInputs final {
   std::array<uint8_t, 4 * kRowBytes> bytes_{};
   std::shared_ptr<const ProfileAccountPublicationStamp> stamp_;
   uint64_t publication_ = 0;
+};
+enum class ProfileAccountEditPhase {
+  kPrepared,
+  kCommitted,
+  kCanceled,
+  kBeforePublicationFailure,
+  kPublishedPendingDurability,
+  kDurablePendingCache,
+  kRetired,
+  kBusy
+};
+// Value-only observations. No snapshot/source/device handle escapes a settled
+// editor result or implies native provider/roster execution readiness.
+struct ProfileAccountEditArtifacts final {
+  std::filesystem::path stage, recovery;
+  std::error_code error;
+  bool stage_created = false, recovery_created = false, recovery_durable = false;
+};
+struct ProfileAccountEditResult final {
+  ProfileAccountEditPhase phase = ProfileAccountEditPhase::kBusy;
+  std::error_code error;
+  bool outcome_known = false;
+  bool published = false, durable = false, cache_published = false;
+  bool unchanged = false, mount_release_pending = false;
+  std::filesystem::path stage, recovery;
+  // Earlier failed attempts may have real retained stages/backups too. Their
+  // value-only paths survive retry/cancel/stop; no native owner escapes here.
+  std::vector<ProfileAccountEditArtifacts> prior_artifacts;
+  bool committed() const {
+    return outcome_known && !error && phase == ProfileAccountEditPhase::kCommitted;
+  }
+};
+class HostProfileAccountEdit final {
+ public:
+  ~HostProfileAccountEdit();
+  HostProfileAccountEdit(const HostProfileAccountEdit&) = delete;
+  ProfileAccountEditResult Commit();
+  ProfileAccountEditResult Cancel();
+  ProfileAccountEditResult result() const;
+ private:
+  friend class ProfileManager;
+  struct State;
+  explicit HostProfileAccountEdit(std::shared_ptr<State> state)
+      : state_(std::move(state)) {}
+  const std::shared_ptr<State> state_;
 };
 }  // namespace xe::kernel::xam
 #endif

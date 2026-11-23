@@ -14,6 +14,7 @@
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/gpu/native_command_stream.h"
 #include "xenia/gpu/native_frame_command_plan.h"
+#include "xenia/kernel/native_identity_image_frame.h"
 
 namespace xe::gpu::test {
 namespace {
@@ -114,6 +115,56 @@ struct Primary {
     return bytes;
   }
 };
+
+kernel::identity_detail::NativeImageDraw ImageUse(uint32_t packet_address,uint32_t initiator,
+    std::array<uint32_t,6> fetch){
+ using namespace kernel::identity_detail;
+ const NativeProfileIdentityTasks::Root root{1,2,3};
+ const NativeImageInput input{EncodedImageSource{root,4,5,6,7,8,0x30001000,128},{}};
+ const NativeDecodedImageTransfer copied{input,9,0x40002000};
+ const NativeImageJournal::Object dc{root,NativeImageJournal::Kind::kDc,0x40003000,10};
+ return {{dc,copied,11,12,13,0x40004000,0xA0001000},packet_address,0xC0012200,0,initiator,fetch};
+}
+
+TEST_CASE("Image consumption joins the exact actual packet and all sampler words",
+          "[graphics][native_frame_command_plan][native_identity_image]"){
+ Primary p;p.Prepare();
+ const std::array<uint32_t,6> fetch{2,0x01000001,0x80000000,0,0xA0000000,0};
+ p.Register(XE_GPU_REG_SHADER_CONSTANT_FETCH_00_0,{fetch[0],fetch[1],fetch[2],fetch[3],fetch[4],fetch[5]});
+ const auto offset=p.Draw(xenos::EdramMode::kColorDepth,xenos::PrimitiveType::kTriangleList,6,true);
+ p.CopyFlush();const auto plan=Plan::Analyze(p.Bytes());REQUIRE(plan);
+ const uint32_t primary=0x01000000;
+ auto actual=ImageUse(primary+offset*4,p.words[offset+2],fetch);
+ REQUIRE(kernel::identity_detail::ImageDrawMatchesPlan(actual,primary,*plan.plan));
+ auto wrong=actual;wrong.packet_address+=4;
+ CHECK_FALSE(kernel::identity_detail::ImageDrawMatchesPlan(wrong,primary,*plan.plan));
+ wrong=actual;wrong.packet_address|=0xA0000000;
+ CHECK_FALSE(kernel::identity_detail::ImageDrawMatchesPlan(wrong,primary,*plan.plan));
+ wrong=actual;wrong.viz=1;
+ CHECK_FALSE(kernel::identity_detail::ImageDrawMatchesPlan(wrong,primary,*plan.plan));
+ wrong=actual;wrong.initiator^=0x10000;
+ CHECK_FALSE(kernel::identity_detail::ImageDrawMatchesPlan(wrong,primary,*plan.plan));
+ for(size_t n=0;n<fetch.size();++n){CAPTURE(n);wrong=actual;wrong.fetch[n]^=1;
+  CHECK_FALSE(kernel::identity_detail::ImageDrawMatchesPlan(wrong,primary,*plan.plan));}
+ wrong=actual;wrong.packet_header=0xC0032200;
+ CHECK_FALSE(kernel::identity_detail::ImageDrawMatchesPlan(wrong,primary,*plan.plan));
+ wrong=actual;wrong.draw.dc.root.generation++;
+ CHECK_FALSE(kernel::identity_detail::ImageDrawMatchesPlan(wrong,primary,*plan.plan));
+ wrong=actual;wrong.draw.render=0;
+ CHECK_FALSE(kernel::identity_detail::ImageDrawMatchesPlan(wrong,primary,*plan.plan));
+}
+TEST_CASE("Image packet agreement refuses inherited missing sampler state and DMA family",
+          "[graphics][native_frame_command_plan][native_identity_image]"){
+ Primary p;p.Prepare();const auto offset=p.Draw(xenos::EdramMode::kColorDepth,
+     xenos::PrimitiveType::kTriangleList,6,true);p.CopyFlush();
+ const auto no_fetch=Plan::Analyze(p.Bytes());REQUIRE(no_fetch);
+ const auto actual=ImageUse(0x01000000+offset*4,p.words[offset+2],{});
+ CHECK_FALSE(kernel::identity_detail::ImageDrawMatchesPlan(actual,0x01000000,*no_fetch.plan));
+ // Original indexed DMA packet is a separate unsupported plan family; no
+ // cursor/header similarity is converted into image consumption.
+ p.words[offset]=0xC0032200;p.words.insert(p.words.begin()+offset+3,{0x02000000,12});
+ const auto dma=Plan::Analyze(p.Bytes());CHECK_FALSE(dma);
+}
 
 void Rejected(const Primary& primary, Plan::Error error) {
   const auto result = Plan::Analyze(primary.Bytes());

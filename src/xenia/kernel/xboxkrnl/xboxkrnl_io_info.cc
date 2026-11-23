@@ -85,11 +85,12 @@ X_STATUS QueryRetainedAllocationInformation(
   // A scheduling boundary which declines execution during shutdown must not
   // turn a still-zero local value into fabricated successful allocation.
   X_STATUS status = X_STATUS_CANCELLED;
-  kernel->RunBlockingIo(
+  const auto invoked = kernel->RunBlockingIo(
       [&] { status = file->file()->QueryAllocationSize(&allocation); },
       file->device()->supports_concurrent_io()
           ? GuestScheduler::BlockingCallClass::kConcurrent
           : GuestScheduler::BlockingCallClass::kSerial);
+  if(invoked!=HostCallOutcome::kReturned)return HostCallFailureStatus(invoked);
   if (XFAILED(status)) {
     return status;
   }
@@ -113,6 +114,57 @@ X_STATUS QueryRetainedAllocationInformation(
   // capacity, position, completions and failed-request bytes stay untouched.
   return util::WriteGuestIoBuffers(memory, writes);
 }
+X_STATUS QueryRetainedNetworkOpenInformation(
+    KernelState* kernel, uint32_t handle, uint32_t output, uint32_t iosb) {
+  if (!kernel) return X_STATUS_INVALID_HANDLE;
+  auto file = kernel->object_table()->LookupObject<XFile>(handle);
+  if (!file || !file->file() || !file->entry() || !file->device()) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  auto& memory = *kernel->memory();
+  constexpr uint32_t bytes = sizeof(X_FILE_NETWORK_OPEN_INFORMATION);
+  static_assert(bytes == 56);
+  if (!util::GuestIoRangeValid(memory, output, bytes, true) ||
+      (iosb && !util::GuestIoRangeValid(memory, iosb,
+                                       sizeof(X_IO_STATUS_BLOCK), true))) {
+    return X_STATUS_ACCESS_VIOLATION;
+  }
+  if (iosb && util::GuestIoRangesOverlap(memory, output, bytes, iosb,
+                                        sizeof(X_IO_STATUS_BLOCK))) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  vfs::File::Information observed{};
+  const auto status = file->QueryInformation(&observed);
+  if (XFAILED(status)) return status;
+  if (observed.end_of_file > uint64_t(std::numeric_limits<int64_t>::max()) ||
+      observed.allocation_size > uint64_t(std::numeric_limits<int64_t>::max())) {
+    return X_STATUS(0xC0000095);
+  }
+  X_FILE_NETWORK_OPEN_INFORMATION information{};
+  information.creation_time = observed.create_timestamp;
+  information.last_access_time = observed.access_timestamp;
+  information.last_write_time = observed.write_timestamp;
+  information.change_time = observed.change_timestamp;
+  information.allocation_size = observed.allocation_size;
+  information.end_of_file = observed.end_of_file;
+  information.attributes = observed.attributes;
+  X_IO_STATUS_BLOCK status_block{};
+  status_block.status = X_STATUS_SUCCESS;
+  status_block.information = bytes;
+  const std::array<util::GuestIoWrite, 2> writes{{
+      {output, {reinterpret_cast<const uint8_t*>(&information), bytes}},
+      {iosb, iosb ? std::span<const uint8_t>(
+                         reinterpret_cast<const uint8_t*>(&status_block),
+                         sizeof(status_block))
+                  : std::span<const uint8_t>{}},
+  }};
+  // Revalidate payload+IOSB together after the backend wait, before either
+  // write. Caller capacity beyond the fixed ABI record is never touched.
+  return util::WriteGuestIoBuffers(memory, writes);
+}
 }  // namespace
 
 dword_result_t NtQueryInformationFile_entry(
@@ -129,6 +181,12 @@ dword_result_t NtQueryInformationFile_entry(
 
   if (info_class == XFileAllocationInformation) {
     return QueryRetainedAllocationInformation(
+        kernel_state(), file_handle, info_ptr.guest_address(),
+        io_status_block_ptr.guest_address());
+  }
+
+  if (info_class == XFileNetworkOpenInformation) {
+    return QueryRetainedNetworkOpenInformation(
         kernel_state(), file_handle, info_ptr.guest_address(),
         io_status_block_ptr.guest_address());
   }
@@ -187,26 +245,6 @@ dword_result_t NtQueryInformationFile_entry(
       out_length = 0;
       break;
     };
-    case XFileNetworkOpenInformation: {
-      // Make sure we're working with up-to-date information, just in case the
-      // file size has changed via something other than NtSetInfoFile
-      // (eg. seems NtWriteFile might extend the file in some cases). The host
-      // lookup can block on a slow drive.
-      kernel_state()->RunBlockingIo(
-          [&]() { file->entry()->update(); },
-          GuestScheduler::BlockingCallClass::kConcurrent);
-
-      auto info = info_ptr.as<X_FILE_NETWORK_OPEN_INFORMATION*>();
-      info->creation_time = file->entry()->create_timestamp();
-      info->last_access_time = file->entry()->access_timestamp();
-      info->last_write_time = file->entry()->write_timestamp();
-      info->change_time = file->entry()->write_timestamp();
-      info->allocation_size = file->entry()->allocation_size();
-      info->end_of_file = file->entry()->size();
-      info->attributes = file->entry()->attributes();
-      out_length = sizeof(*info);
-      break;
-    }
     case XFileBasicInformation:
       // The file system takes it to set but not to query.
       status = X_STATUS_INVALID_PARAMETER;
@@ -353,17 +391,24 @@ dword_result_t NtSetInformationFile_entry(
                            device->bytes_per_sector(),
                        false);
       uint64_t file_size = 0;
-      kernel_state()->RunBlockingIo(
+      const auto size_query = kernel_state()->RunBlockingIo(
           [&]() {
             file->entry()->update();
             file_size = file->entry()->size();
           },
           GuestScheduler::BlockingCallClass::kConcurrent);
+      if(size_query!=HostCallOutcome::kReturned){result=HostCallFailureStatus(size_query);break;}
       if (allocation_size < file_size) {
         result = file->SetLength(allocation_size);
-        kernel_state()->RunBlockingIo(
+        const auto refreshed = kernel_state()->RunBlockingIo(
             [&]() { file->entry()->update(); },
             GuestScheduler::BlockingCallClass::kConcurrent);
+        if(refreshed!=HostCallOutcome::kReturned && XSUCCEEDED(result)){
+          // SetLength really returned success; no rollback/cancellation is
+          // claimed when its later metadata refresh fails.
+          (void)InvokeHostCall([] { XELOGE("SetAllocation metadata refresh failed after successful SetLength"); });
+          result=X_STATUS_UNSUCCESSFUL;
+        }
       }
       break;
     }
@@ -372,9 +417,13 @@ dword_result_t NtSetInformationFile_entry(
       result = file->SetLength(info->end_of_file);
 
       // Update the files vfs::Entry information
-      kernel_state()->RunBlockingIo(
+      const auto refreshed = kernel_state()->RunBlockingIo(
           [&]() { file->entry()->update(); },
           GuestScheduler::BlockingCallClass::kConcurrent);
+      if(refreshed!=HostCallOutcome::kReturned && XSUCCEEDED(result)){
+        (void)InvokeHostCall([] { XELOGE("SetEOF metadata refresh failed after successful SetLength"); });
+        result=X_STATUS_UNSUCCESSFUL;
+      }
       break;
     }
     case XFileCompletionInformation: {

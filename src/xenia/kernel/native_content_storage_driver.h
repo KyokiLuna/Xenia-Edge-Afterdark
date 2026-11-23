@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -26,6 +27,7 @@ namespace xe::kernel {
 class KernelState;
 class NativeSystemCallbackDispatcher;
 class NativeMediaService;
+class NativeContentResolve;
 class NativeSystemUiService;
 namespace test { class NativeContentStorageDriverTestAccess; }
 
@@ -82,6 +84,38 @@ class NativeContentStorageDriver
   // FE2000B routing/completion/cancellation is deliberately not implemented.
   std::shared_ptr<const xam::ManagedFormatSourceProof> CaptureFormatSource(
       uint32_t native_id, std::error_code&);
+  // Namespace translation metadata issued only by an original successful
+  // processing return. A native ID is not the registry's stable device number.
+  // This receipt owns no host directory, MVA, guest Task or Kernel resource.
+  class ContentProcessingReceipt final {
+   public:
+    uint32_t native_id() const { return native_id_; }
+    const std::shared_ptr<const filesystem::ConsoleStorageVolume>& volume() const {
+      return device_.source_volume;
+    }
+    const std::string& guest_volume_root() const { return device_.guest_volume_root; }
+    const std::shared_ptr<const NativeOpticalStorageProof>& optical_source() const {
+      return device_.optical_source_proof;
+    }
+   private:
+    friend class NativeContentStorageDriver;
+    ContentProcessingReceipt() = default;
+    std::shared_ptr<const uint8_t> issuer_;
+    uint64_t driver_generation_ = 0, cookie_ = 0;
+    uint32_t native_id_ = 0;
+    NativeContentStorageDevice device_;
+  };
+  // Cached metadata only; callers must separately admit the EXACT returned
+  // source through ContentSourceRegistry, and recheck this binding before use.
+  // These methods never reinterpret a caller-supplied path or stable number.
+  std::optional<ContentProcessingReceipt> CaptureContentProcessing(
+      uint32_t native_id) const noexcept;
+  std::optional<ContentProcessingReceipt> CaptureContentProcessing(
+      const std::shared_ptr<const filesystem::ConsoleStorageVolume>&) const noexcept;
+  // Snapshot of actual successfully processed rows; not native table order or
+  // a native default-device result. The original cookie remains in each row.
+  std::vector<ContentProcessingReceipt> CaptureContentProcessing() const;
+  bool ContentProcessingCurrent(const ContentProcessingReceipt&) const noexcept;
   static constexpr uint32_t kProcessingFunction = 0x8167E918;
   static void ObserveProcessingEntry(void*, uint64_t) noexcept;
   static void ObserveProcessingReturn(void*, uint64_t) noexcept;
@@ -101,6 +135,24 @@ class NativeContentStorageDriver
 
  private:
   friend class NativeMediaService;
+  friend class NativeContentResolve;
+  // Narrow nonwaiting metadata gate. The only consumer already owns GCRC and
+  // a retained driver, and publishes a source-bound VFS alias or an exact
+  // guest device selection before releasing it. No IO, provider, callback or
+  // guest execution may occur while it is held; bounded guest memory stores
+  // under the same existing namespace/allocator guard are permitted.
+  class ContentProcessingAdmission final {
+   public:
+    ~ContentProcessingAdmission() = default;
+    ContentProcessingAdmission(ContentProcessingAdmission&&) noexcept = default;
+   private:
+    friend class NativeContentStorageDriver;
+    explicit ContentProcessingAdmission(std::mutex& mutex)
+        : lock_(mutex, std::try_to_lock) {}
+    std::unique_lock<std::mutex> lock_;
+  };
+  std::optional<ContentProcessingAdmission> TryAdmitContentProcessing(
+      const ContentProcessingReceipt&, std::error_code&) const noexcept;
   friend class NativeSystemUiService;
   friend class test::NativeContentStorageDriverTestAccess;
   // Service-only, after strict producer/callback drain and its factual whole
@@ -131,6 +183,13 @@ class NativeContentStorageDriver
   void OnProcessingEntry(const cpu::ppc::PPCContext&);
   void OnProcessingReturn(const cpu::ppc::PPCContext&);
   void StopFormatBindings() noexcept;
+  std::shared_ptr<const NativeOpticalStorageProof> CaptureOpticalSource(
+      std::string_view actual_native_root) const;
+  bool OpticalSourceCurrent(const NativeOpticalStorageProof&) const;
+  // Existing namespace protection is already held at the final bounded HOST
+  // output cut. No Config-use owner, backing lock or provider may be acquired
+  // or released by this metadata-only currentness check.
+  bool OpticalSourceCurrentLocked(const NativeOpticalStorageProof&) const;
   // Historical comparison metadata only; never dereferenced after retirement.
   KernelState* const kernel_identity_;
   const uint64_t generation_;

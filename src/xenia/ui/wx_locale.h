@@ -18,8 +18,12 @@ namespace ui {
 // Initializes wxLocale from cvars::ui_locale. Call once at app init.
 void InitializeWxLocale();
 
+// Release the locale after app/window teardown, before wx library cleanup.
+// Safe when initialization was skipped or cleanup runs more than once.
+void ShutdownWxLocale();
+
 // Canonical name of the currently-active wxLocale (e.g. "en_US", "ja_JP").
-// Empty if InitializeWxLocale has not been called.
+// Empty before initialization and after shutdown.
 std::string GetActiveLocaleCanonicalName();
 
 }  // namespace ui

@@ -239,6 +239,7 @@ class PolicyFileHandle;
 class HostStorageSnapshotToken;
 class HostStorageSnapshotStage;
 class HostStorageSnapshotBatch;
+class SnapshotPublicationSet;
 class HostStorageSnapshotTestAccess;
 class HostStorageManagedMetadata;
 class ManagedDeviceIdentity;
@@ -498,6 +499,7 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   friend class CacheStorageOwner;
   friend class MediaReferenceStore;
   friend class HostStorageSnapshotTestAccess;
+  friend class SnapshotPublicationSet;
   friend class HostStorageManagedMetadata;
   friend class ManagedDeviceIdentity;
   friend class ManagedVolumeAuthority;
@@ -505,6 +507,22 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   friend class ManagedStorageBootstrap;
   friend class HostStorageBootstrapDirectory;
   friend class HostStorageBootstrapTestAccess;
+  // Issued scoped/typed participants only. Distinct actual reservations must
+  // describe the same retained native directory/space as the original view.
+  // One real MutationGuard validates all bytes and projects only observations;
+  // callers cannot construct a rebased token or supply this authority list.
+  static std::unique_ptr<HostStorageSnapshotBatch> ValidateJoinedSnapshotBatch(
+      std::shared_ptr<const HostStorageRoot> original,
+      std::span<const std::shared_ptr<const HostStorageSnapshotToken>> actual,
+      std::vector<std::shared_ptr<const HostStorageSnapshotToken>> projected,
+      std::error_code&);
+  friend class ProfilePublicationIntentStore;
+  IntentWriteResult WriteNewProfileDoneWithSnapshotGuard(
+      const HostStorageSnapshotBatch&, const std::filesystem::path&,
+      std::span<const uint8_t>) const;
+  IntentWriteResult WriteNewProfileRecordWithSnapshotGuard(
+      const HostStorageSnapshotBatch&, const std::filesystem::path&,
+      std::span<const uint8_t>, bool completion) const;
   std::shared_ptr<HostStorageRoot> MountedFilesystemRoot(std::error_code&) const;
   std::shared_ptr<HostStorageRoot> IndependentNamespaceView(std::error_code&) const;
   // Physical bootstrap parents outlive a logical source generation. Issued
@@ -753,6 +771,7 @@ class HostStorageSnapshotToken final {
   const std::shared_ptr<const HostStorageRoot>& root() const { return root_; }
  private:
   friend class HostStorageRoot;
+  friend class SnapshotPublicationSet;
   HostStorageSnapshotToken(std::shared_ptr<const HostStorageRoot> root,
       std::filesystem::path relative, bool exists, FileHandleInfo info,
       std::vector<uint8_t> bytes, bool ascii_folded_leaf = false,
@@ -878,6 +897,7 @@ class HostStorageSnapshotBatch final {
   const auto& metadata() const { return metadata_; }
  private:
   friend class HostStorageRoot;
+  friend class SnapshotPublicationSet;
   HostStorageSnapshotBatch(std::shared_ptr<const HostStorageRoot> root,
       std::vector<std::shared_ptr<const HostStorageSnapshotToken>> tokens,
       std::vector<std::optional<FileInfo>> metadata,
@@ -887,7 +907,9 @@ class HostStorageSnapshotBatch final {
   const std::shared_ptr<const HostStorageRoot> root_;
   const std::vector<std::shared_ptr<const HostStorageSnapshotToken>> tokens_;
   const std::vector<std::optional<FileInfo>> metadata_;
-  const std::unique_ptr<HostStorageSpace::MutationGuard> guard_;
+  // Destroy the real filesystem guard before the private scoped-access owner.
+  std::shared_ptr<const void> access_owner_;
+  std::unique_ptr<HostStorageSpace::MutationGuard> guard_;
 };
 }  // namespace xe::filesystem
 #endif

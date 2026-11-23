@@ -18,6 +18,8 @@ namespace xe::filesystem {
 class ManagedVolumeAuthority;
 class ManagedStorageBootstrap;
 class ManagedBootstrapCreationPermit;
+class SnapshotPublicationSet;
+class ProfilePublicationIntentStore;
 // One exact managed Content epoch. Factory admission and restart recovery run
 // before catalog/guest publication. This is a separate journal purpose from
 // profile intents, format phases and single-file backup storage.
@@ -129,7 +131,27 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
   // file + directory barriers and the separate metadata parent barrier.
   std::error_code Flush(FlushReservation&,
                         const std::filesystem::path& exact_header);
+  // Opaque joined metadata admission. Only the common profile publication
+  // store may prepare it; the real CM epoch owns its flat thumbnail namespace
+  // and active-operation count until the complete outer scope/batch drains.
+  class ProfileThumbnailParticipant final {
+   public:
+    ~ProfileThumbnailParticipant();
+   private:
+    friend class ContentMutationOwner;
+    friend class ProfilePublicationIntentStore;
+    struct Data;
+    explicit ProfileThumbnailParticipant(std::shared_ptr<Data>);
+    const std::shared_ptr<const HostStorageSnapshotToken>& expected() const;
+    std::error_code CheckCurrent(const SnapshotPublicationSet&) const;
+    std::shared_ptr<Data> data_;
+  };
+
  private:
+  friend class ProfilePublicationIntentStore;
+  std::shared_ptr<ProfileThumbnailParticipant> PrepareProfileThumbnail(
+      const std::filesystem::path& exact_package,
+      const std::shared_ptr<SnapshotPublicationSet>&, std::error_code&);
   friend class ManagedVolumeAuthority;
   friend class ManagedStorageBootstrap;
   friend class ContentMutationOwnerTestAccess;

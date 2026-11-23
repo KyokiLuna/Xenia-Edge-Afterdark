@@ -85,6 +85,8 @@ TEST_CASE("Storage ordinals register their real one-argument trampolines",
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/testing/isolated_kernel_runtime_settings.h"
 #include "xenia/kernel/xthread.h"
+#include "xenia/vfs/devices/host_path_device.h"
+#include "xenia/vfs/virtual_file_system.h"
 
 namespace xe::kernel {
 namespace test {
@@ -97,9 +99,24 @@ class NativeContentStorageDriverTestAccess {
   static std::shared_ptr<void> HoldConfigUse(
       const std::shared_ptr<NativeContentStorageDriver>&);
   static bool Retire(const std::shared_ptr<NativeContentStorageDriver>&,KernelState*);
+  static std::shared_ptr<const NativeOpticalStorageProof> CaptureOptical(
+      const std::shared_ptr<NativeContentStorageDriver>&,std::string_view);
+  static bool OpticalCurrent(const std::shared_ptr<NativeContentStorageDriver>&,
+      const NativeOpticalStorageProof&);
 };
 }  // namespace test
 namespace test {
+// Test-only access to the real producer on the actual nonconst Emulator.
+// The public snapshot interface stays const; no generation/state is invented.
+class NativeStorageTitleLifecycleTestAccess final {
+ public:
+  static uint64_t BeginPreparing(Emulator& emulator) {
+    return emulator.title_execution_state_.BeginPreparing();
+  }
+  static bool CancelPreparing(Emulator& emulator,uint64_t generation) {
+    return emulator.title_execution_state_.CancelPreparing(generation);
+  }
+};
 namespace {
 struct StorageLifetimeRoot {
   std::filesystem::path path;
@@ -197,6 +214,66 @@ TEST_CASE("Uninstalled storage host resources retire before an escaped owner out
   CHECK(KernelState::shared()==replacement->kernel_state());
   replacement.reset();
 }
+TEST_CASE("Native optical metadata follows the actual registered mount control block and live title generation without pinning backing",
+          "[kernel][native_storage_exports][optical][generation][lifetime]") {
+  // Real VFS/Kernel/Memory-backed folder fixture for the typed optical role.
+  // Test access deliberately bypasses native producer admission: no native
+  // driver install, EA08/E918 call, generated ID, DVD or playback is claimed.
+  IsolatedKernelRuntimeSettings settings;
+  StorageLifetimeRoot root;
+  for(const auto* leaf:{"content","cache","optical"})
+    REQUIRE(std::filesystem::create_directory(root.path/leaf));
+  auto emulator=std::make_unique<Emulator>("",root.path,root.path/"content",root.path/"cache");
+  REQUIRE(emulator->Setup(nullptr,nullptr,false,{},{},{})==X_STATUS_SUCCESS);
+  auto* kernel=emulator->kernel_state();REQUIRE(kernel);
+  auto* fs=emulator->file_system();REQUIRE(fs);
+  auto owner=NativeContentStorageDriverTestAccess::HostOnlyOwner(kernel,{});REQUIRE(owner);
+  const auto generation=NativeStorageTitleLifecycleTestAccess::BeginPreparing(*emulator);REQUIRE(generation);
+  kernel->title_mount_path_="\\Device\\Cdrom0";
+  const auto volume=filesystem::ConsoleStorageVolume::OpticalMedia();
+  const auto mount=[&]{
+    std::error_code error;
+    auto storage=filesystem::HostStorageRoot::Open(root.path/"optical",true,error);
+    REQUIRE(storage);REQUIRE_FALSE(error);
+    auto device=std::make_unique<vfs::HostPathDevice>("\\Device\\Cdrom0",storage->path(),true,
+        false,"FATX",storage);
+    REQUIRE(device->SetStorageVolume(volume));REQUIRE(device->Initialize());
+    std::shared_ptr<vfs::Device> registered;
+    REQUIRE(fs->RegisterDeviceExclusive(std::move(device),registered)==X_STATUS_SUCCESS);
+    return registered;
+  };
+  auto original=mount();std::weak_ptr<vfs::Device> old_device=original;
+  const auto proof=NativeContentStorageDriverTestAccess::CaptureOptical(owner,"\\Device\\CdRom0");
+  REQUIRE(proof);CHECK(proof->volume()==volume);CHECK(proof->title_generation()==generation);
+  CHECK(NativeContentStorageDriverTestAccess::OpticalCurrent(owner,*proof));
+  REQUIRE(fs->UnregisterDevice(original->mount_path(),original.get()));original.reset();
+  CHECK(old_device.expired()); // the proof owns no Device/root/FD
+  CHECK_FALSE(NativeContentStorageDriverTestAccess::OpticalCurrent(owner,*proof));
+  auto replacement=mount();
+  // Deliberately reuse the SAME logical optical volume metadata and spelling:
+  // a different actual Device/control block must still reject the old proof.
+  CHECK_FALSE(NativeContentStorageDriverTestAccess::OpticalCurrent(owner,*proof));
+  const auto current=NativeContentStorageDriverTestAccess::CaptureOptical(owner,"\\Device\\CdRom0");
+  REQUIRE(current);CHECK(NativeContentStorageDriverTestAccess::OpticalCurrent(owner,*current));
+  REQUIRE(NativeStorageTitleLifecycleTestAccess::CancelPreparing(*emulator,generation));
+  CHECK_FALSE(NativeContentStorageDriverTestAccess::OpticalCurrent(owner,*current));
+  CHECK_FALSE(NativeContentStorageDriverTestAccess::CaptureOptical(owner,"\\Device\\CdRom0"));
+  const auto next=NativeStorageTitleLifecycleTestAccess::BeginPreparing(*emulator);REQUIRE(next>generation);
+  CHECK_FALSE(NativeContentStorageDriverTestAccess::OpticalCurrent(owner,*current));
+  REQUIRE(NativeStorageTitleLifecycleTestAccess::CancelPreparing(*emulator,next));
+  REQUIRE(fs->UnregisterDevice(replacement->mount_path(),replacement.get()));replacement.reset();
+  kernel->title_mount_path_.clear();
+  owner->BeginStop();REQUIRE(owner->Drain());
+  auto threads=kernel->object_table()->GetObjectsByType<XThread>(XObject::Type::Thread);
+  kernel->ShutdownDispatchThread();kernel->guest_scheduler()->Shutdown();
+  for(const auto& thread:threads) {
+    if(thread->thread())REQUIRE(threading::Wait(thread->thread(),false,std::chrono::seconds(5))==threading::WaitResult::kSuccess);
+    REQUIRE_FALSE(thread->is_running());
+  }
+  REQUIRE(NativeContentStorageDriverTestAccess::Retire(owner,kernel));threads.clear();
+  emulator.reset();CHECK_FALSE(NativeContentStorageDriverTestAccess::OpticalCurrent(owner,*current));
+}
+
 }  // namespace test
 }  // namespace xe::kernel
 #endif

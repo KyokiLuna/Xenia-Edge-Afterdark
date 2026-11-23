@@ -30,7 +30,9 @@ std::shared_ptr<const cpu::GuestImportProvider> CreateNativeXuiImportProvider(
     std::string* error = nullptr);
 
 // Native system-domain profile. Keeps the coupled Task/Msg/SysApp/Notify/input,
-// UI and cross-module allocation families in the same native XAM generation.
+// UI, native tile-image caches/decoder and cross-module allocation families
+// in the same native XAM generation. Cache outputs remain native objects owned
+// by that generation; this policy does not manufacture an HLE image result.
 // Construction establishes binding identity only, not scheduler/driver/UI
 // readiness. Register it in a NativeImportDomain before native child loads;
 // never apply it globally to ordinary titles or an incompatible live module.

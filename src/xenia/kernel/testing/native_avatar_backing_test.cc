@@ -8,6 +8,7 @@
 #include "xenia/base/byte_order.h"
 #include "xenia/memory.h"
 #include "xenia/kernel/native_avatar_contract.h"
+#include "xenia/cpu/guest_call_abi.h"
 #include "xenia/base/threading.h"
 #include "xenia/kernel/native_system_task_continuation.h"
 namespace xe::kernel::test {
@@ -231,6 +232,99 @@ TEST_CASE("Avatar animation borrows original control and payload without freezin
   CHECK(*memory.TranslateVirtual<uint8_t*>(data)==0x5A);
   CHECK(*memory.TranslateVirtual<uint8_t*>(control+NativeAvatarAnimationBuffers::kControlBytes-1)==0xA5);
   CHECK(heap->Release(control));CHECK(heap->Release(data));CHECK(heap->Release(id));
+}
+
+// Exercises the real packing/restoration and backing implementations with an
+// injected executor. This is not execution of the original 17559 calculator,
+// an admitted Service request, a native completion or rendered geometry.
+TEST_CASE("Avatar GetAssets captures sizes before delegated entry and borrows actual spans",
+          "[kernel][native_avatar][memory][guest_call]") {
+  Memory memory; REQUIRE(memory.Initialize());
+  constexpr uint32_t base=0x90010000, scratch=base+0x100, cpu_buffer=base+0x3000;
+  constexpr uint32_t gpu=base+0x7000, sp=base+0xF000, caller_lr=0x82002000;
+  constexpr uint16_t mask=0x1234;
+  const uint32_t gpu_bytes=GENERATE(0u,0x1800u);
+  auto* heap=memory.LookupHeap(base);
+  REQUIRE(heap->AllocFixed(base,0x10000,0x1000,
+      kMemoryAllocationReserve|kMemoryAllocationCommit,kRW));
+  cpu::ppc::PPCContext context{};
+  context.r[1]=sp;context.lr=caller_lr;
+  context.r[3]=base+0x1000;context.r[4]=mask;context.r[5]=7;
+  context.r[6]=cpu_buffer;context.r[7]=gpu;context.r[8]=base+0x2000;
+  const auto original_args=std::array<uint64_t,6>{context.r[3],context.r[4],
+      context.r[5],context.r[6],context.r[7],context.r[8]};
+  const std::array query_args{cpu::GuestCallArgument::UInt32(mask),
+      cpu::GuestCallArgument::UInt32(scratch),
+      cpu::GuestCallArgument::UInt32(scratch+4)};
+  unsigned queries=0;
+  const auto query=[&]() -> std::optional<NativeAvatarAssetSizes> {
+    // The real Service still authenticates the existing original caller/code.
+    // This fixture deliberately rejects the late synthetic return context.
+    if(context.lr!=caller_lr || context.r[1]!=sp)return {};
+    const auto result=cpu::ExecuteGuestCallWithExecutor(&memory,&context,
+        0x81674A70,query_args,[&](uint32_t address){
+          ++queries;CHECK(address==0x81674A70);
+          CHECK(context.lr==caller_lr);CHECK(context.r[3]==mask);
+          CHECK(context.r[4]==scratch);CHECK(context.r[5]==scratch+4);
+          context.r[1]-=cpu::kGuestCallExecuteStackPadding;
+          context.lr=0xBCBCBCBC; // Processor::Execute's actual entry contract.
+          xe::store_and_swap<uint32_t>(memory.TranslateVirtual(scratch),0x2100);
+          xe::store_and_swap<uint32_t>(memory.TranslateVirtual(scratch+4),gpu_bytes);
+          context.r[3]=0;return true;
+        });
+    return NativeAvatarAssetSizes::CaptureActualReturn(mask,result.executed,
+        uint32_t(result.value),
+        xe::load_and_swap<uint32_t>(memory.TranslateVirtual(scratch)),
+        xe::load_and_swap<uint32_t>(memory.TranslateVirtual(scratch+4)));
+  };
+  const auto captured=query(); REQUIRE(captured);CHECK(queries==1);
+  CHECK(context.lr==caller_lr);CHECK(context.r[1]==sp);
+  for(size_t n=0;n<original_args.size();++n)CHECK(context.r[n+3]==original_args[n]);
+  // Scratch is no longer the result owner. Changing it cannot relabel the
+  // immutable counts attached to this exact invocation.
+  std::memset(memory.TranslateVirtual(scratch),0xA5,8);
+  const auto counts=captured->ForMask(mask);REQUIRE(counts);
+  CHECK(counts->first==0x2100);CHECK(counts->second==gpu_bytes);
+  CHECK_FALSE(captured->ForMask(mask^1));
+  std::vector<NativeAvatarBackingRange> ranges{{cpu_buffer,counts->first,true}};
+  if(counts->second)ranges.push_back({gpu,counts->second,true});
+  auto borrowed=NativeAvatarServiceTestAccess::Borrow(memory,ranges);REQUIRE(borrowed);
+  std::array<cpu::GuestCallArgument,6> asset_args;
+  for(size_t n=0;n<asset_args.size();++n)
+    asset_args[n]=cpu::GuestCallArgument::UInt32(uint32_t(original_args[n]));
+  const auto assets=cpu::ExecuteGuestCallWithExecutor(&memory,&context,
+      0x81674AD8,asset_args,[&](uint32_t address){
+        CHECK(address==0x81674AD8);
+        context.r[1]-=cpu::kGuestCallExecuteStackPadding;context.lr=0xBCBCBCBC;
+        CHECK_FALSE(query()); // Reproduces the rejected old placement.
+        CHECK(queries==1);
+        const auto actual=captured->ForMask(uint16_t(context.r[4]));REQUIRE(actual);
+        CHECK(actual->first==0x2100);CHECK(actual->second==gpu_bytes);
+        CHECK_FALSE(heap->Release(base));
+        CHECK_FALSE(heap->Protect(cpu_buffer+0x2000,0x1000,kMemoryProtectNoAccess));
+        *memory.TranslateVirtual<uint8_t*>(cpu_buffer+actual->first-1)=0x5A;
+        if(actual->second)*memory.TranslateVirtual<uint8_t*>(gpu+actual->second-1)=0xC3;
+        context.r[3]=0;return true;
+      });
+  REQUIRE(assets.executed);CHECK(assets.value==0);CHECK(queries==1);
+  CHECK(context.lr==caller_lr);CHECK(context.r[1]==sp);
+  for(size_t n=0;n<original_args.size();++n)CHECK(context.r[n+3]==original_args[n]);
+  borrowed.reset();
+  CHECK(*memory.TranslateVirtual<uint8_t*>(cpu_buffer+0x20FF)==0x5A);
+  if(gpu_bytes)CHECK(*memory.TranslateVirtual<uint8_t*>(gpu+gpu_bytes-1)==0xC3);
+  CHECK(heap->Release(base));
+}
+TEST_CASE("Avatar asset size capture rejects unreturned failed or missing native outputs",
+          "[kernel][native_avatar][guest_call]") {
+  constexpr uint16_t mask=0x1234;
+  CHECK_FALSE(NativeAvatarAssetSizes::CaptureActualReturn(mask,false,0,0x2100,0x1800));
+  CHECK_FALSE(NativeAvatarAssetSizes::CaptureActualReturn(mask,true,0x80004005,0x2100,0x1800));
+  CHECK_FALSE(NativeAvatarAssetSizes::CaptureActualReturn(mask,true,0,0,0x1800));
+  CHECK_FALSE(NativeAvatarAssetSizes::CaptureActualReturn(mask,true,0,std::nullopt,0x1800));
+  CHECK_FALSE(NativeAvatarAssetSizes::CaptureActualReturn(mask,true,0,0x2100,std::nullopt));
+  const auto zero_gpu=NativeAvatarAssetSizes::CaptureActualReturn(mask,true,0,0x2100,0);
+  REQUIRE(zero_gpu);const auto counts=zero_gpu->ForMask(mask);REQUIRE(counts);
+  CHECK(counts->first==0x2100);CHECK(counts->second==0);
 }
 
 }  // namespace xe::kernel::test

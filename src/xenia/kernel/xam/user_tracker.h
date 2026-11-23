@@ -110,11 +110,15 @@ class UserTracker {
 
   // Images
   bool UpdateUserIcon(uint64_t xuid, std::span<const uint8_t> icon_data);
+  bool ClearUserIcon(uint64_t xuid);
 
   std::vector<uint8_t> GetIcon(uint64_t xuid, uint32_t title_id,
                                    XTileType tile_type, uint64_t tile_id) const;
 
  private:
+  friend class ProfileManager;
+  bool TrackUser(uint64_t xuid);
+  std::optional<ProfileGpdMutation> CapturePlayedTitleMutation(std::error_code&) const;
   bool IsUserTracked(uint64_t xuid) const;
 
   void UpdateSettingValue(uint64_t xuid, uint32_t title_id,

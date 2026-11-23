@@ -76,6 +76,8 @@ struct Anchor {
   std::string_view hash;
 };
 constexpr Anchor kAnchors[] = {
+    {0x8167EA08, 124,
+     "10089914dc38aeeeed801cfaad918ad64ade215447f216f33cdc522dd0c998d3"},
     {0x8167B700, 20,
      "725ad74f7d8c53c5b44d139e21ec885f6af1a7ef0ec1ecf98e68929901eddcaf"},
     {0x8167B718, 96,

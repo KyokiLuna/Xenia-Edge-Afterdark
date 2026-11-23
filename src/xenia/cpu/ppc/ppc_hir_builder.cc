@@ -32,6 +32,8 @@
 #include "xenia/cpu/processor.h"
 #include "xenia/cpu/xex_module.h"
 #include "xenia/kernel/native_profile_identity_owner.h"
+#include "xenia/kernel/native_xmsg_provenance.h"
+#include "xenia/kernel/native_content_resolve.h"
 DEFINE_bool(
     break_on_unimplemented_instructions, true,
     "Break to the host debugger (or crash if no debugger attached) if an "
@@ -209,6 +211,38 @@ bool PPCHIRBuilder::Emit(GuestFunction* function, uint32_t flags) {
       if(start_address==cut.function && address==cut.address && code==cut.word){
         ContextBarrier();CallExtern(builtins()->native_identity_task_diagnostic[site]);break;
       }
+    }
+    // Authenticate the complete original function/address/word triple before
+    // observing native Task publication or the actual loaded call operands.
+    // The barrier precedes the ORIGINAL instruction on both backends; it does
+    // not replace its compare/load/mtctr/store, synthesize a native call, or
+    // grant callback/profile authority. Existing diagnostic cuts stay intact.
+    const auto& execution_sites=kernel::NativeProfileIdentityOwner::kTaskExecutionSites;
+    for(size_t site=0;site<execution_sites.size();++site){
+      const auto& cut=execution_sites[site];
+      if(start_address==cut.function && address==cut.address && code==cut.word){
+        ContextBarrier();CallExtern(builtins()->native_identity_task_execution[site]);break;
+      }
+    }
+    // Observe only actual loaded operands at a pinned original image cut.
+    // The context barrier precedes the ORIGINAL instruction on both backends;
+    // no register, native call, result, image or graphics authority is changed.
+    const auto& image_sites=kernel::NativeProfileIdentityOwner::kImageObservationSites;
+    for(size_t site=0;site<image_sites.size();++site){
+      const auto& cut=image_sites[site];
+      if(start_address==cut.function && address==cut.address && code==cut.word){
+        ContextBarrier();CallExtern(builtins()->native_identity_image_observation[site]);break;
+      }
+    }
+    for(const auto& site:kernel::NativeXmsgProvenance::InstructionSites()){
+      if(start_address==site.function && address==site.address && code==site.word){
+        ContextBarrier();CallExtern(builtins()->native_xmsg_instruction);break;
+      }
+    }
+    if(start_address==kernel::NativeContentResolve::kProducerFunction &&
+       address==kernel::NativeContentResolve::kProducerInstruction &&
+       code==kernel::NativeContentResolve::kProducerWord){
+      ContextBarrier();CallExtern(builtins()->native_content_resolve_producer);
     }
     InstrData i;
     i.address = address;

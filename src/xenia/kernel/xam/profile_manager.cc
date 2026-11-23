@@ -72,6 +72,100 @@ struct ProfileSettingsReadNativeOwners {
     tokens.clear(); account.reset(); storage.reset();
   }
 };
+// Issued host edit state. The PM registry retains cleanup and uncertain actual
+// publication after a UI drops its handle; it owns no PM or long-lived gate Use.
+struct HostProfileAccountEdit::State final {
+  std::mutex mutex;
+  std::shared_ptr<ProfileAccountCommitGate> gate;
+  std::weak_ptr<const HostProfileAccountEdit> handle;
+  uint64_t serial = 0, xuid = 0;
+  ProfileAccountFieldEdits edits;
+  std::string mount_path;
+  uint64_t mount_generation = 0, source_generation = 0;
+  uint32_t device_id = 0;
+  bool mounted = false;
+  std::shared_ptr<vfs::HostPathDevice> device;
+  std::shared_ptr<const filesystem::HostStorageRoot> source, view, guest_generation;
+  std::shared_ptr<const filesystem::ManagedDeviceIdentity> managed_identity;
+  std::shared_ptr<const ProfileAccountSnapshot> expected;
+  std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery;
+  X_XAMACCOUNTINFO candidate{};
+  ProfileAccountAttempt attempt;
+  ProfileAccountEditResult outcome;
+  static ProfileAccountEditResult Busy() {
+    ProfileAccountEditResult result;
+    result.error = std::make_error_code(std::errc::device_or_resource_busy);
+    return result;  // Explicitly no observed outcome; not a failed/no-write claim.
+  }
+  bool Terminal() const {
+    return outcome.phase == ProfileAccountEditPhase::kCommitted ||
+           outcome.phase == ProfileAccountEditPhase::kCanceled ||
+           outcome.phase == ProfileAccountEditPhase::kRetired;
+  }
+  void ObserveAttempt() {
+    outcome.outcome_known = true;
+    outcome.published = attempt.storage.published;
+    outcome.durable = attempt.storage.durable;
+    outcome.stage = attempt.storage.stage;
+    outcome.recovery = attempt.storage.recovery;
+    outcome.error = attempt.error;
+  }
+  void RememberUnpublishedArtifacts() {
+    const auto& storage = attempt.storage;
+    if (storage.stage_created || storage.recovery_created) {
+      outcome.prior_artifacts.push_back({storage.stage, storage.recovery,
+          attempt.error, storage.stage_created, storage.recovery_created,
+          storage.recovery_durable});
+    }
+  }
+  void DropIoResources() {
+    // Only after an actual settled release/owner stop, outside PM/GCRC locks.
+    attempt = {};
+    expected.reset(); recovery.reset();
+    device.reset(); source.reset(); view.reset(); guest_generation.reset();
+    managed_identity.reset();
+    std::memset(&candidate, 0, sizeof(candidate));
+  }
+};
+HostProfileAccountEdit::~HostProfileAccountEdit() {
+  // A busy cancellation remains owned by the issued registry. The destructor
+  // cannot abandon entered IO or callback into a destroyed manager.
+  try { Cancel(); } catch (...) {}
+}
+ProfileAccountEditResult HostProfileAccountEdit::result() const {
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    return State::Busy();
+  }
+  std::unique_lock lock(state_->mutex, std::try_to_lock);
+  return lock.owns_lock() ? state_->outcome : State::Busy();
+}
+ProfileAccountEditResult HostProfileAccountEdit::Commit() {
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    return State::Busy();
+  }
+  auto state = state_;
+  auto use = state->gate ? state->gate->Acquire() : nullptr;
+  if (!use) {
+    auto observed = result();
+    observed.error = std::make_error_code(std::errc::operation_canceled);
+    return observed;
+  }
+  return use->owner().CommitAccountEdit(state);
+}
+ProfileAccountEditResult HostProfileAccountEdit::Cancel() {
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    return State::Busy();
+  }
+  auto state = state_;
+  auto use = state->gate ? state->gate->Acquire() : nullptr;
+  if (!use) {
+    auto observed = result();
+    observed.error = std::make_error_code(std::errc::operation_canceled);
+    return observed;
+  }
+  return use->owner().CancelAccountEdit(state);
+}
+
 ProfileSettingsReadProvider::ProfileSettingsReadProvider(
     const ProfileManager* owner, std::shared_ptr<ProfileSettingsReadLifetime> life)
     : owner_(owner), lifetime_(std::move(life)) {}
@@ -149,6 +243,7 @@ ProfileManager::~ProfileManager() {
   }
   account_commit_gate_->CloseAndDrain();
   CloseRosterAuthority();
+  CloseAccountEdits();
   // All observing/copy/publish operations have drained. Release native owners
   // from the SAME existing mount nodes outside all metadata/GCRC locks; closed
   // retained rows keep immutable GPD bytes but cannot hold the source lease.
@@ -519,16 +614,32 @@ ProfileManager::TryReserveIdleForManagedFormat(std::error_code& error) {
 
 bool ProfileManager::MountProfile(const uint64_t xuid, std::string mount_path,
                                   uint32_t* mounted_device_id) {
+  ReapAccountEdits();
   ReapReleasedProfileReads();
   return MountProfileInternal(xuid, std::move(mount_path), {}, nullptr,
                               mounted_device_id);
 }
 bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
     std::shared_ptr<ProfileReadMountNode> read,
-    const ContentSourceState* exact_source, uint32_t* mounted_device_id) {
+    const ContentSourceState* exact_source, uint32_t* mounted_device_id,
+    HostProfileAccountEdit::State* edit) {
   if (xe::global_critical_region::is_held_by_current_thread()) {
     return false;
   }
+  if (edit && (read || edit->mounted || edit->xuid != xuid)) { return false; }
+  const auto bind_edit = [&](const ProfileMount& held) {
+    if (!edit) { return; }
+    // Same successful lock/counter/namespace publication as the real mount.
+    // Shared pointer copies only; no issuer/readiness fact is synthesized.
+    edit->mount_generation = held.mount_generation;
+    edit->source_generation = held.source_generation;
+    edit->device_id = held.device_id;
+    edit->device = held.device;
+    edit->source = held.source; edit->view = held.view;
+    edit->guest_generation = held.guest_generation;
+    edit->managed_identity = held.managed_identity;
+    edit->mounted = true;
+  };
   if (mount_path.empty()) {
     mount_path = fmt::format(kDefaultMountFormat, xuid);
   }
@@ -621,6 +732,7 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
       if (held.references == SIZE_MAX) { return false; }
       ++held.references;
     }
+    bind_edit(held);
     if (mounted_device_id) { *mounted_device_id = held.device_id; }
     return true;
   }
@@ -718,7 +830,8 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
           *prepared_registration,registration_keepalive))) {
     return false;
   }
-  profile_mounts_.insert(std::move(mount_node));
+  const auto inserted_mount = profile_mounts_.insert(std::move(mount_node));
+  bind_edit(inserted_mount.position->second);
   if (mounted_device_id) { *mounted_device_id = source->source.device_id; }
   return true;
 }
@@ -732,7 +845,8 @@ bool ProfileManager::DismountProfile(std::string_view mount_path) {
   return DismountProfileInternal(mount_path);
 }
 bool ProfileManager::DismountProfileInternal(std::string_view mount_path,
-    std::shared_ptr<ProfileReadMountNode> expected_read) {
+    std::shared_ptr<ProfileReadMountNode> expected_read,
+    const HostProfileAccountEdit::State* edit) {
   if (xe::global_critical_region::is_held_by_current_thread()) {
     return false;
   }
@@ -751,9 +865,26 @@ bool ProfileManager::DismountProfileInternal(std::string_view mount_path,
   }
   const auto key = xe::utf8::lower_ascii(path);
   const auto found = profile_mounts_.find(key);
-  if (found == profile_mounts_.end()) {
-    return false;
+  if (edit && (expected_read || !edit->mounted || !edit->mount_generation ||
+      !edit->device || !edit->view)) { return false; }
+  const bool same_edit = !edit || (found != profile_mounts_.end() &&
+      found->second.xuid == edit->xuid &&
+      found->second.mount_generation == edit->mount_generation &&
+      found->second.device == edit->device && found->second.view == edit->view &&
+      found->second.source == edit->source &&
+      found->second.guest_generation == edit->guest_generation &&
+      found->second.managed_identity == edit->managed_identity &&
+      found->second.source_generation == edit->source_generation &&
+      found->second.device_id == edit->device_id);
+  if (edit && !same_edit) {
+    // A missing/reused alias alone proves nothing. Only actual old namespace
+    // and view retirement plus absence of that exact device can settle it.
+    auto global = xe::global_critical_region::TryAcquire();
+    return global.owns_lock() && edit->device->namespace_retiring() &&
+        edit->view->retiring() &&
+        kernel_state_->file_system()->AcquireDevice(edit->mount_path) != edit->device;
   }
+  if (found == profile_mounts_.end()) { return false; }
   auto& held = found->second;
   std::shared_ptr<ProfileReadMountNode>* read_link = nullptr;
   if (expected_read) {
@@ -778,33 +909,69 @@ bool ProfileManager::DismountProfileInternal(std::string_view mount_path,
     if (retired->storage()->xuid() == found->second.xuid &&
         !retired->writes_drained()) { return false; }
   }
-  if (auto owner = account_identities_.find(found->second.xuid);
-      owner != account_identities_.end() && owner->second->slot() == 0xFF) {
-    owner->second->Retire();
-    if (!owner->second->writes_drained()) { return false; }
+  if (!edit) {
+    if (auto owner = account_identities_.find(found->second.xuid);
+        owner != account_identities_.end() && owner->second->slot() == 0xFF) {
+      owner->second->Retire();
+      if (!owner->second->writes_drained()) { return false; }
+    }
   }
   auto global = xe::global_critical_region::TryAcquire();
   if (!global.owns_lock()) {
     return false;
   }
   retiring_device = held.device;
-  if (!retiring_device || retiring_device->storage() != held.view ||
-      kernel_state_->file_system()->AcquireDevice(retiring_device->mount_path()) != retiring_device ||
-      !(detached = kernel_state_->file_system()->DetachDevice(
-          retiring_device->mount_path(), retiring_device.get()))) {
-    return false;
+  if (!retiring_device || retiring_device->storage() != held.view) { return false; }
+  const auto registered = kernel_state_->file_system()->AcquireDevice(retiring_device->mount_path());
+  const bool edit_already_retired = edit && registered != retiring_device &&
+      retiring_device->namespace_retiring() && held.view->retiring();
+  if (registered != retiring_device && !edit_already_retired) { return false; }
+  const auto account_owner = account_identities_.find(held.xuid);
+  const auto exact_edit_account = [&](const auto& owner) {
+    const auto& storage = owner->storage();
+    return storage->xuid() == held.xuid && storage->device() == held.device &&
+        storage->view() == held.view && storage->source() == held.source &&
+        storage->guest_generation() == held.guest_generation &&
+        storage->managed_identity() == held.managed_identity &&
+        storage->source_generation() == held.source_generation &&
+        storage->device_id() == held.device_id;
+  };
+  if (edit) {
+    // A new Account owner at the same XUID is not our retirement authority.
+    // An older issued identity must already be truly retired before a changed
+    // owner can settle its reference; never close a replacement generation.
+    if (edit->expected && !edit->expected->identity()->retired() &&
+        (account_owner == account_identities_.end() ||
+         account_owner->second != edit->expected->identity())) { return false; }
+    // Real managed-file Open/count admission shares this namespace guard.
+    // Do not close a different raw File/cache producer merely to cancel our
+    // editor. Actual typed writers share the atomic Account admission word.
+    if (retiring_device->has_open_files() || retiring_device->has_managed_files()) {
+      return false;
+    }
+    if (account_owner != account_identities_.end() &&
+        exact_edit_account(account_owner->second) &&
+        account_owner->second->slot() == 0xFF &&
+        !account_owner->second->RetireIfIdle()) { return false; }
   }
+  if (!edit_already_retired &&
+      !(detached = kernel_state_->file_system()->DetachDevice(
+          retiring_device->mount_path(), retiring_device.get()))) { return false; }
+  // A proved external closure has already performed actual old-device
+  // retirement. Extract only this stamped old record; leave the current VFS
+  // alias/replacement untouched and do not require unavailable-source IO.
   if (found->second.publication_lease) {
     found->second.publication_lease->Retire();
   }
   if (auto owner = account_identities_.find(found->second.xuid);
-      owner != account_identities_.end() && owner->second->slot() == 0xFF) {
+      owner != account_identities_.end() && owner->second->slot() == 0xFF &&
+      (!edit || exact_edit_account(owner->second))) {
     retired_account = account_identities_.extract(owner);
   }
   retired_mount = profile_mounts_.extract(found);
   global.unlock();
   lock.unlock();
-  detached->Retire();
+  if (detached) { detached->Retire(); }
   return true;
 }
 
@@ -1049,7 +1216,8 @@ std::shared_ptr<const ProfileSettingsReadBatch> ProfileManager::CaptureProfileSe
     }
     // Existing coupled-GPD recovery is the prerequisite, not a writer/model
     // permission returned to this read-only observation.
-    error = ProfileGpdTransaction::ReplayBeforeLoad(native->storage, owner, recovery);
+    error = ProfileGpdTransaction::ReplayBeforeLoad(native->storage, owner, recovery,
+                                                     volume->mutations());
     if (error) { return {}; }
     auto load = [&](uint32_t id, bool dashboard) -> bool {
       const auto snapshot = GpdSnapshotStore::Load(
@@ -1166,16 +1334,22 @@ std::vector<uint8_t> ProfileManager::CaptureProfileIcon(uint64_t xuid,
   if (!global.owns_lock()) {
     return {};
   }
-  const auto slot = GetUserIndexAssignedToProfile(xuid);
-  const auto found = logged_profiles_.find(slot);
-  return found == logged_profiles_.end() ? std::vector<uint8_t>{}
-                                         : found->second->GetProfileIcon(type);
+  const auto roster = CaptureSelectedRoster();
+  if (!roster) { return {}; }
+  for (uint8_t slot = 0; slot != 4; ++slot) {
+    if (roster->slots()[slot].xuid != xuid) { continue; }
+    const auto profile = CaptureRosterProfile(slot);
+    return profile && profile->xuid() == xuid ? profile->GetProfileIcon(type)
+                                            : std::vector<uint8_t>{};
+  }
+  return {};
 }
 
 ProfileGpdWriter ProfileManager::CaptureGpdWriter(uint64_t xuid,
                                                   std::error_code& error) {
   auto model = AcquireProfileGpdModel(xuid, error);
-  if (!model) {
+  if (!model || !OrdinaryRosterWriterAvailable(model)) {
+    if (!error) { error = std::make_error_code(std::errc::device_or_resource_busy); }
     return {};
   }
   auto lease = AcquireProfileStorageLease(xuid, error);
@@ -1189,7 +1363,10 @@ ProfileGpdWriter ProfileManager::CaptureGpdWriter(uint64_t xuid,
     error = std::make_error_code(std::errc::no_such_device);
     return {};
   }
-  return {std::move(model), std::move(owner), std::move(recovery)};
+  if (model->storage() != lease || !OrdinaryRosterWriterAvailable(model)) {
+    error = std::make_error_code(std::errc::device_or_resource_busy); return {};
+  }
+  return {std::move(model), std::move(owner), std::move(recovery), volume->mutations()};
 }
 ProfileGpdWriter ProfileManager::CaptureGpdWriter(uint8_t slot,
                                                   std::error_code& error) {
@@ -1232,7 +1409,12 @@ std::error_code ProfileManager::LoadGpdModel(
       }
     }
   }
-  return ProfileGpdWriter{model, owner, recovery}.Reload();
+  const ProfileGpdWriter writer{model, owner, recovery, volume->mutations()};
+  if (const auto error = writer.Reload()) { return error; }
+  // Reload's cache/model commit guards have ended before the real repair IO.
+  // A failed repair cannot publish a false successful native sign-in row.
+  const auto& installed = kernel_state_->emulator()->installed_system_source();
+  return writer.RepairLegacyPictureKeys(installed ? installed->snapshot() : nullptr);
 }
 
 std::error_code ProfileManager::ReloadGpdModel(uint64_t xuid) {
@@ -1841,6 +2023,258 @@ bool ProfileManager::CreateAccount(const uint64_t xuid,
   return result;
 }
 
+std::shared_ptr<HostProfileAccountEdit> ProfileManager::PrepareAccountEdit(
+    uint64_t xuid, ProfileAccountFieldEdits edits, std::error_code& error) {
+  error = edits.Validate();
+  if (error) { return {}; }
+  if (!xuid || xe::global_critical_region::is_held_by_current_thread()) {
+    error = std::make_error_code(std::errc::invalid_argument); return {};
+  }
+  auto entered = account_commit_gate_->Acquire();
+  if (!entered) {
+    error = std::make_error_code(std::errc::operation_canceled); return {};
+  }
+  ReapAccountEdits();
+  // Host editors select an authenticated known row. This API cannot create an
+  // absent Account or turn an unreadable payload into an empty profile.
+  if (!CaptureCachedAccount(xuid, error)) { return {}; }
+  auto state = std::make_shared<HostProfileAccountEdit::State>();
+  state->gate = account_commit_gate_; state->xuid = xuid;
+  state->edits = std::move(edits);
+  state->mount_path = fmt::format(kDefaultMountFormat, xuid) + ":";
+  auto handle = std::shared_ptr<HostProfileAccountEdit>(new HostProfileAccountEdit(state));
+  state->handle = handle;
+  // Preallocate its map node outside the actual metadata admission boundary.
+  decltype(account_edits_) pending;
+  pending.emplace(0, state);
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock() || account_edits_.size() >= 64 ||
+        !next_account_edit_ || next_account_edit_ == UINT64_MAX) {
+      error = std::make_error_code(std::errc::device_or_resource_busy); return {};
+    }
+    state->serial = next_account_edit_++;
+    auto node = pending.extract(0); node.key() = state->serial;
+    account_edits_.insert(std::move(node));
+  }
+  std::unique_lock serial(state->mutex);
+  state->outcome.phase = ProfileAccountEditPhase::kBeforePublicationFailure;
+  state->outcome.outcome_known = true;
+  if (!MountProfileInternal(xuid, {}, {}, nullptr, nullptr, state.get())) {
+    state->outcome.error = error = std::make_error_code(std::errc::device_or_resource_busy);
+    return {};  // Handle destruction cancels after this serial guard releases.
+  }
+  auto identity = CaptureAccountIdentity(xuid, error);
+  state->expected = identity ? ProfileAccountSnapshot::Load(identity, error) : nullptr;
+  if (!state->expected) { state->outcome.error = error; return {}; }
+  const auto storage = identity->storage();
+  if (storage->device() != state->device || storage->view() != state->view ||
+      storage->source() != state->source ||
+      storage->guest_generation() != state->guest_generation ||
+      storage->managed_identity() != state->managed_identity ||
+      storage->source_generation() != state->source_generation) {
+    state->outcome.error = error = std::make_error_code(std::errc::operation_canceled);
+    return {};
+  }
+  const auto volume = content_manager_.Volume(storage->source_id());
+  state->recovery = volume && volume->profile_writable() ? volume->recovery() : nullptr;
+  if (!state->recovery) {
+    state->outcome.error = error = std::make_error_code(std::errc::read_only_file_system);
+    return {};
+  }
+  error = state->edits.Apply(state->expected->account(), state->candidate);
+  if (error) { state->outcome.error = error; return {}; }
+  state->outcome = {};
+  state->outcome.phase = ProfileAccountEditPhase::kPrepared;
+  state->outcome.outcome_known = true;
+  state->outcome.mount_release_pending = true;
+  return handle;
+}
+
+bool ProfileManager::ReleaseAccountEditMount(HostProfileAccountEdit::State& state) {
+  if (state.mounted) {
+    if (!DismountProfileInternal(state.mount_path, {}, &state)) {
+      state.outcome.mount_release_pending = true; return false;
+    }
+    state.mounted = false;
+  }
+  state.outcome.mount_release_pending = false;
+  state.DropIoResources();
+  return true;
+}
+
+ProfileAccountEditResult ProfileManager::CancelAccountEdit(
+    const std::shared_ptr<HostProfileAccountEdit::State>& state) {
+  using Phase = ProfileAccountEditPhase;
+  if (!state || state->gate != account_commit_gate_ ||
+      xe::global_critical_region::is_held_by_current_thread()) {
+    return HostProfileAccountEdit::State::Busy();
+  }
+  std::unique_lock serial(state->mutex, std::try_to_lock);
+  if (!serial.owns_lock()) { return HostProfileAccountEdit::State::Busy(); }
+  if (!state->Terminal() && !state->attempt.storage.published) {
+    state->outcome.phase = Phase::kCanceled;
+    state->outcome.error.clear();
+    state->outcome.outcome_known = true;
+  } else if (!state->Terminal()) {
+    auto observed = state->outcome;
+    observed.error = std::make_error_code(std::errc::operation_in_progress);
+    return observed;  // Actual publication cannot be described as rolled back.
+  }
+  if (state->Terminal()) { ReleaseAccountEditMount(*state); }
+  auto observed = state->outcome;
+  if (state->outcome.phase == Phase::kCommitted) {
+    observed.error = std::make_error_code(std::errc::operation_not_permitted);
+  }
+  return observed;
+}
+
+ProfileAccountEditResult ProfileManager::CommitAccountEdit(
+    const std::shared_ptr<HostProfileAccountEdit::State>& state) {
+  using Phase = ProfileAccountEditPhase;
+  if (!state || state->gate != account_commit_gate_ ||
+      xe::global_critical_region::is_held_by_current_thread()) {
+    return HostProfileAccountEdit::State::Busy();
+  }
+  std::unique_lock serial(state->mutex, std::try_to_lock);
+  if (!serial.owns_lock()) { return HostProfileAccountEdit::State::Busy(); }
+  if (state->Terminal()) {
+    ReleaseAccountEditMount(*state); return state->outcome;
+  }
+  if (!state->expected || !state->mounted || !state->recovery) {
+    state->outcome.phase = Phase::kRetired;
+    state->outcome.error = std::make_error_code(std::errc::operation_canceled);
+    state->outcome.outcome_known = true;
+    ReleaseAccountEditMount(*state); return state->outcome;
+  }
+  const auto identity = state->expected->identity();
+  if (identity->retired() || identity->storage()->retiring()) {
+    state->outcome.phase = Phase::kRetired;
+    state->outcome.error = std::make_error_code(std::errc::operation_canceled);
+    state->outcome.outcome_known = true;
+    ReleaseAccountEditMount(*state); return state->outcome;
+  }
+  ProfileAccountWriter writer(identity, state->recovery);
+  if (!state->attempt.storage.published) {
+    if (std::memcmp(&state->expected->account(), &state->candidate,
+                     sizeof(state->candidate)) == 0) {
+      auto error = state->expected->CheckAvailable();
+      auto checked = !error ? state->view->ValidateSnapshotBatch(
+                                 {state->expected->token()}, error) : nullptr;
+      if (!checked) {
+        state->outcome.phase = Phase::kBeforePublicationFailure;
+        state->outcome.error = error;
+        return state->outcome;
+      }
+      checked.reset();
+      state->outcome.phase = Phase::kCommitted;
+      state->outcome.error.clear(); state->outcome.unchanged = true;
+      state->outcome.outcome_known = true;
+      // No physical write, cache mutation or Account revision for a no-op.
+      ReleaseAccountEditMount(*state); return state->outcome;
+    }
+    // SAME captured Account supplies both unedited bytes and durable expected.
+    // Never reload expected after building this candidate; never Live-default.
+    state->RememberUnpublishedArtifacts();
+    state->attempt = writer.Replace(state->expected, state->candidate);
+  } else if (!state->attempt.durable) {
+    state->attempt = writer.RetryDurability(state->attempt);
+  }
+  state->ObserveAttempt();
+  if (state->attempt.error == std::errc::operation_canceled ||
+      (state->attempt.storage.published && state->attempt.storage.durable &&
+       !state->attempt.durable)) {
+    state->outcome.phase = Phase::kRetired;
+    if (!state->outcome.error) {
+      state->outcome.error = std::make_error_code(std::errc::state_not_recoverable);
+    }
+    ReleaseAccountEditMount(*state); return state->outcome;
+  }
+  if (!state->attempt.durable) {
+    state->outcome.phase = state->attempt.storage.published
+        ? Phase::kPublishedPendingDurability : Phase::kBeforePublicationFailure;
+    if (!state->outcome.error) {
+      state->outcome.error = std::make_error_code(std::errc::io_error);
+    }
+    return state->outcome;
+  }
+  state->outcome.phase = Phase::kDurablePendingCache;
+  std::error_code error;
+  if (!PublishAccountCache(state->attempt.durable, error)) {
+    state->outcome.error = error;
+    if (error == std::errc::operation_canceled ||
+        error == std::errc::state_not_recoverable) {
+      // Original bytes really reached storage, but this old receipt may not
+      // publish over a retired identity or a later actual Account revision.
+      state->outcome.phase = Phase::kRetired;
+      ReleaseAccountEditMount(*state);
+    }
+    return state->outcome;
+  }
+  state->outcome.phase = Phase::kCommitted;
+  state->outcome.error.clear(); state->outcome.cache_published = true;
+  ReleaseAccountEditMount(*state);
+  return state->outcome;
+}
+
+void ProfileManager::ReapAccountEdits() {
+  if (xe::global_critical_region::is_held_by_current_thread()) { return; }
+  auto entered = account_commit_gate_->Acquire();
+  if (!entered) { return; }
+  std::vector<std::shared_ptr<HostProfileAccountEdit::State>> abandoned;
+  abandoned.reserve(64);
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { return; }
+    for (const auto& [serial, state] : account_edits_) {
+      if (state->handle.expired()) { abandoned.push_back(state); }
+    }
+  }
+  for (const auto& state : abandoned) {
+    // No owner/source registry lock survives actual retry or deferred rundown.
+    const auto canceled = CancelAccountEdit(state);
+    if (canceled.error == std::errc::operation_in_progress) {
+      CommitAccountEdit(state);
+    }
+  }
+  // Erase only states whose exact reference really settled. A shared local
+  // keeps destruction outside this metadata lock even for the last UI drop.
+  std::vector<std::shared_ptr<HostProfileAccountEdit::State>> released;
+  released.reserve(abandoned.size());
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { return; }
+    for (const auto& state : abandoned) {
+      std::unique_lock serial(state->mutex, std::try_to_lock);
+      if (serial.owns_lock() && state->Terminal() && !state->mounted) {
+        const auto found = account_edits_.find(state->serial);
+        if (found != account_edits_.end() && found->second == state) {
+          released.push_back(std::move(found->second));
+          account_edits_.erase(found);
+        }
+      }
+    }
+  }
+}
+
+void ProfileManager::CloseAccountEdits() {
+  // Actual manager stop, after its counted gate drained. No entered operation
+  // or late callback can use PM; escaped handles keep value observations only.
+  auto states = std::move(account_edits_);
+  for (auto& [serial, state] : states) {
+    std::lock_guard lock(state->mutex);
+    if (!state->Terminal()) {
+      state->outcome.phase = ProfileAccountEditPhase::kRetired;
+      state->outcome.error = std::make_error_code(std::errc::operation_canceled);
+      state->outcome.outcome_known = true;
+    }
+    if (state->expected) { state->expected->identity()->Retire(); }
+    state->mounted = false;  // This exact issuing PM is actually retiring.
+    state->outcome.mount_release_pending = false;
+    state->DropIoResources();
+  }
+}
+
 bool ProfileManager::UpdateAccount(const uint64_t xuid,
                                    const X_XAMACCOUNTINFO* account) {
   if (!account || xe::global_critical_region::is_held_by_current_thread()) {
@@ -1864,6 +2298,9 @@ std::shared_ptr<ProfileAccountIdentity> ProfileManager::CaptureAccountIdentity(
     error = std::make_error_code(std::errc::device_or_resource_busy); return {};
   }
   if (auto selected = CaptureRosterIdentity(xuid)) { return selected; }
+  if (!RosterIdentityRebindAvailable(xuid)) {
+    error = std::make_error_code(std::errc::device_or_resource_busy); return {};
+  }
   auto storage = AcquireProfileStorageLease(xuid, error);
   if (!storage) { return {}; }
   std::vector<std::shared_ptr<ProfileAccountIdentity>> released_owners;
@@ -1872,7 +2309,8 @@ std::shared_ptr<ProfileAccountIdentity> ProfileManager::CaptureAccountIdentity(
     error = std::make_error_code(std::errc::device_or_resource_busy);
     return {};
   }
-  if (retiring_profiles_.contains(xuid) || preparing_profiles_.contains(xuid)) {
+  if (retiring_profiles_.contains(xuid) || preparing_profiles_.contains(xuid) ||
+      !RosterIdentityRebindAvailable(xuid)) {
     error = std::make_error_code(std::errc::operation_canceled);
     return {};
   }
@@ -1934,7 +2372,7 @@ ProfileManager::CaptureDurableAccount(uint64_t xuid, std::error_code& error) {
 std::shared_ptr<const NativeLogonAccountInputs>
 ProfileManager::PrepareNativeLogonAccounts(std::error_code& error) {
   error.clear();
-  if (!CaptureSelectedRoster()) {
+  if (!CanonicalRosterAccountsAvailable()) {
     error = std::make_error_code(std::errc::device_or_resource_busy); return {};
   }
   auto use = account_commit_gate_->Acquire();
@@ -1949,7 +2387,8 @@ ProfileManager::PrepareNativeLogonAccounts(std::error_code& error) {
   auto out = std::shared_ptr<NativeLogonAccountInputs>(new NativeLogonAccountInputs);
   {
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
-    if (!lock.owns_lock() || preparing_slots_.any() || !retiring_profiles_.empty()) {
+    if (!lock.owns_lock() || !CanonicalRosterAccountsAvailable() ||
+        preparing_slots_.any() || !retiring_profiles_.empty()) {
       error = std::make_error_code(std::errc::device_or_resource_busy);
       return {};
     }
@@ -1993,7 +2432,8 @@ ProfileManager::PrepareNativeLogonAccounts(std::error_code& error) {
   // later coordinator must hold logical publication ownership and revalidate.
   // No filesystem or profile lock survives return to native/guest execution.
   std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
-  if (!lock.owns_lock() || !out->OwnershipCurrent() || preparing_slots_.any()) {
+  if (!lock.owns_lock() || !CanonicalRosterAccountsAvailable() ||
+      !out->OwnershipCurrent() || preparing_slots_.any()) {
     error = std::make_error_code(std::errc::operation_canceled);
     return {};
   }

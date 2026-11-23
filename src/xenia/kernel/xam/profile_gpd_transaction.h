@@ -3,6 +3,7 @@
 #define XENIA_KERNEL_XAM_PROFILE_GPD_TRANSACTION_H_
 #include "xenia/kernel/xam/profile_gpd_model.h"
 #include "xenia/kernel/xam/xdbf/gpd_durable_intent.h"
+#include "xenia/vfs/installed_system_source.h"
 namespace xe::kernel::xam {
 // Live-epoch event only. No persisted UI protocol: replayed historical awards
 // restore data and NEVER manufacture a new event/counter increment.
@@ -43,11 +44,17 @@ struct ProfileGpdWriter {
   std::shared_ptr<ProfileGpdModelAuthority> model;
   std::shared_ptr<const filesystem::ProfileIntentOwner> owner;
   std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery;
+  std::shared_ptr<filesystem::ContentMutationOwner> metadata;
   // Observing IO stays outside metadata/GCRC. A pending exact retry retains
   // its original clone/stamp; no reload can normalize partially published data.
   std::optional<ProfileGpdMutationOrigin>
   CaptureCurrentOrigin(const ProfileGpdMutation &, std::error_code &) const;
   std::error_code Reload() const;
+  // Selected-model preparation only, before native roster publication. Only
+  // demonstrably LE stock keys are repaired through the normal durable writer.
+  // Valid/unknown/custom data is preserved; read-only observers never coerce it.
+  std::error_code RepairLegacyPictureKeys(
+      std::shared_ptr<const vfs::InstalledSystemSource::Snapshot>) const;
   ProfileGpdTransactionAttempt Submit(
       ProfileGpdMutation,
       std::optional<ProfileGpdModelStamp> required_stamp = {}) const;
@@ -74,7 +81,7 @@ class ProfileGpdTransaction final {
       std::shared_ptr<ProfileGpdPendingMutation>,
       std::shared_ptr<const filesystem::ProfileIntentOwner>,
       std::shared_ptr<const filesystem::SnapshotRecoveryOwner>,
-      std::error_code&);
+      std::error_code&, std::shared_ptr<filesystem::ContentMutationOwner> metadata = {});
   ProfileGpdTransactionAttempt Attempt();
   // Only after real retirement and outside all namespace/model locks. A busy
   // in-flight operation retains its store/target lease until later retry.
@@ -84,7 +91,8 @@ class ProfileGpdTransaction final {
   static std::error_code ReplayBeforeLoad(
       std::shared_ptr<ProfileStorageLease>,
       std::shared_ptr<const filesystem::ProfileIntentOwner>,
-      std::shared_ptr<const filesystem::SnapshotRecoveryOwner>);
+      std::shared_ptr<const filesystem::SnapshotRecoveryOwner>,
+      std::shared_ptr<filesystem::ContentMutationOwner> metadata = {});
 
  private:
   ProfileGpdTransaction() = default;
@@ -95,6 +103,8 @@ class ProfileGpdTransaction final {
   std::shared_ptr<ProfileGpdPendingMutation> pending_;
   std::shared_ptr<const filesystem::ProfileIntentOwner> owner_;
   std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery_;
+  std::shared_ptr<filesystem::ContentMutationOwner> metadata_;
+  std::shared_ptr<filesystem::ProfileArtifactAdmission> artifact_admission_;
   std::unique_ptr<GpdDurableIntentStore> store_;
   std::filesystem::path attempted_journal_;
   bool preparation_uncertain_ = false, committed_ = false;

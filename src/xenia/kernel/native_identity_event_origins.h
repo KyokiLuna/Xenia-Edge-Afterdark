@@ -283,7 +283,8 @@ class NativeIdentityEventOrigins {
   // Its real native frame/Task owner remains retained externally. It must NOT
   // be created at GetNext return or FE ingress. The optional entry origin is
   // copied from an earlier retained request/dispatch, never reminted here.
-  std::optional<Work> BeginWork(WorkKey key, std::optional<Origin> entry_origin) {
+  std::optional<Work> BeginWork(WorkKey key, std::optional<Origin> entry_origin,
+                                std::optional<Work> earlier_parent = {}) {
     if (!key.valid() || key.root != root_ || lost() ||
         (closed_.load(std::memory_order_acquire) && !entry_origin)) return {};
     for (const auto& value : works_) {
@@ -299,6 +300,20 @@ class NativeIdentityEventOrigins {
       // can a recycled native task address retire its earlier live work.
       if (old == key || reused_task || equal_frame) { Lose(__LINE__,8); return {}; }
     }
+    WorkEntry* parent = earlier_parent ? Find(*earlier_parent) : nullptr;
+    if (earlier_parent) {
+      const auto before = parent ? parent->key.Load() : WorkKey{};
+      // The bridge binds the exact earlier owner, before this native child
+      // enters. Same-address tasks, unrelated threads and later equal frames
+      // never become a synchronous consumption parent.
+      if (!parent || before.root != key.root ||
+          before.task_allocation_generation != key.task_allocation_generation ||
+          before.thread != key.thread || before.pcr != key.pcr ||
+          before.task != key.task || before.sp <= key.sp ||
+          before.invocation >= key.invocation || parent->children == UINT32_MAX) {
+        Lose(__LINE__,8); return {};
+      }
+    }
     const uint64_t id = Next(next_work_);
     if (!id) return {};
     if (entry_origin && !Pin(*entry_origin)) { Lose(__LINE__,8); return {}; }
@@ -311,6 +326,9 @@ class NativeIdentityEventOrigins {
       value.dequeued = {};
       value.count = 0;
       value.unknown_input = !entry_origin;
+      value.parent = earlier_parent;
+      value.children = 0;
+      if (parent) ++parent->children;
       value.serial.store(id, std::memory_order_release);
       work_count_.fetch_add(1, std::memory_order_relaxed);
       return Work{root_, id, i};
@@ -335,12 +353,44 @@ class NativeIdentityEventOrigins {
   // thread's dequeue. Stop does not disable genuine completion/drain.
   bool FinishWorkNormally(Work work, WorkKey actual_return) {
     auto* value = Find(work);
-    if (!value || value->key.Load() != actual_return || lost()) { Lose(__LINE__,9); return false; }
+    if (!value || value->key.Load() != actual_return || value->children || lost()) {
+      Lose(__LINE__,9); return false;
+    }
+    WorkEntry* parent = value->parent ? Find(*value->parent) : nullptr;
+    if (value->parent) {
+      if (!parent || !parent->children) { Lose(__LINE__,9); return false; }
+      // Preflight every distinct dependency and both retained sets before
+      // changing either work. Entry provenance is not a dequeue receipt.
+      uint32_t additions = 0;
+      for (uint32_t i = 0; i < value->count; ++i) {
+        if (!Find(value->dequeued[i])) { Lose(__LINE__,9); return false; }
+        bool duplicate = false;
+        for (uint32_t j = 0; j < parent->count; ++j)
+          if (parent->dequeued[j] == value->dequeued[i]) duplicate = true;
+        if (!duplicate) ++additions;
+      }
+      if (parent->count + additions > kOriginsPerWork) { Lose(__LINE__,9); return false; }
+      for (uint32_t j = 0; j < parent->count; ++j)
+        if (!Find(parent->dequeued[j])) { Lose(__LINE__,9); return false; }
+      // Transfer the child's actual native dequeue pins directly, without a
+      // release/reacquire gap. Dedup drops only the child's independent pin.
+      for (uint32_t i = 0; i < value->count; ++i) {
+        bool duplicate = false;
+        for (uint32_t j = 0; j < parent->count; ++j)
+          if (parent->dequeued[j] == value->dequeued[i]) duplicate = true;
+        if (duplicate) Release(value->dequeued[i]);
+        else parent->dequeued[parent->count++] = value->dequeued[i];
+      }
+      parent->unknown_input = parent->unknown_input || value->unknown_input;
+      --parent->children;
+    } else {
+      for (uint32_t i = 0; i < value->count; ++i) Release(value->dequeued[i]);
+    }
     if (value->entry.serial) Release(value->entry);
-    for (uint32_t i = 0; i < value->count; ++i) Release(value->dequeued[i]);
     value->entry = {};
     value->dequeued = {};
     value->count = 0;
+    value->parent.reset();
     value->serial.store(0, std::memory_order_release);
     work_count_.fetch_sub(1, std::memory_order_relaxed);
     return !lost();
@@ -415,8 +465,9 @@ class NativeIdentityEventOrigins {
     AtomicWorkKey key;
     Origin entry;
     std::array<Origin, kOriginsPerWork> dequeued{};
-    uint32_t count = 0;
+    uint32_t count = 0, children = 0;
     bool unknown_input = false;
+    std::optional<Work> parent;
   };
   OriginEntry* Find(Origin origin) {
     if (origin.root != root_ || !origin.serial || origin.serial == kReserved || origin.slot >= kOrigins ||

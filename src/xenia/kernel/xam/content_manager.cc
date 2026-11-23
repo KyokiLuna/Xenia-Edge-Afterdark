@@ -315,15 +315,10 @@ X_RESULT ContentManager::PreparePackageMount(ContentPackage& package,
 ContentPackage::~ContentPackage() {
   auto* fs = kernel_state_->file_system();
   auto published = registered_device_.lock();
-  {
-    auto lock = global_critical_region::AcquireDirect();
-    std::string current;
-    const auto actual = fs->AcquireDevice(device_path_);
-    if (link_owned_ && published && (!actual || actual == published) &&
-        fs->FindSymbolicLink(root_name_ + ":", current) &&
-        xe::utf8::equal_case(current, published_link_target_)) {
-      fs->UnregisterSymbolicLink(root_name_ + ":");
-    }
+  if (link_owned_ && published_link_) {
+    // A later explicit delete/recreate owns another creation token, even if
+    // its spelling, target and live device are all equal to the old link.
+    fs->UnregisterSymbolicLink(*published_link_);
   }
   // Actual prepared-device and borrowed source owners remain in the object
   // until after the short guard. Never retire an unrelated replacement.
@@ -1074,6 +1069,160 @@ bool ContentManager::RegisterManagedSource(ContentSource source) {
   }
   return sources_.RegisterManaged(std::move(source), volume->identity(), volume);
 }
+X_STATUS ContentManager::MountManagedSourceDevices(const std::string& source_id) {
+  if (!kernel_state_ || global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  auto* fs = kernel_state_->file_system();
+  const auto source = sources_.Source(source_id);
+  const auto owner = Volume(source_id);
+  const auto identity = source ? sources_.CaptureStorageVolume(*source) : nullptr;
+  if (source && (source->source.read_only ||
+      source->source.kind == ContentSourceKind::kInstalledSystem)) {
+    return X_STATUS_ACCESS_DENIED;
+  }
+  if (!fs || !source || !identity || !source->available || !source->storage ||
+      source->source.kind != ContentSourceKind::kManaged ||
+      !owner || !owner->profile_writable() ||
+      !owner->public_root() || source->volume != owner) {
+    return X_STATUS(0xC000009D);
+  }
+  // These two fields are explicit registry metadata. The native Content
+  // layout is supported only when they describe the real volume/Content edge;
+  // never derive a volume from a host parent or strip a Content component.
+  const auto& volume_path = source->source.guest_volume_root;
+  const auto& content_path = source->source.guest_root;
+  if (volume_path.empty() || !xe::utf8::equal_case(
+          content_path, xe::utf8::join_guest_paths(volume_path, "Content"))) {
+    return X_STATUS_NOT_SUPPORTED;
+  }
+  struct MountResources {
+    ContentSourceState source;
+    std::shared_ptr<const filesystem::ManagedVolumeAuthority> owner;
+  };
+  auto resources = std::make_shared<MountResources>(MountResources{*source, owner});
+  std::unique_ptr<vfs::Device> volume = std::make_unique<vfs::HostPathDevice>(
+      volume_path, owner->public_root()->path(), false, false, "FATX",
+      owner->public_root(), source->storage,
+      vfs::HostPathDevice::ControlRole::kFolderVolume);
+  if (!volume->SetStorageVolume(identity) || !volume->Initialize() ||
+      !volume->RetainMountResource(resources)) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
+  std::error_code error;
+  auto prepared_volume = fs->PrepareDeviceRegistration(volume, error);
+  if (!prepared_volume) {
+    return error ? vfs::HostStorageError(error) : X_STATUS_UNSUCCESSFUL;
+  }
+  std::unique_ptr<vfs::Device> content = std::make_unique<vfs::HostPathDevice>(
+      content_path, source->storage->path(), false, true, "FATX",
+      source->storage, source->storage);
+  if (!content->SetStorageVolume(identity) || !content->Initialize() ||
+      !content->RetainMountResource(resources)) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
+  auto prepared_content = fs->PrepareDeviceRegistration(
+      content, error, prepared_volume->device());
+  if (!prepared_content) {
+    return error ? vfs::HostStorageError(error) : X_STATUS_UNSUCCESSFUL;
+  }
+  std::shared_ptr<vfs::Device> published_volume, published_content;
+  std::shared_ptr<vfs::Device> rollback_volume, rollback_content;
+  X_STATUS result = X_STATUS_SUCCESS;
+  {
+    auto lock = global_critical_region_.Acquire();
+    auto source_admission=sources_.TryAdmitSourceGeneration(*source,error);
+    if(!source_admission)return vfs::HostStorageError(error);
+    try {
+      result = fs->RegisterPreparedDeviceExclusive(*prepared_volume, published_volume);
+      if (XSUCCEEDED(result)) {
+        result = fs->RegisterPreparedDeviceExclusive(*prepared_content, published_content);
+      }
+    } catch (...) {
+      result = X_STATUS_NO_MEMORY;
+    }
+    if (XFAILED(result)) {
+      // The outer namespace interval prevents files/aliases observing either
+      // new object. Capsules still retain every backing; actual retirement
+      // runs after GCRC. A pre-existing foreign child is never detached.
+      if (published_content) {
+        rollback_content = fs->DetachDevice(content_path, published_content.get());
+      }
+      if (published_volume) {
+        rollback_volume = fs->DetachDevice(volume_path, published_volume.get());
+      }
+    }
+  }
+  if (rollback_content) { rollback_content->Retire(); }
+  if (rollback_volume) { rollback_volume->Retire(); }
+  return result;
+}
+
+
+X_STATUS ContentManager::RefreshManagedContentView(const std::string& source_id) try {
+  if(!kernel_state_ || global_critical_region::is_held_by_current_thread())
+    return X_STATUS_INVALID_PARAMETER;
+  auto* fs=kernel_state_->file_system();
+  const auto source=sources_.Source(source_id);
+  const auto owner=Volume(source_id);
+  const auto identity=source?sources_.CaptureStorageVolume(*source):nullptr;
+  if(!fs || !source || !identity || !source->available || !source->storage ||
+      source->source.kind!=ContentSourceKind::kManaged || source->source.read_only ||
+      !owner || owner!=source->volume || !owner->profile_writable() || !owner->public_root())
+    return X_STATUS(0xC000009D);
+  const auto& volume_path=source->source.guest_volume_root;
+  const auto& content_path=source->source.guest_root;
+  if(volume_path.empty() || !xe::utf8::equal_case(content_path,
+      xe::utf8::join_guest_paths(volume_path,"Content")))return X_STATUS_NOT_SUPPORTED;
+  auto parent=fs->AcquireDevice(volume_path);
+  auto previous=fs->AcquireDevice(content_path);
+  if(!parent && !previous)return MountManagedSourceDevices(source_id);
+  const auto* parent_host=dynamic_cast<const vfs::HostPathDevice*>(parent.get());
+  const auto* old_host=dynamic_cast<const vfs::HostPathDevice*>(previous.get());
+  if(!parent_host || !old_host || parent->namespace_retiring() || previous->namespace_retiring() ||
+      previous->mount_parent()!=parent || parent->storage_volume()!=identity ||
+      previous->storage_volume()!=identity || parent_host->is_read_only() || old_host->is_read_only() ||
+      parent_host->control_role()!=vfs::HostPathDevice::ControlRole::kFolderVolume ||
+      !parent_host->storage() || !old_host->storage())return X_STATUS_ACCESS_DENIED;
+  // Authenticate the existing physical directory objects outside GCRC. The
+  // mount-local Subroot/GuestView wrappers intentionally have distinct owners;
+  // they must still name the exact source/MVA directories, not same strings.
+  const auto parent_id=parent_host->storage()->directory_identity();
+  const auto old_id=old_host->storage()->directory_identity();
+  const auto public_id=owner->public_root()->directory_identity();
+  const auto source_id_token=source->storage->directory_identity();
+  if(!parent_id || !old_id || !public_id || !source_id_token ||
+      !parent_id->SameEntry({},*public_id,{}) || !old_id->SameEntry({},*source_id_token,{}))
+    return X_STATUS_ACCESS_DENIED;
+  struct Resources {
+    ContentSourceState source;
+    std::shared_ptr<const filesystem::ManagedVolumeAuthority> owner;
+  };
+  auto resources=std::make_shared<Resources>(Resources{*source,owner});
+  std::unique_ptr<vfs::Device> content=std::make_unique<vfs::HostPathDevice>(
+      content_path,source->storage->path(),false,true,"FATX",source->storage,source->storage);
+  if(!content->SetStorageVolume(identity) || !content->Initialize() ||
+      !content->RetainMountResource(resources))return X_STATUS_UNSUCCESSFUL;
+  std::error_code error;
+  auto prepared=fs->PrepareDeviceRegistration(content,error,parent);
+  if(!prepared)return error?vfs::HostStorageError(error):X_STATUS_UNSUCCESSFUL;
+  std::shared_ptr<vfs::Device> published,retired;
+  X_STATUS status=X_STATUS_UNSUCCESSFUL;
+  {
+    auto global=global_critical_region_.Acquire();
+    auto admission=sources_.TryAdmitSourceGeneration(*source,error);
+    if(!admission)return vfs::HostStorageError(error);
+    if(fs->AcquireDevice(volume_path)!=parent || fs->AcquireDevice(content_path)!=previous ||
+        parent->namespace_retiring() || previous->namespace_retiring())return X_STATUS(0xC000009D);
+    // Existing VFS commit refuses open files, retained descendants, foreign
+    // retirement owners and source replacement before changing either row.
+    status=fs->ReplacePreparedDeviceExclusive(*prepared,previous,published,retired);
+  }
+  if(retired)retired->Retire(); // Actual mount-local retirement outside GCRC.
+  return status;
+} catch(const std::bad_alloc&) {return X_STATUS_NO_MEMORY;}
+  catch(...) {return X_STATUS_UNSUCCESSFUL;}
+
 std::shared_ptr<const filesystem::ManagedVolumeAuthority>
 ContentManager::Volume(const std::string& source_id) const {
   std::unique_lock lock(managed_owners_->mutex, std::try_to_lock);
@@ -2234,7 +2383,7 @@ std::unique_ptr<ContentPackage> ContentManager::MountPackageSelection(
   const auto volume=selected.source ? sources_.CaptureStorageVolume(*selected.source)
                                    : selected.library ? filesystem::ConsoleStorageVolume::ExternalPackage() : nullptr;
   if (!volume) { return {}; }
-  kernel_state_->RunBlockingIo([&] {
+  const auto invoked = kernel_state_->RunBlockingIo([&] {
     if (selected.directory) {
       package = std::make_unique<ContentPackage>(
           kernel_state_, root_name, data, selected.path, root_path,
@@ -2252,6 +2401,7 @@ std::unique_ptr<ContentPackage> ContentManager::MountPackageSelection(
     package.reset(new ContentPackage(kernel_state_, root_name, data,
         selected.path, root_path, std::move(backing), volume));
   }, GuestScheduler::BlockingCallClass::kConcurrent);
+  if(invoked!=HostCallOutcome::kReturned)return {};
   if (!package) { return {}; }
   package->source_ = selected.source;
   package->package_admission_ = selected.claim;
@@ -2484,7 +2634,7 @@ std::unique_ptr<ContentPackage> ContentManager::PrepareBorrowedPackage(
   package->package_path_ = selected.path;
   if(diagnostic)diagnostic->At(BorrowedContentMountDiagnostic::kPrepare);
   package->mount_diagnostic_=diagnostic;
-  kernel_state_->RunBlockingIo([&] {
+  const auto invoked = kernel_state_->RunBlockingIo([&] {
     if (selected.directory) {
       package->MountHostPath(selected.path, selected.directory->read_only(),
                              selected.directory);
@@ -2497,6 +2647,11 @@ std::unique_ptr<ContentPackage> ContentManager::PrepareBorrowedPackage(
   // The real join completes all observation writes. No pointer escapes to
   // namespace publication, deferred completion or a retained prepared capsule.
   package->mount_diagnostic_=nullptr;
+  if(invoked!=HostCallOutcome::kReturned){
+    result=xboxkrnl::xeRtlNtStatusToDosError(HostCallFailureStatus(invoked));
+    if(diagnostic)diagnostic->Fail(__LINE__,result);
+    return {};
+  }
   // RunBlockingIo joins the actual host closure before reading its result.
   // A prepared capsule, rather than an error-shaped bool, remains success.
   const bool prepared = package->is_prepared();
@@ -2549,10 +2704,13 @@ X_RESULT ContentManager::CommitPreparedContent(const RootAdmission& claim,
       const auto status = fs->RegisterPreparedDeviceExclusive(
           *package->prepared_->registration, published);
       if (XFAILED(status)) { result = xboxkrnl::xeRtlNtStatusToDosError(status); }
-      else if (!fs->RegisterSymbolicLink(alias, target)) { result = X_ERROR_ALREADY_EXISTS; }
       else {
+        const auto linked = fs->RegisterDeviceSymbolicLink(
+            alias, target, published, package->published_link_);
+        if (XFAILED(linked)) { result = xboxkrnl::xeRtlNtStatusToDosError(linked); }
+      }
+      if (!result) {
         package->registered_device_ = published;
-        package->published_link_target_.swap(target);
         package->link_owned_ = package->mounted_ = true;
       }
     } catch (...) {
@@ -2974,7 +3132,6 @@ X_STATUS ContentManager::RetireMountedDeviceTreeWithPolicy(
   std::unique_ptr<vfs::VirtualFileSystem::DeviceRetirement> retirement;
   std::vector<std::shared_ptr<ContentPackage>> packages;
   std::vector<string_key_insensitive> keys;
-  std::vector<std::string> aliases;
   X_STATUS status = X_STATUS_SUCCESS;
   {
     auto lock = global_critical_region_.Acquire();
@@ -2995,10 +3152,9 @@ X_STATUS ContentManager::RetireMountedDeviceTreeWithPolicy(
         return vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy));
       }
       closing_packages_.reserve(closing_packages_.size() + packages.size());
-      keys.reserve(packages.size()); aliases.reserve(packages.size());
+      keys.reserve(packages.size());
       for (const auto& package : packages) {
         keys.push_back(string_key_insensitive::create(package->root_name_));
-        aliases.push_back(package->root_name_ + ":");
       }
     } catch (...) { return X_STATUS_INSUFFICIENT_RESOURCES; }
     status = fs->CommitDeviceRetirement(*retirement);
@@ -3009,9 +3165,8 @@ X_STATUS ContentManager::RetireMountedDeviceTreeWithPolicy(
         closing_packages_.insert(open_packages_.extract(opened));
       }
       package->closing_ = package->close_draining_ = true;
-      const auto device = package->prepared_->registration->device();
-      if (package->link_owned_) {
-        fs->UnregisterExpectedSymbolicLink(aliases[i], package->published_link_target_, device.get());
+      if (package->link_owned_ && package->published_link_) {
+        fs->UnregisterSymbolicLink(*package->published_link_);
       }
       package->link_owned_ = package->mounted_ = false;
     }
@@ -3972,16 +4127,30 @@ struct ContentManager::ContentFlush final {
   std::filesystem::path header;
   object_ref<XEvent> event;
   std::atomic<uint64_t> remaining{0};
+  std::vector<std::shared_ptr<util::IoBatchArrival>> file_arrivals;
   std::atomic<X_STATUS> first_error{X_STATUS_SUCCESS};
   std::atomic<X_RESULT> result{X_ERROR_IO_PENDING};
   std::atomic<bool> done{false};
-  void Finish(bool dropped) {
+  void Finish(bool dropped, X_STATUS unstarted_failure = X_STATUS_SUCCESS) {
     X_STATUS status = first_error.load(std::memory_order_acquire);
+    if (XSUCCEEDED(status) && XFAILED(unstarted_failure)) { status = unstarted_failure; }
     if (dropped && XSUCCEEDED(status)) { status = X_STATUS_CANCELLED; }
     X_RESULT output;
     if (XFAILED(status)) { output = xboxkrnl::xeRtlNtStatusToDosError(status); }
     else if (!mount || mount->retiring()) { output = X_ERROR_DEVICE_NOT_CONNECTED; }
-    else { output = ContentMutationError(owner->Flush(*reservation, header)); }
+    else {
+      const auto invoked = InvokeHostCall([&] {
+        output = ContentMutationError(owner->Flush(*reservation, header));
+      });
+      if (invoked != HostCallOutcome::kReturned) {
+        // The barrier was entered: its durability is unknown, not cancelled
+        // and not proof that earlier file writes or header effects vanished.
+        output = xboxkrnl::xeRtlNtStatusToDosError(HostCallFailureStatus(invoked));
+        (void)InvokeHostCall([] {
+          XELOGE("Content flush host barrier did not return; durability unknown");
+        });
+      }
+    }
     // No common/MVA owner is stored on the waiter's reclaimable fiber stack.
     // Release this operation's filesystem pins BEFORE touching guest event
     // metadata. Existing file handles/queue runners retain their own refs and
@@ -4079,34 +4248,52 @@ X_RESULT ContentManager::FlushContent(std::string_view root_name) {
       }
     }
   }
-  auto state = std::make_shared<ContentFlush>();
-  state->owner = std::move(owner); state->reservation = std::move(reservation);
-  state->mount = std::move(mount);
-  state->header = header->lexically_relative(captured->storage->path());
-  state->event = object_ref<XEvent>(new XEvent(kernel_state_, true));
-  state->event->Initialize(false, false);
-  state->event->set_signal_ring_quiet(true);
-  state->remaining.store(files.size(), std::memory_order_relaxed);
+  std::shared_ptr<ContentFlush> state;
   uint64_t serial = 0;
-  {
+  const auto prepared = InvokeHostCall([&] {
+    state = std::make_shared<ContentFlush>();
+    state->owner = std::move(owner); state->reservation = std::move(reservation);
+    state->mount = std::move(mount);
+    state->header = header->lexically_relative(captured->storage->path());
+    state->file_arrivals.reserve(files.size());
+    for (size_t i = 0; i < files.size(); ++i) {
+      state->file_arrivals.push_back(std::make_shared<util::IoBatchArrival>());
+    }
+    state->event = object_ref<XEvent>(new XEvent(kernel_state_, true));
+    state->event->Initialize(false, false);
+    state->event->set_signal_ring_quiet(true);
+    state->remaining.store(files.size(), std::memory_order_relaxed);
     std::lock_guard lock(content_flush_mutex_);
     if (content_flushes_.size() < 64 && next_content_flush_) {
-      serial = next_content_flush_++;
-      content_flushes_.emplace(serial, state);
+      const auto candidate = next_content_flush_++;
+      content_flushes_.emplace(candidate, state);
+      serial = candidate;  // Publish only after actual successful insertion.
     }
-  }
-  if (!serial) {
-    state->event->ReleaseHandle();
-    return X_ERROR_BUSY;
+  });
+  if (prepared != HostCallOutcome::kReturned || !serial) {
+    if (state && state->event) { state->event->ReleaseHandle(); }
+    return prepared == HostCallOutcome::kReturned ? X_ERROR_BUSY :
+        xboxkrnl::xeRtlNtStatusToDosError(X_STATUS_INSUFFICIENT_RESOURCES);
   }
   if (files.empty()) {
-    kernel_state_->guest_scheduler()->PostHostCall(
-        [state] { state->Finish(false); }, GuestScheduler::BlockingCallClass::kConcurrent,
-        [state](GuestScheduler::HostCallDropReason) { state->Finish(true); });
+    bool accepted = false;
+    const auto submitted = InvokeHostCall([&] {
+      accepted = kernel_state_->guest_scheduler()->PostHostCall(
+          [state] { state->Finish(false); }, GuestScheduler::BlockingCallClass::kConcurrent,
+          [state](GuestScheduler::HostCallDropReason) { state->Finish(true); });
+    });
+    if (submitted != HostCallOutcome::kReturned || !accepted) {
+      state->Finish(false, X_STATUS_INSUFFICIENT_RESOURCES);
+    }
   } else {
-    for (const auto& file : files) {
-      const auto status = file->FlushQueued([state](X_STATUS result) { state->Arrive(result); });
-      if (XFAILED(status)) { state->Arrive(status); }
+    for (size_t i = 0; i < files.size(); ++i) {
+      const auto arrival = state->file_arrivals[i];
+      const auto arrive = [state, arrival](X_STATUS result) {
+        arrival->CompleteOnce(result, [state](X_STATUS actual) { state->Arrive(actual); });
+      };
+      // Includes the caller-side callable conversion before FlushQueued entry.
+      // Every outcome shares this exact item's once-only arrival receipt.
+      util::SubmitIoBatchItem([&] { return files[i]->FlushQueued(arrive); }, arrive);
     }
   }
   auto* waiting = state.get();

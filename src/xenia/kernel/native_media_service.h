@@ -7,13 +7,17 @@
 #include <span>
 #include <string>
 #include "xenia/kernel/guest_runtime.h"
+#include "xenia/xbox.h"
 #include "xenia/cpu/ppc/ppc_context.h"
-namespace xe { class Memory; }
+namespace xe { class Memory; class NativeAvatarBackingLease; namespace vfs { class File; } }
 namespace xe::kernel {
 namespace util { class GuestIoNativeMediaFactoryScope; }
 class KernelState;
 class XThread;
 class XObject;
+class XFile;
+template <typename T> class object_ref;
+namespace test { class NativeMediaDirectTestAccess; }
 class NativeImportDomain;
 class NativeSystemAllocationAuthority;
 class NativeSystemUiStartupCatalog;
@@ -60,6 +64,13 @@ class NativeMediaService final : public std::enable_shared_from_this<NativeMedia
   static std::unique_ptr<NativeMediaObjectFree> CaptureObjectFree(
       KernelState*,const cpu::ppc::PPCContext*,uint32_t body,uint32_t type,
       uint32_t allocation,uint32_t free_procedure) noexcept;
+  // Existing actual IO producer, before its new guest handle is published.
+  // An unrelated open is unchanged. A claimed direct C open must retain the
+  // exact previously admitted selected Device; no post-lookup adoption.
+  static X_STATUS ValidateDirectFileOpen(KernelState*,const vfs::File&,
+                                         uint32_t guest_output) noexcept;
+  static void ObserveDirectFileOpen(KernelState*,const object_ref<XFile>&,
+                                    uint32_t guest_output) noexcept;
   void BeginStop() noexcept;
   // Actual callbacks/entered calls/tasks drained. Unavailable-backend body
   // resources may remain for verified stopped-Kernel rundown; this is NOT a
@@ -67,6 +78,7 @@ class NativeMediaService final : public std::enable_shared_from_this<NativeMedia
   bool Drained() const noexcept;
  private:
   friend class NativeSystemUiService;
+  friend class test::NativeMediaDirectTestAccess;
   friend class util::GuestIoNativeMediaFactoryScope;
   friend class NativeSystemTaskContinuation;
   friend class NativeMediaObjectCreation;
@@ -84,6 +96,9 @@ class NativeMediaService final : public std::enable_shared_from_this<NativeMedia
   bool ObserveFeReady(XThread&,std::string*);
   bool OwnsScheduledWork(uint64_t serial) const noexcept;
   bool FactoryPublicationCurrent(uint64_t serial,uint32_t handle,const Memory&) const noexcept;
+  void FactoryPublicationCommitted(uint64_t serial,uint32_t value) noexcept;
+  static std::shared_ptr<const NativeAvatarBackingLease> BorrowDirectBacking(
+      Memory&,uint32_t message,uint32_t payload,std::span<const uint32_t>);
   bool StepOnBootstrap(XThread&) noexcept;
   bool StopOnBootstrap(XThread&) noexcept;
   // Same service's actual joined CPU/Kernel stop boundary, while Memory and

@@ -14,6 +14,7 @@
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/devices/host_path_entry.h"
 #include "xenia/vfs/folder_volume_control.h"
+#include "xenia/base/retained_file_metadata.h"
 #include "xenia/vfs/host_storage_errors.h"
 
 namespace xe {
@@ -41,6 +42,44 @@ void HostPathFile::Destroy() { delete this; }
 std::optional<filesystem::FileHandleInfo> HostPathFile::QueryBackingInfo(
     std::error_code& error) const {
   return file_handle_->QueryInfo(error);
+}
+
+X_STATUS HostPathFile::QueryInformation(Information* output) const {
+  if (!output) return X_STATUS_INVALID_PARAMETER;
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  Information result{};
+  const auto status = File::QueryInformation(&result);
+  if (XFAILED(status)) return status;
+  if (!file_handle_) return X_STATUS_INVALID_HANDLE;
+  const auto* entry = static_cast<const HostPathEntry*>(entry_);
+  if (entry->overwritten_ && entry->overwrite_metadata_error_) {
+    return HostStorageError(entry->overwrite_metadata_error_);
+  }
+  std::error_code error;
+  const auto actual = filesystem::QueryRetainedFileMetadata(*file_handle_, error);
+  if (!actual) {
+    if (error == std::errc::value_too_large) return X_STATUS(0xC0000095);
+    return HostStorageError(error);
+  }
+  result.access_timestamp = actual->access_timestamp;
+  result.write_timestamp = actual->write_timestamp;
+  result.change_timestamp = actual->change_timestamp;
+  // Preserve deliberate guest views: directories and collapsed package
+  // headers have logical sizes; an exclusive overwrite owns its logical EOF
+  // even while its old physical FATX tail is retained. Never publish tail EOF.
+  if (!entry->reported_size_fixed_ &&
+      !(result.attributes & kFileAttributeDirectory)) {
+    if (!entry->overwritten_) result.end_of_file = actual->size;
+    const uint64_t unit = uint64_t(entry->sectors_per_allocation_unit()) *
+                          retained_device()->bytes_per_sector();
+    const auto allocation = RoundFileAllocationSize(actual->allocated_bytes,
+                                                    unit, &result.allocation_size);
+    if (XFAILED(allocation)) return allocation;
+  }
+  *output = result;
+  return X_STATUS_SUCCESS;
 }
 
 X_STATUS HostPathFile::QueryAllocationSize(uint64_t* output) const {

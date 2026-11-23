@@ -14,6 +14,7 @@ namespace xe {
 class Memory;
 namespace kernel::xam { class ProfileSettingsReadBatch; }
 namespace kernel { class NativeMediaService; namespace test { class NativeMediaDeniedAliasTestAccess; } }
+namespace kernel { class NativeIdentityTilePublication; }
 namespace kernel::util {
 // A request validates the complete supplied span before admission, then checks
 // it again at actual access. No borrowed translated pointer crosses a wait.
@@ -50,12 +51,12 @@ class GuestIoProfileReadScope final {
   const xam::ProfileSettingsReadBatch& batch_;
   std::unique_lock<std::recursive_mutex> lock_;
 };
-// Exact owned native factory out-DWORD only. Constructible by that owner;
+// Exact owned native enum/stream factory out-DWORD. Constructible by that owner;
 // final admission is nonwaiting metadata, after provider waits and range checks.
 class GuestIoNativeMediaFactoryScope final {
  public:
   X_STATUS Admit();
-  void Release() noexcept { if(lock_.owns_lock())lock_.unlock(); }
+  void Release() noexcept;
  private:
   friend class xe::kernel::NativeMediaService;
   friend class xe::kernel::test::NativeMediaDeniedAliasTestAccess;
@@ -69,6 +70,11 @@ class GuestIoNativeMediaFactoryScope final {
   std::unique_lock<std::mutex> lock_;
 };
 X_STATUS WriteGuestIoBuffers(Memory&, std::span<const GuestIoWrite>);
+// The typed observer denies only image provenance. It never changes byte
+// validation/status, owns no translated destination, and releases all strong
+// holders in its caller after this aggregate writer's GCRC/callback scopes.
+X_STATUS WriteGuestIoBuffers(Memory&, std::span<const GuestIoWrite>,
+                             NativeIdentityTilePublication&);
 X_STATUS WriteGuestIoBuffers(Memory&, std::span<const GuestIoWrite>,
                              GuestIoProfileReadScope&);
 X_STATUS WriteGuestIoBuffers(Memory&, std::span<const GuestIoWrite>,

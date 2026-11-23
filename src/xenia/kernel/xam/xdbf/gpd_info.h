@@ -161,6 +161,14 @@ class GpdInfo : public XdbfFile {
   // r/w image, setting, string.
   std::span<const uint8_t> GetImage(uint64_t id) const;
   void AddImage(uint32_t id, std::span<const uint8_t> image_data);
+  // Private-model operations for the stamped writer. Namespace2 keys retain
+  // all 64 bits; empty owned bytes are an image, not a deletion marker. These
+  // functions perform no IO, cache publication or native completion.
+  std::error_code UpsertImageChecked(uint64_t id,
+                                      std::span<const uint8_t> image_data);
+  // Desired-state deletion is idempotent. A native front door must separately
+  // preserve its recovered delete-absent status; this is not that ABI.
+  std::error_code DeleteImageChecked(uint64_t id);
 
   X_XDBF_GPD_SETTING_HEADER* GetSetting(uint32_t id);
   const X_XDBF_GPD_SETTING_HEADER* GetSetting(uint32_t id) const;

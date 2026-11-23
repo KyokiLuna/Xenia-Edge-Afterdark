@@ -49,8 +49,13 @@ UserData::UserData(X_USER_DATA_TYPE data_type, UserDataTypes user_data) {
           static_cast<uint16_t>(string_util::size_in_bytes(str, false));
 
       extended_data_.resize(data_.data.unicode.size);
-      memcpy(extended_data_.data(), reinterpret_cast<uint8_t*>(str.data()),
-             data_.data.unicode.size);
+      // All extended WSTRING bytes use the guest/native UTF-16BE format.
+      // Guest/GPD constructors already retain that wire representation.
+      for (size_t i = 0; i != str.size(); ++i) {
+        const uint16_t unit = uint16_t(str[i]);
+        extended_data_[i * 2] = uint8_t(unit >> 8);
+        extended_data_[i * 2 + 1] = uint8_t(unit);
+      }
       break;
     }
     case X_USER_DATA_TYPE::INT32:

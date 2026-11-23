@@ -28,6 +28,7 @@
 #include "xenia/cpu/export_resolver.h"
 #include "xenia/kernel/guest_runtime.h"
 #include "xenia/kernel/guest_scheduler.h"
+#include "xenia/kernel/util/host_call_outcome.h"
 #include "xenia/kernel/kernel.h"
 #include "xenia/kernel/nui.h"
 #include "xenia/kernel/util/kernel_fwd.h"
@@ -53,8 +54,12 @@ namespace kernel {
 class SystemManagementController;
 class NativeImportDomain;
 class NativeSystemAllocationAuthority;
+class NativeSystemUiService;
+class NativeIdentityTilePublication;
+class NativeIdentityTileObserverSlot;
 class NativeNotificationPreferenceCoordinator;
 class XStfsDevice;
+class ConsoleSigningIdentity;
 struct NativeSystemPhysicalAllocationDecision;
 namespace xam {
 class AchievementManager;
@@ -212,13 +217,15 @@ class KernelState {
       Emulator* emulator,
       std::shared_ptr<ConsoleSettingsStore> console_settings = {},
       std::error_code console_settings_error = {},
-      std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery_owner = {});
+      std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery_owner = {},
+      std::shared_ptr<ConsoleSigningIdentity> signing_identity = {});
   ~KernelState();
 
   static KernelState* shared();
 
   Emulator* emulator() const { return emulator_; }
   Memory* memory() const { return memory_; }
+  const std::shared_ptr<ConsoleSigningIdentity>& console_signing_identity() const { return console_signing_identity_; }
   cpu::Processor* processor() const { return processor_; }
   vfs::VirtualFileSystem* file_system() const { return file_system_; }
   // Conservative native STFS body/context lifetime; never owns retired mounts
@@ -243,9 +250,21 @@ class KernelState {
   // worker while the calling fiber waits on an event its completion signals.
   // Off a fiber or under the global lock it runs inline. With |alertable| a
   // user APC ends one poll of the wait, which still lasts until |fn| is done.
-  void RunBlockingIo(const std::function<void()>& fn,
-                     GuestScheduler::BlockingCallClass call_class,
-                     bool alertable = false);
+  // Consume the invocation outcome separately from the operation's result.
+  // Ordinary host exceptions never become success or unchanged cancellation.
+  // Actual scheduler-stop abandonment does not resume a borrowed caller.
+  template <typename Fn>
+  [[nodiscard]] HostCallOutcome RunBlockingIo(
+      Fn&& fn,
+      GuestScheduler::BlockingCallClass call_class,
+      bool alertable = false) {
+    std::function<void()> owned;
+    if (InvokeHostCall([&] { owned = std::forward<Fn>(fn); }) !=
+        HostCallOutcome::kReturned) {
+      return HostCallOutcome::kAdmissionFailed;
+    }
+    return RunBlockingIoImpl(std::move(owned), call_class, alertable);
+  }
 
   SystemManagementController* smc() const { return smc_.get(); }
 
@@ -372,6 +391,7 @@ class KernelState {
     UserModuleExecutionLease& operator=(UserModuleExecutionLease&&) = delete;
 
    private:
+
     friend class KernelState;
     UserModuleExecutionLease(KernelState* kernel, const UserModule* owner,
                              uint32_t hmodule)
@@ -546,7 +566,18 @@ class KernelState {
   std::array<uint32_t, 0x11> xbdm_counters_address = {};
 
  private:
+  [[nodiscard]] HostCallOutcome RunBlockingIoImpl(
+      std::function<void()> fn, GuestScheduler::BlockingCallClass call_class,
+      bool alertable);
+
   friend class NativeProfileIdentityOwner;
+  friend class NativeSystemUiService;
+  friend class NativeIdentityTilePublication;
+  // Atomic alias of this Kernel's existing native-service admission slot.
+  // It contains weak observers only; stores/credit never take registry locks
+  // under GCRC, and no native resource is retired by this metadata alias.
+  std::atomic<std::shared_ptr<NativeIdentityTileObserverSlot>>
+      native_identity_tile_observer_slot_;
   // Denial-only cache for the explicitly selected identity factory. Native
   // DC628 cannot consult a registry under its publisher lock. This never
   // grants publication: an exact actual-Task prebound cell is still required.
@@ -593,6 +624,7 @@ class KernelState {
   std::unique_ptr<XmpVolumePatch> xmp_volume_patch_;
   std::unique_ptr<XConfig> xconfig_;
   std::shared_ptr<const filesystem::SnapshotRecoveryOwner> snapshot_recovery_owner_;
+  std::shared_ptr<ConsoleSigningIdentity> console_signing_identity_;
   // Console authority and native cache handover outlive the resident service.
   // No service/coordinator ownership cycle or second settings store.
   std::shared_ptr<NativeNotificationPreferenceCoordinator>
@@ -645,10 +677,19 @@ class KernelState {
   // KDPCs queued on the dispatch thread that haven't started.
   std::vector<uint32_t> dispatch_dpcs_;
 
+  struct QueuedDpc {
+    uint32_t dpc_ptr;
+    uint32_t arg1;
+    uint32_t arg2;
+  };
   // DPCs queued to each guest processor and the thread that runs them there.
   struct ProcessorDpcs {
+    // Never held across a guest memory access, which can fault into the watch
+    // handler while KeInsertQueueDpc holds the global region and waits here.
     std::mutex lock;
-    std::deque<uint32_t> queue;
+    std::deque<QueuedDpc> queue;
+    // Under lock.
+    std::deque<QueuedDpc>::iterator Find(uint32_t dpc_ptr);
     object_ref<XEvent> event;
     object_ref<XHostThread> thread;
     std::atomic<bool> started{false};

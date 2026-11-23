@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <exception>
+#include <cstdlib>
 #include <limits>
 #include <new>
 #include <utility>
@@ -35,6 +36,7 @@
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/guest_io_buffer.h"
+#include "xenia/kernel/util/host_call_outcome.h"
 
 // As with normal Microsoft, there are like twelve different ways to access
 // the audio APIs. Early games use XMA*() methods almost exclusively to touch
@@ -80,6 +82,11 @@ struct AudioSystem::ClientRegistration {
   std::shared_ptr<NativeAudioObservation> observation;
   uint64_t frame_sequence = 0;
   AudioDriver* driver = nullptr;  // clients_mutex_ protects the driver.
+  enum class CleanupStep {
+    kNotEntered, kClaimed, kDriverEntered, kDriverReturned,
+    kObservationRetired, kArgumentFreed, kSemaphoresDrained, kSlotReleased
+  };
+  CleanupStep cleanup_step = CleanupStep::kNotEntered;  // exact cleanup owner
   std::atomic<uint32_t> frames_submitted{0};
   std::atomic<uint32_t> frames_processed{0};
   std::atomic<uint32_t> frames_dropped{0};
@@ -142,6 +149,14 @@ AudioSystem::AudioSystem(cpu::Processor* processor)
 }
 
 AudioSystem::~AudioSystem() {
+  for (const auto& slot : clients_) {
+    if (slot.registration && slot.registration->lifecycle.phase() ==
+                                 AudioClientLifecycle::Phase::kCleanupFailed) {
+      // A driver may retain our semaphores after an interrupted Shutdown.
+      // Destruction must never turn quarantine into an unproved backend stop.
+      std::quick_exit(EXIT_FAILURE);
+    }
+  }
   ducker_policy_->Stop();
   StopIndependentAudio();
   if (xma_decoder_) {
@@ -384,7 +399,15 @@ void AudioSystem::Shutdown() {
     }
     if (registration) {
       registration->lifecycle.Retire(true);
-      CleanupClient(i, registration);
+      if (!CleanupClient(i, registration)) {
+        try {
+          XELOGE("APU: backend cleanup stop unproven at step {}; "
+                 "retaining providers until process exit",
+                 int(registration->cleanup_step));
+          xe::FlushLog();
+        } catch (...) {}
+        std::quick_exit(EXIT_FAILURE);
+      }
     }
   }
   restored_clients_.clear();
@@ -763,6 +786,7 @@ X_STATUS AudioSystem::UnregisterClient(size_t index) {
   }
   struct Outcome {
     std::atomic<bool> cleaned{false};
+    std::atomic<X_STATUS> failure{X_STATUS_UNSUCCESSFUL};
     threading::Fence done;
   };
   struct HostCompletion {
@@ -778,25 +802,50 @@ X_STATUS AudioSystem::UnregisterClient(size_t index) {
       operation->Complete();
     }
   };
-  auto outcome = std::make_shared<Outcome>();
-  auto completion = std::make_shared<HostCompletion>(operation, outcome);
-  std::function<void()> work = [this, index, registration, outcome,
+  std::shared_ptr<Outcome> outcome;
+  std::shared_ptr<HostCompletion> completion;
+  std::function<void()> work;
+  const auto prepared = kernel::InvokeHostCall([&] {
+    outcome = std::make_shared<Outcome>();
+    completion = std::make_shared<HostCompletion>(operation, outcome);
+    work = [this, index, registration, outcome,
                                 completion = std::move(completion)] {
     (void)
         completion;  // Own completion even when the queued function is dropped.
-    if (registration->lifecycle.WaitForQuiescence()) {
-      outcome->cleaned.store(CleanupClient(index, registration),
+    const auto invoked = kernel::InvokeHostCall([&] {
+      if (registration->lifecycle.WaitForQuiescence()) {
+        outcome->cleaned.store(CleanupClient(index, registration),
+                               std::memory_order_release);
+      }
+    });
+    if (invoked != kernel::HostCallOutcome::kReturned) {
+      outcome->failure.store(kernel::HostCallFailureStatus(invoked),
                              std::memory_order_release);
     }
   };
-  // RunBlockingIo retains a reference to a guest-stack std::function. Use an
-  // owned PostHostCall instead: shutdown may drop queued jobs and reclaim
-  // parked fibers without unwinding their locals. The job's completion ticket
-  // closes the counter on execution OR cancellation, independently of them.
+  });
+  if (prepared != kernel::HostCallOutcome::kReturned) {
+    // Retirement may already have withdrawn callback admission, but cleanup
+    // never entered. No unknown backend destroy/cancel/success is claimed.
+    work = {};
+    completion.reset();
+    return X_STATUS_INSUFFICIENT_RESOURCES;
+  }
+  // Use an owned completion ticket independently of the guest wait frame:
+  // shutdown may drop queued jobs and reclaim parked fibers without unwinding
+  // their locals. Ticket destruction closes this actual operation counter on
+  // execution OR unstarted drop; cleanup failure never becomes success.
   if (kernel::GuestScheduler::CurrentThreadOffloadsBlockingCalls()) {
-    kernel_state_->guest_scheduler()->PostHostCall(
-        std::move(work),
-        kernel::GuestScheduler::BlockingCallClass::kConcurrent);
+    bool accepted = false;
+    const auto submitted = kernel::InvokeHostCall([&] {
+      accepted = kernel_state_->guest_scheduler()->PostHostCall(
+          std::move(work),
+          kernel::GuestScheduler::BlockingCallClass::kConcurrent);
+    });
+    if (submitted != kernel::HostCallOutcome::kReturned || !accepted) {
+      outcome->failure.store(X_STATUS_INSUFFICIENT_RESOURCES,
+                             std::memory_order_release);
+    }
   } else {
     work();
   }
@@ -804,7 +853,7 @@ X_STATUS AudioSystem::UnregisterClient(size_t index) {
   kernel::GuestScheduler::WaitOnFence(outcome->done);
   return outcome->cleaned.load(std::memory_order_acquire)
              ? X_STATUS_SUCCESS
-             : X_STATUS_UNSUCCESSFUL;
+             : outcome->failure.load(std::memory_order_acquire);
 }
 
 bool AudioSystem::CleanupClient(
@@ -816,34 +865,56 @@ bool AudioSystem::CleanupClient(
   if (!registration->lifecycle.ClaimCleanup()) {
     return registration->lifecycle.WaitForCleanup();
   }
-  AudioDriver* driver_to_destroy;
-  std::shared_ptr<NativeAudioObservation> observation;
-  {
-    std::lock_guard lock(clients_mutex_);
-    if (clients_[index].registration != registration) {
-      return false;
+  struct CleanupGuard {
+    AudioClientLifecycle& lifecycle;
+    bool complete = false;
+    ~CleanupGuard() { if (!complete) { lifecycle.FailCleanup(); } }
+  } cleanup{registration->lifecycle};
+  registration->cleanup_step = ClientRegistration::CleanupStep::kClaimed;
+  bool cleaned = false;
+  const auto invoked = kernel::InvokeHostCall([&] {
+    AudioDriver* driver_to_destroy;
+    std::shared_ptr<NativeAudioObservation> observation;
+    {
+      std::lock_guard lock(clients_mutex_);
+      if (clients_[index].registration != registration) { return; }
+      driver_to_destroy = registration->driver;
+      observation = registration->observation;
     }
-    driver_to_destroy = std::exchange(registration->driver, nullptr);
-    observation = std::exchange(registration->observation, {});
-  }
-  // Keep the slot occupied until both the guest callback and host driver have
-  // stopped, and all old semaphore signals have been drained.
-  DestroyDriver(driver_to_destroy);
-  if (observation) { observation->Retire(); }
-  memory()->SystemHeapFree(registration->wrapped_callback_arg);
-  auto client_semaphore = client_semaphores_[index].get();
-  xe::threading::WaitResult wait_result;
-  do {
-    wait_result = xe::threading::Wait(client_semaphore, false,
-                                      std::chrono::milliseconds(0));
-  } while (wait_result == xe::threading::WaitResult::kSuccess);
-  assert_true(wait_result == xe::threading::WaitResult::kTimeout);
-  {
-    std::lock_guard lock(clients_mutex_);
-    clients_[index].registration.reset();
-    clients_[index].next_pump_us = 0;
-  }
-  registration->lifecycle.CompleteCleanup();
+    // Keep the slot/module/driver record owned until normal backend return.
+    // An attempted but unreturned destruction is never automatically retried.
+    registration->cleanup_step = ClientRegistration::CleanupStep::kDriverEntered;
+    DestroyDriver(driver_to_destroy);
+    registration->cleanup_step = ClientRegistration::CleanupStep::kDriverReturned;
+    {
+      std::lock_guard lock(clients_mutex_);
+      registration->driver = nullptr;
+    }
+    if (observation) { observation->Retire(); }
+    registration->cleanup_step = ClientRegistration::CleanupStep::kObservationRetired;
+    memory()->SystemHeapFree(registration->wrapped_callback_arg);
+    registration->cleanup_step = ClientRegistration::CleanupStep::kArgumentFreed;
+    auto client_semaphore = client_semaphores_[index].get();
+    xe::threading::WaitResult wait_result;
+    do {
+      wait_result = xe::threading::Wait(client_semaphore, false,
+                                        std::chrono::milliseconds(0));
+    } while (wait_result == xe::threading::WaitResult::kSuccess);
+    if (wait_result != xe::threading::WaitResult::kTimeout) { return; }
+    registration->cleanup_step = ClientRegistration::CleanupStep::kSemaphoresDrained;
+    {
+      std::lock_guard lock(clients_mutex_);
+      if (clients_[index].registration != registration) { return; }
+      registration->observation.reset();
+      clients_[index].registration.reset();
+      clients_[index].next_pump_us = 0;
+    }
+    registration->cleanup_step = ClientRegistration::CleanupStep::kSlotReleased;
+    registration->lifecycle.CompleteCleanup();
+    cleaned = true;
+  });
+  if (invoked != kernel::HostCallOutcome::kReturned || !cleaned) { return false; }
+  cleanup.complete = true;
   return true;
 }
 

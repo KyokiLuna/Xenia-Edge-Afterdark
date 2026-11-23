@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -21,6 +22,7 @@
 #include "xenia/ui/windowed_app_context.h"
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/base/byte_order.h"
+#include "xenia/base/xdbf_view.h"
 #include "xenia/base/string.h"
 #include "xenia/base/managed_volume_authority.h"
 #include "xenia/kernel/xam/xam_content_device.h"
@@ -38,6 +40,9 @@
 #include "xenia/kernel/xam/tile_service.h"
 #include "xenia/kernel/xam/tile_request.h"
 #include "xenia/kernel/xam/user_profile.h"
+#include "xenia/kernel/xam/user_tracker.h"
+#include "xenia/kernel/xam/profile_picture_codec.h"
+#include "xenia/kernel/testing/profile_picture_fixture.h"
 #include "xenia/kernel/xam/user_settings.h"
 #include "xenia/kernel/xam/xam_state.h"
 #include "xenia/kernel/xam/xdbf/gpd_info_profile.h"
@@ -112,6 +117,7 @@ uint32_t CallCreationExport(CreationRuntime& runtime,uint16_t ordinal,PPCContext
   entry->function_data.trampoline(&context); return uint32_t(context.r[3]);
 }
 std::vector<uint8_t> CreationRead(const std::filesystem::path& path) {
+  CAPTURE(path.string());
   std::ifstream file(path,std::ios::binary); REQUIRE(file);
   return {std::istreambuf_iterator<char>(file),{}};
 }
@@ -171,6 +177,20 @@ CreationFiles CheckCreatedProfile(CreationRuntime& runtime,uint64_t xuid,
   REQUIRE_FALSE(ValidateGpdSnapshot(files.at("FFFE07D1.gpd")));
   REQUIRE_FALSE(ValidateProfileGpdRecords(files.at("FFFE07D1.gpd"),true));
   GpdInfoProfile gpd(files.at("FFFE07D1.gpd")); const auto appearance=Appearance(gpd);
+  std::optional<UserSetting> picture_key;
+  REQUIRE(UserSetting::ReadFromGpd(gpd,uint32_t(UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY),picture_key)==X_ERROR_SUCCESS);
+  REQUIRE(picture_key);
+  const auto key_bytes=picture_key->get_extended_data(); REQUIRE(key_bytes.size()==50);
+  const std::array<uint32_t,3> key_tuple{kDashboardID,0x00020000u|picture,0x00010000u|picture};
+  constexpr char hex[]="0123456789ABCDEF";
+  for(size_t field=0;field!=key_tuple.size();++field) {
+    for(size_t digit=0;digit!=8;++digit) {
+      const size_t at=(field*8+digit)*2;
+      REQUIRE(key_bytes[at]==0);
+      REQUIRE(key_bytes[at+1]==uint8_t(hex[(key_tuple[field]>>((7-digit)*4))&15]));
+    }
+  }
+  REQUIRE(key_bytes[48]==0); REQUIRE(key_bytes[49]==0);
   REQUIRE(AvatarManifestBodyType(appearance)==preset.body_type);
   // The native SetManifest normalization is independently checked byte by byte;
   // all unknown input bytes outside the XUID/clear range must survive unchanged.
@@ -230,6 +250,43 @@ void CheckSignedInProjection(CreationRuntime& runtime,uint64_t xuid,
   REQUIRE(std::equal(expected.begin(),expected.end(),memory.TranslateVirtual<uint8_t*>(page.address+0x100)));
   REQUIRE(*memory.TranslateVirtual<uint8_t*>(page.address+0xFF)==0xA5);
   REQUIRE(*memory.TranslateVirtual<uint8_t*>(page.address+0x100+1000)==0xA5);
+  // Exercise actual settings publication and the registered tile-key consumer,
+  // rather than comparing two host serializers that share the same defect.
+  constexpr uint32_t key_id=uint32_t(UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY);
+  const uint32_t ids=page.address+0x600,size=page.address+0x610,output=page.address+0x800;
+  const uint32_t required=8+sizeof(X_USER_PROFILE_SETTING)+UserSetting::get_max_size(key_id);
+  xe::store_and_swap<uint32_t>(memory.TranslateVirtual(ids),key_id);
+  xe::store_and_swap<uint32_t>(memory.TranslateVirtual(size),required);
+  context=CreationContext(runtime,page.address+0x2800);
+  context.r[3]=kDashboardID;context.r[4]=slot;context.r[5]=context.r[6]=0;
+  context.r[7]=1;context.r[8]=ids;context.r[9]=0xffffffff;context.r[10]=size;
+  xe::store_and_swap<uint32_t>(memory.TranslateVirtual(util::get_arg_stack_ptr<uint32_t>(&context,0)),output);
+  xe::store_and_swap<uint32_t>(memory.TranslateVirtual(util::get_arg_stack_ptr<uint32_t>(&context,1)),0);
+  REQUIRE(CallCreationExport(runtime,0x22A,context)==X_ERROR_SUCCESS);
+  X_USER_PROFILE_SETTING row{};
+  std::memcpy(&row,memory.TranslateVirtual(output+8),sizeof(row));
+  REQUIRE(row.user_index==slot);
+  REQUIRE(uint64_t(row.xuid)==((uint64_t(slot)<<32)|UINT64_C(0xFFFFFFFF)));
+  REQUIRE(row.setting_id==key_id);
+  REQUIRE(row.data.type==X_USER_DATA_TYPE::WSTRING);REQUIRE(row.data.data.unicode.size==50);
+  std::optional<UserSetting> stored_key;
+  REQUIRE(UserSetting::ReadFromGpd(gpd,key_id,stored_key)==X_ERROR_SUCCESS);REQUIRE(stored_key);
+  const auto expected_key=stored_key->get_extended_data();REQUIRE(expected_key.size()==50);
+  REQUIRE(std::equal(expected_key.begin(),expected_key.end(),memory.TranslateVirtual<uint8_t*>(row.data.data.unicode.ptr)));
+  REQUIRE(*memory.TranslateVirtual<uint8_t*>(output-1)==0xA5);
+  REQUIRE(*memory.TranslateVirtual<uint8_t*>(output+required)==0xA5);
+  context=CreationContext(runtime,page.address+0x2800);
+  context.r[3]=output+8+offsetof(X_USER_PROFILE_SETTING,data);
+  context.r[4]=page.address+0x620;context.r[5]=page.address+0x624;context.r[6]=page.address+0x628;
+  REQUIRE(CallCreationExport(runtime,0x30A,context)==X_ERROR_SUCCESS);
+  std::array<uint32_t,3> parsed{};
+  for(size_t field=0;field!=3;++field) {
+    std::string text;
+    for(size_t i=0;i!=8;++i){REQUIRE(expected_key[(field*8+i)*2]==0);text.push_back(char(expected_key[(field*8+i)*2+1]));}
+    parsed[field]=uint32_t(std::strtoul(text.c_str(),nullptr,16));
+    REQUIRE(xe::load_and_swap<uint32_t>(memory.TranslateVirtual(page.address+0x620+uint32_t(field*4)))==parsed[field]);
+  }
+  REQUIRE(parsed[0]==kDashboardID);
 }
 XCONTENT_AGGREGATE_DATA CreationSaveDescriptor(CreationRuntime& runtime) {
   const auto source=runtime.content().sources().Source("hdd"); REQUIRE(source);
@@ -456,6 +513,189 @@ TEST_CASE("Installed initial local profiles create real Account GPD stock tiles 
   REQUIRE(runtime.profiles().GetUserIndexAssignedToProfile(native_xuid)==3);
   CheckSignedInProjection(runtime,native_xuid,native_edited);
   ReadCreationSave(runtime,one.xuid,"CreationA",save_one); ReadCreationSave(runtime,two.xuid,"CreationB",save_two);
+  // Reproduce the actual older host constructor's LE key on copied fixture
+  // state only, with unknown record header/tail bytes to protect in repair.
+  runtime.profiles().Logout(3,false);runtime.profiles().Logout(0,false);runtime.profiles().Logout(2,false);
+  runtime.emulator.reset();REQUIRE(KernelState::shared()==nullptr);
+  class LegacyKeyDatabase : public GpdInfoProfile {
+   public:
+    explicit LegacyKeyDatabase(const std::vector<uint8_t>& bytes):GpdInfoProfile(bytes){}
+    void BreakHostKey() {
+      const auto* original=GetEntry(uint16_t(GpdSection::kSetting),uint32_t(UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY));REQUIRE(original);
+      Entry copy=*original;REQUIRE(copy.data.size()>=sizeof(X_XDBF_GPD_SETTING_HEADER)+50);
+      auto* header=reinterpret_cast<X_XDBF_GPD_SETTING_HEADER*>(copy.data.data());
+      header->unknown_1=0x1234ABCD;std::fill_n(header->unknown,7,char(0x5A));
+      header->base_data.unicode.ptr=0x89ABCDEF;
+      auto* payload=copy.data.data()+sizeof(*header);
+      for(size_t i=0;i!=50;i+=2){std::swap(payload[i],payload[i+1]);}
+      copy.data.insert(copy.data.end(),{0xC1,0xA0,0xF9,0});copy.info.size=uint32_t(copy.data.size());
+      UpsertEntry(&copy);
+    }
+  } legacy(first.at("FFFE07D1.gpd"));
+  legacy.BreakHostKey();std::vector<uint8_t> legacy_wire;
+  REQUIRE_FALSE(legacy.SerializeChecked(legacy_wire,GpdSnapshotStore::kMaximumBytes));
+  const auto one_package=runtime.root.path/"content"/ProfileStorageLease::ProfileRelative(one.xuid);
+  {
+    std::ofstream output(one_package/"FFFE07D1.gpd",std::ios::binary|std::ios::trunc);REQUIRE(output);
+    output.write(reinterpret_cast<const char*>(legacy_wire.data()),legacy_wire.size());REQUIRE(output.good());
+  }
+  runtime.Restart();runtime.profiles().Login(one.xuid,2,false);
+  REQUIRE(runtime.profiles().GetUserIndexAssignedToProfile(one.xuid)==2);
+  auto repaired=first;repaired["FFFE07D1.gpd"]=CreationRead(one_package/"FFFE07D1.gpd");
+  REQUIRE(repaired.at("FFFE07D1.gpd")!=legacy_wire);
+  const GpdInfoProfile repaired_db(repaired.at("FFFE07D1.gpd"));
+  const auto* repaired_key=repaired_db.GetEntry(uint16_t(GpdSection::kSetting),uint32_t(UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY));REQUIRE(repaired_key);
+  const GpdInfoProfile& legacy_read = legacy;
+  const auto* legacy_key=legacy_read.GetEntry(uint16_t(GpdSection::kSetting),uint32_t(UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY));REQUIRE(legacy_key);
+  auto intended=legacy_key->data;
+  for(size_t i=sizeof(X_XDBF_GPD_SETTING_HEADER);i!=sizeof(X_XDBF_GPD_SETTING_HEADER)+50;i+=2){std::swap(intended[i],intended[i+1]);}
+  REQUIRE(repaired_key->data==intended); // exact unknown header, pointer and suffix retained
+  const auto before_view=XdbfTableView::Parse(legacy_wire);
+  const auto after_view=XdbfTableView::Parse(repaired.at("FFFE07D1.gpd"));
+  REQUIRE(before_view);REQUIRE(after_view);REQUIRE(before_view->entries_used==after_view->entries_used);
+  for(size_t i=0;i!=before_view->entries_used;++i){
+    const auto* record=before_view->entries.data()+i*18;
+    const uint16_t section=uint16_t(record[0])<<8|record[1];
+    const uint64_t id=uint64_t(XdbfTableView::U32(record+2))<<32|XdbfTableView::U32(record+6);
+    if(section==uint16_t(GpdSection::kSetting)&&id==uint32_t(UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY)){continue;}
+    const auto old=before_view->Find(section,id),next=after_view->Find(section,id);REQUIRE(old);REQUIRE(next);
+    REQUIRE(std::equal(old->begin(),old->end(),next->begin(),next->end()));
+  }
+  REQUIRE(Appearance(repaired_db)==Appearance(legacy));
+  for(const auto& [leaf,bytes]:first){if(leaf!="FFFE07D1.gpd"){REQUIRE(CreationRead(one_package/leaf)==bytes);}}
+  CheckSignedInProjection(runtime,one.xuid,repaired);
+  {
+    auto writer=runtime.profiles().CaptureGpdWriter(one.xuid,error);REQUIRE(writer.model);REQUIRE_FALSE(error);
+    auto rows=GpdDurableIntentStore::Scan(*writer.owner,error);REQUIRE_FALSE(error);
+    size_t recovered_before=0;
+    for(const auto& row:rows){
+      if(row.binding.xuid!=one.xuid){continue;}
+      REQUIRE_FALSE(row.error);REQUIRE(row.done_record_valid);
+      std::vector<uint8_t> journal;
+      REQUIRE_FALSE(writer.owner->root()->ReadFile(row.journal,4*GpdSnapshotStore::kMaximumBytes+16384,journal));
+      REQUIRE(std::search(journal.begin(),journal.end(),legacy_wire.begin(),legacy_wire.end())!=journal.end());
+      ++recovered_before;
+    }
+    REQUIRE(recovered_before==1); // real durable journal retains full original bytes
+    const auto before_repair=writer.model->CaptureLoads(error);REQUIRE(before_repair);
+    const auto original_id=before_repair->at(kDashboardID).token->info().file_id;
+    REQUIRE_FALSE(runtime.profiles().ReloadGpdModel(one.xuid));
+    REQUIRE(CreationRead(one_package/"FFFE07D1.gpd")==repaired.at("FFFE07D1.gpd"));
+    const auto after_repair=writer.model->CaptureLoads(error);REQUIRE(after_repair);
+    REQUIRE(after_repair->at(kDashboardID).token->info().file_id==original_id);
+    REQUIRE(GpdDurableIntentStore::Scan(*writer.owner,error).size()==rows.size());REQUIRE_FALSE(error);
+  }
+  runtime.profiles().Logout(2,false);runtime.Restart();runtime.profiles().Login(one.xuid,2,false);
+  REQUIRE(runtime.profiles().GetUserIndexAssignedToProfile(one.xuid)==2);
+  REQUIRE(CreationRead(one_package/"FFFE07D1.gpd")==repaired.at("FFFE07D1.gpd"));
+  CheckSignedInProjection(runtime,one.xuid,repaired);
+  ReadCreationSave(runtime,one.xuid,"CreationA",save_one);ReadCreationSave(runtime,two.xuid,"CreationB",save_two);
+}
+
+TEST_CASE("Both host editors' common picture service commits pair and selection then resets and restarts without changing identity or saves",
+          "[.installed_profile_creation][kernel][profile_picture][persistence]") {
+  CreationRuntime runtime(true);
+  const auto created = runtime.profiles().CreateProfileDetailed("HostPictures", true);
+  REQUIRE(created.status == X_ERROR_SUCCESS); REQUIRE(created.signed_in);
+  const auto xuid = created.xuid; REQUIRE(xuid);
+  const auto package = runtime.root.path / "content" / ProfileStorageLease::ProfileRelative(xuid);
+  const auto account = CreationRead(package / "Account");
+  const auto public_large = CreationRead(package / "tile_64.png");
+  const auto public_small = CreationRead(package / "tile_32.png");
+  const auto avatar_large = CreationRead(package / "avtr_64.png");
+  // The actual fresh recipe ships avtr_64 only. Preserve a genuine existing
+  // small tile byte-for-byte when present, and preserve its absence otherwise.
+  std::optional<std::vector<uint8_t>> avatar_small;
+  if (std::filesystem::exists(package / "avtr_32.png")) {
+    avatar_small = CreationRead(package / "avtr_32.png");
+  }
+  const auto check_avatar_small = [&] {
+    REQUIRE(std::filesystem::exists(package / "avtr_32.png") == avatar_small.has_value());
+    if (avatar_small) { REQUIRE(CreationRead(package / "avtr_32.png") == *avatar_small); }
+  };
+  const GpdInfoProfile original_gpd(CreationRead(package / "FFFE07D1.gpd"));
+  const auto appearance = Appearance(original_gpd);
+  std::optional<UserSetting> public_key;
+  REQUIRE(UserSetting::ReadFromGpd(original_gpd,
+      uint32_t(UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY), public_key) == X_ERROR_SUCCESS);
+  REQUIRE(public_key);
+  const std::array<uint8_t,4> save{0x61,0,0x72,0x83};
+  WriteCreationSave(runtime, xuid, "HostPictureSave", save);
+  auto* tracker = runtime.emulator->kernel_state()->xam_state()->user_tracker();
+  REQUIRE(tracker);
+  const auto self_picture = [&]() {
+    auto profile = runtime.profiles().CaptureProfile(xuid);
+    REQUIRE(profile); return profile->GetSelfProfileIcon();
+  };
+  REQUIRE(self_picture() == public_large);
+  const auto before_rejected = CreationRead(package / "FFFE07D1.gpd");
+  REQUIRE_FALSE(tracker->UpdateUserIcon(xuid, std::array<uint8_t,3>{0x89,0,1}));
+  REQUIRE(CreationRead(package / "FFFE07D1.gpd") == before_rejected);
+  REQUIRE_FALSE(std::filesystem::exists(package / "pp_64.png"));
+  REQUIRE_FALSE(std::filesystem::exists(package / "pp_32.png"));
+  const auto png = xe::kernel::test::SyntheticProfilePicture64();
+  std::error_code error;
+  const auto pair = PrepareHostProfilePicturePair(png, error);
+  REQUIRE(pair); REQUIRE_FALSE(error);
+  REQUIRE(tracker->UpdateUserIcon(xuid, png));
+  REQUIRE(CreationRead(package / "pp_64.png") == pair->large);
+  REQUIRE(CreationRead(package / "pp_32.png") == pair->small);
+  REQUIRE(runtime.profiles().CaptureProfileIcon(xuid, XTileType::kPersonalGamerTile) == pair->large);
+  REQUIRE(self_picture() == pair->large);
+  REQUIRE(runtime.profiles().CaptureProfileIcon(xuid, XTileType::kPersonalGamerTileSmall) == pair->small);
+  const GpdInfoProfile changed_gpd(CreationRead(package / "FFFE07D1.gpd"));
+  std::optional<UserSetting> selected;
+  REQUIRE(UserSetting::ReadFromGpd(changed_gpd,
+      uint32_t(UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE), selected) == X_ERROR_SUCCESS);
+  REQUIRE(selected); REQUIRE(selected->get_type() == X_USER_DATA_TYPE::WSTRING);
+  const auto text = std::get<std::u16string>(selected->get_host_data());
+  REQUIRE(text.size() == 25); REQUIRE(text.back() == 0);
+  REQUIRE(text.substr(0,8) == u"fffe07d1");
+  REQUIRE(Appearance(changed_gpd) == appearance);
+  REQUIRE(CreationRead(package / "Account") == account);
+  REQUIRE(CreationRead(package / "tile_64.png") == public_large);
+  REQUIRE(CreationRead(package / "tile_32.png") == public_small);
+  REQUIRE(CreationRead(package / "avtr_64.png") == avatar_large);
+  check_avatar_small();
+  runtime.profiles().Logout(runtime.profiles().GetUserIndexAssignedToProfile(xuid), false);
+  runtime.Restart();
+  runtime.profiles().Login(xuid, 2, false);
+  REQUIRE(runtime.profiles().GetUserIndexAssignedToProfile(xuid) == 2);
+  REQUIRE(CreationRead(package / "avtr_64.png") == avatar_large);
+  check_avatar_small();
+  REQUIRE(runtime.profiles().CaptureProfileIcon(xuid, XTileType::kPersonalGamerTile) == pair->large);
+  REQUIRE(self_picture() == pair->large);
+  const GpdInfoProfile persisted(CreationRead(package / "FFFE07D1.gpd"));
+  std::optional<UserSetting> persisted_key;
+  REQUIRE(UserSetting::ReadFromGpd(persisted,
+      uint32_t(UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE), persisted_key) == X_ERROR_SUCCESS);
+  REQUIRE(persisted_key); REQUIRE(persisted_key->Serialize() == selected->Serialize());
+  tracker = runtime.emulator->kernel_state()->xam_state()->user_tracker();
+  REQUIRE(tracker->ClearUserIcon(xuid));
+  REQUIRE_FALSE(std::filesystem::exists(package / "pp_64.png"));
+  REQUIRE_FALSE(std::filesystem::exists(package / "pp_32.png"));
+  REQUIRE(runtime.profiles().CaptureProfileIcon(xuid, XTileType::kPersonalGamerTile) == public_large);
+  REQUIRE(self_picture() == public_large);
+  REQUIRE(runtime.profiles().CaptureProfileIcon(xuid, XTileType::kPersonalGamerTileSmall) == public_small);
+  const GpdInfoProfile reset_gpd(CreationRead(package / "FFFE07D1.gpd"));
+  std::optional<UserSetting> reset_key;
+  REQUIRE(UserSetting::ReadFromGpd(reset_gpd,
+      uint32_t(UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE), reset_key) == X_ERROR_SUCCESS);
+  REQUIRE(reset_key); REQUIRE(reset_key->get_host_data() == public_key->get_host_data());
+  REQUIRE(Appearance(reset_gpd) == appearance);
+  REQUIRE(CreationRead(package / "avtr_64.png") == avatar_large);
+  check_avatar_small();
+  REQUIRE(CreationRead(package / "Account") == account);
+  runtime.profiles().Logout(2, false); runtime.Restart();
+  runtime.profiles().Login(xuid, 0, false);
+  REQUIRE(runtime.profiles().GetUserIndexAssignedToProfile(xuid) == 0);
+  REQUIRE(CreationRead(package / "avtr_64.png") == avatar_large);
+  check_avatar_small();
+  REQUIRE(runtime.profiles().CaptureProfileIcon(xuid, XTileType::kPersonalGamerTile) == public_large);
+  REQUIRE(self_picture() == public_large);
+  REQUIRE_FALSE(std::filesystem::exists(package / "pp_64.png"));
+  REQUIRE_FALSE(std::filesystem::exists(package / "pp_32.png"));
+  ReadCreationSave(runtime, xuid, "HostPictureSave", save);
 }
 
 TEST_CASE("Registered profile creation takes a device DWORD pointer and reports missing System as a failed owned completion",

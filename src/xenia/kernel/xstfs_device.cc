@@ -232,7 +232,7 @@ X_STATUS XStfsDevice::CreateInternal(KernelState& kernel, uint32_t address,
   const auto read_error = std::make_shared<std::atomic<X_STATUS>>(X_STATUS_SUCCESS);
   const bool concurrent = shared->retained_device() &&
                           shared->retained_device()->supports_concurrent_io();
-  kernel.RunBlockingIo([&] {
+  const auto invoked = kernel.RunBlockingIo([&] {
     auto backing = vfs::XContentReadBacking::FromSharedFile(shared, &status);
     if (!backing) { return; }
     auto checked = std::make_unique<StatusBacking>(std::move(backing), read_error);
@@ -277,6 +277,7 @@ X_STATUS XStfsDevice::CreateInternal(KernelState& kernel, uint32_t address,
     status = X_STATUS_SUCCESS;
   }, concurrent ? GuestScheduler::BlockingCallClass::kConcurrent
                 : GuestScheduler::BlockingCallClass::kSerial);
+  if(invoked!=HostCallOutcome::kReturned)return HostCallFailureStatus(invoked);
   if (status != X_STATUS_SUCCESS) { return status; }
 
   auto stfs = object_ref<XStfsDevice>(new XStfsDevice(

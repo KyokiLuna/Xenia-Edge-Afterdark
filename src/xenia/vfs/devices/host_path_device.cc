@@ -19,6 +19,14 @@
 
 namespace xe {
 namespace vfs {
+namespace {
+bool IsPackageThumbnail(const std::filesystem::path& leaf) {
+  if (leaf.has_parent_path()) { return false; }
+  auto name = leaf.generic_string();
+  for (auto& c : name) { if (c >= 'A' && c <= 'Z') { c += 'a' - 'A'; } }
+  return name == kPackageThumbnailFileName;
+}
+}  // namespace
 
 HostPathDevice::HostPathDevice(
     const std::string_view mount_path, const std::filesystem::path& host_path,
@@ -175,7 +183,7 @@ HostPathDevice::TryCommitSnapshotCache(
       return {};
     }
     result->existing_[i] = existing;
-    additions += row.token->exists() && !existing;
+    additions += row.token->exists() && !existing && !IsPackageThumbnail(row.token->relative());
     if (row.token->exists() && result->batch_->metadata()[i]->total_size >
                                    SIZE_MAX - bytes_per_sector()) {
       error = std::make_error_code(std::errc::value_too_large);
@@ -200,7 +208,9 @@ void HostPathDevice::ApplySnapshotCache(SnapshotCacheCommit& commit) noexcept {
   for (size_t i = 0; i != commit.prepared_->rows.size(); ++i) {
     auto& row = commit.prepared_->rows[i];
     auto* entry = commit.existing_[i];
-    if (!row.token->exists()) {
+    // The genuine metadata token still participates in EXACT batch equality
+    // and validation, but package bookkeeping never becomes a guest leaf.
+    if (!row.token->exists() || IsPackageThumbnail(row.token->relative())) {
       if (entry) {
         std::erase_if(root->children_, [entry](const auto& child) {
           return child.get() == entry;
@@ -452,7 +462,7 @@ void HostPathDevice::PopulateEntry(
   for (auto& child_info : child_infos) {
     // Xenia bookkeeping, never part of the package the console hands out.
     if (child_info.type == xe::filesystem::FileInfo::Type::kFile &&
-        child_info.name == kPackageThumbnailFileName) {
+        IsPackageThumbnail(child_info.name)) {
       continue;
     }
 

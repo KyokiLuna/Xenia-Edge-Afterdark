@@ -4,15 +4,17 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <system_error>
 #include <utility>
 #include "xenia/kernel/guest_runtime.h"
 namespace xe::cpu { struct GuestCallResult; }
-namespace xe::gpu { class NativeFramePresentationGuard; }
+namespace xe::gpu { class NativeFramePresentationGuard; class NativeFrameExecutionRequest; struct NativeFrameExecutionResult; }
 namespace xe::kernel {
 class KernelState;
+struct NativeCompletedFrameRecord;
 class XThread;
 class NativeImportDomain;
 class GuestRuntimeCallExecutor;
@@ -23,9 +25,14 @@ class NativeSystemUiStartupCatalog;
 class NativeNotificationPresentationObserver;
 class NativeSystemGraphicsTransport;
 class NativeIdentityTileWork;
+class NativeIdentityTilePublication;
+class NativeIdentityTileObserverSlot;
 class NativeAvatarService;
 class NativeProfileIdentityRequest;
+class NativeProfileSaveOwner;
+class NativeXmsgProvenance;
 namespace xam {
+class HostRoster;
 class ProfileManager;
 class ProfileRosterIntent;
 class ProfileRosterNativeBinding;
@@ -63,6 +70,61 @@ class NativeProfileIdentityOwner final
     {0x816B9890,0x816B98B4,0x2F030002},{0x816B9890,0x816B98C0,0x2F030002}
   }};
   static void ObserveTaskDiagnosticInstruction(void*,uint32_t site) noexcept;
+  // Exact common native instruction cuts, not callback-address permissions.
+  static constexpr std::array<TaskDiagnosticSite,6> kTaskExecutionSites{{
+    {0x816B9BB8,0x816B9C14,0x2B0B0001},
+    {0x816B9D68,0x816B9E1C,0x817E0008},
+    {0x816B8B08,0x816B8B5C,0x7D6903A6},
+    {0x816B8B08,0x816B8B64,0x907F0038},
+    {0x816B7DE8,0x816B7E9C,0x7D6903A6},
+    {0x816B7DE8,0x816B7EA4,0x817F0008}
+  }};
+  static void ObserveTaskExecutionInstruction(void*,uint32_t site) noexcept;
+  // Observer-only loaded operands. Original calls/returns retain their native
+  // ABI; opaque D3D return words are never interpreted as HRESULT success.
+  static constexpr std::array<TaskDiagnosticSite,17> kImageObservationSites{{
+    {0x816B0B50,0x816B0B84,0x4807CA0D},
+    {0x81798270,0x81798294,0x480A12FD},
+    {0x81798270,0x81798298,0x38600000},
+    {0x81798740,0x81798770,0x480A14A9},
+    {0x81798740,0x81798774,0x38600000},
+    {0x81798788,0x817987C0,0x480A19C1},
+    {0x81798788,0x817987C4,0x38600000},
+    {0x816C8D68,0x816C8DA0,0x4BFFFCA9},
+    {0x817DD2E0,0x817DD348,0x482962AD},
+    {0x817DD2E0,0x817DD34C,0x7C7B1B78},
+    {0x816C8D68,0x816C8DDC,0x2C030000},
+    {0x81839590,0x818396A4,0x7CBDF92E},
+    {0x81839C18,0x81839C54,0x917F0030},
+    {0x8183A180,0x8183A214,0x917F0030},
+    {0x816921C8,0x81692368,0x93D90010},
+    {0x81839780,0x81839B08,0x957E0004},
+    {0x81839C60,0x8183A048,0x957E0004}
+  }};
+  static void ObserveImageInstruction(void*,uint32_t site) noexcept;
+
+  // Value-only factual observation. The caller supplies its independently
+  // authenticated actual native Task; these values confer no request, roster,
+  // source/read/writer, backing-pointer or future-execution authority.
+  struct TaskExecutionObservation {
+    uint64_t kernel=0,domain=0,root_generation=0,birth_generation=0,invocation=0,module_generation=0;
+    uint32_t task=0,thread=0,pcr=0,dispatcher_sp=0,body_sp=0;
+    uint32_t callback=0,argument=0,module=0,callback_lr=0;
+  };
+  static std::optional<TaskExecutionObservation> CurrentTaskExecution(
+      void* actual_context,uint32_t authenticated_actual_task) noexcept;
+  // One value observation from the genuine allocator own-return. Consumed
+  // only by the common XMsg return adapter before original PPC resumes; no
+  // second Task counter/registry and no future request/read authority.
+  struct TaskAllocationReturnObservation {
+    struct RootFact {uint64_t kernel=0,domain=0,generation=0;};
+    struct FrameFact {uint32_t thread=0,pcr=0,sp=0,lr=0,function=0;};
+    RootFact root;FrameFact allocator,producer;
+    uint32_t native_status=0,task=0;
+    uint64_t birth_generation=0,birth_origin=0;
+    bool validated_birth=false;
+  };
+
   // Only an already retained actual ThreadState cell is consulted under the
   // native publisher/listener locks: bounded scalars/atomics, no lookup/IO,
   // host mutex, allocation or shared/native-resource final release.
@@ -150,6 +212,17 @@ class NativeProfileIdentityOwner final
   bool Drained() const noexcept;
  private:
   friend class NativeAvatarService;
+  friend class NativeIdentityTilePublication;
+  static void ObserveImageEntry(void*,uint32_t) noexcept;
+  static void ObserveImageReturn(void*,uint32_t) noexcept;
+  static void ObserveImageAllocationFree(void*) noexcept;
+  bool BindImageObserverSlot(const std::shared_ptr<NativeIdentityTileObserverSlot>&) noexcept;
+  void ObserveImageTileWrite(const std::shared_ptr<NativeIdentityTileObserverSlot>&,
+      const std::array<std::pair<uint32_t,uint32_t>,2>&,uint32_t phase,
+      const NativeIdentityTileWork*) noexcept;
+  friend class NativeXmsgProvenance;
+  static std::optional<TaskAllocationReturnObservation> TakeTaskAllocationReturnAtNativeCut(
+      void* actual_context) noexcept;
   // Permission to release exactly our own actual getter reference. This is
   // independent of execution Birth and carries no read/source/publication
   // authority. Only the retained Avatar producer can prepare it, before PPC.
@@ -202,12 +275,28 @@ class NativeProfileIdentityOwner final
   static bool ClaimKernelBeforeHeap(KernelState&,const GuestRuntimeCallExecutor&,
       const std::shared_ptr<const xam::ProfileRosterNativeBinding>&);
   static std::shared_ptr<NativeProfileIdentityOwner> CreateBeforeWorkers(Config,std::string*);
+  // Always-present execution role. No identity plan, PM claim, read scope,
+  // renderer or profile publication is installed by this factory.
+  static std::shared_ptr<NativeProfileIdentityOwner> CreateExecutionBeforeWorkers(Config,std::string*);
+  bool HasProfileIdentityAuthority() const noexcept;
+
   static std::shared_ptr<NativeProfileIdentityOwner> Lookup(KernelState*);
   // Advisory snapshot only; exact host Bootstrap phase, never guard IO.
   void ReportFirstRefusalOnBootstrap(XThread&) noexcept;
   // External coordinator snapshot only; permanent scalar cells, even empty.
   void ReportFirstRefusalOnCoordinator() const noexcept;
   void ReportAlignmentOnHost(const char* boundary) const noexcept;
+  // Advisory single-writer progress receipts on the existing OS Bootstrap.
+  // No guest read, owner lock, call, completion or admission authority.
+  enum class HandoffStage : uint32_t {
+    kOwnersCaptured=1,kAlignmentReport,kAlignmentReported,kProfileReport,
+    kProfileReported,kAvatarReport,kAvatarReported,kStartupUnavailable,
+    kStepGate,kStepCall,kStepAdmission,kRefusalReport,kRefusalReported,
+    kReap,kReaped,kPreentry,kPaint,kPaintReturned,kContinuation,
+    kContinuationReturned,kStepReturnedTrue,kStepReturnedFalse,
+    kMediaStep,kMediaReturnedTrue,kMediaReturnedFalse,kProgressReturned
+  };
+  void ObserveBootstrapHandoff(HandoffStage,bool begin_turn=false) noexcept;
   struct SharedScheduleObservation {
     bool admitted=false;
     std::function<void(const cpu::GuestCallResult&)> returned;
@@ -237,6 +326,10 @@ class NativeProfileIdentityOwner final
   static FrameQueryAdmission AdmitNativeFrameIteration(
       XThread&,uint32_t return_address,bool source_retired) noexcept;
   static FrameQueryAdmission CaptureNativeFrameGuard(XThread&) noexcept;
+  static void ObserveNativeImageFrameCaptured(XThread&,const gpu::NativeFrameExecutionRequest&,
+      const NativeCompletedFrameRecord&) noexcept;
+  static void ObserveNativeImageFrameCompleted(const gpu::NativeFrameExecutionRequest&,
+      const gpu::NativeFrameExecutionResult&) noexcept;
   // Same existing normal-return retirement on the actual OS Bootstrap,
   // outside all native/owner locks. No admission or completion authority.
   bool ReapReturnedOnBootstrap(XThread&,bool include_expected = true) noexcept;
@@ -254,6 +347,18 @@ class NativeProfileIdentityOwner final
   static uint64_t EnterPreboundNativePublisher(void*) noexcept;
   static void ReturnPreboundNativePublisher(void*) noexcept;
   struct State;
+  friend class NativeProfileSaveOwner;
+  // Candidate references only. The independently authenticated SAVE issuer
+  // must use PM's ACTUAL selected envelope and revalidate request/getter/job/
+  // model/source currentness; neither this snapshot nor Task facts grant IO.
+  struct SaveSelectionCandidates {
+    std::shared_ptr<const xam::HostRoster> current;
+    std::shared_ptr<xam::ProfileRosterIntent> active_intent;
+    uint64_t job_source=0;
+  };
+  std::optional<SaveSelectionCandidates> CaptureSaveSelectionCandidates() const noexcept;
+  static bool ObserveExecutionEntry(void*,uint32_t) noexcept;
+  static bool ObserveExecutionReturn(void*,uint32_t) noexcept;
   explicit NativeProfileIdentityOwner(std::shared_ptr<State>);
   std::shared_ptr<State> state_;
 };

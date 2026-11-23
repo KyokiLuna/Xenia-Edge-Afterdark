@@ -28,6 +28,7 @@ namespace kernel {
 namespace xam {
 class ProfileGpdModelAuthority;
 struct ProfileGpdReadModels;
+struct ProfileGpdReadCapture;
 
 enum class X_USER_PROFILE_SETTING_SOURCE : uint32_t {
   NO_VALUE = 0,
@@ -76,6 +77,11 @@ enum class XTileType {
   kAvatarGamerTileSmall,
   kAvatarFullBody
 };
+
+// Selects existing HOST fixed-picture/fallback semantics from one already
+// owned immutable GPD/picture tuple; no file/provider/slot lookup occurs.
+std::vector<uint8_t> CaptureProfilePicture(const ProfileGpdReadCapture&, XTileType);
+std::vector<uint8_t> CaptureSelfProfilePicture(const ProfileGpdReadCapture&);
 
 // TODO: find filenames of other tile types that are stored in profile
 inline const std::map<XTileType, std::string> kTileFileNames = {
@@ -146,31 +152,11 @@ class UserProfile {
   };
   bool IsLiveEnabled() const { return account_info_.load(std::memory_order_acquire)->IsLiveEnabled(); }
 
-  void ClearProfileIcon(XTileType icon_type) {
-    profile_images_.erase(icon_type);
-  }
-
-  std::vector<uint8_t> GetProfileIcon(XTileType icon_type) const {
-    std::unique_lock lock(profile_images_mutex_, std::try_to_lock);
-    if (!lock.owns_lock()) {
-      return {};
-    }
-    auto found = profile_images_.find(icon_type);
-    if (found != profile_images_.end()) {
-      return found->second;
-    }
-    if (icon_type == XTileType::kPersonalGamerTile ||
-        icon_type == XTileType::kLocalGamerTile) {
-      icon_type = XTileType::kGamerTile;
-    }
-    if (icon_type == XTileType::kPersonalGamerTileSmall ||
-               icon_type == XTileType::kLocalGamerTileSmall) {
-      icon_type = XTileType::kGamerTileSmall;
-    }
-    found = profile_images_.find(icon_type);
-    return found == profile_images_.end() ? std::vector<uint8_t>{}
-                                          : found->second;
-  }
+  std::vector<uint8_t> GetProfileIcon(XTileType icon_type) const;
+  // The local self editor uses the personal choice, preserving public tile
+  // semantics for guest/public exports. Each size keeps its existing public
+  // fallback; small is used only when no large picture is available.
+  std::vector<uint8_t> GetSelfProfileIcon() const;
 
   void GetPasscode(uint16_t* passcode) const {
     const auto account = account_info_.load(std::memory_order_acquire);
@@ -211,8 +197,7 @@ class UserProfile {
 
   std::shared_ptr<const GpdInfo> GetGpd(uint32_t title_id) const;
   void LoadProfileIcon(XTileType tile_type);
-  void WriteProfileIcon(XTileType tile_type,
-                        std::span<const uint8_t> icon_data);
+
 };
 
 }  // namespace xam

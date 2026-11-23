@@ -88,7 +88,7 @@ bool AudioClientLifecycle::IsCurrentCallback() const {
 
 void AudioClientLifecycle::Retire(bool audio_worker_stopped) {
   std::lock_guard lock(mutex_);
-  if (phase_ == Phase::kRetired ||
+  if (phase_ == Phase::kRetired || phase_ == Phase::kCleanupFailed ||
       (phase_ == Phase::kFailed && !audio_worker_stopped)) {
     return;
   }
@@ -105,7 +105,7 @@ bool AudioClientLifecycle::WaitForQuiescence() {
     return false;
   }
   drained_.wait(lock, [this] { return !calling_ && !preparing_; });
-  return phase_ != Phase::kFailed;
+  return phase_ != Phase::kFailed && phase_ != Phase::kCleanupFailed;
 }
 
 bool AudioClientLifecycle::ClaimCleanup() {
@@ -122,11 +122,20 @@ void AudioClientLifecycle::CompleteCleanup() {
   std::shared_ptr<void> release;
   {
     std::lock_guard lock(mutex_);
-    if (cleanup_claimed_ && !calling_ && !preparing_) {
+    if (cleanup_claimed_ && phase_ == Phase::kRetiring &&
+        !calling_ && !preparing_) {
       phase_ = Phase::kRetired;
       release = std::move(module_lease_);
       drained_.notify_all();
     }
+  }
+}
+
+void AudioClientLifecycle::FailCleanup() {
+  std::lock_guard lock(mutex_);
+  if (cleanup_claimed_ && phase_ != Phase::kRetired) {
+    phase_ = Phase::kCleanupFailed;
+    drained_.notify_all();
   }
 }
 
@@ -136,7 +145,8 @@ bool AudioClientLifecycle::WaitForCleanup() {
     return false;
   }
   drained_.wait(lock, [this] {
-    return phase_ == Phase::kRetired || phase_ == Phase::kFailed;
+    return phase_ == Phase::kRetired || phase_ == Phase::kFailed ||
+           phase_ == Phase::kCleanupFailed;
   });
   return phase_ == Phase::kRetired;
 }

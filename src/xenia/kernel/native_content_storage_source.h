@@ -15,11 +15,37 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <utility>
 
 #include "xenia/kernel/xam/xam_content_device.h"
 
+namespace xe::filesystem { class ConsoleStorageVolume; }
+namespace xe::vfs { class Device; }
 namespace xe::kernel {
 namespace xam { class ManagedFormatSourceProof; class SelectedMediaSourceProof; }
+
+// Metadata from the genuine native type4 optical processing producer. This
+// is NOT an extra source/physical device and is never a notification input.
+// The actual registered optical VFS Device owns backing/lifetime; this weak
+// capsule only binds the observed native row to that same mounted generation.
+class NativeOpticalStorageProof final {
+ public:
+  const std::shared_ptr<const filesystem::ConsoleStorageVolume>& volume() const {return volume_;}
+  const std::string& guest_root() const {return root_;}
+  uint64_t title_generation() const {return title_generation_;}
+ private:
+  friend class NativeContentStorageDriver;
+  friend class NativeContentResolve;
+  NativeOpticalStorageProof(std::shared_ptr<const filesystem::ConsoleStorageVolume> volume,
+      std::weak_ptr<vfs::Device> device,const vfs::Device* identity,std::string root,uint64_t generation)
+      :volume_(std::move(volume)),device_(std::move(device)),identity_(identity),
+       root_(std::move(root)),title_generation_(generation) {}
+  std::shared_ptr<const filesystem::ConsoleStorageVolume> volume_;
+  std::weak_ptr<vfs::Device> device_;
+  const vfs::Device* identity_=nullptr; // comparison only, never dereferenced
+  std::string root_;
+  uint64_t title_generation_=0;
+};
 
 // An owned physical-volume projection from the common content-source catalog.
 // Installed-system content on an HDD contributes to the same device. Host
@@ -39,6 +65,13 @@ struct NativeContentStorageDevice {
   // Weak selected-source publication metadata. Native device/USB attachment
   // receipts and cursor use admission remain separate, mandatory proofs.
   std::shared_ptr<const xam::SelectedMediaSourceProof> selected_media_proof;
+  // Exact registry generation metadata, never a host path/root/format permit.
+  // The source registry retires this very object before replacing a backing.
+  // Native processing may bind its actual generated ID to this identity even
+  // when a full/read-only device is ineligible for formatting.
+  std::shared_ptr<const filesystem::ConsoleStorageVolume> source_volume;
+  // Only the authentic native optical producer may create this capsule.
+  std::shared_ptr<const NativeOpticalStorageProof> optical_source_proof;
   bool operator==(const NativeContentStorageDevice&) const = default;
 };
 

@@ -10,6 +10,8 @@
 #define MBEDTLS_CIPHER_MODE_CBC
 #define MBEDTLS_DES_C
 #define MBEDTLS_DHM_C
+// ConsoleSigningIdentity generates the emulator's persistent local RSA key.
+#define MBEDTLS_GENPRIME
 #define MBEDTLS_MD5_C
 #define MBEDTLS_MD_C
 #define MBEDTLS_OID_C

@@ -8,6 +8,9 @@
 #include <cstring>
 #include <fstream>
 #include <random>
+#include <atomic>
+#include <thread>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include "third_party/catch/include/catch.hpp"
@@ -18,6 +21,10 @@
 #include "xenia/vfs/devices/host_path_entry.h"
 #include "xenia/vfs/devices/host_path_file.h"
 #include "xenia/vfs/folder_volume_control.h"
+
+#if !XE_PLATFORM_WIN32
+#include <pthread.h>
+#endif
 
 namespace xe::kernel::util::test {
 namespace {
@@ -253,5 +260,33 @@ TEST_CASE("Posted cancellation and failed IOSB stores never fabricate success",
     CHECK(xe::load_and_swap<uint32_t>(fixture.memory.TranslateVirtual(
               CompletionFixture::kStatus)) == 0xA5A5A5A5);
   }
+}
+
+TEST_CASE("Checked host invocation preserves guest reentry and POSIX thread-exit control flow",
+          "[kernel][file_control][completion][host_io]") {
+  CHECK(InvokeHostCall([] { throw std::runtime_error("ordinary IO"); }) ==
+        HostCallOutcome::kExecutionFailed);
+  CHECK(InvokeHostCall([] {}) == HostCallOutcome::kReturned);
+#if !XE_PLATFORM_WIN32
+  bool reentered = false;
+  try {
+    (void)InvokeHostCall([] { throw FiberReentryException{0x12345678}; });
+  } catch (const FiberReentryException& signal) {
+    reentered = signal.address == 0x12345678;
+  }
+  CHECK(reentered);
+  std::atomic<bool> unwound{false}, returned{false};
+  std::thread worker([&] {
+    struct UnwindReceipt {
+      std::atomic<bool>& value;
+      ~UnwindReceipt() { value.store(true, std::memory_order_release); }
+    } receipt{unwound};
+    (void)InvokeHostCall([] { pthread_exit(nullptr); });
+    returned.store(true, std::memory_order_release);
+  });
+  worker.join();
+  CHECK(unwound.load(std::memory_order_acquire));
+  CHECK_FALSE(returned.load(std::memory_order_acquire));
+#endif
 }
 }  // namespace xe::kernel::util::test

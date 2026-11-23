@@ -406,6 +406,16 @@ ProfileAccountIdentity::PauseForRoster(std::error_code& error) {
   }
   return result;
 }
+bool ProfileAccountIdentity::RetireIfIdle() {
+  auto state = writes_.load(std::memory_order_acquire);
+  if (state == kClosed && retired_.load(std::memory_order_acquire)) { return true; }
+  uint64_t idle = 0;
+  if (!writes_.compare_exchange_strong(idle, kClosed, std::memory_order_acq_rel)) {
+    return false;
+  }
+  retired_.store(true, std::memory_order_release);
+  return true;
+}
 ProfileAccountIdentity::Write::~Write() {
   if (owner_) {
     owner_->writes_.fetch_sub(1, std::memory_order_acq_rel);
@@ -596,6 +606,51 @@ ProfileAccountAttempt ProfileAccountWriter::RetryDurability(
   }
   return out;
 }
+ProfileAccountFieldValues ProfileAccountFieldValues::From(
+    const X_XAMACCOUNTINFO& account) {
+  return {account.GetGamertagString(), account.GetCountry(), account.GetLanguage()};
+}
+ProfileAccountFieldEdits ProfileAccountFieldEdits::Between(
+    const ProfileAccountFieldValues& before,
+    const ProfileAccountFieldValues& desired) {
+  ProfileAccountFieldEdits edits;
+  if (before.gamertag != desired.gamertag) { edits.gamertag = desired.gamertag; }
+  if (before.country != desired.country) { edits.country = desired.country; }
+  if (before.language != desired.language) { edits.language = desired.language; }
+  return edits;
+}
+bool ProfileAccountFieldEdits::empty() const {
+  return !gamertag && !country && !language;
+}
+std::error_code ProfileAccountFieldEdits::Validate() const {
+  if ((gamertag && !ProfileManager::IsGamertagValid(*gamertag)) ||
+      (country && uint32_t(*country) > 0xff) ||
+      (language && uint32_t(*language) > 0x1f)) {
+    return std::make_error_code(std::errc::invalid_argument);
+  }
+  return {};
+}
+std::error_code ProfileAccountFieldEdits::Apply(
+    const X_XAMACCOUNTINFO& before, X_XAMACCOUNTINFO& output) const {
+  if (const auto error = Validate()) { return error; }
+  X_XAMACCOUNTINFO candidate;
+  std::memcpy(&candidate, &before, sizeof(candidate));
+  if (gamertag) {
+    // Current local-name validation admits ASCII only, at most15 characters.
+    // Store the complete native UTF16BE field explicitly, independent of host
+    // byte order. Do not retain any prior name after the terminating NUL.
+    auto* field = reinterpret_cast<uint8_t*>(candidate.gamertag);
+    std::fill_n(field, sizeof(candidate.gamertag), uint8_t(0));
+    for (size_t i = 0; i != gamertag->size(); ++i) {
+      field[i * 2 + 1] = uint8_t((*gamertag)[i]);
+    }
+  }
+  if (country) { candidate.SetCountry(*country); }
+  if (language) { candidate.SetLanguage(*language); }
+  std::memcpy(&output, &candidate, sizeof(output));
+  return {};
+}
+
 ProfileAccountAttempt ProfileAccountWriter::Replace(
     std::shared_ptr<const ProfileAccountSnapshot> expected,
     const X_XAMACCOUNTINFO& account) const {

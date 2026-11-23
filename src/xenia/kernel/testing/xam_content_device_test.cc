@@ -56,6 +56,9 @@
 #include "xenia/vfs/file.h"
 #include "xenia/vfs/virtual_file_system.h"
 
+DECLARE_bool(mount_scratch);
+DECLARE_bool(force_mount_devkit);
+
 namespace xe::kernel::xam::test {
 namespace {
 
@@ -906,6 +909,38 @@ TEST_CASE("Nested real STFS mounts close with their retained parent and stale cl
   REQUIRE(fs->ResolvePath("Parent:\\child"));
   REQUIRE(content->CloseContent("parent", replacement.get()) == X_ERROR_SUCCESS);
   REQUIRE_FALSE(fs->IsSymbolicLinkRegistered("Parent:"));
+}
+
+
+TEST_CASE("Actual content close preserves an explicitly recreated root alias token",
+          "[kernel][content][storage][mount][source_alias][ownership]") {
+  const bool same_device = GENERATE(false, true);
+  SelectorRuntime runtime; InstallWireNestedPackages(runtime);
+  auto* content = runtime.state()->content_manager();
+  auto* fs = runtime.emulator->file_system();
+  std::shared_ptr<vfs::Device> old, other;
+  REQUIRE(content->OpenContentFile("OldRoot", "Host:\\outer.stfs", nullptr, 0,
+                                   &old) == X_ERROR_SUCCESS);
+  REQUIRE(content->OpenContentFile("OtherRoot", "Host:\\outer.stfs", nullptr, 0,
+                                   &other) == X_ERROR_SUCCESS);
+  REQUIRE(old); REQUIRE(other); REQUIRE(old != other);
+  REQUIRE(fs->UnregisterSymbolicLink("OldRoot:"));
+  const auto selected = same_device ? old : other;
+  std::shared_ptr<const vfs::SymbolicLinkToken> replacement;
+  REQUIRE(fs->RegisterDeviceSymbolicLink("OldRoot:", selected->mount_path(),
+                                       selected, replacement) == X_STATUS_SUCCESS);
+  REQUIRE(content->CloseContent("OldRoot", old.get()) == X_ERROR_SUCCESS);
+  REQUIRE_FALSE(content->IsRootTaken("OldRoot"));
+  // Old close may not erase the newer link, even for equal source and target.
+  CHECK(fs->IsSymbolicLinkRegistered("OldRoot:"));
+  if (same_device) {
+    CHECK(fs->ResolvePath("OldRoot:\\child") == nullptr); // retired old source
+  } else {
+    REQUIRE(fs->ResolvePath("OldRoot:\\child"));
+    CHECK(fs->AcquirePathDevice("OldRoot:") == other);
+  }
+  REQUIRE(fs->UnregisterSymbolicLink(*replacement));
+  REQUIRE(content->CloseContent("OtherRoot", other.get()) == X_ERROR_SUCCESS);
 }
 
 TEST_CASE("A queued borrowed mount refuses parent withdrawal before atomic publication",
@@ -1947,3 +1982,146 @@ TEST_CASE(
 }
 }  // namespace xe::kernel::xam::test
 #endif
+
+
+namespace xe::kernel::xam::test {
+TEST_CASE("Actual standard HDD mounts preserve a bound volume alias through Content",
+          "[kernel][storage][source_alias][volume_publication]") {
+  struct OptionalMounts {
+    bool scratch = std::exchange(cvars::mount_scratch, false);
+    bool devkit = std::exchange(cvars::force_mount_devkit, false);
+    ~OptionalMounts() {
+      std::swap(cvars::mount_scratch, scratch);
+      std::swap(cvars::force_mount_devkit, devkit);
+    }
+  } optional_mounts;
+  SelectorRuntime runtime;
+  runtime.emulator->MountStandardDrives();
+  auto* fs = runtime.emulator->file_system();
+  const auto volume = fs->AcquireDevice("\\Device\\Harddisk0\\Partition1");
+  const auto content = fs->AcquireDevice("\\Device\\Harddisk0\\Partition1\\Content");
+  REQUIRE(volume);
+  REQUIRE(content);
+  CHECK(content->mount_parent() == volume);
+  CHECK(content->storage_volume() == volume->storage_volume());
+  std::shared_ptr<const vfs::SymbolicLinkToken> alias;
+  REQUIRE(fs->RegisterDeviceSymbolicLink("\\??\\ResolvedHDD:",
+      volume->mount_path(), volume, alias) == X_STATUS_SUCCESS);
+  CHECK(fs->AcquirePathDevice("\\??\\ResolvedHDD:\\Content") == content);
+  CHECK(fs->ResolvePath("\\??\\ResolvedHDD:\\Content"));
+  REQUIRE(fs->UnregisterSymbolicLink(*alias));
+}
+
+TEST_CASE("Managed volume child collision rolls back only new mounts and preserves source",
+          "[kernel][storage][source_alias][volume_publication][rollback]") {
+  SelectorRuntime runtime;
+  auto* manager = runtime.state()->content_manager();
+  auto* fs = runtime.emulator->file_system();
+  const auto root = runtime.scratch.root / "owned-volume-content";
+  REQUIRE(std::filesystem::create_directory(root));
+  REQUIRE(manager->RegisterManagedSource(
+      {"owned-folder", 3, DeviceType::USBMASS, ContentSourceKind::kManaged,
+       root, "\\FolderVolume\\Content", u"Owned folder", false, 0,
+       "\\FolderVolume", {}, runtime.scratch.root}));
+  const auto source = manager->sources().Source("owned-folder");
+  REQUIRE(source);
+  const auto storage_volume = manager->sources().CaptureStorageVolume(*source);
+  REQUIRE(storage_volume);
+  auto foreign = std::make_unique<vfs::NullDevice>(
+      "\\FolderVolume\\Content", std::initializer_list<std::string>{"\\foreign"});
+  REQUIRE(foreign->Initialize());
+  REQUIRE(fs->RegisterDevice(std::move(foreign)));
+  const auto original = fs->AcquireDevice("\\FolderVolume\\Content");
+  REQUIRE(original);
+  CHECK(manager->MountManagedSourceDevices("owned-folder") ==
+        X_STATUS_OBJECT_NAME_COLLISION);
+  CHECK_FALSE(fs->AcquireDevice("\\FolderVolume"));
+  CHECK(fs->AcquireDevice("\\FolderVolume\\Content") == original);
+  CHECK_FALSE(original->namespace_retiring());
+  CHECK(fs->ResolvePath("\\FolderVolume\\Content\\foreign"));
+  CHECK_FALSE(source->storage->retiring());
+  CHECK(manager->sources().CaptureStorageVolume(*source) == storage_volume);
+  REQUIRE(fs->UnregisterDevice(original->mount_path(), original.get()));
+  REQUIRE(manager->MountManagedSourceDevices("owned-folder") == X_STATUS_SUCCESS);
+  const auto volume = fs->AcquireDevice("\\FolderVolume");
+  const auto content = fs->AcquireDevice("\\FolderVolume\\Content");
+  REQUIRE(volume);
+  REQUIRE(content);
+  CHECK(content->mount_parent() == volume);
+  CHECK(content->storage_volume() == storage_volume);
+  std::shared_ptr<const vfs::SymbolicLinkToken> alias;
+  REQUIRE(fs->RegisterDeviceSymbolicLink("\\System??\\ResolvedFolder:",
+      volume->mount_path(), volume, alias) == X_STATUS_SUCCESS);
+  CHECK(fs->AcquirePathDevice("\\System??\\ResolvedFolder:\\Content") == content);
+  REQUIRE(fs->UnregisterSymbolicLink(*alias));
+}
+}  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+TEST_CASE("Managed Content refresh preserves real source ancestry and refuses busy or foreign views",
+          "[kernel][storage][source_alias][volume_publication][refresh]") {
+  SelectorRuntime runtime;
+  auto* manager=runtime.state()->content_manager();auto* fs=runtime.emulator->file_system();
+  const auto root=runtime.scratch.root/"refresh-content";
+  REQUIRE(std::filesystem::create_directory(root));
+  {std::ofstream file(root/"held.bin",std::ios::binary);file<<"held";REQUIRE(file.good());}
+  REQUIRE(manager->RegisterManagedSource({"refresh-folder",3,DeviceType::USBMASS,
+      ContentSourceKind::kManaged,root,"\\RefreshVolume\\Content",u"Refresh",false,0,
+      "\\RefreshVolume",{},runtime.scratch.root}));
+  REQUIRE(manager->MountManagedSourceDevices("refresh-folder")==X_STATUS_SUCCESS);
+  const auto parent=fs->AcquireDevice("\\RefreshVolume");
+  const auto before=fs->AcquireDevice("\\RefreshVolume\\Content");
+  REQUIRE(parent);REQUIRE(before);REQUIRE(before->mount_parent()==parent);
+  const auto source=manager->sources().Source("refresh-folder");REQUIRE(source);
+  const auto identity=manager->sources().CaptureStorageVolume(*source);REQUIRE(identity);
+  REQUIRE(before->storage_volume()==identity);
+  std::shared_ptr<const vfs::SymbolicLinkToken> volume_alias,old_alias;
+  REQUIRE(fs->RegisterDeviceSymbolicLink("\\??\\RefreshRoot:",parent->mount_path(),parent,volume_alias)==X_STATUS_SUCCESS);
+  REQUIRE(fs->RegisterDeviceSymbolicLink("\\??\\OldContent:",before->mount_path(),before,old_alias)==X_STATUS_SUCCESS);
+  SECTION("An actual open File refuses replacement; genuine close admits the new tree") {
+    vfs::File* opened=nullptr;vfs::FileAction action{};
+    REQUIRE(fs->OpenFile(nullptr,"\\??\\RefreshRoot:\\Content\\held.bin",
+        vfs::FileDisposition::kOpen,vfs::FileAccess::kFileReadData,false,true,&opened,&action)==X_STATUS_SUCCESS);
+    REQUIRE(opened);
+    struct Close {vfs::File*& file;~Close(){if(file)file->Destroy();}} close{opened};
+    {std::ofstream file(root/"late.bin",std::ios::binary);file<<"late";REQUIRE(file.good());}
+    CHECK_FALSE(fs->ResolvePath("\\??\\RefreshRoot:\\Content\\late.bin"));
+    CHECK(XFAILED(manager->RefreshManagedContentView("refresh-folder")));
+    CHECK(fs->AcquireDevice(before->mount_path())==before);
+    CHECK_FALSE(before->namespace_retiring());
+    std::array<uint8_t,4> bytes{};size_t count=0;
+    REQUIRE(opened->ReadSync(bytes,0,&count)==X_STATUS_SUCCESS);
+    CHECK(count==4);CHECK(bytes==std::array<uint8_t,4>{'h','e','l','d'});
+    opened->Destroy();opened=nullptr;
+    REQUIRE(manager->RefreshManagedContentView("refresh-folder")==X_STATUS_SUCCESS);
+    const auto after=fs->AcquireDevice(before->mount_path());REQUIRE(after);REQUIRE(after!=before);
+    CHECK(after->mount_parent()==parent);CHECK(after->storage_volume()==identity);
+    CHECK(before->namespace_retiring());CHECK_FALSE(fs->ResolvePath("\\??\\OldContent:\\held.bin"));
+    REQUIRE(fs->OpenFile(nullptr,"\\??\\RefreshRoot:\\Content\\late.bin",
+        vfs::FileDisposition::kOpen,vfs::FileAccess::kFileReadData,false,true,&opened,&action)==X_STATUS_SUCCESS);
+    REQUIRE(opened);bytes.fill(0);count=0;
+    REQUIRE(opened->ReadSync(bytes,0,&count)==X_STATUS_SUCCESS);
+    CHECK(count==4);CHECK(bytes==std::array<uint8_t,4>{'l','a','t','e'});
+    opened->Destroy();opened=nullptr;
+    REQUIRE(fs->UnregisterSymbolicLink(*old_alias));
+    std::shared_ptr<const vfs::SymbolicLinkToken> fresh;
+    REQUIRE(fs->RegisterDeviceSymbolicLink("\\??\\OldContent:",after->mount_path(),after,fresh)==X_STATUS_SUCCESS);
+    CHECK_FALSE(fs->UnregisterSymbolicLink(*old_alias));
+    CHECK(fs->ResolvePath("\\??\\OldContent:\\late.bin"));
+    REQUIRE(fs->UnregisterSymbolicLink(*fresh));
+  }
+  SECTION("A foreign same-name child is never replaced or attached to the source") {
+    REQUIRE(fs->UnregisterDevice(before->mount_path(),before.get()));
+    auto foreign=std::make_unique<vfs::NullDevice>(before->mount_path(),
+        std::initializer_list<std::string>{"\\foreign"});REQUIRE(foreign->Initialize());
+    REQUIRE(fs->RegisterDevice(std::move(foreign)));
+    const auto actual=fs->AcquireDevice(before->mount_path());REQUIRE(actual);
+    CHECK(manager->RefreshManagedContentView("refresh-folder")==X_STATUS_ACCESS_DENIED);
+    CHECK(fs->AcquireDevice(before->mount_path())==actual);CHECK_FALSE(actual->namespace_retiring());
+    CHECK(fs->ResolvePath("\\RefreshVolume\\Content\\foreign"));
+    CHECK(manager->sources().CaptureStorageVolume(*source)==identity);
+    CHECK_FALSE(source->storage->retiring());
+  }
+  REQUIRE(fs->UnregisterSymbolicLink(*volume_alias));
+}
+} // namespace xe::kernel::xam::test

@@ -13,6 +13,24 @@
 
 #include "xenia/base/threading.h"
 
+#if XE_PLATFORM_LINUX
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define XE_FIBER_BOUNDS_ASAN_TEST 1
+#endif
+#elif defined(__SANITIZE_ADDRESS__)
+#define XE_FIBER_BOUNDS_ASAN_TEST 1
+#endif
+#endif
+#if XE_FIBER_BOUNDS_ASAN_TEST
+#include <cstdio>
+#include <fstream>
+#include <string>
+#include <string_view>
+#include <unistd.h>
+#include <sanitizer/asan_interface.h>
+#endif
+
 #define CATCH_CONFIG_ENABLE_CHRONO_STRINGMAKER
 #include "third_party/catch/include/catch.hpp"
 
@@ -1358,6 +1376,150 @@ TEST_CASE("Fiber cooperative switch", "[fiber]") {
 
   REQUIRE(order == std::vector<int>{0, 1, 2, 3, 4, 5, 6});
 }
+
+
+TEST_CASE("Fiber normal entry return restores caller and survives real restart", "[fiber]") {
+  auto caller = Fiber::CreateFromThread();
+  REQUIRE(caller);
+  int entered = 0, unwound = 0;
+  bool actual_entry = true;
+  std::unique_ptr<Fiber> child;
+  child = Fiber::Create({}, [&] {
+    struct Exit { int& count; ~Exit() { ++count; } } cleanup{unwound};
+    actual_entry &= Fiber::GetCurrentFiber() == child.get();
+    ++entered;
+    // Genuine C++ routine return exercises EntryTrampoline's real return.
+  });
+  REQUIRE(child);
+  child->SwitchTo();
+  REQUIRE(Fiber::GetCurrentFiber() == caller.get());
+  CHECK(actual_entry); CHECK(entered == 1); CHECK(unwound == 1);
+  child->Restart();
+  child->SwitchTo();
+  REQUIRE(Fiber::GetCurrentFiber() == caller.get());
+  CHECK(actual_entry); CHECK(entered == 2); CHECK(unwound == 2);
+  child.reset();
+  CHECK(Fiber::GetCurrentFiber() == caller.get());
+  caller.reset();
+  CHECK(Fiber::GetCurrentFiber() == nullptr);
+}
+
+TEST_CASE("Fiber entry return targets its latest actual resumer", "[fiber]") {
+  auto caller = Fiber::CreateFromThread();
+  REQUIRE(caller);
+  std::vector<int> order;
+  bool child_identity = true, parent_identity = true;
+  std::unique_ptr<Fiber> child, parent;
+  child = Fiber::Create({}, [&] {
+    child_identity &= Fiber::GetCurrentFiber() == child.get();
+    order.push_back(1);
+    caller->SwitchTo();
+    // A different owned fiber resumes this entry. Return must reach it,
+    // not jump past it to the original adopted caller.
+    child_identity &= Fiber::GetCurrentFiber() == child.get();
+    order.push_back(4);
+  });
+  REQUIRE(child);
+  child->SwitchTo();
+  REQUIRE(Fiber::GetCurrentFiber() == caller.get());
+  order.push_back(2);
+  parent = Fiber::Create({}, [&] {
+    parent_identity &= Fiber::GetCurrentFiber() == parent.get();
+    order.push_back(3);
+    child->SwitchTo();
+    parent_identity &= Fiber::GetCurrentFiber() == parent.get();
+    order.push_back(5);
+  });
+  REQUIRE(parent);
+  parent->SwitchTo();
+  REQUIRE(Fiber::GetCurrentFiber() == caller.get());
+  order.push_back(6);
+  CHECK(child_identity); CHECK(parent_identity);
+  CHECK(order == std::vector<int>{1, 2, 3, 4, 5, 6});
+}
+
+#if XE_FIBER_BOUNDS_ASAN_TEST
+namespace {
+struct ActualFiberAsanBounds {
+  bool mapped = false, actual_floor = false;
+  bool first_is_stack = false, last_is_stack = false;
+  uintptr_t usable_begin = 0, usable_end = 0;
+};
+bool AsanReportsStack(uintptr_t address) {
+  const char* kind = __asan_locate_address(
+      reinterpret_cast<void*>(address), nullptr, 0, nullptr, nullptr);
+  return kind && std::string_view(kind) == "stack";
+}
+// The real frame pointer remains on the actual stack even if ASan moves local
+// variables to its fake stack. Inspect OS mappings, not a copied range helper.
+__attribute__((noinline)) ActualFiberAsanBounds ActualOwnedFiberBounds(size_t requested) {
+  ActualFiberAsanBounds result;
+  const uintptr_t frame = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+  const long page_result = sysconf(_SC_PAGESIZE);
+  if (page_result <= 0) { return result; }
+  const auto page = size_t(page_result);
+  const auto usable = ((requested + page - 1) / page) * page;
+  std::ifstream maps("/proc/self/maps");
+  std::string line;
+  while (std::getline(maps, line)) {
+    unsigned long long first = 0, last = 0;
+    char access[5]{};
+    if (std::sscanf(line.c_str(), "%llx-%llx %4s", &first, &last, access) != 3 ||
+        access[0] != 'r' || access[1] != 'w' || frame < first || frame >= last) { continue; }
+    result.mapped = true;
+    if (first < page || usable > last - first) { return result; }
+    result.actual_floor = Fiber::IsStackOverflowFault(
+        reinterpret_cast<void*>(uintptr_t(first) - page));
+    if (!result.actual_floor) { return result; }
+    // The registered guard splits the RW mapping at the true usable bottom.
+    // A coalesced following RW mapping may enlarge last; the creation size
+    // and real guard independently identify this actual fiber's top.
+    result.usable_begin = uintptr_t(first);
+    result.usable_end = uintptr_t(first) + usable;
+    result.first_is_stack = AsanReportsStack(result.usable_begin);
+    result.last_is_stack = AsanReportsStack(result.usable_end - 1);
+    return result;
+  }
+  return result;
+}
+__attribute__((noinline)) bool ActualAdoptedFrameIsAsanStack() {
+  return AsanReportsStack(reinterpret_cast<uintptr_t>(__builtin_frame_address(0)));
+}
+}  // namespace
+
+TEST_CASE("ASan recognizes real owned stack endpoints after switches and child return", "[fiber][asan]") {
+  auto adopted = Fiber::CreateFromThread();
+  REQUIRE(adopted);
+  REQUIRE(ActualAdoptedFrameIsAsanStack());
+  Fiber::CreationParameters params;
+  params.stack_size = 512 * 1024;
+  ActualFiberAsanBounds outer_before, inner_bounds, outer_after;
+  bool outer_restored = false;
+  std::unique_ptr<Fiber> outer, inner;
+  outer = Fiber::Create(params, [&] {
+    outer_before = ActualOwnedFiberBounds(params.stack_size);
+    inner = Fiber::Create(params, [&] {
+      inner_bounds = ActualOwnedFiberBounds(params.stack_size);
+    });
+    inner->SwitchTo(); // real dying return to an OWNED destination
+    outer_restored = Fiber::GetCurrentFiber() == outer.get();
+    outer_after = ActualOwnedFiberBounds(params.stack_size);
+  });
+  REQUIRE(outer);
+  outer->SwitchTo(); // real dying return to the ADOPTED destination
+  REQUIRE(Fiber::GetCurrentFiber() == adopted.get());
+  CHECK(outer_restored);
+  CHECK(ActualAdoptedFrameIsAsanStack());
+  for (const auto* observed : {&outer_before, &inner_bounds, &outer_after}) {
+    CHECK(observed->mapped); CHECK(observed->actual_floor);
+    CHECK(observed->first_is_stack); CHECK(observed->last_is_stack);
+    CHECK(observed->usable_end > observed->usable_begin);
+  }
+  CHECK(outer_before.usable_begin == outer_after.usable_begin);
+  CHECK(outer_before.usable_end == outer_after.usable_end);
+  CHECK(inner_bounds.usable_begin != outer_before.usable_begin);
+}
+#endif
 
 }  // namespace test
 }  // namespace base

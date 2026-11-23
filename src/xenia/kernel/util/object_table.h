@@ -99,7 +99,7 @@ class ObjectTable {
 
  private:
   friend class xboxkrnl::XGuestObject;
-  friend class test::NativeMediaDeniedAliasTestAccess;
+  friend class xe::kernel::test::NativeMediaDeniedAliasTestAccess;
   // Birth metadata only; no Kernel, object, body or native reference ownership.
   // Capture is lazy, so genuine Reset/destruction invalidates without allocating.
   std::weak_ptr<const uint8_t> CaptureCountedBodyBirth() {

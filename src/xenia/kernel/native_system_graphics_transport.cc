@@ -2141,6 +2141,7 @@ NativeSystemGraphicsTransport::HookResult NativeSystemGraphicsTransport::Set(
     invocation.Complete(false);
     return reject(Counter::kSetOtherRejected, 24);
   }
+  NativeProfileIdentityOwner::ObserveNativeImageFrameCaptured(*thread,*request,completed->record);
   const bool frozen_control = request->plan()->is_overlay_control();
   const auto frozen_identity = request->identity();
   const auto frozen_backend_epoch = request->backend_epoch();
@@ -2626,6 +2627,7 @@ bool NativeSystemGraphicsTransport::PollOnNativeTask(XThread& thread,
     state_->Reject(Blocker::kBackendFailure, true);
     return false;
   }
+  NativeProfileIdentityOwner::ObserveNativeImageFrameCompleted(*request,result);
   if(request->presentation_guard() && request->output_layout() &&
      result.status==gpu::NativeFrameExecutionResult::Status::kSubmitted &&
      result.title_state_restored){

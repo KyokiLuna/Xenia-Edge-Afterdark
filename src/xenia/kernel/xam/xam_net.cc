@@ -857,16 +857,13 @@ dword_result_t NetDll_XNetDnsLookup_entry(dword_t caller, lpstring_t host,
     if (host) {
       const std::string name(host.value());
       // A lookup blocks for as long as the resolver takes.
-      kernel_state()->RunBlockingIo(
-          [&name, &result]() {
-            // Nothing may throw out of here, as the wait ends only once this
-            // returns.
-            try {
-              ResolveDnsHost(name, &result);
-            } catch (...) {
-            }
-          },
+      const auto invoked = kernel_state()->RunBlockingIo(
+          [&name, &result]() { ResolveDnsHost(name, &result); },
           GuestScheduler::BlockingCallClass::kConcurrent);
+      if(invoked!=HostCallOutcome::kReturned){
+        result={};
+        result.status=int32_t(X_WSAError::X_WSAHOST_NOT_FOUND);
+      }
       XELOGD("XNetDnsLookup({}) = {} addresses", name, uint32_t(result.cina));
     }
     auto dns_guest = kernel_memory()->SystemHeapAlloc(sizeof(XNDNS));

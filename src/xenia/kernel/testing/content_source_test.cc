@@ -1936,3 +1936,209 @@ TEST_CASE(
 }
 }  // namespace xe::kernel::xam::test
 #endif
+
+
+namespace xe::kernel::xam::test {
+TEST_CASE("A native storage volume receipt captures only its exact cached source without probing",
+          "[content][storage][native_resolve][generation][metadata]") {
+  Scratch scratch;
+  size_t probes = 0;
+  ContentSourceRegistry registry([&](const auto&) {
+    ++probes;
+    return std::optional(std::filesystem::space_info{100, 90, 80});
+  });
+  const auto definition = scratch.Managed("receipt-source", 3);
+  REQUIRE(registry.Register(definition));
+  const auto selected = registry.Source(definition.id); REQUIRE(selected);
+  REQUIRE(selected->available); REQUIRE(selected->storage);
+  const auto volume = registry.CaptureStorageVolume(*selected); REQUIRE(volume);
+  probes = 0;
+  std::error_code error;
+  const auto captured = registry.CaptureSourceCached(volume, error);
+  REQUIRE(captured); REQUIRE_FALSE(error);
+  CHECK(probes == 0);
+  CHECK(captured->storage == selected->storage);
+  CHECK(captured->generation == selected->generation);
+  CHECK(captured->source.device_id == 3);
+  CHECK(captured->storage_volume == volume);
+  const auto described=registry.DescribeSourceCached(volume,error);
+  REQUIRE(described);REQUIRE_FALSE(error);
+  CHECK(described->identity==volume);
+  CHECK(described->source.id==definition.id);
+  CHECK(described->source.device_id==3);
+  CHECK(described->generation==selected->generation);
+  CHECK(described->capacity_bytes==selected->capacity_bytes);
+  CHECK(described->free_bytes==selected->free_bytes);
+  CHECK(probes==0);
+  CHECK_FALSE(registry.CaptureSourceCached(
+      filesystem::ConsoleStorageVolume::ExternalPackage(), error));
+  CHECK(error == std::errc::no_such_device);
+  CHECK(probes == 0);
+
+  // Same strings/numbers and even the same directory do not replace the
+  // registry-issued generation metadata object from a different owner.
+  ContentSourceRegistry other([](const auto&) {
+    return std::optional(std::filesystem::space_info{100, 90, 80});
+  });
+  REQUIRE(other.Register(definition));
+  const auto foreign = other.Source(definition.id); REQUIRE(foreign);
+  const auto foreign_volume = other.CaptureStorageVolume(*foreign); REQUIRE(foreign_volume);
+  CHECK_FALSE(registry.DescribeSourceCached(foreign_volume,error));
+  CHECK(error==std::errc::no_such_device);
+  CHECK_FALSE(registry.CaptureSourceCached(foreign_volume, error));
+  CHECK(error == std::errc::no_such_device);
+  CHECK(probes == 0);
+
+  // Actual source observation retires the old metadata, while the held old
+  // root remains an owned object and can never be retagged as a replacement.
+  REQUIRE(std::filesystem::remove(definition.root));
+  const auto removed = registry.Source(definition.id); REQUIRE(removed);
+  CHECK_FALSE(removed->available);
+  probes = 0;
+  CHECK_FALSE(registry.DescribeSourceCached(volume,error));
+  CHECK_FALSE(registry.CaptureSourceCached(volume, error));
+  CHECK(error == std::errc::no_such_device);
+  CHECK(probes == 0);
+  REQUIRE(std::filesystem::create_directory(definition.root));
+  const auto replacement = registry.Source(definition.id); REQUIRE(replacement);
+  REQUIRE(replacement->available);
+  const auto newer = registry.CaptureStorageVolume(*replacement); REQUIRE(newer);
+  CHECK(newer != volume);
+  probes = 0;
+  CHECK_FALSE(registry.DescribeSourceCached(volume,error));
+  CHECK_FALSE(registry.CaptureSourceCached(volume, error));
+  REQUIRE(registry.CaptureSourceCached(newer, error));
+  REQUIRE(registry.DescribeSourceCached(newer,error));
+  CHECK_FALSE(error);
+  CHECK(probes == 0);
+}
+}  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+TEST_CASE("A retained storage description does not keep a retired source backing alive",
+          "[content][storage][native_resolve][lifetime][metadata]") {
+  Scratch scratch;
+  const auto definition=scratch.Managed("visible-row",3);
+  std::weak_ptr<filesystem::HostStorageRoot> backing;
+  std::optional<ContentSourceDescription> visible;
+  {
+    ContentSourceRegistry registry([](const auto&) {
+      return std::optional(std::filesystem::space_info{100,90,80});
+    });
+    REQUIRE(registry.Register(definition));
+    const auto source=registry.Source(definition.id);REQUIRE(source);
+    REQUIRE(source->available);REQUIRE(source->storage);
+    backing=source->storage;
+    const auto identity=registry.CaptureStorageVolume(*source);REQUIRE(identity);
+    std::error_code error;
+    visible=registry.DescribeSourceCached(identity,error);
+    REQUIRE(visible);REQUIRE_FALSE(error);
+    CHECK(visible->identity->available_cached());
+  }
+  // An onscreen selector/native-ID row can survive the Registry. It keeps
+  // only denied metadata, never a source flock, open root or usable generation.
+  CHECK(backing.expired());
+  REQUIRE(visible);REQUIRE(visible->identity);
+  CHECK_FALSE(visible->identity->available_cached());
+  CHECK(visible->source.id==definition.id);
+  CHECK(visible->source.device_id==3);
+}
+}  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+TEST_CASE("Source generation admission joins real registry withdrawal and bound alias lifetime",
+          "[content][storage][native_resolve][namespace][generation][concurrency]") {
+  Scratch scratch;ContentSource source=scratch.Managed("installed-admission",1);
+  source.kind=ContentSourceKind::kInstalledSystem;source.read_only=true;source.reserved_bytes=0;
+  source.guest_volume_root="\\Device\\GenerationAdmission";source.guest_root=source.guest_volume_root;
+  {std::ofstream out(source.root/"payload.bin",std::ios::binary);out<<"original";}
+  std::error_code error;
+  const auto authority=filesystem::HostStorageRoot::Open(source.root,true,error,0);
+  REQUIRE(authority);REQUIRE_FALSE(error);
+  std::atomic<bool> probe_armed{false};
+  std::promise<void> sampled,resume,query_resumed,finished;
+  auto sampled_future=sampled.get_future();auto resume_future=resume.get_future();
+  auto query_resumed_future=query_resumed.get_future();auto finished_future=finished.get_future();
+  ContentSourceRegistry registry([&](const auto&){
+    if(probe_armed.exchange(false)) {
+      // SampleQueries has already released its media-drain metadata lock.
+      // Pause the actual writer here BEFORE the test acquires admission.
+      sampled.set_value();resume_future.wait();query_resumed.set_value();
+    }
+    return std::optional(std::filesystem::space_info{100,90,80});
+  });
+  REQUIRE(registry.RegisterReadOnly(source,authority,1));
+  const auto before=registry.Source(source.id);REQUIRE(before);REQUIRE(before->storage_volume);
+  auto publish=[&](const ContentSourceState& captured,vfs::VirtualFileSystem& fs){
+    auto device=std::make_unique<vfs::HostPathDevice>(source.guest_volume_root,source.root,true,
+        false,"FATX",captured.storage);
+    REQUIRE(device->SetStorageVolume(captured.storage_volume));REQUIRE(device->Initialize());
+    REQUIRE(fs.RegisterDevice(std::move(device)));
+    return fs.AcquireDevice(source.guest_volume_root);
+  };
+  vfs::VirtualFileSystem fs;const auto old_device=publish(*before,fs);REQUIRE(old_device);
+  CHECK_FALSE(registry.TryAdmitSourceGeneration(*before,error));
+  CHECK(error==std::errc::operation_would_block);
+  std::shared_ptr<const vfs::SymbolicLinkToken> old_alias;
+  std::thread replacement;std::atomic<bool> changed{false};
+  auto global=xe::global_critical_region::AcquireDeferred();
+  std::optional<ContentSourceRegistry::SourceGenerationAdmission> admission;
+  struct Join {
+    decltype(admission)& admission;decltype(global)& global;std::thread& worker;
+    std::promise<void>& resume;bool resumed=false;
+    void Resume() {if(!resumed){resume.set_value();resumed=true;}}
+    ~Join(){admission.reset();if(global.owns_lock())global.unlock();
+      Resume();if(worker.joinable())worker.join();}
+  } join{admission,global,replacement,resume}; // Owns every failure before thread construction.
+  probe_armed=true;
+  replacement=std::thread([&]{
+    bool result=false;
+    try {result=registry.RegisterReadOnly(source,authority,2);} catch(...) {}
+    changed.store(result,std::memory_order_release);finished.set_value();
+  });
+  // Reach the genuine outside-lock query first. Holding the generation guard
+  // before this rendezvous would block SampleQueries' earlier media drain.
+  REQUIRE(sampled_future.wait_for(std::chrono::seconds(2))==std::future_status::ready);
+  global.lock();
+  auto foreign_owner=*before;
+  foreign_owner.storage=std::shared_ptr<filesystem::HostStorageRoot>(before->storage.get(),[](auto*){});
+  CHECK_FALSE(registry.TryAdmitSourceGeneration(foreign_owner,error));
+  CHECK(error==std::errc::no_such_device);
+  auto wrong_policy=*before;wrong_policy.source.read_only=false;
+  CHECK_FALSE(registry.TryAdmitSourceGeneration(wrong_policy,error));
+  CHECK(error==std::errc::no_such_device);
+  admission=registry.TryAdmitSourceGeneration(*before,error);REQUIRE(admission);REQUIRE_FALSE(error);
+  join.Resume();
+  REQUIRE(query_resumed_future.wait_for(std::chrono::seconds(2))==std::future_status::ready);
+  // The actual writer has resumed, but cannot finish real publication while
+  // this existing generation's Registry admission remains held.
+  CHECK(finished_future.wait_for(std::chrono::milliseconds(30))==std::future_status::timeout);
+  CHECK_FALSE(changed.load(std::memory_order_acquire));
+  REQUIRE(before->storage_volume->available_cached());
+  REQUIRE(fs.RegisterDeviceSymbolicLink("GENADMIT:",source.guest_volume_root,old_device,old_alias)==X_STATUS_SUCCESS);
+  REQUIRE(fs.ResolvePath("GENADMIT:\\payload.bin"));
+  admission.reset();global.unlock();replacement.join();
+  REQUIRE(changed.load(std::memory_order_acquire));
+  CHECK_FALSE(before->storage_volume->available_cached());
+  CHECK_FALSE(fs.ResolvePath("GENADMIT:\\payload.bin"));
+  // Driver notification may not yet have detached the old Device. Retiring
+  // the real source still invalidates its bound alias immediately.
+  REQUIRE(fs.AcquireDevice(source.guest_volume_root)==old_device);
+  {auto locked=xe::global_critical_region::AcquireDirect();
+    CHECK_FALSE(registry.TryAdmitSourceGeneration(*before,error));
+    CHECK(error==std::errc::no_such_device);
+  }
+  const auto after=registry.Source(source.id);REQUIRE(after);REQUIRE(after->available);
+  REQUIRE(after->storage_volume!=before->storage_volume);
+  REQUIRE(fs.UnregisterSymbolicLink(*old_alias));REQUIRE(fs.UnregisterDevice(source.guest_volume_root));
+  const auto fresh_device=publish(*after,fs);REQUIRE(fresh_device);REQUIRE(fresh_device!=old_device);
+  std::shared_ptr<const vfs::SymbolicLinkToken> fresh_alias;
+  {auto locked=xe::global_critical_region::AcquireDirect();
+    auto current=registry.TryAdmitSourceGeneration(*after,error);REQUIRE(current);REQUIRE_FALSE(error);
+    REQUIRE(fs.RegisterDeviceSymbolicLink("GENADMIT:",source.guest_volume_root,fresh_device,fresh_alias)==X_STATUS_SUCCESS);
+  }
+  CHECK_FALSE(fs.UnregisterSymbolicLink(*old_alias));
+  REQUIRE(fs.ResolvePath("GENADMIT:\\payload.bin"));
+  REQUIRE(fs.UnregisterSymbolicLink(*fresh_alias));REQUIRE(fs.UnregisterDevice(source.guest_volume_root));
+}
+}  // namespace xe::kernel::xam::test

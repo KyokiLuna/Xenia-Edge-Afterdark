@@ -10,6 +10,7 @@
 #include "xenia/kernel/guest_scheduler.h"
 
 #include <algorithm>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -27,6 +28,7 @@
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/xobject.h"
 #include "xenia/kernel/xthread.h"
+#include "xenia/kernel/util/host_call_outcome.h"
 
 DEFINE_uint32(
     guest_scheduler_spin_quanta, 0,
@@ -373,7 +375,11 @@ void GuestScheduler::Shutdown() {
     while (!dropped.empty()) {
       std::unique_ptr<BlockingCall> call(dropped.front());
       dropped.pop();
-      if (call->on_drop) { call->on_drop(HostCallDropReason::kQueuedShutdown); }
+      if (call->on_drop && InvokeHostCall([&] {
+            call->on_drop(HostCallDropReason::kQueuedShutdown);
+          }) != HostCallOutcome::kReturned) {
+        (void)InvokeHostCall([] { XELOGE("GuestScheduler: queued drop owner uncertain; continuing remaining owners"); });
+      }
     }
   };
   drop_queued(io_lock_, io_queue_);
@@ -895,6 +901,12 @@ void GuestScheduler::SwitchTo(XThread* next) {
     std::lock_guard<std::mutex> lock(lock_);
     links.running = false;
     cpus_[t_current_cpu].current_thread = nullptr;
+    // A bump that reached it while parking is moot but would head-queue it
+    // when its wait ends.
+    if (links.blocked) {
+      links.preempted = false;
+      links.repoll_preempt = false;
+    }
   }
   XThread::SetCurrentThread(nullptr);
 }
@@ -1073,15 +1085,29 @@ void GuestScheduler::SpinYield(std::chrono::milliseconds host_sleep) {
   }
 }
 
-void GuestScheduler::EnsureIoWorker() {
+bool GuestScheduler::EnsureIoWorker() {
   std::call_once(io_once_, [this]() {
+    FailIoAdmissionIfRequested(1);
     io_event_ = xe::threading::Event::CreateAutoResetEvent(false);
+    if (!io_event_) { throw std::bad_alloc(); }
     xe::threading::Thread::CreationParameters params;
-    io_thread_ =
-        xe::threading::Thread::Create(params, [this]() { IoWorkerLoop(); });
-    io_thread_->set_name("Guest I/O");
+    auto thread = xe::threading::Thread::Create(
+        params, [this]() { IoWorkerLoop(); });
+    if (!thread) { throw std::bad_alloc(); }
+    io_thread_ = std::move(thread);
     io_started_.store(true);
+    // Worker is tracked before optional diagnostics can allocate/fail.
+    (void)InvokeHostCall([&] { io_thread_->set_name("Guest I/O"); });
   });
+  return bool(io_thread_);
+}
+
+void GuestScheduler::FailIoAdmissionIfRequested(uint32_t point) {
+  auto expected = point;
+  if (io_admission_failure_point_.compare_exchange_strong(
+          expected, 0, std::memory_order_relaxed)) {
+    throw std::bad_alloc();
+  }
 }
 
 bool GuestScheduler::CurrentThreadOffloadsBlockingCalls() {
@@ -1110,20 +1136,34 @@ void GuestScheduler::WaitOnFence(xe::threading::Fence& fence) {
   self->clear_cooperative_wait_shape();
 }
 
-void GuestScheduler::PostHostCall(std::function<void()> fn,
-                                  BlockingCallClass call_class,
-                                  std::function<void(HostCallDropReason)> on_drop) {
-  auto* call = new BlockingCall;
-  call->fn = std::move(fn);
-  call->on_drop = std::move(on_drop);
-  if (!EnqueueBlockingCall(call, call_class)) {
-    // Existing callers without a drop contract retain their inline behavior.
-    // Owned requests close admission truthfully instead of starting new IO.
-    if (call->on_drop) {
-      call->on_drop(HostCallDropReason::kAdmissionShutdown);
-    } else { call->fn(); }
-    delete call;
+bool GuestScheduler::PostHostCall(
+    std::function<void()> fn, BlockingCallClass call_class,
+    std::function<void(HostCallDropReason)> on_drop) {
+  std::unique_ptr<BlockingCall> call;
+  bool accepted = false;
+  const auto prepared = InvokeHostCall([&] {
+    call = std::make_unique<BlockingCall>();
+    call->fn = std::move(fn);
+    call->on_drop = std::move(on_drop);
+    accepted = EnqueueBlockingCall(call.get(), call_class);
+    // Enqueue's final throwing operation is queue commit. Nothing after a
+    // successful commit can throw or invoke the body on this submitting frame.
+    if (accepted) { call.release(); }
+  });
+  if (prepared != HostCallOutcome::kReturned) { return false; }
+  if (!accepted) {
+    // Actual shutdown rejection preserves its original disposition. Resource
+    // failure above never invokes this cancellation/drop path.
+    const auto invoked = InvokeHostCall([&] {
+      if (call->on_drop) {
+        call->on_drop(HostCallDropReason::kAdmissionShutdown);
+      } else { call->fn(); }
+    });
+    if (invoked != HostCallOutcome::kReturned) {
+      (void)InvokeHostCall([] { XELOGE("GuestScheduler: inline shutdown disposition failed"); });
+    }
   }
+  return true;
 }
 
 bool GuestScheduler::EnqueueBlockingCall(BlockingCall* call,
@@ -1132,15 +1172,16 @@ bool GuestScheduler::EnqueueBlockingCall(BlockingCall* call,
   if (call_class == BlockingCallClass::kConcurrent) {
     return EnqueuePoolCall(call);
   }
-  EnsureIoWorker();
+  if (!EnsureIoWorker()) { return false; }
   {
     std::lock_guard<std::mutex> lock(io_lock_);
-    if (shutting_down_.load()) {
-      return false;
-    }
+    if (shutting_down_.load()) { return false; }
+    // Wake before publication while the worker cannot inspect the queue. A
+    // failed push leaves only a harmless wake, never a borrowed stack owner.
+    io_event_->Set();
+    FailIoAdmissionIfRequested(2);
     io_queue_.push(call);
   }
-  io_event_->Set();
   return true;
 }
 
@@ -1149,18 +1190,28 @@ bool GuestScheduler::CurrentThreadIsBlockingCallWorker() {
 }
 
 void GuestScheduler::RunBlockingCall(BlockingCall* call) {
-  uint64_t started = Clock::host_tick_count_raw();
-  t_in_blocking_call = true;
-  call->fn();
-  t_in_blocking_call = false;
-  uint64_t finished = Clock::host_tick_count_raw();
-  // Raw ticks, converted only at report time.
-  uint64_t queued_for = started - call->queued_ns;
+  // Own the closure on every unwind, including preserved thread-control
+  // sentinels. Destroying it settles only its producer's actual owned ticket.
+  std::unique_ptr<BlockingCall> owned(call);
+  struct WorkerFlag {
+    bool previous = t_in_blocking_call;
+    WorkerFlag() { t_in_blocking_call = true; }
+    ~WorkerFlag() { t_in_blocking_call = previous; }
+  } worker_flag;
+  const uint64_t started = Clock::host_tick_count_raw();
+  const auto invoked = InvokeHostCall(call->fn);
+  const uint64_t finished = Clock::host_tick_count_raw();
+  const uint64_t queued_for = started - call->queued_ns;
   stats_.io_calls.fetch_add(1, std::memory_order_relaxed);
   stats_.io_queue_ns.fetch_add(queued_for, std::memory_order_relaxed);
   stats_.io_run_ns.fetch_add(finished - started, std::memory_order_relaxed);
   AccumulateMax(stats_.io_queue_max_ns, queued_for);
-  delete call;
+  if (invoked != HostCallOutcome::kReturned) {
+    // Production request owners settle their own failure before this point.
+    // A legacy fire-and-forget exception cannot kill this shared worker or
+    // pretend that the body was an unstarted shutdown cancellation.
+    (void)InvokeHostCall([] { XELOGE("GuestScheduler: host call escaped without normal return"); });
+  }
 }
 
 void GuestScheduler::IoWorkerLoop() {
@@ -1182,33 +1233,38 @@ void GuestScheduler::IoWorkerLoop() {
   }
 }
 
-void GuestScheduler::StartPoolWorkerLocked() {
+bool GuestScheduler::StartPoolWorkerLocked() {
+  // Every allocation that can lose tracking precedes native thread creation.
+  // A new worker immediately waits for this lock; it cannot consume any call
+  // before its owning handle has entered the reserved vector.
+  FailIoAdmissionIfRequested(3);
+  io_pool_threads_.reserve(kMaxIoPoolThreads);
+  std::string name = "Guest I/O " + std::to_string(io_pool_threads_.size());
   xe::threading::Thread::CreationParameters params;
-  auto thread =
-      xe::threading::Thread::Create(params, [this]() { IoPoolWorkerLoop(); });
-  thread->set_name(std::string("Guest I/O ") +
-                   std::to_string(io_pool_threads_.size()));
+  auto thread = xe::threading::Thread::Create(
+      params, [this]() { IoPoolWorkerLoop(); });
+  if (!thread) { return false; }
   io_pool_threads_.push_back(std::move(thread));
   io_pool_size_.store(io_pool_threads_.size(), std::memory_order_relaxed);
   io_started_.store(true);
+  (void)InvokeHostCall([&] { io_pool_threads_.back()->set_name(std::move(name)); });
+  return true;
 }
 
 bool GuestScheduler::EnqueuePoolCall(BlockingCall* call) {
   {
     std::lock_guard<std::mutex> lock(io_pool_lock_);
-    if (shutting_down_.load()) {
-      return false;
-    }
-    io_pool_queue_.push(call);
-    // Queued work counts as well as running work. In a burst every call can
-    // arrive before a worker has picked any up, and a busy count alone would
-    // see an idle pool and never grow it.
-    if (io_pool_busy_ + io_pool_queue_.size() > io_pool_threads_.size() &&
+    if (shutting_down_.load()) { return false; }
+    // Account for this prospective call without publishing it. Thread/start
+    // failure leaves both existing FIFO entries and this exact call untouched.
+    if (io_pool_busy_ + io_pool_queue_.size() + 1 > io_pool_threads_.size() &&
         io_pool_threads_.size() < kMaxIoPoolThreads) {
-      StartPoolWorkerLocked();
+      if (!StartPoolWorkerLocked()) { throw std::bad_alloc(); }
     }
+    io_pool_cv_.notify_one();
+    FailIoAdmissionIfRequested(4);
+    io_pool_queue_.push(call);
   }
-  io_pool_cv_.notify_one();
   return true;
 }
 
@@ -1225,7 +1281,14 @@ void GuestScheduler::IoPoolWorkerLoop() {
     ++io_pool_busy_;
     AccumulateMax(stats_.io_peak_inflight, io_pool_busy_);
     lock.unlock();
-    RunBlockingCall(call);
+    try {
+      RunBlockingCall(call);
+    } catch (...) {
+      // Preserve control-flow unwind while repairing actual pool ownership.
+      lock.lock();
+      --io_pool_busy_;
+      throw;
+    }
     lock.lock();
     --io_pool_busy_;
   }
@@ -1478,12 +1541,32 @@ void GuestScheduler::RereadyBlocked(int cpu_index) {
     XThread* kept_head = nullptr;
     XThread* kept_tail = nullptr;
     int kept_max_prio = -1;
+    // Waiters only their deadline released, readied after the walk by earliest
+    // deadline with the last to block first on a tie so two threads sleeping
+    // in step on one CPU take turns.
+    XThread* expired_head = nullptr;
+    // Backstop re-polls, readied last so none can run ahead of an expiry.
+    XThread* backstop_head = nullptr;
+    XThread* backstop_tail = nullptr;
+    auto ready_waiter = [&](XThread* t) {
+      auto& links = t->scheduler_links();
+      links.blocked = false;
+      links.queued = true;
+      stats_.rereadied.fetch_add(1, std::memory_order_relaxed);
+      // Its current guest CPU, not the one it blocked on, since
+      // KeSetAffinityThread may have moved it while blocked.
+      int target = CpuOf(t);
+      links.cpu = target;
+      LinkReadyLocked(cpus_[target], t, TakeHeadRequeue(links));
+      if (target != cpu_index) {
+        wake_mask |= uint32_t(1) << target;
+      }
+    };
     XThread* t = cpu.blocked_head;
     while (t) {
       auto& links = t->scheduler_links();
       XThread* next = links.ready_next;
-      // Skip a gated waiter whose wait cannot have resolved yet.
-      if (links.wait_gated && !force_all) {
+      if (links.wait_gated) {
         // Three gate kinds: a single object's epoch, a multi-wait's summed
         // epoch, or (neither) a pure timed sleep that only the deadline below
         // can resolve.
@@ -1497,9 +1580,28 @@ void GuestScheduler::RereadyBlocked(int cpu_index) {
               t->cooperative_wait_set_epoch() != links.wait_epoch;
         }
         if (!may_have_resolved &&
-            !(links.wait_deadline_ms && now_ms >= links.wait_deadline_ms) &&
             !(links.wait_alertable && t->HasPendingUserApc()) &&
             !(links.wait_interruptible && t->HasDeliverableKernelApc())) {
+          if (links.wait_deadline_ms && now_ms >= links.wait_deadline_ms) {
+            XThread** link = &expired_head;
+            while (*link && (*link)->scheduler_links().wait_deadline_ms <
+                                links.wait_deadline_ms) {
+              link = &(*link)->scheduler_links().ready_next;
+            }
+            links.ready_next = *link;
+            *link = t;
+            t = next;
+            continue;
+          }
+          // A pure sleep has no epoch bump for the backstop to catch and the
+          // checks above cover everything else that ends one.
+          if (force_all && (obj || links.wait_gate_count)) {
+            links.ready_next = nullptr;
+            LinkTailLocked(backstop_head, backstop_tail, t);
+            t = next;
+            continue;
+          }
+          // Skip a gated waiter whose wait cannot have resolved yet.
           links.ready_next = nullptr;
           LinkTailLocked(kept_head, kept_tail, t);
           int prio = ClampPriority(t->priority());
@@ -1517,18 +1619,15 @@ void GuestScheduler::RereadyBlocked(int cpu_index) {
           continue;
         }
       }
-      links.blocked = false;
-      links.queued = true;
-      stats_.rereadied.fetch_add(1, std::memory_order_relaxed);
-      // Its current guest CPU, not the one it blocked on, since
-      // KeSetAffinityThread may have moved it while blocked.
-      int target = CpuOf(t);
-      links.cpu = target;
-      LinkReadyLocked(cpus_[target], t, TakeHeadRequeue(links));
-      if (target != cpu_index) {
-        wake_mask |= uint32_t(1) << target;
-      }
+      ready_waiter(t);
       t = next;
+    }
+    for (XThread* list : {expired_head, backstop_head}) {
+      for (t = list; t;) {
+        XThread* next = t->scheduler_links().ready_next;
+        ready_waiter(t);
+        t = next;
+      }
     }
     cpu.blocked_head = kept_head;
     cpu.blocked_tail = kept_tail;

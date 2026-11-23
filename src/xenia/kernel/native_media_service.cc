@@ -37,6 +37,8 @@
 #include "xenia/kernel/xam/content_source.h"
 #include "xenia/kernel/xam/selected_media_source_proof.h"
 #include "xenia/kernel/xthread.h"
+#include "xenia/kernel/xfile.h"
+#include "xenia/vfs/file.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_ob.h"
 #include "xenia/memory.h"
 namespace xe::kernel {
@@ -91,7 +93,7 @@ std::optional<std::string> NativeMassPath(Memory& memory,uint32_t pointer,bool s
 struct NativeMediaService::State {
   explicit State(Config value):config(std::move(value)),
       kernel(config.catalog->calls()->kernel()),root(config.domain->root()) {
-    scopes.reserve(256);tokens.reserve(256);attachment_calls.reserve(64);token_calls.reserve(64);
+    scopes.reserve(256);tokens.reserve(256);attachment_calls.reserve(64);token_calls.reserve(64);direct_calls.reserve(64);
   }
   Config config;
   KernelState* kernel=nullptr;
@@ -157,6 +159,65 @@ struct NativeMediaService::State {
     uint32_t index=0,object=0,slot=0,output=0;
     std::shared_ptr<const Attachment> attachment;
   };
+  // Direct original1F4 only. Caller output is staged until the actual new
+  // File is paired with the prior source/device; native stream/File ownership
+  // then survives this call through its genuine handle and I/O references.
+  struct DirectCall {
+    Memory* memory=nullptr;
+    Frame frame;
+    std::optional<Frame> backend;
+    uint64_t serial=0;
+    uint32_t message=0,original_payload=0,original_output=0,scratch=0;
+    uint32_t stream=0,file_handle=0;
+    bool backend_returned=false,publication_ready=false,delivered=false;
+    bool uncertain=false;
+    std::array<uint32_t,5> words{};
+    std::shared_ptr<const NativeServiceBackingLease> backing;
+    std::shared_ptr<const Attachment> attachment;
+    std::shared_ptr<vfs::Device> device;
+    std::vector<std::shared_ptr<xam::SelectedMediaUse>> source_uses;
+    vfs::File* pending_file=nullptr;
+    object_ref<XFile> file;
+    ~DirectCall() { if(scratch && memory)memory->SystemHeapFree(scratch); }
+  };
+  std::vector<std::shared_ptr<DirectCall>> direct_calls;
+  bool DirectClaim(const cpu::ppc::PPCContext&,uint32_t);
+  bool EnterDirect(cpu::ppc::PPCContext&,const Frame&,bool& claimed);
+  bool AdmitDirect(const cpu::ppc::PPCContext&,const Frame&,bool& claimed);
+  bool ReturnDirect(cpu::ppc::PPCContext&,const Frame&);
+  bool DirectCodeCurrent() const {
+    constexpr uint32_t code[]={0x816A2F88,0x81703738,0x818613D0,0x81861750,
+      0x81862240,0x81862318,0x81863130,0x81863508,0x8187A5D8,0x8187F310,
+      0x8187F3C0,0x81880538,0x81885DD0,0x81860E98,0x818610E8,0x818611A8,
+      0x819CF4A0,0x819CF4D8,0x819D69B0,0x819CF630,0x819CF7E8,0x819CF4C0,
+      0x819CF900,0x819CFB80,0x819D6A30};
+    for(auto at:code)if(!RootCurrent(at))return false;
+    if(!RootData(kUsbVtable,0x60) || !RootData(0x81619A10,0x64))return false;
+    auto global=global_critical_region::AcquireDirect();
+    return HashMatches({kernel->memory()->TranslateVirtual<const uint8_t*>(kUsbVtable),0x60},
+        "5c9818db380352b02334ed82949462a635a1d080725643e89f5b73c1e0449ed1") &&
+      HashMatches({kernel->memory()->TranslateVirtual<const uint8_t*>(0x81619A10),0x64},
+        "8c7e3eada76d55f5de92e1230c535a3837a38d7c3ba72f283080e034477e8be6");
+  }
+  std::optional<Frame> DirectFileFrame(uint32_t output) const {
+    auto* thread=XThread::IsInThread()?XThread::GetCurrentThread():nullptr;
+    if(!thread || thread->kernel_state()!=kernel)return {};
+    const auto* c=thread->thread_state()->context();
+    const auto frame=ActualFrame(*kernel,*c,0x818610E8);
+    if(!frame || frame->lr!=0x81861158 || frame->sp>UINT32_MAX-0x50 ||
+        output!=frame->sp+0x50 || !Pointer(c->r[3]) || uint32_t(c->r[3])!=output)return {};
+    return frame;
+  }
+  std::shared_ptr<DirectCall> DirectFileCaller(const Frame& frame) const {
+    for(auto i=direct_calls.rbegin();i!=direct_calls.rend();++i) {
+      const auto& call=*i;
+      if(call->message==kNativeMediaSourceStream && call->backend &&
+          !call->backend_returned && call->frame.thread==frame.thread &&
+          call->frame.pcr==frame.pcr && call->frame.process==frame.process &&
+          frame.sp<call->backend->sp)return call;
+    }
+    return {};
+  }
   // Weak source metadata only: no file/device/registry owner is cached here.
   std::map<uint32_t,std::shared_ptr<Attachment>> attachments;
   std::vector<Token> tokens;
@@ -358,7 +419,196 @@ bool ReadWords(Memory& memory,uint32_t address,std::span<uint32_t> words) {
   for(size_t n=0;n<words.size();++n)words[n]=xe::load_and_swap<uint32_t>(raw.data()+n*4);
   return true;
 }
+bool ReadDirectWords(Memory& memory,uint32_t address,std::span<uint32_t> words) {
+  if(words.size()!=5)return false;
+  std::array<uint8_t,kNativeMediaDirectPayloadBytes> raw{};
+  if(XFAILED(util::ReadGuestIoBuffer(memory,address,raw)))return false;
+  for(size_t n=0;n<words.size();++n)words[n]=xe::load_and_swap<uint32_t>(raw.data()+n*4);
+  return true;
+}
 bool Succeeded(uint32_t result) {return int32_t(result)>=0;}
+}
+
+std::shared_ptr<const NativeAvatarBackingLease> NativeMediaService::BorrowDirectBacking(
+    Memory& memory,uint32_t message,uint32_t payload,std::span<const uint32_t> words) {
+  if(global_critical_region::is_held_by_current_thread() ||
+      !NativeMediaDirectPayloadValid(message,words))return {};
+  std::vector<NativeServiceBackingRange> ranges{{payload,kNativeMediaDirectPayloadBytes,false}};
+  if(message==kNativeMediaSourceMetadata) {
+    // The native capacity error precedes every array access; keep that real
+    // error/count behavior without pretending an undersized array was used.
+    if(words[2] && words[3]>=kNativeMediaSourceMetadataCapacity)
+      ranges.push_back({words[2],kNativeMediaSourceMetadataCapacity*kNativeMediaSourceMetadataBytes,true});
+  } else ranges.push_back({words[1],kNativeMediaFileIdentityBytes,false});
+  ranges.push_back({words[4],4,true});
+  for(size_t i=0;i<ranges.size();++i) {
+    const auto& a=ranges[i];
+    if(!util::GuestIoRangeValid(memory,a.address,a.length,a.writable))return {};
+    for(size_t j=0;j<i;++j)if(util::GuestIoRangesOverlap(memory,a.address,a.length,
+        ranges[j].address,ranges[j].length))return {};
+  }
+  return memory.BorrowNativeServiceBacking(ranges);
+}
+bool NativeMediaService::State::DirectClaim(const cpu::ppc::PPCContext& c,uint32_t at) {
+  if(at!=0x81706478 && uint32_t(c.r[3])!=kNativeMediaApp)return false;
+  const uint32_t message=uint32_t(c.r[4]);
+  if(message!=kNativeMediaSourceMetadata && message!=kNativeMediaSourceStream)return false;
+  const uint32_t payload=uint32_t(c.r[at==0x816A2CF0?6:5]);
+  {
+    std::lock_guard lock(mutex);
+    for(const auto& call:direct_calls)if(call->message==message && call->scratch==payload)return true;
+    if(message==kNativeMediaSourceMetadata)return fe_observed && !attachments.empty();
+  }
+  std::array<uint32_t,5> words{};
+  std::array<uint8_t,kNativeMediaSourceBytes> token{};
+  if(at==0x81706478 || global_critical_region::is_held_by_current_thread()) {
+    if(!ReadWords(*kernel->memory(),payload,words) || !words[1] ||
+        !internal::ReadNativeWaitSnapshot(*kernel->memory(),words[1],token))return false;
+  } else {
+    if(!RootCurrent(at) || !ReadDirectWords(*kernel->memory(),payload,words) || !words[1] ||
+        XFAILED(util::ReadGuestIoBuffer(*kernel->memory(),words[1],token)))return false;
+  }
+  std::lock_guard lock(mutex);return bool(TokenAttachment(token));
+}
+bool NativeMediaService::State::EnterDirect(cpu::ppc::PPCContext& c,const Frame& frame,bool& claimed) {
+  claimed=DirectClaim(c,frame.function);
+  // Exact direct B is the normal source inventory interface even when the
+  // current selected set is empty. Unrelated native async B remains native.
+  if(uint32_t(c.r[4])==kNativeMediaSourceMetadata && frame.function==0x816A2F88 && fe_observed)claimed=true;
+  if(!claimed)return true;
+  if(frame.function!=0x816A2F88 || ingress_closed || uncertain ||
+      global_critical_region::is_held_by_current_thread() || !FaCurrent() || !DirectCodeCurrent())return false;
+  const auto payload=Pointer(c.r[5]);
+  if(!payload)return false;
+  auto call=std::make_shared<DirectCall>();call->memory=kernel->memory();call->frame=frame;
+  call->message=uint32_t(c.r[4]);call->original_payload=*payload;
+  if(!ReadDirectWords(*call->memory,*payload,call->words) ||
+      !NativeMediaDirectPayloadValid(call->message,call->words))return false;
+  call->original_output=call->words[4];
+  call->backing=NativeMediaService::BorrowDirectBacking(*call->memory,call->message,*payload,call->words);
+  if(!call->backing)return false;
+  std::array<uint32_t,5> repeated{};
+  if(!ReadDirectWords(*call->memory,*payload,repeated) || repeated!=call->words)return false;
+  std::array<uint8_t,kNativeMediaFileIdentityBytes> identity{};
+  std::vector<std::shared_ptr<const Attachment>> selected;
+  if(call->message==kNativeMediaSourceStream) {
+    if(XFAILED(util::ReadGuestIoBuffer(*call->memory,call->words[1],identity)) ||
+        !NativeMediaFileIdentityValid(identity))return false;
+    std::lock_guard lock(mutex);
+    call->attachment=TokenAttachment(std::span(identity).first(kNativeMediaSourceBytes));
+    if(!call->attachment)return false;
+    selected.push_back(call->attachment);
+  } else {
+    std::lock_guard lock(mutex);
+    for(const auto& [object,attachment]:attachments)if(!attachment->transitioning)selected.push_back(attachment);
+  }
+  for(const auto& attachment:selected) {
+    if(!storage->SelectedMediaProcessingCurrent(attachment->processing))return false;
+    std::error_code error;
+    auto use=kernel->xam_state()->content_manager()->sources().CaptureSelectedMediaUse(
+        attachment->processing.source,error);
+    if(error || !use)return false;
+    call->source_uses.push_back(std::move(use));
+  }
+  if(call->attachment) {
+    call->device=call->attachment->processing.source->device_.lock();
+    if(!call->device)return false;
+  }
+  const uint32_t scratch_bytes=call->message==kNativeMediaSourceStream?
+      24+kNativeMediaFileIdentityBytes:kNativeMediaDirectPayloadBytes;
+  call->scratch=call->memory->SystemHeapAlloc(scratch_bytes);
+  if(!call->scratch)return false;
+  // Capture C's exact nested value into this actual owned request. The native
+  // stream stores its File, not this temporary identity/path pointer.
+  auto native=call->words;
+  if(call->message==kNativeMediaSourceStream) {
+    native[1]=call->scratch+24;native[4]=call->scratch+20;
+    std::memcpy(call->memory->TranslateVirtual(call->scratch+24),identity.data(),identity.size());
+    xe::store_and_swap<uint32_t>(call->memory->TranslateVirtual(call->scratch+20),0);
+  }
+  for(size_t i=0;i<native.size();++i)
+    xe::store_and_swap<uint32_t>(call->memory->TranslateVirtual(call->scratch+uint32_t(i)*4),native[i]);
+  {
+    std::lock_guard lock(mutex);
+    if(ingress_closed || retired || uncertain || !next_serial || next_serial==UINT64_MAX || direct_calls.size()>=64)return false;
+    for(const auto& attachment:selected) {
+      const auto actual=attachments.find(attachment->object);
+      if(actual==attachments.end() || actual->second!=attachment || attachment->transitioning ||
+          !attachment->processing.source->SourceCurrentCached())return false;
+    }
+    call->serial=next_serial++;direct_calls.push_back(call);
+  }
+  c.r[5]=call->scratch;
+  return true;
+}
+bool NativeMediaService::State::AdmitDirect(const cpu::ppc::PPCContext& c,const Frame& frame,bool& claimed) {
+  claimed=DirectClaim(c,frame.function);
+  if(!claimed)return true;
+  const auto manager=Word(*kernel->memory(),0x81AAD7A8);
+  if(!manager || *manager!=uint32_t(c.r[3]) || !DirectCodeCurrent())return false;
+  std::lock_guard lock(mutex);
+  for(auto i=direct_calls.rbegin();i!=direct_calls.rend();++i) {
+    const auto& call=*i;
+    if(call->message!=uint32_t(c.r[4]) || call->scratch!=uint32_t(c.r[5]) ||
+        call->frame.thread!=frame.thread || call->frame.pcr!=frame.pcr ||
+        call->frame.process!=frame.process)continue;
+    if(call->backend || retired || uncertain || ingress_closed || !call->backing->current())return false;
+    if(call->attachment && !call->attachment->processing.source->SourceCurrentCached())return false;
+    call->backend=frame;return true;
+  }
+  return false; // Selected async/unobserved ingresses have no direct owner.
+}
+bool NativeMediaService::State::ReturnDirect(cpu::ppc::PPCContext& c,const Frame& frame) {
+  std::shared_ptr<DirectCall> call;
+  {
+    std::lock_guard lock(mutex);
+    for(const auto& candidate:direct_calls) {
+      if(candidate->backend && *candidate->backend==frame) {
+        candidate->backend_returned=true;return true;
+      }
+      if(candidate->frame==frame)call=candidate;
+    }
+  }
+  if(!call)return false;
+  bool healthy=true;
+  if(call->backend && !call->backend_returned)healthy=false;
+  if(call->message==kNativeMediaSourceStream && call->backend_returned) {
+    const auto output=Word(*call->memory,call->scratch+20);
+    if(!output)healthy=false;
+    else if(Succeeded(uint32_t(c.r[3]))) {
+      const auto vtable=*output?Word(*call->memory,*output):std::nullopt;
+      const auto refs=*output && *output<=UINT32_MAX-0x68?Word(*call->memory,*output+0x0C):std::nullopt;
+      const auto file=*output && *output<=UINT32_MAX-0x68?Word(*call->memory,*output+0x2C):std::nullopt;
+      const auto flags=*output && *output<=UINT32_MAX-0x68?Word(*call->memory,*output+0x50):std::nullopt;
+      if(!vtable || *vtable!=0x81619A10 || !refs || *refs!=1 || !file || !flags || !(*flags&1) ||
+          !call->file || call->file_handle!=*file || !DirectCodeCurrent())healthy=false;
+      else {std::lock_guard lock(mutex);call->stream=*output;call->publication_ready=true;}
+    } else if(*output)healthy=false;
+    else {std::lock_guard lock(mutex);call->publication_ready=true;}
+    if(healthy) {
+      std::array<uint8_t,4> bytes{};xe::store_and_swap<uint32_t>(bytes.data(),*output);
+      const util::GuestIoWrite write{call->original_output,bytes};
+      util::GuestIoNativeMediaFactoryScope admission(service.lock(),call->serial,*output,*call->memory);
+      const auto published=util::WriteGuestIoBuffers(*call->memory,std::span(&write,1),admission);
+      if(XFAILED(published) && Succeeded(uint32_t(c.r[3])))
+        c.r[3]=uint64_t(int64_t(int32_t(kAbort)));
+    }
+    // A real new stream was not exposed if final host publication refused.
+    // Release that exact owned native ref on this original healthy caller.
+    if(healthy && call->stream && !call->delivered) {
+      const std::array<uint32_t,1> args{call->stream};
+      const auto released=Call(*XThread::GetCurrentThread(),0x819D6A30,args);
+      if(!released.executed || uint32_t(released.value)!=0)healthy=false;
+    }
+  }
+  if(!healthy) {
+    std::lock_guard lock(mutex);call->uncertain=true;uncertain=true;
+    c.r[3]=uint64_t(int64_t(int32_t(kAbort)));return true;
+  }
+  // Local call retains all resources through removal. Final File/source/FD
+  // holders and owned scratch die outside the owner metadata mutex.
+  {std::lock_guard lock(mutex);std::erase(direct_calls,call);}
+  return true;
 }
 
 bool NativeMediaService::State::EnterFactory(cpu::ppc::PPCContext& c,const Frame& frame) {
@@ -435,6 +685,8 @@ bool NativeMediaService::State::EnterMessage(cpu::ppc::PPCContext& c,
     const Frame& frame,bool& claimed) {
   claimed=false;
   if(uint32_t(c.r[3])!=kNativeMediaApp)return true;
+  if(uint32_t(c.r[4])==kNativeMediaSourceMetadata || uint32_t(c.r[4])==kNativeMediaSourceStream)
+    return EnterDirect(c,frame,claimed);
   const uint32_t message=uint32_t(c.r[4]),payload=uint32_t(c.r[frame.function==0x816A2CF0?6:5]);
   if(message!=kNativeMediaQueryInit && message!=kNativeMediaQueryRead && message!=kNativeMediaQueryClose)return true;
   std::array<uint32_t,8> request{};
@@ -519,6 +771,7 @@ bool NativeMediaService::State::Claimed(const cpu::ppc::PPCContext& c,uint32_t a
     return cursor && (cursor->selected || address==0x816F1040);
   }
   if(address!=0x816A2F88 && address!=0x816A2CF0 && address!=0x816A2FF8 && address!=0x81706478)return false;
+  if(DirectClaim(c,address))return true;
   if(address!=0x81706478 && uint32_t(c.r[3])!=kNativeMediaApp)return false;
   const uint32_t message=uint32_t(c.r[4]),payload=uint32_t(c.r[address==0x816A2CF0?6:5]);
   if(message!=kNativeMediaQueryInit && message!=kNativeMediaQueryRead && message!=kNativeMediaQueryClose)return false;
@@ -539,6 +792,8 @@ bool NativeMediaService::State::AdmitBackend(const cpu::ppc::PPCContext& c,
     const Frame& frame,bool& claimed) {
   claimed=false;
   const uint32_t message=uint32_t(c.r[4]),payload=uint32_t(c.r[5]);
+  if(message==kNativeMediaSourceMetadata || message==kNativeMediaSourceStream)
+    return AdmitDirect(c,frame,claimed);
   if(message!=kNativeMediaQueryInit && message!=kNativeMediaQueryRead && message!=kNativeMediaQueryClose)return true;
   uint32_t workspace=payload;std::array<uint32_t,8> request{};
   std::shared_ptr<const Attachment> attachment;
@@ -921,7 +1176,7 @@ void NativeMediaService::ObserveReturn(void* raw,uint64_t address) noexcept {
     if(!frame)return;
     if(address==0x8187AE98)s.ReturnAttachment(*c,*frame);
     else if(address==0x818621F0)s.ReturnToken(*c,*frame);
-    else s.ReturnScope(*c,*frame);
+    else if(!s.ReturnDirect(*c,*frame))s.ReturnScope(*c,*frame);
   } catch(...) {if(const auto owner=Lookup(c->kernel_state))owner->state_->uncertain=true;}
 }
 void NativeMediaService::BeforeCompletionPublication(void*) noexcept {
@@ -953,10 +1208,35 @@ std::optional<uint32_t> NativeMediaService::TryEnumerationOnOriginalCaller(
 } catch(...) {return kAbort;}
 std::optional<uint32_t> NativeMediaService::TryMessageOnOriginalCaller(
     KernelState* kernel,uint16_t ordinal,std::span<const uint32_t> args) noexcept try {
-  if(!kernel || args.size()<4 || args[0]!=kNativeMediaApp ||
-      (args[1]!=kNativeMediaQueryInit && args[1]!=kNativeMediaQueryRead && args[1]!=kNativeMediaQueryClose))return {};
+  if(!kernel || args.size()<4 || args[0]!=kNativeMediaApp)return {};
+  const bool direct=args[1]==kNativeMediaSourceMetadata || args[1]==kNativeMediaSourceStream;
+  if(!direct && args[1]!=kNativeMediaQueryInit && args[1]!=kNativeMediaQueryRead && args[1]!=kNativeMediaQueryClose)return {};
   const auto owner=Lookup(kernel);if(!owner)return {};
   auto& s=*owner->state_;
+  if(direct) {
+    if(!XThread::IsInThread() || global_critical_region::is_held_by_current_thread())return kNotReady;
+    auto* direct_caller=XThread::GetCurrentThread();
+    if(!direct_caller || direct_caller->kernel_state()!=kernel)return kNotReady;
+    const size_t input=(ordinal==0x1F4 || ordinal==0x1F6)?2:3;
+    if(input>=args.size())return kNotReady;
+    bool claimed=args[1]==kNativeMediaSourceMetadata;
+    if(!claimed) {
+      std::array<uint32_t,5> words{};std::array<uint8_t,kNativeMediaSourceBytes> token{};
+      if(ReadDirectWords(*kernel->memory(),args[input],words) && words[1] &&
+          XSUCCEEDED(util::ReadGuestIoBuffer(*kernel->memory(),words[1],token))) {
+        std::lock_guard lock(s.mutex);claimed=bool(s.TokenAttachment(token));
+      }
+    }
+    if(!claimed)return {};
+    // Direct1F4 is truly synchronous on TITLE too. The separate ProcessRequest
+    // rule and original async Task/APC ownership are not inferred or bypassed.
+    if(!NativeMediaDirectOriginalArgumentsValid(ordinal,args) || !XThread::IsInThread() ||
+        global_critical_region::is_held_by_current_thread())return kNotReady;
+    auto* caller=XThread::GetCurrentThread();
+    if(!caller || caller->kernel_state()!=kernel)return kNotReady;
+    const auto result=s.Call(*caller,0x816A2F88,args);
+    return result.executed?uint32_t(result.value):kAbort;
+  }
   const bool synchronous=ordinal==0x1F4;
   const uint32_t payload=args[(synchronous || ordinal==0x1F6)?2:3];
   std::array<uint32_t,8> request{};uint32_t workspace=payload;
@@ -1044,6 +1324,15 @@ bool NativeMediaService::State::CleanupOnTask(XThread& actual,const std::shared_
 bool NativeMediaService::FactoryPublicationCurrent(uint64_t serial,uint32_t handle,const Memory& memory) const noexcept {
   const auto& s=*state_;
   if(s.retired || s.uncertain || s.ingress_closed || !s.kernel || s.kernel->memory()!=&memory)return false;
+  for(const auto& direct:s.direct_calls)if(direct->serial==serial) {
+    if(direct->message!=kNativeMediaSourceStream || !direct->publication_ready ||
+        direct->delivered || direct->uncertain || !direct->backend_returned ||
+        !direct->backing || !direct->backing->current() || direct->stream!=handle)return false;
+    if(!handle)return !direct->file || direct->file->file()->retained_device()==direct->device;
+    const auto actual=s.kernel->object_table()->LookupObject<XFile>(direct->file_handle,true);
+    return direct->file && actual.get()==direct->file.get() &&
+        direct->file->file()->retained_device()==direct->device;
+  }
   const auto found=s.cursors.find(serial);
   if(found==s.cursors.end())return false;
   const auto& c=*found->second;
@@ -1055,6 +1344,16 @@ bool NativeMediaService::FactoryPublicationCurrent(uint64_t serial,uint32_t hand
       !c.admission->handles_closed_.load(std::memory_order_acquire) &&
       !c.admission->body_detached_.load(std::memory_order_acquire) &&
       !c.admission->issuer_.expired() && c.output_backing && c.output_backing->current();
+}
+void NativeMediaService::FactoryPublicationCommitted(uint64_t serial,uint32_t value) noexcept {
+  for(const auto& direct:state_->direct_calls)if(direct->serial==serial && direct->stream==value)
+    direct->delivered=true;
+}
+void util::GuestIoNativeMediaFactoryScope::Release() noexcept {
+  if(lock_.owns_lock()) {
+    // WriteBatch copied every byte before this callback-free metadata commit.
+    owner_->FactoryPublicationCommitted(serial_,handle_);lock_.unlock();
+  }
 }
 X_STATUS util::GuestIoNativeMediaFactoryScope::Admit() {
   if(!owner_)return X_STATUS_CANCELLED;
@@ -1128,6 +1427,31 @@ bool NativeMediaService::StepOnBootstrap(XThread& actual) noexcept try {
   }
   return true;
 } catch(...) {state_->uncertain=true;return false;}
+X_STATUS NativeMediaService::ValidateDirectFileOpen(KernelState* kernel,
+    const vfs::File& file,uint32_t output) noexcept try {
+  if(global_critical_region::is_held_by_current_thread())return X_STATUS_SUCCESS;
+  const auto owner=Lookup(kernel);if(!owner)return X_STATUS_SUCCESS;
+  auto& s=*owner->state_;const auto frame=s.DirectFileFrame(output);
+  if(!frame)return X_STATUS_SUCCESS;
+  if(!s.RootCurrent(0x818610E8))return X_STATUS_ACCESS_DENIED;
+  std::lock_guard lock(s.mutex);const auto call=s.DirectFileCaller(*frame);
+  if(!call)return X_STATUS_SUCCESS;
+  if(call->uncertain || call->pending_file || call->file || !call->device ||
+      file.retained_device()!=call->device || !file.retained_device()->is_read_only())return X_STATUS_ACCESS_DENIED;
+  call->pending_file=const_cast<vfs::File*>(&file);return X_STATUS_SUCCESS;
+} catch(...) {return X_STATUS_ACCESS_DENIED;}
+void NativeMediaService::ObserveDirectFileOpen(KernelState* kernel,
+    const object_ref<XFile>& file,uint32_t output) noexcept try {
+  if(global_critical_region::is_held_by_current_thread())return;
+  const auto owner=Lookup(kernel);if(!owner)return;
+  auto& s=*owner->state_;const auto frame=s.DirectFileFrame(output);if(!frame)return;
+  std::lock_guard lock(s.mutex);const auto call=s.DirectFileCaller(*frame);if(!call)return;
+  if(!file || call->file || call->pending_file!=file->file() ||
+      file->file()->retained_device()!=call->device) {
+    call->uncertain=true;s.uncertain=true;return;
+  }
+  call->file=file;call->file_handle=file->handle();
+} catch(...) {if(const auto owner=Lookup(kernel))owner->state_->uncertain=true;}
 void NativeMediaService::BeginStop() noexcept {
   try {std::lock_guard lock(state_->mutex);
     state_->ingress_closed.store(true,std::memory_order_release);
@@ -1149,7 +1473,7 @@ bool NativeMediaService::StopOnBootstrap(XThread& actual) noexcept {
 }
 bool NativeMediaService::Drained() const noexcept try {
   const auto& s=*state_;std::lock_guard lock(s.mutex);
-  if(s.uncertain || s.scheduled_cleanup || !s.scopes.empty() || !s.attachment_calls.empty() || !s.token_calls.empty())return false;
+  if(s.uncertain || s.scheduled_cleanup || !s.scopes.empty() || !s.direct_calls.empty() || !s.attachment_calls.empty() || !s.token_calls.empty())return false;
   for(const auto& [serial,cursor]:s.cursors) {
     if(cursor->active || cursor->cleanup_running || cursor->uncertain || !cursor->factory_returned)return false;
     if(!cursor->selected && !cursor->deferred_until_stopped)return false; // temporary ref still needs a Task

@@ -10,6 +10,12 @@ namespace xe::kernel {
 class NativeProfileIdentityOwner;
 namespace test { class NativeIdentityWakeOwnerTestAccess; }
 namespace identity_detail {
+// Native lis/addi may sign-extend a DWORD in a64-bit GPR. Validate canonical
+// native32 bits instead of rejecting actual8000000E or truncating arbitrary64.
+inline bool DwordIs(uint64_t actual,uint32_t expected) noexcept {
+ return uint32_t(actual)==expected &&
+     (actual==uint64_t(expected) || actual==uint64_t(int64_t(int32_t(expected))));
+}
 // The concrete identity owner holds its actual retained XThread/domain/Task
 // records in parallel. These methods own ONLY finite origin/disposition
 // metadata under that owner's mutex, never guest calls, waits, filesystem IO,
@@ -147,6 +153,21 @@ class NativeIdentityWakeOwner final {
       // ordinary/unjoined producer cannot replace this factual wake source.
     }
     return true;
+  }
+  // F25E0 and 7B68 are frameless tails. The retained caller, wake serial and
+  // physical Task birth survive through 7600; matching native DWORD arguments
+  // does not consume that ownership or supply worker/publication readiness.
+  bool MatchesNativeRescheduleTail(Wake producer_key,Wake reschedule_key,
+      Frame producer,Frame reschedule,Frame tail,uint32_t tagged_task,
+      const std::array<uint64_t,4>& args) const noexcept {
+    if(lost_ || !producer_key.serial || producer_key.serial!=reschedule_key.serial ||
+       !Matches(producer,0x816F25E0) || !Matches(reschedule,0x816B7B68) ||
+       !Matches(tail,0x816B7600) || !SameCaller(producer,tail) || !SameCaller(reschedule,tail) ||
+       args[0]!=uint64_t(tagged_task&~1u) || !DwordIs(args[1],0x815F8E38u) ||
+       !DwordIs(args[2],0xFu) || !DwordIs(args[3],0))return false;
+    for(const auto& entry:wakes_)if(entry && entry->key.serial==producer_key.serial)
+      return entry->reached_reschedule && entry->frame==producer && entry->reschedule==reschedule;
+    return false;
   }
   bool ReturnNativeReschedule(Wake key,Frame actual) {
     auto* value=Find(key);

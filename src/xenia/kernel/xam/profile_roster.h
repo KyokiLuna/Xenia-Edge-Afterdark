@@ -78,6 +78,11 @@ struct ProfileRosterResult final {
   ProfileRosterPhase phase = ProfileRosterPhase::kPreparing;
   uint64_t before_epoch = 0, after_epoch = 0;
   std::array<bool, 4> changed{};
+  // Independent factual host duties. Published/map commitment is not native
+  // resource retirement or permission to reveal identity pixels.
+  bool native_protocol_returned = false, selected_reads_available = false;
+  bool maps_committed = false, writers_available = false, owners_retired = false;
+  uint32_t native_protocol_value = 0;
 };
 class ProfileRosterIntent final {
  public:
@@ -107,6 +112,7 @@ class ProfileRosterIntent final {
 // Both actual resource envelopes are preheld outside this cell before PPC.
 class ProfileRosterPublicationCell final {
  private:
+  friend class test::ProfileSettingsReadTestAccess;
   friend class ProfileManager;
   friend struct ProfileRosterAuthority;
   friend class ::xe::kernel::NativeProfileIdentityOwner;
@@ -116,13 +122,19 @@ class ProfileRosterPublicationCell final {
   // Independently retained revocable metadata; never a dangling intent pointer.
   std::shared_ptr<State> state_;
 };
-// Only concrete native owner mints this after its factual publisher, listener,
-// wake/provider output, descendant/task and renderer old/new-origin join.
+// The concrete native owner issues distinct protocol and full-join roles.
+// A protocol own-return permits only selected reads/canonical host commitment;
+// it can never substitute for actual resource retirement or visual joins.
 class ProfileRosterNativeCompletion final {
  private:
   friend class ::xe::kernel::NativeProfileIdentityOwner;
   friend class ProfileManager;
   friend struct ProfileRosterAuthority;
+  friend class test::ProfileSettingsReadTestAccess;
+  static std::shared_ptr<const ProfileRosterNativeCompletion> ForProtocol(
+      const std::shared_ptr<ProfileRosterIntent>&,
+      const std::shared_ptr<const ProfileRosterNativeBinding>&,
+      uint64_t claimed_nonce, uint32_t actual_native_value);
   static std::shared_ptr<const ProfileRosterNativeCompletion> ForJoined(
       const std::shared_ptr<ProfileRosterIntent>&,
       const std::shared_ptr<const ProfileRosterNativeBinding>&,
@@ -136,6 +148,7 @@ class ProfileRosterNativeCompletion final {
 // family; ordinary Guide/Avatar-only service startup does not claim it.
 class ProfileRosterNativeBinding final {
  private:
+  friend class test::ProfileSettingsReadTestAccess;
   friend class ProfileRosterNativeCompletion;
   friend class ProfileManager;
   friend struct ProfileRosterAuthority;
@@ -168,6 +181,7 @@ class ProfileRosterNativeReadScope final {
   friend class ProfileManager;
   friend struct ProfileRosterAuthority;
   friend class ::xe::kernel::NativeProfileIdentityOwner;
+  friend class test::ProfileSettingsReadTestAccess;
   static std::unique_ptr<ProfileRosterNativeReadScope> Prepare(
       std::shared_ptr<ProfileRosterNativeReadTicket>,
       std::shared_ptr<const ProfileRosterNativeBinding>);

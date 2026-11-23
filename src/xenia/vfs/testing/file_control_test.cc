@@ -1246,5 +1246,73 @@ TEST_CASE("Readonly optical allocation stays unsupported without fabricated memb
   std::array<uint8_t,4> read{};size_t count=0;
   REQUIRE(file.file->ReadSync(read,0,&count)==X_STATUS_SUCCESS);REQUIRE(count==read.size());REQUIRE(read==bytes);
 }
+
+TEST_CASE("Retained metadata matches opened bytes after replacement and namespace withdrawal",
+          "[vfs][file_information][retained]") {
+  TemporaryDirectory directory;
+  std::ofstream(directory.path / "file") << "real";
+  std::error_code error;
+  auto root = filesystem::HostStorageRoot::Open(directory.path, false, error, 0);
+  REQUIRE(root); REQUIRE_FALSE(error);
+  VirtualFileSystem fs;
+  auto device = std::make_unique<AllocationVolume>(directory.path, root, 16);
+  REQUIRE(device->Initialize()); auto* raw = device.get();
+  REQUIRE(fs.RegisterDevice(std::move(device)));
+  FileOwner opened;
+  REQUIRE(raw->ResolvePath("file")->Open(FileAccess::kFileReadData,
+                                        &opened.file) == X_STATUS_SUCCESS);
+  const auto original_creation = opened.file->entry()->create_timestamp();
+  std::filesystem::rename(directory.path / "file", directory.path / "old");
+  std::ofstream(directory.path / "file") << std::string(32768, 'X');
+  // This specifically exercises the earlier path refresh's wrong-source EOF.
+  opened.file->entry()->update();
+  REQUIRE(opened.file->entry()->size() == 32768);
+  File::Information info{};
+  REQUIRE(opened.file->QueryInformation(&info) == X_STATUS_SUCCESS);
+  CHECK(info.end_of_file == 4);
+  CHECK(info.create_timestamp == original_creation);
+  CHECK(info.allocation_size == ((NativeAllocationOf(*opened.file)+8191)/8192)*8192);
+  const std::array<uint8_t,4> expected{'r','e','a','l'};
+  std::array<uint8_t,4> bytes{}; size_t read = 0;
+  REQUIRE(opened.file->ReadSync(bytes,0,&read) == X_STATUS_SUCCESS);
+  CHECK(read == bytes.size()); CHECK(bytes == expected);
+  raw->BeginNamespaceRetirement(); // Existing view remains owned/readable.
+  REQUIRE(opened.file->QueryInformation(&info) == X_STATUS_SUCCESS);
+  CHECK(info.end_of_file == expected.size());
+  root->Retire(); // Actual backend withdrawal is a different, real failure.
+  std::memset(&info,0xA5,sizeof(info));
+  std::array<uint8_t,sizeof(info)> before;
+  std::memcpy(before.data(),&info,sizeof(info));
+  CHECK(opened.file->QueryInformation(&info) == X_STATUS(0xC000009D));
+  CHECK(std::memcmp(&info,before.data(),sizeof(info)) == 0);
+}
+TEST_CASE("Retained metadata keeps overwrite EOF and preserves failures without repair",
+          "[vfs][file_information][overwrite_flush]") {
+  OverwriteFlushFixture f;
+  auto faults=std::make_shared<OverwriteFlushFaults>();
+  HostPathFileTestAccess::Wrap(*f.file.file,faults);
+  File::Information info{};
+  REQUIRE(f.file.file->QueryInformation(&info) == X_STATUS_SUCCESS);
+  CHECK(info.end_of_file == 0); CHECK(f.PhysicalSize() == 8);
+  f.WriteByte(2);
+  REQUIRE(f.file.file->QueryInformation(&info) == X_STATUS_SUCCESS);
+  CHECK(info.end_of_file == 3); CHECK(f.PhysicalSize() == 8);
+  CHECK(info.allocation_size >= info.end_of_file);
+  faults->query_failures=1;
+  std::memset(&info,0xA5,sizeof(info));
+  std::array<uint8_t,sizeof(info)> before;
+  std::memcpy(before.data(),&info,sizeof(info));
+  CHECK(f.file.file->QueryInformation(&info) == X_STATUS_UNSUCCESSFUL);
+  CHECK(std::memcmp(&info,before.data(),sizeof(info)) == 0);
+  CHECK(f.PhysicalSize() == 8);
+  REQUIRE(f.file.file->Flush() == X_STATUS_SUCCESS);
+  REQUIRE(f.file.file->QueryInformation(&info) == X_STATUS_SUCCESS);
+  CHECK(info.end_of_file == 3); CHECK(f.PhysicalSize() == 3);
+  { auto lock=global_critical_region::AcquireDirect();
+    std::memset(&info,0xA5,sizeof(info)); std::memcpy(before.data(),&info,sizeof(info));
+    CHECK(f.file.file->QueryInformation(&info) == X_STATUS_INVALID_DEVICE_REQUEST);
+    CHECK(std::memcmp(&info,before.data(),sizeof(info)) == 0);
+  }
+}
 } // namespace xe::vfs::test
 #endif

@@ -1,6 +1,7 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "xenia/base/managed_volume_authority.h"
 #include "xenia/base/content_mutation_owner.h"
+#include "xenia/base/profile_publication_intent.h"
 #include "xenia/base/managed_storage_bootstrap.h"
 #include "xenia/base/cache_storage_owner.h"
 #include <algorithm>
@@ -1551,6 +1552,11 @@ bool ManagedStorageBootstrap::Open(ManagedVolumeAuthority& out,
     error=out.mutations_->Recover();if (error) {return fail();}
   }
   if (!out.mutations_->ready()) {error=BootPending();return fail();}
+  // Replay the typed profile tuple only after actual CM recovery and before
+  // the source can issue its first public guest view. A pending/corrupt intent
+  // never becomes a partially initialized default profile.
+  error=ProfilePublicationIntentStore::ReplayBeforeGuestAdmission(
+      out.intents_,recovery,out.mutations_);if (error) {return fail();}
   error=b.identity->CheckCurrent();if (error) {return fail();}
   ManagedBootstrapGuestAdmissionPermit admission(bootstrap,b.source,b.source_lease,
       b.identity,out.projection_,out.mutations_);
@@ -2075,6 +2081,10 @@ ManagedVolumeAuthority::OpenLegacyInternal(
       error = std::make_error_code(std::errc::io_error);
     }
   }
+  if (!error) {
+    error = ProfilePublicationIntentStore::ReplayBeforeGuestAdmission(
+        result->intents_, result->recovery_, result->mutations_);
+  }
   return result;
 }
 std::array<uint8_t, 32> ManagedVolumeAuthority::FormatBindingDigest(
@@ -2498,6 +2508,10 @@ std::shared_ptr<ManagedVolumeAuthority> ManagedVolumeAuthority::BuildFormatVolum
       error = result->mutations_ ? result->mutations_->error() : Denied();
       if (!error) { error = std::make_error_code(std::errc::operation_in_progress); }
     }
+  }
+  if (!error) {
+    error = ProfilePublicationIntentStore::ReplayBeforeGuestAdmission(
+        result->intents_, result->recovery_, result->mutations_);
   }
   return result;
 }

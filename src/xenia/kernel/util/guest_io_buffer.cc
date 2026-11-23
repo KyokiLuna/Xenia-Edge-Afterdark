@@ -10,6 +10,7 @@
 #include "xenia/base/memory.h"
 #include "xenia/base/mutex.h"
 #include "xenia/memory.h"
+#include "xenia/kernel/native_identity_tile_work.h"
 
 namespace xe::kernel::util {
 namespace {
@@ -58,7 +59,8 @@ X_STATUS CheckWrites(Memory& memory, std::span<const GuestIoWrite> writes,
 }
 template <typename Store,typename Admission=GuestIoProfileReadScope>
 X_STATUS WriteBatch(Memory& memory, std::span<const GuestIoWrite> writes,
-                    Store store, Admission* admission = nullptr) {
+                    Store store, Admission* admission = nullptr,
+                    NativeIdentityTilePublication* publication = nullptr) {
   if (writes.size() > 2) {
     return X_STATUS_INVALID_PARAMETER;
   }
@@ -99,6 +101,15 @@ X_STATUS WriteBatch(Memory& memory, std::span<const GuestIoWrite> writes,
     status = admission->Admit();
     if (XFAILED(status)) { return status; }
   }
+  // This guard is declared after the real global lock: an exceptional store
+  // settles unknown provenance BEFORE GCRC is released. Physical callbacks run
+  // only after a known actual store receipt and cannot turn it into no-write.
+  struct PublicationExit {
+    NativeIdentityTilePublication* observer=nullptr;
+    bool entered=false;
+    ~PublicationExit(){if(observer && entered)observer->StoresUncertain();}
+  } publication_exit{publication,false};
+  if(publication){publication->BeforeStores();publication_exit.entered=true;}
   for (size_t i = 0; i < writes.size(); ++i) {
     if (writes[i].bytes.empty()) {
       continue;
@@ -109,6 +120,7 @@ X_STATUS WriteBatch(Memory& memory, std::span<const GuestIoWrite> writes,
     store(i, output);
     std::atomic_thread_fence(std::memory_order_release);
   }
+  if(publication){publication->StoresCommitted();publication_exit.entered=false;}
   if (admission) { admission->Release(); }
   // Every byte is already committed before an invalidation callback can run.
   // Such observers may change mappings afterward; no rejected partial write
@@ -180,6 +192,15 @@ X_STATUS WriteGuestIoBuffers(Memory& memory,
   return WriteBatch(memory, writes, [&](size_t i, uint8_t* output) {
     std::memcpy(output, writes[i].bytes.data(), writes[i].bytes.size());
   });
+}
+X_STATUS WriteGuestIoBuffers(Memory& memory,
+                             std::span<const GuestIoWrite> writes,
+                             NativeIdentityTilePublication& publication) {
+  auto store=[&](size_t i,uint8_t* output){
+    std::memcpy(output,writes[i].bytes.data(),writes[i].bytes.size());
+  };
+  return WriteBatch(memory,writes,store,
+      static_cast<GuestIoProfileReadScope*>(nullptr),&publication);
 }
 X_STATUS WriteGuestIoBuffers(Memory& memory,
                              std::span<const GuestIoWrite> writes,

@@ -54,7 +54,7 @@ The project is developed in tested milestones. The [implementation roadmap](docs
 | Remaining system apps & online-service compatibility | Later milestones, dependent on the system foundation. |
 | Performance and broader compatibility | Ongoing research and regression testing; no game-wide FPS or compatibility guarantee. |
 
-The [HDD milestone notes for 2026-11-18](docs/research/17559-hdd-milestone-20261118.md) describe the milestone's actual validation, limitations and source/build provenance. A published milestone will appear on the [Afterdark Releases page](https://github.com/KyokiLuna/Xenia-Edge-Afterdark/releases) under `hdd-milestone-20261118`.
+The [HDD checkpoint notes for 2026-11-23](docs/research/17559-hdd-milestone-20261123.md) describe the current integration, validation boundaries and remaining work. Its release bundle carries the actual engineering and AppImage acceptance records. The [2026-11-18 milestone notes](docs/research/17559-hdd-milestone-20261118.md) remain available as a historical record.
 
 The [V62 checkpoint notes](docs/research/17559-hdd-profile-checkpoint-v62.md) remain a historical record of its Linux profile-persistence and Call of Duty: Black Ops storage/control-setting tests. V62 is a public prerelease; its results do not establish acceptance of later native profile or avatar work.
 

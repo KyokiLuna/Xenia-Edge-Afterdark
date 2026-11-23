@@ -9,7 +9,9 @@
 
 #include "xenia/emulator.h"
 #include "xenia/kernel/xam/user_profile.h"
+#include "xenia/kernel/xam/profile_picture_codec.h"
 #include <algorithm>
+#include <random>
 #include "third_party/fmt/include/fmt/format.h"
 #include "third_party/stb/stb_image.h"
 #include "xenia/kernel/kernel_state.h"
@@ -131,13 +133,12 @@ std::optional<CapturedAchievementAward> UserTracker::CaptureAward(
                                   std::move(*origin)};
 }
 
+bool UserTracker::TrackUser(uint64_t xuid) {
+  std::lock_guard lock(metadata_mutex_);
+  return tracked_xuids_.insert(xuid).second;
+}
 bool UserTracker::AddUser(uint64_t xuid) {
-  {
-    std::lock_guard lock(metadata_mutex_);
-    if (!tracked_xuids_.insert(xuid).second) {
-      return false;
-    }
-  }
+  if (!TrackUser(xuid)) { return false; }
   if (Spa()) {
     AddTitleToPlayedList(xuid);
   }
@@ -164,7 +165,7 @@ void UserTracker::FlushUserData(uint64_t xuid) {
                                                                        error);
   if (writer.model && writer.model->Pending(error)) {
     auto transaction =
-        writer.model->AcquireTransaction(writer.owner, writer.recovery, error);
+        writer.model->AcquireTransaction(writer.owner, writer.recovery, error, writer.metadata);
   if (transaction) {
       transaction->Attempt();
     }
@@ -177,18 +178,25 @@ void UserTracker::AddTitleToPlayedList() {
   }
 }
 
-void UserTracker::AddTitleToPlayedList(uint64_t xuid) {
+std::optional<ProfileGpdMutation> UserTracker::CapturePlayedTitleMutation(
+    std::error_code& error) const {
+  error.clear();
   auto spa = Spa();
-  if (!spa || !spa->include_in_profile() || spa->is_system_app()) {
-    return;
-  }
+  if (!spa || !spa->include_in_profile() || spa->is_system_app()) { return {}; }
   ProfileGpdMutation command;
   command.kind = ProfileGpdMutationKind::kTouchTitle;
   command.title_id = spa->title_id();
   command.guest_time = Clock::QueryGuestSystemTime();
-  command.title_data =
-      ProfileGpdTitleData::Capture(std::move(spa), XLanguage::kEnglish);
-  const auto result = Mutate(xuid, std::move(command));
+  command.title_data = ProfileGpdTitleData::Capture(std::move(spa), XLanguage::kEnglish);
+  if (!command.title_data) { error = std::make_error_code(std::errc::bad_message); return {}; }
+  return command;
+}
+void UserTracker::AddTitleToPlayedList(uint64_t xuid) {
+  std::error_code error;
+  auto command = CapturePlayedTitleMutation(error);
+  if (error) { XELOGW("Profile title metadata unavailable: {}", error.message()); return; }
+  if (!command) { return; }
+  const auto result = Mutate(xuid, std::move(*command));
   if (result.error) {
     XELOGW("Profile title mutation pending/refused: {}",
            result.error.message());
@@ -706,31 +714,62 @@ bool UserTracker::UpsertSetting(uint64_t xuid, uint32_t title_id,
 
 bool UserTracker::UpdateUserIcon(uint64_t xuid,
                                  std::span<const uint8_t> icon_data) {
-  auto user = kernel_state()->xam_state()->profile_manager()->CaptureProfile(xuid);
-  if (!user) {
-    return false;
+  // One owned host request, before any model admission or physical mutation.
+  // Genuine PNG decode/shape validation and pair preparation happen first.
+  std::error_code error;
+  const auto pair = PrepareHostProfilePicturePair(icon_data, error);
+  if (!pair || error) { return false; }
+  try {
+    // Native17559 DDE8/F838/F9D0 personal-key grammar: an explicit title and
+    // two16-bit values, emitted as24 UTF16BE hex characters by UserSetting.
+    // HOST entropy does not claim native RNG/callback execution or image-cache
+    // item64 meaning. Avatar title/reserved title families are not generated.
+    const uint32_t nonce = std::random_device{}();
+    const auto text = fmt::format("{:08x}{:08x}{:08x}", kDashboardID,
+                                   nonce & 0xFFFF, nonce >> 16);
+    ProfileGpdMutation command;
+    command.kind = ProfileGpdMutationKind::kSetPictures;
+    command.title_id = kDashboardID;
+    command.picture_changes = {
+        {filesystem::ProfileArtifactKind::kPersonal64, false, pair->large},
+        {filesystem::ProfileArtifactKind::kPersonal32, false, pair->small}};
+    command.settings.emplace_back(UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE,
+                                   std::u16string(text.begin(), text.end()));
+    return Committed(Mutate(xuid, std::move(command)));
+  } catch (...) { return false; }
+}
+
+bool UserTracker::ClearUserIcon(uint64_t xuid) {
+  // Reset personal selection to this exact captured PUBLIC selection. Unknown
+  // or unreadable keys are preserved and reported, never replaced by00.
+  std::error_code error;
+  auto writer = kernel_state()->xam_state()->profile_manager()->CaptureGpdWriter(xuid, error);
+  if (!writer.model || error) { return false; }
+  auto captured = writer.model->CaptureRead(error);
+  if (!captured || error || !captured->pictures) { return false; }
+  for (const auto& [name, pixels] : {std::pair{"tile_64.png", 64u}, std::pair{"tile_32.png", 32u}}) {
+    const auto found = captured->pictures->find(name);
+    if (found == captured->pictures->end() || !found->second->exists() ||
+        ValidateProfilePicturePng(found->second->bytes(), pixels)) { return false; }
   }
-
-  int width, height, channels;
-  if (!stbi_info_from_memory(icon_data.data(),
-                             static_cast<int>(icon_data.size()), &width,
-                             &height, &channels)) {
-    return false;
-  }
-
-  XTileType icon_type = XTileType::kGameIcon;
-
-  if (std::pair<uint16_t, uint16_t>(width, height) == kProfileIconSize) {
-    icon_type = XTileType::kPersonalGamerTile;
-  } else if (std::pair<uint16_t, uint16_t>(width, height) ==
-             kProfileIconSizeSmall) {
-    icon_type = XTileType::kPersonalGamerTileSmall;
-  } else {
-    return false;
-  }
-
-  user->WriteProfileIcon(icon_type, icon_data);
-  return true;
+  std::optional<UserSetting> public_key;
+  if (UserSetting::ReadFromGpd(captured->models->dashboard,
+      uint32_t(UserSettingId::XPROFILE_GAMERCARD_PICTURE_KEY), public_key) != X_ERROR_SUCCESS ||
+      !public_key || public_key->get_type() != X_USER_DATA_TYPE::WSTRING) { return false; }
+  auto text = std::get<std::u16string>(public_key->get_host_data());
+  if (text.size() != 25 || text.back() != 0) { return false; }
+  text.pop_back();
+  if (!std::all_of(text.begin(), text.end(), [](char16_t c) {
+      return (c >= u'0' && c <= u'9') || (c >= u'a' && c <= u'f') || (c >= u'A' && c <= u'F');
+    })) { return false; }
+  ProfileGpdMutation command; command.kind = ProfileGpdMutationKind::kSetPictures;
+  command.title_id = kDashboardID; command.request_id = writer.model->AllocateRequestId(error);
+  if (error) { return false; }
+  command.picture_changes = {
+      {filesystem::ProfileArtifactKind::kPersonal64, true, {}},
+      {filesystem::ProfileArtifactKind::kPersonal32, true, {}}};
+  command.settings.emplace_back(UserSettingId::XPROFILE_GAMERCARD_PERSONAL_PICTURE, text);
+  return Committed(writer.Submit(std::move(command), captured->origin.stamp));
 }
 
 std::vector<uint8_t> UserTracker::GetIcon(uint64_t xuid, uint32_t title_id,

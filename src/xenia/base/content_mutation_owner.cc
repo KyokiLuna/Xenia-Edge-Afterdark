@@ -2,9 +2,11 @@
  * Xenia : Xbox 360 Emulator Research Project
  * Released under the BSD license - see LICENSE in the root for details.
  */
+#include "xenia/base/snapshot_publication_set.h"
 #include "xenia/base/content_mutation_owner.h"
 #include <algorithm>
 #include <array>
+#include <new>
 #include <random>
 #include <set>
 #include "xenia/base/mutex.h"
@@ -593,6 +595,105 @@ std::error_code ContentMutationOwner::RecoverPreparations(
     if (text.ends_with(".abort") && !plans.contains(text.substr(8,32))) { return Error(std::errc::bad_message); }
   }
   return {};
+}
+struct ContentMutationOwner::ProfileThumbnailParticipant::Data {
+  std::shared_ptr<ContentMutationOwner> owner;
+  std::weak_ptr<SnapshotPublicationSet> members;
+  std::shared_ptr<HostStorageRoot> reservation;
+  std::shared_ptr<const HostStorageSnapshotToken> expected;
+  bool active = false;
+  ~Data() {
+    if (reservation) {
+      reservation->Retire();
+      reservation->ReleaseRetiredSnapshotReservation();
+    }
+    if (active) { owner->active_.fetch_sub(1, std::memory_order_acq_rel); }
+  }
+};
+ContentMutationOwner::ProfileThumbnailParticipant::ProfileThumbnailParticipant(
+    std::shared_ptr<Data> data) : data_(std::move(data)) {}
+ContentMutationOwner::ProfileThumbnailParticipant::~ProfileThumbnailParticipant() = default;
+const std::shared_ptr<const HostStorageSnapshotToken>&
+ContentMutationOwner::ProfileThumbnailParticipant::expected() const { return data_->expected; }
+std::error_code ContentMutationOwner::ProfileThumbnailParticipant::CheckCurrent(
+    const SnapshotPublicationSet& members) const {
+  const auto held = data_->members.lock();
+  if (!data_->active || !held || held.get() != &members || !data_->reservation ||
+      data_->reservation->retiring()) { return Error(std::errc::operation_canceled); }
+  return data_->owner->CheckCurrent();
+}
+std::shared_ptr<ContentMutationOwner::ProfileThumbnailParticipant>
+ContentMutationOwner::PrepareProfileThumbnail(const std::filesystem::path& package,
+    const std::shared_ptr<SnapshotPublicationSet>& members, std::error_code& error) {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread() || !members) {
+    error = Error(std::errc::operation_not_permitted); return {};
+  }
+  // This join is only for the actual canonical local profile package, never
+  // arbitrary content metadata. The store separately authenticates its XUID,
+  // managed source binding and complete intended record before journal IO.
+  std::vector<std::string> parts;
+  for (const auto& part : package) { parts.push_back(part.generic_string()); }
+  const auto fold = [](std::string value) {
+    for (auto& c : value) { if (c >= 'a' && c <= 'z') { c -= 'a' - 'A'; } }
+    return value;
+  };
+  const auto xuid_leaf = [](std::string_view value) {
+    return value.size() == 16 && value != "0000000000000000" &&
+        std::all_of(value.begin(), value.end(), [](char c) {
+          return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        });
+  };
+  if (!wire::ValidPackage(package) || parts.size() != 4 || !xuid_leaf(parts[0]) ||
+      fold(parts[0]) != fold(parts[3]) || fold(parts[1]) != "FFFE07D1" ||
+      parts[2] != "00010000") {
+    error = Error(std::errc::invalid_argument); return {};
+  }
+  std::unique_lock operation(operation_mutex_, std::try_to_lock);
+  if (!operation.owns_lock()) { error = Error(std::errc::device_or_resource_busy); return {}; }
+  error = CheckCurrent();
+  if (!error && (!ready() || active_.load(std::memory_order_acquire))) {
+    error = Error(std::errc::device_or_resource_busy);
+  }
+  if (error) { return {}; }
+  try {
+    auto data = std::make_shared<ProfileThumbnailParticipant::Data>();
+    data->owner = shared_from_this(); data->members = members;
+    active_.fetch_add(1, std::memory_order_acq_rel); data->active = true;
+    const auto exact = CaptureMetadata(Kind::kThumbnail, package,
+                                        package / "__thumbnail.png", error);
+    if (!exact) { return {}; }
+    auto native_profile = content_->Subroot(package, false, error);
+    if (!native_profile) { return {}; }
+    auto before = native_profile->CaptureSnapshot("__thumbnail.png",
+        wire::kMaximumMetadataBytes, error, true);
+    if (!before) { return {}; }
+    if (before->exists() != exact->exists() || before->bytes().size() != exact->bytes().size() ||
+        !std::equal(before->bytes().begin(), before->bytes().end(), exact->bytes().begin()) ||
+        (before->exists() && (before->info().filesystem_id != exact->info().filesystem_id ||
+          before->info().file_id != exact->info().file_id || before->info().size != exact->info().size))) {
+      error = Error(std::errc::state_not_recoverable); return {};
+    }
+    data->reservation = native_profile->ReserveSnapshotFile(before, error);
+    if (!data->reservation) { return {}; }
+    if (!data->reservation->IsSnapshotReservationOf(*native_profile)) {
+      error = Error(std::errc::state_not_recoverable); return {};
+    }
+    auto actual = data->reservation->CaptureSnapshot("__thumbnail.png",
+        wire::kMaximumMetadataBytes, error, true);
+    if (!actual) { return {}; }
+    // Allocate the public holder BEFORE attaching. A later allocation failure
+    // must not strand an attached active admission with no returned holder.
+    auto participant = std::shared_ptr<ProfileThumbnailParticipant>(new ProfileThumbnailParticipant(data));
+    // Attach validates actual source ancestry + native directory identity,
+    // retains this typed admission, and issues an original-view observation.
+    data->expected = members->AttachThumbnail(content_, data->reservation,
+                                                actual, data, error);
+    if (!data->expected) { return {}; }
+    return participant;
+  } catch (const std::bad_alloc&) {
+    error = Error(std::errc::not_enough_memory); return {};
+  }
 }
 ContentMutationOwner::Receipt ContentMutationOwner::WriteMetadata(
     Kind kind, const std::filesystem::path& package,

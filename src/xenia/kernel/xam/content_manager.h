@@ -41,6 +41,7 @@ class KernelState;
 namespace vfs {
 class XContentReadBacking;
 class Device;
+class SymbolicLinkToken;
 enum class DeviceRetirementPolicy;
 class XContentContainerDevice;
 }  // namespace vfs
@@ -329,7 +330,8 @@ class ContentPackage {
   std::shared_ptr<vfs::Device> mount_parent_;
   std::shared_ptr<const filesystem::HostStorageRoot> mount_source_certificate_;
   bool closing_ = false, close_draining_ = false, handles_released_ = false;
-  std::string root_path_, published_link_target_;
+  std::string root_path_;
+  std::shared_ptr<const vfs::SymbolicLinkToken> published_link_;
   std::weak_ptr<vfs::Device> registered_device_;
   void PublishMount(std::unique_ptr<vfs::Device>);
   struct PreparedMount;
@@ -346,6 +348,13 @@ class ContentManager {
  public:
   bool RegisterManagedSource(ContentSource);
   bool RegisterRequiredManagedSource(ContentSource);
+  // Publish the actual managed volume and its Content child as one namespace
+  // transaction. Exact source/MVA identity, explicit guest roots and prepared
+  // parent ownership are captured before commit; no guest path chooses a root.
+  X_STATUS MountManagedSourceDevices(const std::string& source_id);
+  // Rebuild one idle managed Content child through the same actual source and
+  // registered volume edge. Busy/foreign/replaced views remain unchanged.
+  X_STATUS RefreshManagedContentView(const std::string& source_id);
   bool managed_sources_ready() const;
   std::shared_ptr<const filesystem::ProfileIntentOwner> ProfileIntents(
       const std::string& source_id) const;

@@ -1225,6 +1225,11 @@ X_STATUS Emulator::Setup(
 #endif
   }
 
+  if (console_data_owner_ && console_data_owner_->signing_error()) {
+    XELOGE("Console signing identity unavailable: {} ({}). Existing identity preserved.",
+        console_data_owner_->signing_error().message(), console_data_owner_->signing_error().value());
+  }
+
   // Recovery is a separate authority, never a console-settings payload or a
   // profile alias. Establish its protection before ANY guest mount; an error
   // after protection must retain that owner rather than expose its files.
@@ -1293,7 +1298,8 @@ X_STATUS Emulator::Setup(
       console_data_owner_
           ? console_data_owner_->error()
           : std::make_error_code(std::errc::operation_not_supported),
-      snapshot_recovery_owner_);
+      snapshot_recovery_owner_,
+      console_data_owner_ ? console_data_owner_->signing_identity() : nullptr);
 #if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
   if (setup_purpose_ == SetupPurpose::kGuestExecution &&
       !kernel_state_->content_manager()->managed_sources_ready()) {
@@ -2941,23 +2947,7 @@ void Emulator::MountStandardDrives() {
     content_ec = owned_storage->Create("content", true);
     hdd = kernel_state_->content_manager()->sources().Source("hdd");
   }
-  const auto hdd_volume = kernel_state_->content_manager()->Volume("hdd");
-  if (hdd && hdd->available && hdd->storage && hdd_volume &&
-      hdd_volume->profile_writable() && hdd_volume->public_root()) {
-    const auto& volume_storage = hdd_volume->public_root();
-    const auto identity=kernel_state_->content_manager()->sources().CaptureStorageVolume(*hdd);
-    auto volume = std::make_unique<vfs::HostPathDevice>(
-        "\\Device\\Harddisk0\\Partition1", volume_storage->path(), false,
-        false, "FATX", volume_storage, hdd->storage,
-        vfs::HostPathDevice::ControlRole::kFolderVolume);
-    if (volume->SetStorageVolume(identity) && volume->Initialize()) { fs->RegisterDevice(std::move(volume)); }
-    auto content = std::make_unique<vfs::HostPathDevice>(
-        "\\Device\\Harddisk0\\Partition1\\Content", content_root_, false, true,
-        "FATX", hdd->storage, hdd->storage);
-    if (content->SetStorageVolume(identity) && content->Initialize()) {
-      fs->RegisterDevice(std::move(content));
-    }
-  } else {
+  if (XFAILED(kernel_state_->content_manager()->MountManagedSourceDevices("hdd"))) {
     XELOGW("Managed HDD content is unavailable; no backing folder recreated");
   }
 
@@ -2980,33 +2970,12 @@ void Emulator::MountStandardDrives() {
   // metadata is recovered. No global/SYSTEM or previous-product fallback.
 
   if (cvars::mount_memory_unit) {
-    const auto mu =
-        kernel_state_->content_manager()->sources().Source("memory-unit");
-    // An existing empty parent is not an initialized Content device. Creation
-    // or formatting is an explicit managed-storage operation.
-    if (!mu || !mu->available || !mu->storage) {
+    if (XFAILED(kernel_state_->content_manager()->MountManagedSourceDevices(
+            "memory-unit"))) {
       XELOGW("Configured memory unit is unavailable or uninitialized");
     } else {
-      const auto owner = kernel_state_->content_manager()->Volume("memory-unit");
-      const auto identity=kernel_state_->content_manager()->sources().CaptureStorageVolume(*mu);
-      auto volume_storage = owner && owner->profile_writable()
-                                ? owner->public_root() : nullptr;
-      if (volume_storage) {
-        auto volume = std::make_unique<vfs::HostPathDevice>(
-            "\\Device\\Mass0", volume_storage->path(), false, false, "FATX",
-            std::move(volume_storage), mu->storage,
-          vfs::HostPathDevice::ControlRole::kFolderVolume);
-        if (volume->SetStorageVolume(identity) && volume->Initialize() && fs->RegisterDevice(std::move(volume))) {
-          fs->RegisterSymbolicLink("MU:", "\\Device\\Mass0");
-          fs->RegisterSymbolicLink("\\MU", "\\Device\\Mass0");
-        }
-      }
-      auto content = std::make_unique<vfs::HostPathDevice>(
-          "\\Device\\Mass0\\Content", mu->source.root, false, true, "FATX",
-          mu->storage, mu->storage);
-      if (content->SetStorageVolume(identity) && content->Initialize()) {
-        fs->RegisterDevice(std::move(content));
-      }
+      fs->RegisterSymbolicLink("MU:", "\\Device\\Mass0");
+      fs->RegisterSymbolicLink("\\MU", "\\Device\\Mass0");
     }
   }
 
@@ -4139,25 +4108,10 @@ X_STATUS Emulator::PrepareLaunch(const std::filesystem::path& path,
     input_system_->ResetKeystrokes();
   }
 
-  // Refresh one idle view instead of appending duplicate mounts. Existing
-  // open files retain their device/tree; a busy view cannot be discarded.
-  constexpr std::string_view kContentMount =
-      "\\Device\\Harddisk0\\Partition1\\Content";
-  const auto source = kernel_state_->content_manager()->sources().Source("hdd");
-  if (source && source->available && source->storage) {
-    if (!file_system_->GetDevice(kContentMount) ||
-        file_system_->UnregisterDevice(kContentMount)) {
-      auto content = std::make_unique<vfs::HostPathDevice>(
-          kContentMount, content_root_, false, true, "FATX", source->storage,
-          source->storage);
-      const auto identity=kernel_state_->content_manager()->sources().CaptureStorageVolume(*source);
-      if (content->SetStorageVolume(identity) && content->Initialize()) {
-        file_system_->RegisterDevice(std::move(content));
-      }
-    }
-  } else {
-    file_system_->RetireDevice(kContentMount);
-  }
+  // Refresh the actual managed Content child through its common producer.
+  // A busy/foreign/replaced view is preserved, with a truthful diagnostic.
+  const auto refreshed=kernel_state_->content_manager()->RefreshManagedContentView("hdd");
+  if(XFAILED(refreshed))XELOGW("Managed HDD Content refresh unavailable: {:08X}",refreshed);
 
 #if XE_PLATFORM_WIN32
   // The files of an installed system update.

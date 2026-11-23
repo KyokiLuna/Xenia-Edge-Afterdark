@@ -39,6 +39,12 @@ struct PPCBuiltins {
   Function* native_avatar_completion_publication;
   Function* native_identity_render_iteration_end;
   Function* native_identity_task_diagnostic[12];
+  // Six fixed original Task publication/call/return cuts, shared by backends.
+  Function* native_identity_task_execution[6];
+  // Seven exact native image loaded-operand/call-return observations.
+  Function* native_identity_image_observation[17];
+  Function* native_xmsg_instruction;
+  Function* native_content_resolve_producer;
 };
 
 class PPCFrontend {

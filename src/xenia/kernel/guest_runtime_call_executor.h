@@ -57,6 +57,12 @@ class GuestRuntimeCallExecutor
       XThread&, NativeSystemUiPublicCall, std::span<const uint64_t> arguments);
 
  private:
+  friend class NativeSystemUiService;
+  // Fixed7DB only. The Service has already bound the genuine Editor cell,
+  // copied-request Producer and paired native loader source on this caller.
+  // Generic Avatar family admission remains disabled.
+  GuestRuntime::ExecutionResult ExecuteEditorOnOriginalCaller(
+      XThread&, std::span<const uint64_t>);
   friend class NativeAvatarService;
   friend class NativeProfileIdentityOwner;
   class ProfileIdentityProviderBinding final {

@@ -28,13 +28,18 @@ namespace xe {
 namespace kernel {
 namespace xam {
 
-// No host fallback after a native Editor attempt. Its owned SYSTEM launch
-// pair is distinct from avatar engine readiness and from a title's exit ABI.
+// No host fallback after a native Editor attempt. The real SYSTEM caller
+// returns request status; an accepted TITLE transfer parks only after the
+// Service has released its public resources and awakened the owned worker.
 dword_result_t XamLaunchAvatarEditor_entry(dword_t user_index, dword_t flags,
                                            lpu16string_t name) {
   const auto result = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
       kernel_state(), NativeSystemUiPublicCall::kLaunchAvatarEditor,
       std::array<uint32_t,3>{user_index, flags, name.guest_address()});
+  if (result.disposition ==
+      NativeSystemUiPublicCallResult::Disposition::kTransferred) {
+    ParkAfterTitleHandoff();
+  }
   // Editor is HRESULT-returning. Preserve the actual native return verbatim;
   // inactive/denied host policy must not look like positive native success.
   if (result.disposition == NativeSystemUiPublicCallResult::Disposition::kReturned)

@@ -12,7 +12,9 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -85,6 +87,16 @@ struct ContentSourceState {
   // A refused fresh selected-media observation grants no backing. It does not
   // overwrite the last physical projection or retire that actual generation.
   std::error_code observation_error;
+};
+
+// Immutable cached namespace/selector facts, with NO HostStorageRoot, MVA,
+// selection or Device ownership. This is not file/read/write/format admission.
+// Exact metadata identity is still required at each actual common IO boundary.
+struct ContentSourceDescription {
+  ContentSource source;
+  uint64_t generation=0,capacity_bytes=0,free_bytes=0;
+  std::shared_ptr<const filesystem::ConsoleStorageVolume> identity;
+  std::shared_ptr<const ManagedFormatSourceProof> managed_format_proof;
 };
 
 // Opaque cached registry capability for one actual managed generation. It is
@@ -265,6 +277,48 @@ class ContentSourceRegistry {
   // Exact captured cached generation only; no observation or numeric-ID lookup.
   std::shared_ptr<const filesystem::ConsoleStorageVolume> CaptureStorageVolume(
       const ContentSourceState&) const;
+  // Bounded namespace publication only, after GCRC and any driver binding
+  // admission. The caller retains this Registry/manager for the whole scope.
+  // No observing IO, callbacks, guest execution or last-owner release while
+  // held. This joins the exact existing registry generation to an effect;
+  // cached volume availability alone is not such a lease.
+  class SourceGenerationAdmission final {
+   public:
+    ~SourceGenerationAdmission()=default;
+    SourceGenerationAdmission(SourceGenerationAdmission&&) noexcept=default;
+    SourceGenerationAdmission& operator=(SourceGenerationAdmission&&) noexcept=default;
+   private:
+    friend class ContentSourceRegistry;
+    explicit SourceGenerationAdmission(std::mutex& mutex)
+        :lock_(mutex,std::try_to_lock){}
+    std::unique_lock<std::mutex> lock_;
+  };
+  std::optional<SourceGenerationAdmission> TryAdmitSourceGeneration(
+      const ContentSourceState&,std::error_code&) const noexcept;
+  // The metadata form joins guest-ID/namespace publication without retaining
+  // an MVA or native backing. It grants no read/write/format capability.
+  std::optional<SourceGenerationAdmission> TryAdmitSourceGeneration(
+      const ContentSourceDescription&,std::error_code&) const noexcept;
+  std::optional<SourceGenerationAdmission> TryAdmitSourceGenerations(
+      std::span<const ContentSourceDescription>,std::error_code&) const noexcept;
+  // Exact already-observed generation only, with nonwaiting metadata
+  // admission. No path observation/refresh, weak native owner, callback or IO.
+  // Caller must use ordinary retained-root admission for actual operations.
+  std::optional<ContentSourceState> CaptureSourceCached(
+      const std::shared_ptr<const filesystem::ConsoleStorageVolume>&,
+      std::error_code&) const;
+  // Same exact cached validation as CaptureSourceCached, returning metadata
+  // only. Suitable for an ephemeral native-ID translation or visible selector:
+  // its lifetime can never retain a source flock or guest-access backing.
+  std::optional<ContentSourceDescription> DescribeSourceCached(
+      const std::shared_ptr<const filesystem::ConsoleStorageVolume>&,
+      std::error_code&) const;
+  // Cached selector/ID projection only. No Sources() observation, source/root
+  // owner, callback or native resource may escape these metadata methods.
+  std::vector<ContentSourceDescription> DescribeSourcesCached(
+      uint32_t device_id, std::error_code&) const;
+  bool IsDescriptionCurrentCached(const ContentSourceDescription&) const noexcept;
+
   std::shared_ptr<filesystem::HostStorageRoot> CaptureManagedDirectory(
       const std::filesystem::path&, bool force_readonly, bool& matched,
       std::error_code&,

@@ -529,7 +529,9 @@ class Fiber {
 
   // Creates a suspended fiber that will run |start_routine| the first time it
   // is switched to. The routine runs on the host thread that performs that
-  // switch.
+  // switch. A normal routine return terminates this entry and resumes its most
+  // recent SwitchTo caller, restoring that caller as GetCurrentFiber(). The
+  // caller and target must remain alive across each actual context transfer.
   static std::unique_ptr<Fiber> Create(CreationParameters params,
                                        std::function<void()> start_routine);
 

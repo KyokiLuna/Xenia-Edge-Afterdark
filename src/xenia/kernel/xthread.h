@@ -33,6 +33,7 @@
 #include "xenia/kernel/util/xfiletime.h"
 #include "xenia/kernel/xmutant.h"
 #include "xenia/kernel/xobject.h"
+#include "xenia/kernel/util/guest_control_flow.h"
 #include "xenia/xbox.h"
 
 namespace xe {
@@ -380,14 +381,6 @@ struct X_KTHREAD {
 };
 static_assert_size(X_KTHREAD, 0xAB0);
 
-#if !XE_PLATFORM_WIN32
-// Exception thrown by XThread::Reenter() to unwind through JIT frames.
-// C++ exception unwinding uses DWARF .eh_frame info registered for JIT code,
-// ensuring destructors and RAII guards in host C++ frames are properly called.
-struct FiberReentryException {
-  uint32_t address;
-};
-#endif
 
 class NativeSystemInvocationState;
 class NativeSystemAllocationAuthority;

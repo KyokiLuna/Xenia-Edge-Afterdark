@@ -6,11 +6,13 @@
 #include <mutex>
 #include <optional>
 #include "xenia/kernel/xam/profile_gpd_publication.h"
+#include "xenia/base/profile_publication_intent.h"
 #include "xenia/kernel/xam/user_settings.h"
 #include "xenia/kernel/xam/xdbf/gpd_info_profile.h"
 #include "xenia/kernel/xam/xdbf/gpd_info_title.h"
 namespace xe::filesystem {
 class ProfileIntentOwner;
+class SnapshotPublicationSet;
 }
 namespace xe::kernel::xam {
 std::error_code ValidateProfileGpdRecords(std::span<const uint8_t>,
@@ -19,6 +21,13 @@ class ProfileManager;
 class ProfileRosterIntent;
 class ProfileGpdModelAuthority;
 class ProfileGpdTransaction;
+// Genuine immutable flat picture observations, captured before the final
+// common guard. Missing members remain missing; no fallback bytes are seeded.
+using ProfileGpdPictureSnapshots = std::map<std::string,
+    std::shared_ptr<const filesystem::HostStorageSnapshotToken>>;
+std::shared_ptr<const ProfileGpdPictureSnapshots> CaptureProfilePictures(
+    std::shared_ptr<const filesystem::HostStorageRoot>, std::error_code&,
+    const filesystem::SnapshotPublicationSet* members = nullptr);
 struct ProfileGpdReadModels {
   explicit ProfileGpdReadModels(std::span<const uint8_t> dashboard_bytes)
       : dashboard(std::vector<uint8_t>(dashboard_bytes.begin(),
@@ -40,7 +49,15 @@ enum class ProfileGpdMutationKind {
   kRefreshProfileData,
   kRefreshSummary,
   kReload,
-  kFlush
+  kFlush,
+  kUpsertImage,
+  kDeleteImage,
+  kSetPictures
+};
+struct ProfilePictureMutation {
+  filesystem::ProfileArtifactKind kind = filesystem::ProfileArtifactKind::kPersonal64;
+  bool remove = false;
+  std::vector<uint8_t> bytes;
 };
 // A captured SPA projection owns every string/image/achievement. It never
 // borrows SpaInfo, its buffers or a currently executing title module.
@@ -59,6 +76,13 @@ struct ProfileGpdTitleData {
 struct ProfileGpdMutation {
   ProfileGpdMutationKind kind = ProfileGpdMutationKind::kFlush;
   uint32_t title_id = 0, record_id = 0;
+  // Only kUpsertImage/kDeleteImage use these. This owns opaque input bytes;
+  // an empty upsert is distinct from kDeleteImage and the ID is never narrowed.
+  uint64_t image_id = 0;
+  std::vector<uint8_t> image_data;
+  // Only kSetPictures: deep owned fixed-picture edits and optional settings
+  // belong to the SAME publication, never a post-GPD UserProfile cache write.
+  std::vector<ProfilePictureMutation> picture_changes;
   // Non-unlock commands require their actual immutable ingress request ID.
   // Unlock retries are keyed by (sign-in generation, title, achievement).
   uint64_t request_id = 0, guest_time = 0;
@@ -76,6 +100,7 @@ struct ProfileGpdPlannedFile {
 };
 struct ProfileGpdModelPlan {
   std::map<uint32_t, ProfileGpdPlannedFile> files;
+  std::vector<filesystem::ProfileArtifactMutation> pictures;
   bool already_unlocked = false;
   // Derived unlock-plan shape only. Real load tokens and the typed journal
   // authorize writes; other mutators use explicit Create/Delete, never an
@@ -93,6 +118,9 @@ struct ProfileGpdMutationOrigin {
 struct ProfileGpdReadCapture {
   ProfileGpdMutationOrigin origin;
   std::shared_ptr<const ProfileGpdReadModels> models;
+  // Same exact model-version publication tuple as models/origin. An owned old
+  // read keeps these immutable bytes through later ordinary model versions.
+  std::shared_ptr<const ProfileGpdPictureSnapshots> pictures;
   std::vector<std::shared_ptr<const filesystem::HostStorageSnapshotToken>>
       tokens;
 };
@@ -105,15 +133,18 @@ class ProfileGpdPendingMutation final {
   const auto& command() const { return command_; }
   bool Matches(const ProfileGpdMutation &) const;
   std::shared_ptr<const ProfileGpdModelPlan> BuildPlan(std::error_code&);
+  const auto& pictures_before() const { return pictures_before_; }
 
  private:
   friend class ProfileGpdModelAuthority;
   ProfileGpdPendingMutation(
       ProfileGpdMutationOrigin, ProfileGpdMutation,
-      std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>>);
+      std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>>,
+      std::shared_ptr<const ProfileGpdPictureSnapshots>);
   const ProfileGpdMutationOrigin origin_;
   const ProfileGpdMutation command_;
   const std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines_;
+  const std::shared_ptr<const ProfileGpdPictureSnapshots> pictures_before_;
   std::mutex mutex_;
   std::shared_ptr<const ProfileGpdModelPlan> plan_;
 };
@@ -161,7 +192,8 @@ class ProfileGpdModelAuthority final
   // consumed only by the explicit TouchTitle creation policy, never as repair.
   std::error_code InstallLoaded(std::map<uint32_t, GpdSnapshotLoad>);
   std::unique_ptr<PreparedCommit> PrepareLoaded(
-      std::map<uint32_t, GpdSnapshotLoad>, std::error_code&);
+      std::map<uint32_t, GpdSnapshotLoad>, std::error_code&,
+      std::shared_ptr<const ProfileGpdPictureSnapshots> pictures = {});
   // Returns SAME pending object for an exact retry before any IsUnlocked test.
   // A different operation cannot mutate the model while an intent is pending.
   std::shared_ptr<ProfileGpdPendingMutation> Begin(
@@ -176,13 +208,14 @@ class ProfileGpdModelAuthority final
   std::shared_ptr<ProfileGpdTransaction> AcquireTransaction(
       std::shared_ptr<const filesystem::ProfileIntentOwner>,
       std::shared_ptr<const filesystem::SnapshotRecoveryOwner>,
-      std::error_code&);
+      std::error_code&, std::shared_ptr<filesystem::ContentMutationOwner> metadata = {});
   std::error_code ReleaseRetiredPublication();
   // Parse/allocate detached immutable models before acquiring a storage batch
   // or namespace/model locks. No caller-filled durable-completion flag exists.
   std::unique_ptr<PreparedCommit> PrepareCommit(
       std::shared_ptr<ProfileGpdPendingMutation>,
-      std::map<uint32_t, GpdSnapshotLoad> current, std::error_code&);
+      std::map<uint32_t, GpdSnapshotLoad> current, std::error_code&,
+      std::shared_ptr<const ProfileGpdPictureSnapshots> pictures = {});
   std::unique_ptr<CommitGuard> TryCommit(
       std::unique_ptr<PreparedCommit>,
       std::shared_ptr<const filesystem::HostStorageSnapshotBatch>,
@@ -204,6 +237,7 @@ class ProfileGpdModelAuthority final
   uint64_t version_ = 0, next_request_id_ = 1;
   std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines_;
   std::shared_ptr<const ProfileGpdReadModels> models_;
+  std::shared_ptr<const ProfileGpdPictureSnapshots> pictures_;
   std::shared_ptr<ProfileGpdPendingMutation> pending_;
   std::shared_ptr<ProfileGpdTransaction> pending_transaction_;
 };
@@ -218,6 +252,7 @@ class ProfileGpdModelAuthority::PreparedCommit final {
   uint64_t expected_version = 0;
   std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines;
   std::shared_ptr<const ProfileGpdReadModels> models;
+  std::shared_ptr<const ProfileGpdPictureSnapshots> pictures;
   std::vector<std::shared_ptr<const filesystem::HostStorageSnapshotToken>>
       checked;
 };

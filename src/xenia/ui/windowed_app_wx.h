@@ -40,7 +40,12 @@ class XeniaWxApp : public wxApp {
     return wxLayout_LeftToRight;
   }
 
+ protected:
+  void DoDelayedCleanup() override;
+
  private:
+  void DestroyWindowedApp();
+  bool app_initialization_entered_ = false;
   std::unique_ptr<WxWindowedAppContext> app_context_;
   std::unique_ptr<WindowedApp> app_;
 };

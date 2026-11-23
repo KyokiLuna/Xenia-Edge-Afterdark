@@ -9,6 +9,8 @@
 
 #include <atomic>
 #include <charconv>
+#include <cstdlib>
+#include <utility>
 #include <functional>
 
 #include "xenia/base/logging.h"
@@ -17,6 +19,9 @@
 #include "xenia/emulator.h"
 #include "xenia/kernel/info/file.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_media_service.h"
+#include "xenia/kernel/native_content_resolve.h"
+#include "xenia/vfs/file_open_context.h"
 #include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/util/io_request_completion.h"
 #include "xenia/kernel/util/shim_utils.h"
@@ -113,78 +118,124 @@ static bool CompletesAsync(XFile* file, uint32_t length, uint64_t byte_offset,
 
 // Runs |transfer|, which returns a status and fills in the bytes moved, then
 // reports the completion. A request that pends runs on an I/O worker.
+template <typename Transfer,
+          typename Publish = std::function<X_STATUS(X_STATUS, uint32_t)>>
 static X_STATUS SubmitRequest(
     const object_ref<XFile>& file, const object_ref<XEvent>& ev,
     uint32_t apc_routine, uint32_t apc_context, X_IO_STATUS_BLOCK* status_block,
-    uint32_t status_block_address, bool pends,
-    std::function<X_STATUS(uint32_t*)> transfer,
-    std::function<X_STATUS(X_STATUS, uint32_t)> publish_status = {},
+    uint32_t status_block_address, bool pends, Transfer transfer,
+    Publish publish_status = {},
     util::InlineIoFailurePolicy inline_failure =
         util::InlineIoFailurePolicy::kRejectWithoutCompletion) {
   auto thread = retain_object(XThread::GetCurrentThread());
-  bool pending_published = false;
-  if (pends && publish_status &&
-      inline_failure == util::InlineIoFailurePolicy::kCompleteAdmitted) {
-    // A checked pending-store failure is still a pre-admission rejection:
-    // neither the file nor supplied event has been reset yet.
-    const auto published = publish_status(X_STATUS_PENDING, 0);
-    if (XFAILED(published)) {
-      return published;
-    }
-    pending_published = true;
+  struct Callbacks {
+    std::function<X_STATUS(uint32_t*, util::IoTransferReceipt*)> transfer;
+    std::function<X_STATUS(X_STATUS, uint32_t)> publish;
+  };
+  std::shared_ptr<Callbacks> callbacks;
+  std::shared_ptr<util::IoRequestCompletion> completion;
+  const auto prepared = InvokeHostCall([&] {
+    callbacks = std::make_shared<Callbacks>();
+    callbacks->transfer = std::move(transfer);
+    callbacks->publish = std::move(publish_status);
+    completion = std::make_shared<util::IoRequestCompletion>();
+  });
+  if (prepared != HostCallOutcome::kReturned) {
+    return X_STATUS_INSUFFICIENT_RESOURCES;
   }
-  // Cleared at issue, so a wait cannot return on an earlier completion.
-  if (ev) {
-    ev->Reset();
-  }
-  file->ResetWaitState();
   auto complete = [file, ev, thread, apc_routine, apc_context, status_block,
-                   status_block_address, transfer = std::move(transfer),
-                   publish_status = publish_status,
-                   inline_failure](bool posted, bool cancelled) {
-    return util::CompleteIoRequest(
-        posted, cancelled, inline_failure, transfer,
-        [publish_status, status_block](X_STATUS status, uint32_t bytes) {
-          if (publish_status) {
-            return publish_status(status, bytes);
-          }
-          if (status_block) {
-            WriteIoStatus(status_block, status, bytes);
-          }
+                   status_block_address, callbacks, completion,
+                   inline_failure](bool posted, bool cancelled,
+                       X_STATUS unstarted_failure = X_STATUS_SUCCESS) {
+    const auto status = util::CompleteIoRequestOwned(
+        *completion, posted, cancelled, inline_failure, callbacks->transfer,
+        [&](X_STATUS result, uint32_t bytes) {
+          if (callbacks->publish) { return callbacks->publish(result, bytes); }
+          if (status_block) { WriteIoStatus(status_block, result, bytes); }
           return X_STATUS_SUCCESS;
         },
-        [file, ev, thread, apc_routine, apc_context, status_block_address](
-            X_STATUS status, uint32_t bytes) {
-          if (QueuesApc(apc_routine, apc_context)) {
-            QueueIoApc(thread.get(), apc_routine, apc_context,
-                       status_block_address);
-          }
-          file->NotifyCompletion(status, bytes, apc_context);
-          if (ev) {
-            ev->Set(KernelState::kIoDiskIncrement, false);
-          }
-        });
+        [&](X_STATUS result, uint32_t bytes) {
+          util::CompleteIoNotifications(
+              completion->notifications, QueuesApc(apc_routine, apc_context),
+              [&] { QueueIoApc(thread.get(), apc_routine, apc_context,
+                                status_block_address); },
+              [&] { file->NotifyCompletion(result, bytes, apc_context,
+                                            &completion->notifications); },
+              bool(ev), [&] { ev->Set(KernelState::kIoDiskIncrement, false); });
+        }, unstarted_failure);
+    if (completion->transfer_call == HostCallOutcome::kExecutionFailed ||
+        completion->transfer.invocation == HostCallOutcome::kExecutionFailed ||
+        completion->publication_call == HostCallOutcome::kExecutionFailed ||
+        completion->notification_call == HostCallOutcome::kExecutionFailed ||
+        completion->notifications.Failed()) {
+      (void)InvokeHostCall([&] {
+        XELOGE("IO: request host execution failed; backend_entered={} "
+               "backend_returned={} count_known={} known_bytes={} prefix={} "
+               "publication_call={} notification_call={} ports={}/{}",
+               completion->transfer.backend_entered,
+               completion->transfer.backend_returned,
+               completion->transfer.count_known, completion->transfer.bytes,
+               completion->transfer.completed_prefix,
+               int(completion->publication_call), int(completion->notification_call),
+               completion->notifications.ports_returned,
+               completion->notifications.ports_attempted);
+      });
+    }
+    return status;
   };
+  // Allocate all queued closures before changing guest pending/event state.
+  std::function<void(bool)> posted_body;
+  std::function<void()> resource_failure;
+  if (pends && InvokeHostCall([&] {
+        posted_body = [complete](bool cancelled) { complete(true, cancelled); };
+        resource_failure = [complete] {
+          complete(true, false, X_STATUS_INSUFFICIENT_RESOURCES);
+        };
+      }) != HostCallOutcome::kReturned) {
+    return X_STATUS_INSUFFICIENT_RESOURCES;
+  }
+  const auto pending = [&] {
+    completion->pending_publication_call = InvokeHostCall([&] {
+      if (callbacks->publish) {
+        completion->pending_publication_status = callbacks->publish(X_STATUS_PENDING, 0);
+      } else {
+        if (status_block) {
+          status_block->status = X_STATUS_PENDING;
+          status_block->information = 0;
+        }
+        completion->pending_publication_status = X_STATUS_SUCCESS;
+      }
+    });
+    return completion->pending_publication_call == HostCallOutcome::kReturned
+        ? completion->pending_publication_status : X_STATUS_UNSUCCESSFUL;
+  };
+  bool pending_published = false;
+  if (pends && callbacks->publish &&
+      inline_failure == util::InlineIoFailurePolicy::kCompleteAdmitted) {
+    // Genuine checked pre-admission rejection: no backend/event admission yet.
+    // A host exception leaves an uncertain attempted pending store, never an
+    // assertion that an IOSB write did not happen.
+    const auto published = pending();
+    if (XFAILED(published)) { return published; }
+    pending_published = true;
+  }
+  if (InvokeHostCall([&] {
+        if (ev) { ev->Reset(); }
+        file->ResetWaitState();
+      }) != HostCallOutcome::kReturned) {
+    return X_STATUS_UNSUCCESSFUL;
+  }
   if (pends) {
     if (!pending_published) {
-      if (publish_status) {
-        const auto published = publish_status(X_STATUS_PENDING, 0);
-        if (XFAILED(published)) {
-          return published;
-        }
-      } else if (status_block) {
-        status_block->status = X_STATUS_PENDING;
-        status_block->information = 0;
-      }
+      const auto published = pending();
+      if (XFAILED(published)) { return published; }
     }
-    file->PostIo(thread.get(),
-                 [complete = std::move(complete)](bool cancelled) {
-                   complete(true, cancelled);
-                 });
+    file->PostIo(thread.get(), std::move(posted_body), {},
+                 std::move(resource_failure));
     return X_STATUS_PENDING;
   }
   X_STATUS status = complete(false, false);
-  // A kernel APC the completion queued runs before the service returns.
+  // Actual guest APC execution remains outside the host exception adapter.
   xeProcessKernelApcs(thread->thread_state()->context());
   return status;
 }
@@ -346,6 +397,7 @@ dword_result_t IoCreateFile_entry(lpdword_t handle_out, dword_t desired_access,
       util::TranslateAnsiStringPointer(kernel_memory(), object_attrs->name_ptr);
 
   vfs::Entry* root_entry = nullptr;
+  object_ref<XFile> root_file;
 
   const bool has_root_handle =
       object_attrs->root_directory != kObDosDevicesRoot &&  // ObDosDevices
@@ -366,7 +418,7 @@ dword_result_t IoCreateFile_entry(lpdword_t handle_out, dword_t desired_access,
   }
 
   if (has_root_handle) {
-    auto root_file = kernel_state()->object_table()->LookupObject<XFile>(
+    root_file = kernel_state()->object_table()->LookupObject<XFile>(
         object_attrs->root_directory);
     assert_not_null(root_file);
     assert_true(root_file->type() == XObject::Type::File);
@@ -380,17 +432,49 @@ dword_result_t IoCreateFile_entry(lpdword_t handle_out, dword_t desired_access,
     result = HideXeFuTitleUpdate(target_path);
   }
 
-  // Attempt open (or create). The host open can block on a slow drive.
-  vfs::File* vfs_file;
-  vfs::FileAction file_action;
+  // The genuine native Resolve worker has already selected a processed
+  // physical source. Capture that exact owner on its original caller before
+  // moving into host IO; a later same-path mount must not gain its authority.
+  // Unrelated opens retain their existing ordinary namespace policy.
+  vfs::FileOpenContext native_open_context;
   if (XSUCCEEDED(result)) {
-    kernel_state()->RunBlockingIo(
-        [&]() {
+    const auto resolve = NativeContentResolve::CaptureOpenSource(
+        kernel_state(), target_path, native_open_context);
+    if (resolve && XFAILED(*resolve)) { result = *resolve; }
+  }
+
+  // Attempt open (or create). The host open can block on a slow drive.
+  vfs::File* vfs_file = nullptr;
+  vfs::FileAction file_action{};
+  if (XSUCCEEDED(result)) {
+    const auto invoked = kernel_state()->RunBlockingIo(
+        [&, root_owner = std::move(root_file),
+         open_context = std::move(native_open_context)]() {
+          // This exact directory/Entry owner travels into the actual host
+          // call. A concurrent guest close cannot invalidate raw root_entry.
+          (void)root_owner;
+          struct UnpublishedFile {
+            vfs::File*& file;
+            bool handed_off = false;
+            ~UnpublishedFile() noexcept(false) {
+              if (!handed_off && file) {
+                auto* actual = std::exchange(file, nullptr);
+                const auto closed = InvokeHostCall([&] { actual->Destroy(); });
+                if (closed != HostCallOutcome::kReturned) {
+                  // The close may already have mutated durable storage. It
+                  // cannot be replayed or moved onto a guest waiter stack.
+                  try { XELOGE("IO: unpublished host close unproven"); xe::FlushLog(); }
+                  catch (...) {}
+                  std::quick_exit(EXIT_FAILURE);
+                }
+              }
+            }
+          } unpublished{vfs_file};
           if (options & kIoOpenTargetDirectory) {
             result = kernel_state()->file_system()->OpenFile(
                 root_entry, xe::utf8::find_base_guest_path(target_path),
                 vfs::FileDisposition::kOpen, desired_access, true, false,
-                &vfs_file, &file_action);
+                &vfs_file, &file_action, open_context);
             if (result == X_STATUS_OBJECT_NAME_NOT_FOUND) {
               result = X_STATUS_OBJECT_PATH_NOT_FOUND;
             }
@@ -401,6 +485,7 @@ dword_result_t IoCreateFile_entry(lpdword_t handle_out, dword_t desired_access,
                       ? vfs::FileAction::kExists
                       : vfs::FileAction::kDoesNotExist;
             }
+            unpublished.handed_off = XSUCCEEDED(result);
             return;
           }
           result = kernel_state()->file_system()->OpenFile(
@@ -409,9 +494,23 @@ dword_result_t IoCreateFile_entry(lpdword_t handle_out, dword_t desired_access,
               desired_access,
               (create_options & CreateOptions::FILE_DIRECTORY_FILE) != 0,
               (create_options & CreateOptions::FILE_NON_DIRECTORY_FILE) != 0,
-              &vfs_file, &file_action);
+              &vfs_file, &file_action, open_context);
+          unpublished.handed_off = XSUCCEEDED(result);
         },
         GuestScheduler::BlockingCallClass::kConcurrent);
+    if(invoked!=HostCallOutcome::kReturned){
+      // The owned host closure already retired any issued unpublished file.
+      // No filesystem rollback/unchanged effect is claimed here.
+      result=HostCallFailureStatus(invoked);
+    }
+  }
+  if(XSUCCEEDED(result)) {
+    const auto admitted=NativeMediaService::ValidateDirectFileOpen(
+        kernel_state(),*vfs_file,handle_out.guest_address());
+    if(XFAILED(admitted)) {
+      vfs_file->Destroy();
+      result=admitted;
+    }
   }
   object_ref<XFile> file = nullptr;
 
@@ -429,6 +528,10 @@ dword_result_t IoCreateFile_entry(lpdword_t handle_out, dword_t desired_access,
     file = object_ref<XFile>(
         new XFile(kernel_state(), vfs_file, synchronous, alertable, buffered));
 
+    // Pair this actual new object before publication, never a later numeric
+    // handle lookup. Ordinary opens are not claimed by the media observer.
+    NativeMediaService::ObserveDirectFileOpen(kernel_state(),file,
+                                               handle_out.guest_address());
     // Handle ref is incremented, so return that.
     handle = file->handle();
   }
@@ -507,9 +610,9 @@ dword_result_t NtReadFile_entry(dword_t file_handle, dword_t event_handle,
         io_status_block, io_status_block.guest_address(),
         CompletesAsync(file.get(), length, byte_offset, false),
         [file, buffer_address, length, byte_offset,
-         apc_context_address](uint32_t* bytes_read) {
+         apc_context_address](uint32_t* bytes_read, util::IoTransferReceipt* receipt) {
           X_STATUS status = file->Read(buffer_address, length, byte_offset,
-                                       bytes_read, apc_context_address, false);
+                                       bytes_read, apc_context_address, false, receipt);
           if (XSUCCEEDED(status)) {
             if (auto patch = kernel_state()->xmp_volume_patch()) {
               auto host_buf = kernel_memory()->TranslateVirtual(buffer_address);
@@ -558,9 +661,9 @@ dword_result_t NtReadFileScatter_entry(
         io_status_block, io_status_block.guest_address(),
         CompletesAsync(file.get(), read_length, byte_offset, false),
         [file, segments_address, read_length, byte_offset,
-         apc_context_address](uint32_t* bytes_read) {
+         apc_context_address](uint32_t* bytes_read, util::IoTransferReceipt* receipt) {
           return file->ReadScatter(segments_address, read_length, byte_offset,
-                                   bytes_read, apc_context_address, false);
+                                   bytes_read, apc_context_address, false, receipt);
         });
   }
 
@@ -598,10 +701,10 @@ dword_result_t NtWriteFile_entry(dword_t file_handle, dword_t event_handle,
         io_status_block.guest_address(),
         CompletesAsync(file.get(), length, byte_offset, true),
         [file, buffer_address, length, byte_offset,
-         apc_context_address](uint32_t* bytes_written) {
+         apc_context_address](uint32_t* bytes_written, util::IoTransferReceipt* receipt) {
           X_STATUS status =
               file->Write(buffer_address, length, byte_offset, bytes_written,
-                          apc_context_address, false);
+                          apc_context_address, false, receipt);
           if (XSUCCEEDED(status)) {
             if (auto patch = kernel_state()->xmp_volume_patch()) {
               auto host_buf = kernel_memory()->TranslateVirtual(buffer_address);
@@ -743,7 +846,7 @@ dword_result_t NtQueryFullAttributesFile_entry(
   // Resolve the file using the virtual file system. The host lookup can block
   // on a slow drive.
   vfs::Entry* entry = nullptr;
-  kernel_state()->RunBlockingIo(
+  const auto invoked = kernel_state()->RunBlockingIo(
       [&]() {
         entry = kernel_state()->file_system()->ResolvePath(target_path);
         if (entry) {
@@ -751,6 +854,7 @@ dword_result_t NtQueryFullAttributesFile_entry(
         }
       },
       GuestScheduler::BlockingCallClass::kConcurrent);
+  if(invoked!=HostCallOutcome::kReturned)return HostCallFailureStatus(invoked);
   if (entry) {
     // Found.
     file_info->creation_time = entry->create_timestamp();
@@ -836,7 +940,7 @@ dword_result_t NtFlushBuffersFile_entry(
   // admitted operation now reports actual backend flush failure.
   return SubmitRequest(
       file, nullptr, 0, 0, nullptr, status_address, !file->is_synchronous(),
-      [file](uint32_t*) { return file->Flush(); },
+      [file](uint32_t*, util::IoTransferReceipt* receipt) { return file->Flush(receipt); },
       [memory, status_address](X_STATUS status, uint32_t count) {
         return util::WriteGuestIoStatus(*memory, status_address, status, count);
       },
@@ -975,9 +1079,9 @@ dword_result_t NtDeviceIoControlFile_entry(
       file, event, apc_routine, apc_context, nullptr, status_address,
       !file->is_synchronous(),
       [file, code, input_address, input_length, output_address,
-       output_length](uint32_t* count) {
+       output_length](uint32_t* count, util::IoTransferReceipt* receipt) {
         return file->DeviceControl(code, input_address, input_length,
-                                   output_address, output_length, count);
+                                   output_address, output_length, count, receipt);
       },
       [memory, status_address](X_STATUS status, uint32_t count) {
         return util::WriteGuestIoStatus(*memory, status_address, status, count);

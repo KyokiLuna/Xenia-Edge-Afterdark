@@ -144,6 +144,12 @@ void InitializeWxLocale() {
   }
 }
 
+void ShutdownWxLocale() {
+  // wxLocale restores wx's current UI locale in its destructor. It must not
+  // survive until static destruction, after wxUILocale::ms_current is gone.
+  g_locale.reset();
+}
+
 std::string GetActiveLocaleCanonicalName() {
   if (!g_locale) {
     return {};

@@ -14,10 +14,13 @@
 #include <memory>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/kernel/native_frame_owner.h"
+#include "xenia/kernel/native_identity_image_journal.h"
+#include "xenia/kernel/native_identity_default_image.h"
 #include "xenia/memory.h"
 
 namespace xe::kernel::test {
@@ -561,5 +564,561 @@ TEST_CASE(
   CHECK(memory.ReleaseOwnedPhysicalAllocation(foreign, allocation_id) ==
         memory::PhysicalLeaseStatus::kSuccess);
 }
+
+// These exercise the SAME Owner's production value journal. Supplied values
+// stand for authenticated original native cuts; no native call, PNG decode,
+// resource reference, command submission or GPU completion is manufactured.
+using ImageJournal = identity_detail::NativeImageJournal;
+using ImageInput = identity_detail::NativeImageInput;
+using ImageTransfer = identity_detail::NativeDecodedImageTransfer;
+using ImageRoot = identity_detail::NativeProfileIdentityTasks::Root;
+
+ImageInput JournalInput(ImageRoot root, uint64_t source = 3,
+                        uint64_t version = 17, uint64_t publication = 9) {
+  return {identity_detail::EncodedImageSource{
+              root, 0x42, 7, publication, source, version, 0x41000000, 512},
+          {}};
+}
+
+ImageJournal::Object JournalObject(ImageJournal& journal,
+                                  ImageJournal::Kind kind,
+                                  uint32_t address) {
+  const auto object = journal.BeginNativeObject(kind, address);
+  REQUIRE(object);
+  REQUIRE(journal.FinishNativeObject(*object, true));
+  return *object;
+}
+
+ImageJournal::Object JournalWrapper(ImageJournal& journal,
+                                   const ImageInput& input,
+                                   uint32_t address = 0x42000000,
+                                   uint32_t texture = 0x43000000) {
+  const auto object =
+      JournalObject(journal, ImageJournal::Kind::kWrapper, address);
+  REQUIRE(journal.FinishWrapperAssignment(
+      object, ImageTransfer{input, 33, texture}, true));
+  return object;
+}
+
+TEST_CASE("Known native object construction revokes cross-kind reused DC birth",
+          "[kernel][native_frame_owner][native_image_journal]") {
+  const ImageRoot root{11, 12, 13};
+  ImageJournal journal(root);
+  const auto input = JournalInput(root);
+  const auto wrapper = JournalWrapper(journal, input);
+  const auto dc = JournalObject(journal, ImageJournal::Kind::kDc, 0x44000000);
+  const auto selection = journal.BeginDcSelection(dc);
+  REQUIRE(selection);
+  REQUIRE(journal.SelectDcTexture(*selection, wrapper, 0x45000000,
+                                 0x43000000, true, false));
+  REQUIRE(journal.ObserveDrawCall(dc, selection->serial, 101, 102,
+                                 0x45000000, 0x46000000, true));
+
+  // Reuse is invalidated at genuine constructor ENTRY, before its output.
+  const auto replacement = journal.BeginNativeObject(
+      ImageJournal::Kind::kInterface, dc.address);
+  REQUIRE(replacement);
+  CHECK(replacement->birth != dc.birth);
+  CHECK_FALSE(journal.Current(ImageJournal::Kind::kDc, dc.address));
+  CHECK_FALSE(journal.ObserveDrawCall(dc, selection->serial, 101, 103,
+                                    0x45000000, 0x46000000, true));
+  CHECK_FALSE(journal.Current(ImageJournal::Kind::kInterface, dc.address));
+  journal.RetireObject(dc);  // A delayed OLD token cannot retire the new birth.
+  REQUIRE(journal.FinishNativeObject(*replacement, true));
+  CHECK(journal.Current(ImageJournal::Kind::kInterface, dc.address) ==
+        replacement);
+  CHECK_FALSE(journal.FinishNativeObject(dc, true));
+
+  const auto failed = journal.BeginNativeObject(ImageJournal::Kind::kBrush,
+                                                dc.address);
+  REQUIRE(failed);
+  CHECK_FALSE(journal.FinishNativeObject(*failed, false));
+  CHECK_FALSE(journal.Current(ImageJournal::Kind::kInterface, dc.address));
+  CHECK_FALSE(journal.Current(ImageJournal::Kind::kBrush, dc.address));
+  const auto retry =
+      JournalObject(journal, ImageJournal::Kind::kDc, dc.address);
+  CHECK(retry.birth != dc.birth);
+  CHECK(retry.birth != failed->birth);
+  CHECK_FALSE(journal.Copied(retry));
+  journal.RetireObject(*replacement);
+  CHECK(journal.Current(ImageJournal::Kind::kDc, dc.address) == retry);
+}
+
+TEST_CASE("Known cache winner keeps its complete desired-source lineage",
+          "[kernel][native_frame_owner][native_image_journal]") {
+  const ImageRoot root{21, 22, 23};
+  ImageJournal journal(root);
+  const auto desired = JournalInput(root);
+  const auto image_interface =
+      JournalObject(journal, ImageJournal::Kind::kInterface, 0x44000000);
+  const auto brush =
+      JournalObject(journal, ImageJournal::Kind::kBrush, 0x44000100);
+  const auto winner = JournalWrapper(journal, desired);
+  const auto unknown =
+      JournalObject(journal, ImageJournal::Kind::kWrapper, 0x44000200);
+  REQUIRE(journal.CopyOwnedPath(image_interface, desired, true));
+  REQUIRE(journal.AdoptKnownWinner(brush, winner,
+                                  *journal.OwnedPath(image_interface), true));
+  const auto original = journal.Copied(brush);
+  REQUIRE(original);
+  CHECK(original->input == desired);
+
+  SECTION("Different native winner never becomes requested source by relabel") {
+    // Same pointer/length/version can still belong to a distinct source.
+    const auto different = JournalInput(root, 4);
+    const auto other = JournalWrapper(journal, different, 0x44000300,
+                                      0x43000100);
+    CHECK_FALSE(journal.AdoptKnownWinner(brush, other, desired, true));
+    CHECK(journal.Copied(brush) == original);
+    auto changed = desired;
+    ++changed.provider->version;
+    CHECK_FALSE(journal.AdoptKnownWinner(brush, winner, changed, true));
+    changed = desired;
+    ++changed.provider->publication;
+    CHECK_FALSE(journal.AdoptKnownWinner(brush, winner, changed, true));
+    CHECK(journal.Copied(brush) == original);
+  }
+  SECTION("Unknown or failed duplicate return cannot fabricate decoded bytes") {
+    CHECK_FALSE(journal.AdoptKnownWinner(brush, unknown, desired, true));
+    CHECK_FALSE(journal.AdoptKnownWinner(brush, winner, desired, false));
+    CHECK_FALSE(journal.FinishWrapperAssignment(
+        unknown, ImageTransfer{desired, 33, 0x43000000}, false));
+    CHECK_FALSE(journal.Copied(unknown));
+    CHECK(journal.Copied(brush) == original);
+  }
+  SECTION("Withdrawal is distinct from copied path and decoder output") {
+    journal.BeforePathChange(image_interface);
+    CHECK_FALSE(journal.OwnedPath(image_interface));
+    journal.WithdrawResource(brush);
+    CHECK_FALSE(journal.Copied(brush));
+    CHECK(journal.Copied(winner) == original);
+    CHECK_FALSE(journal.CopyOwnedPath(image_interface, desired, false));
+    CHECK_FALSE(journal.OwnedPath(image_interface));
+    REQUIRE(journal.CopyOwnedPath(image_interface, desired, true));
+    REQUIRE(journal.AdoptKnownWinner(brush, winner, desired, true));
+    CHECK(journal.Copied(brush) == original);
+  }
+}
+
+TEST_CASE("Copied native DC texture survives encoded and wrapper retirement",
+          "[kernel][native_frame_owner][native_image_journal]") {
+  const ImageRoot root{31, 32, 33};
+  ImageJournal journal(root);
+  identity_detail::NativeEncodedImageEpoch encoded;
+  REQUIRE(encoded.Allocate(root, 0x42, 0x41000000, 1024));
+  const auto captured = encoded.Capture(0x42, 3, 17, 512,
+                                       encoded.allocation(),
+                                       encoded.publication());
+  REQUIRE(captured);
+  const ImageInput input{*captured, {}};
+  REQUIRE(encoded.FinishOriginalDecode(*captured, captured->address,
+                                       captured->size, true));
+  const auto wrapper = JournalWrapper(journal, input);
+  const auto dc = JournalObject(journal, ImageJournal::Kind::kDc, 0x44000000);
+  const auto selection = journal.BeginDcSelection(dc);
+  REQUIRE(selection);
+  REQUIRE(journal.SelectDcTexture(*selection, wrapper, 0x45000000,
+                                 0x43000000, true, false));
+  // The native same-texture return can preserve a genuinely retained prior
+  // source without a new pointer store, but it still has its own invocation.
+  const auto unchanged = journal.BeginDcSelection(dc);
+  REQUIRE(unchanged);
+  REQUIRE(journal.SelectDcTexture(*unchanged, wrapper, 0x45000000,
+                                 0x43000000, false, true));
+  const auto unselected_dc =
+      JournalObject(journal, ImageJournal::Kind::kDc, 0x44000100);
+  CHECK_FALSE(journal.ObserveDrawCall(unselected_dc, unchanged->serial, 201,
+                                    202, 0x45000000, 0x46000000, true));
+  // Genuine copied native Texture AddRef ownership is separate from PNG use.
+  encoded.Revoke();
+  CHECK_FALSE(encoded.Current(*captured));
+  journal.RetireObject(wrapper);
+  CHECK_FALSE(journal.Copied(wrapper));
+  const auto draw = journal.ObserveDrawCall(dc, unchanged->serial, 201, 202,
+                                          0x45000000, 0x46000000, true);
+  REQUIRE(draw);
+  CHECK(draw->copied.input == input);
+  CHECK(draw->copied.texture == 0x43000000);
+  CHECK(draw->render == 201);
+  CHECK(draw->call == 202);
+
+  CHECK_FALSE(journal.ObserveDrawCall(dc, unchanged->serial + 1, 201, 203,
+                                    0x45000000, 0x46000000, true));
+  CHECK_FALSE(journal.ObserveDrawCall(dc, unchanged->serial, 0, 203,
+                                    0x45000000, 0x46000000, true));
+  CHECK_FALSE(journal.ObserveDrawCall(dc, unchanged->serial, 201, 0,
+                                    0x45000000, 0x46000000, true));
+  CHECK_FALSE(journal.ObserveDrawCall(dc, unchanged->serial, 201, 203,
+                                    0x45000004, 0x46000000, true));
+  CHECK_FALSE(journal.ObserveDrawCall(dc, unchanged->serial, 201, 203,
+                                    0x45000000, 0, true));
+  CHECK_FALSE(journal.ObserveDrawCall(dc, unchanged->serial, 201, 203,
+                                    0x45000000, 0x46000000, false));
+  auto foreign = dc;
+  ++foreign.root.generation;
+  CHECK_FALSE(journal.ObserveDrawCall(foreign, unchanged->serial, 201, 203,
+                                    0x45000000, 0x46000000, true));
+  REQUIRE(journal.NativeTextureOwned(draw->copied));
+  journal.RevokeNativeTexture(draw->copied.texture);
+  CHECK_FALSE(journal.NativeTextureOwned(draw->copied));
+  CHECK_FALSE(journal.ObserveDrawCall(dc, unchanged->serial, 201, 203,
+                                    0x45000000, 0x46000000, true));
+  // Existing immutable frame/value receipts remain facts; no future native
+  // object adoption can borrow this freed/reused texture address.
+  CHECK(draw->copied.texture == 0x43000000);
+  journal.WithdrawResource(dc);
+  CHECK_FALSE(journal.ObserveDrawCall(dc, unchanged->serial, 201, 203,
+                                    0x45000000, 0x46000000, true));
+  // The prior value receipt remains factual; withdrawal grants no new draw.
+  CHECK(draw->copied.input == input);
+}
+
+TEST_CASE("Overlapping or abandoned native DC selection cannot borrow readiness",
+          "[kernel][native_frame_owner][native_image_journal]") {
+  const ImageRoot root{41, 42, 43};
+  ImageJournal journal(root);
+  const auto input = JournalInput(root);
+  const auto first = JournalWrapper(journal, input);
+  const auto second = JournalWrapper(journal, JournalInput(root, 4, 18),
+                                     0x42000100, 0x43000100);
+  const auto dc = JournalObject(journal, ImageJournal::Kind::kDc, 0x44000000);
+  const auto original = journal.BeginDcSelection(dc);
+  REQUIRE(original);
+  REQUIRE(journal.SelectDcTexture(*original, first, 0x45000000,
+                                 0x43000000, true, false));
+  const auto older = journal.BeginDcSelection(dc);
+  const auto younger = journal.BeginDcSelection(dc);
+  REQUIRE(older);
+  REQUIRE(younger);
+  CHECK_FALSE(journal.ObserveDrawCall(dc, original->serial, 301, 302,
+                                    0x45000000, 0x46000000, true));
+  CHECK_FALSE(journal.SelectDcTexture(*younger, second, 0x45000000,
+                                     0x43000100, true, false));
+  CHECK_FALSE(journal.SelectDcTexture(*older, first, 0x45000000,
+                                     0x43000000, true, false));
+  CHECK_FALSE(journal.Copied(dc));
+  const auto recovery = journal.BeginDcSelection(dc);
+  REQUIRE(recovery);
+  // Previous matching texture alone is not a real store/retained old lineage.
+  CHECK_FALSE(journal.SelectDcTexture(*recovery, first, 0x45000000,
+                                     0x43000000, false, true));
+  const auto fresh = journal.BeginDcSelection(dc);
+  REQUIRE(fresh);
+  REQUIRE(journal.SelectDcTexture(*fresh, first, 0x45000000,
+                                 0x43000000, true, false));
+  REQUIRE(journal.ObserveDrawCall(dc, fresh->serial, 301, 303,
+                                 0x45000000, 0x46000000, true));
+
+  const auto reset_pending = journal.BeginDcSelection(dc);REQUIRE(reset_pending);
+  journal.WithdrawResource(dc);
+  CHECK(journal.Current(ImageJournal::Kind::kDc,dc.address)==std::optional(dc));
+  CHECK_FALSE(journal.Copied(dc));
+  CHECK_FALSE(journal.SelectDcTexture(*reset_pending,first,0x45000000,0x43000000,false,true));
+  const auto after_reset=journal.BeginDcSelection(dc);REQUIRE(after_reset);
+  REQUIRE(journal.SelectDcTexture(*after_reset,first,0x45000000,0x43000000,true,false));
+
+  const auto abandoned = journal.BeginDcSelection(dc);
+  const auto attempted_recovery = journal.BeginDcSelection(dc);
+  REQUIRE(abandoned);
+  REQUIRE(attempted_recovery);
+  CHECK_FALSE(journal.SelectDcTexture(*attempted_recovery, second, 0x45000000,
+                                     0x43000100, true, false));
+  CHECK_FALSE(journal.ObserveDrawCall(dc, attempted_recovery->serial, 301, 304,
+                                    0x45000000, 0x46000000, true));
+  // No synthetic return retires the abandoned invocation. Only real stop does.
+  journal.RetireMetadataAfterActualStop();
+  CHECK_FALSE(journal.Copied(dc));
+  CHECK_FALSE(journal.BeginDcSelection(dc));
+}
+
+TEST_CASE("Native section image source stays distinct and exact through cache use",
+          "[kernel][native_frame_owner][native_image_journal]") {
+  const ImageRoot root{51, 52, 53};
+  ImageJournal journal(root);
+  const ImageInput section{
+      {}, identity_detail::NativeSectionImageSource{
+              root, 3, 0x42, 17, root.generation, 0x30000000, 0x81BE4480,
+              0xEA39, 0x81BE6C9F, 522}};
+  REQUIRE(section.valid());
+  const auto wrapper = JournalWrapper(journal, section);
+  const auto brush =
+      JournalObject(journal, ImageJournal::Kind::kBrush, 0x44000000);
+  REQUIRE(journal.AdoptKnownWinner(brush, wrapper, section, true));
+  CHECK(journal.Copied(brush)->input.section == section.section);
+  CHECK_FALSE(journal.Copied(brush)->input.provider);
+
+  auto changed = section;
+  ++changed.section->module_generation;
+  CHECK_FALSE(changed.valid());
+  CHECK_FALSE(journal.AdoptKnownWinner(brush, wrapper, changed, true));
+  changed = section;
+  changed.section->address = changed.section->section +
+                             changed.section->section_size - 1;
+  CHECK_FALSE(changed.valid());
+  CHECK_FALSE(journal.AdoptKnownWinner(brush, wrapper, changed, true));
+  changed = section;
+  changed.provider = JournalInput(root).provider;
+  CHECK_FALSE(changed.valid());
+  CHECK_FALSE(journal.AdoptKnownWinner(brush, wrapper, changed, true));
+  CHECK_FALSE(journal.AdoptKnownWinner(brush, wrapper, JournalInput(root), true));
+  auto foreign = JournalInput(root);
+  ++foreign.provider->root.domain;
+  CHECK_FALSE(journal.FinishWrapperAssignment(
+      wrapper, ImageTransfer{foreign, 34, 0x43000000}, true));
+  CHECK(journal.Copied(brush)->input == section);
+}
+
+TEST_CASE("Actual stop closes all existing native image metadata generations",
+          "[kernel][native_frame_owner][native_image_journal]") {
+  const ImageRoot root{61, 62, 63};
+  ImageJournal journal(root);
+  const auto input = JournalInput(root);
+  const auto wrapper = JournalWrapper(journal, input);
+  const auto brush =
+      JournalObject(journal, ImageJournal::Kind::kBrush, 0x44000000);
+  const auto dc = JournalObject(journal, ImageJournal::Kind::kDc, 0x44000100);
+  REQUIRE(journal.AdoptKnownWinner(brush, wrapper, input, true));
+  const auto selection = journal.BeginDcSelection(dc);
+  REQUIRE(selection);
+  REQUIRE(journal.SelectDcTexture(*selection, wrapper, 0x45000000,
+                                 0x43000000, true, false));
+  const auto prior = journal.ObserveDrawCall(dc, selection->serial, 401, 402,
+                                           0x45000000, 0x46000000, true);
+  REQUIRE(prior);
+  journal.RetireMetadataAfterActualStop();
+  CHECK(journal.unavailable());
+  CHECK_FALSE(journal.Current(ImageJournal::Kind::kWrapper, wrapper.address));
+  CHECK_FALSE(journal.Copied(brush));
+  CHECK_FALSE(journal.Copied(dc));
+  CHECK_FALSE(journal.BeginNativeObject(ImageJournal::Kind::kDc, dc.address));
+  CHECK_FALSE(journal.FinishWrapperAssignment(
+      wrapper, ImageTransfer{input, 34, 0x43000000}, true));
+  CHECK_FALSE(journal.SelectDcTexture(*selection, wrapper, 0x45000000,
+                                     0x43000000, true, false));
+  CHECK_FALSE(journal.ObserveDrawCall(dc, selection->serial, 401, 403,
+                                    0x45000000, 0x46000000, true));
+  CHECK(prior->copied.input == input);
+}
+
+// Exact ORIGINAL default-row observations are supplied by the Owner's genuine
+// 8D68/Open/GetSection/GetBuffer/fallback cuts. The pure helper neither owns
+// their native resources nor claims these scalar fixture calls execute them.
+struct DefaultImageFacts {
+  using DefaultRow = identity_detail::NativeDefaultImageRow;
+  identity_detail::NativeDefaultRootSection current;
+  identity_detail::NativeDefaultRowObservation row;
+  identity_detail::NativeDefaultResourceOpenObservation open;
+  identity_detail::NativeDefaultGetSectionObservation section;
+  identity_detail::NativeDefaultGetBufferObservation buffer;
+  identity_detail::NativeDefaultFallbackObservation fallback;
+
+  explicit DefaultImageFacts(uint32_t index = 0) {
+    constexpr ImageRoot root{71, 72, 73};
+    constexpr uint32_t module = 0x30002000;
+    constexpr std::array<std::u16string_view, 3> labels{
+        u"defaultsystemimage.png", u"dashicon.png",
+        u"ico_64x_licensestore.png"};
+    constexpr std::array<uint32_t, 3> offsets{0x281F, 0x3893, 0x3546};
+    constexpr std::array<uint32_t, 3> lengths{522, 7479, 2078};
+    const bool xam = index < 2;
+    current = {root, module, root.generation, xam ? "xam" : "shrdres",
+               xam ? 0x81BE4480u : 0x81BAD980u,
+               xam ? 0xEA39u : 0x36AA7u};
+    row = {root, 701, index, 0x81A8271C + index * 0x10, module,
+           root.generation, xam ? u"xam" : u"shrdres", labels[index]};
+    open = {root, row.initializer, 702, row.row_output, module, 0x90060000,
+            0, row.section, row.entry};
+    section = {root, module, root.generation, current.name, current.address,
+               current.size, 0};
+    buffer = {root, row.initializer, open.invocation, row.row_output,
+              open.stream, current.address + offsets[index], lengths[index],
+              0};
+    fallback = {root, module, root.generation, index, 74, 3,
+                0xF123456789ABCDEFull, buffer.address, buffer.size, 0};
+  }
+  std::optional<DefaultRow> Observe() const {
+    return DefaultRow::Observe(current, row, open, section, buffer);
+  }
+};
+
+TEST_CASE("Original three default resource rows join distinct section sources",
+          "[kernel][native_frame_owner][native_image_default]") {
+  for (uint32_t index = 0; index < 3; ++index) {
+    CAPTURE(index);
+    DefaultImageFacts facts(index);
+    const auto row = facts.Observe();
+    REQUIRE(row);
+    CHECK(row->index() == index);
+    const auto original = row->AtOriginalFallback(facts.fallback);
+    REQUIRE(original);
+    CHECK(original->valid());
+    CHECK(original->root == facts.current.root);
+    CHECK(original->module == facts.current.module);
+    CHECK(original->module_generation == facts.current.module_generation);
+    CHECK(original->section == facts.current.address);
+    CHECK(original->section_size == facts.current.size);
+    CHECK(original->address == facts.buffer.address);
+    CHECK(original->size == facts.buffer.size);
+    CHECK(original->provider == facts.fallback.provider_birth);
+    CHECK(original->source == facts.fallback.source);
+    CHECK(original->version == 0xF123456789ABCDEFull);
+    const ImageInput input{{}, *original};
+    CHECK(input.valid());
+    CHECK_FALSE(input.provider);  // No invented Provider allocation epoch.
+    CHECK(input.section == original);
+  }
+}
+
+TEST_CASE("Default row requires original root package entry and buffer join",
+          "[kernel][native_frame_owner][native_image_default]") {
+  DefaultImageFacts facts;
+  REQUIRE(facts.Observe());
+  SECTION("module-zero filesystem route is not a section-backed default") {
+    facts.current.module = 0;
+    facts.row.module = facts.open.module = facts.section.module = 0;
+    CHECK_FALSE(facts.Observe());
+  }
+  SECTION("foreign or stale actual module cannot borrow the current root") {
+    ++facts.section.module_generation;
+    CHECK_FALSE(facts.Observe());
+    facts.section.module_generation = facts.current.module_generation;
+    ++facts.open.module;
+    CHECK_FALSE(facts.Observe());
+  }
+  SECTION("another row or successful unrelated Open does not supply entry") {
+    facts.row.index = 1;
+    CHECK_FALSE(facts.Observe());
+    facts.row.index = 0;
+    ++facts.open.initializer;
+    CHECK_FALSE(facts.Observe());
+    facts.open.initializer = facts.row.initializer;
+    ++facts.buffer.resource_open;
+    CHECK_FALSE(facts.Observe());
+  }
+  SECTION("matching labels alone cannot supply unobserved section ownership") {
+    facts.section = {};
+    CHECK_FALSE(facts.Observe());
+  }
+  SECTION("resource label and original ANSI section must both match") {
+    facts.open.entry = u"dashicon.png";
+    CHECK_FALSE(facts.Observe());
+    facts.open.entry = facts.row.entry;
+    facts.section.name = "shrdres";
+    CHECK_FALSE(facts.Observe());
+  }
+  SECTION("genuine failed original calls never become successful metadata") {
+    facts.open.result = 0x80004005;
+    CHECK_FALSE(facts.Observe());
+    facts.open.result = 0;
+    facts.section.result = 0xC0000001;
+    CHECK_FALSE(facts.Observe());
+    facts.section.result = 0;
+    facts.buffer.result = 0x80004005;
+    CHECK_FALSE(facts.Observe());
+  }
+  SECTION("actual stream output and GetBuffer must have the same owner") {
+    facts.buffer.stream += 4;
+    CHECK_FALSE(facts.Observe());
+    facts.buffer.stream = facts.open.stream;
+    facts.buffer.row_output += 0x10;
+    CHECK_FALSE(facts.Observe());
+  }
+  SECTION("a nearby PNG address or truncated entry is not the original entry") {
+    ++facts.buffer.address;
+    CHECK_FALSE(facts.Observe());
+    --facts.buffer.address;
+    --facts.buffer.size;
+    CHECK_FALSE(facts.Observe());
+    ++facts.buffer.size;
+    ++facts.current.address;
+    ++facts.section.address;
+    CHECK_FALSE(facts.Observe());
+  }
+  SECTION("current resource row identity must match actual GetSection result") {
+    --facts.section.size;
+    CHECK_FALSE(facts.Observe());
+    facts.section.size = facts.current.size;
+    ++facts.buffer.root.domain;
+    CHECK_FALSE(facts.Observe());
+  }
+}
+
+TEST_CASE("Original default fallback needs current module and exact selected row",
+          "[kernel][native_frame_owner][native_image_default]") {
+  // These transient copied labels die before the row's later fallback. The
+  // resulting value owns only scalar genealogy, never borrowed string views.
+  const auto row = [] {
+    DefaultImageFacts facts;
+    const std::u16string section = u"xam", entry = u"defaultsystemimage.png";
+    const std::string ansi = "xam";
+    facts.row.section = facts.open.section = section;
+    facts.row.entry = facts.open.entry = entry;
+    facts.current.name = facts.section.name = ansi;
+    return facts.Observe();
+  }();
+  REQUIRE(row);
+  DefaultImageFacts current;
+  const auto original = row->AtOriginalFallback(current.fallback);
+  REQUIRE(original);
+  SECTION("failed absent or pending native lookup supplies no image source") {
+    current.fallback.result = 0x8000FFFF;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+    current.fallback.result = 0x3E5;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+  }
+  SECTION("root module removal and reload cannot revive a retained row value") {
+    current.fallback.current_module = 0;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+    current.fallback.current_module = current.current.module;
+    ++current.fallback.current_module_generation;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+    current.fallback.current_module_generation = current.current.module_generation;
+    ++current.fallback.root.generation;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+  }
+  SECTION("real lookup result must match index pointer and full byte count") {
+    ++current.fallback.index;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+    --current.fallback.index;
+    ++current.fallback.address;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+    --current.fallback.address;
+    --current.fallback.size;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+  }
+  SECTION("unknown provider birth or source cannot borrow default image bytes") {
+    current.fallback.provider_birth = 0;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+    current.fallback.provider_birth = 74;
+    current.fallback.source = 0;
+    CHECK_FALSE(row->AtOriginalFallback(current.fallback));
+  }
+  CHECK(original->source == 3);
+  CHECK(original->version == 0xF123456789ABCDEFull);
+}
 }  // namespace
+TEST_CASE("Retained native draw refuses a later same-source DC selection",
+          "[kernel][native_frame_owner][native_image_journal]") {
+ const ImageRoot root{81,82,83};ImageJournal journal(root);
+ const auto first=JournalWrapper(journal,JournalInput(root,4,18));
+ auto second_input=JournalInput(root,4,18);++second_input.provider->provider;
+ const auto second=JournalWrapper(journal,second_input,0x42000100,0x43000100);
+ const auto dc=JournalObject(journal,ImageJournal::Kind::kDc,0x44000000);
+ const auto first_selection=journal.BeginDcSelection(dc);REQUIRE(first_selection);
+ REQUIRE(journal.SelectDcTexture(*first_selection,first,0x45000000,0x43000000,true,false));
+ const auto retained=journal.Copied(dc);REQUIRE(retained);
+ const auto emitted=journal.ObserveRetainedDrawCall(dc,first_selection->serial,*retained,101,102,0x45000000,0x46000000,true);REQUIRE(emitted);
+ const auto later=journal.BeginDcSelection(dc);REQUIRE(later);
+ REQUIRE(journal.SelectDcTexture(*later,second,0x45000000,0x43000100,true,false));
+ const auto now=journal.Copied(dc);REQUIRE(now);
+ REQUIRE(now->input.source()==retained->input.source());
+ REQUIRE(now->input!=retained->input);
+ CHECK(emitted->copied==*retained);
+ CHECK(journal.NativeTextureOwned(emitted->copied));
+ CHECK_FALSE(journal.ObserveRetainedDrawCall(dc,first_selection->serial,*retained,101,102,0x45000000,0x46000000,true));
+ // A latest serial must not substitute the different actual image transfer.
+ CHECK_FALSE(journal.ObserveRetainedDrawCall(dc,later->serial,*retained,101,102,0x45000000,0x46000000,true));
+ CHECK(journal.ObserveRetainedDrawCall(dc,later->serial,*now,103,104,0x45000000,0x46000000,true));
+}
+
 }  // namespace xe::kernel::test

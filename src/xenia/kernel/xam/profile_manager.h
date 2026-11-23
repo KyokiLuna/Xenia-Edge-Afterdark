@@ -314,8 +314,11 @@ class ProfileManager {
       const uint64_t xuid, const uint32_t title_id = -1,
       const XContentType content_type = XContentType::kInvalid) const;
 
-  // Writes the account and applies it to the signed-in profile, filling in
-  // what a Live-enabled account is missing.
+  // Host-only typed edit preparation. The returned owner keeps its exact
+  // source/snapshot/mount through real commit, cancel or deferred rundown.
+  std::shared_ptr<HostProfileAccountEdit> PrepareAccountEdit(
+      uint64_t xuid, ProfileAccountFieldEdits, std::error_code&);
+  // Legacy full-Account writes retain their existing Live-default policy.
   bool UpdateAccount(const uint64_t xuid, const X_XAMACCOUNTINFO* account);
 
   std::vector<ScannedTitleInfo> ScanAllProfilesForTitles() const;
@@ -362,8 +365,13 @@ class ProfileManager {
   std::shared_ptr<const HostRoster> CaptureSelectedRoster(
       NativeProfileProjection* diagnostic = nullptr) const;
   void ReportNativeProfileDiagnostics(const char* boundary) const noexcept;
+  enum class RosterSettlementStage:uint8_t {kHostComplete,kNativeMaps,kNativeRetirement};
   ProfileRosterResult SettleRoster(const std::shared_ptr<ProfileRosterIntent>&,
-                                  bool native_joined);
+                                  RosterSettlementStage);
+  bool OrdinaryRosterWriterAvailable(
+      const std::shared_ptr<ProfileGpdModelAuthority>&) const;
+  bool CanonicalRosterAccountsAvailable() const;
+  bool RosterIdentityRebindAvailable(uint64_t xuid) const;
   std::shared_ptr<ProfileRosterAuthority> roster_authority_;
   std::shared_ptr<const ProfileRosterNativeBinding> ClaimNativeRosterFactory();
   bool InstallNativeRosterOwner(
@@ -376,10 +384,21 @@ class ProfileManager {
       const std::shared_ptr<ProfileRosterIntent>&,
       const std::shared_ptr<const ProfileRosterNativeBinding>&,
       std::error_code&);
+  ProfileRosterResult PublishNativeRosterProtocol(
+      const std::shared_ptr<ProfileRosterIntent>&,
+      const ProfileRosterNativeCompletion&);
   ProfileRosterResult FinalizeNativeRoster(
       const std::shared_ptr<ProfileRosterIntent>&,
       const ProfileRosterNativeCompletion&);
 
+  friend class HostProfileAccountEdit;
+  ProfileAccountEditResult CommitAccountEdit(
+      const std::shared_ptr<HostProfileAccountEdit::State>&);
+  ProfileAccountEditResult CancelAccountEdit(
+      const std::shared_ptr<HostProfileAccountEdit::State>&);
+  bool ReleaseAccountEditMount(HostProfileAccountEdit::State&);
+  void ReapAccountEdits();
+  void CloseAccountEdits();
   friend class ProfileSettingsReadProvider;
   friend class test::ProfileSettingsReadTestAccess;
   friend bool ProfileSettingsReadBatch::IdentityCurrentAdmitted() const;
@@ -398,12 +417,18 @@ class ProfileManager {
   bool MountProfileInternal(uint64_t, std::string,
                             std::shared_ptr<ProfileReadMountNode> = {},
                             const ContentSourceState* exact_source = nullptr,
-                            uint32_t* mounted_device_id = nullptr);
+                            uint32_t* mounted_device_id = nullptr,
+                            HostProfileAccountEdit::State* edit = nullptr);
   bool DismountProfileInternal(std::string_view,
-                              std::shared_ptr<ProfileReadMountNode> = {});
+                              std::shared_ptr<ProfileReadMountNode> = {},
+                              const HostProfileAccountEdit::State* edit = nullptr);
   std::shared_ptr<ProfileSettingsReadLifetime> settings_read_lifetime_;
   std::shared_ptr<const ProfileSettingsReadProvider> settings_read_provider_;
   uint64_t next_profile_mount_generation_ = 1;
+  // Issued edit states own exact normal mount references. An abandoned UI
+  // cannot drop a busy cleanup or an actual pending publication receipt.
+  uint64_t next_account_edit_ = 1;
+  std::map<uint64_t, std::shared_ptr<HostProfileAccountEdit::State>> account_edits_;
   friend class ProfileAccountFileService;
   friend class ProfileAccountManagedFile;
   std::shared_ptr<ProfileAccountCommitGate> account_commit_gate_;

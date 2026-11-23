@@ -29,6 +29,8 @@
 #include "xenia/base/native_system_ui_trace.h"
 #include "xenia/kernel/native_notification_presentation.h"
 #include "xenia/kernel/native_content_storage_driver.h"
+#include "xenia/kernel/native_content_resolve.h"
+#include "xenia/kernel/native_xmsg_provenance.h"
 #include "xenia/kernel/native_managed_format_frontdoor.h"
 #include "xenia/kernel/native_avatar_service.h"
 #include "xenia/kernel/native_system_ui_service.h"
@@ -284,6 +286,18 @@ bool A64Emitter::Emit(hir::HIRBuilder* builder, EmitFunctionInfo& func_info) {
     mov(x1,static_cast<uint64_t>(current_guest_function_));
     CallNative(reinterpret_cast<void*>(kernel::NativeSystemUiService::ObserveSigninEntry));
   }
+  // Common provenance observes the real producer before the same Task
+  // owner may consume a private authenticated TITLE metadata fact. No guard
+  // result, register mutation or native entry denial is added by this hook.
+  if(kernel::NativeXmsgProvenance::HooksFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeXmsgProvenance::ObserveEntry));
+  }
+  if(kernel::NativeContentResolve::HooksFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeContentResolve::GuardEntry));
+    cbz(x0,epilog_label());
+  }
   if(kernel::NativeMediaService::HooksFunction(current_guest_function_)){
     mov(x1,static_cast<uint64_t>(current_guest_function_));
     CallNative(reinterpret_cast<void*>(kernel::NativeMediaService::GuardEntry));
@@ -473,6 +487,17 @@ bool A64Emitter::Emit(hir::HIRBuilder* builder, EmitFunctionInfo& func_info) {
   if(kernel::HooksNativeProfileIdentity(current_guest_function_)){
     mov(x1,static_cast<uint64_t>(current_guest_function_));
     CallNative(reinterpret_cast<void*>(kernel::NativeProfileIdentityOwner::ObserveReturn));
+  }
+  // The real B9A18 Task own-return above publishes its once-only scalar
+  // cut after releasing State/GCRC. Consume it before original PPC resumes;
+  // family duties then observe only the common authenticated provenance.
+  if(kernel::NativeXmsgProvenance::HooksFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeXmsgProvenance::ObserveReturn));
+  }
+  if(kernel::NativeContentResolve::HooksFunction(current_guest_function_)){
+    mov(x1,static_cast<uint64_t>(current_guest_function_));
+    CallNative(reinterpret_cast<void*>(kernel::NativeContentResolve::ObserveReturn));
   }
   if(kernel::NativeSystemUiService::HooksSigninFunction(current_guest_function_)){
     mov(x1,static_cast<uint64_t>(current_guest_function_));

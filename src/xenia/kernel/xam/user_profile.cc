@@ -18,6 +18,76 @@
 namespace xe {
 namespace kernel {
 namespace xam {
+std::vector<uint8_t> CaptureProfilePicture(const ProfileGpdReadCapture& read,
+                                          XTileType type) {
+  if (!read.pictures) { return {}; }
+  const auto named = kTileFileNames.find(type);
+  if (named == kTileFileNames.end()) { return {}; }
+  auto found = read.pictures->find(named->second);
+  if (found == read.pictures->end()) { return {}; }
+  auto token = found->second;
+  if (!token->exists()) {
+    const char* fallback = nullptr;
+    switch (type) {
+      case XTileType::kPersonalGamerTile: case XTileType::kLocalGamerTile:
+        fallback = "tile_64.png"; break;
+      case XTileType::kPersonalGamerTileSmall: case XTileType::kLocalGamerTileSmall:
+        fallback = "tile_32.png"; break;
+      default: break;
+    }
+    if (fallback) {
+      found = read.pictures->find(fallback);
+      if (found != read.pictures->end()) { token = found->second; }
+    }
+  }
+  return token->exists() ? std::vector<uint8_t>(token->bytes().begin(), token->bytes().end())
+                         : std::vector<uint8_t>{};
+}
+std::vector<uint8_t> CaptureSelfProfilePicture(const ProfileGpdReadCapture& read) {
+  auto bytes = CaptureProfilePicture(read, XTileType::kPersonalGamerTile);
+  return bytes.empty() ? CaptureProfilePicture(read, XTileType::kPersonalGamerTileSmall)
+                       : bytes;
+}
+std::vector<uint8_t> UserProfile::GetSelfProfileIcon() const {
+  if (const auto model = gpd_model_.lock()) {
+    std::error_code error; const auto read = model->CaptureRead(error);
+    if (!read || error) { return {}; }
+    // Large/small decisions belong to ONE immutable model/picture version.
+    if (read->pictures) { return CaptureSelfProfilePicture(*read); }
+  }
+  // Legacy GPD-only compatibility also selects both sizes under ONE lock.
+  std::unique_lock lock(profile_images_mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) { return {}; }
+  const auto select = [&](XTileType personal, XTileType fallback)
+      -> const std::vector<uint8_t>* {
+    auto found = profile_images_.find(personal);
+    if (found == profile_images_.end()) { found = profile_images_.find(fallback); }
+    return found == profile_images_.end() ? nullptr : &found->second;
+  };
+  const auto* large = select(XTileType::kPersonalGamerTile, XTileType::kGamerTile);
+  if (large && !large->empty()) { return *large; }
+  const auto* small = select(XTileType::kPersonalGamerTileSmall, XTileType::kGamerTileSmall);
+  return small ? *small : std::vector<uint8_t>{};
+}
+std::vector<uint8_t> UserProfile::GetProfileIcon(XTileType type) const {
+  if (const auto model = gpd_model_.lock()) {
+    std::error_code error; const auto read = model->CaptureRead(error);
+    if (!read || error) { return {}; }
+    if (read->pictures) { return CaptureProfilePicture(*read, type); }
+  }
+  // Compatibility for a legacy GPD-only object with no issued picture tuple.
+  std::unique_lock lock(profile_images_mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) { return {}; }
+  auto found = profile_images_.find(type);
+  if (found != profile_images_.end()) { return found->second; }
+  if (type == XTileType::kPersonalGamerTile || type == XTileType::kLocalGamerTile) {
+    type = XTileType::kGamerTile;
+  } else if (type == XTileType::kPersonalGamerTileSmall || type == XTileType::kLocalGamerTileSmall) {
+    type = XTileType::kGamerTileSmall;
+  }
+  found = profile_images_.find(type);
+  return found == profile_images_.end() ? std::vector<uint8_t>{} : found->second;
+}
 
 UserProfile::UserProfile(const uint64_t xuid,
                          const X_XAMACCOUNTINFO* account_info,
@@ -30,6 +100,11 @@ UserProfile::UserProfile(const uint64_t xuid,
   // if non-zero, it prevents the user from playing the game.
   // "You do not have permissions to perform this operation."
 
+  if (const auto owner = gpd_model_.lock()) {
+    std::error_code error; const auto read = owner->CaptureRead(error);
+    if (read && read->pictures) { return; }
+  }
+  // Legacy GPD-only compatibility cache.
   // Load default gamer tiles
   LoadProfileIcon(XTileType::kGamerTile);
   LoadProfileIcon(XTileType::kGamerTileSmall);
@@ -146,49 +221,6 @@ void UserProfile::LoadProfileIcon(XTileType tile_type) {
   profile_images_.insert_or_assign(tile_type, data);
 }
 
-void UserProfile::WriteProfileIcon(XTileType tile_type,
-                                   std::span<const uint8_t> icon_data) {
-  const std::string path =
-      fmt::format("User_{:016X}:\\{}", xuid_, kTileFileNames.at(tile_type));
-
-  vfs::File* file = nullptr;
-  vfs::FileAction action;
-
-  const X_STATUS result = kernel_state()->file_system()->OpenFile(
-      nullptr, path, vfs::FileDisposition::kOverwriteIf,
-      vfs::FileAccess::kGenericWrite | vfs::FileAccess::kFileWriteData, false,
-      true, &file, &action);
-
-  if (result != X_STATUS_SUCCESS) {
-    return;
-  }
-
-  // Set the file length first to ensure we can write
-  X_STATUS set_length_result = file->SetLength(icon_data.size());
-  if (set_length_result != X_STATUS_SUCCESS &&
-      set_length_result != X_STATUS_NOT_IMPLEMENTED) {
-    XELOGW("WriteProfileIcon: SetLength failed with status {:08X}",
-           set_length_result);
-  }
-
-  size_t written_bytes = 0;
-
-  X_STATUS write_result =
-      file->WriteSync({icon_data.data(), icon_data.size()}, 0, &written_bytes);
-  if (write_result != X_STATUS_SUCCESS) {
-    XELOGW("WriteProfileIcon: WriteSync failed with status {:08X}",
-           write_result);
-  } else {
-    XELOGI("WriteProfileIcon: Successfully wrote {} bytes to {}", written_bytes,
-           path);
-  }
-
-  file->Destroy();
-
-  std::lock_guard image_lock(profile_images_mutex_);
-  profile_images_.insert_or_assign(
-      tile_type, std::vector<uint8_t>(icon_data.begin(), icon_data.end()));
-}
 
 }  // namespace xam
 }  // namespace kernel

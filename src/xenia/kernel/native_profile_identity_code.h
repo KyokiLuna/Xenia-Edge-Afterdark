@@ -4,6 +4,14 @@
 namespace xe::kernel::identity_detail {
 struct NativeIdentityCodeExtent { uint32_t address,bytes;const char* sha256; };
 inline constexpr NativeIdentityCodeExtent kNativeIdentityCode[] = {
+  // Original shared Task execution lifecycle (including all publication modes).
+  {0x816B9528,320,"ce4ed33f1bbf50374bbd3356a6cbf84537afa7c62782b47e2d4ee51a6e5f8c69"},
+  {0x816B8EE0, 112, "6ea64e674e276b58d5b666a80f2da9e0c7e3b21cc713ed8918ded96bbca22d2a"},
+  {0x816B9748, 324, "72506e54e11ba77d38d3d634f5bc97027478f88a6f76a8891565aa5941e8702b"},
+  {0x816BA530, 284, "6503dc13f9e11d76b4556f765c843ab50845abcd8bf2445aff8f50affad929c7"},
+  {0x816BA3C0, 124, "682c37930a8cc3410adce86e029cc2d6bd96c5ea14958bbb039caf9277b60d49"},
+  {0x816B7D28, 112, "cb48f9ec86c3a1ad7a1498d91528583d68c9856e663b9d5620f2a50d8f57dc86"},
+  {0x816B9668, 224, "c4fbaedefac18a52bf66338990e32f4b80c5d28b11bfb8ae53c6fff00329eae5"},
   // Finite owning-getter and ordinary/Wait nonfinal reference baseline.
   {0x816B8098, 48, "e6c9e34282cfbf21ced6b5aa991148d7e52fd0daeaa76782f4850444c1a39b57"},
   {0x816B7B80, 24, "bae8c269c47e9baa51a35f7e1663f73501e0ace0306e34e2d55fee6114dde1c8"},
@@ -70,7 +78,11 @@ inline constexpr NativeIdentityCodeExtent kNativeIdentityCode[] = {
   {0x816A7EE0, 32, "066c0eba76b83ab48fc111ba078e8017030e558b65287439897cda98f1dcbb9d"},
   {0x816A9208, 4, "9e7b916d974a1f6cee95c9077cec371ae0c1fef319464980c2e5166206de09ae"},
   {0x816B8F50, 116, "452895d3aadec45e75e2d4ca1c42e05214cfe8317937ea53ea6b57b04345ef49"},
+  {0x816B8D98, 324, "09c854b5249a6328484e15ab4b7d84e83f3f9c79ae01172a951290f38c40234f"},
   // Typed independent periodic class factory, data-consumer and native stop.
+  // Original periodic options normalization and process/TLS affiliation.
+  {0x816B9890, 200, "968564812af2f105bc62d7f8efa2615fd3038ab667034dd28e8bfb2e1c0b6a07"},
+  {0x816B9958, 100, "667f307d0ff1995484001c6584865c35ffd52c3916f6fcc104c5053e8f3d0782"},
   {0x8190A358, 140, "fd7cb99cb0c1bbabb6914e6031cf2cf59bd736113b46cb86257fd0d7819f1eac"},
   {0x81909CF8, 56, "abd41893811704c230ecd4c684952dfa79eebd1010926d040a6dabd1b1469e0a"},
   {0x81907DA0, 184, "2074b3e9e48aab6c6f24c2a91d172defd50017b12a0f8ec0123b008a183f1439"},

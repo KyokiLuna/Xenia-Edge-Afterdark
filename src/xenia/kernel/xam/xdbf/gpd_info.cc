@@ -8,6 +8,7 @@
  */
 
 #include "xenia/kernel/xam/xdbf/gpd_info.h"
+#include <algorithm>
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/user_settings.h"
 
@@ -55,6 +56,41 @@ void GpdInfo::AddImage(uint32_t id, std::span<const uint8_t> image_data) {
   memcpy(new_entry.data.data(), image_data.data(), image_data.size());
 
   UpsertEntry(&new_entry);
+}
+
+std::error_code GpdInfo::UpsertImageChecked(
+    uint64_t id, std::span<const uint8_t> image_data) {
+  if (image_data.size() > UINT32_MAX) {
+    return std::make_error_code(std::errc::file_too_large);
+  }
+  const auto* prior = GetEntry(uint16_t(GpdSection::kImage), id);
+  if (prior && prior->data.size() == image_data.size() &&
+      std::equal(prior->data.begin(), prior->data.end(), image_data.begin())) {
+    return {};
+  }
+  // The legacy allocator requires a fitting range. Check before mutation;
+  // deleting the prior record also makes its exact range available.
+  if (free_entries_.empty() ||
+      !((prior && prior->data.size() >= image_data.size()) ||
+        std::any_of(free_entries_.begin(), free_entries_.end(),
+                    [&](const XdbfFileLoc& free) {
+                      return uint32_t(free.size) >= image_data.size();
+                    }))) {
+    return std::make_error_code(std::errc::no_space_on_device);
+  }
+  Entry replacement(id, uint16_t(GpdSection::kImage),
+                    uint32_t(image_data.size()));
+  // Own bytes before UpsertEntry can relocate the source entry/vector.
+  replacement.data.assign(image_data.begin(), image_data.end());
+  UpsertEntry(&replacement);
+  return {};
+}
+
+std::error_code GpdInfo::DeleteImageChecked(uint64_t id) {
+  if (const auto* entry = GetEntry(uint16_t(GpdSection::kImage), id)) {
+    DeleteEntry(entry);
+  }
+  return {};
 }
 
 Entry* GpdInfo::GetSettingEntry(uint32_t id) {

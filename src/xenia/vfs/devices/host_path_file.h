@@ -34,6 +34,7 @@ class HostPathFile : public File {
   // The caller supplies the usual blocking-I/O scheduling boundary.
   std::optional<filesystem::FileHandleInfo> QueryBackingInfo(
       std::error_code& error) const;
+  X_STATUS QueryInformation(Information* output) const override;
   X_STATUS QueryAllocationSize(uint64_t* output) const override;
   // An Entry may hold a pending overwrite before any File has opened it.
   static bool EntryHasMutatingClose(const Entry*);

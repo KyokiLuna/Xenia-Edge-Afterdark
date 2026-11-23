@@ -99,6 +99,9 @@ class GuestScheduler {
     kAdmissionShutdown,  // New admission rejected because shutdown began.
   };
 
+  // False means an ordinary resource failure BEFORE queue commit: fn and
+  // on_drop have not been called. True means queued or the original inline
+  // shutdown disposition was performed. It is not body-success proof.
   // Runs |fn|, a blocking host call such as a disc read, on an I/O worker
   // without waiting. kSerial calls share one worker, kConcurrent calls go to a
   // pool so one slow call cannot hold up the rest. Without on_drop, runs
@@ -108,7 +111,7 @@ class GuestScheduler {
   // precedes parked-fiber reclamation. The caller must retain Kernel lifetime
   // for admission-time settlement. It must be safe
   // without a live guest caller/borrowed guest buffers and must not throw.
-  void PostHostCall(std::function<void()> fn, BlockingCallClass call_class,
+  bool PostHostCall(std::function<void()> fn, BlockingCallClass call_class,
                     std::function<void(HostCallDropReason)> on_drop = {});
 
   // True when the calling thread is a scheduler-managed fiber, so a blocking
@@ -191,7 +194,7 @@ class GuestScheduler {
   // and the APC check of alertable waiters. Quiet gated waiters do not tick
   // at this rate, they wake on signals, deadlines and the backstop.
   static constexpr uint64_t kPollBackoffMs = 1;
-  // At least this often every blocked fiber re-polls regardless of the epoch
+  // At least this often every epoch-gated waiter re-polls regardless of its
   // gate, so a missed epoch bump costs a latency blip, not a hang.
   static constexpr uint64_t kRepollBackstopMs = 64;
   // Floor on the watchdog's wake period. Below this the wakeups cost more than
@@ -279,12 +282,12 @@ class GuestScheduler {
   // False once shutdown has begun.
   bool EnqueueBlockingCall(BlockingCall* call, BlockingCallClass call_class);
   // Lazily starts the serial I/O worker on the first kSerial offload.
-  void EnsureIoWorker();
+  bool EnsureIoWorker();
   void IoWorkerLoop();
   // Queues a kConcurrent call, growing the pool when every worker is busy.
   bool EnqueuePoolCall(BlockingCall* call);
   // Caller holds io_pool_lock_.
-  void StartPoolWorkerLocked();
+  bool StartPoolWorkerLocked();
   void IoPoolWorkerLoop();
   // Runs one queued call, accumulates its counters and frees it.
   void RunBlockingCall(BlockingCall* call);
@@ -396,6 +399,11 @@ class GuestScheduler {
   double ticks_per_us_ = 0.0;
   void ReportStatsIfDue();
 
+  friend class GuestSchedulerIoTestAccess;
+  // Existing-interface admission fault seams; private test access can fail one
+  // exact precommit point. Zero in normal execution, never affects guest ABI.
+  std::atomic<uint32_t> io_admission_failure_point_{0};
+  void FailIoAdmissionIfRequested(uint32_t point);
   std::once_flag io_once_;
   std::atomic<bool> io_started_{false};
   std::mutex io_lock_;

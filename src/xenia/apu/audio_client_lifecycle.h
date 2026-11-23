@@ -36,6 +36,9 @@ class AudioClientLifecycle {
     kActive,
     kRetiring,
     kFailed,
+    // Entered host cleanup failed; callback-worker join cannot prove backend
+    // shutdown. Never retried/promoted or allowed to release its module pin.
+    kCleanupFailed,
     kRetired
   };
 
@@ -71,6 +74,7 @@ class AudioClientLifecycle {
   bool WaitForQuiescence();
   bool ClaimCleanup();
   void CompleteCleanup();
+  void FailCleanup();
   bool WaitForCleanup();
 
  private:

@@ -17,6 +17,10 @@ namespace xe {
 namespace kernel {
 namespace xboxkrnl {
 
+// Secure host entropy shared by native Random and local console signing.
+// No guest memory; returns false and clears output on host failure.
+bool XeCryptHostRandom(std::span<uint8_t>);
+
 // The 17559 manifest verifier's index 0 selects the retail PIRS public key.
 // Only this verified selector is supported; other indices fail closed.
 // hash is SHA1 (20 bytes); signature is a 2048-bit little-endian integer.

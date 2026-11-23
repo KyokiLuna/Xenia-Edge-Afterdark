@@ -279,11 +279,14 @@ void ProfileEditorDialog::LoadProfileData() {
     return;
   }
 
-  const auto* account_data = pm->GetAccount(xuid_);
+  std::error_code account_error;
+  const auto account_metadata = pm->CaptureCachedAccount(xuid_, account_error);
+  const auto* account_data = account_metadata ? &account_metadata->account() : nullptr;
   if (!account_data) {
     return;
   }
 
+  account_form_original_ = ProfileAccountFieldValues::From(*account_data);
   original_data_.gamertag = account_data->GetGamertagString();
   original_data_.country = account_data->GetCountry();
   original_data_.language = account_data->GetLanguage();
@@ -333,15 +336,9 @@ void ProfileEditorDialog::LoadProfileData() {
     load_string(UserSettingId::XPROFILE_GAMERCARD_USER_BIO,
                 original_data_.gamer_bio);
 
-    for (auto tile :
-         {XTileType::kPersonalGamerTile, XTileType::kGamerTile,
-          XTileType::kPersonalGamerTileSmall, XTileType::kGamerTileSmall}) {
-      auto data = profile->GetProfileIcon(tile);
-      if (!data.empty()) {
-        original_data_.profile_icon.assign(data.begin(), data.end());
-        break;
-      }
-    }
+    // Same self/personal selector as the ImGui editor; public exports retain
+    // their separate public-tile meaning.
+    original_data_.profile_icon = profile->GetSelfProfileIcon();
   }
 
   current_data_ = original_data_;
@@ -407,7 +404,7 @@ void ProfileEditorDialog::Build() {
 
   gamertag_edit_ = new wxTextCtrl(profile_box, wxID_ANY,
                                   wxString::FromUTF8(current_data_.gamertag));
-  gamertag_edit_->SetMaxLength(15);
+  gamertag_edit_->SetMaxLength(16);  // Preserve a malformed stored name until explicit edit.
   gamertag_edit_->Bind(wxEVT_TEXT,
                        [this](wxCommandEvent&) { UpdateGamertagValidation(); });
   add_field(_("Gamertag:"), gamertag_edit_);
@@ -457,6 +454,7 @@ void ProfileEditorDialog::Build() {
 
   live_enabled_check_ = new wxCheckBox(online_box, wxID_ANY, _("Live Enabled"));
   live_enabled_check_->SetValue(current_data_.is_live_enabled);
+  live_enabled_check_->Enable(false);
   online_sizer->Add(live_enabled_check_, wxSizerFlags().Border(wxALL, 4));
 
   auto add_online_field = [&](const wxString& label, wxWindow* widget) {
@@ -495,14 +493,9 @@ void ProfileEditorDialog::Build() {
                        SubscriptionTierValues());
   SelectByValue(subscription_tier_combo_, SubscriptionTierValues(),
                 static_cast<int>(current_data_.account_subscription_tier));
-  subscription_tier_combo_->Enable(current_data_.is_live_enabled);
+  subscription_tier_combo_->Enable(false);
   add_online_field(_("Subscription Tier:"), subscription_tier_combo_);
 
-  live_enabled_check_->Bind(wxEVT_CHECKBOX, [this, signed_in](wxCommandEvent&) {
-    bool checked = live_enabled_check_->GetValue();
-    gamer_zone_combo_->Enable(checked && signed_in);
-    subscription_tier_combo_->Enable(checked);
-  });
 
   root->Add(online_sizer,
             wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 8));
@@ -512,9 +505,13 @@ void ProfileEditorDialog::Build() {
   button_row->AddStretchSpacer(1);
   save_button_ = new wxButton(this, wxID_OK, _("Save"));
   save_button_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { OnSave(); });
-  auto* cancel = new wxButton(this, wxID_CANCEL, _("Cancel"));
+  cancel_button_ = new wxButton(this, wxID_CANCEL, _("Cancel"));
+  cancel_button_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+    if (account_edit_) { account_edit_->Cancel(); account_edit_.reset(); }
+    EndModal(wxID_CANCEL);
+  });
   button_row->Add(save_button_, wxSizerFlags().Border(wxRIGHT, 4));
-  button_row->Add(cancel);
+  button_row->Add(cancel_button_);
   root->Add(button_row,
             wxSizerFlags().Expand().Border(wxLEFT | wxRIGHT | wxBOTTOM, 8));
 
@@ -545,8 +542,9 @@ void ProfileEditorDialog::RefreshIconBitmap() {
 }
 
 bool ProfileEditorDialog::IsGamertagValid() const {
-  return ProfileManager::IsGamertagValid(
-      gamertag_edit_->GetValue().utf8_string());
+  const std::string desired(gamertag_edit_->GetValue().utf8_string());
+  return desired == account_form_original_.gamertag ||
+      ProfileManager::IsGamertagValid(desired);
 }
 
 void ProfileEditorDialog::UpdateGamertagValidation() {
@@ -594,6 +592,53 @@ void ProfileEditorDialog::OnChangeIcon() {
   RefreshIconBitmap();
 }
 
+bool ProfileEditorDialog::SaveAccountData(ProfileManager& profiles) {
+  const auto commit_pending = [&]() {
+    const auto result = account_edit_->Commit();
+    if (!result.committed()) {
+      if (result.published && result.phase == ProfileAccountEditPhase::kRetired) {
+        cancel_button_->SetLabel(_("Close"));
+        wxMessageBox(_("Account data reached storage, but the profile changed before completion. Close and reopen this editor to review it."),
+                     _("Account save incomplete"), wxOK | wxICON_WARNING, this);
+      } else if (result.published) {
+        cancel_button_->SetLabel(_("Close"));
+        wxMessageBox(_("Account data reached storage. Save again to finish; Close keeps the recorded outcome."),
+                     _("Account save incomplete"), wxOK | wxICON_WARNING, this);
+      } else {
+        wxMessageBox(_("Could not save account changes. Your edits are still here."),
+                     _("Account save failed"), wxOK | wxICON_WARNING, this);
+        if (result.error == std::errc::state_not_recoverable ||
+            result.phase == ProfileAccountEditPhase::kRetired) {
+          account_edit_->Cancel(); account_edit_.reset();
+        }
+      }
+      return false;
+    }
+    account_form_original_ = account_pending_values_;
+    account_edit_.reset();
+    cancel_button_->SetLabel(_("Cancel"));
+    return true;
+  };
+  if (account_edit_ && !commit_pending()) { return false; }
+  const ProfileAccountFieldValues desired{
+      std::string(gamertag_edit_->GetValue().utf8_string()),
+      static_cast<XOnlineCountry>(CurrentValue(country_combo_, CountryValues(),
+          static_cast<int>(account_form_original_.country))),
+      static_cast<XLanguage>(CurrentValue(language_combo_, LanguageValues(),
+          static_cast<int>(account_form_original_.language)))};
+  auto edits = ProfileAccountFieldEdits::Between(account_form_original_, desired);
+  if (edits.empty()) { return true; }
+  std::error_code error;
+  account_edit_ = profiles.PrepareAccountEdit(xuid_, std::move(edits), error);
+  if (!account_edit_) {
+    wxMessageBox(_("Could not prepare account changes. The profile may be busy or unavailable."),
+                 _("Account save failed"), wxOK | wxICON_WARNING, this);
+    return false;
+  }
+  account_pending_values_ = desired;
+  return commit_pending();
+}
+
 void ProfileEditorDialog::OnSave() {
   if (!emulator_window_ || !emulator_window_->emulator()) {
     return;
@@ -614,53 +659,18 @@ void ProfileEditorDialog::OnSave() {
   auto* profile = xam_state->GetUserProfile(xuid_);
   bool signed_in = profile != nullptr;
 
-  // Account.
-  const auto* account_ptr = pm->GetAccount(xuid_);
-  if (!account_ptr) {
-    XELOGE("ProfileEditorDialog: no account for {:016X}", xuid_);
-    EndModal(wxID_CANCEL);
-    return;
-  }
-  const auto account_original = *account_ptr;
-  auto account = account_original;
-  std::u16string gamertag =
-      xe::to_utf16(gamertag_edit_->GetValue().utf8_string());
-  string_util::copy_and_swap_truncating(account.gamertag, gamertag,
-                                        std::size(account.gamertag));
-  account.SetLanguage(static_cast<XLanguage>(
-      CurrentValue(language_combo_, LanguageValues(),
-                   static_cast<int>(account.GetLanguage()))));
-  account.SetCountry(static_cast<XOnlineCountry>(
-      CurrentValue(country_combo_, CountryValues(),
-                   static_cast<int>(account.GetCountry()))));
-  account.ToggleLiveFlag(live_enabled_check_->GetValue());
-  account.SetSubscriptionTier(
-      static_cast<X_XAMACCOUNTINFO::AccountSubscriptionTier>(
-          CurrentValue(subscription_tier_combo_, SubscriptionTierValues(),
-                       static_cast<int>(account.GetSubscriptionTier()))));
-
-  if (std::memcmp(&account, &account_original, sizeof(X_XAMACCOUNTINFO)) != 0) {
-    pm->UpdateAccount(xuid_, &account);
-  }
+  if (!SaveAccountData(*pm)) { return; }
 
   if (current_data_.profile_icon != original_data_.profile_icon) {
-    // Drop both on-disk tiles and the cached image map first so a smaller
-    // replacement icon doesn't get masked by a stale larger tile (the
-    // toolbar prefers the 64-px file).
-    auto* fs = kernel_state->file_system();
-    fs->DeletePath(fmt::format("User_{:016X}:\\tile_64.png", xuid_));
-    fs->DeletePath(fmt::format("User_{:016X}:\\tile_32.png", xuid_));
-    if (profile) {
-      profile->ClearProfileIcon(XTileType::kGamerTile);
-      profile->ClearProfileIcon(XTileType::kGamerTileSmall);
-      profile->ClearProfileIcon(XTileType::kPersonalGamerTile);
-      profile->ClearProfileIcon(XTileType::kPersonalGamerTileSmall);
+    const bool saved = current_data_.profile_icon.empty()
+        ? xam_state->user_tracker()->ClearUserIcon(xuid_)
+        : xam_state->user_tracker()->UpdateUserIcon(xuid_, current_data_.profile_icon);
+    if (!saved) {
+      wxMessageBox(_("Could not save the picture. The profile may be busy, unavailable, or have unreadable picture metadata. Your edits are still here."),
+                   _("Picture save failed"), wxOK | wxICON_WARNING, this);
+      return;
     }
-    if (!current_data_.profile_icon.empty()) {
-      xam_state->user_tracker()->UpdateUserIcon(
-          xuid_, {current_data_.profile_icon.data(),
-                  current_data_.profile_icon.size()});
-    }
+    original_data_.profile_icon = current_data_.profile_icon;
   }
 
   if (signed_in) {
@@ -670,20 +680,18 @@ void ProfileEditorDialog::OnSave() {
       if (value.length() > max_chars) {
         value.resize(max_chars);
       }
-      std::u16string swapped;
-      swapped.reserve(value.size());
-      for (auto ch : value) {
-        swapped.push_back(xe::byte_swap(ch));
-      }
       auto it = current_data_.gpd_settings.find(id);
       if (it != current_data_.gpd_settings.end()) {
-        if (auto* prev = std::get_if<std::u16string>(&it->second)) {
-          if (*prev == swapped) {
+        if (const auto* prev = std::get_if<std::u16string>(&it->second)) {
+          auto previous = *prev;
+          if (!previous.empty() && !previous.back()) { previous.pop_back(); }
+          if (previous == value) {
             return;
           }
         }
       }
-      UserSetting updated(id, swapped);
+      // UserSetting owns the host-to-guest wire conversion.
+      UserSetting updated(id, value);
       xam_state->user_tracker()->UpsertSetting(xuid_, kernel::kDashboardID,
                                                &updated);
     };

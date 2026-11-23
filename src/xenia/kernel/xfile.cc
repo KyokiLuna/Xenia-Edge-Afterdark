@@ -55,8 +55,8 @@ GuestScheduler::BlockingCallClass XFile::io_call_class() const {
              : GuestScheduler::BlockingCallClass::kSerial;
 }
 
-void XFile::RunSynchronousIo(const std::function<void()>& fn) {
-  kernel_state()->RunBlockingIo(fn, io_call_class(), is_alertable_);
+HostCallOutcome XFile::RunSynchronousIoOwned(std::function<void()> fn) {
+  return kernel_state()->RunBlockingIo(std::move(fn), io_call_class(), is_alertable_);
 }
 
 uint64_t XFile::position() const { return position_.load(); }
@@ -68,9 +68,10 @@ X_STATUS XFile::QueryDirectory(X_FILE_DIRECTORY_INFORMATION* out_info,
                                bool restart) {
   // An I/O worker may already hold file_lock_ for a slow read.
   X_STATUS result = X_STATUS_SUCCESS;
-  RunSynchronousIo([&]() {
+  const auto invoked = RunSynchronousIo([&]() {
     result = QueryDirectoryInternal(out_info, length, file_name, restart);
   });
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
   return result;
 }
 
@@ -131,25 +132,27 @@ X_STATUS XFile::QueryDirectoryInternal(X_FILE_DIRECTORY_INFORMATION* out_info,
 
 X_STATUS XFile::Read(uint32_t buffer_guest_address, uint32_t buffer_length,
                      uint64_t byte_offset, uint32_t* out_bytes_read,
-                     uint32_t apc_context, bool notify_completion) {
+                     uint32_t apc_context, bool notify_completion, util::IoTransferReceipt* receipt) {
   // file_lock_ is taken inside the closure, on an I/O worker, so it is never
   // held while the calling fiber waits.
   // Booked before the offload, so requests queue in the order they are issued.
   const uint64_t deadline_ms = ReserveDriveTime(byte_offset, buffer_length);
   X_STATUS result = X_STATUS_SUCCESS;
-  RunSynchronousIo([&]() {
+  const auto invoked = RunSynchronousIo([&]() {
     std::lock_guard<std::mutex> lock(file_lock_);
     result = ReadInternal(buffer_guest_address, buffer_length, byte_offset,
-                          out_bytes_read, apc_context, notify_completion);
+                          out_bytes_read, apc_context, notify_completion, receipt);
   });
+  if (receipt) { receipt->invocation = invoked; }
   AwaitDriveTime(deadline_ms);
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
   return result;
 }
 
 X_STATUS XFile::ReadInternal(uint32_t buffer_guest_address,
                              uint32_t buffer_length, uint64_t byte_offset,
                              uint32_t* out_bytes_read, uint32_t apc_context,
-                             bool notify_completion) {
+                             bool notify_completion, util::IoTransferReceipt* receipt) {
   if (byte_offset == uint64_t(-1)) {
     // Read from current position.
     byte_offset = position_.load();
@@ -199,43 +202,55 @@ X_STATUS XFile::ReadInternal(uint32_t buffer_guest_address,
           if (buffer_physical_heap) {
             // Resolve output is copied in whole pages, so the pages this read
             // only partly covers get it now, for the read to land over it.
-            uint64_t file_size = entry()->size();
-            buffer_physical_heap->ProvideReadWatchedEdgePages(
-                buffer_guest_address,
-                uint32_t(std::min<uint64_t>(
-                    buffer_length,
-                    byte_offset < file_size ? file_size - byte_offset : 0)));
-          }
-          result = file_->ReadSync(
-              std::span<uint8_t>(
-                  buffer_physical_heap
-                      ? memory()->TranslatePhysical(
-                            buffer_physical_heap->GetPhysicalAddress(
-                                buffer_guest_address))
-                      : memory()->TranslateVirtual(buffer_guest_address),
-                  buffer_length),
-              size_t(byte_offset), &bytes_read);
-          if (XSUCCEEDED(result)) {
-            if (buffer_physical_heap) {
-              // The read has already replaced the contents it covers, the rest
-              // of the buffer keeps them.
-              uint32_t read_length =
-                  uint32_t(std::min(size_t(buffer_length), bytes_read));
-              if (read_length) {
-                buffer_physical_heap->TriggerCallbacks(
-                    xe::global_critical_region::AcquireDirect(),
-                    buffer_guest_address, read_length, true, true, true, false,
-                    true);
-              }
-              if (read_length < buffer_length) {
-                buffer_physical_heap->TriggerCallbacks(
-                    xe::global_critical_region::AcquireDirect(),
-                    buffer_guest_address + read_length,
-                    buffer_length - read_length, true, true);
-              }
+            vfs::File::Information actual;
+            result = file_->QueryInformation(&actual);
+            if (XSUCCEEDED(result)) {
+              buffer_physical_heap->ProvideReadWatchedEdgePages(
+                  buffer_guest_address,
+                  uint32_t(std::min<uint64_t>(
+                      buffer_length, byte_offset < actual.end_of_file
+                                         ? actual.end_of_file - byte_offset : 0)));
             }
+          }
+          // Query failure performs no read/physical output mutation, then
+          // reaches the same once-only count/notification path below.
+          if (XSUCCEEDED(result)) {
+            const uint32_t prefix = receipt ? receipt->completed_prefix : 0;
+            if (receipt) { receipt->EnterBackend(prefix); }
+            result = file_->ReadSync(
+                std::span<uint8_t>(
+                    buffer_physical_heap
+                        ? memory()->TranslatePhysical(
+                              buffer_physical_heap->GetPhysicalAddress(
+                                  buffer_guest_address))
+                        : memory()->TranslateVirtual(buffer_guest_address),
+                    buffer_length),
+                size_t(byte_offset), &bytes_read);
+            // Record the actual backend return before any physical callbacks.
+            if (out_bytes_read) { *out_bytes_read = uint32_t(bytes_read); }
+            if (receipt) { receipt->Returned(result, prefix + uint32_t(bytes_read)); }
+            if (XSUCCEEDED(result)) {
+              if (buffer_physical_heap) {
+                // The read has already replaced the contents it covers, the rest
+                // of the buffer keeps them.
+                uint32_t read_length =
+                    uint32_t(std::min(size_t(buffer_length), bytes_read));
+                if (read_length) {
+                  buffer_physical_heap->TriggerCallbacks(
+                      xe::global_critical_region::AcquireDirect(),
+                      buffer_guest_address, read_length, true, true, true, false,
+                      true);
+                }
+                if (read_length < buffer_length) {
+                  buffer_physical_heap->TriggerCallbacks(
+                      xe::global_critical_region::AcquireDirect(),
+                      buffer_guest_address + read_length,
+                      buffer_length - read_length, true, true);
+                }
+              }
 
-            position_.store(byte_offset + bytes_read);
+              position_.store(byte_offset + bytes_read);
+            }
           }
         }
       }
@@ -247,51 +262,103 @@ X_STATUS XFile::ReadInternal(uint32_t buffer_guest_address,
   }
 
   if (notify_completion) {
-    NotifyCompletion(result, uint32_t(bytes_read), apc_context);
+    if (NotifyCompletion(result, uint32_t(bytes_read), apc_context) !=
+        HostCallOutcome::kReturned) { return X_STATUS_UNSUCCESSFUL; }
   }
 
   return result;
 }
 
 void XFile::PostIo(XThread* thread, std::function<void(bool cancelled)> fn,
-                    std::function<void()> on_drop) {
-  {
+                    std::function<void()> on_drop,
+                    std::function<void()> on_resource_failure) {
+  bool run = false;
+  const auto prepared = InvokeHostCall([&] {
+    // Keep the actual failure owner here if constructing/pushing the queue
+    // entry fails before commit. std::function moves themselves are noexcept.
+    PostedIo item{thread, std::move(fn), std::move(on_drop), on_resource_failure};
     std::lock_guard<std::mutex> lock(posted_lock_);
-    posted_.push_back({thread, std::move(fn), std::move(on_drop)});
-    if (posted_running_) {
-      return;
-    }
-    posted_running_ = true;
+    posted_.push_back(std::move(item));
+    if (!posted_running_) { posted_running_ = true; run = true; }
+  });
+  if (prepared != HostCallOutcome::kReturned) {
+    if (on_resource_failure) {
+      if (InvokeHostCall(on_resource_failure) != HostCallOutcome::kReturned) {
+        (void)InvokeHostCall([] { XELOGE("XFile: resource rejection owner uncertain"); });
+      }
+    } else { (void)InvokeHostCall([] { XELOGE("XFile: unstarted legacy request resource admission failed"); }); }
+    return;
   }
-  // Both immediate shutdown rejection and later queue-drop settlement may
-  // complete inline, so neither submission nor callbacks hold posted_lock_.
-  kernel_state()->guest_scheduler()->PostHostCall(
+  if (!run) { return; }
+  bool accepted = false;
+  const auto submitted = InvokeHostCall([&] {
+    accepted = kernel_state()->guest_scheduler()->PostHostCall(
       [file = retain_object(this)]() { file->RunPostedIo(); }, io_call_class(),
       [file = retain_object(this)](GuestScheduler::HostCallDropReason reason) {
         file->DropPostedIo(reason);
       });
+  });
+  if (submitted != HostCallOutcome::kReturned || !accepted) { FailPostedIoAdmission(); }
+}
+
+void XFile::FailPostedIoAdmission() {
+  std::deque<PostedIo> failed;
+  {
+    std::lock_guard<std::mutex> lock(posted_lock_);
+    failed.swap(posted_);
+    posted_running_thread_ = nullptr;
+    posted_executing_ = false;
+    posted_running_ = false;
+  }
+  for (auto& posted : failed) {
+    // This runner never entered the scheduler queue. Only the real producer's
+    // resource-failure owner may settle it; never call complete(true)/on_drop.
+    if (posted.on_resource_failure) {
+      if (InvokeHostCall(posted.on_resource_failure) != HostCallOutcome::kReturned) {
+        (void)InvokeHostCall([] { XELOGE("XFile: resource failure owner uncertain; continuing remaining owners"); });
+      }
+    } else { (void)InvokeHostCall([] { XELOGE("XFile: unstarted legacy runner resource admission failed"); }); }
+  }
 }
 
 void XFile::RunPostedIo(bool admission_shutdown) {
   std::unique_lock<std::mutex> lock(posted_lock_);
-  while (!posted_.empty()) {
-    auto posted = std::move(posted_.front());
-    posted_.pop_front();
-    posted_running_thread_ = posted.thread;
-    lock.unlock();
-    if (admission_shutdown && posted.on_drop) {
-      posted.on_drop();
-    } else { posted.complete(false); }
-    lock.lock();
+  try {
+    while (!posted_.empty()) {
+      auto posted = std::move(posted_.front());
+      posted_.pop_front();
+      posted_running_thread_ = posted.thread;
+      posted_executing_ = true;
+      lock.unlock();
+      const auto invoked = InvokeHostCall([&] {
+        if (admission_shutdown && posted.on_drop) {
+          posted.on_drop();
+        } else { posted.complete(false); }
+      });
+      if (invoked != HostCallOutcome::kReturned) {
+        (void)InvokeHostCall([] { XELOGE("XFile: posted request escaped its completion owner"); });
+      }
+      lock.lock();
+      posted_running_thread_ = nullptr;
+      posted_executing_ = false;
+      // Destroy authority-bearing captures outside the queue lock.
+      lock.unlock();
+      posted.complete = {};
+      posted.on_drop = {};
+      posted.on_resource_failure = {};
+      lock.lock();
+    }
+    posted_running_ = false;
+  } catch (...) {
+    // Only control-flow sentinels should reach this path. The current request
+    // has already started and must never be replayed as on_drop/cancelled.
+    // Pending FIFO entries stay intact for shutdown or a later real runner.
+    if (!lock.owns_lock()) { lock.lock(); }
     posted_running_thread_ = nullptr;
-    // Drop-only captures can own unrelated resources. Release both callback
-    // closures outside queue locks, just like their normal/drop invocation.
-    lock.unlock();
-    posted.complete = {};
-    posted.on_drop = {};
-    lock.lock();
+    posted_executing_ = false;
+    posted_running_ = false;
+    throw;
   }
-  posted_running_ = false;
 }
 
 void XFile::DropPostedIo(GuestScheduler::HostCallDropReason reason) {
@@ -306,13 +373,16 @@ void XFile::DropPostedIo(GuestScheduler::HostCallDropReason reason) {
     std::lock_guard<std::mutex> lock(posted_lock_);
     dropped.swap(posted_);
     posted_running_thread_ = nullptr;
+    posted_executing_ = false;
     posted_running_ = false;
   }
   // Scheduler invokes this only for an unstarted runner. In-flight callbacks
   // finish normally before Shutdown joins their workers. Legacy callbacks are
   // destroyed, never invoked against possibly expired guest memory.
   for (auto& posted : dropped) {
-    if (posted.on_drop) { posted.on_drop(); }
+    if (posted.on_drop && InvokeHostCall(posted.on_drop) != HostCallOutcome::kReturned) {
+      (void)InvokeHostCall([] { XELOGE("XFile: unstarted drop owner uncertain; continuing remaining owners"); });
+    }
   }
 }
 
@@ -330,13 +400,15 @@ void XFile::CancelPostedIo(XThread* thread) {
     }
   }
   for (auto& posted : cancelled) {
-    posted.complete(true);
+    if (InvokeHostCall([&] { posted.complete(true); }) != HostCallOutcome::kReturned) {
+      (void)InvokeHostCall([] { XELOGE("XFile: cancellation owner uncertain; continuing remaining owners"); });
+    }
   }
 }
 
 bool XFile::HasPostedIo(XThread* thread) {
   std::lock_guard<std::mutex> lock(posted_lock_);
-  if (posted_running_thread_ == thread) {
+  if (posted_executing_ && posted_running_thread_ == thread) {
     return true;
   }
   for (const auto& posted : posted_) {
@@ -403,16 +475,18 @@ void XFile::AwaitDriveTime(uint64_t deadline_ms) {
 
 X_STATUS XFile::ReadScatter(uint32_t segments_guest_address, uint32_t length,
                             uint64_t byte_offset, uint32_t* out_bytes_read,
-                            uint32_t apc_context, bool notify_completion) {
+                            uint32_t apc_context, bool notify_completion, util::IoTransferReceipt* receipt) {
   // The whole loop as one request, so the fiber waits once.
   const uint64_t deadline_ms = ReserveDriveTime(byte_offset, length);
   X_STATUS result = X_STATUS_SUCCESS;
-  RunSynchronousIo([&]() {
+  const auto invoked = RunSynchronousIo([&]() {
     result =
         ReadScatterInternal(segments_guest_address, length, byte_offset,
-                            out_bytes_read, apc_context, notify_completion);
+                            out_bytes_read, apc_context, notify_completion, receipt);
   });
+  if (receipt) { receipt->invocation = invoked; }
   AwaitDriveTime(deadline_ms);
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
   return result;
 }
 
@@ -420,7 +494,7 @@ X_STATUS XFile::ReadScatterInternal(uint32_t segments_guest_address,
                                     uint32_t length, uint64_t byte_offset,
                                     uint32_t* out_bytes_read,
                                     uint32_t apc_context,
-                                    bool notify_completion) {
+                                    bool notify_completion, util::IoTransferReceipt* receipt) {
   std::lock_guard<std::mutex> lock(file_lock_);
   X_STATUS result = X_STATUS_SUCCESS;
 
@@ -444,10 +518,11 @@ X_STATUS XFile::ReadScatterInternal(uint32_t segments_guest_address,
     }
 
     uint32_t bytes_read = 0;
+    if (receipt) { receipt->completed_prefix = read_total; }
     result = ReadInternal(
         read_buffer, read_length,
         byte_offset != uint64_t(-1) ? byte_offset + read_total : byte_offset,
-        &bytes_read, apc_context, false);
+        &bytes_read, apc_context, false, receipt);
 
     if (result != X_STATUS_SUCCESS) {
       break;
@@ -462,7 +537,8 @@ X_STATUS XFile::ReadScatterInternal(uint32_t segments_guest_address,
   }
 
   if (notify_completion) {
-    NotifyCompletion(result, read_total, apc_context);
+    if (NotifyCompletion(result, read_total, apc_context) !=
+        HostCallOutcome::kReturned) { return X_STATUS_UNSUCCESSFUL; }
   }
 
   return result;
@@ -470,19 +546,21 @@ X_STATUS XFile::ReadScatterInternal(uint32_t segments_guest_address,
 
 X_STATUS XFile::Write(uint32_t buffer_guest_address, uint32_t buffer_length,
                       uint64_t byte_offset, uint32_t* out_bytes_written,
-                      uint32_t apc_context, bool notify_completion) {
+                      uint32_t apc_context, bool notify_completion, util::IoTransferReceipt* receipt) {
   X_STATUS result = X_STATUS_SUCCESS;
-  RunSynchronousIo([&]() {
+  const auto invoked = RunSynchronousIo([&]() {
     result = WriteInternal(buffer_guest_address, buffer_length, byte_offset,
-                           out_bytes_written, apc_context, notify_completion);
+                           out_bytes_written, apc_context, notify_completion, receipt);
   });
+  if (receipt) { receipt->invocation = invoked; }
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
   return result;
 }
 
 X_STATUS XFile::WriteInternal(uint32_t buffer_guest_address,
                               uint32_t buffer_length, uint64_t byte_offset,
                               uint32_t* out_bytes_written, uint32_t apc_context,
-                              bool notify_completion) {
+                              bool notify_completion, util::IoTransferReceipt* receipt) {
   // Physical memory is read through the unprotected physical view, as a host
   // write from a watched page would fail rather than fault into its callbacks.
   // Those are triggered first as for a guest read, which brings in resolve
@@ -504,21 +582,28 @@ X_STATUS XFile::WriteInternal(uint32_t buffer_guest_address,
   }
 
   std::lock_guard<std::mutex> lock(file_lock_);
+  X_STATUS result = X_STATUS_SUCCESS;
   if (byte_offset == uint64_t(-1)) {
     // Write from current position.
     byte_offset = position_.load();
   } else if (byte_offset == kEndOfFile) {
-    // The entry's size is only refreshed on request.
-    entry()->update();
-    byte_offset = entry()->size();
+    // Observe THIS retained view under the existing file/IO ownership. A path
+    // refresh cannot describe a managed session or a replaced-path old FD.
+    vfs::File::Information actual;
+    result = file_->QueryInformation(&actual);
+    if (XSUCCEEDED(result)) { byte_offset = actual.end_of_file; }
   }
 
   size_t bytes_written = 0;
-  X_STATUS result = file_->WriteSync(std::span<uint8_t>(buffer, buffer_length),
-                                     size_t(byte_offset), &bytes_written);
-  // A zero-length write leaves the position alone.
-  if (XSUCCEEDED(result) && buffer_length) {
-    position_.store(byte_offset + bytes_written);
+  if (XSUCCEEDED(result)) {
+    if (receipt) { receipt->EnterBackend(); }
+    result = file_->WriteSync(std::span<uint8_t>(buffer, buffer_length),
+                               size_t(byte_offset), &bytes_written);
+    if (receipt) { receipt->Returned(result, uint32_t(bytes_written)); }
+    // A zero-length write leaves the position alone.
+    if (XSUCCEEDED(result) && buffer_length) {
+      position_.store(byte_offset + bytes_written);
+    }
   }
 
   if (out_bytes_written) {
@@ -526,20 +611,25 @@ X_STATUS XFile::WriteInternal(uint32_t buffer_guest_address,
   }
 
   if (notify_completion) {
-    NotifyCompletion(result, uint32_t(bytes_written), apc_context);
+    if (NotifyCompletion(result, uint32_t(bytes_written), apc_context) !=
+        HostCallOutcome::kReturned) { return X_STATUS_UNSUCCESSFUL; }
   }
   return result;
 }
 
-X_STATUS XFile::Flush() {
+X_STATUS XFile::Flush(util::IoTransferReceipt* receipt) {
   if (global_critical_region::is_held_by_current_thread()) {
     return X_STATUS_INVALID_DEVICE_REQUEST;
   }
   X_STATUS result = X_STATUS_NOT_SUPPORTED;
-  RunSynchronousIo([&]() {
+  const auto invoked = RunSynchronousIo([&]() {
     std::lock_guard<std::mutex> lock(file_lock_);
+    if (receipt) { receipt->EnterBackend(); }
     result = file_->Flush();
+    if (receipt) { receipt->Returned(result, 0); }
   });
+  if (receipt) { receipt->invocation = invoked; }
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
   return result;
 }
 
@@ -563,21 +653,35 @@ X_STATUS XFile::FlushQueued(std::function<void(X_STATUS)> completion) {
        filesystem::FileAccess::kFileAppendData |
        filesystem::FileAccess::kGenericWrite |
        filesystem::FileAccess::kGenericAll)) != 0;
-  PostIo(thread.get(),
-      [file, thread, completion, writable](bool cancelled) {
+  std::function<void(bool)> body;
+  std::function<void()> dropped, resource_failure;
+  const auto prepared = InvokeHostCall([&] {
+    body = [file, thread, completion, writable](bool cancelled) {
         (void)thread;  // Own the actual issuer until completion/cancellation.
         X_STATUS status = X_STATUS_CANCELLED;
         if (!cancelled) {
-          std::lock_guard<std::mutex> lock(file->file_lock_);
-          // Readonly handles have no logical overwrite obligation. A later
-          // common FlushTree supplies all regular-file data barriers.
-          status = writable ? file->file_->Flush() : X_STATUS_SUCCESS;
+          const auto invoked = InvokeHostCall([&] {
+            std::lock_guard<std::mutex> lock(file->file_lock_);
+            // Readonly handles have no logical overwrite obligation.
+            status = writable ? file->file_->Flush() : X_STATUS_SUCCESS;
+          });
+          if (invoked != HostCallOutcome::kReturned) {
+            status = HostCallFailureStatus(invoked);
+          }
         }
         // Batch completion can perform further host work/release references.
         // Never call it with file_lock_ or posted_lock_ owned.
         completion(status);
-      },
-      [completion]() { completion(X_STATUS_CANCELLED); });
+      };
+    dropped = [completion]() { completion(X_STATUS_CANCELLED); };
+    resource_failure = [completion]() { completion(X_STATUS_INSUFFICIENT_RESOURCES); };
+  });
+  if (prepared != HostCallOutcome::kReturned) {
+    // No PostIo entry/commit occurred. The caller owns its one rejection.
+    return X_STATUS_INSUFFICIENT_RESOURCES;
+  }
+  PostIo(thread.get(), std::move(body), std::move(dropped),
+         std::move(resource_failure));
   return X_STATUS_SUCCESS;
 }
 
@@ -588,7 +692,8 @@ std::optional<vfs::File::DeviceControlLayout> XFile::DescribeDeviceControl(
 
 X_STATUS XFile::DeviceControl(uint32_t code, uint32_t input_address,
                               uint32_t input_length, uint32_t output_address,
-                              uint32_t output_length, uint32_t* transferred) {
+                              uint32_t output_length, uint32_t* transferred,
+                              util::IoTransferReceipt* receipt) {
   *transferred = 0;
   if (global_critical_region::is_held_by_current_thread()) {
     return X_STATUS_INVALID_DEVICE_REQUEST;
@@ -610,7 +715,7 @@ X_STATUS XFile::DeviceControl(uint32_t code, uint32_t input_address,
   // Layouts are trusted backend declarations, not guest allocation requests.
   // No current supported packet exceeds16 bytes.
   std::vector<uint8_t> input(layout->input_bytes), output(layout->output_bytes);
-  RunSynchronousIo([&]() {
+  const auto invoked = RunSynchronousIo([&]() {
     if (!util::GuestIoRangeValid(*memory(), input_address, input_length,
                                  false) ||
         !util::GuestIoRangeValid(*memory(), output_address, output_length,
@@ -625,7 +730,9 @@ X_STATUS XFile::DeviceControl(uint32_t code, uint32_t input_address,
     uint32_t count = 0;
     {
       std::lock_guard<std::mutex> lock(file_lock_);
+      if (receipt) { receipt->EnterBackend(); }
       result = file_->DeviceControl(code, input, output, &count);
+      if (receipt) { receipt->Returned(result, count); }
     }
     if (XFAILED(result)) {
       return;
@@ -640,35 +747,56 @@ X_STATUS XFile::DeviceControl(uint32_t code, uint32_t input_address,
       *transferred = count;
     }
   });
+  if (receipt) { receipt->invocation = invoked; }
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
+  return result;
+}
+
+X_STATUS XFile::QueryInformation(vfs::File::Information* output) {
+  if (!output) return X_STATUS_INVALID_PARAMETER;
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  X_STATUS result = X_STATUS_CANCELLED;
+  vfs::File::Information observed{};
+  const auto invoked = RunSynchronousIo([&] {
+    std::lock_guard<std::mutex> lock(file_lock_);
+    result = file_->QueryInformation(&observed);
+  });
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
+  if (XSUCCEEDED(result)) *output = observed;
   return result;
 }
 
 X_STATUS XFile::SetLength(size_t length) {
   X_STATUS result = X_STATUS_SUCCESS;
-  RunSynchronousIo([&]() {
+  const auto invoked = RunSynchronousIo([&]() {
     std::lock_guard<std::mutex> lock(file_lock_);
     result = file_->SetLength(length);
   });
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
   return result;
 }
 X_STATUS XFile::SetTimes(uint64_t create_timestamp, uint64_t access_timestamp,
                          uint64_t write_timestamp) {
   X_STATUS result = X_STATUS_SUCCESS;
-  RunSynchronousIo([&]() {
+  const auto invoked = RunSynchronousIo([&]() {
     std::lock_guard<std::mutex> lock(file_lock_);
     result =
         file_->SetTimes(create_timestamp, access_timestamp, write_timestamp);
   });
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
   return result;
 }
 X_STATUS XFile::Rename(const std::filesystem::path file_path,
                        bool replace_existing) {
   X_STATUS result = X_STATUS_SUCCESS;
-  RunSynchronousIo([&]() {
+  const auto invoked = RunSynchronousIo([&]() {
     result = kernel_state()->file_system()->RenameEntry(
         entry(), xe::path_to_utf8(file_path), replace_existing,
         file_->storage_lease());
   });
+  if (invoked!=HostCallOutcome::kReturned) return HostCallFailureStatus(invoked);
   return result;
 }
 
@@ -754,27 +882,51 @@ object_ref<XFile> XFile::Restore(KernelState* kernel_state,
   return object_ref<XFile>(file);
 }
 
-void XFile::NotifyCompletion(X_STATUS status, uint32_t num_bytes,
-                             uint32_t apc_context) {
-  // A request without an APC context posts no packet.
+HostCallOutcome XFile::NotifyCompletion(
+    X_STATUS status, uint32_t num_bytes, uint32_t apc_context,
+    util::IoNotificationReceipt* receipt) {
+  util::IoNotificationReceipt local;
+  if (!receipt) { receipt = &local; }
   if (apc_context) {
     XIOCompletion::IONotification notify;
     notify.apc_context = apc_context;
     notify.num_bytes = num_bytes;
     notify.status = status;
-    NotifyIOCompletionPorts(notify);
+    receipt->ports = InvokeHostCall([&] {
+      if (NotifyIOCompletionPorts(notify, receipt) != HostCallOutcome::kReturned) {
+        receipt->ports = HostCallOutcome::kExecutionFailed;
+      }
+    });
+    // The snapshot may return normally after one or more per-port failures.
+    if (receipt->ports_attempted != receipt->ports_returned) {
+      receipt->ports = HostCallOutcome::kExecutionFailed;
+    }
   }
-  async_event_->Set();
+  receipt->file_event = InvokeHostCall([&] { async_event_->Set(); });
+  return receipt->Failed() ? HostCallOutcome::kExecutionFailed
+                           : HostCallOutcome::kReturned;
 }
 
-void XFile::NotifyIOCompletionPorts(
-    XIOCompletion::IONotification& notification) {
-  std::lock_guard<std::mutex> lock(completion_port_lock_);
-
-  for (auto port : completion_ports_) {
-    notification.key_context = port.first;
-    port.second->QueueNotification(notification);
+HostCallOutcome XFile::NotifyIOCompletionPorts(
+    XIOCompletion::IONotification& notification,
+    util::IoNotificationReceipt* receipt) {
+  std::vector<std::pair<uint32_t, object_ref<XIOCompletion>>> ports;
+  {
+    std::lock_guard<std::mutex> lock(completion_port_lock_);
+    ports.assign(completion_ports_.begin(), completion_ports_.end());
   }
+  bool failed = false;
+  for (const auto& port : ports) {
+    notification.key_context = port.first;
+    ++receipt->ports_attempted;
+    const auto invoked = InvokeHostCall([&] {
+      port.second->QueueNotification(notification);
+    });
+    if (invoked == HostCallOutcome::kReturned) {
+      ++receipt->ports_returned;
+    } else { failed = true; }
+  }
+  return failed ? HostCallOutcome::kExecutionFailed : HostCallOutcome::kReturned;
 }
 
 }  // namespace kernel

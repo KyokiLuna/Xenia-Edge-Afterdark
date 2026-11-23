@@ -36,6 +36,11 @@ X_STATUS RoundFileAllocationSize(uint64_t native_bytes, uint64_t guest_unit,
 
 class File {
  public:
+  struct Information {
+    uint64_t create_timestamp = 0, access_timestamp = 0, write_timestamp = 0;
+    uint64_t change_timestamp = 0, allocation_size = 0, end_of_file = 0;
+    uint32_t attributes = 0;
+  };
   struct DeviceControlLayout {
     uint32_t input_bytes = 0;
     uint32_t output_bytes = 0;
@@ -70,6 +75,13 @@ class File {
                               size_t* out_bytes_written) {
     return X_STATUS_NOT_IMPLEMENTED;
   }
+
+  // Query this retained byte view. Immutable backend metadata comes from its
+  // retained Entry; mutable or managed views override this to observe their
+  // actual backing/session and return genuine unavailable/error status.
+  // The caller serializes with other operations on this file. No output is
+  // changed on failure, and success is not a flush/completion notification.
+  virtual X_STATUS QueryInformation(Information* output) const;
 
   // Actual retained-file allocation in guest allocation-unit geometry.
   // Only an explicit backend implementation may succeed; no cached Entry

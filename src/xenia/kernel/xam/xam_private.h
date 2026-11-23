@@ -39,6 +39,11 @@ struct SystemLaunchTarget {
 std::optional<SystemLaunchTarget> CaptureSystemLaunchTarget(
     KernelState&, std::string_view guest_path);
 
+// After an already-accepted title replacement, stop this actual caller from
+// resuming guest code. Owns no launch request/resource and never returns. Call
+// only after all host public-invocation/Producer resources have retired.
+[[noreturn]] void ParkAfterTitleHandoff();
+
 // XamLoaderLaunchTitleEx, which doesn't return.
 void LaunchTitle(std::string path, std::string_view d_drive_path,
                  uint32_t flags);

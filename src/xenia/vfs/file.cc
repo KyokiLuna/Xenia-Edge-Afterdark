@@ -22,6 +22,24 @@ X_STATUS RoundFileAllocationSize(uint64_t native_bytes, uint64_t guest_unit,
   *output = native_bytes + padding;
   return X_STATUS_SUCCESS;
 }
+X_STATUS File::QueryInformation(Information* output) const {
+  if (!output) return X_STATUS_INVALID_PARAMETER;
+  auto lock = global_critical_region::AcquireDirect();
+  if (!entry_ || !device_owner_ || device_owner_.get() != entry_->device()) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+  // Namespace withdrawal alone does not retire an already-open byte view.
+  // Each mutable/managed backend decides actual source/view availability.
+  Information result{};
+  result.create_timestamp = entry_->create_timestamp();
+  result.access_timestamp = entry_->access_timestamp();
+  result.write_timestamp = result.change_timestamp = entry_->write_timestamp();
+  result.allocation_size = entry_->allocation_size();
+  result.end_of_file = entry_->size();
+  result.attributes = entry_->attributes();
+  *output = result;
+  return X_STATUS_SUCCESS;
+}
 File::File(uint32_t file_access, Entry* entry)
     : device_owner_(entry ? entry->device()->weak_from_this().lock() : nullptr),
       file_access_(file_access),

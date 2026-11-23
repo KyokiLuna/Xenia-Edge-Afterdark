@@ -1,0 +1,742 @@
+# ISOLATED PRIVATE REVIEW CANDIDATE — not selected by any active configuration.
+# Base dependencies remain preserved; use only a fresh Root-approved runtime.
+# PRIVATE verified supplied image plan; no image addresses in production code.
+schema = 1
+identity = "native-xam-heaps-crt-v1"
+module_hash = "DD9939F8B910C18D"
+image_code_sha1 = "D8F94A9D7D09F731B12215B7BAB23847564F06AE"
+image_size = 0x610000
+lifetime = "kernel"
+
+[[bridge]]
+library = "xam.xex"
+ordinal = 0xB46
+
+# Actual native DLL-entry prefix calls this setter with its incoming HMODULE
+# before process-attach/whole-boot dispatch. Preserve that prerequisite without
+# executing the native whole-boot body or writing a host-manufactured global.
+[[bridge]]
+library = 'xam.xex'
+ordinal = 0x231
+code_size = 236
+code_sha256 = 'bac3b00a84577306d315de348e379aa6690507ea3c12129e2fde30e7a8d6ee91'
+
+[[bridge]]
+library = 'xam.xex'
+ordinal = 0x232
+code_size = 56
+code_sha256 = 'd23aaadb31b86b58d4ab63b6fe17e3c7e58ebc17e5ee7dd89609db84508ee819'
+
+[[bridge]]
+library = 'xam.xex'
+ordinal = 0x22A
+code_size = 388
+code_sha256 = '3b796e145f20c340cb0aab1f1a667552fa919dbe39129aad96597f8ac002f8c6'
+
+[[bridge]]
+library = 'xam.xex'
+ordinal = 0x21A
+code_size = 180
+code_sha256 = '93fccebe6fd57253625afd6e24dbde729bf48aeec2f0ee75a0efec57e87cc09d'
+
+[[bridge]]
+library = 'xam.xex'
+ordinal = 0x269
+code_size = 16
+code_sha256 = 'e9fb780e48b3e55766bf8ed91cab8db437611aa3541e47b6e2136a639c86cebd'
+
+[[bridge]]
+library = 'xam.xex'
+ordinal = 0x25A
+code_size = 188
+code_sha256 = '0b6af2294c7e6fb7747029aaa683bf97ec1878f62f1d408726c478ddd230465d'
+
+
+[[phase]]
+identity = "native-self-module-context"
+[[phase.call]]
+identity = "native-system-self-module-bind"
+rva = 0xF0B58
+code_size = 0xC
+code_sha256 = "9020f5dc1ed3bf76b2874640a4d8f2dc7a77edb483475e5122c6f2a3761661f4"
+arguments = ["module_handle"]
+result = "void"
+[[phase.call.before]]
+rva = 0x4B3EE0
+expected = 0
+[[phase.call.after]]
+rva = 0x4B3EE0
+expected = "module_handle"
+
+[[phase]]
+identity = "native-preflight"
+[[phase.call]]
+identity = "native-process-heap-unused"
+ordinal = 0x7D2
+arguments = []
+result = "zero"
+[[phase.call.before]]
+rva = 0x4D82F4
+expected = 0
+
+[[phase]]
+identity = "native-heap-crt-initialization"
+[[phase.call]]
+identity = "native-heap-crt-startup"
+rva = 0xF6618
+code_size = 0x184
+code_sha256 = "d3168b8a6775bbdea1e0a85ca6a35bc294aa0b50077c57ab5da76992fe9f8d2e"
+arguments = []
+result = "void"
+[[phase.call.after]]
+rva = 0x4D8290
+expected = 0xFFFFFFFF
+[[phase.call.after]]
+rva = 0x4D8738
+expected = 0xFFFFFFFF
+[[phase.call.after]]
+rva = 0x4BC014
+nonzero = true
+[[phase.call.after]]
+rva = 0x4BC02C
+nonzero = true
+[[phase.call.after]]
+rva = 0x4BC05C
+nonzero = true
+[[phase.call.after]]
+rva = 0x4BC074
+nonzero = true
+[[phase.call.after]]
+rva = 0x4BC08C
+nonzero = true
+[[phase.call.after]]
+rva = 0x4BC0A4
+nonzero = true
+[[phase.call.after]]
+rva = 0x4BC0BC
+nonzero = true
+
+[[phase]]
+identity = "native-postflight"
+[[phase.call]]
+identity = "native-process-heap-created"
+ordinal = 0x7D2
+arguments = []
+result = "nonzero"
+
+[[phase]]
+identity = "native-system-service-startup-catalog"
+deferred = true
+
+[[phase.call]]
+identity = "native-system-task-init"
+rva = 0xCA650
+code_size = 0x8
+code_sha256 = "dd52e9d5e756776da71d52e0f10d9bc377c157f44ab90e1f3be2489b62473cd1"
+arguments = []
+result = "hresult"
+
+[[phase.call]]
+identity = "native-system-shared-graphics-init"
+rva = 0xD9EA0
+code_size = 0x14C
+code_sha256 = "cb83632e14ed701d35d42f24e69f5f5bdbe828a25661ada005b51d44d9eff471"
+arguments = []
+result = "hresult"
+
+[[phase.call]]
+identity = "native-system-config-init"
+rva = 0xB17B8
+code_size = 0x64
+code_sha256 = "d1b3c9104383a0716785b61c2994bd00c15c9be201a76d5b1940e5fc644ab3cd"
+arguments = []
+result = "nonzero"
+
+# Original relative order: Config969DC, Notify969E0, Profile969F0, InputAux969F4.
+# Deferred service prerequisite; never extends/reinitializes the heap plan.
+[[phase.call]]
+identity = "native-system-notify-init"
+rva = 0xB95A0
+code_size = 0xDC
+code_sha256 = "bccb7e72058b7ce42fe7f8e2ccb25eaf78966838564c5413c80d3d89e09b45fa"
+arguments = []
+result = "void"
+caller = "system"
+
+# Original Main969F0: real profile serial queue and eight profile buffers.
+# Void initializer is accepted only with the mandatory actual postcondition.
+[[phase.call]]
+identity = "native-system-profile-data-init"
+rva = 0xEB788
+code_size = 0xD4
+code_sha256 = "ac267e2a987800a56f536da15b645f31fa690466c80d7b179b06c40205837e13"
+arguments = []
+result = "void"
+caller = "system"
+
+[[phase.call]]
+identity = "native-system-input-aux-init"
+rva = 0x1044D0
+code_size = 0x18C
+code_sha256 = "dec3c2185ca94413e1f2e08ea5f1b69436535fd2e85ca27bd1d6c3a318456ad9"
+arguments = []
+result = "hresult"
+
+[[phase.call]]
+identity = "native-system-update-predicate"
+rva = 0xAD060
+code_size = 0x18
+code_sha256 = "d6c583f1d7af8bee8eae05d3d9890747a454596b8e4c4a9795611f244b9c87c7"
+arguments = []
+result = "any"
+caller = "system_task"
+
+[[phase.call]]
+identity = "native-system-fe-init"
+rva = 0xCDE90
+code_size = 0xAC
+code_sha256 = "7689eff393cd3d203d2de6f2b6564b7a2c2649715a6849b41ac25b0974c5a7b8"
+arguments = [0]
+result = "hresult"
+caller = "system_task"
+
+[[phase.call]]
+identity = "native-system-ui-manager-init"
+rva = 0xDEBD8
+code_size = 0xC0
+code_sha256 = "99f827bd62230d14b2a5704c3d7f1f340f448d185eb0eaf258f39794e0275f0e"
+arguments = []
+result = "hresult"
+caller = "system_task"
+
+[[phase]]
+identity = "native-system-shared-factory-profile"
+deferred = true
+[[phase.call]]
+identity = "native-light-device-factory"
+rva = 0x24EA40
+code_size = 0xD8
+code_sha256 = "86c64388db95f9bf5b198ad9fc67f7e568e608378bfe7929307e91d14ad929f9"
+arguments = [0,2,0,0,0,0]
+result = "hresult"
+system_device_layout = { version=1, device_size=0x6080, reference_count=0x3C, system_flag=0x2B0C, light_flags=0x2B3C, light_mask=0x80, creator_thread=0x2B08, use_counter=0x2B1C, gpu_identifier=0x2B10, normal_table=0x5F58, mode_rva=0x4E30F8 }
+[[phase.call.before]]
+rva = 0x4D82F4
+expected = 0
+[[phase.call.before]]
+rva = 0x4D7DE4
+expected = 0
+[[phase.call.before]]
+rva = 0x4D7DEC
+expected = 0
+
+[[phase]]
+identity = "native-system-task-continuation-transport"
+deferred = true
+
+[[phase.call]]
+identity = "native-system-task-schedule"
+rva = 0xCA440
+code_size = 0xE8
+code_sha256 = "54499cbb31f67e590a4c36e36708688274d2c696f1a03529bd26782955c73fee"
+arguments = [0, 0, 0, 0]
+result = "hresult"
+caller = "system"
+
+[[phase.call]]
+identity = "native-system-task-create"
+rva = 0xCA668
+code_size = 0x48
+code_sha256 = "6f6895fe529c0718cf03788f4b5d5aed2863028fdeda2bb484b9b19a81dd1686"
+arguments = [0]
+result = "hresult"
+caller = "system"
+
+[[phase.call]]
+identity = "native-system-task-modify"
+rva = 0xCA6B0
+code_size = 0x8
+code_sha256 = "7078c2eb244a8db92cf1675de972d286cd11b8454203eb98b765ca135dcea927"
+arguments = [0, 0, 0, 0, 0]
+result = "any"
+caller = "system"
+
+[[phase.call]]
+identity = "native-system-task-wait"
+rva = 0xCA660
+code_size = 0x8
+code_sha256 = "adf01425cd86f55f5deef9388c3a9794fa2af896730a3a0b0987d2fa6101c6f3"
+arguments = [0]
+result = "any"
+caller = "system"
+
+[[phase.call]]
+identity = "native-system-close-task"
+rva = 0xC7B80
+code_size = 0x18
+code_sha256 = "bae8c269c47e9baa51a35f7e1663f73501e0ace0306e34e2d55fee6114dde1c8"
+arguments = [0]
+result = "any"
+caller = "system"
+
+[[phase.call]]
+identity = "native-system-current-task"
+rva = 0xC8098
+code_size = 0x30
+code_sha256 = "e6c9e34282cfbf21ced6b5aa991148d7e52fd0daeaa76782f4850444c1a39b57"
+arguments = []
+result = "any"
+caller = "system"
+
+[[phase.call]]
+identity = "native-system-task-status"
+rva = 0xC7B98
+code_size = 0x44
+code_sha256 = "d774cb5de9cb20e86eda0cc42317b7838590393aa495e700fcc2b468e3b24199"
+arguments = [0]
+result = "any"
+caller = "system"
+
+[[phase.call]]
+identity = "native-system-frontend-continuation"
+rva = 0xA6558
+code_size = 0x250
+code_sha256 = "2274bb755437b3b81ae716552b93cd87c81d95b108efb4f47a127f66b65edd4d"
+arguments = [0]
+result = "any"
+caller = "system_task"
+
+# Public APIs remain on the original actual TITLE/SYSTEM caller. UInt32
+# placeholders express logical arity only; the forwarding entry supplies real
+# scalar values and genuine guest addresses. Any preserves raw native results.
+[[phase]]
+identity = "native-public-original-caller-catalog"
+deferred = true
+
+[[phase.call]]
+identity = "native-public-input-caps"
+rva = 0x102E70
+code_size = 0x60
+code_sha256 = "eea2d728a36c5e98887269827095659b611d559f363fcf45710197a9837057b0"
+arguments = [0, 0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-input-state"
+rva = 0x1014E8
+code_size = 0x1D4
+code_sha256 = "218d2b2479d523401f38d90586d24013dca12b3540ea298dcea691c2f2681785"
+arguments = [0, 0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-input-set"
+rva = 0x101740
+code_size = 0xA0
+code_sha256 = "c0ece20911d25d5e6e0427b7a65257dae22451cfc2ef8b293f93404617bb7ed6"
+arguments = [0, 0, 0, 0, 0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-input-enable"
+rva = 0x102480
+code_size = 0x15C
+code_sha256 = "2248bd3097104a24fa194c970351b5f047bdb8324263e7093713b17641aa8f7b"
+arguments = [0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-show-guide"
+rva = 0xD3580
+code_size = 0xC
+code_sha256 = "b0a1a25d253a4712bf3ffd09a735fbb990bcda72dff82c708f159868445c3afa"
+arguments = [0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-show-keyboard"
+rva = 0xD1F38
+code_size = 0x84
+code_sha256 = "9e20591bb745e86753a3fac242be606741345d934395d0edb6d14c5438661ae5"
+arguments = [0, 0, 0, 0, 0, 0, 0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-show-messagebox"
+rva = 0xD5508
+code_size = 0x218
+code_sha256 = "f28d164282ae1eec032b1a22e7bd87151d43332ae108a6530f263ebccb46c6b8"
+arguments = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+result = "any"
+caller = "original"
+
+# Append at process startup, BEFORE the Ready heap plan is initialized.
+# Original caller only; never a SYSTEM task or initializer. Zero values are
+# validated argument-shape metadata, replaced by actual synchronous arguments.
+# Exact supplied17559 sign-in exports: deferred original-caller metadata only.
+# These placeholders are never bootstrap calls or completed-user receipts.
+[[phase.call]]
+identity = "native-public-show-signin-2bc"
+rva = 0xD3CD8
+code_size = 0x10
+code_sha256 = "590e4113a14d24bb22fb8afb722a494dc65b6d3787ad9a708d061776094c91bb"
+arguments = [0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-show-signin-2be"
+rva = 0xD19C8
+code_size = 0x50
+code_sha256 = "ebc223b4b6327c41551102ff58d70f43159bf96ab6cc4d6acaf25f7b18edceb7"
+arguments = [0, 0, 0]
+result = "any"
+caller = "original"
+
+[[phase]]
+identity = "native-public-controller-keystrokes-original"
+deferred = true
+
+[[phase.call]]
+identity = "native-public-input-keystroke"
+rva = 0x104AB8
+code_size = 0x28
+code_sha256 = "4575febad65bb4842f9fa58e04f02e9dd98ce9319b9b63dd12491201824f169e"
+arguments = [0, 0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-input-keystroke-ex"
+rva = 0x104778
+code_size = 0x33C
+code_sha256 = "cad0c322f7489a999baaf9ee37119d22b391d94ea6a2aaf7d196868bea20f0b5"
+arguments = [0, 0, 0]
+result = "any"
+caller = "original"
+
+# Public UI state is queried on its actual synchronous TITLE/SYSTEM caller.
+# This deferred leaf is metadata only, never a boot initializer or UI policy.
+[[phase]]
+identity = "native-public-ui-state-original"
+deferred = true
+
+[[phase.call]]
+identity = "native-public-is-ui-active"
+rva = 0xD7D78
+code_size = 0x10
+code_sha256 = "7d6eef6ba06629576aeb7ae0989ca39a5b8a7ad4f9f5d0998a8008cdbc69584f"
+arguments = []
+result = "any"
+caller = "original"
+
+# HDD gate derived catalog. Original Guide plan above is preserved byte-for-byte.
+# Actual SYSTEM Task source/index roles are admitted only as a complete family.
+[[phase]]
+identity = "native-system-content-startup-v2-storage-driver"
+deferred = true
+
+[[phase.call]]
+identity = "native-system-content-storage-initialize"
+rva = 0x8ED90
+code_size = 0xC0
+code_sha256 = "5f307d586e49332ee2e8846c7a2a0e4edcb19377310d0d4ba821d57ffe910938"
+arguments = []
+result = "void"
+caller = "system_task"
+
+[[phase.call]]
+identity = "native-system-content-storage-boot-complete"
+rva = 0xA64A8
+code_size = 0xAC
+code_sha256 = "dd837757da053cffb3b06436971f2acd9eab5b0f464e5a85ef97d0e4676109ce"
+arguments = []
+result = "hresult"
+caller = "system_task"
+
+[[phase.call]]
+identity = "native-system-content-source-attach"
+rva = 0xF9A58
+code_size = 0x1C
+code_sha256 = "a2599d519d0d1c4914759521605dd39db9c141f304f7c388fe54e1260fc32f6b"
+arguments = [0, 0, 0]
+result = "hresult"
+caller = "system_task"
+
+[[phase.call]]
+identity = "native-system-content-index-initialize"
+rva = 0xFBDE0
+code_size = 0xC
+code_sha256 = "154d22e30f059cf00c8ee2a07efbe5cdf3a7a7e315f5b9fb424272e822caf567"
+arguments = []
+result = "hresult"
+caller = "system_task"
+
+[[phase.call]]
+identity = "native-system-content-index-lookup"
+rva = 0xF8D40
+code_size = 0x70
+code_sha256 = "cb6b5ad7303c2e667fbbbd42ad3058c4317feff68bfab4ec2efe2fe3a69f9e9f"
+arguments = [0, 0, 0, 0]
+result = "hresult"
+caller = "system_task"
+
+[[phase.call]]
+identity = "native-public-show-device-selector"
+rva = 0xD5300
+code_size = 0x24
+code_sha256 = "07ff8ca536b92c61acb8e2834efb441076ed14bd3376c0483b5400b270abdb45"
+arguments = [0, 0, 0, 0, 0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = 'native-public-avatar-initialize'
+rva = 546280
+code_size = 228
+code_sha256 = '4b7eceaaaee759f0ac9585337c83635793118744e823eebccb6b1261706bb919'
+arguments = [0, 0, 0, 0, 0, 0]
+caller = 'original'
+result = 'any'
+
+[[phase.call]]
+identity = 'native-public-avatar-shutdown'
+rva = 543040
+code_size = 12
+code_sha256 = '29ef149b5c35c7293435787d1e5452bd7512979291def903f8398aa8507d6517'
+arguments = []
+caller = 'original'
+result = 'void'
+
+[[phase.call]]
+identity = 'native-public-avatar-get-manifest-local-user'
+rva = 543056
+code_size = 112
+code_sha256 = '17a7a28f96a7b41cff8bdabe93005204dd70c8c6d91b3f80ae798666318b8f9a'
+arguments = [0, 0, 0]
+caller = 'original'
+result = 'any'
+
+[[phase.call]]
+identity = 'native-public-avatar-get-assets-result-size'
+rva = 543344
+code_size = 104
+code_sha256 = '679af48429b8a772df8fcc0a5cd9f2e2a08948d39140a3e33d1c9466a29a32da'
+arguments = [0, 0, 0]
+caller = 'original'
+result = 'any'
+
+[[phase.call]]
+identity = 'native-public-avatar-get-assets'
+rva = 543448
+code_size = 148
+code_sha256 = '61530c9835f633f75976229959fef2d9349fcfcf9502ca3bcd338518f7462487'
+arguments = [0, 0, 0, 0, 0, 0]
+caller = 'original'
+result = 'any'
+
+[[phase.call]]
+identity = 'native-public-avatar-set-manifest'
+rva = 544224
+code_size = 124
+code_sha256 = '7bfbf817fe0b93b940533db13adc5021055a5f4afac1119e3eb17fe42f26f984'
+arguments = [0, 0, 0]
+caller = 'original'
+result = 'any'
+
+[[phase.call]]
+identity = 'native-public-avatar-get-metadata-random'
+rva = 545368
+code_size = 152
+code_sha256 = '1d258cad8c81e3eeaf0e41b3eb4e534533866ec6426952da397e9246b1172c79'
+arguments = [0, 0, 0, 0]
+caller = 'original'
+result = 'any'
+
+[[phase.call]]
+identity = 'native-public-avatar-get-metadata-signed-out-profile-count'
+rva = 545520
+code_size = 100
+code_sha256 = '1ec3c7580d78f1d013895b6a165aabc23d387f677329b88738d4b24e02777beb'
+arguments = [0, 0]
+caller = 'original'
+result = 'any'
+
+[[phase.call]]
+identity = 'native-public-avatar-get-metadata-signed-out-profile'
+rva = 545624
+code_size = 112
+code_sha256 = '7b23e0c61b74c91ab4d3b9530728c6567c390cff15e02a8397f29196d856a724'
+arguments = [0, 0, 0]
+caller = 'original'
+result = 'any'
+
+[[phase.call]]
+identity = "native-public-avatar-manifest-get-body-type"
+rva = 0x853C8
+code_size = 0x30
+code_sha256 = "8106aac6d3b87c22abf7b9843660513d49b5edf2deb7864ebb7a624521e15120"
+arguments = [0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-show-avatar-mini-creator"
+rva = 0xD45F8
+code_size = 0x80
+code_sha256 = "30c6eb6ba6414ad0637a7e92e4e725ada2c51e4f5f179312c366c58716c3db29"
+arguments = [0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-launch-avatar-editor"
+rva = 0xF2ED0
+code_size = 0x7C
+code_sha256 = "18f12d1e2d01f5f0b0b39cee2fff39700367b197c825609247cf6dec9976cb6a"
+arguments = [0, 0, 0]
+result = "any"
+caller = "original"
+
+# Only source-checked preference controls; the notification queue family stays
+# closed. Native293 is invoked by the actual owned SYSTEM bootstrap adapter.
+[[phase]]
+identity = "native-notification-controls-catalog-v1"
+deferred = true
+
+[[phase.call]]
+identity = "native-public-notify-set-options"
+rva = 0xBBB38
+code_size = 0x84
+code_sha256 = "23887d384fb656c7a5fd7e951050e35b04bd25c1bf16078ab0091c895dcd07a2"
+arguments = [0, 0, 0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-notify-get-options"
+rva = 0xBBBC0
+code_size = 0x50
+code_sha256 = "677fa8e7796c8caee34f092c77a6397d820d3d4570753819df19130e3b2b10e5"
+arguments = [0, 0, 0, 0]
+result = "any"
+caller = "original"
+
+# Owned avatar F3 roles: deferred metadata only; no heap initializer or activation.
+[[phase]]
+identity = "native-owned-avatar-deferred-v1"
+deferred = true
+
+[[phase.call]]
+identity = 'native-avatar-f3-descriptor-setup'
+rva = 838712
+code_size = 108
+code_sha256 = '649c43fbcffe629316d6b1fcf4c61b58f25964e6902b12ccc01a8b70955956a9'
+arguments = [0, 0, 0, 0, 0, 0]
+caller = 'system_task'
+result = 'void'
+
+[[phase.call]]
+identity = 'native-avatar-f3-load'
+rva = 838920
+code_size = 600
+code_sha256 = 'a7630ef93675d8db35d1c13e15ed517d54ad8e66211a1d88acb2f6ae8d438987'
+arguments = [0, 0, 0, 0]
+caller = 'system_task'
+result = 'hresult'
+
+
+# Complete optional native identity family. ORIGINAL TITLE/SYSTEM ingress is
+# deferred metadata only; it is NEVER executed as a heap initializer. These
+# ordinals are joined to authenticated17559 export names and real HLE entries.
+[[bridge]]
+library = "xam.xex"
+ordinal = 0x20E
+code_size = 216
+code_sha256 = "c4ef112e193048eacb415e7655aee203c126a439ec7d4274dd8a488e59b6470f"
+
+[[bridge]]
+library = "xam.xex"
+ordinal = 0x227
+code_size = 524
+code_sha256 = "e07774f3a7f3405cdbf3db3c410a3805ef2496e1942b5b52e783afd7e60a06b0"
+
+[[phase]]
+identity = "native-owned-profile-identity-original-v1"
+deferred = true
+
+[[phase.call]]
+identity = "native-owned-profile-logon-20b"
+rva = 0x3AC630
+code_size = 124
+code_sha256 = "a0aa03126283a4f01087fb97d1a89046b3c93d3673fbc445c7bcf500331552af"
+arguments = [0, 0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-owned-profile-logon-224"
+rva = 0x3AE3E0
+code_size = 3324
+code_sha256 = "de904615c0b3a5147b78cedaa7593a0d8482fbc2192274694d96e4eb0464fea1"
+arguments = [0, 0, 0]
+result = "any"
+caller = "original"
+
+# Optional animation extension: original caller, never initialization.
+[[phase.call]]
+identity = 'native-public-avatar-load-animation'
+rva = 544072
+code_size = 152
+code_sha256 = '79dfc783867f65459133dc1938776d496134763bb54e304a97fc95726b147a96'
+arguments = [0, 0, 0, 0]
+caller = 'original'
+result = 'any'
+
+
+# Optional paired periodic factory contract. This is an original deferred stop,
+# never a startup call or a successful drain observation. The typed owner must
+# require this catalog entry before it admits its independent periodic Task.
+[[phase]]
+identity = "native-independent-periodic-service-stop-catalog"
+deferred = true
+[[phase.call]]
+identity = "native-periodic-service-stop"
+rva = 0x3168D0
+code_size = 0x80
+code_sha256 = "e15b08f73223ccb8b256e69da67716015fd3e57e1802a3482a8d278e6e02992f"
+arguments = [0]
+caller = "system"
+result = "void"
+
+# Paired Editor source contracts. These are DEFERRED prototypes only: the
+# Service's exact prebound EPIX/path cell observes original7DB loader edges.
+# They never run at heap startup, fabricate a SYSTEM Task, or change the real
+# TITLE/SYSTEM caller. Generic Avatar-family admission stays disabled.
+[[phase]]
+identity = "native-editor-paired-loader-source-catalog-v1"
+deferred = true
+
+[[phase.call]]
+identity = "native-editor-launch-data-producer"
+rva = 0xAF4A8
+code_size = 0x44
+code_sha256 = "1d9019e79d733d9d7a684483669495b123db530fe1998496fb00e14380e862c9"
+arguments = [0, 0]
+result = "any"
+caller = "system_task"
+
+[[phase.call]]
+identity = "native-editor-launch-handoff"
+rva = 0xB0D70
+code_size = 0x4C8
+code_sha256 = "356032498b591454c18725988dc410e9eb9f4f792773bc9b51a767a8dd39be8d"
+arguments = [0, 0, 0, 0]
+result = "any"
+caller = "system_task"

@@ -226,9 +226,15 @@ void GamercardUI::LoadStringSetting(UserSettingId setting_id, char* buffer) {
 }
 
 void GamercardUI::LoadGamercardInfo() {
-  const auto account_data =
-      kernel_state_->xam_state()->profile_manager()->GetAccount(xuid_);
+  std::error_code account_error;
+  const auto account_metadata = kernel_state_->xam_state()->profile_manager()
+      ->CaptureCachedAccount(xuid_, account_error);
+  const auto* account_data = account_metadata ? &account_metadata->account() : nullptr;
 
+  if (!account_data) {
+    account_save_error_ = "The profile is unavailable."; return;
+  }
+  account_form_original_ = ProfileAccountFieldValues::From(*account_data);
   std::memcpy(gamercardOriginalValues_.gamertag,
               account_data->GetGamertagString().c_str(),
               account_data->GetGamertagString().size());
@@ -258,8 +264,7 @@ void GamercardUI::LoadGamercardInfo() {
     }
 
     const auto gamer_icon =
-        kernel_state_->xam_state()->GetUserProfile(xuid_)->GetProfileIcon(
-            XTileType::kGamerTile);
+        kernel_state_->xam_state()->GetUserProfile(xuid_)->GetSelfProfileIcon();
 
     gamercardOriginalValues_.profile_icon.assign(gamer_icon.begin(),
                                                  gamer_icon.end());
@@ -374,8 +379,10 @@ void GamercardUI::DrawBaseSettings(ImGuiIO& io) {
   DrawInputTextBox(
       "Gamertag:", gamercardValues_.gamertag,
       std::size(gamercardValues_.gamertag), leftSideTextObjectAlignment,
-      [](std::span<const char> data) {
-        return ProfileManager::IsGamertagValid(std::string(data.data()));
+      [this](std::span<const char> data) {
+        const std::string desired(data.data());
+        return desired == account_form_original_.gamertag ||
+            ProfileManager::IsGamertagValid(desired);
       });
 
   ImGui::BeginDisabled(!is_signed_in_);
@@ -434,9 +441,9 @@ void GamercardUI::DrawBaseSettings(ImGuiIO& io) {
 void GamercardUI::DrawOnlineSettings(ImGuiIO& io) {
   ImGui::SeparatorText("Online Profile Settings");
 
-  if (ImGui::Checkbox("Live Enabled", &gamercardValues_.is_live_enabled)) {
-    // TODO: Add checks to decide if online XUID generation is required
-  }
+  ImGui::BeginDisabled();
+  ImGui::Checkbox("Live Enabled", &gamercardValues_.is_live_enabled);
+  ImGui::EndDisabled();
 
   ImGui::Text("Online XUID:");
   ImGui::SameLine(leftSideTextObjectAlignment);
@@ -455,12 +462,14 @@ void GamercardUI::DrawOnlineSettings(ImGuiIO& io) {
       UserSettingId::XPROFILE_GAMERCARD_ZONE, "Gamer Zone", XGamerzoneName,
       static_cast<int>(std::size(XGamerzoneName)), leftSideTextObjectAlignment);
 
+  ImGui::BeginDisabled();
   ImGui::Text("Subscription Tier:");
   ImGui::SameLine(leftSideTextObjectAlignment);
   ImGui::Combo(
       "###Subscription",
       reinterpret_cast<int*>(&gamercardValues_.account_subscription_tier),
       AccountSubscription, static_cast<int>(std::size(AccountSubscription)));
+  ImGui::EndDisabled();
 
   ImGui::EndDisabled();
 }
@@ -587,14 +596,13 @@ void GamercardUI::OnDrawDialog(ImGuiIO& io) {
 
   ImGui::NewLine();
 
-  const bool is_valid_gamertag =
-      ProfileManager::IsGamertagValid(std::string(gamercardValues_.gamertag));
+  const std::string desired_gamertag(gamercardValues_.gamertag);
+  const bool is_valid_gamertag = desired_gamertag == account_form_original_.gamertag ||
+      ProfileManager::IsGamertagValid(desired_gamertag);
 
   ImGui::BeginDisabled(!is_valid_gamertag);
-  if (ImGui::Button("Save")) {
-    SaveProfileIcon();
+  if (ImGui::Button("Save") && SaveAccountData() && SaveProfileIcon()) {
     SaveSettings();
-    SaveAccountData();
     dialog_open = false;
   }
   if (!is_valid_gamertag) {
@@ -607,8 +615,13 @@ void GamercardUI::OnDrawDialog(ImGuiIO& io) {
 
   ImGui::SameLine();
 
-  if (ImGui::Button("Cancel")) {
+  const bool account_published = account_edit_ && account_edit_->result().published;
+  if (ImGui::Button(account_published ? "Close" : "Cancel")) {
+    if (account_edit_) { account_edit_->Cancel(); account_edit_.reset(); }
     dialog_open = false;
+  }
+  if (!account_save_error_.empty()) {
+    ImGui::TextWrapped("%s", account_save_error_.c_str());
   }
 
   if (!dialog_open) {
@@ -620,35 +633,58 @@ void GamercardUI::OnDrawDialog(ImGuiIO& io) {
   ImGui::EndPopup();
 }
 
-void GamercardUI::SaveAccountData() {
-  const auto account_original =
-      *kernel_state_->xam_state()->profile_manager()->GetAccount(xuid_);
-  auto account = account_original;
-
-  account.SetCountry(gamercardValues_.country);
-  account.SetLanguage(gamercardValues_.language);
-  account.SetSubscriptionTier(gamercardValues_.account_subscription_tier);
-  account.ToggleLiveFlag(gamercardValues_.is_live_enabled);
-
-  const std::u16string gamertag =
-      xe::to_utf16(std::string(gamercardValues_.gamertag));
-  string_util::copy_and_swap_truncating(account.gamertag, gamertag,
-                                        std::size(account.gamertag));
-
-  if (std::memcmp(&account, &account_original, sizeof(X_XAMACCOUNTINFO)) != 0) {
-    kernel_state_->xam_state()->profile_manager()->UpdateAccount(xuid_,
-                                                                  &account);
+bool GamercardUI::SaveAccountData() {
+  auto* profiles = kernel_state_->xam_state()->profile_manager();
+  const auto commit_pending = [&]() {
+    const auto result = account_edit_->Commit();
+    if (!result.committed()) {
+      if (result.published && result.phase == ProfileAccountEditPhase::kRetired) {
+        account_save_error_ = "Account data reached storage, but the profile changed before completion. Close and reopen this editor to review it.";
+      } else if (result.published) {
+        account_save_error_ = "Account data reached storage. Save again to finish; Close keeps the recorded outcome.";
+      } else if (result.error == std::errc::state_not_recoverable ||
+                 result.phase == ProfileAccountEditPhase::kRetired) {
+        account_save_error_ = "The profile changed while saving. Review your changes and try Save again.";
+        account_edit_->Cancel(); account_edit_.reset();
+      } else {
+        account_save_error_ = "Could not save account changes. Your edits are still here.";
+      }
+      return false;
+    }
+    account_form_original_ = account_pending_values_;
+    account_edit_.reset();
+    return true;
+  };
+  if (account_edit_ && !commit_pending()) { return false; }
+  const ProfileAccountFieldValues desired{std::string(gamercardValues_.gamertag),
+                                          gamercardValues_.country,
+                                          gamercardValues_.language};
+  auto edits = ProfileAccountFieldEdits::Between(account_form_original_, desired);
+  if (edits.empty()) { account_save_error_.clear(); return true; }
+  std::error_code error;
+  account_edit_ = profiles->PrepareAccountEdit(xuid_, std::move(edits), error);
+  if (!account_edit_) {
+    account_save_error_ = "Could not prepare account changes. The profile may be busy or unavailable.";
+    return false;
   }
+  account_pending_values_ = desired;
+  if (!commit_pending()) { return false; }
+  account_save_error_.clear();
+  return true;
 }
 
-void GamercardUI::SaveProfileIcon() {
-  if (gamercardValues_.profile_icon == gamercardOriginalValues_.profile_icon) {
-    return;
+bool GamercardUI::SaveProfileIcon() {
+  if (gamercardValues_.profile_icon == gamercardOriginalValues_.profile_icon) { return true; }
+  auto* tracker = kernel_state_->xam_state()->user_tracker();
+  const bool saved = gamercardValues_.profile_icon.empty()
+      ? tracker->ClearUserIcon(xuid_)
+      : tracker->UpdateUserIcon(xuid_, gamercardValues_.profile_icon);
+  if (!saved) {
+    account_save_error_ = "Could not save the picture. Your edits are still here.";
+    return false;
   }
-
-  kernel_state_->xam_state()->user_tracker()->UpdateUserIcon(
-      xuid_, {gamercardValues_.profile_icon.data(),
-              gamercardValues_.profile_icon.size()});
+  gamercardOriginalValues_.profile_icon = gamercardValues_.profile_icon;
+  return true;
 }
 
 void GamercardUI::SaveSettings() {

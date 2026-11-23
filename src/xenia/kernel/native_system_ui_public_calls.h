@@ -141,7 +141,11 @@ struct NativeSystemUiPublicCallResult {
     kReturned,
     kDenied,
     kExecutionFailed,
-    kHostFallback
+    kHostFallback,
+    // The exact Editor request was copied/queued and the genuine delegated
+    // public call plus its host resources have retired. The TITLE shim must
+    // park; this is not Editor launch/readiness or a native completion.
+    kTransferred
   };
   Disposition disposition = Disposition::kInactive;
   uint32_t value = 0;

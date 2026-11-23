@@ -1,6 +1,9 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "xenia/kernel/native_media_contract.h"
+#include "xenia/kernel/native_xmsg_provenance_state.h"
 #include "xenia/kernel/native_media_service.h"
+#include "xenia/kernel/xfile.h"
+#include "xenia/kernel/xam/content_manager.h"
 #include "xenia/kernel/native_media_object_admission.h"
 #include "xenia/kernel/xevent.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
@@ -36,6 +39,15 @@
 #include <thread>
 
 namespace xe::kernel::test {
+// Non-admitting range borrow only. This seam cannot create a service, native
+// attachment/stream/File witness, Task, callback, code or readiness receipt.
+class NativeMediaDirectTestAccess {
+ public:
+  static auto Borrow(Memory& memory,uint32_t message,uint32_t payload,
+                     std::span<const uint32_t> words) {
+    return NativeMediaService::BorrowDirectBacking(memory,message,payload,words);
+  }
+};
 class NativeMediaDeniedAliasTestAccess {
  public:
   static auto CountedBirth(util::ObjectTable& table) { return table.CaptureCountedBodyBirth(); }
@@ -527,4 +539,269 @@ TEST_CASE("Ordinary counted reference lookup and paired release preserve real gu
   REQUIRE(emulator->kernel_state()->object_table()->ReleaseHandle(handle)==X_STATUS_SUCCESS);
   REQUIRE(wrapper->handles().empty());wrapper.reset();emulator.reset();
 }
+TEST_CASE("Direct native source metadata and stream requests preserve their distinct real ABI",
+          "[kernel][native_media_owner][direct][abi]") {
+  const std::array<uint32_t,4> original{kNativeMediaApp,kNativeMediaSourceStream,0x90010000,0};
+  REQUIRE(NativeMediaDirectOriginalArgumentsValid(0x1F4,original));
+  for(uint16_t ordinal:{uint16_t(0x1F6),uint16_t(0x1F7),uint16_t(0x1FC),uint16_t(0x49F)})
+    CHECK_FALSE(NativeMediaDirectOriginalArgumentsValid(ordinal,original));
+  CHECK_FALSE(NativeMediaDirectOriginalArgumentsValid(0x1F4,std::span(original).first(3)));
+  // B's scalar filter is never a pointer. The actual native writer requires
+  // ten B4-byte slots when an array is supplied, or just count4 for sizing.
+  std::array<uint32_t,5> metadata{0,0xFFFF1234,0,0,0x90012000};
+  REQUIRE(NativeMediaDirectPayloadValid(kNativeMediaSourceMetadata,metadata));
+  metadata[2]=0x90014000;metadata[3]=9;
+  // It remains a valid wire request: the original native body returns its
+  // actual capacity error before touching the undersized array.
+  CHECK(NativeMediaDirectPayloadValid(kNativeMediaSourceMetadata,metadata));
+  metadata[3]=10;REQUIRE(NativeMediaDirectPayloadValid(kNativeMediaSourceMetadata,metadata));
+  CHECK(kNativeMediaSourceMetadataCapacity*kNativeMediaSourceMetadataBytes==0x708);
+  const std::array<uint32_t,5> stream{0,0x90016000,0x40,0,0x90012000};
+  REQUIRE(NativeMediaDirectPayloadValid(kNativeMediaSourceStream,stream));
+  std::array<uint8_t,kNativeMediaFileIdentityBytes> identity;
+  identity.fill(0x7F);
+  auto* descriptor=identity.data()+kNativeMediaFileDescriptorOffset;
+  descriptor[kNativeMediaFileNameBytes]=1;
+  CHECK_FALSE(NativeMediaFileIdentityValid(identity));
+  // The final permitted UTF16 terminator is at index260, immediately before
+  // the tag. No terminator outside that real field can qualify this input.
+  descriptor[0x208]=descriptor[0x209]=0;
+  REQUIRE(NativeMediaFileIdentityValid(identity));
+  CHECK_FALSE(NativeMediaFileIdentityValid(std::span(identity).first(0x28)));
+  descriptor[kNativeMediaFileNameBytes]=2;
+  descriptor[0x208]=descriptor[0x209]=0x7F;
+  descriptor[0]=descriptor[1]=0; // Tag2 consumes descriptor+6, not this prefix.
+  CHECK_FALSE(NativeMediaFileIdentityValid(identity));
+  descriptor[6]=descriptor[7]=0;REQUIRE(NativeMediaFileIdentityValid(identity));
+  descriptor[kNativeMediaFileNameBytes]=3;CHECK_FALSE(NativeMediaFileIdentityValid(identity));
+}
+TEST_CASE("Direct media backing protects the actual nested outputs and cannot substitute aliases",
+          "[kernel][native_media_owner][direct][memory]") {
+  Memory memory;REQUIRE(memory.Initialize());
+  constexpr uint32_t payload=0x90010000,count=0x90012000,identity=0x90014000,array=0x90016FF0;
+  constexpr uint32_t rw=kMemoryProtectRead|kMemoryProtectWrite;
+  auto* heap=memory.LookupHeap(payload);
+  for(uint32_t page:{payload,count,identity})REQUIRE(heap->AllocFixed(page,0x1000,0x1000,
+      kMemoryAllocationReserve|kMemoryAllocationCommit,rw));
+  REQUIRE(heap->AllocFixed(0x90016000,0x2000,0x1000,
+      kMemoryAllocationReserve|kMemoryAllocationCommit,rw));
+  using Access=xe::kernel::test::NativeMediaDirectTestAccess;
+  std::array<uint32_t,5> words{0,0xFFFF1234,array,10,count};
+  auto borrowed=Access::Borrow(memory,kNativeMediaSourceMetadata,payload,words);
+  REQUIRE(borrowed);REQUIRE(borrowed->current());
+  CHECK_FALSE(heap->Decommit(payload,0x1000));
+  CHECK_FALSE(heap->Decommit(count,0x1000));
+  CHECK_FALSE(heap->Decommit(0x90017000,0x1000)); // B output actually crosses it.
+  CHECK_FALSE(heap->Release(0x90016000));
+  borrowed.reset();
+  REQUIRE(heap->Protect(identity,0x1000,kMemoryProtectRead));
+  words={0,identity,0x40,0,count};
+  borrowed=Access::Borrow(memory,kNativeMediaSourceStream,payload,words);
+  REQUIRE(borrowed);CHECK_FALSE(heap->Release(identity));
+  CHECK_FALSE(heap->Protect(count,0x1000,kMemoryProtectNoAccess));
+  words[4]=payload+4; // Writable input/output alias still cannot qualify.
+  CHECK_FALSE(Access::Borrow(memory,kNativeMediaSourceStream,payload,words));
+  borrowed.reset();
+  REQUIRE(heap->Protect(count,0x1000,kMemoryProtectRead));
+  words[4]=count;CHECK_FALSE(Access::Borrow(memory,kNativeMediaSourceStream,payload,words));
+  REQUIRE(heap->Protect(count,0x1000,rw));
+  words={0,1,array,9,count};
+  borrowed=Access::Borrow(memory,kNativeMediaSourceMetadata,payload,words);
+  REQUIRE(borrowed); // Native capacity failure needs no array access/borrow.
+  CHECK(heap->Decommit(0x90017000,0x1000));
+  borrowed.reset();
+  // The range lease preserves pages, not custom-heap allocation ownership.
+  for(uint32_t page:{payload,count,identity,0x90016000u})REQUIRE(heap->Release(page));
+}
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+TEST_CASE("Direct media source use transfers into a real XFile through final close and saved removal",
+          "[kernel][native_media_owner][direct][selected_media][lifetime]") {
+  const bool folder=GENERATE(false,true);
+  xe::kernel::test::IsolatedKernelRuntimeSettings settings;MediaScratch runtime,input;
+  REQUIRE(std::filesystem::create_directory(runtime.path/"content"));
+  REQUIRE(std::filesystem::create_directory(runtime.path/"cache"));
+  std::ofstream(input.path/"song")<<"original";
+  const auto setup=[&] {
+    auto result=std::make_unique<Emulator>("",runtime.path,runtime.path/"content",runtime.path/"cache");
+    REQUIRE(result->Setup(nullptr,nullptr,false,{},{},{})==X_STATUS_SUCCESS);return result;
+  };
+  auto emulator=setup();auto* kernel=emulator->kernel_state();
+  auto* content=kernel->content_manager();auto* fs=emulator->file_system();auto* table=kernel->object_table();
+  const auto added=content->AddMediaReference({folder?input.path:input.path/"song"},folder,*fs);
+  REQUIRE_FALSE(added.error);REQUIRE(added.persisted);REQUIRE(added.durable);REQUIRE(added.active);
+  auto source=content->sources().Source(added.id);REQUIRE(source);
+  const auto mount=source->source.guest_volume_root;
+  auto direct_use=content->sources().CaptureSelectedMediaUse(*source);REQUIRE(direct_use);
+  auto device=fs->AcquireDevice(mount);REQUIRE(device);
+  vfs::File* raw=nullptr;vfs::FileAction action{};
+  REQUIRE(fs->OpenFile(nullptr,mount+(folder?R"(\song)":R"(\0\song)"),
+      vfs::FileDisposition::kOpen,vfs::FileAccess::kFileReadData,false,true,&raw,&action)==X_STATUS_SUCCESS);
+  REQUIRE(raw);REQUIRE(raw->retained_device()==device);
+  auto file=object_ref<XFile>(new XFile(kernel,raw,false,false,true));
+  const uint32_t primary=file->handle();uint32_t alias=0;
+  REQUIRE(table->DuplicateHandle(primary,&alias)==X_STATUS_SUCCESS);
+  auto in_flight=table->LookupObject<XFile>(primary);REQUIRE(in_flight.get()==file.get());
+  // This is the actual common File authority after direct-call handoff, with
+  // a real I/O-style object_ref. No native stream/Task/readiness is fabricated.
+  direct_use.reset();file.reset();
+  const auto removed=content->RemoveMediaReference(added.id,*fs);
+  REQUIRE(removed.removed);REQUIRE(removed.persisted);REQUIRE(removed.durable);
+  REQUIRE(removed.error==std::errc::device_or_resource_busy);
+  REQUIRE(fs->AcquireDevice(mount)==device);REQUIRE(device->has_open_files());
+  auto* close=emulator->export_resolver()->GetExportByOrdinal("xboxkrnl.exe",0xCF);
+  REQUIRE(close);REQUIRE(close->function_data.trampoline);
+  const auto actual_close=[&](uint32_t handle) {
+    PPCContext context{};context.virtual_membase=emulator->memory()->virtual_membase();
+    context.kernel_state=kernel;context.processor=emulator->processor();context.r[3]=handle;
+    close->function_data.trampoline(&context);return uint32_t(context.r[3]);
+  };
+  REQUIRE(actual_close(primary)==X_STATUS_SUCCESS);
+  REQUIRE(table->LookupObject<XFile>(alias).get()==in_flight.get());
+  REQUIRE(actual_close(alias)==X_STATUS_SUCCESS);REQUIRE(in_flight->handles().empty());
+  std::error_code error;
+  REQUIRE(content->RestoreMediaReferences(*fs,error).empty());REQUIRE_FALSE(error);
+  REQUIRE(fs->AcquireDevice(mount)==device);REQUIRE(device->has_open_files());
+  in_flight.reset();REQUIRE_FALSE(device->has_open_files());
+  REQUIRE(content->RestoreMediaReferences(*fs,error).empty());REQUIRE_FALSE(error);
+  REQUIRE_FALSE(fs->AcquireDevice(mount));REQUIRE_FALSE(content->sources().Source(added.id));
+  source.reset();device.reset();emulator.reset();
+  // The real durable removal cannot resurrect the source after a fresh Kernel.
+  emulator=setup();content=emulator->kernel_state()->content_manager();fs=emulator->file_system();
+  REQUIRE(content->RestoreMediaReferences(*fs,error).empty());REQUIRE_FALSE(error);
+  REQUIRE_FALSE(content->sources().Source(added.id));REQUIRE_FALSE(fs->AcquireDevice(mount));
+  std::ifstream original(input.path/"song");std::string bytes;original>>bytes;REQUIRE(bytes=="original");
+}
+#endif
 } // namespace xe::kernel::xam::test
+
+namespace xe::kernel::test {
+// Actual private production metadata methods, not a native service fixture.
+// These tests cannot publish a service/Task/source or bypass its code gates.
+class NativeXmsgProvenanceTestAccess final {
+ public:
+  using Owner=NativeXmsgProvenance;
+  using State=Owner::State;
+  using Record=Owner::Capture::Record;
+  using Frame=Owner::FrameFact;
+  static constexpr Owner::RootFact kRoot{17,23,29};
+  static std::shared_ptr<Record> Request(const std::shared_ptr<State>& state,uint64_t capture=1) {
+    auto record=std::make_shared<Record>();record->owner=state;record->capture=capture;
+    record->producer.root=kRoot;record->producer.app=0xFB;record->producer.message=0xB0004;
+    record->producer.argument=0x90100100;record->producer.argument_bytes=4;
+    record->producer.overlap=0x90101000;record->copy_entered=true;
+    state->records.push_back(record);return record;
+  }
+  static void DistinctProducerForms() {
+    auto state=std::make_shared<State>(kRoot);const auto record=Request(state);
+    cpu::ppc::PPCContext context{};
+    context.r[3]=0xFB;context.r[4]=0xB0004;context.r[5]=0x90100100;context.r[6]=4;context.r[7]=0x90101000;
+    REQUIRE(state->PublicArguments(*record,context,false));
+    CHECK_FALSE(state->PublicArguments(*record,context,true));
+    std::swap(context.r[5],context.r[7]);std::swap(context.r[6],context.r[7]);
+    // Genuine direct Start r5=overlap,r6=argument,r7=copy extent.
+    REQUIRE(state->PublicArguments(*record,context,true));
+    CHECK_FALSE(state->PublicArguments(*record,context,false));
+    context.r[6]=0x1122334490100100ull;CHECK_FALSE(state->PublicArguments(*record,context,true));
+    context.r[6]=0xFFFFFFFF90100100ull;REQUIRE(state->PublicArguments(*record,context,true));
+    // Common provider callback arg2 is opaque and independently observed.
+    Owner::DispatchFact fact;fact.original_argument_bytes=4;fact.provider_argument2=0;
+    CHECK(fact.original_argument_bytes==4);CHECK(fact.provider_argument2==0);
+    // This real metadata object is not an installed/authenticated native owner.
+    Owner::Capture capture(record);CHECK(Owner::FactsAvailable(capture));
+    CHECK_FALSE(Owner::CurrentDispatch(&context,capture));
+  }
+  static void CopyFreeAndReuse() {
+    auto state=std::make_shared<State>(kRoot);const auto old=Request(state);
+    const std::array<uint8_t,4> input{0x31,0,0x72,0xA4};
+    Memory memory;REQUIRE(memory.Initialize());constexpr uint32_t page=0x90200000;
+    REQUIRE(memory.LookupHeap(page)->AllocFixed(page,0x1000,0x1000,
+        kMemoryAllocationReserve|kMemoryAllocationCommit,kMemoryProtectRead|kMemoryProtectWrite));
+    std::memcpy(memory.TranslateVirtual(page+0x1C),input.data(),input.size());
+    const auto owned=State::ReadCopiedPayload(memory,page+0x1C,4);REQUIRE(owned);
+    REQUIRE(state->BindCopiedPayload(*old,0,true,true,page,page+0x1C,owned));
+    const auto old_copy=old->copy_serial;REQUIRE(old_copy);
+    CHECK((old->copied_bytes && std::equal(input.begin(),input.end(),old->copied_bytes->begin())));
+    std::memset(memory.TranslateVirtual(page+0x1C),0xCC,input.size());
+    REQUIRE(memory.LookupHeap(page)->Release(page));
+    CHECK(std::equal(input.begin(),input.end(),old->copied_bytes->begin()));
+    CHECK_FALSE(State::ReadCopiedPayload(memory,page+0x1C,4));
+    CHECK_FALSE(state->BindCopiedPayload(*old,old->version,true,true,0x90300000,0x9030001C,owned));
+    Owner::Capture retained(old);
+    state->Revoke(0);state->Revoke(0x99990000);CHECK(state->Live(*old));
+    REQUIRE(Owner::FactsAvailable(retained));
+    const auto before=Owner::Observe(retained);REQUIRE(before);
+    CHECK_FALSE(before->authority_revoked);CHECK_FALSE(before->kernel_stopped);
+    state->Revoke(0x90200000);CHECK_FALSE(state->Live(*old));CHECK(old->revoked);
+    CHECK_FALSE(Owner::FactsAvailable(retained));
+    const auto revoked=Owner::Observe(retained);REQUIRE(revoked);
+    CHECK(revoked->authority_revoked);CHECK_FALSE(revoked->released);
+    CHECK_FALSE(revoked->kernel_stopped); // Free ENTRY is no completed free/stop.
+    const auto fresh=Request(state,2);
+    REQUIRE(state->BindCopiedPayload(*fresh,0,true,true,0x90200000,0x9020001C,owned));
+    REQUIRE(fresh->copy_serial!=old_copy);CHECK(fresh->envelope==old->envelope);
+    CHECK(Owner::FactsAvailable(Owner::Capture(fresh)));
+    CHECK_FALSE(Owner::FactsAvailable(retained));
+    const auto selected=state->Unique([](const auto& r){return r.envelope==0x90200000;});
+    CHECK(selected==fresh);CHECK_FALSE(state->Live(*old));
+    auto canceled=Request(state,3);Owner::Capture cancellation(canceled);Owner::Release(cancellation);
+    CHECK_FALSE(state->BindCopiedPayload(*canceled,canceled->version,true,true,0x90400000,0x9040001C,owned));
+    auto wrong=Request(state,4);
+    CHECK_FALSE(state->BindCopiedPayload(*wrong,0,true,true,0x90500000,0xDEAD0000,owned));
+    CHECK(wrong->unavailable);CHECK(wrong->envelope==0);CHECK(wrong->copy_serial==0);
+    auto failed=Request(state,5);
+    REQUIRE(state->BindCopiedPayload(*failed,0,false,true,0,0,{}));
+    CHECK(failed->copy_returned);CHECK(failed->envelope==0);CHECK(failed->copy_serial==0);
+    auto no_entry=Request(state,6);no_entry->copy_entered=false;
+    CHECK_FALSE(state->BindCopiedPayload(*no_entry,0,true,true,0x90600000,0x9060001C,owned));
+  }
+  static void ProviderShadowsAndHistoricalCapture() {
+    auto state=std::make_shared<State>(kRoot);const auto record=Request(state);
+    int actual_thread=0,other_thread=0;
+    const Frame outer{3,0x80004000,0x70810000,0x816A2BE8,0x816A29C0};
+    auto body=outer;body.sp-=0x80;body.lr=0x816A2A24;
+    State::Provider provider;provider.frame=outer;provider.actual_thread=&actual_thread;
+    provider.record=record;provider.serial=1;provider.fact=std::make_shared<Owner::DispatchFact>();
+    state->providers.push_back(provider);
+    REQUIRE(state->CurrentProvider(*record,body,&actual_thread));
+    CHECK_FALSE(state->CurrentProvider(*record,outer,&actual_thread));
+    CHECK_FALSE(state->CurrentProvider(*record,body,&other_thread));
+    State::Provider unadmitted;unadmitted.frame=outer;unadmitted.frame.sp-=0x180;
+    unadmitted.actual_thread=&actual_thread;unadmitted.serial=2;
+    state->providers.push_back(unadmitted);auto nested=body;nested.sp-=0x180;
+    CHECK_FALSE(state->CurrentProvider(*record,nested,&actual_thread)); // never search older matching app
+    state->providers.back().returned=true;state->Prune();
+    REQUIRE(state->CurrentProvider(*record,body,&actual_thread));
+    state->provider_overflow=true;CHECK_FALSE(state->CurrentProvider(*record,body,&actual_thread));
+    state->provider_overflow=false;Owner::Capture historical(record);Owner::Release(historical);
+    CHECK(historical);CHECK_FALSE(state->Live(*record));CHECK_FALSE(Owner::FactsAvailable(historical));
+    CHECK_FALSE(state->CurrentProvider(*record,body,&actual_thread));
+    CHECK_FALSE(Owner::CurrentDispatch(nullptr,historical));
+  }
+  static void SharedReleaseHasNoHandleWrite() {
+    auto state=std::make_shared<State>(kRoot);const auto record=Request(state);Owner::Capture capture(record);
+    const auto historical=record->capture;std::array<std::thread,2> workers;
+    struct Join {std::array<std::thread,2>& workers;~Join(){for(auto& worker:workers)if(worker.joinable())worker.join();}} join{workers};
+    workers[0]=std::thread([&]{for(unsigned n=0;n<100;++n)Owner::Release(capture);});
+    workers[1]=std::thread([&]{for(unsigned n=0;n<100;++n){
+      (void)Owner::FactsAvailable(capture);(void)Owner::Observe(capture);Owner::Release(capture);
+    }});
+    for(auto& worker:workers)worker.join();
+    CHECK(capture);CHECK(record->released);CHECK(record->capture==historical);
+    CHECK_FALSE(state->Live(*record));CHECK_FALSE(Owner::FactsAvailable(capture));
+    const auto observed=Owner::Observe(capture);REQUIRE(observed);CHECK(observed->released);
+    CHECK_FALSE(Owner::CurrentDispatch(nullptr,capture));
+  }
+};
+TEST_CASE("Original XMsg request and direct Start producer forms retain their distinct ABI", "[kernel][xmsg_provenance][abi]") {
+  NativeXmsgProvenanceTestAccess::DistinctProducerForms();
+}
+TEST_CASE("Observed native XMsg copies revoke on real free and never retarget equal address reuse", "[kernel][xmsg_provenance][copy][lifetime]") {
+  NativeXmsgProvenanceTestAccess::CopyFreeAndReuse();
+}
+TEST_CASE("Unadmitted nested XMsg providers and released historical captures cannot lend older facts", "[kernel][xmsg_provenance][provider][lifetime]") {
+  NativeXmsgProvenanceTestAccess::ProviderShadowsAndHistoricalCapture();
+}
+TEST_CASE("Shared XMsg release changes only synchronized subscription metadata", "[kernel][xmsg_provenance][concurrency]") {
+  NativeXmsgProvenanceTestAccess::SharedReleaseHasNoHandleWrite();
+}
+}  // namespace xe::kernel::test

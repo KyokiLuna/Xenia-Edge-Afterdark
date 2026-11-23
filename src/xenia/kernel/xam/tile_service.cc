@@ -472,14 +472,29 @@ TileService::OwnedPng CaptureTilePng(KernelState& kernel,
       ? manager->AcquireProfileGpdModel(uint8_t(args.user), error)
       : manager->AcquireProfileGpdModel(args.item, error);
   if (!state.model || error) { return {X_E_NO_SUCH_USER}; }
-  state.origin = state.model->CaptureOrigin(error);
-  if (!state.origin || error ||
-      (args.user < XUserMaxUserCount && state.origin->user_slot != args.user)) {
+  const auto captured = state.model->CaptureRead(error);
+  if (!captured || error ||
+      (args.user < XUserMaxUserCount && captured->origin.user_slot != args.user)) {
     return {X_E_FAIL};
   }
-  auto png = TileService::FromOwnedPng(kernel.xam_state()->user_tracker()->GetIcon(
-      state.origin->xuid, args.title, XTileType(args.type), args.item));
-  if (!TileIdentityCurrent(state)) { return {X_E_FAIL}; }
+  state.origin = captured->origin;
+  std::vector<uint8_t> bytes;
+  const auto fixed = kTileFileNames.find(XTileType(args.type));
+  if (captured->pictures && fixed != kTileFileNames.end() &&
+      captured->pictures->contains(fixed->second)) {
+    bytes = CaptureProfilePicture(*captured, XTileType(args.type));
+  } else {
+    // Non-fixed GPD/SPA families keep their existing services. Their initial
+    // capture must still prove no publication raced the owned result.
+    bytes = kernel.xam_state()->user_tracker()->GetIcon(
+        state.origin->xuid, args.title, XTileType(args.type), args.item);
+  }
+  auto png = TileService::FromOwnedPng(bytes);
+  const auto after = state.model->CaptureOrigin(error);
+  if (!after || error || !TileIdentityCurrent(state) ||
+      after->stamp.model_version != captured->origin.stamp.model_version) {
+    return {X_E_FAIL};
+  }
   return png;
 }
 }
@@ -580,7 +595,10 @@ X_RESULT CompleteTileRequest(KernelState& kernel, const OwnedTileRequest& reques
       xe::store_and_swap<uint32_t>(required.data(), state.raw.required);
       const std::array<util::GuestIoWrite, 2> writes{
           {{args.destination, state.raw.payload}, {args.size_address, required}}};
-      if (XFAILED(util::WriteGuestIoBuffers(memory, writes))) { status = X_E_INVALIDARG; }
+      NativeIdentityTilePublication publication(&kernel,
+          {{{args.destination,uint32_t(state.raw.payload.size())},{args.size_address,4}}},
+          state.native.get());
+      if (XFAILED(util::WriteGuestIoBuffers(memory, writes, publication))) { status = X_E_INVALIDARG; }
       else {output_written=true;}
     }
   } else if (XSUCCEEDED(status)) {
@@ -595,8 +613,13 @@ X_RESULT CompleteTileRequest(KernelState& kernel, const OwnedTileRequest& reques
           argb[0] = rgba[3]; argb[1] = rgba[0]; argb[2] = rgba[1]; argb[3] = rgba[2];
         }
       }
-      if (!TileIdentityCurrent(state) || XFAILED(util::WriteGuestIoBuffer(memory, args.destination, staged))) {
-        status = X_E_INVALIDARG;
+      if(!TileIdentityCurrent(state)){status=X_E_INVALIDARG;}
+      else{
+        const util::GuestIoWrite write{args.destination,staged};
+        NativeIdentityTilePublication publication(&kernel,
+            {{{args.destination,uint32_t(staged.size())},{0,0}}});
+        if(XFAILED(util::WriteGuestIoBuffers(memory,std::span(&write,1),publication)))
+          status=X_E_INVALIDARG;
       }
     }
   }

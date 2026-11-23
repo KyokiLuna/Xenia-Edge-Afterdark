@@ -11,6 +11,7 @@
 #define XENIA_KERNEL_XAM_UI_GAMERCARD_UI_H_
 
 #include "xenia/kernel/xam/user_settings.h"
+#include "xenia/kernel/xam/profile_account_snapshot.h"
 #include "xenia/kernel/xam/xam_ui.h"
 
 namespace xe {
@@ -20,7 +21,7 @@ namespace ui {
 
 struct GamercardSettings {
   // Account settings
-  char gamertag[16];
+  char gamertag[16 * 4 + 1];  // Bounded UTF8 display of all16 native units.
   xe::XOnlineCountry country;
   xe::XLanguage language;
   bool is_live_enabled;
@@ -59,8 +60,8 @@ class GamercardUI final : public XamDialog {
   void LoadSetting(UserSettingId setting_id);
   void LoadStringSetting(UserSettingId setting_id, char* buffer);
   void SaveSettings();
-  void SaveAccountData();
-  void SaveProfileIcon();
+  bool SaveAccountData();
+  bool SaveProfileIcon();
 
   void DrawSettingComboBox(UserSettingId setting_id, std::string label,
                            const char* const items[], int item_count,
@@ -84,6 +85,10 @@ class GamercardUI final : public XamDialog {
   // changed.
   GamercardSettings gamercardOriginalValues_ = {};
   GamercardSettings gamercardValues_ = {};
+  ProfileAccountFieldValues account_form_original_;
+  ProfileAccountFieldValues account_pending_values_;
+  std::shared_ptr<HostProfileAccountEdit> account_edit_;
+  std::string account_save_error_;
 };
 
 }  // namespace ui

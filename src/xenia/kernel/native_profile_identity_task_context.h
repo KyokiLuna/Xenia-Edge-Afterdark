@@ -25,7 +25,8 @@ class NativeProfileIdentityTaskContext final {
   friend class NativeProfileIdentityOwner;
   static std::optional<uint32_t> Read(
       const GuestRuntimeCallExecutor& calls,const NativeImportDomain& domain,
-      uint32_t exact_function,cpu::ppc::PPCContext& context) {
+      uint32_t exact_function,cpu::ppc::PPCContext& context,
+      bool allow_authenticated_title=false) {
     auto* kernel=calls.kernel();
     auto* thread=XThread::GetCurrentFiberThread();
     if (!thread) { thread=XThread::GetCurrentThread(); }
@@ -34,7 +35,8 @@ class NativeProfileIdentityTaskContext final {
         domain.root()!=NativeImportDomain::Member{root->hmodule_ptr(),calls.load_generation()} ||
         kernel->GetUserModuleForAddress(exact_function).get()!=root.get() ||
         thread->kernel_state()!=kernel ||
-        thread->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM ||
+        (thread->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM &&
+         !(allow_authenticated_title && thread->native_frame_thread_identity().process_type==X_PROCTYPE_TITLE)) ||
         thread->thread_state()->context()!=&context || context.kernel_state!=kernel ||
         context.thread_state!=thread->thread_state() || context.processor!=kernel->processor() ||
         context.r[13]!=thread->pcr_ptr() || context.r[1]>UINT32_MAX || (context.r[1]&15)) { return {}; }

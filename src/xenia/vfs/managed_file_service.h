@@ -3,10 +3,12 @@
 #define XENIA_VFS_MANAGED_FILE_SERVICE_H_
 #include <filesystem>
 #include <memory>
+#include <utility>
 #include <vector>
 #include "xenia/base/mutex.h"
 #include "xenia/base/host_storage.h"
 #include "xenia/vfs/file.h"
+#include "xenia/vfs/file_open_context.h"
 #include "xenia/vfs/entry.h"
 namespace xe::vfs {
 // Host-owned, exact managed leaves only. Matching selects an existing policy;
@@ -22,6 +24,22 @@ class ManagedFileService {
   virtual X_STATUS Open(std::shared_ptr<Device> requested_device,
       std::string requested_path, FileDisposition, uint32_t access,
       bool directory, File**, FileAction*) = 0;
+  // Called through the SAME exact-leaf policy before any disposition effect,
+  // after VFS has checked all actual source constraints and dropped namespace
+  // ownership. Existing policies do not silently accept another policy's
+  // native request capability. No worker TLS/path lookup reconstructs it.
+  virtual X_STATUS OpenWithContext(std::shared_ptr<Device> requested_device,
+      std::string requested_path, FileDisposition disposition, uint32_t access,
+      bool directory, File** file, FileAction* action,
+      const FileOpenContext& context) {
+    if (context.managed_authority) {
+      if (file) { *file = nullptr; }
+      if (action) { *action = FileAction::kDoesNotExist; }
+      return X_STATUS_ACCESS_DENIED;
+    }
+    return Open(std::move(requested_device), std::move(requested_path),
+                disposition, access, directory, file, action);
+  }
 };
 class ManagedFileRegistry final {
  public:

@@ -726,6 +726,25 @@ std::optional<SystemLaunchTarget> CaptureSystemLaunchTarget(
   return target;
 }
 
+[[noreturn]] void ParkAfterTitleHandoff() {
+  // Borrow only the currently executing XThread. The existing title worker
+  // owns stop/relaunch and joins actual CPU workers before reclaiming stacks;
+  // no strong Kernel/service/caller owner can survive this never-return frame.
+  auto* thread = XThread::GetCurrentThread();
+  if (!thread) {
+    XELOGE("Accepted title handoff lost its actual caller");
+    xe::FlushLog();
+    std::quick_exit(EXIT_FAILURE);
+  }
+  thread->Suspend(nullptr);
+  // Self-suspend may return on POSIX or after a real Resume. Delay parks a
+  // cooperative guest fiber instead of blocking its shared host dispatcher.
+  // Each real delay may end; the accepted TITLE continuation still cannot run.
+  while (true) {
+    thread->Delay(1, 0, uint64_t(-10'000'000ll));
+  }
+}
+
 // Starts the title at |host_path| with |launch_path| in it, or its default
 // module when empty. Doesn't return.
 static void StartTitle(XamModule::LoaderData& loader_data,
@@ -751,7 +770,6 @@ static void StartTitle(XamModule::LoaderData& loader_data,
     auto new_launch_module = std::move(launch_path);
     auto new_flags = loader_data.launch_flags;
     auto new_data = loader_data.launch_data;
-    auto current_thread = XThread::GetCurrentThread();
 
     // The installed App owns the existing host worker. Its command copies all
     // accepted arguments before this never-return guest frame parks.
@@ -789,14 +807,9 @@ static void StartTitle(XamModule::LoaderData& loader_data,
                                 std::move(new_data), true, package_path);
       }).detach();
     }
-    // Stop running guest code; RelaunchTitle terminates us. Suspend can
-    // return on POSIX, so park rather than fall through to spawn.
-    if (current_thread) {
-      current_thread->Suspend(nullptr);
-    }
-    while (true) {
-      xe::threading::NanoSleep(int64_t(1'000'000'000));
-    }
+    // RelaunchTitle owns real termination. No accepted caller resumes guest
+    // code, including a cooperative fiber whose self-suspend later returns.
+    ParkAfterTitleHandoff();
   }
 #endif  // !XE_PLATFORM_MAC
 

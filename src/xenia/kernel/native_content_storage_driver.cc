@@ -19,6 +19,10 @@
 #include <type_traits>
 
 #include "xenia/base/mutex.h"
+#include "xenia/emulator.h"
+#include "xenia/vfs/device.h"
+#include "xenia/vfs/virtual_file_system.h"
+#include "xenia/base/console_storage_volume.h"
 #include "xenia/cpu/function.h"
 #include "xenia/cpu/processor.h"
 #include "xenia/cpu/xex_module.h"
@@ -165,6 +169,10 @@ struct NativeContentStorageDriver::State {
   std::condition_variable drained;
   std::shared_ptr<NativeContentStorageSource::Subscription> subscription;
   NativeContentStorageQueue queue;
+  // Independent metadata owner tag prevents receipt ABA across a driver
+  // recreation with the same Kernel address/domain/cookie values.
+  const std::shared_ptr<const uint8_t> content_issuer =
+      std::make_shared<const uint8_t>(0);
   // Paths are driver-owned Kernel allocations, never native-private pointers.
   // Retain even a removed device's path until the entire Kernel has stopped.
   std::map<std::string, uint32_t> guest_paths;
@@ -732,6 +740,55 @@ void NativeContentStorageDriver::StopFormatBindings() noexcept {
   } catch (...) {
   }
 }
+std::shared_ptr<const NativeOpticalStorageProof>
+NativeContentStorageDriver::CaptureOpticalSource(std::string_view native_root) const {
+  const auto use=AcquireConfigUse();if(!use || !config_.kernel)return {};
+  std::weak_ptr<vfs::Device> weak;
+  const vfs::Device* identity=nullptr;
+  std::shared_ptr<const filesystem::ConsoleStorageVolume> volume;
+  uint64_t generation=0;
+  {
+    auto global=global_critical_region::AcquireDirect();
+    // Borrow from the registered VFS row only while this same namespace lock
+    // owns it. Copy weak/control-block and volume METADATA, never a temporary
+    // strong Device whose final FD/resource release could land on this native
+    // dispatcher stack after a concurrent mount withdrawal.
+    const auto& title_mount=config_.kernel->title_mount_path_;
+    auto* device=title_mount.empty()?nullptr:config_.kernel->file_system()->GetDevice(title_mount);
+    if(!device || device->namespace_retiring() ||
+        !xe::utf8::equal_case(device->mount_path(),native_root) ||
+        !xe::utf8::equal_case(title_mount,native_root))return {};
+    volume=device->storage_volume();
+    if(!volume || !volume->available_cached() ||
+        volume->origin()!=filesystem::ConsoleStorageVolume::Origin::kOpticalMedia ||
+        volume->type()!=filesystem::ConsoleStorageType::ODD)return {};
+    const auto execution=config_.kernel->emulator()->title_execution_state().snapshot();
+    if(!execution.generation ||
+        (execution.phase!=TitleExecutionState::Phase::kPreparing && execution.phase!=TitleExecutionState::Phase::kRunning))return {};
+    generation=execution.generation;weak=device->weak_from_this();identity=device;
+  }
+  return std::shared_ptr<const NativeOpticalStorageProof>(new NativeOpticalStorageProof(
+      std::move(volume),std::move(weak),identity,std::string(native_root),generation));
+}
+bool NativeContentStorageDriver::OpticalSourceCurrent(const NativeOpticalStorageProof& proof) const {
+  const auto use=AcquireConfigUse();if(!use || !config_.kernel)return false;
+  auto global=global_critical_region::AcquireDirect();
+  return OpticalSourceCurrentLocked(proof);
+}
+bool NativeContentStorageDriver::OpticalSourceCurrentLocked(const NativeOpticalStorageProof& proof) const {
+  if(!global_critical_region::is_held_by_current_thread() ||
+      !config_.kernel || config_.kernel!=kernel_identity_)return false;
+  const auto& title_mount=config_.kernel->title_mount_path_;
+  const auto* device=title_mount.empty()?nullptr:config_.kernel->file_system()->GetDevice(title_mount);
+  if(!device || device!=proof.identity_ || device->namespace_retiring() ||
+      !xe::utf8::equal_case(title_mount,proof.root_))return false;
+  const auto weak=device->weak_from_this();
+  const auto execution=config_.kernel->emulator()->title_execution_state().snapshot();
+  return !proof.device_.owner_before(weak) && !weak.owner_before(proof.device_) &&
+      device->storage_volume()==proof.volume_ && proof.volume_ && proof.volume_->available_cached() &&
+      execution.generation==proof.title_generation_ &&
+      (execution.phase==TitleExecutionState::Phase::kPreparing || execution.phase==TitleExecutionState::Phase::kRunning);
+}
 void NativeContentStorageDriver::OnProcessingEntry(
     const cpu::ppc::PPCContext& context) {
   const auto pointer = Pointer(context.r[3]);
@@ -741,6 +798,10 @@ void NativeContentStorageDriver::OnProcessingEntry(
   if (!frame) { StopFormatBindings(); return; }
   const auto packet = ReadProcessingPacket(*config_.kernel->memory(), *pointer);
   if (!packet) { StopFormatBindings(); return; }
+  std::shared_ptr<const NativeOpticalStorageProof> optical;
+  if(frame->lr==0x8167EA50 && uint64_t(frame->sp)+0x50==frame->packet &&
+      packet->path_pointer==0x815F39F4 && packet->type==4 && packet->transition==1 &&
+      packet->path=="\\Device\\CdRom0")optical=CaptureOpticalSource(packet->path);
   std::lock_guard lock(state_->mutex);
   if (state_->stopping || state_->binding_failed) { return; }
   // E918 removes matching old rows before any insertion. Revoke first even
@@ -787,6 +848,19 @@ void NativeContentStorageDriver::OnProcessingEntry(
           NativeContentStorageTransition::kInserted, true});
     }
   }
+  if(optical && state_->processing_cookie!=UINT64_MAX) {
+    auto slot=std::find_if(state_->processing_deliveries.begin(),state_->processing_deliveries.end(),
+        [](const auto& value){return !value;});
+    if(slot!=state_->processing_deliveries.end()) {
+      cookie=++state_->processing_cookie;
+      NativeContentStorageDevice observed;
+      observed.identity="title-optical";observed.generation=optical->title_generation();
+      observed.type=xam::DeviceType::ODD;observed.guest_volume_root=packet->path;observed.available=true;
+      observed.source_volume=optical->volume();observed.optical_source_proof=std::move(optical);
+      slot->emplace(State::ProcessingDelivery{std::move(observed),cookie,frame->thread,
+          frame->pcr,frame->sp,packet->path_pointer,NativeContentStorageTransition::kInserted,false});
+    }
+  }
   // MU/Sapphire's paired/partially successful packets and other native callers
   // may invalidate bindings but cannot mint a managed format capability here.
   state_->processing.Begin({*frame, packet->path_pointer, packet->transition,
@@ -822,11 +896,25 @@ void NativeContentStorageDriver::OnProcessingReturn(
   if (delivery == state_->processing_deliveries.end()) { return; }
   auto owned = std::move(**delivery);
   delivery->reset();
-  if (!receipt->succeeded || receipt->call.transition != 1 ||
-      (!owned.device.managed_format_proof && !owned.device.selected_media_proof) ||
-      (owned.device.selected_media_proof && !owned.device.selected_media_proof->SourceCurrentCached()) ||
-      !BindingType(receipt->call.type) ||
-      !state_->queue.IsDesired(owned.device)) { return; }
+  const auto& volume=owned.device.source_volume;
+  const auto& optical=owned.device.optical_source_proof;
+  const bool optical_valid=optical && receipt->call.type==4 &&
+      owned.device.type==xam::DeviceType::ODD && volume && volume==optical->volume() &&
+      volume->origin()==filesystem::ConsoleStorageVolume::Origin::kOpticalMedia &&
+      volume->available_cached() && owned.device.generation==optical->title_generation() &&
+      owned.device.guest_volume_root==optical->guest_root();
+  const bool registered_valid=!optical && BindingType(receipt->call.type) &&
+      state_->queue.IsDesired(owned.device) &&
+      (owned.device.managed_format_proof || owned.device.selected_media_proof || volume) &&
+      (!volume || (volume->available_cached() &&
+          volume->origin()==filesystem::ConsoleStorageVolume::Origin::kRegisteredSource &&
+          volume->source_id()==owned.device.identity && volume->generation()==owned.device.generation &&
+          volume->type()==owned.device.type)) &&
+      (!owned.device.selected_media_proof || owned.device.selected_media_proof->SourceCurrentCached());
+  if(!receipt->succeeded || receipt->call.transition!=1 || (!optical_valid && !registered_valid))return;
+  // Optical is an authentic native-produced row, not a queue notification or
+  // format capability. Capturing/consuming it later also requires the same
+  // live existing VFS Device/title generation, outside this metadata mutex.
   auto same_id = std::find_if(state_->bindings.begin(), state_->bindings.end(),
       [&](const auto& value) { return value && value->native_id == receipt->native_id; });
   if (same_id != state_->bindings.end()) {
@@ -841,6 +929,131 @@ void NativeContentStorageDriver::OnProcessingReturn(
   free->emplace(State::Binding{std::move(owned.device), receipt->native_id,
                                receipt->call.delivery_cookie});
 }
+std::optional<NativeContentStorageDriver::ContentProcessingReceipt>
+NativeContentStorageDriver::CaptureContentProcessing(uint32_t native_id) const noexcept try {
+  const auto use=AcquireConfigUse();
+  if(!use || !native_id || !IsCurrent())return {};
+  std::optional<ContentProcessingReceipt> result;
+  {
+    std::lock_guard lock(state_->mutex);
+    if(state_->stopping || state_->binding_failed)return {};
+    for(const auto& binding:state_->bindings) {
+      if(!binding || binding->native_id!=native_id || !binding->cookie ||
+          !binding->device.source_volume || !binding->device.source_volume->available_cached() ||
+          (!binding->device.optical_source_proof && !state_->queue.IsDesired(binding->device)))continue;
+      if(result)return {};
+      result=ContentProcessingReceipt{};result->issuer_=state_->content_issuer;
+      result->driver_generation_=generation_;result->cookie_=binding->cookie;
+      result->native_id_=binding->native_id;result->device_=binding->device;
+    }
+  }
+  if(result && result->device_.optical_source_proof &&
+      !OpticalSourceCurrent(*result->device_.optical_source_proof))return {};
+  return result;
+} catch(...) {return {};}
+std::optional<NativeContentStorageDriver::ContentProcessingReceipt>
+NativeContentStorageDriver::CaptureContentProcessing(
+    const std::shared_ptr<const filesystem::ConsoleStorageVolume>& volume) const noexcept try {
+  const auto use=AcquireConfigUse();
+  if(!use || !volume || !volume->available_cached() || !IsCurrent())return {};
+  std::optional<ContentProcessingReceipt> result;
+  {
+    std::lock_guard lock(state_->mutex);
+    if(state_->stopping || state_->binding_failed)return {};
+    for(const auto& binding:state_->bindings) {
+      if(!binding || !binding->native_id || !binding->cookie ||
+          binding->device.source_volume!=volume ||
+          binding->device.source_volume.owner_before(volume) || volume.owner_before(binding->device.source_volume) ||
+          (!binding->device.optical_source_proof && !state_->queue.IsDesired(binding->device)))continue;
+      if(result)return {};
+      result=ContentProcessingReceipt{};result->issuer_=state_->content_issuer;
+      result->driver_generation_=generation_;result->cookie_=binding->cookie;
+      result->native_id_=binding->native_id;result->device_=binding->device;
+    }
+  }
+  if(result && result->device_.optical_source_proof &&
+      !OpticalSourceCurrent(*result->device_.optical_source_proof))return {};
+  return result;
+} catch(...) {return {};}
+std::vector<NativeContentStorageDriver::ContentProcessingReceipt>
+NativeContentStorageDriver::CaptureContentProcessing() const {
+  const auto use=AcquireConfigUse();
+  if(!use || !IsCurrent())return {};
+  std::vector<ContentProcessingReceipt> result;
+  {
+    std::lock_guard lock(state_->mutex);
+    if(state_->stopping || state_->binding_failed)return {};
+    result.reserve(state_->bindings.size());
+    for(const auto& binding:state_->bindings) {
+      if(!binding || !binding->native_id || !binding->cookie ||
+          !binding->device.source_volume || !binding->device.source_volume->available_cached() ||
+          (!binding->device.optical_source_proof && !state_->queue.IsDesired(binding->device)))continue;
+      ContentProcessingReceipt row;
+      row.issuer_=state_->content_issuer;row.driver_generation_=generation_;
+      row.cookie_=binding->cookie;row.native_id_=binding->native_id;row.device_=binding->device;
+      result.push_back(std::move(row));
+    }
+  }
+  // No VFS/current-title check or potential final Config owner drop occurs
+  // under the Driver metadata lock. Holding a row owns no backing/FD/Task.
+  std::erase_if(result,[&](const auto& row){return row.optical_source() &&
+      !OpticalSourceCurrent(*row.optical_source());});
+  return result;
+}
+bool NativeContentStorageDriver::ContentProcessingCurrent(
+    const ContentProcessingReceipt& receipt) const noexcept try {
+  const auto use = AcquireConfigUse();
+  if (!use || !IsCurrent() || !receipt.native_id_ || !receipt.cookie_ ||
+      receipt.driver_generation_ != generation_ || !receipt.device_.source_volume ||
+      !receipt.device_.source_volume->available_cached()) return false;
+  if(receipt.device_.optical_source_proof &&
+      !OpticalSourceCurrent(*receipt.device_.optical_source_proof))return false;
+  std::lock_guard lock(state_->mutex);
+  if (state_->stopping || state_->binding_failed ||
+      receipt.issuer_ != state_->content_issuer ||
+      receipt.issuer_.owner_before(state_->content_issuer) ||
+      state_->content_issuer.owner_before(receipt.issuer_)) return false;
+  return std::any_of(state_->bindings.begin(), state_->bindings.end(),
+      [&](const auto& binding) {
+        return binding && binding->native_id == receipt.native_id_ &&
+            binding->cookie == receipt.cookie_ && binding->device == receipt.device_ &&
+            (binding->device.optical_source_proof || state_->queue.IsDesired(binding->device));
+      });
+} catch (...) { return false; }
+std::optional<NativeContentStorageDriver::ContentProcessingAdmission>
+NativeContentStorageDriver::TryAdmitContentProcessing(
+    const ContentProcessingReceipt& receipt, std::error_code& error) const noexcept try {
+  error.clear();
+  if (!global_critical_region::is_held_by_current_thread()) {
+    error = std::make_error_code(std::errc::operation_would_block); return {};
+  }
+  // Check the actual current optical mount/control block/title generation
+  // after provider waits, BEFORE taking Driver metadata. GCRC keeps the VFS
+  // identity stable through the bounded store; no stale weak backing is locked.
+  if(receipt.device_.optical_source_proof &&
+      !OpticalSourceCurrentLocked(*receipt.device_.optical_source_proof)) {
+    error=std::make_error_code(std::errc::no_such_device);return {};
+  }
+  ContentProcessingAdmission guard(state_->mutex);
+  if (!guard.lock_.owns_lock()) {
+    error = std::make_error_code(std::errc::device_or_resource_busy); return {};
+  }
+  if (state_->stopping || state_->retiring || state_->retired || state_->binding_failed ||
+      !receipt.native_id_ || !receipt.cookie_ || receipt.driver_generation_ != generation_ ||
+      receipt.issuer_ != state_->content_issuer ||
+      receipt.issuer_.owner_before(state_->content_issuer) ||
+      state_->content_issuer.owner_before(receipt.issuer_) ||
+      !receipt.device_.source_volume || !receipt.device_.source_volume->available_cached() ||
+      std::none_of(state_->bindings.begin(), state_->bindings.end(),
+        [&](const auto& binding) {
+          return binding && binding->native_id == receipt.native_id_ &&
+              binding->cookie == receipt.cookie_ && binding->device == receipt.device_ &&
+              (binding->device.optical_source_proof || state_->queue.IsDesired(binding->device));
+        })) {
+    error = std::make_error_code(std::errc::no_such_device); return {};
+  }
+  return std::optional<ContentProcessingAdmission>(std::move(guard));
+} catch (...) { error = std::make_error_code(std::errc::io_error); return {}; }
 std::shared_ptr<const xam::ManagedFormatSourceProof>
 NativeContentStorageDriver::CaptureFormatSource(uint32_t native_id,
                                                 std::error_code& error) {
@@ -1085,6 +1298,10 @@ class NativeContentStorageDriverTestAccess {
   static std::shared_ptr<void> HoldConfigUse(
       const std::shared_ptr<NativeContentStorageDriver>&);
   static bool Retire(const std::shared_ptr<NativeContentStorageDriver>&,KernelState*);
+  static std::shared_ptr<const NativeOpticalStorageProof> CaptureOptical(
+      const std::shared_ptr<NativeContentStorageDriver>&,std::string_view);
+  static bool OpticalCurrent(const std::shared_ptr<NativeContentStorageDriver>&,
+      const NativeOpticalStorageProof&);
 };
 }  // namespace test
 std::shared_ptr<NativeContentStorageDriver>
@@ -1113,6 +1330,15 @@ std::shared_ptr<void> test::NativeContentStorageDriverTestAccess::HoldConfigUse(
 bool test::NativeContentStorageDriverTestAccess::Retire(
     const std::shared_ptr<NativeContentStorageDriver>& owner,KernelState* kernel) {
   return owner->RetireAfterActualKernelStop(kernel);
+}
+std::shared_ptr<const NativeOpticalStorageProof>
+test::NativeContentStorageDriverTestAccess::CaptureOptical(
+    const std::shared_ptr<NativeContentStorageDriver>& owner,std::string_view root) {
+  return owner->CaptureOpticalSource(root);
+}
+bool test::NativeContentStorageDriverTestAccess::OpticalCurrent(
+    const std::shared_ptr<NativeContentStorageDriver>& owner,const NativeOpticalStorageProof& proof) {
+  return owner->OpticalSourceCurrent(proof);
 }
 NativeContentStorageDriver::Snapshot NativeContentStorageDriver::snapshot()
     const {

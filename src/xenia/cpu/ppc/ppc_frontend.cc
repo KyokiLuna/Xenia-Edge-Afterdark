@@ -10,6 +10,8 @@
 #include "xenia/cpu/ppc/ppc_frontend.h"
 #include "xenia/kernel/native_avatar_service.h"
 #include "xenia/kernel/native_profile_identity_owner.h"
+#include "xenia/kernel/native_xmsg_provenance.h"
+#include "xenia/kernel/native_content_resolve.h"
 
 #include "xenia/base/atomic.h"
 #include "xenia/base/logging.h"
@@ -154,6 +156,21 @@ static void NativeIdentityTaskDiagnostic(PPCContext* c,void* site,void*) {
   xe::kernel::NativeProfileIdentityOwner::ObserveTaskDiagnosticInstruction(
       c,static_cast<uint32_t>(reinterpret_cast<uintptr_t>(site)));
 }
+static void NativeIdentityTaskExecution(PPCContext* c,void* site,void*) {
+  xe::kernel::NativeProfileIdentityOwner::ObserveTaskExecutionInstruction(
+      c,static_cast<uint32_t>(reinterpret_cast<uintptr_t>(site)));
+}
+static void NativeIdentityImageObservation(PPCContext* c,void* site,void*) {
+  xe::kernel::NativeProfileIdentityOwner::ObserveImageInstruction(
+      c,static_cast<uint32_t>(reinterpret_cast<uintptr_t>(site)));
+}
+static void NativeXmsgInstruction(PPCContext* c,void*,void*) {
+  xe::kernel::NativeXmsgProvenance::ObserveInstruction(c,0x816A2A1C);
+}
+static void NativeContentResolveProducer(PPCContext* c,void*,void*) {
+  xe::kernel::NativeContentResolve::ObserveProducerInstruction(c,
+      xe::kernel::NativeContentResolve::kProducerInstruction);
+}
 bool PPCFrontend::Initialize() {
   void* arg0 = reinterpret_cast<void*>(&xe::global_critical_region::mutex());
   void* arg1 = reinterpret_cast<void*>(&builtins_.global_lock_count);
@@ -177,6 +194,37 @@ bool PPCFrontend::Initialize() {
     "NativeTaskOperand8","NativeTaskOperand9","NativeTaskOperand10","NativeTaskOperand11"};
   for(uintptr_t i=0;i<12;++i)builtins_.native_identity_task_diagnostic[i]=processor_->DefineBuiltin(
       names[i],NativeIdentityTaskDiagnostic,reinterpret_cast<void*>(i),nullptr);
+  constexpr const char* execution_names[6]={
+    "NativeTaskExecution0","NativeTaskExecution1","NativeTaskExecution2",
+    "NativeTaskExecution3","NativeTaskExecution4","NativeTaskExecution5"};
+  static_assert(xe::kernel::NativeProfileIdentityOwner::kTaskExecutionSites.size()==6);
+  for(uintptr_t i=0;i<6;++i)builtins_.native_identity_task_execution[i]=processor_->DefineBuiltin(
+      execution_names[i],NativeIdentityTaskExecution,reinterpret_cast<void*>(i),nullptr);
+  constexpr const char* image_names[17]={
+    "NativeImageOperand0",
+    "NativeImageOperand1",
+    "NativeImageOperand2",
+    "NativeImageOperand3",
+    "NativeImageOperand4",
+    "NativeImageOperand5",
+    "NativeImageOperand6",
+    "NativeImageOperand7",
+    "NativeImageOperand8",
+    "NativeImageOperand9",
+    "NativeImageOperand10",
+    "NativeImageOperand11",
+    "NativeImageOperand12",
+    "NativeImageOperand13",
+    "NativeImageOperand14",
+    "NativeImageOperand15",
+    "NativeImageOperand16"};
+  static_assert(xe::kernel::NativeProfileIdentityOwner::kImageObservationSites.size()==17);
+  for(uintptr_t i=0;i<17;++i)builtins_.native_identity_image_observation[i]=processor_->DefineBuiltin(
+      image_names[i],NativeIdentityImageObservation,reinterpret_cast<void*>(i),nullptr);
+  builtins_.native_xmsg_instruction=processor_->DefineBuiltin(
+      "NativeXmsgProviderOperands",NativeXmsgInstruction,nullptr,nullptr);
+  builtins_.native_content_resolve_producer=processor_->DefineBuiltin(
+      "NativeContentResolveProducer",NativeContentResolveProducer,nullptr,nullptr);
   return true;
 }
 

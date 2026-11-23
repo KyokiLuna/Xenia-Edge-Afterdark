@@ -7,6 +7,7 @@
  ******************************************************************************
  */
 #include "xenia/kernel/native_system_task_continuation.h"
+#include "xenia/kernel/native_system_ui_service.h"
 
 #include <array>
 #include <atomic>
@@ -443,6 +444,15 @@ GuestRuntime::ExecutionResult NativeSystemTaskContinuation::InvokeAndWaitImpl(
       // failure cannot replace completion, native Wait/Close or stop handling.
       if(identity_host_maintenance){
         try{identity_host_maintenance();}catch(...){/* retain native control flow */}
+      }else{
+        // Same actual OS Bootstrap host cut for the always-present execution
+        // role, including STARTUP/media when optional profile identity is off.
+        // Only proved returns/free retire; this never replaces native result,
+        // Wait/Close, admission or any role's existing stop-retention proof.
+        try{
+          if(const auto execution=NativeSystemUiService::CaptureTaskExecutionOwner(state_->kernel))
+            execution->ReapReturnedOnBootstrap(bootstrap,false);
+        }catch(...){/* preserve original transport/rundown */}
       }
       if (completed) { break; }
       // Only a normally returned Schedule reaches this wait. A never-entered

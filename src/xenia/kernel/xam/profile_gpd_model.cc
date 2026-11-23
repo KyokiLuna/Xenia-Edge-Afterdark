@@ -1,6 +1,9 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "xenia/kernel/xam/profile_gpd_model.h"
+#include "xenia/kernel/xam/profile_picture_codec.h"
+#include "xenia/base/snapshot_publication_set.h"
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <limits>
 #include <set>
@@ -10,6 +13,63 @@
 #include "xenia/base/xdbf_view.h"
 #include "xenia/kernel/xam/profile_gpd_transaction.h"
 namespace xe::kernel::xam {
+namespace {
+constexpr std::array<const char*, 7> kProfilePictureLeaves{
+    "tile_64.png", "tile_32.png", "pp_64.png", "pp_32.png",
+    "avtr_64.png", "avtr_32.png", "__thumbnail.png"};
+std::error_code AppendProfilePictures(
+    const std::shared_ptr<const ProfileGpdPictureSnapshots>& pictures,
+    const std::shared_ptr<ProfileStorageLease>& storage,
+    std::vector<std::shared_ptr<const filesystem::HostStorageSnapshotToken>>& checked) {
+  if (!pictures) { return {}; } // preserved GPD-only compatibility producer
+  if (!storage || pictures->size() != kProfilePictureLeaves.size()) {
+    return std::make_error_code(std::errc::invalid_argument);
+  }
+  uint64_t total = 0;
+  for (const auto& token : checked) {
+    if (!token || token->bytes().size() > filesystem::HostStorageRoot::kMaximumSnapshotBatchBytes - total) {
+      return std::make_error_code(std::errc::file_too_large);
+    }
+    total += token->bytes().size();
+  }
+  for (const auto name : kProfilePictureLeaves) {
+    const auto found = pictures->find(name);
+    if (found == pictures->end()) { return std::make_error_code(std::errc::invalid_argument); }
+    const auto& token = found->second;
+    auto actual = token ? token->relative().generic_string() : std::string{};
+    for (auto& c : actual) { if (c >= 'A' && c <= 'Z') { c += 'a' - 'A'; } }
+    if (!token || token->root() != storage->view() || !token->ascii_folded_leaf() || actual != name ||
+        token->bytes().size() > filesystem::HostStorageRoot::kMaximumSnapshotBatchBytes - total ||
+        (token->exists() && (!token->info().regular || token->info().links != 1))) {
+      return std::make_error_code(std::errc::invalid_argument);
+    }
+    total += token->bytes().size(); checked.push_back(token);
+  }
+  return checked.size() > filesystem::HostStorageRoot::kMaximumSnapshotBatchTokens
+      ? std::make_error_code(std::errc::file_too_large) : std::error_code{};
+}
+}  // namespace
+std::shared_ptr<const ProfileGpdPictureSnapshots> CaptureProfilePictures(
+    std::shared_ptr<const filesystem::HostStorageRoot> view, std::error_code& error,
+    const filesystem::SnapshotPublicationSet* members) {
+  error.clear();
+  if (xe::global_critical_region::is_held_by_current_thread() || !view ||
+      (members && members->base() != view)) {
+    error = std::make_error_code(std::errc::operation_not_permitted); return {};
+  }
+  auto result = std::make_shared<ProfileGpdPictureSnapshots>();
+  uint64_t total = 0;
+  for (const auto name : kProfilePictureLeaves) {
+    auto token = members ? members->Capture(name, GpdSnapshotStore::kMaximumBytes, error, true)
+                         : view->CaptureSnapshot(name, GpdSnapshotStore::kMaximumBytes, error, true);
+    if (!token) { return {}; }
+    if (token->bytes().size() > filesystem::HostStorageRoot::kMaximumSnapshotBatchBytes - total) {
+      error = std::make_error_code(std::errc::file_too_large); return {};
+    }
+    total += token->bytes().size(); result->emplace(name, std::move(token));
+  }
+  return result;
+}
 namespace {
 std::shared_ptr<const ProfileGpdReadModels> ReadModels(
     const std::map<uint32_t, GpdSnapshotLoad>&, std::error_code&);
@@ -46,8 +106,12 @@ bool SameTitleData(const std::shared_ptr<const ProfileGpdTitleData>& a,
   return true;
 }
 bool SameCommand(const ProfileGpdMutation& a, const ProfileGpdMutation& b) {
-  if (a.settings.size() != b.settings.size()) {
+  if (a.settings.size() != b.settings.size() || a.picture_changes.size() != b.picture_changes.size()) {
     return false;
+  }
+  for (size_t i = 0; i != a.picture_changes.size(); ++i) {
+    const auto& x = a.picture_changes[i]; const auto& y = b.picture_changes[i];
+    if (x.kind != y.kind || x.remove != y.remove || x.bytes != y.bytes) { return false; }
   }
   for (size_t i = 0; i != a.settings.size(); ++i) {
     if (a.settings[i].get_setting_id() != b.settings[i].get_setting_id() ||
@@ -56,7 +120,8 @@ bool SameCommand(const ProfileGpdMutation& a, const ProfileGpdMutation& b) {
     }
   }
   if (a.kind != b.kind || a.title_id != b.title_id ||
-      a.record_id != b.record_id ||
+      a.record_id != b.record_id || a.image_id != b.image_id ||
+      a.image_data != b.image_data ||
       a.foreground_generation != b.foreground_generation ||
       a.domain_id != b.domain_id) {
     return false;
@@ -201,7 +266,8 @@ std::error_code SummarizeChecked(GpdInfoTitle& game,
 }
 bool PreservesUnknown(std::span<const uint8_t> before,
                       std::span<const uint8_t> intended,
-                      std::optional<uint32_t> removed_title = {}) {
+                      std::optional<uint32_t> removed_title = {},
+                      std::optional<std::pair<uint64_t, bool>> image_change = {}) {
   const auto old = XdbfTableView::Parse(before),
              next = XdbfTableView::Parse(intended);
   if (!old || !next) {
@@ -217,13 +283,31 @@ bool PreservesUnknown(std::span<const uint8_t> before,
       continue;
     }
     const auto a = old->Find(section, id), b = next->Find(section, id);
+    if (image_change && section == uint16_t(GpdSection::kImage) &&
+        id == image_change->first) {
+      // The sole admitted exception is this exact typed image in this file.
+      // Upsert must retain it; delete must remove it, even if it held zero bytes.
+      if (image_change->second ? bool(b) : !b) { return false; }
+      continue;
+    }
     if (!a || !b) {
       return false;
     }
-    if ((section < 1 || section > 5) &&
+    if ((image_change || section < 1 || section > 5) &&
         (a->size() != b->size() ||
          !std::equal(a->begin(), a->end(), b->begin()))) {
       return false;
+    }
+  }
+  if (image_change) {
+    for (size_t i = 0; i != next->entries_used; ++i) {
+      const auto* e = next->entries.data() + i * 18;
+      const uint16_t section = uint16_t(e[0]) << 8 | e[1];
+      const uint64_t id = uint64_t(XdbfTableView::U32(e + 2)) << 32 |
+                          XdbfTableView::U32(e + 6);
+      if (section == uint16_t(GpdSection::kImage) &&
+          id == image_change->first) { continue; }
+      if (!old->Find(section, id)) { return false; }
     }
   }
   return true;
@@ -367,8 +451,20 @@ std::shared_ptr<const ProfileGpdModelPlan> MakePlan(
       }
       break;
     }
+    case ProfileGpdMutationKind::kUpsertImage:
+      error = (game ? static_cast<GpdInfo&>(*game)
+                    : static_cast<GpdInfo&>(dashboard))
+                  .UpsertImageChecked(command.image_id, command.image_data);
+      break;
+    case ProfileGpdMutationKind::kDeleteImage:
+      error = (game ? static_cast<GpdInfo&>(*game)
+                    : static_cast<GpdInfo&>(dashboard))
+                  .DeleteImageChecked(command.image_id);
+      break;
+    case ProfileGpdMutationKind::kSetPictures:
     case ProfileGpdMutationKind::kSetSettings:
-      if (command.settings.empty() || command.settings.size() > 64) {
+      if ((command.settings.empty() && command.kind != ProfileGpdMutationKind::kSetPictures) ||
+          command.settings.size() > 64) {
         error = Error(std::errc::invalid_argument);
         break;
       }
@@ -527,7 +623,16 @@ std::shared_ptr<const ProfileGpdModelPlan> MakePlan(
                     id == kDashboardID
                 ? std::optional<uint32_t>(command.title_id)
                 : std::nullopt;
-        if (!PreservesUnknown(before.token->bytes(), after, removed)) {
+        std::optional<std::pair<uint64_t, bool>> image_change;
+        if (id == command.title_id &&
+            (command.kind == ProfileGpdMutationKind::kUpsertImage ||
+             command.kind == ProfileGpdMutationKind::kDeleteImage)) {
+          image_change = std::pair{
+              command.image_id,
+              command.kind == ProfileGpdMutationKind::kDeleteImage};
+        }
+        if (!PreservesUnknown(before.token->bytes(), after, removed,
+                              image_change)) {
           error = Error(std::errc::permission_denied);
           return;
         }
@@ -645,10 +750,11 @@ std::shared_ptr<const ProfileGpdTitleData> ProfileGpdTitleData::Capture(
 }
 ProfileGpdPendingMutation::ProfileGpdPendingMutation(
     ProfileGpdMutationOrigin origin, ProfileGpdMutation command,
-    std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines)
+    std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines,
+    std::shared_ptr<const ProfileGpdPictureSnapshots> pictures)
     : origin_(std::move(origin)),
       command_(std::move(command)),
-      baselines_(std::move(baselines)) {}
+      baselines_(std::move(baselines)), pictures_before_(std::move(pictures)) {}
 bool ProfileGpdPendingMutation::Matches(
     const ProfileGpdMutation &command) const {
   return SameCommand(command_, command);
@@ -662,7 +768,28 @@ std::shared_ptr<const ProfileGpdModelPlan> ProfileGpdPendingMutation::BuildPlan(
     return {};
   }
   if (!plan_) {
-    plan_ = MakePlan(command_, *baselines_, error);
+    auto made = MakePlan(command_, *baselines_, error);
+    if (!made || error) { return {}; }
+    if (command_.kind == ProfileGpdMutationKind::kSetPictures) {
+      if (!pictures_before_ || pictures_before_->size() != 7) {
+        error = Error(std::errc::operation_would_block); return {};
+      }
+      auto joined = std::make_shared<ProfileGpdModelPlan>(*made);
+      for (const auto& edit : command_.picture_changes) {
+        const auto index = uint64_t(edit.kind) - uint64_t(filesystem::ProfileArtifactKind::kPublic64);
+        if (index >= kProfilePictureLeaves.size()) { error = Error(std::errc::invalid_argument); return {}; }
+        const auto found = pictures_before_->find(kProfilePictureLeaves[size_t(index)]);
+        if (found == pictures_before_->end()) { error = Error(std::errc::invalid_argument); return {}; }
+        const auto action = edit.remove
+            ? (found->second->exists() ? filesystem::ProfileArtifactAction::kDelete
+                                       : filesystem::ProfileArtifactAction::kObserve)
+            : (found->second->exists() ? filesystem::ProfileArtifactAction::kReplace
+                                       : filesystem::ProfileArtifactAction::kCreate);
+        joined->pictures.push_back({edit.kind, 0, action, edit.bytes});
+      }
+      made = std::move(joined);
+    }
+    plan_ = std::move(made);
   }
   return plan_;
 }
@@ -749,7 +876,8 @@ ProfileGpdModelAuthority::PauseForRoster(std::error_code& error) {
 }
 std::unique_ptr<ProfileGpdModelAuthority::PreparedCommit>
 ProfileGpdModelAuthority::PrepareLoaded(
-    std::map<uint32_t, GpdSnapshotLoad> loaded, std::error_code& error) {
+    std::map<uint32_t, GpdSnapshotLoad> loaded, std::error_code& error,
+    std::shared_ptr<const ProfileGpdPictureSnapshots> pictures) {
   error.clear();
   const auto dashboard = loaded.find(kDashboardID);
   if (dashboard == loaded.end()) {
@@ -784,6 +912,9 @@ ProfileGpdModelAuthority::PrepareLoaded(
       std::make_shared<const std::map<uint32_t, GpdSnapshotLoad>>(
           std::move(loaded));
   prepared->models = std::move(read_models);
+  error = AppendProfilePictures(pictures, storage_, prepared->checked);
+  if (error) { return {}; }
+  prepared->pictures = std::move(pictures);
   std::unique_lock lock(mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
     error = Error(std::errc::device_or_resource_busy);
@@ -800,6 +931,11 @@ ProfileGpdModelAuthority::PrepareLoaded(
   if (pending_ || version_ == UINT64_MAX) {
     error = Error(std::errc::device_or_resource_busy);
     return {};
+  }
+  if (!prepared->pictures && pictures_) {
+    error = AppendProfilePictures(pictures_, storage_, prepared->checked);
+    if (error) { return {}; }
+    prepared->pictures = pictures_;
   }
   prepared->expected_version = version_;
   return prepared;
@@ -838,7 +974,7 @@ std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::Begin(
     error = Error(std::errc::operation_canceled);
     return {};
   }
-  if (uint32_t(command.kind) > uint32_t(ProfileGpdMutationKind::kFlush) ||
+  if (uint32_t(command.kind) > uint32_t(ProfileGpdMutationKind::kSetPictures) ||
       !command.title_id ||
       (command.kind != ProfileGpdMutationKind::kUnlock &&
        !command.request_id) ||
@@ -846,6 +982,41 @@ std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::Begin(
        !command.foreground_generation)) {
     error = Error(std::errc::invalid_argument);
     return {};
+  }
+  if ((command.kind == ProfileGpdMutationKind::kUpsertImage &&
+       command.image_data.size() > GpdSnapshotStore::kMaximumBytes) ||
+      (command.kind == ProfileGpdMutationKind::kDeleteImage &&
+       !command.image_data.empty())) {
+    error = Error(command.kind == ProfileGpdMutationKind::kDeleteImage
+                      ? std::errc::invalid_argument
+                      : std::errc::file_too_large);
+    return {};
+  }
+  if (command.kind == ProfileGpdMutationKind::kSetPictures) {
+    if (command.title_id != kDashboardID || command.picture_changes.empty() || command.picture_changes.size() > 7) {
+      error = Error(std::errc::invalid_argument); return {};
+    }
+    uint64_t bytes = 0; std::set<uint64_t> kinds;
+    for (const auto& edit : command.picture_changes) {
+      const uint64_t kind = uint64_t(edit.kind);
+      if (kind < uint64_t(filesystem::ProfileArtifactKind::kPublic64) ||
+          kind > uint64_t(filesystem::ProfileArtifactKind::kThumbnail) || !kinds.insert(kind).second ||
+          (edit.remove && !edit.bytes.empty()) || (!edit.remove && edit.bytes.empty()) ||
+          edit.bytes.size() > GpdSnapshotStore::kMaximumBytes ||
+          edit.bytes.size() > filesystem::HostStorageRoot::kMaximumSnapshotBatchBytes - bytes) {
+        error = Error(std::errc::invalid_argument); return {};
+      }
+      if (!edit.remove) {
+        const uint32_t pixels = edit.kind == filesystem::ProfileArtifactKind::kPublic32 ||
+            edit.kind == filesystem::ProfileArtifactKind::kPersonal32 ||
+            edit.kind == filesystem::ProfileArtifactKind::kAvatar32 ? 32 : 64;
+        error = ValidateProfilePicturePng(edit.bytes, pixels);
+        if (error) { return {}; }
+      }
+      bytes += edit.bytes.size();
+    }
+  } else if (!command.picture_changes.empty()) {
+    error = Error(std::errc::invalid_argument); return {};
   }
   // Deep copy payload ownership before metadata locking. No borrowed guest,
   // profile, SPA or mutable caller-owned projection survives this boundary.
@@ -891,7 +1062,7 @@ std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::Begin(
                                   weak_from_this()};
   pending_ =
       std::shared_ptr<ProfileGpdPendingMutation>(new ProfileGpdPendingMutation(
-          std::move(origin), std::move(command), baselines_));
+          std::move(origin), std::move(command), baselines_, pictures_));
   return pending_;
 }
 std::optional<ProfileGpdMutationOrigin> ProfileGpdModelAuthority::CaptureOrigin(
@@ -1029,9 +1200,13 @@ std::optional<ProfileGpdReadCapture> ProfileGpdModelAuthority::CaptureRead(
                 storage_,
                 weak_from_this()};
   out.models = models_;
+  out.pictures = pictures_;
   out.tokens.reserve(baselines_->size());
   for (const auto& [title, load] : *baselines_) {
     out.tokens.push_back(load.token);
+  }
+  if (pictures_) {
+    for (const auto& [name, token] : *pictures_) { out.tokens.push_back(token); }
   }
   return out;
 }
@@ -1057,7 +1232,7 @@ std::shared_ptr<ProfileGpdTransaction>
 ProfileGpdModelAuthority::AcquireTransaction(
     std::shared_ptr<const filesystem::ProfileIntentOwner> owner,
     std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery,
-    std::error_code& error) {
+    std::error_code& error, std::shared_ptr<filesystem::ContentMutationOwner> metadata) {
   error.clear();
   std::unique_lock lock(mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
@@ -1077,7 +1252,7 @@ ProfileGpdModelAuthority::AcquireTransaction(
   }
   pending_transaction_ = ProfileGpdTransaction::Create(
       shared_from_this(), pending_, std::move(owner), std::move(recovery),
-      error);  // Metadata only, before IO.
+      error, std::move(metadata));  // Metadata only, before IO.
   return pending_transaction_;
 }
 void ProfileGpdModelAuthority::DiscardUnpublished(
@@ -1111,7 +1286,8 @@ std::error_code ProfileGpdModelAuthority::ReleaseRetiredPublication() {
 std::unique_ptr<ProfileGpdModelAuthority::PreparedCommit>
 ProfileGpdModelAuthority::PrepareCommit(
     std::shared_ptr<ProfileGpdPendingMutation> pending,
-    std::map<uint32_t, GpdSnapshotLoad> current, std::error_code& error) {
+    std::map<uint32_t, GpdSnapshotLoad> current, std::error_code& error,
+    std::shared_ptr<const ProfileGpdPictureSnapshots> pictures) {
   error.clear();
   if (!pending || pending->origin().owner.lock().get() != this) {
     error = Error(std::errc::invalid_argument);
@@ -1138,6 +1314,7 @@ ProfileGpdModelAuthority::PrepareCommit(
       return {};
     }
     original = baselines_;
+    if (!pictures) { pictures = pictures_; }
   }
   for (const auto &[title, before] : *original) {
     if (!current.contains(title)) {
@@ -1167,6 +1344,40 @@ ProfileGpdModelAuthority::PrepareCommit(
           a.size() != b.size() || !std::equal(a.begin(), a.end(), b.begin())) {
         error = Error(std::errc::state_not_recoverable);
         return {};
+      }
+    }
+  }
+  if (pending->command().kind == ProfileGpdMutationKind::kSetPictures) {
+    if (!pictures || !pending->pictures_before() || pictures->size() != 7) {
+      error = Error(std::errc::invalid_argument); return {};
+    }
+    for (size_t i = 0; i != kProfilePictureLeaves.size(); ++i) {
+      const auto kind = filesystem::ProfileArtifactKind(uint64_t(filesystem::ProfileArtifactKind::kPublic64) + i);
+      const auto name = kProfilePictureLeaves[i];
+      const auto now = pictures->find(name), before = pending->pictures_before()->find(name);
+      if (now == pictures->end() || before == pending->pictures_before()->end()) {
+        error = Error(std::errc::invalid_argument); return {};
+      }
+      const auto edit = std::find_if(plan->pictures.begin(), plan->pictures.end(),
+          [&](const auto& value) { return value.kind == kind; });
+      const auto& token = now->second;
+      if (!token) { error = Error(std::errc::invalid_argument); return {}; }
+      if (edit != plan->pictures.end() && edit->action != filesystem::ProfileArtifactAction::kObserve) {
+        const bool absent = edit->action == filesystem::ProfileArtifactAction::kDelete;
+        if (token->exists() == absent || (!absent &&
+            (token->bytes().size() != edit->intended.size() ||
+             !std::equal(token->bytes().begin(), token->bytes().end(), edit->intended.begin())))) {
+          error = Error(std::errc::state_not_recoverable); return {};
+        }
+      } else {
+        const auto& old = before->second;
+        if (!old || old->exists() != token->exists() ||
+            old->bytes().size() != token->bytes().size() ||
+            !std::equal(old->bytes().begin(), old->bytes().end(), token->bytes().begin()) ||
+            (old->exists() && (old->info().filesystem_id != token->info().filesystem_id ||
+                             old->info().file_id != token->info().file_id))) {
+          error = Error(std::errc::state_not_recoverable); return {};
+        }
       }
     }
   }
@@ -1210,6 +1421,9 @@ ProfileGpdModelAuthority::PrepareCommit(
   if (error) {
     return {};
   }
+  error = AppendProfilePictures(pictures, storage_, prepared->checked);
+  if (error) { return {}; }
+  prepared->pictures = std::move(pictures);
   prepared->expected_version = pending->origin().stamp.model_version;
   prepared->baselines = std::move(next);
   prepared->pending = std::move(pending);
@@ -1270,6 +1484,7 @@ bool ProfileGpdModelAuthority::CommitGuard::Apply() noexcept {
   }
   owner_->baselines_ = std::move(prepared_->baselines);
   owner_->models_ = std::move(prepared_->models);
+  owner_->pictures_ = std::move(prepared_->pictures);
   ++owner_->version_;
   owner_->pending_.reset();
   owner_->pending_transaction_.reset();

@@ -7,6 +7,8 @@
  ******************************************************************************
  */
 #include "xenia/kernel/xam/tile_service.h"
+#include "xenia/kernel/xam/profile_picture_codec.h"
+#include "xenia/kernel/testing/profile_picture_fixture.h"
 #include "xenia/kernel/xam/tile_request.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/user_module.h"
@@ -711,4 +713,48 @@ TEST_CASE("Registered guest FB retains sync precedence and asynchronous refusal"
 }
 
 #endif
+
+namespace {
+std::vector<uint8_t> Profile64Fixture() {
+  return ::xe::kernel::test::SyntheticProfilePicture64();
+}
+
+}  // namespace
+TEST_CASE("Host picture codec preserves source PNG and creates a genuine other-size alpha image",
+          "[tile_service][profile_picture][codec]") {
+  const auto source = Profile64Fixture();
+  std::error_code error;
+  const auto pair = PrepareHostProfilePicturePair(source, error);
+  REQUIRE(pair); REQUIRE_FALSE(error); REQUIRE(pair->large == source);
+  REQUIRE_FALSE(ValidateProfilePicturePng(pair->large, 64));
+  REQUIRE_FALSE(ValidateProfilePicturePng(pair->small, 32));
+  auto small = TileService::PrepareTexture(TileService::FromOwnedPng(pair->small), 128, 32);
+  REQUIRE(small.status == X_E_SUCCESS); REQUIRE(small.width == 32); REQUIRE(small.height == 32);
+  const std::array<std::array<uint8_t,4>,4> expected{{
+      {255,0,0,255}, {0,255,0,128}, {0,0,255,64}, {255,255,255,0}}};
+  for (unsigned quadrant = 0; quadrant != 4; ++quadrant) {
+    const auto at = ((quadrant/2)*16*32 + (quadrant%2)*16)*4;
+    REQUIRE(std::equal(expected[quadrant].begin(), expected[quadrant].end(), small.rgba.begin()+at));
+  }
+  const auto upscaled = PrepareHostProfilePicturePair(pair->small, error);
+  REQUIRE(upscaled); REQUIRE_FALSE(error); REQUIRE(upscaled->small == pair->small);
+  auto large = TileService::PrepareTexture(TileService::FromOwnedPng(upscaled->large), 256, 64);
+  REQUIRE(large.status == X_E_SUCCESS); REQUIRE(large.width == 64); REQUIRE(large.height == 64);
+  for (unsigned quadrant = 0; quadrant != 4; ++quadrant) {
+    const auto at = ((quadrant/2)*32*64 + (quadrant%2)*32)*4;
+    REQUIRE(std::equal(expected[quadrant].begin(), expected[quadrant].end(), large.rgba.begin()+at));
+  }
+}
+TEST_CASE("Fixed-picture codec refuses malformed shapes compression and oversized data without a pair",
+          "[tile_service][profile_picture][failure]") {
+  auto input = Profile64Fixture();
+  SECTION("wrong actual size") { input = Png(); }
+  SECTION("header promises64 with only2x2 data") { input = WithDimensions(64,64); }
+  SECTION("truncated input") { input.resize(40); }
+  SECTION("damaged compressed payload") { input[input.size()/2] ^= 0x80; }
+  SECTION("oversized input") { input.resize((1u<<20)+1); }
+  std::error_code error; REQUIRE_FALSE(PrepareHostProfilePicturePair(input,error)); REQUIRE(error);
+  REQUIRE(ValidateProfilePicturePng(Profile64Fixture(),32));
+  REQUIRE(ValidateProfilePicturePng(Profile64Fixture(),128));
+}
 }  // namespace xe::kernel::xam::test

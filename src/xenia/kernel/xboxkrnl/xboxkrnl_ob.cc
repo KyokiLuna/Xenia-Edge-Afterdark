@@ -24,6 +24,7 @@
 #include "xenia/base/logging.h"
 #include "xenia/cpu/processor.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_content_resolve.h"
 #include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/kernel/xboxkrnl/ob_waitable_object.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
@@ -1150,6 +1151,14 @@ dword_result_t ObCreateSymbolicLink_entry(pointer_t<X_ANSI_STRING> path_ptr,
       xeObSymbolicLinkName(util::TranslateAnsiPath(kernel_memory(), path_ptr));
   auto target = xe::utf8::canonicalize_guest_path(
       util::TranslateAnsiPath(kernel_memory(), target_ptr));
+
+  // The actual native Resolve producer has its own exact request/source
+  // identity and truthful duplicate policy. It publishes a source-bound alias
+  // before the legacy same-text compatibility case can claim success.
+  if (const auto native = NativeContentResolve::TryCreateSymbolicLink(
+          kernel_state(), path, target)) {
+    return *native;
+  }
 
   // 4D5307DC expects success.
   if (kernel_state()->file_system()->FindSymbolicLink(path, target)) {

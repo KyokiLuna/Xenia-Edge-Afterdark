@@ -1,7 +1,10 @@
 # 17559 checkpoint Guide regression — 2026-11-23
 
-Status: current-ELF unsigned Guide visibility, close/input release and reopen
-passed; sign-in, Avatar Editor and successful shutdown remain unaccepted.
+Status: unsigned Guide visibility, close/input release and reopen passed in
+earlier qualified ELF runs. The latest V125 startup run did not establish
+readiness or visible Guide completion. Sign-in, Avatar Editor and successful
+shutdown remain unaccepted. See the [native profile admission update](17559-native-profile-admission-20261125.md)
+for the latest source, tests and observed limits.
 The published `hdd-milestone-20261123` AppImage remains affected. Its release page
 carries a critical-regression notice. The combined HDD goal is active again;
 repairing this checkpoint remains the immediate priority.

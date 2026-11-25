@@ -48,7 +48,7 @@ The project is developed in tested milestones. The [implementation roadmap](docs
 
 | Subsystem | Current state |
 | --- | --- |
-| Guide / shared XUI & XAM foundation | Locally tested on Linux; remaining native scenes and service-dependent behavior still require integration. |
+| Guide / shared XUI & XAM foundation | Native rendering demonstrated in earlier Linux runs; startup readiness, visibility regressions and shutdown remain open. |
 | HDD, local profiles & saves | In progress. Managed storage, persistence and recovery have engineering test coverage; the combined HDD gate remains incomplete. V62 separately recorded local profile creation/reopening and BO1 settings persistence. |
 | Native account/profile UI | Integration and runtime validation remain in progress. Native sign-in and profile/avatar initialization are not established as working across the requested scenarios. |
 | Avatar system | Stock appearance/preview data is present in local profile work; full 3D rendering, editing, persistence and game consumption remain unfinished. |
@@ -61,6 +61,8 @@ The project is developed in tested milestones. The [implementation roadmap](docs
 The [HDD checkpoint notes for 2026-11-23](docs/research/17559-hdd-milestone-20261123.md) describe the current integration, validation boundaries and remaining work. Its release bundle carries the actual engineering and AppImage acceptance records. The [2026-11-18 milestone notes](docs/research/17559-hdd-milestone-20261118.md) remain available as a historical record.
 
 Current source progress and the unresolved native sign-in/shutdown failures are recorded in the [Guide regression report](docs/research/17559-checkpoint-guide-regression-20261123.md). The [2026-11-25 source backup](docs/research/17559-source-backup-20261125.md) saves the newer work and an explicitly unapplied research draft; it does not add a checkpoint release or close the HDD gate.
+
+The [native profile admission update](docs/research/17559-native-profile-admission-20261125.md) records the subsequently applied source changes, passing focused tests and failed or untested native scenarios. This is a source backup, not a replacement AppImage or finished gate.
 
 The [V62 checkpoint notes](docs/research/17559-hdd-profile-checkpoint-v62.md) remain a historical record of its Linux profile-persistence and Call of Duty: Black Ops storage/control-setting tests. V62 is a public prerelease; its results do not establish acceptance of later native profile or avatar work.
 

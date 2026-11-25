@@ -577,7 +577,8 @@ struct NativeProfileIdentityOwner::TaskReference::Data {
 };
 namespace {
 // Diagnostic classification only. The low four latest_kind bits retain the
-// existing Work kind; upper bits carry this immutable source table's index+1.
+// existing Work kind; bits4..11 carry the source table index+1. Bits16..31
+// are reserved for one incompatible reentrant Work category/role pair.
 // No guest read, fresh code-authentication claim or read/admission authority.
 constexpr uint32_t OriginalLogonFunctionRole(uint32_t function) noexcept {
  for(size_t i=0;i<std::size(identity_detail::kNativeIdentityCode);++i)
@@ -814,6 +815,17 @@ struct NativeProfileIdentityOwner::State {
   uint32_t available=0,reason=0,state=0,first_argument=0;uint64_t serial=0,source=0;
   Frame frame;Tasks::Birth birth{};bool closed=false;
  };
+ // A worker stopped at its genuine native callback entry has no data/read or
+ // callback-completion authority yet. Keep its actual execution provenance
+ // separately from active whole Work, so it cannot block the OLD-frame cut.
+ struct PrebodyIdentityWorker {
+  Frame frame;Tasks::Birth birth;
+  object_ref<XThread> thread;
+  std::shared_ptr<KernelState::UserModuleExecutionLease> code;
+  NativeImportDomain::Operation domain;
+  uint32_t argument=0;
+  bool admitted=false,refused=false;
+ };
  struct Job {
   uint64_t serial=0,source=0;
   std::optional<NativeProfileIdentityRequest> original;
@@ -838,7 +850,13 @@ struct NativeProfileIdentityOwner::State {
   uint32_t value=kAbort;
   std::atomic<bool> bootstrap_alignment{false},external_closed{false},native_entered{false};
   std::atomic<bool> native_returned{false},execution_uncertain{false},publisher_observed{false};
-  std::atomic<bool> preentry_ready{false},entering{false},canceled{false},transport_running{false};
+  // Original initializer and dataful worker are different native phases.
+  // The reentrant async initializer may return under its retained OLD read;
+  // no worker reads/publishes until the existing full old-source/paint cut.
+  std::atomic<bool> initializer_ready{false},data_worker_ready{false};
+  std::atomic<bool> entering{false},canceled{false},transport_running{false};
+  std::shared_ptr<Work> original_render_frame;
+  std::array<std::shared_ptr<PrebodyIdentityWorker>,2> prebody_workers;
   std::atomic<bool> owned_input{false},done{false};
   std::atomic<bool> old_paint_drained{false},new_paint_drained{false},event_producer_finished{false};
   uint32_t preentry_attempt=0; // State-locked, saturating diagnostic generation
@@ -1715,6 +1733,245 @@ struct NativeProfileIdentityOwner::State {
        (function || (!(*i)->transport_unclaimed && !(*i)->creation_only && !(*i)->execution_options && !(*i)->profile_control && !(*i)->periodic_factory)))return *i;
   return {};
  }
+ // This is a dependency/lifetime classification, not a promise that a native
+ // consumer never updates an auth scalar. The proven initializer does not
+ // replace the OLD allocations. Keep their exact scopes and genuine joins;
+ // only the later data worker may replace the roster/cache resources.
+ enum class ReentrantWorkConflict:uint8_t {
+  kNone,kUnhealthy,kFrameLifetime,kSource,kIdentityWriter,kForeignLifetime,
+  kReadIssuer,kOpaqueExecution,kBorrowedRead,kUntyped,kCallerContext,
+  kCallerExecution,kCallerCell,kCallerOldData,kCallerOldBarrier,kCallerExpected,
+  kCallerWake,kCallerShadow,kCallerBootstrap
+ };
+ ReentrantWorkConflict ReentrantWorkHealth(const Work& work) const {
+  if(work.uncertain || work.execution_uncertain || work.execution_read_fallback)
+   return ReentrantWorkConflict::kUnhealthy;
+  if(!work.serial || !work.frame.valid() || work.frame.root!=root || !work.thread ||
+     work.thread->kernel_state()!=kernel || work.thread->thread_id()!=work.frame.thread ||
+     work.thread->pcr_ptr()!=work.frame.pcr || !root_code || !resident_domain ||
+     (!work.domain && !work.transport_unclaimed))return ReentrantWorkConflict::kFrameLifetime;
+  // Passive native routing can use the factual boot source, but it cannot
+  // borrow some other published/prepared identity merely by retaining code.
+  if(work.source!=current_read_source && work.source!=kBootUnjoinedSource)
+   return ReentrantWorkConflict::kSource;
+  if(work.commit || work.host_body || work.identity_continuation ||
+     work.frame.function==0x8199C630 || work.frame.function==0x8199E3E0 ||
+     work.frame.function==0x8199E148 || work.frame.function==0x8199C838 ||
+     work.frame.function==0x816DC628)
+   return ReentrantWorkConflict::kIdentityWriter;
+  if(work.foreign_task_cleanup)return ReentrantWorkConflict::kForeignLifetime;
+  // Registered/broad host execution alone is not a proved cache writer.
+  if((work.registered_executor && !work.transport_only) || work.frame.function==0x81696558)
+   return ReentrantWorkConflict::kOpaqueExecution;
+  return ReentrantWorkConflict::kNone;
+ }
+ bool RetainedFixedOldRead(const Work& work) const {
+  const auto* node=work.birth.generation?tasks.FindBirthConst(work.birth.generation):nullptr;
+  const bool actual_task=work.birth.generation && node && Tasks::SameBirth(node->birth,work.birth) &&
+      !node->freed && !node->delete_entered && !node->free_entered;
+  const bool actual_system_frame=work.system_thread_frame && !work.birth.generation && !work.birth.task;
+  // Every scope issued from this pool was prepared from current_ticket.
+  // No Job exists at this admission cut, so no following writer ticket can
+  // enter this pool. A nested/suspended scope stays owned until real Leave.
+  return ReentrantWorkHealth(work)==ReentrantWorkConflict::kNone && !work.normal_return &&
+      work.source==current_read_source && (actual_task || actual_system_frame) &&
+      work.read && work.read_pool==&boot_reads &&
+      !work.physical_work && !work.prebody_parked && !work.execution_only &&
+      !work.transport_unclaimed && !work.transport_only && !work.creation_only &&
+      !work.execution_options && !work.execution_read_owner && !work.execution_read.pending();
+ }
+ ReentrantWorkConflict ReentrantOldWorkConflict(const Work& work) const {
+  const auto health=ReentrantWorkHealth(work);
+  if(health!=ReentrantWorkConflict::kNone)return health;
+  if(work.read)return RetainedFixedOldRead(work)?ReentrantWorkConflict::kNone:
+      ReentrantWorkConflict::kReadIssuer;
+  if(work.execution_read_owner || work.execution_read.pending()){
+   // Only a completed inline dispatch's real Wait restoration is transport.
+   // An executing arbitrary callback remains opaque even with an old scope.
+   const auto& parent=work.execution_read_owner;
+   const bool active_parent=parent && std::find(active.begin(),active.end(),parent)!=active.end();
+   if(!work.execution_only || !work.execution_control || !work.execution_code_proven ||
+      work.frame.function!=0x816BA058 ||
+      work.execution_read.phase()!=Tasks::ExecutionReadCell::Phase::kTransferred ||
+      !active_parent || !RetainedFixedOldRead(*parent) ||
+      work.thread.get()!=parent->thread.get() || work.frame.root!=parent->frame.root ||
+      work.frame.thread!=parent->frame.thread || work.frame.pcr!=parent->frame.pcr ||
+      work.serial<=parent->serial || work.frame.sp>=parent->frame.sp ||
+      work.execution_read.owner()!=parent.get() || work.execution_read.scope()!=parent->read.get() ||
+      work.execution_read.origin()!=parent->frame || work.execution_read.restoration()!=work.frame)
+    return ReentrantWorkConflict::kBorrowedRead;
+   return ReentrantWorkConflict::kNone;
+  }
+  // Task metadata never certifies its callback. The actual dispatch/callback
+  // has a distinct whole record and remains incompatible while it is opaque.
+  if(work.frame.function==0x816B8B08 || work.frame.function==0x816B7DE8 ||
+     (work.execution_only && (!work.execution_code_proven || !CommonTaskFunction(work.frame.function))))
+   return ReentrantWorkConflict::kOpaqueExecution;
+  if(CommonTaskFunction(work.frame.function))return ReentrantWorkConflict::kNone;
+  if(work.transport_unclaimed){
+   // The ordinary CompleteIO shadow has no identity overlap/APC authority;
+   // all other neutral shadows above must be actual Task metadata calls.
+   return work.frame.function==0x816A2588?ReentrantWorkConflict::kNone:
+       ReentrantWorkConflict::kUntyped;
+  }
+  if((work.listener_frame && work.listener_arguments && ListenerOuter(work.frame.function)) ||
+     work.provider_generation || work.wake || work.wake_work ||
+     (work.physical_work && (work.prebody_parked || work.owns_persistent_work ||
+       (work.periodic_role!=PeriodicRole::kNone && work.periodic_body_admitted))))
+   return ReentrantWorkConflict::kNone;
+  return ReentrantWorkConflict::kUntyped;
+ }
+ // Capture only the actual native Task scalar outside State. This does not
+ // issue a read/source or certify a callback; the final metadata cut below
+ // binds the real selected execution and every containing old-data duty.
+ std::optional<uint32_t> OriginalCallerTask(XThread* caller,uint16_t ordinal) const {
+  if(!caller || ActualThread()!=caller || !caller->thread_state() ||
+     !caller->thread_state()->context() || global_critical_region::is_held_by_current_thread() ||
+     (ordinal!=0x20B && ordinal!=0x224))return {};
+  return NativeProfileIdentityTaskContext::Read(*config.catalog->calls(),*config.domain,
+      ordinal==0x20B?0x8199C630u:0x8199E3E0u,*caller->thread_state()->context(),
+      caller->native_frame_thread_identity().process_type==X_PROCTYPE_TITLE);
+ }
+ ReentrantWorkConflict NormalOriginalCaller(XThread* caller,std::optional<uint32_t> actual_task,
+     uint32_t* first_function=nullptr) const {
+  const auto refuse=[&](ReentrantWorkConflict why,uint32_t function=0){
+   if(first_function)*first_function=function;return why;
+  };
+  auto* cpu=caller?caller->thread_state():nullptr;const auto* c=cpu?cpu->context():nullptr;
+  if(!caller || ActualThread()!=caller || caller->kernel_state()!=kernel || !c ||
+     c->kernel_state!=kernel || c->thread_state!=cpu || c->processor!=kernel->processor() ||
+     !DwordIs(c->r[13],caller->pcr_ptr()) || !DwordIs(c->r[1],uint32_t(c->r[1])) ||
+     (c->r[1]&15) || caller->stack_limit()>=caller->stack_base() ||
+     c->r[1]<caller->stack_limit() || c->r[1]>caller->stack_base() ||
+     !aligned || job || stopping.load() || retired.load() || uncertain.load() ||
+     render_phase!=RenderPhase::kOpen || !current_ticket || !current_roster ||
+     current_read_source==kBootUnjoinedSource)return refuse(ReentrantWorkConflict::kCallerContext);
+  if(caller->thread_id()==config.allocation->bootstrap_thread_id())
+   return refuse(ReentrantWorkConflict::kCallerBootstrap);
+  if(cpu->native_profile_roster_read_.load(std::memory_order_acquire) ||
+     cpu->native_identity_publication_cell_.load(std::memory_order_acquire) ||
+     cpu->native_identity_listener_cell_.load(std::memory_order_acquire))
+   return refuse(ReentrantWorkConflict::kCallerCell);
+  if(unavailable_execution_frames.Shadows(root,caller->thread_id(),caller->pcr_ptr(),
+      uint32_t(c->r[1]),caller->stack_base()))return refuse(ReentrantWorkConflict::kCallerShadow);
+  // This common receipt covers either native dispatcher. A code-pinned
+  // execution-only Task owns callback lifetime, never an old roster read.
+  std::shared_ptr<Work> issuer;
+  for(auto i=active.rbegin();i!=active.rend();++i){const auto& work=*i;
+   if(work && !work->normal_return && work->frame.thread==caller->thread_id() &&
+      (work->frame.function==0x816B8B08 || work->frame.function==0x816B7DE8)){issuer=work;break;}
+  }
+  if(!issuer || !actual_task || issuer->thread.get()!=caller || issuer->frame.root!=root ||
+     issuer->frame.pcr!=caller->pcr_ptr() || !issuer->domain || issuer->uncertain ||
+     !issuer->execution_only || !issuer->execution_code_proven || issuer->execution_uncertain ||
+     issuer->source!=kBootUnjoinedSource || issuer->birth.task!=*actual_task ||
+     !tasks.IsExecutionSubject(issuer->birth.generation) || !issuer->execution_dispatch ||
+     !issuer->execution_lifetime || issuer->execution_lifetime->uncertain ||
+     issuer->execution_lifetime->native_freed || !issuer->execution_target)
+   return refuse(ReentrantWorkConflict::kCallerExecution,issuer?issuer->frame.function:0);
+  const auto selected=tasks.CaptureCurrentExecution(issuer->execution_dispatch,
+      caller->thread_id(),caller->pcr_ptr(),uint32_t(c->r[1]),*actual_task);
+  const auto* node=tasks.FindBirthConst(issuer->birth.generation);
+  const auto& target=issuer->execution_target;
+  if(!selected || !Tasks::SameBirth(selected->birth,issuer->birth) || selected->dispatcher!=issuer->frame ||
+     !node || node->execution_active!=issuer->execution_dispatch || selected->callback!=target->callback ||
+     !target->code.module || !target->code.lease || !target->code.load_generation ||
+     target->code.module->load_generation()!=target->code.load_generation)
+   return refuse(ReentrantWorkConflict::kCallerExecution,issuer->frame.function);
+  const auto same_frame=[&](const Frame& f){return f.root==root &&
+      (f.thread==caller->thread_id() || f.pcr==caller->pcr_ptr());};
+  const auto check=[&](const auto& work,bool active_record){
+   if(!work)return ReentrantWorkConflict::kNone;
+   const auto& cell=work->execution_read;
+   const auto& parent=work->execution_read_owner;
+   const bool own=work->thread.get()==caller || same_frame(work->frame);
+   const bool borrowed=same_frame(cell.origin()) || same_frame(cell.restoration()) ||
+       (parent && (parent->thread.get()==caller || same_frame(parent->frame)));
+   if(!own && !borrowed)return ReentrantWorkConflict::kNone;
+   if(own && (work->thread.get()!=caller || work->frame.root!=root ||
+       work->frame.thread!=caller->thread_id() || work->frame.pcr!=caller->pcr_ptr()))
+    return ReentrantWorkConflict::kFrameLifetime;
+   if(work->read || work->execution_read_fallback || cell.pending() || cell.scope() ||
+      (cell.owner() && (!parent || cell.owner()!=parent.get())) ||
+      (parent && (parent->read || parent->execution_read_fallback || parent->execution_read.pending())))
+    return ReentrantWorkConflict::kCallerOldData;
+   if(!work->normal_return && (work->commit || work->identity_continuation || work->host_body))
+    return ReentrantWorkConflict::kCallerOldData;
+   // Mirror only the actual existing old-cut join. A returned code/ref holder
+   // is not new data, while a containing ordinary native operation must end.
+   if(active_record && !work->physical_work && !work->execution_only)
+    return ReentrantWorkConflict::kCallerOldBarrier;
+   return ReentrantWorkConflict::kNone;
+  };
+  for(const auto* records:{&active,&execution_retained,&host_retired})
+   for(const auto& work:*records){const auto conflict=check(work,records==&active);
+    if(conflict!=ReentrantWorkConflict::kNone)return refuse(conflict,work->frame.function);}
+  for(const auto& call:expected)if(call && !call->call_returned &&
+      (call->thread.get()==caller || (call->actual && same_frame(*call->actual))))
+   return refuse(ReentrantWorkConflict::kCallerExpected,call->function);
+  if(wake){
+   for(const auto& row:wake->wakes_)if(row && (same_frame(row->frame) || same_frame(row->reschedule)))
+    return refuse(ReentrantWorkConflict::kCallerWake,row->frame.function);
+   for(const auto& row:wake->works_)if(row && (same_frame(row->frame) || same_frame(row->refresh)))
+    return refuse(ReentrantWorkConflict::kCallerWake,row->frame.function);
+  }
+  return ReentrantWorkConflict::kNone;
+ }
+ // Positive ownership proof for the primary-proven local async families only.
+ // Keeping the exact read/frame is essential: the outer native scene still
+ // owns resources after its callback returns, through the actual CD920 cut.
+ std::shared_ptr<Work> ReentrantOriginalFrame(XThread* caller,uint16_t ordinal,
+     uint32_t flags,uint32_t overlap,OriginalLogonDiagnostic* diagnostic=nullptr) const {
+  const auto rejected=[&](uint32_t bit,bool condition){
+   if(diagnostic){diagnostic->evaluated|=1u<<bit;if(condition)diagnostic->failed|=1u<<bit;}
+   return condition;
+  };
+  if(rejected(0,!caller || caller!=ActualThread() || (ordinal!=0x20B && ordinal!=0x224)))return {};
+  const bool proven_async_flags=flags==0 || flags==4 || flags==0xC || flags==0x20 ||
+      flags==0x24 || flags==0x2C || flags==0x120420 || flags==0x120424;
+  if(rejected(1,!proven_async_flags || !overlap) ||
+     rejected(2,bool(job) || render_phase!=RenderPhase::kOpen || !aligned || !current_ticket ||
+         !current_roster || !config.factory_binding || !pixels) ||
+     rejected(3,stopping.load() || retired.load() || uncertain.load()) ||
+     rejected(11,!expected.empty()))return {};
+  auto* cpu=caller->thread_state();const auto* c=cpu?cpu->context():nullptr;
+  const auto work=Latest(caller->thread_id());
+  if(rejected(4,!c || caller->kernel_state()!=kernel || c->kernel_state!=kernel ||
+         c->thread_state!=cpu || c->r[13]!=caller->pcr_ptr()) ||
+     rejected(5,!work || !work->render_iteration || work->frame.function!=0x816CD6E8 ||
+         work->frame.root!=root || work->frame.thread!=caller->thread_id() ||
+         work->frame.pcr!=caller->pcr_ptr() || work->thread.get()!=caller ||
+         work->source!=current_read_source) ||
+     rejected(7,!work->domain || work->normal_return || work->uncertain || work->physical_work ||
+         work->execution_only || work->execution_read_owner || work->execution_read_fallback) ||
+     rejected(6,!work->read || work->read_pool!=&boot_reads || work->presentation_guard!=pixels ||
+         xam::ProfileRosterNativeReadScope::FromActualThread(kernel,cpu)!=work->read.get()))return {};
+  const auto* node=tasks.FindBirthConst(work->external_birth.generation);
+  if(rejected(8,!node || !Tasks::SameBirth(node->birth,work->external_birth) ||
+         !Tasks::SameBirth(work->birth,work->external_birth) || node->freed || node->free_entered) ||
+     rejected(9,c->r[1]>UINT32_MAX || (c->r[1]&15) || caller->stack_limit()>=caller->stack_base() ||
+         c->r[1]<caller->stack_limit() || c->r[1]>work->frame.sp ||
+         work->frame.sp>caller->stack_base()))return {};
+  // Keep both original old-source mutation-descendant checks in Enqueue.
+  // A retained fixed-old consumer or pure transport is not a destructive
+  // publisher. Its full read/source/listener/paint lifetime still joins before
+  // data_worker_ready; no scope, native result or callback is shortened here.
+  bool other_owner=false;
+  for(const auto& other:active){
+   if(!other || other==work || other->normal_return)continue;
+   const auto conflict=ReentrantOldWorkConflict(*other);
+   if(conflict==ReentrantWorkConflict::kNone)continue;
+   other_owner=true;
+   // One representative at the actual API cut, never a per-frame census.
+   // Existing kind/role/caller/stack metadata in bits0..15 is unchanged.
+   if(diagnostic)diagnostic->latest_kind=(diagnostic->latest_kind&0xFFFFu) |
+       (uint32_t(conflict)<<16) | (OriginalLogonFunctionRole(other->frame.function)<<24);
+   break;
+  }
+  if(rejected(10,other_owner))return {};
+  return work;
+ }
+ bool AwaitPreparedWorker(cpu::ppc::PPCContext&,uint32_t) noexcept;
  uint64_t EarlierSource(uint32_t thread) const {
   const auto prior=Latest(thread);return prior?prior->source:kBootUnjoinedSource;
  }
@@ -2333,6 +2590,95 @@ struct NativeProfileIdentityOwner::State {
   return frame;
  }
 };
+// Both native224 queue variants may reach their worker before the original
+// initializer returns. Park at the actual callback entry, never after native
+// data/cache instructions or under State/GCRC/native locks. No Task callback
+// start/return, read scope or listener whole-work exists until normal Core
+// admission follows this gate.
+bool NativeProfileIdentityOwner::State::AwaitPreparedWorker(
+    cpu::ppc::PPCContext& c,uint32_t at) noexcept {
+ hooks.fetch_add(1,std::memory_order_acq_rel);
+ struct Exit{State& s;~Exit(){s.hooks.fetch_sub(1,std::memory_order_acq_rel);}} exit{*this};
+ try{
+  std::shared_ptr<Job> pending;
+  {
+   std::lock_guard lock(mutex);pending=job;
+   if(!pending || !pending->original_render_frame || pending->data_worker_ready)return true;
+  }
+  if(global_critical_region::is_held_by_current_thread()){Lose(__LINE__);return false;}
+  auto* thread=ActualThread();
+  const auto task=NativeProfileIdentityTaskContext::Read(*config.catalog->calls(),*config.domain,at,c);
+  if(!task || !thread || !DwordIs(c.r[3],uint32_t(c.r[3]))){Lose(__LINE__);return false;}
+  Tasks::Birth captured;
+  {
+   std::lock_guard lock(mutex);
+   const auto* node=tasks.FindLiveTask(*task);
+   if(job!=pending || !pending->native_entered || !pending->overlap || pending->canceled ||
+      !node || node->birth.origin!=pending->source || !node->published || node->started ||
+      node->returned || node->callback!=at || node->argument!=uint32_t(c.r[3]) ||
+      node->execution_only || node->created_persistent || node->periodic_factory || node->transport_only){
+    Lose(__LINE__);return false;
+   }
+   captured=node->birth;
+  }
+  // This ALREADY published Task may arrive after stop sealed allocation.
+  // Retained-context validation captures metadata only, never body permission;
+  // every caller/domain/code/frame predicate still runs. Actual Core admission
+  // below remains strict and is not replaced by this prebody reservation.
+  const bool accepting=config.allocation->IsAccepting();
+  const auto frame=ReadFrame(c,at,false,nullptr,true);
+  if(!frame){Lose(__LINE__);return false;}
+  auto worker=std::make_shared<PrebodyIdentityWorker>();worker->frame=*frame;
+  worker->thread=retain_object(thread);worker->code=root_code;worker->domain=config.domain->Acquire();
+  worker->argument=uint32_t(c.r[3]);
+  {
+   std::lock_guard lock(mutex);
+   const auto* node=tasks.FindLiveTask(*task);
+   if(job!=pending || !worker->code || !worker->domain || !node ||
+      !Tasks::SameBirth(node->birth,captured) || node->birth.origin!=pending->source ||
+      !node->published || node->started || node->returned || node->callback!=at ||
+      node->argument!=worker->argument){Lose(__LINE__);return false;}
+   const auto slot=std::find_if(pending->prebody_workers.begin(),pending->prebody_workers.end(),
+       [](const auto& old){return !old;});
+   if(slot==pending->prebody_workers.end() || std::any_of(pending->prebody_workers.begin(),
+       pending->prebody_workers.end(),[&](const auto& old){return old && old->frame==*frame;})){
+    Lose(__LINE__);return false;
+   }
+   worker->birth=node->birth;*slot=worker;
+   if(stopping.load() || retired.load() || uncertain.load() || pending->execution_uncertain){
+    worker->refused=true;pending->execution_uncertain=true;return false;
+   }
+   if(!accepting){worker->refused=true;pending->execution_uncertain=true;Lose(__LINE__);return false;}
+  }
+  for(;;){
+   // Actual frame/Task/code checks precede State, just like original Core.
+   const auto current_frame=ReadFrame(c,at);
+   const auto current=NativeProfileIdentityTaskContext::Read(*config.catalog->calls(),*config.domain,at,c);
+   {
+    std::lock_guard lock(mutex);
+    const auto* node=current?tasks.FindLiveTask(*current):nullptr;
+    if(job!=pending || stopping.load() || retired.load() || uncertain.load() ||
+       pending->execution_uncertain || pending->canceled){
+     // Native initializer already entered. Retain the exact request, code and
+     // worker metadata for factual stop; never CancelRoster or invent a body
+     // return/CompleteIO/Task close to make shutdown look drained.
+     worker->refused=true;pending->execution_uncertain=true;return false;
+    }
+    if(ActualThread()!=thread || !current_frame || *current_frame!=*frame ||
+       !DwordIs(c.r[3],worker->argument) || !node ||
+       !Tasks::SameBirth(node->birth,worker->birth) || node->birth.origin!=pending->source ||
+       !node->published || node->started || node->returned || node->callback!=at ||
+       node->argument!=worker->argument){
+     worker->refused=true;pending->execution_uncertain=true;Lose(__LINE__);return false;
+    }
+    if(pending->data_worker_ready){
+     worker->admitted=true;return true; // existing EnterWork/read/Commit follows
+    }
+   }
+   thread->Delay(0,0,uint64_t(-10000ll));
+  }
+ }catch(...){Lose(__LINE__);return false;}
+}
 static_assert(std::atomic<uint64_t>::is_always_lock_free);
 static_assert(std::atomic<uint32_t>::is_always_lock_free);
 
@@ -2757,7 +3103,7 @@ void NativeProfileIdentityOwner::ReportAlignmentOnHost(const char* boundary) con
     d.job_flags=uint64_t(j.bootstrap_alignment.load())|(uint64_t(j.canceled.load())<<1)|
       (uint64_t(j.entering.load())<<2)|(uint64_t(j.native_entered.load())<<3)|(uint64_t(j.native_returned.load())<<4)|
       (uint64_t(j.transport_running.load())<<5)|(uint64_t(j.execution_uncertain.load())<<6)|
-      (uint64_t(j.preentry_ready.load())<<7)|(uint64_t(j.publisher_observed.load())<<8)|
+      (uint64_t(j.data_worker_ready.load())<<7)|(uint64_t(j.publisher_observed.load())<<8)|
       (uint64_t(j.render_refresh_observed.load())<<9)|(uint64_t(j.old_paint_drained.load())<<10)|
       (uint64_t(j.new_paint_drained.load())<<11)|(uint64_t(j.want_final_barrier.load())<<12)|
       (uint64_t(j.done.load())<<14); // bit13 unavailable: joined is not State-locked
@@ -4044,6 +4390,7 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
   }
   job->input=scratch.address;job->owned_input=true;
  }
+ const auto caller_task=s.OriginalCallerTask(caller,original?original->ordinal():0);
  {
   std::lock_guard lock(s.mutex);
   uint32_t evaluated=0,failed=0;
@@ -4055,6 +4402,10 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
      rejected(7,!s.next_source || s.next_source==UINT64_MAX)){
    return fail(__LINE__,11,std::errc::device_or_resource_busy,failed==(1u<<6),evaluated,failed);
   }
+  if(caller && s.Latest(caller->thread_id()) &&
+     s.NormalOriginalCaller(caller,caller_task)!=State::ReentrantWorkConflict::kNone &&
+     !s.ReentrantOriginalFrame(caller,original?original->ordinal():0,flags,overlap))
+   return fail(__LINE__,11,std::errc::device_or_resource_busy,false,1u<<9,1u<<9);
   job->serial=job->source=s.next_source++;
  }
  auto lifetime=std::make_shared<State::EventLifetime>();
@@ -4078,6 +4429,7 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
    }
   }
  } unpublished{s,job,error,retryable_bootstrap};
+ const auto reserved_caller_task=s.OriginalCallerTask(caller,original?original->ordinal():0);
  {
   std::lock_guard lock(s.mutex);
   uint32_t evaluated=0,failed=0;
@@ -4086,6 +4438,14 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
      rejected(3,s.uncertain.load()) || rejected(6,!s.tasks.SourceDescendantsClosed(s.current_read_source))){
    return fail(__LINE__,14,std::errc::device_or_resource_busy,failed==(1u<<6),evaluated,failed);
   }
+  const bool normal_caller=caller &&
+      s.NormalOriginalCaller(caller,reserved_caller_task)==State::ReentrantWorkConflict::kNone;
+  if(!normal_caller)job->original_render_frame=s.ReentrantOriginalFrame(caller,original?original->ordinal():0,flags,overlap);
+  // Readless issuers use the existing full drain BEFORE initializer entry.
+  // They do not manufacture a render read or enable the early worker gate.
+  job->initializer_ready=bool(job->original_render_frame);
+  if(caller && s.Latest(caller->thread_id()) && !normal_caller && !job->original_render_frame)
+   return fail(__LINE__,14,std::errc::device_or_resource_busy,false,1u<<9,1u<<9);
   job->old_pixels=s.pixels;
   job->old_event_source=s.current_event_source;job->old_event_origin=s.current_event_origin;
   job->hidden_pixels=std::make_shared<IdentityPixelGuard>(job->source,false,s.pixel_lifetime);
@@ -4142,7 +4502,7 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
  auto expected=std::make_shared<State::Expected>();
  {
   std::lock_guard lock(s.mutex);job=s.job;
-  if(!job || !job->preentry_ready || job->canceled || job->entering || job->native_entered ||
+  if(!job || !job->initializer_ready || job->canceled || job->entering || job->native_entered ||
      job->execution_uncertain || s.retired.load() || s.uncertain.load() ||
      ActualThread()!=&thread || thread.kernel_state()!=s.kernel || s.expected.size()>=64 ||
      (job->original_caller && job->original_caller.get()!=&thread))
@@ -4217,6 +4577,7 @@ NativeProfileIdentityOwner::Result NativeProfileIdentityOwner::TryLogonOnOrigina
      diagnostic.Refused(9,(caller->native_frame_thread_identity().process_type!=X_PROCTYPE_TITLE &&
       caller->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM),__LINE__) ||
      diagnostic.Refused(10,global_critical_region::is_held_by_current_thread(),__LINE__))return diagnostic.Finish(rejected);
+  const auto caller_task=s.OriginalCallerTask(caller,ordinal);
   {
    std::lock_guard lock(s.mutex);
    const auto latest=[&]{
@@ -4244,14 +4605,24 @@ NativeProfileIdentityOwner::Result NativeProfileIdentityOwner::TryLogonOnOrigina
      diagnostic.value.latest_borrowed_read_present=bool(work->execution_read_owner);
      diagnostic.value.latest_same_source=work->source==s.current_read_source;
     }
-    return bool(work);
+    if(!work)return false;
+    uint32_t conflict_function=0;
+    const auto normal=s.NormalOriginalCaller(caller,caller_task,&conflict_function);
+    if(normal==State::ReentrantWorkConflict::kNone)return false;
+    if(work->render_iteration)
+     return !s.ReentrantOriginalFrame(caller,ordinal,uint32_t(args[1]),uint32_t(args[2]),&diagnostic.value);
+    // One actual normal-admission refusal; low16 Latest metadata is intact.
+    // No failed render bit is fabricated for a successful readless issuer.
+    diagnostic.value.latest_kind=(diagnostic.value.latest_kind&0xFFFFu) |
+        (uint32_t(normal)<<16) | (OriginalLogonFunctionRole(conflict_function)<<24);
+    return true;
    };
    if(diagnostic.Refused(11,!s.aligned,__LINE__) || diagnostic.Refused(12,s.job,__LINE__) ||
       diagnostic.Refused(13,s.stopping.load(),__LINE__) || diagnostic.Refused(14,s.retired.load(),__LINE__) ||
       diagnostic.Refused(15,s.uncertain.load(),__LINE__) || diagnostic.Refused(16,latest(),__LINE__))return diagnostic.Finish(rejected);
-   // A synchronous original ingress cannot wait for its OWN already admitted
-   // old render/provider work to drain. Refuse before native/PM entry rather
-   // than forge an asynchronous native return or move it to another caller.
+   // A proven local async initializer runs on this same caller while its
+   // exact OLD render/read stays retained. All other owned caller work still
+   // refuses here; null overlap never receives an async substitute.
   }
   if(diagnostic.Refused(17,!s.EnterPublic(false),__LINE__))return diagnostic.Finish(rejected);
   struct PublicExit{State& s;~PublicExit(){s.LeavePublic(false);}} public_exit{s};
@@ -4309,7 +4680,7 @@ NativeProfileIdentityOwner::Result NativeProfileIdentityOwner::TryLogonOnOrigina
     std::lock_guard lock(s.mutex);
     closed=!s.job || s.job->intent!=intent || s.job->canceled || s.stopping.load() ||
         s.retired.load() || s.uncertain.load();
-    ready=!closed && s.job->preentry_ready;
+    ready=!closed && s.job->initializer_ready;
    }
    if(ready)break;
    if(diagnostic.Refused(33,closed,__LINE__) || diagnostic.Refused(34,std::chrono::steady_clock::now()>=deadline,__LINE__)){owner->CancelQueued(intent);return diagnostic.Finish(rejected);}
@@ -6092,7 +6463,7 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   std::lock_guard lock(s.mutex);
   // Diagnostic-only generation; never reset an in-flight synchronous drain or
   // the already-armed continuation. No native pending read is added here.
-  if(!job->preentry_ready && !job->preentry_observation_exhausted){
+  if(!job->data_worker_ready && !job->preentry_observation_exhausted){
    if(job->preentry_attempt==PaintObservation::kMaximumAttempt){
     job->preentry_observation_exhausted=true;job->preentry_attempt=0;
    }else ++job->preentry_attempt;
@@ -6140,14 +6511,17 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   const bool armed=s.wake->ArmPrepared(job->source,pending);
   observation.Finish(PaintStage::kArm,armed);
   if(!armed)return false;
-  job->old_paint_drained=true;job->preentry_ready=true;s.changed.notify_all();
+  // This is still the only dataful-worker grant: true CD920/read/Task end,
+  // actual source/listener closure, physical paint drain and native wake arm.
+  job->old_paint_drained=true;job->initializer_ready=true;
+  job->data_worker_ready=true;s.changed.notify_all();
  }
  bool run_host=false;
  std::shared_ptr<NativeSystemTaskContinuation> continuation;
  {
   std::lock_guard lock(s.mutex);
   observation.Begin(PaintStage::kContinuation);
-  run_host=observed(PaintStage::kContinuation,0,s.job==job) && observed(PaintStage::kContinuation,1,job->preentry_ready) && observed(PaintStage::kContinuation,2,!job->original_caller) &&
+  run_host=observed(PaintStage::kContinuation,0,s.job==job) && observed(PaintStage::kContinuation,1,job->data_worker_ready) && observed(PaintStage::kContinuation,2,!job->original_caller) &&
       observed(PaintStage::kContinuation,3,!job->native_entered) && observed(PaintStage::kContinuation,4,!job->entering) && observed(PaintStage::kContinuation,5,!job->transport_running) && observed(PaintStage::kContinuation,6,!s.stopping.load());
   if(run_host){continuation=s.continuation.lock();if(observed(PaintStage::kContinuation,7,bool(continuation)))job->transport_running=true;}
   else observation.Finish(PaintStage::kContinuation,false);
@@ -6679,6 +7053,11 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
    if(job->owned_input.exchange(false) && job->input)state_->kernel->memory()->SystemHeapFree(job->input);
    job->input=0;job->caller_backing.reset();job->overlap_backing.reset();
    job->old_reads={};job->writer_reads={};job->old_ticket.reset();job->writer_ticket.reset();
+   job->original_render_frame.reset();
+   for(const auto& worker:job->prebody_workers)if(worker){
+    worker->thread.reset();worker->code.reset();worker->domain={};
+   }
+   job->prebody_workers={};
    job->publication.reset();job->joined.reset();job->intent.reset();job->original_caller.reset();
    job->caller_code.clear();job->apc_code.reset();job->domain={};
    job->old_event_source.reset();job->event_source.reset();
@@ -7034,6 +7413,17 @@ uint64_t NativeProfileIdentityOwner::GuardEntryCore(void* raw,uint64_t address) 
   return !cell || Listeners::FastEnter(cell,ListenerRegisters(c),at)?1:Abort(c);
  }
  if((at==0x816A2CF0 || at==0x816A2A48) && NativeXmsgProvenance::Lookup(c.kernel_state))return 1;
+ if(at==0x8199E148 || at==0x8199C838){
+  try{
+   if(const auto owner=Lookup(c.kernel_state)){
+    auto& s=*owner->state_;
+    if(s.retired.load(std::memory_order_acquire) || !s.kernel || !s.config.catalog)
+     return s.Deny(c,at,__LINE__);
+    if(s.kernel->GetUserModuleForAddress(at).get()==s.config.catalog->calls()->module().get() &&
+       !s.AwaitPreparedWorker(c,at))return s.Deny(c,at,__LINE__);
+   }
+  }catch(...){if(const auto owner=Lookup(c.kernel_state))owner->state_->Lose(__LINE__);return Abort(c,at);}
+ }
  if(ObserveExecutionEntry(raw,at))return 1;
  try{
   auto owner=Lookup(c.kernel_state);

@@ -426,6 +426,8 @@ void ProfileManager::ReportNativeProfileDiagnostics(const char* boundary) const 
              {"latest_caller_available",((d.latest_kind>>12)&3u)!=0},
              {"latest_same_caller",((d.latest_kind>>12)&3u)==1},
              {"latest_sp_relation",(d.latest_kind>>14)&3u},
+             {"reentrant_conflict_category",(d.latest_kind>>16)&0xFFu},
+             {"reentrant_conflict_function_role",(d.latest_kind>>24)&0xFFu},
              {"latest_read_present",d.latest_read_present},{"latest_borrowed_read_present",d.latest_borrowed_read_present},
              {"latest_same_source",d.latest_same_source},{"entered",d.entered},{"returned",d.returned},
              {"phase_available",d.phase_available},{"phase",d.phase},{"maps_committed",d.maps_committed},

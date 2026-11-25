@@ -253,8 +253,9 @@ Phase ContentPhase(NativeSystemContentCall call) {
   return Phase::kPrepareSeams;
 }
 }  // namespace
-NativeSystemProfileInitializationData ReadNativeSystemProfileInitializationData(
-    Memory& memory) {
+namespace {
+NativeSystemProfileInitializationData ReadProfileInitializationData(
+    Memory& memory, bool constructor_cut) {
   NativeSystemProfileInitializationData result;
   auto guard = global_critical_region::AcquireDirect();
   const auto reference = Word(&memory, 0x81AA3E90);
@@ -272,12 +273,15 @@ NativeSystemProfileInitializationData ReadNativeSystemProfileInitializationData(
     result.status = NativeSystemProfileInitializationData::Status::kQueueObject;
     return result;
   }
-  // Original BA840 creates the serial queue's base reference and empty list;
-  // BA948 stores body|2 and adds flags1. No Task is created or adopted here.
-  if (Word(&memory, result.queue_body + 4) != 1u ||
-      Word(&memory, result.queue_body + 8) != 0u ||
-      Word(&memory, result.queue_body + 0x18) != 1u ||
-      Word(&memory, result.queue_body + 0x1C) != 1u) {
+  // Original BA840/BA948 establish these pristine counters only at the
+  // constructor cut. Later extra queue holders/list state are not proof of
+  // an identity mutation; the owner separately excludes actual operations.
+  const auto references = Word(&memory, result.queue_body + 4);
+  if (!references || !*references ||
+      (constructor_cut &&
+       (*references != 1u || Word(&memory, result.queue_body + 8) != 0u ||
+        Word(&memory, result.queue_body + 0x18) != 1u ||
+        Word(&memory, result.queue_body + 0x1C) != 1u))) {
     result.status = NativeSystemProfileInitializationData::Status::kQueueState;
     return result;
   }
@@ -307,7 +311,8 @@ NativeSystemProfileInitializationData ReadNativeSystemProfileInitializationData(
         return result;
       }
       const auto* bytes = memory.TranslateVirtual<const uint8_t*>(*buffer);
-      if (!std::all_of(bytes, bytes + 0x22,
+      if (constructor_cut &&
+          !std::all_of(bytes, bytes + 0x22,
                        [](uint8_t value) { return value == 0; })) {
         result.status = NativeSystemProfileInitializationData::Status::kBuffer;
         return result;
@@ -316,6 +321,69 @@ NativeSystemProfileInitializationData ReadNativeSystemProfileInitializationData(
     }
   }
   result.status = NativeSystemProfileInitializationData::Status::kValid;
+  return result;
+}
+}  // namespace
+NativeSystemProfileInitializationData ReadNativeSystemProfileInitializationData(
+    Memory& memory) {
+  return ReadProfileInitializationData(memory, true);
+}
+NativeSystemInitialEmptyProfileData ReadNativeSystemInitialEmptyProfileData(
+    Memory& memory, const NativeSystemProfileInitializationData* initialized) {
+  NativeSystemInitialEmptyProfileData result;
+  auto guard = global_critical_region::AcquireDirect();
+  result.initialization = ReadProfileInitializationData(memory, !initialized);
+  if (result.initialization.status !=
+          NativeSystemProfileInitializationData::Status::kValid ||
+      (initialized &&
+       initialized->status !=
+           NativeSystemProfileInitializationData::Status::kValid)) {
+    result.status =
+        NativeSystemInitialEmptyProfileData::Status::kInitialization;
+    return result;
+  }
+  if (initialized &&
+      (initialized->queue_reference != result.initialization.queue_reference ||
+       initialized->queue_body != result.initialization.queue_body ||
+       initialized->buffers != result.initialization.buffers)) {
+    result.status =
+        NativeSystemInitialEmptyProfileData::Status::kChangedAllocation;
+    return result;
+  }
+  // These are the ACTIVE native overrides, not merely a static vtable object.
+  if (Word(&memory, 0x81A82FF0) != 0x81AA28E0u ||
+      Word(&memory, 0x81A83028) != 0x81A8302Cu ||
+      Word(&memory, 0x81A8302C) != 0x815FB150u) {
+    result.status = NativeSystemInitialEmptyProfileData::Status::kProvider;
+    return result;
+  }
+  // Minimal native presence is raw bit0 (D8470). The one-time fresh baseline
+  // additionally requires canonical absent identity/status scalars in BOTH
+  // arrays; it never erases dormant rows or interprets Account/name payloads.
+  if (Word(&memory, 0x81AA28DC) != 0u) {
+    result.status = NativeSystemInitialEmptyProfileData::Status::kIdentity;
+    return result;
+  }
+  constexpr uint32_t offsets[] = {0,     8,     0xC,   0x3C, 0x40,
+                                  0x27C, 0x280, 0x288, 0x28C};
+  for (uint32_t slot = 0; slot < 4; ++slot) {
+    if (Word(&memory, 0x81AA3D74 + slot * 4) != 0u) {
+      result.status = NativeSystemInitialEmptyProfileData::Status::kIdentity;
+      return result;
+    }
+    for (const auto base : {0x81AA28E0u, 0x81AA3320u}) {
+      for (const auto offset : offsets) {
+        // Online XUID+3C is DWORD-aligned; read both DWORDs, not an
+        // incorrectly 8-byte-aligned generic QWORD accessor.
+        if (Word(&memory, base + slot * 0x290 + offset) != 0u) {
+          result.status =
+              NativeSystemInitialEmptyProfileData::Status::kIdentity;
+          return result;
+        }
+      }
+    }
+  }
+  result.status = NativeSystemInitialEmptyProfileData::Status::kValid;
   return result;
 }
 NativeSystemPeriodicServiceStopPlan CheckNativeSystemPeriodicServiceStopPlan(
@@ -371,6 +439,10 @@ struct NativeSystemUiStartupCatalog::State {
   GuestRuntime::Function frontend_callback;
   std::string provenance;
   std::shared_ptr<NativeSystemContent> system_content;
+  // Only the actual bootstrap may stage/take this synchronous observation.
+  bool initial_profile_witness_staged = false;
+  XThread* initial_profile_witness_thread = nullptr;
+  std::optional<NativeInitialEmptyProfileWitness> initial_profile_witness;
 };
 NativeSystemUiStartupCatalog::NativeSystemUiStartupCatalog(
     std::unique_ptr<State> state)
@@ -1132,6 +1204,111 @@ bool NativeSystemUiStartupCatalog::CheckNativeProfileInitialization(
   return true;
 }
 
+bool NativeSystemUiStartupCatalog::CheckNativeInitialEmptyProfileSource()
+    const {
+  if (!CheckNativeProfileInitializationSource(nullptr)) return false;
+  const auto& calls = *state_->calls;
+  const auto module = calls.module();
+  auto* image = module->xex_module();
+  auto* memory = calls.kernel()->memory();
+  constexpr Anchor proof[] = {
+      {0x816DF950, 12,
+       "3de861ca448eec27add506c4ac7158ac05314b1b759773b6c1f238092177325d"},
+      {0x816DF960, 12,
+       "4b36ebd0269af347fa6fc526ab9c8d2f26a1f21cad1ff6d690ca6d4db525004a"},
+      {0x816D8470, 156,
+       "2b3b96e841c587476312525fdca0cc593279167f8ff4961af97436a479c7aad4"},
+      {0x816D8510, 124,
+       "f62a128cb5f1093368d1678e159ba2d7c15b2b393aa9747ff556d31890d9a847"},
+  };
+  for (const auto& body : proof) {
+    if (calls.kernel()->GetUserModuleForAddress(body.address).get() !=
+            module.get() ||
+        !CodeHash(calls, body.address, body.length, body.hash))
+      return false;
+    for (uint32_t at = body.address; at < body.address + body.length; at += 4) {
+      if (image->TranslateCode(at) !=
+          memory->TranslateVirtual<const uint8_t*>(at))
+        return false;
+    }
+  }
+  const auto root_word = [&](uint32_t at) -> std::optional<uint32_t> {
+    if (calls.kernel()->GetUserModuleForAddress(at).get() != module.get() ||
+        !Data(calls, at))
+      return {};
+    return Word(memory, at);
+  };
+  if (root_word(0x81A82FF0) != 0x81AA28E0u ||
+      root_word(0x81A83028) != 0x81A8302Cu ||
+      root_word(0x815FB150) != 0x816DF950u ||
+      root_word(0x815FB154) != 0x816DF960u ||
+      root_word(0x815FB158) != 0x816DF970u || !root_word(0x81AA28DC))
+    return false;
+  constexpr uint32_t offsets[] = {0,     8,     0xC,   0x3C, 0x40,
+                                  0x27C, 0x280, 0x288, 0x28C};
+  for (uint32_t slot = 0; slot < 4; ++slot) {
+    if (!root_word(0x81AA3D74 + slot * 4)) return false;
+    for (const auto base : {0x81AA28E0u, 0x81AA3320u}) {
+      for (const auto offset : offsets) {
+        if (!root_word(base + slot * 0x290 + offset)) return false;
+      }
+    }
+  }
+  return true;
+}
+NativeInitialEmptyProfileWitness::NativeInitialEmptyProfileWitness(
+    std::shared_ptr<const NativeSystemUiStartupCatalog> catalog,
+    NativeSystemProfileInitializationData initialization)
+    : catalog_(std::move(catalog)),
+      initialization_(std::move(initialization)) {}
+bool NativeInitialEmptyProfileWitness::Matches(
+    const std::shared_ptr<GuestRuntimeCallExecutor>& calls,
+    const std::shared_ptr<NativeSystemAllocationAuthority>& allocation) const {
+  if (!catalog_ || catalog_->calls() != calls ||
+      catalog_->allocation() != allocation ||
+      !catalog_->CheckNativeInitialEmptyProfileSource())
+    return false;
+  // Fresh startup metadata only: no auth-buffer contents are read again.
+  return ReadNativeSystemInitialEmptyProfileData(*calls->kernel()->memory(),
+                                                 &initialization_)
+             .status == NativeSystemInitialEmptyProfileData::Status::kValid;
+}
+void NativeSystemUiStartupCatalog::StageInitialEmptyProfileWitness(
+    const std::shared_ptr<const NativeSystemUiStartupCatalog>& self,
+    XThread& bootstrap) const {
+  if (self.get() != this || state_->initial_profile_witness_staged ||
+      !XThread::IsInThread(&bootstrap) ||
+      bootstrap.native_frame_thread_identity().kernel !=
+          state_->calls->kernel() ||
+      bootstrap.native_frame_thread_identity().process_type !=
+          X_PROCTYPE_SYSTEM ||
+      bootstrap.native_frame_thread_identity().thread_id !=
+          state_->allocation->bootstrap_thread_id())
+    return;
+  state_->initial_profile_witness_staged = true;
+  state_->initial_profile_witness_thread = &bootstrap;
+  if (!CheckNativeInitialEmptyProfileSource()) return;
+  const auto data = ReadNativeSystemInitialEmptyProfileData(
+      *state_->calls->kernel()->memory());
+  if (data.status == NativeSystemInitialEmptyProfileData::Status::kValid)
+    state_->initial_profile_witness =
+        NativeInitialEmptyProfileWitness(self, data.initialization);
+}
+std::optional<NativeInitialEmptyProfileWitness>
+NativeSystemUiStartupCatalog::TakeInitialEmptyProfileWitness(
+    XThread& bootstrap) const {
+  if (!XThread::IsInThread(&bootstrap) ||
+      state_->initial_profile_witness_thread != &bootstrap)
+    return {};
+  auto witness = std::move(state_->initial_profile_witness);
+  state_->initial_profile_witness.reset();
+  return witness;
+}
+void NativeSystemUiStartupCatalog::ClearInitialEmptyProfileWitness() const {
+  state_->initial_profile_witness.reset();
+  state_->initial_profile_witness_thread = nullptr;
+}
+
 bool NativeSystemUiStartupCatalog::CheckNativeNotificationInitialization(
     std::string* error) const {
   const auto fail = [&](std::string reason) {
@@ -1748,12 +1925,29 @@ NativeSystemUiStartupRuntime::Status NativeSystemUiStartupRuntime::Initialize(
           if (!called.succeeded) {
             return fail("Native early call: " + called.detail);
           }
-          const auto observed =
-              seams->ObserveAfter(role->phase, *catalog, bootstrap);
-          return observed.succeeded
-                     ? called
-                     : fail("Early native ownership postcondition: " +
-                            observed.detail);
+          if (role->phase == Phase::kProfileData) {
+            // This mandatory check belongs to the real call/return, not to a
+            // replaceable virtual observer or a public byte-only predicate.
+            std::string profile_error;
+            if (!catalog->CheckNativeProfileInitialization(&profile_error))
+              return fail("Native profile constructor postcondition: " +
+                          profile_error);
+            catalog->StageInitialEmptyProfileWitness(catalog, bootstrap);
+          }
+          try {
+            const auto observed =
+                seams->ObserveAfter(role->phase, *catalog, bootstrap);
+            if (role->phase == Phase::kProfileData)
+              catalog->ClearInitialEmptyProfileWitness();
+            return observed.succeeded
+                       ? called
+                       : fail("Early native ownership postcondition: " +
+                              observed.detail);
+          } catch (...) {
+            if (role->phase == Phase::kProfileData)
+              catalog->ClearInitialEmptyProfileWitness();
+            throw;
+          }
         });
     if (early == GuestRuntime::InitStatus::kBusy ||
         early == GuestRuntime::InitStatus::kReentrant) {

@@ -1332,6 +1332,32 @@ std::shared_ptr<ProfileRosterNativeReadTicket> ProfileManager::CaptureCurrentNat
   a->tickets.push_back(ticket);
   return ticket;
 }
+std::optional<uint64_t> ProfileManager::CaptureInitialEmptyNativeRosterSequence(
+    const std::shared_ptr<const ProfileRosterNativeBinding>& binding,
+    const ProfileRosterExpected& expected,
+    const std::shared_ptr<ProfileRosterNativeReadTicket>& ticket) const {
+  std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+  const auto a = roster_authority_;
+  if (!lock.owns_lock() || !a || !a->open.load(std::memory_order_acquire) ||
+      !a->ordinary.load(std::memory_order_acquire) || !a->selected_read.load(std::memory_order_acquire) ||
+      a->pending || !a->current || a->selected.load(std::memory_order_acquire) != a->current.get() ||
+      !binding || a->binding != binding || binding->state_->authority.lock() != a ||
+      !expected.roster || !expected.proof_ || expected.proof_->authority.lock() != a ||
+      expected.proof_->exact != expected.roster.get() || expected.roster != a->current->roster ||
+      !ticket || !ticket->state_ || ticket->state_->authority != a ||
+      ticket->state_->binding != binding.get() || !ticket->state_->open.load(std::memory_order_acquire) ||
+      ticket->state_->following || ticket->state_->fixed != a->current.get() ||
+      ticket->state_->operation || ticket->state_->writer_old || ticket->state_->writer_new ||
+      !a->next_operation) { return {}; }
+  for (size_t slot = 0; slot != 4; ++slot) {
+    const auto& row = a->current->rows[slot];
+    if (expected.roster->slots()[slot] != ProfileRosterSlot{} || row.profile ||
+        row.model || row.identity || row.account || row.storage) { return {}; }
+  }
+  // A Prepare+Cancel can leave the same exact empty roster. The functional
+  // operation sequence still invalidates an earlier one-time startup capture.
+  return a->next_operation;
+}
 std::shared_ptr<ProfileRosterPublicationCell> ProfileManager::EnterNativeRoster(
     const std::shared_ptr<ProfileRosterIntent>& intent,
     const std::shared_ptr<const ProfileRosterNativeBinding>& binding, std::error_code& error) {

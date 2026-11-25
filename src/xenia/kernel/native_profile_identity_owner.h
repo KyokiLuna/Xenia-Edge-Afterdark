@@ -22,6 +22,7 @@ class NativeSystemAllocationAuthority;
 class NativeSystemTaskContinuation;
 class NativeSystemUiService;
 class NativeSystemUiStartupCatalog;
+class NativeInitialEmptyProfileWitness;
 class NativeNotificationPresentationObserver;
 class NativeSystemGraphicsTransport;
 class NativeIdentityTileWork;
@@ -278,6 +279,8 @@ class NativeProfileIdentityOwner final
   friend class GuestRuntimeCallExecutor;
   friend class NativeSystemTaskContinuation;
   friend class NativeSystemUiService;
+  // Optional fresh constructor provenance, never a native Logon completion.
+  void ObserveInitialEmptyProfileBaseline(XThread&, NativeInitialEmptyProfileWitness&&) noexcept;
   friend class NativeSystemGraphicsTransport;
   friend class xam::ProfileManager;
   struct Config {

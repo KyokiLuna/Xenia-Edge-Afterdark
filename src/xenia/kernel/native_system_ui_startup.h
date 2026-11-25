@@ -26,6 +26,7 @@ class NativeSystemAllocationAuthority;
 class XThread;
 class NativeSystemUiService;
 class NativeSystemContent;
+class NativeSystemUiStartupCatalog;
 struct ValidatedGuestRuntimePlan;
 // The optional stop descriptor does not start, identify or own a native Task.
 // A typed factory owner separately requires it before creating periodic work.
@@ -64,6 +65,46 @@ struct NativeSystemProfileInitializationData {
 };
 NativeSystemProfileInitializationData ReadNativeSystemProfileInitializationData(
     Memory&);
+// Scalar data ABI only, not evidence that DB788 executed. A fresh recheck
+// compares the retained constructor allocations without rereading auth buffers.
+struct NativeSystemInitialEmptyProfileData {
+  enum class Status {
+    kUnavailable,
+    kInitialization,
+    kProvider,
+    kIdentity,
+    kChangedAllocation,
+    kValid
+  };
+  Status status = Status::kUnavailable;
+  NativeSystemProfileInitializationData initialization;
+};
+NativeSystemInitialEmptyProfileData ReadNativeSystemInitialEmptyProfileData(
+    Memory&,
+    const NativeSystemProfileInitializationData* initialized = nullptr);
+// Only the actual DB788 call/return and mandatory initialization postcondition
+// can issue this move-only value. A public byte observer/check cannot mint it.
+class NativeInitialEmptyProfileWitness final {
+ public:
+  NativeInitialEmptyProfileWitness(
+      NativeInitialEmptyProfileWitness&&) noexcept = default;
+  NativeInitialEmptyProfileWitness& operator=(
+      NativeInitialEmptyProfileWitness&&) noexcept = default;
+  NativeInitialEmptyProfileWitness(const NativeInitialEmptyProfileWitness&) =
+      delete;
+  NativeInitialEmptyProfileWitness& operator=(
+      const NativeInitialEmptyProfileWitness&) = delete;
+  bool Matches(const std::shared_ptr<GuestRuntimeCallExecutor>&,
+               const std::shared_ptr<NativeSystemAllocationAuthority>&) const;
+
+ private:
+  friend class NativeSystemUiStartupCatalog;
+  NativeInitialEmptyProfileWitness(
+      std::shared_ptr<const NativeSystemUiStartupCatalog>,
+      NativeSystemProfileInitializationData);
+  std::shared_ptr<const NativeSystemUiStartupCatalog> catalog_;
+  NativeSystemProfileInitializationData initialization_;
+};
 struct NativeSystemUiStartupSymbols {
   uint32_t manager_base = 0, dc_cell = 0;
   uint32_t shared_device_cell = 0, record_context_cell = 0;
@@ -140,6 +181,16 @@ class NativeSystemUiStartupCatalog {
 
  private:
   friend class NativeSystemUiService;
+  // Bootstrap-affine, only inside ObserveAfter(kProfileData). Untaken values
+  // are discarded before that synchronous observer returns to startup.
+  std::optional<NativeInitialEmptyProfileWitness>
+  TakeInitialEmptyProfileWitness(XThread&) const;
+  void StageInitialEmptyProfileWitness(
+      const std::shared_ptr<const NativeSystemUiStartupCatalog>&,
+      XThread&) const;
+  void ClearInitialEmptyProfileWitness() const;
+  bool CheckNativeInitialEmptyProfileSource() const;
+  friend class NativeInitialEmptyProfileWitness;
   // Fixed compiled17559 profile, separate from the immutable923 heap plan.
   // Only the service's once-only prepared-Title record can execute this role.
   GuestRuntime::Plan PreparedTitleHeapPlan(

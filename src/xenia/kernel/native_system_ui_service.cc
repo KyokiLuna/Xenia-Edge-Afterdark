@@ -1337,10 +1337,12 @@ class NativeSystemUiService::StartupSeams final
         return Fail("Actual native input notification adapter closed");
       }
     } else if (phase == NativeSystemUiStartupPhase::kProfileData) {
-      std::string profile_error;
-      if (!catalog.CheckNativeProfileInitialization(&profile_error))
-        return Fail("Actual native profile data initialization incomplete: " +
-                    profile_error);
+      // Runtime has already executed DB788 and enforced its mandatory native
+      // postcondition. A public check/empty snapshot cannot mint this witness.
+      auto witness=catalog.TakeInitialEmptyProfileWitness(thread);
+      std::shared_ptr<NativeProfileIdentityOwner> identity;
+      {std::lock_guard lock(state_->mutex);identity=state_->profile_identity;}
+      if(witness && identity)identity->ObserveInitialEmptyProfileBaseline(thread,std::move(*witness));
     } else if (phase == NativeSystemUiStartupPhase::kInputAuxiliary) {
       if (!observe_tasks(symbols.input_task_cells)) {
         return Fail(

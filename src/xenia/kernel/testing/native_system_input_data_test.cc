@@ -6,15 +6,17 @@
  * Released under the BSD license - see LICENSE in the root for more details. *
  ******************************************************************************
  */
+#include "xenia/kernel/native_system_input_data.h"
+
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
 
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/base/byte_order.h"
 #include "xenia/base/mutex.h"
-#include "xenia/kernel/native_system_input_data.h"
 #include "xenia/kernel/native_system_ui_startup.h"
 #include "xenia/memory.h"
 
@@ -306,5 +308,163 @@ TEST_CASE("Profile initialization data preserves partial native buffer evidence"
   CHECK(ReadNativeSystemProfileInitializationData(f.memory).status ==
         NativeSystemProfileInitializationData::Status::kBuffer);
   CHECK(f.Snapshot() == before);
+}
+namespace {
+using EmptyProfileStatus = NativeSystemInitialEmptyProfileData::Status;
+void PutInitialEmptyProfileMetadata(InputDataFixture& f) {
+  PutProfileInitializationMetadata(f);
+  f.Store(0x81A82FF0, 0x81AA28E0);
+  f.Store(0x81A83028, 0x81A8302C);
+  f.Store(0x81A8302C, 0x815FB150);
+  f.Store(0x81AA28DC, 0);
+  for (uint32_t slot = 0; slot < 4; ++slot) {
+    f.Store(0x81AA3D74 + slot * 4, 0);
+    for (const auto base : {0x81AA28E0u, 0x81AA3320u}) {
+      for (const auto offset :
+           {0u, 8u, 0xCu, 0x3Cu, 0x40u, 0x27Cu, 0x280u, 0x288u, 0x28Cu})
+        f.Store(base + slot * 0x290 + offset, 0);
+    }
+  }
+}
+// Even a complete inert Memory fixture cannot manufacture the call/return
+// witness. Positive native constructor execution remains a runtime test.
+static_assert(
+    !std::is_default_constructible_v<NativeInitialEmptyProfileWitness>);
+static_assert(!std::is_copy_constructible_v<NativeInitialEmptyProfileWitness>);
+static_assert(!std::is_constructible_v<NativeInitialEmptyProfileWitness,
+                                       NativeSystemProfileInitializationData>);
+static_assert(std::is_move_constructible_v<NativeInitialEmptyProfileWitness>);
+}  // namespace
+TEST_CASE(
+    "Initial empty profile data distinguishes construction from zero rows",
+    "[native_profile_data][real_memory]") {
+  InputDataFixture f;
+  PutInitialEmptyProfileMetadata(f);
+  SECTION("Constructed metadata is a data observation, not a native witness") {
+    // DB788 uses exactly0x22 = 34 bytes, not22 decimal or0x22B.
+    *f.memory.TranslateVirtual<uint8_t*>(0x81A8E100 + 0x22) = 1;
+    const auto before = f.Snapshot();
+    const auto data = ReadNativeSystemInitialEmptyProfileData(f.memory);
+    REQUIRE(data.status == EmptyProfileStatus::kValid);
+    REQUIRE(data.initialization.queue_body == kProfileQueue);
+    REQUIRE(data.initialization.buffers[7] == 0x81A8E2C0);
+    REQUIRE(f.Snapshot() == before);
+  }
+  SECTION(
+      "Raw zero rows with no real queue or allocated buffers are not "
+      "initialized") {
+    f.Store(0x81AA3E90, 0);
+    for (uint32_t slot = 0; slot < 4; ++slot)
+      for (const auto base : {0x81AA28E0u, 0x81AA3320u})
+        f.Store(base + slot * 0x290 + 0x278, 0);
+    const auto before = f.Snapshot();
+    REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory).status ==
+            EmptyProfileStatus::kInitialization);
+    REQUIRE(f.Snapshot() == before);
+  }
+}
+TEST_CASE(
+    "Initial empty profile data rejects active provider and row overrides",
+    "[native_profile_data][real_memory]") {
+  InputDataFixture f;
+  PutInitialEmptyProfileMetadata(f);
+  const auto cell = GENERATE(0x81A82FF0u, 0x81A83028u, 0x81A8302Cu);
+  // A valid static vtable is insufficient when its active provider is changed.
+  f.Store(cell, 0x81A8F000);
+  const auto before = f.Snapshot();
+  REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory).status ==
+          EmptyProfileStatus::kProvider);
+  REQUIRE(f.Snapshot() == before);
+}
+TEST_CASE(
+    "Initial empty profile data requires all primary and secondary identities "
+    "absent",
+    "[native_profile_data][real_memory]") {
+  InputDataFixture f;
+  for (const auto base : {0x81AA28E0u, 0x81AA3320u}) {
+    for (uint32_t slot = 0; slot < 4; ++slot) {
+      for (const auto offset :
+           {0u, 8u, 0xCu, 0x3Cu, 0x40u, 0x27Cu, 0x280u, 0x288u, 0x28Cu}) {
+        CAPTURE(base, slot, offset);
+        PutInitialEmptyProfileMetadata(f);
+        f.Store(base + slot * 0x290 + offset, 1);
+        const auto before = f.Snapshot();
+        REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory).status ==
+                EmptyProfileStatus::kIdentity);
+        REQUIRE(f.Snapshot() == before);
+      }
+    }
+  }
+}
+TEST_CASE(
+    "Initial empty profile data rejects requested presence and publication",
+    "[native_profile_data][real_memory]") {
+  InputDataFixture f;
+  PutInitialEmptyProfileMetadata(f);
+  const auto cell =
+      GENERATE(0x81AA28DCu, 0x81AA3D74u, 0x81AA3D78u, 0x81AA3D7Cu, 0x81AA3D80u);
+  f.Store(cell, 1);
+  const auto before = f.Snapshot();
+  REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory).status ==
+          EmptyProfileStatus::kIdentity);
+  REQUIRE(f.Snapshot() == before);
+}
+TEST_CASE(
+    "Fresh initial baseline validates allocation metadata without rereading "
+    "auth bytes",
+    "[native_profile_data][real_memory]") {
+  InputDataFixture f;
+  PutInitialEmptyProfileMetadata(f);
+  const auto captured = ReadNativeSystemInitialEmptyProfileData(f.memory);
+  REQUIRE(captured.status == EmptyProfileStatus::kValid);
+  SECTION("Fresh comparison retains actual original allocations") {
+    // The constructor-only content check is not a later live auth reader.
+    *f.memory.TranslateVirtual<uint8_t*>(captured.initialization.buffers[0]) =
+        1;
+    const auto before = f.Snapshot();
+    REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory,
+                                                    &captured.initialization)
+                .status == EmptyProfileStatus::kValid);
+    REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory).status ==
+            EmptyProfileStatus::kInitialization);
+    REQUIRE(f.Snapshot() == before);
+  }
+  SECTION(
+      "A replaced buffer cannot inherit the earlier constructor observation") {
+    f.Store(0x81AA28E0 + 0x278, 0x81A8E500);
+    std::memset(f.memory.TranslateVirtual(0x81A8E500), 0, 0x22);
+    const auto before = f.Snapshot();
+    REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory,
+                                                    &captured.initialization)
+                .status == EmptyProfileStatus::kChangedAllocation);
+    REQUIRE(f.Snapshot() == before);
+  }
+  SECTION("An extra live queue holder is not an identity operation") {
+    f.Store(kProfileQueue + 4, 2);
+    const auto before = f.Snapshot();
+    REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory,
+                                                    &captured.initialization)
+                .status == EmptyProfileStatus::kValid);
+    REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory).status ==
+            EmptyProfileStatus::kInitialization);
+    REQUIRE(f.Snapshot() == before);
+  }
+  SECTION("A zero queue base reference cannot inherit earlier initialization") {
+    f.Store(kProfileQueue + 4, 0);
+    const auto before = f.Snapshot();
+    REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory,
+                                                    &captured.initialization)
+                .status == EmptyProfileStatus::kInitialization);
+    REQUIRE(f.Snapshot() == before);
+  }
+  SECTION("Unavailable old metadata cannot authorize a fresh observation") {
+    auto unavailable = captured.initialization;
+    unavailable.status =
+        NativeSystemProfileInitializationData::Status::kUnavailable;
+    const auto before = f.Snapshot();
+    REQUIRE(ReadNativeSystemInitialEmptyProfileData(f.memory, &unavailable)
+                .status == EmptyProfileStatus::kInitialization);
+    REQUIRE(f.Snapshot() == before);
+  }
 }
 }  // namespace xe::kernel::test

@@ -1,10 +1,68 @@
 # Native profile admission and startup — 2026-11-25
 
-Status: source backup with passing focused tests; native acceptance incomplete.
+Status: source backup with passing full and focused tests; native acceptance incomplete.
 No replacement AppImage, checkpoint release or HDD gate closure accompanies it.
-Internal build labels V123–V125 identify research builds, not releases.
+Internal build labels V123–V126 identify research builds, not releases.
 
-## Applied implementation
+## Current V126 startup and runtime result
+
+The actual native DB788 constructor still runs and its mandatory postcondition
+is checked at its own return. Its verified initial empty identity state can now
+establish the matching unchanged host roster once, after full native startup.
+The fresh native provider/allocation and profile-manager transaction checks
+must agree. A mismatch retains the existing mutation path.
+
+This baseline keeps the initial read source 2, published source 0, unchanged
+epoch and no identity job. It introduces a new visible pixel guard; it does not
+publish a roster, run a sign-in request, complete an overlap or grant service
+readiness. Subsequent real profile changes retain their native transaction.
+
+The current seven-product Release build passed. Direct full suites passed:
+base 323, network 125, kernel 1,401, VFS 136 and UI 124 cases (2,109 cases and
+141,542 assertions). The separate CPU selection passed five cases/130
+assertions; installed-system selection passed 93 cases/14,103 assertions,
+including all nine new baseline cases and three explicitly selected hidden
+cases. Focused selections overlap the full suites and are not additional
+unique coverage. The CPU instruction corpus was not run in full.
+
+The isolated native dashboard run then established the intended aligned/Open
+source-2 baseline without a synthetic startup job or original logon attempt.
+A virtual controller opened the visible native Guide, used its native sign-in
+picker, closed it, navigated the dashboard and reopened the visible Guide.
+This is current ELF evidence, not acceptance of the published AppImage or a
+new physical-controller run.
+
+Selecting disposable profile local123 requested slot 1 through actual
+224/120424. Caller admission passed, but PrepareRoster returned EBUSY at its
+GPD model/intents/load check (existing refusal line 1104), before native
+initializer entry. Source analysis narrows this to LoadGpdModel: model creation
+clears the error and can report EINVAL, while a missing owner with no error
+would report cancellation. Neither yields the observed EBUSY. The nested
+loader stage remains unobserved. Native sign-in, creation and
+Avatar Editor are not accepted. Do not substitute the host toolbar's slot-0
+label for this request's slot-1 state.
+
+Normal WM close after 210.06 seconds returned code 1 with complete owned
+cleanup and no forced signals. This run's first shutdown failure was nonzero
+identity hooks; their exact owners remain unobserved. It is distinct from
+V125's JoinBootstrap failure. Source, configuration, products and read-only
+inputs were preserved; installed user data was not used. MangoHud and GameMode
+were disabled.
+
+| Current V126 record | SHA256 |
+| --- | --- |
+| Applied nine-path source freeze | `c41e4dc3ee71507070a38d9bb8631657df2f7d387aa46a68ca97e1c75af8c949` |
+| Build | `d4230ec4e60b522c7b52df13c896b85228c955869d3feda5045cb5032269a189` |
+| Direct tests | `bbeb1463a47feac629051b38ff5f9205cc70204c8f6bdfa606e3fccb599c8cab` |
+| ELF | `cc077ea6eb594cbf0518ee22a6e835623804d0bce28e8e5b19ad8606b29b06a6` |
+| Runtime result | `06ba7802673484840c1fd5381565fa3e4b959a3bd22cc909d8a9b472afd4a815` |
+| Numeric baseline/profile/stop report | `f46a52230481e12b2ddbedf00fd71608eed68c161c40e9feaada044844b5df5e` |
+
+Next work addresses the shared GPD loading/publication pipeline and genuine
+hook rundown. No busy check, reader ownership or native completion is waived
+by this startup correction.
+
+## Earlier V123–V125 implementation
 
 The original native 20B/224 initializers copy input into native request storage.
 For the verified asynchronous request families, they do not replace the old
@@ -32,7 +90,7 @@ Primary evidence uses the supplied 17559 XAM and Metro SignIn mappings. The
 supplied [XNA title update](17559-xna-update-reference.md) is separately pinned
 to its actual 4.0.21021.0 target; it is not replaced by an older mapped launcher.
 
-## Validation and observed scenarios
+## Earlier validation and observed scenarios
 
 Each V123, V124 and V125 app/kernel build completed with preserved source,
 configuration and fixture records. Each directly ran the same 81 focused
@@ -95,13 +153,13 @@ Raw logs, screenshots, profiles and signing payloads are not published here.
 | V124 existing-profile numeric report | `bfc28e27e94b869b7ac692e333b75b95f387a7c7fadecc729ecfbf5950d32092` |
 | V125 numeric startup/stop report | `32f4d1f154274f8ff1903fc34be34fd7b9112800aa659e4e2c2378f6d101bb91` |
 
-Current implementation bytes are Owner `338f07b6c1eb84ca362c871885ab3373edb7bb35588cdbcf9577ce4b86e2db21`
+V125 implementation bytes were Owner `338f07b6c1eb84ca362c871885ab3373edb7bb35588cdbcf9577ce4b86e2db21`
 and roster `4a97bf2cbceea0e0cff26bb1514bf43dee78e14b38ca7704900169ed5bf172b1`.
 The FFmpeg submodule's working modification still exactly matches the tracked
 `third_party/patches/FFmpeg/xmaframes-overlap-tail.patch`; no unpublished
 submodule commit is required.
 
-Startup readiness/progress and real shutdown remain prerequisites for the next
+Real profile loading/sign-in and shutdown remain prerequisites for the next
 native profile/avatar acceptance run. Preserve required lifecycle checks until
 their replacement is proven. The [console fidelity policy](17559-console-fidelity-policy.md)
 also governs any new hook rundown or core change. A scheduler reclamation split

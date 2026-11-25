@@ -1337,6 +1337,16 @@ class ProfileSettingsReadTestAccess final {
     return pm.PrepareRosterAttempt(desired,expected,error,&retained);
   }
   static auto ClaimRoster(ProfileManager& pm) { return pm.ClaimNativeRosterFactory(); }
+  static auto CurrentTicket(ProfileManager& pm,
+      const std::shared_ptr<const ProfileRosterNativeBinding>& binding,std::error_code& error) {
+    return pm.CaptureCurrentNativeReadTicket(binding,error);
+  }
+  static auto InitialEmptySequence(ProfileManager& pm,
+      const std::shared_ptr<const ProfileRosterNativeBinding>& binding,
+      const ProfileRosterExpected& expected,
+      const std::shared_ptr<ProfileRosterNativeReadTicket>& ticket) {
+    return pm.CaptureInitialEmptyNativeRosterSequence(binding,expected,ticket);
+  }
   static bool PublishedEmptyRows(const std::shared_ptr<ProfileRosterIntent>& intent,
                                  uint32_t native_value = 0) {
     return intent && intent->HasPublishedEmptyUnchangedRows(native_value);
@@ -4180,5 +4190,84 @@ TEST_CASE("Registered original logon exports retain invalid-buffer ABI and obser
   }
   const auto third=ProfileManager::BeginNativeOriginalLogon(sink,0x20B,0,false);
   REQUIRE(third.active());CHECK(third.attempt()==3);
+}
+
+TEST_CASE("Initial empty native baseline validates unchanged common authority without a transaction",
+          "[kernel][profile][roster][native][baseline]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile unsigned_inventory(runtime,0xe000000000000341ull,53);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);
+  REQUIRE(expected.roster);REQUIRE_FALSE(error);
+  const auto epoch=expected.roster->epoch();
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto ticket=ProfileSettingsReadTestAccess::CurrentTicket(pm,binding,error);
+  REQUIRE(ticket);REQUIRE_FALSE(error);
+  const auto before=ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,expected,ticket);
+  REQUIRE(before);CHECK(*before!=0);
+  for(const auto& slot:expected.roster->slots())CHECK(slot==ProfileRosterSlot{});
+  auto after=pm.CaptureRosterExpected(error);REQUIRE(after.roster);REQUIRE_FALSE(error);
+  CHECK(after.roster==expected.roster);CHECK(after.roster->epoch()==epoch);
+  CHECK(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,after,ticket)==before);
+  ProfileRosterExpected unissued;unissued.roster=expected.roster;
+  CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,unissued,ticket));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,{},expected,ticket));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,expected,{}));
+  unsigned_inventory.Unchanged();
+}
+TEST_CASE("Prepared and canceled identity operations invalidate initial empty baseline freshness",
+          "[kernel][profile][roster][native][baseline]") {
+  ProfileAbiRuntime runtime;
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto ticket=ProfileSettingsReadTestAccess::CurrentTicket(pm,binding,error);REQUIRE(ticket);
+  const auto sequence=ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,expected,ticket);REQUIRE(sequence);
+  auto intent=pm.PrepareRoster(RosterDesired({}),expected,error);REQUIRE(intent);REQUIRE_FALSE(error);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,expected,ticket));
+  const auto attempt_ticket=ProfileSettingsReadTestAccess::Ticket(*intent,*binding,error);REQUIRE(attempt_ticket);
+  const auto canceled=pm.CancelRoster(intent);CHECK(canceled.phase==ProfileRosterPhase::kCanceled);CHECK_FALSE(canceled.error);
+  auto after=pm.CaptureRosterExpected(error);REQUIRE(after.roster);REQUIRE_FALSE(error);
+  CHECK(after.roster==expected.roster);CHECK(after.roster->epoch()==expected.roster->epoch());
+  const auto later=ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,after,ticket);REQUIRE(later);
+  CHECK(*later!=*sequence); // Owner must refuse the old captured sequence, even with the same roster.
+  CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,after,attempt_ticket));
+}
+TEST_CASE("Initial empty baseline refuses real metadata contention without altering the roster",
+          "[kernel][profile][roster][native][baseline]") {
+  ProfileAbiRuntime runtime;
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto ticket=ProfileSettingsReadTestAccess::CurrentTicket(pm,binding,error);REQUIRE(ticket);
+  const auto sequence=ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,expected,ticket);REQUIRE(sequence);
+  {
+    HeldRosterMetadata held(pm);
+    REQUIRE(held.ready.wait_for(std::chrono::seconds(2))==std::future_status::ready);
+    CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,expected,ticket));
+  }
+  CHECK(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,expected,ticket)==sequence);
+  auto after=pm.CaptureRosterExpected(error);REQUIRE(after.roster);CHECK(after.roster==expected.roster);
+}
+TEST_CASE("Initial empty baseline refuses occupied roster and expired foreign factory binding",
+          "[kernel][profile][roster][native][baseline]") {
+  std::shared_ptr<const ProfileRosterNativeBinding> foreign;
+  {
+    ProfileAbiRuntime previous;
+    auto& pm=*previous.emulator->kernel_state()->xam_state()->profile_manager();
+    foreign=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(foreign);
+  }
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime,0xe000000000000342ull,54);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto empty=pm.CaptureRosterExpected(error);REQUIRE(empty.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({profile.xuid,0,0,0}),empty).error);
+  auto occupied=pm.CaptureRosterExpected(error);REQUIRE(occupied.roster);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto ticket=ProfileSettingsReadTestAccess::CurrentTicket(pm,binding,error);REQUIRE(ticket);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,occupied,ticket));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,binding,empty,ticket));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,foreign,occupied,ticket));
+  CHECK(pm.CaptureRosterExpected(error).roster==occupied.roster);
 }
 } // namespace xe::kernel::xam::test

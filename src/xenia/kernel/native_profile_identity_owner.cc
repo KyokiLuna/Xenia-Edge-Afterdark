@@ -811,6 +811,25 @@ struct NativeProfileIdentityOwner::State {
   std::optional<Tasks::CompletionRoute> completion_route; // exact shared-IO entry routing only
   bool normal_return=false,uncertain=false;
  };
+ struct InitialEmptyBaseline {
+  explicit InitialEmptyBaseline(NativeInitialEmptyProfileWitness&& value):witness(std::move(value)){}
+  NativeInitialEmptyProfileWitness witness;
+  xam::ProfileRosterExpected expected;
+  std::shared_ptr<xam::ProfileRosterNativeReadTicket> ticket;
+  uint64_t operation_sequence=0;
+ };
+ std::shared_ptr<InitialEmptyBaseline> initial_empty_baseline;
+ bool initial_empty_capture_seen=false,initial_empty_consumed=false;
+ bool InitialEmptyWindow() const {
+  return profile_enabled && !aligned && !boot_alignment_claimed && !bootstrap_cleanup && !bootstrap_fatal &&
+      !job && !stopping.load() && !retired.load() && !uncertain.load() &&
+      !tasks.lost() && (!wake || !wake->lost()) && (!listeners || !listeners->lost()) &&
+      current_read_source==kInitialReadSource && !published_source.load(std::memory_order_acquire) &&
+      render_phase==RenderPhase::kOpen && current_roster && current_ticket &&
+      !public_calls.load() && !external_public_calls.load() && !identity_executor_frames.load() &&
+      std::none_of(expected.begin(),expected.end(),[](const auto& e){return e && e->identity_continuation;});
+ }
+ bool ConsumeInitialEmptyBaseline(XThread& bootstrap) noexcept;
  struct WorkBlocker {
   uint32_t available=0,reason=0,state=0,first_argument=0;uint64_t serial=0,source=0;
   Frame frame;Tasks::Birth birth{};bool closed=false;
@@ -3176,6 +3195,71 @@ bool NativeProfileIdentityOwner::ClaimKernelBeforeHeap(
  bool no=false;
  return kernel.native_profile_identity_claimed_.compare_exchange_strong(no,true,std::memory_order_acq_rel);
 }
+
+void NativeProfileIdentityOwner::ObserveInitialEmptyProfileBaseline(
+    XThread& bootstrap, NativeInitialEmptyProfileWitness&& witness) noexcept try {
+ auto& s=*state_;
+ if(!s.profile_enabled || ActualThread()!=&bootstrap || bootstrap.kernel_state()!=s.kernel ||
+    bootstrap.thread_id()!=s.config.allocation->bootstrap_thread_id() ||
+    bootstrap.native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM ||
+    XThread::GetCurrentFiberThread() || global_critical_region::is_held_by_current_thread())return;
+ auto candidate=std::make_shared<State::InitialEmptyBaseline>(std::move(witness));
+ {
+  std::lock_guard lock(s.mutex);
+  if(s.initial_empty_capture_seen || s.initial_empty_consumed)return;
+  s.initial_empty_capture_seen=true;
+  if(!s.InitialEmptyWindow())return;
+  candidate->ticket=s.current_ticket;
+ }
+ // Runtime already sealed the native constructor witness in this exact
+ // phase. Capture PM metadata here; the first full-startup Step performs the
+ // single fresh native validation outside State/PM locks, without minting again.
+ auto* pm=s.kernel->xam_state()->profile_manager();std::error_code error;
+ candidate->expected=pm->CaptureRosterExpected(error);
+ if(error || !candidate->expected.roster)return;
+ const auto sequence=pm->CaptureInitialEmptyNativeRosterSequence(
+     s.config.factory_binding,candidate->expected,candidate->ticket);
+ if(!sequence)return;
+ candidate->operation_sequence=*sequence;
+ {
+  std::lock_guard lock(s.mutex);
+  if(s.initial_empty_consumed || !s.InitialEmptyWindow() || candidate->ticket!=s.current_ticket ||
+     candidate->expected.roster!=s.current_roster)return;
+  s.initial_empty_baseline=candidate;
+ }
+}catch(...){/* Optional equivalence unavailable: keep genuine mutation path. */}
+
+bool NativeProfileIdentityOwner::State::ConsumeInitialEmptyBaseline(XThread& bootstrap) noexcept try {
+ std::shared_ptr<InitialEmptyBaseline> candidate;
+ {
+  std::lock_guard lock(mutex);
+  if(initial_empty_consumed)return false;
+  initial_empty_consumed=true;candidate=std::move(initial_empty_baseline);
+ }
+ if(!candidate || ActualThread()!=&bootstrap || bootstrap.kernel_state()!=kernel ||
+    bootstrap.thread_id()!=config.allocation->bootstrap_thread_id() ||
+    bootstrap.native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM ||
+    XThread::GetCurrentFiberThread() || global_critical_region::is_held_by_current_thread() ||
+    !candidate->witness.Matches(config.catalog->calls(),config.allocation))return false;
+ auto visible=std::make_shared<IdentityPixelGuard>(kInitialReadSource,true,pixel_lifetime);
+ auto* pm=kernel->xam_state()->profile_manager();
+ std::shared_ptr<IdentityPixelGuard> displaced;
+ {
+  std::lock_guard lock(mutex);
+  // Existing friend/recursive metadata gate, TRY only: never add a blocking
+  // State -> PM inversion or run native/IO work while either lock is held.
+  std::unique_lock metadata(pm->profile_mount_mutex_,std::try_to_lock);
+  if(!metadata.owns_lock() || !InitialEmptyWindow() || candidate->ticket!=current_ticket ||
+     candidate->expected.roster!=current_roster)return false;
+  const auto sequence=pm->CaptureInitialEmptyNativeRosterSequence(
+      config.factory_binding,candidate->expected,candidate->ticket);
+  if(!sequence || *sequence!=candidate->operation_sequence)return false;
+  displaced=std::move(pixels);pixels=std::move(visible);aligned=true;
+  // No publisher/Job/Intent/epoch/event/Wake completion. Source2, nonce0,
+  // fixed ticket and next_source3 remain the truthful constructor baseline.
+ }
+ changed.notify_all();return true;
+}catch(...){return false;}
 
 std::shared_ptr<NativeProfileIdentityOwner> NativeProfileIdentityOwner::CreateBeforeWorkers(
     Config config,std::string* error) {
@@ -6301,6 +6385,9 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
  ObserveBootstrapHandoff(HandoffStage::kReap);
  if(!ReapReturnedOnBootstrap(bootstrap))return false;
  ObserveBootstrapHandoff(HandoffStage::kReaped);
+ // Called only after full native startup by the service's existing progress
+ // turn. Missing/used/mismatched/busy capture leaves normal alignment intact.
+ s.ConsumeInitialEmptyBaseline(bootstrap);
  auto* pm=s.kernel->xam_state()->profile_manager();
  std::shared_ptr<State::Job> job;
  std::shared_ptr<xam::ProfileRosterIntent> cleanup;

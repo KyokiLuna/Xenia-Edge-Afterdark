@@ -452,6 +452,12 @@ class ProfileManager {
   std::shared_ptr<ProfileRosterNativeReadTicket> CaptureCurrentNativeReadTicket(
       const std::shared_ptr<const ProfileRosterNativeBinding>&,
       std::error_code&);
+  // Read-only constructor-baseline comparison. Caller may retain the existing
+  // recursive metadata lock through a separate scalar owner commit.
+  std::optional<uint64_t> CaptureInitialEmptyNativeRosterSequence(
+      const std::shared_ptr<const ProfileRosterNativeBinding>&,
+      const ProfileRosterExpected&,
+      const std::shared_ptr<ProfileRosterNativeReadTicket>&) const;
   std::shared_ptr<ProfileRosterPublicationCell> EnterNativeRoster(
       const std::shared_ptr<ProfileRosterIntent>&,
       const std::shared_ptr<const ProfileRosterNativeBinding>&,

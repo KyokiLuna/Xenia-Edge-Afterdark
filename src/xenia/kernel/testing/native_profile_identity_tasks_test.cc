@@ -368,6 +368,56 @@ class NativeProfileIdentityTaskTestAccess final {
     CHECK_FALSE(ledger.SourceDescendantsClosed(202));
     CHECK_FALSE(ledger.lost());
   }
+  static Birth ReuseAfterConcurrentFinalClose(Ledger& ledger,uint32_t task,uint32_t lane) {
+    if(lane==0)return Allocate(ledger,202,task);
+    if(lane==1){
+      const auto allocation=F(0x816B9A18,0x95010000,0x816BA46C);
+      const auto serial=ledger.BeginDetachedAllocation(allocation,1,allocation.sp+0x50);REQUIRE(serial);
+      const auto fresh=ledger.ReturnDetachedAllocation(serial,allocation,0,task);REQUIRE(fresh);return *fresh;
+    }
+    REQUIRE(lane==2);
+    const auto made=ExecutionAllocate(ledger,task);
+    REQUIRE(ledger.ReturnExecutionProducer(made.producer,made.frame,0));return made.birth;
+  }
+  static void ConcurrentCloseSavedResult(bool derived,uint32_t phase,uint32_t lane=0,uint32_t refusal=0) {
+    // Model the ORIGINAL atomic results: A decremented 2->1 and retained that
+    // value in r31; B later decremented 1->0. A's native own-return can lag B.
+    // These are real ledger lifecycle transitions, not a simulated refcounter.
+    REQUIRE(phase<=3);REQUIRE((!refusal || phase==3));
+    Ledger ledger(root);const auto old=Allocate(ledger,101,0x92001000);
+    const auto work=F(0x8199C838,0x93010000,0x816B8200);
+    REQUIRE(ledger.EnterWork(work,old.task,0x92002000));REQUIRE(ledger.ReturnWork(work,old));
+    auto earlier=F(0x816B7490,0x94020000,0x816B9488);earlier.thread=4;earlier.pcr+=0x1000;
+    auto final=F(0x816B7490,0x94010000,0x816B8D94);final.thread=5;final.pcr+=0x2000;
+    REQUIRE(ledger.EnterClose(earlier,old.task));REQUIRE(ledger.EnterClose(final,old.task));
+    auto deletion=final;deletion.function=derived?0x816B7D98:0x816B7500;
+    deletion.sp-=0x60;deletion.lr=0x816B74E8;
+    REQUIRE(ledger.EnterDeletingDestructor(deletion,old.task,1));
+    const auto finish_earlier=[&](){REQUIRE(ledger.ReturnClose(earlier,1));CHECK_FALSE(ledger.lost());};
+    if(phase==0)finish_earlier(); // The other zero-result Close entered deletion.
+    auto freeing=deletion;freeing.function=0x816E6AB0;freeing.sp-=derived?0x70:0x60;
+    freeing.lr=derived?0x816B7DC8:0x816B752C;
+    REQUIRE(ledger.EnterTaskFree(freeing,old.task));CHECK_FALSE(ledger.FindLiveTask(old.task));
+    if(phase==1)finish_earlier(); // No live/native object bytes may be consulted.
+    REQUIRE(ledger.ReturnTaskFree(freeing));REQUIRE(ledger.ReturnDeletingDestructor(deletion));
+    if(phase==2)finish_earlier(); // Actual free/destructor returned; final Close has not.
+    REQUIRE(ledger.ReturnClose(final,0));
+    if(phase<3){CHECK(ledger.all_native_nodes_closed());CHECK_FALSE(ledger.lost());return;}
+    CHECK_FALSE(ledger.all_native_nodes_closed()); // A still owns its exact Close frame.
+    const auto fresh=ReuseAfterConcurrentFinalClose(ledger,old.task,lane);
+    REQUIRE(fresh.generation!=old.generation);REQUIRE_FALSE(ledger.FindBirth(old.generation));
+    // Both the actual numeric address AND the old metadata slot were reused.
+    // The delayed own-return must consume only its retained memento.
+    REQUIRE(ledger.FindLiveTask(old.task));CHECK(ledger.FindLiveTask(old.task)->birth.generation==fresh.generation);
+    if(refusal==1){auto wrong=earlier;wrong.pcr+=0x1000;CHECK_FALSE(ledger.ReturnClose(wrong,1));CHECK(ledger.lost());}
+    else if(refusal==3){CHECK_FALSE(ledger.ReturnClose(earlier,0));CHECK(ledger.lost());} // No second final release.
+    else{
+      finish_earlier();
+      if(refusal==2){CHECK_FALSE(ledger.ReturnClose(earlier,1));CHECK(ledger.lost());} // Cannot replay A.
+    }
+    REQUIRE(ledger.FindLiveTask(fresh.task));CHECK(ledger.FindLiveTask(fresh.task)->birth.generation==fresh.generation);
+    CHECK_FALSE(ledger.FindBirth(fresh.generation)->freed);CHECK_FALSE(ledger.FindBirth(fresh.generation)->delete_entered);
+  }
   static void ExternalBodyBlocksDelete(){
     Ledger ledger(root);const auto born=Allocate(ledger,101,0x92001000);
     const auto body=F(0x816921C8,0x93010000,0x816CCF18);
@@ -1075,6 +1125,15 @@ TEST_CASE("Executed Task guard refusal is not a native reference release", "[nat
 }
 TEST_CASE("Zero Task Close receipt keeps the old generation through native free reuse", "[native_profile_identity][task_close]"){
  NativeProfileIdentityTaskTestAccess::ZeroCloseReceiptSurvivesRealFreeReuse(GENERATE(false,true));
+}
+TEST_CASE("Concurrent native nonfinal Close may return after the final Close enters deletion", "[identity_task][task_close][close_interleaving]"){
+ NativeProfileIdentityTaskTestAccess::ConcurrentCloseSavedResult(GENERATE(false,true),GENERATE(0u,1u,2u));
+}
+TEST_CASE("Delayed native Close consumes only its old frame after address and metadata slot reuse", "[identity_task][task_close][close_interleaving]"){
+ NativeProfileIdentityTaskTestAccess::ConcurrentCloseSavedResult(GENERATE(false,true),3,GENERATE(0u,1u,2u));
+}
+TEST_CASE("Delayed Close rejects a foreign frame replay and a second final release", "[identity_task][task_close][close_interleaving][refusal]"){
+ NativeProfileIdentityTaskTestAccess::ConcurrentCloseSavedResult(true,3,0,GENERATE(1u,2u,3u));
 }
 TEST_CASE("Task release mismatches and partial native returns retain ownership", "[native_profile_identity][task_close]"){
  NativeProfileIdentityTaskTestAccess::ReleaseMismatchAndPartialReturnRemainOwned();
@@ -2016,4 +2075,195 @@ TEST_CASE("Covered repeated publication attempts never relearn an earlier native
  }
  CHECK_FALSE(epoch.Capture(7,4,18,522,first->allocation,first->publication));
 }
+TEST_CASE("Shared CompleteIO routes ordinary SYSTEM calls without adopting a profile job", "[identity_task][completion_route]") {
+ using L=identity_detail::NativeProfileIdentityTasks;using Route=L::CompletionRoute;
+ const auto frame=NativeProfileIdentityTaskTestAccess::F(0x816A2588,0x7038F950,0x916D4810);
+ auto job=std::make_shared<int>(1);
+ for(uint32_t mode=0;mode<4;++mode){
+  auto route=Route::Capture(frame,mode==0?nullptr:job,7,9,mode==1?0:0x404E0A10,
+      mode==2?0:mode==3?0x404E0B10:0x404E0A10);
+  REQUIRE(route.kind()==Route::Kind::kOrdinary);CHECK(route.FrameMatches(frame));
+  CHECK_FALSE(route.StillOwned(job,7,9,0x404E0A10,0x404E0A10));
+  REQUIRE(route.ReturnOrdinary(frame));CHECK_FALSE(route.FrameMatches(frame));
+  CHECK_FALSE(route.ReturnOrdinary(frame)); // own-return replay cannot end another call
+ }
+}
+TEST_CASE("Claimed CompleteIO pins exact job control block source serial and overlap", "[identity_task][completion_route][authority]") {
+ using L=identity_detail::NativeProfileIdentityTasks;using Route=L::CompletionRoute;
+ const auto frame=NativeProfileIdentityTaskTestAccess::F(0x816A2588);
+ auto job=std::make_shared<int>(1);std::weak_ptr<int> weak=job;
+ {
+  auto route=Route::Capture(frame,job,7,9,0x404E0A10,0x404E0A10);
+  REQUIRE(route.kind()==Route::Kind::kIdentity);CHECK(route.StillOwned(job,7,9,0x404E0A10,0x404E0A10));
+  auto equal=std::make_shared<int>(1);CHECK_FALSE(route.StillOwned(equal,7,9,0x404E0A10,0x404E0A10));
+  std::shared_ptr<const void> forged(job.get(),[](const void*){});
+  CHECK_FALSE(route.StillOwned(forged,7,9,0x404E0A10,0x404E0A10)); // same address, different ownership
+  CHECK_FALSE(route.StillOwned(job,8,9,0x404E0A10,0x404E0A10));
+  CHECK_FALSE(route.StillOwned(job,7,10,0x404E0A10,0x404E0A10));
+  CHECK_FALSE(route.StillOwned(job,7,9,0x404E0B10,0x404E0A10));
+  CHECK_FALSE(route.StillOwned(job,7,9,0x404E0A10,0x1404E0A10ull));
+  job.reset();CHECK_FALSE(weak.expired()); // admission memento retains actual old owner
+ }
+ CHECK(weak.expired());
+ auto owner=std::make_shared<int>(2);
+ // Native32 high pointers may be zero- or sign-extended, exactly as DwordIs.
+ auto high=Route::Capture(frame,owner,7,9,0xC04E0A10,0xFFFFFFFFC04E0A10ull);
+ REQUIRE(high.kind()==Route::Kind::kIdentity);
+ CHECK(high.StillOwned(owner,7,9,0xC04E0A10,0xC04E0A10));
+ CHECK(high.StillOwned(owner,7,9,0xC04E0A10,0xFFFFFFFFC04E0A10ull));
+ CHECK_FALSE(high.StillOwned(owner,7,9,0xC04E0A10,0x1C04E0A10ull));
+ CHECK(Route::Capture(frame,owner,7,9,0xC04E0A10,0x1C04E0A10ull).kind()==Route::Kind::kInvalid);
+ CHECK(Route::Capture(frame,owner,7,9,0x404E0A10,0x1404E0A10ull).kind()==Route::Kind::kInvalid);
+ CHECK(Route::Capture(frame,owner,0,9,0x404E0A10,0x404E0A10).kind()==Route::Kind::kInvalid);
+ CHECK(Route::Capture(frame,owner,7,0,0x404E0A10,0x404E0A10).kind()==Route::Kind::kInvalid);
+}
+TEST_CASE("Nested ordinary completion frames cannot consume or retag older identity returns", "[identity_task][completion_route][lifetime]") {
+ using L=identity_detail::NativeProfileIdentityTasks;using Route=L::CompletionRoute;
+ const auto outer=NativeProfileIdentityTaskTestAccess::F(0x816A2588);
+ auto inner=outer;inner.sp-=0xA0;inner.lr=0x916D4810;
+ auto job=std::make_shared<int>(1);auto identity=Route::Capture(outer,job,7,9,0x404E0A10,0x404E0A10);
+ auto ordinary=Route::Capture(inner,job,7,9,0x404E0A10,0x404E0B10);
+ REQUIRE(identity.kind()==Route::Kind::kIdentity);REQUIRE(ordinary.kind()==Route::Kind::kOrdinary);
+ // Production return lookup considers only the youngest same-function entry.
+ CHECK_FALSE(ordinary.FrameMatches(outer));CHECK(identity.FrameMatches(outer));
+ REQUIRE(ordinary.ReturnOrdinary(inner));CHECK(identity.StillOwned(job,7,9,0x404E0A10,0x404E0A10));
+ for(uint32_t mode=0;mode<6;++mode){
+  auto retained=Route::Capture(inner,job,7,9,0x404E0A10,0x404E0B10);auto wrong=inner;
+  if(mode==0)++wrong.root.generation;if(mode==1)++wrong.thread;if(mode==2)wrong.pcr+=0x1000;
+  if(mode==3)wrong.sp-=0x10;if(mode==4)wrong.lr+=4;if(mode==5)wrong.function+=4;
+  CHECK_FALSE(retained.ReturnOrdinary(wrong));CHECK_FALSE(retained.ReturnOrdinary(inner));
+  CHECK(identity.StillOwned(job,7,9,0x404E0A10,0x404E0A10));
+ }
+}
+
+namespace {
+using ContextRef=identity_detail::NativeProfileIdentityTasks::ContextReferenceReceipt;
+using ContextOwnedRef=identity_detail::NativeProfileIdentityTasks::ReferenceReceipt;
+using ContextFrame=identity_detail::NativeProfileIdentityTasks::Frame;
+ContextFrame ContextEntry(uint32_t worker=9,uint32_t sp=0x707E0100) {
+  auto f=NativeProfileIdentityTaskTestAccess::F(0x816BA3C0,sp,0x816B8B64);
+  f.thread=worker;f.pcr+=worker*0x1000;return f;
+}
+ContextFrame ContextBody(const ContextRef& ref,uint32_t function=0x816BA3C0,
+                         uint32_t lr=0x816BA3D4) {
+  auto f=ref.wrapper;f.sp-=0x70;f.function=function;f.lr=lr;return f;
+}
+void ContextHeld(ContextRef& ref,uint64_t serial=1,ContextFrame entry=ContextEntry()) {
+  REQUIRE(ref.Prepare(serial,entry,0x40602000,entry.sp-0x10000,entry.sp+0x10000));
+  const auto getter=ContextBody(ref,0x816B7F30,0x816BA3D4);
+  REQUIRE(ref.Getter(getter,false,0));REQUIRE(ref.AdmitGetter(getter));
+  REQUIRE(ref.Getter(getter,true,0x401708D0));
+}
+void ContextCallback(ContextRef& ref,uint32_t site,uint64_t result=0) {
+  auto body=ContextBody(ref);body.lr=(site<2)?0x816BA3E8:0x816BA424;
+  REQUIRE(ref.Callback(site,body,ref.task,ref.context,
+      site<2?0x81965798:0x819657E0,result));
+}
+ContextFrame ContextCaller(const ContextRef& ref) {
+  auto f=ref.callback;f.sp-=0xA0;f.function=0x81964C78;f.lr=0x819651E0;return f;
+}
+void ContextFinished(ContextRef& ref,uint64_t count=0) {
+  const auto close=ContextBody(ref,0x816B7490,0x816BA430);
+  REQUIRE(ref.Decrement(close,false,ref.task));REQUIRE(ref.AdmitDecrement(close));
+  REQUIRE(ref.Decrement(close,true,count));REQUIRE(ref.Return(ref.wrapper));
+}
+}
+TEST_CASE("context reference observes native getter body and exact own return",
+          "[identity_task][task_context_reference][lifetime]") {
+  ContextRef ref;const auto entry=ContextEntry();
+  REQUIRE(ref.Prepare(1,entry,0x40602000,entry.sp-0x10000,entry.sp+0x10000));
+  const auto getter=ContextBody(ref,0x816B7F30,0x816BA3D4);
+  REQUIRE(ref.Getter(getter,false,0));CHECK_FALSE(ref.Getter(getter,true,0x401708D0));
+  CHECK(ref.phase==ContextRef::Phase::kUncertain);
+  for(uint32_t field=0;field<6;++field){
+    ContextRef wrong;REQUIRE(wrong.Prepare(2,entry,0x40602000,entry.sp-0x10000,entry.sp+0x10000));
+    auto f=ContextBody(wrong,0x816B7F30,0x816BA3D4);
+    switch(field){case 0:++f.root.generation;break;case 1:++f.thread;break;
+      case 2:f.pcr+=0x1000;break;case 3:f.sp-=0x10;break;case 4:f.lr+=4;break;
+      default:f.function+=4;break;}
+    CHECK_FALSE(wrong.Getter(f,false,0));
+  }
+  for(uint64_t value:{0ull,0x401708D1ull,0x1401708D0ull}){
+    ContextRef bad;REQUIRE(bad.Prepare(3,entry,0x40602000,entry.sp-0x10000,entry.sp+0x10000));
+    const auto f=ContextBody(bad,0x816B7F30,0x816BA3D4);
+    REQUIRE(bad.Getter(f,false,0));REQUIRE(bad.AdmitGetter(f));CHECK_FALSE(bad.Getter(f,true,value));
+  }
+  ContextRef good;ContextHeld(good);CHECK(good.phase==ContextRef::Phase::kHeld);
+  CHECK_FALSE(good.Permits(ContextBody(good),good.task));
+}
+TEST_CASE("fresh context callbacks close only the separately held host reference",
+          "[identity_task][task_context_reference][lifetime]") {
+  for(uint32_t phase:{0u,2u}){
+    ContextRef native;ContextHeld(native);ContextCallback(native,0);
+    if(phase==2){ContextCallback(native,1);ContextCallback(native,2);}
+    ContextOwnedRef host;NativeProfileIdentityTaskTestAccess::AcquireReference(
+        host,41+phase,NativeProfileIdentityTaskTestAccess::Callback());
+    const auto current=ContextCaller(native);
+    REQUIRE(current.thread!=host.callback.thread);REQUIRE(native.callback.function!=host.callback.function);
+    CHECK_FALSE(native.Permits(current,host.task+4));
+    CHECK_FALSE(host.BeginContextRelease(current,native,host.task+4));
+    CHECK(host.state()==ContextOwnedRef::Phase::kHeld);
+    REQUIRE(native.Permits(current,host.task));REQUIRE(host.BeginContextRelease(current,native,host.task));
+    REQUIRE(host.EnterRelease(host.release));REQUIRE(host.ReturnRelease(host.release,1));
+    REQUIRE(host.CompleteRelease(true,1));CHECK_FALSE(host.BeginContextRelease(current,native,host.task));
+    CHECK(native.Permits(current,host.task)); // wrapper's extra native ref is independent
+    ContextCallback(native,phase+1);if(phase==0){ContextCallback(native,2);ContextCallback(native,3);}
+    ContextFinished(native);CHECK(native.finished());
+  }
+}
+TEST_CASE("pending context resumption uses a fresh worker acquisition",
+          "[identity_task][task_context_reference][lifetime]") {
+  ContextOwnedRef host;NativeProfileIdentityTaskTestAccess::AcquireReference(
+      host,71,NativeProfileIdentityTaskTestAccess::Callback());
+  ContextRef first;ContextHeld(first,11);ContextCallback(first,0);ContextCallback(first,1,0x8000000A);
+  CHECK_FALSE(first.Permits(ContextCaller(first),host.task));ContextFinished(first);
+  ContextRef resumed;ContextHeld(resumed,12,ContextEntry(17,0x706E0100));ContextCallback(resumed,0);
+  ContextCallback(resumed,1);ContextCallback(resumed,2);
+  const auto current=ContextCaller(resumed);CHECK_FALSE(first.Permits(current,host.task));
+  REQUIRE(host.BeginContextRelease(current,resumed,host.task));REQUIRE(host.EnterRelease(host.release));
+  REQUIRE(host.ReturnRelease(host.release,2));REQUIRE(host.CompleteRelease(true,2));
+  ContextCallback(resumed,3);ContextFinished(resumed);CHECK(resumed.finished());
+}
+TEST_CASE("innermost uncertain context shadows an older native reference",
+          "[identity_task][task_context_reference][lifetime]") {
+  ContextRef outer;ContextHeld(outer,21);ContextCallback(outer,0);
+  ContextRef inner;auto entry=outer.wrapper;entry.sp-=0x200;
+  REQUIRE(inner.Prepare(22,entry,0x40603000,entry.sp-0x10000,entry.sp+0x10000));
+  CHECK(inner.NewerActiveThan(&outer));CHECK_FALSE(inner.Permits(ContextCaller(outer),outer.task));
+  inner.Fail();CHECK(inner.NewerActiveThan(&outer));
+  ContextRef complete;ContextHeld(complete,23,entry);ContextCallback(complete,0);
+  ContextCallback(complete,1,0x8000000A);ContextFinished(complete);
+  CHECK_FALSE(complete.NewerActiveThan(&outer));CHECK(outer.Permits(ContextCaller(outer),outer.task));
+  auto wrong=ContextCaller(outer);++wrong.root.generation;CHECK_FALSE(outer.Permits(wrong,outer.task));
+  wrong=ContextCaller(outer);++wrong.thread;CHECK_FALSE(outer.Permits(wrong,outer.task));
+  wrong=ContextCaller(outer);wrong.pcr+=0x1000;CHECK_FALSE(outer.Permits(wrong,outer.task));
+  wrong=ContextCaller(outer);wrong.sp=outer.limit-0x10;CHECK_FALSE(outer.Permits(wrong,outer.task));
+}
+TEST_CASE("context decrement revokes before body and needs actual completion",
+          "[identity_task][task_context_reference][lifetime]") {
+  for(bool malformed:{false,true}){
+    ContextRef ref;ContextHeld(ref);ContextCallback(ref,0);ContextCallback(ref,1,0x8000000A);
+    auto close=ContextBody(ref,0x816B7490,0x816BA430);if(malformed)close.sp-=0x10;
+    CHECK(ref.Decrement(close,false,ref.task)==!malformed);
+    CHECK_FALSE(ref.Permits(ContextCaller(ref),ref.task));
+    CHECK_FALSE(ref.Decrement(close,true,0));CHECK_FALSE(ref.Return(ref.wrapper));
+  }
+  ContextRef good;ContextHeld(good);ContextCallback(good,0);ContextCallback(good,1,0x8000000A);
+  ContextFinished(good,0);CHECK(good.finished()); // native wrapper may own the final reference
+}
+TEST_CASE("context baseline cannot excuse failed nonfinal host close or replay",
+          "[identity_task][task_context_reference][lifetime]") {
+  ContextRef native;ContextHeld(native);ContextCallback(native,0);const auto current=ContextCaller(native);
+  for(uint64_t result:{0ull,0x8007139Full,0x100000001ull}){
+    ContextOwnedRef host;NativeProfileIdentityTaskTestAccess::AcquireReference(
+        host,90+result,NativeProfileIdentityTaskTestAccess::Callback());
+    REQUIRE(host.BeginContextRelease(current,native,host.task));REQUIRE(host.EnterRelease(host.release));
+    CHECK_FALSE(host.ReturnRelease(host.release,result));CHECK_FALSE(host.CompleteRelease(true,uint32_t(result)));
+  }
+  ContextCallback(native,1,0x8000000A);ContextFinished(native);
+  ContextOwnedRef late;NativeProfileIdentityTaskTestAccess::AcquireReference(
+      late,99,NativeProfileIdentityTaskTestAccess::Callback());
+  CHECK_FALSE(late.BeginContextRelease(current,native,late.task));
+}
+
 } // namespace xe::kernel::test

@@ -9,6 +9,8 @@
 
 #include "xenia/cpu/processor.h"
 
+#include "xenia/cpu/backend/code_cache.h"
+
 #include <algorithm>
 #include <condition_variable>
 #include <cstdio>
@@ -466,14 +468,47 @@ void Processor::RemoveModule(const Module* module) {
       });
 
   if (itr != modules_.cend()) {
-    const std::vector<uint32_t> addressed_functions =
-        (*itr)->GetAddressedFunctions();
+    auto addressed_functions = (*itr)->GetAddressedFunctions();
+    std::vector<uint32_t> retired_entries;
+    // ForgetSymbol removes map_ entries while retaining their Function/code.
+    // Include every owned function generation, not only the current map.
+    (*itr)->ForEachFunction([&](Function* function) {
+      retired_entries.push_back(function->address());
+    });
+    std::sort(retired_entries.begin(), retired_entries.end());
+    retired_entries.erase(
+        std::unique(retired_entries.begin(), retired_entries.end()),
+        retired_entries.end());
+    addressed_functions.insert(addressed_functions.end(),
+                               retired_entries.begin(), retired_entries.end());
+    std::sort(addressed_functions.begin(), addressed_functions.end());
+    addressed_functions.erase(
+        std::unique(addressed_functions.begin(), addressed_functions.end()),
+        addressed_functions.end());
 
-    modules_.erase(itr);
-
+    // Keep the exact old Module/Functions alive through dispatch withdrawal.
+    // The existing count fence prevents a racing dynamic resolve from leaving
+    // a stale per-thread cache fill after this cut. Active loaded-module
+    // compilation/frames still require the caller's normal unload closure.
+    code_sweep_count_.fetch_add(1);
+    auto* cache = backend_ ? backend_->code_cache() : nullptr;
     for (const uint32_t entry : addressed_functions) {
+      // Modules may overlap (including a retained forgotten generation).
+      // A ready foreign Function is the current owner of this dispatch key;
+      // never withdraw its slot/cache or erase its ready entry for old code.
+      const auto* current = entry_table_.Get(entry);
+      if (current && current->function &&
+          current->function->module() != module) {
+        continue;
+      }
+      if (std::binary_search(retired_entries.begin(), retired_entries.end(),
+                             entry)) {
+        if (cache) { cache->ResetGuestFunction(entry); }
+        if (backend_) { backend_->InvalidateDynamicCalls(entry, entry); }
+      }
       RemoveFunctionByAddress(entry);
     }
+    modules_.erase(itr);
   }
 }
 

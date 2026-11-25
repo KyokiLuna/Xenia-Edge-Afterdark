@@ -29,6 +29,11 @@ class CodeCache {
   virtual uintptr_t execute_base_address() const = 0;
   virtual size_t total_size() const = 0;
 
+  // Withdraw one retired module function from normal guest-address dispatch.
+  // The owner still retains the Function/Module during this call; retirement
+  // does not stop active guest frames or reclaim generated code metadata.
+  virtual void ResetGuestFunction(uint32_t guest_address) = 0;
+
   // Finds a function based on the given host PC (that may be within a
   // function).
   virtual GuestFunction* LookupFunction(uint64_t host_pc) = 0;

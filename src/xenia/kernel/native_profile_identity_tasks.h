@@ -33,10 +33,134 @@ class NativeProfileIdentityTasks final {
     }
     bool operator==(const Frame&) const=default;
   };
+  // Semantic routing of the shared native CompleteIO body. This memento
+  // grants no Task/read/profile/completion authority. Concrete ownership is
+  // still authenticated by the actual owner before any claimed body enters.
+  class CompletionRoute final {
+   public:
+    enum class Kind : uint8_t { kInvalid, kOrdinary, kIdentity };
+    static CompletionRoute Capture(Frame frame, std::shared_ptr<const void> job,
+        uint64_t serial, uint64_t source, uint32_t overlap, uint64_t actual) {
+      CompletionRoute value; value.frame_ = frame;
+      if (!frame.valid() || frame.function != 0x816A2588) return value;
+      if (!job || !overlap || uint32_t(actual) != overlap) {
+        value.kind_ = Kind::kOrdinary; return value;
+      }
+      // A malformed apparent owned overlap cannot downgrade to ordinary IO.
+      if (!CanonicalOverlap(actual, overlap) || !serial || !source) return value;
+      value.kind_ = Kind::kIdentity; value.job_ = std::move(job);
+      value.serial_ = serial; value.source_ = source; value.overlap_ = overlap;
+      return value;
+    }
+    Kind kind() const noexcept { return kind_; }
+    bool FrameMatches(Frame actual) const noexcept {
+      return kind_ != Kind::kInvalid && !returned_ && !failed_ && actual.valid() && actual == frame_;
+    }
+    bool StillOwned(const std::shared_ptr<const void>& job, uint64_t serial,
+        uint64_t source, uint32_t overlap, uint64_t actual) const noexcept {
+      return kind_ == Kind::kIdentity && !returned_ && !failed_ && job &&
+          job.get() == job_.get() && !job.owner_before(job_) && !job_.owner_before(job) &&
+          serial == serial_ && source == source_ && overlap == overlap_ && CanonicalOverlap(actual, overlap_);
+    }
+    bool ReturnOrdinary(Frame actual) noexcept {
+      if (kind_ != Kind::kOrdinary || !FrameMatches(actual)) { failed_ = true; return false; }
+      returned_ = true; return true;
+    }
+   private:
+    // Preserve the owner's established PPC DWORD ABI: lis/addi may yield a
+    // canonical sign extension; arbitrary high bits are never truncated.
+    static bool CanonicalOverlap(uint64_t actual, uint32_t expected) noexcept {
+      return uint32_t(actual) == expected &&
+          (actual == uint64_t(expected) || actual == uint64_t(int64_t(int32_t(expected))));
+    }
+    Kind kind_ = Kind::kInvalid;
+    Frame frame_{};
+    std::shared_ptr<const void> job_;
+    uint64_t serial_ = 0, source_ = 0;
+    uint32_t overlap_ = 0;
+    bool returned_ = false, failed_ = false;
+  };
   struct Birth { uint64_t generation=0,origin=0; uint32_t task=0; };
   // An acquired native reference is NOT an allocation/execution generation.
   // This receipt observes one actual B8098/B7F30 acquisition and consumes only
   // that reference. It cannot publish a callback, source, read or Task node.
+  // Independent native BA3C0 CurrentTask AddRef, not a transport Birth.
+  // Only the concrete owner supplies authenticated code/thread/stack cuts.
+  struct ContextReferenceReceipt {
+    enum class Phase:uint8_t {kEmpty,kEntry,kGetter,kHeld,kCallback0,kAfter0,
+      kCallback1,kAfter1,kClosing,kClosed,kReturned,kUncertain,kRetired};
+    Phase phase=Phase::kEmpty;
+    uint64_t serial=0;
+    Frame wrapper{},callback{};
+    uint32_t context=0,task=0,limit=0,base=0;
+    bool pending=false,getter_entered=false,decrement_entered=false;
+    void Fail() noexcept {phase=Phase::kUncertain;}
+    bool finished() const noexcept {return phase==Phase::kReturned;}
+    bool NewerActiveThan(const ContextReferenceReceipt* older) const noexcept {
+      return !finished() && (!older || serial>older->serial);
+    }
+    bool Prepare(uint64_t id,Frame entry,uint32_t argument,uint32_t low,uint32_t high) noexcept {
+      if(phase!=Phase::kEmpty || !id || !entry.valid() || entry.function!=0x816BA3C0 ||
+         !argument || (argument&3) || low>=high || entry.sp<low+0x70ull || entry.sp>high){Fail();return false;}
+      serial=id;wrapper=entry;context=argument;limit=low;base=high;phase=Phase::kEntry;return true;
+    }
+    bool Body(Frame f) const noexcept {
+      return f.valid() && f.root==wrapper.root && f.thread==wrapper.thread &&
+          f.pcr==wrapper.pcr && f.sp==wrapper.sp-0x70;
+    }
+    bool Getter(Frame f,bool returned,uint64_t value) noexcept {
+      if(!Body(f) || f.function!=0x816B7F30 || f.lr!=0x816BA3D4 ||
+         phase!=(returned?Phase::kGetter:Phase::kEntry)){Fail();return false;}
+      if(!returned){phase=Phase::kGetter;return true;}
+      if(!getter_entered || value<0x1000 || value>UINT32_MAX || (value&3)){Fail();return false;}
+      task=uint32_t(value);phase=Phase::kHeld;return true;
+    }
+    bool AdmitGetter(Frame f) noexcept {
+      if(!Body(f) || f.function!=0x816B7F30 || f.lr!=0x816BA3D4 || phase!=Phase::kGetter){Fail();return false;}
+      getter_entered=true;return true;
+    }
+    bool AdmitDecrement(Frame f) noexcept {
+      if(!Body(f) || f.function!=0x816B7490 || f.lr!=0x816BA430 || phase!=Phase::kClosing){Fail();return false;}
+      decrement_entered=true;return true;
+    }
+    bool Callback(uint32_t site,Frame body,uint32_t actual_task,uint32_t actual_context,
+        uint32_t target,uint64_t value) noexcept {
+      if(!Body(body) || body.function!=0x816BA3C0 || actual_task!=task ||
+         actual_context!=context){Fail();return false;}
+      if(site==0 || site==2){
+        if(phase!=(site==0?Phase::kHeld:Phase::kAfter0) || (site==2 && pending) ||
+           target<4 || (target&3)){Fail();return false;}
+        callback={wrapper.root,wrapper.thread,wrapper.pcr,body.sp,
+            site==0?0x816BA3E8u:0x816BA424u,target};
+        phase=site==0?Phase::kCallback0:Phase::kCallback1;return true;
+      }
+      if(site!=1 && site!=3){Fail();return false;}
+      if(phase!=(site==1?Phase::kCallback0:Phase::kCallback1) || body.lr!=callback.lr){Fail();return false;}
+      if(site==1)pending=uint32_t(value)==0x8000000Au;
+      phase=site==1?Phase::kAfter0:Phase::kAfter1;return true;
+    }
+    bool Permits(Frame current,uint32_t body) const noexcept {
+      return (phase==Phase::kCallback0 || phase==Phase::kCallback1) && task==body &&
+          current.valid() && current.root==wrapper.root && current.thread==wrapper.thread &&
+          current.pcr==wrapper.pcr && current.sp>=limit && current.sp<=callback.sp;
+    }
+    bool Decrement(Frame f,bool returned,uint64_t body_or_count) noexcept {
+      const bool source=Body(f) && f.function==0x816B7490 && f.lr==0x816BA430;
+      if(!returned){
+        const bool ready=(phase==Phase::kAfter0 && pending) || phase==Phase::kAfter1;
+        // Revoke before original decrement, including malformed entry.
+        phase=Phase::kClosing;
+        if(!source || !ready || body_or_count!=task){Fail();return false;}return true;
+      }
+      if(!source || phase!=Phase::kClosing || !decrement_entered || body_or_count>INT32_MAX){Fail();return false;}
+      phase=Phase::kClosed;return true;
+    }
+    bool Return(Frame f) noexcept {
+      if(f!=wrapper || phase!=Phase::kClosed){Fail();return false;}
+      phase=Phase::kReturned;return true;
+    }
+    void Retire() noexcept {phase=Phase::kRetired;}
+  };
   struct ReferenceReceipt {
     enum class Phase:uint32_t {kEmpty,kPrepared,kOuterEntered,kInnerEntered,
       kInnerReturned,kAcquireReturned,kHeld,kReleaseIssued,kReleaseEntered,
@@ -102,6 +226,14 @@ class NativeProfileIdentityTasks final {
       auto before=Phase::kHeld;
       if(!phase.compare_exchange_strong(before,Phase::kReleaseIssued,std::memory_order_acq_rel)){
         Fail();return false;}return true;
+    }
+    bool BeginContextRelease(Frame current,const ContextReferenceReceipt& native,uint32_t body) noexcept {
+      if(state()!=Phase::kHeld || current.root!=callback.root || body!=task ||
+         current.sp<kExecutePadding || !native.Permits(current,body))return false;
+      release={current.root,current.thread,current.pcr,current.sp-kExecutePadding,0xBCBCBCBC,0x816B7490};
+      nonfinal=true;release_callback=native.callback;
+      auto before=Phase::kHeld;
+      return phase.compare_exchange_strong(before,Phase::kReleaseIssued,std::memory_order_acq_rel);
     }
     bool EnterRelease(Frame actual) noexcept {
       return Step(Phase::kReleaseIssued,Phase::kReleaseEntered,actual,release);
@@ -1505,6 +1637,11 @@ class NativeProfileIdentityTasks final {
   }
   bool ReturnClose(Frame frame,uint32_t actual_remaining_references) {
     for (auto& value:closes_) { if (value && value->frame==frame) {
+      // Original7490 saves its successful atomic decrement in r31. A
+      // nonzero caller may return AFTER another Close deleted/freed/reused
+      // both the Task address and its metadata slot. Its retained own-frame
+      // consumes only this call; it does not grant any native Task lifetime.
+      if (actual_remaining_references && !lost_) { value.reset();return true; }
       auto* node=FindBirth(value->birth);
       const bool external=std::any_of(external_.begin(),external_.end(),[&](const auto& work) {
         return work && work->birth.generation==value->birth;

@@ -8,18 +8,23 @@
  */
 
 #include <array>
+
 #include "xenia/base/logging.h"
+#include "xenia/base/mutex.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/native_media_service.h"
 #include "xenia/kernel/native_managed_format_frontdoor.h"
 #include "xenia/kernel/user_module.h"
+#include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/app_manager.h"
 #include "xenia/kernel/xam/xam.h"
 #include "xenia/kernel/xam/xam_private.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_error.h"
+#include "xenia/kernel/xboxkrnl/xboxkrnl_threading.h"
 #include "xenia/kernel/xevent.h"
 #include "xenia/kernel/xthread.h"
+#include "xenia/memory.h"
 #include "xenia/xbox.h"
 
 namespace xe {
@@ -156,36 +161,105 @@ dword_result_t XMsgCompleteIORequest_entry(
 }
 DECLARE_XAM_EXPORT2(XMsgCompleteIORequest, kNone, kImplemented, kSketchy);
 
-dword_result_t XamGetOverlappedResult_entry(
-    pointer_t<XAM_OVERLAPPED> overlapped_ptr, lpdword_t length_ptr,
-    dword_t wait) {
-  uint32_t result = X_STATUS_SUCCESS;
+// Shared with the Win32 query below; use its existing checked caller-PCR
+// error behavior rather than XThread's unrelated current-TLS error slot.
+dword_result_t WaitForSingleObject_entry(dword_t handle, dword_t milliseconds,
+                                        const ppc_context_t& context);
+qword_result_t RtlGetLastError_entry(const ppc_context_t& context);
 
-  if (overlapped_ptr->result != X_ERROR_IO_PENDING) {
-    result = overlapped_ptr->result;
-  } else if (wait && overlapped_ptr->event) {
-    auto ev = kernel_state()->object_table()->LookupObject<XEvent>(
-        overlapped_ptr->event);
-    result = ev->Wait(3, 1, 0, nullptr);
-  } else {
-    result = X_STATUS_TIMEOUT;
+namespace {
+enum class OverlappedWaitApi { kNt, kWin32 };
+
+// Native queries access only these DWORDs, in this order. Ordinary virtual
+// scalars also work with inherited GCRC; physical/watched IO uses the common
+// buffer path. No mapped pointer or newly acquired lock survives a wait.
+bool OverlappedWord(Memory& memory, uint32_t address, uint32_t& value,
+                     bool write = false) {
+  if (!address || address > UINT32_MAX - 3) { return false; }
+  if (auto* heap = memory.LookupHeap(address);
+      heap && heap->heap_type() == HeapType::kGuestVirtual &&
+      memory.LookupHeap(address + 3) == heap) {
+    auto lock = global_critical_region::AcquireDirect();
+    if (!util::GuestIoRangeValid(memory, address, 4, write)) { return false; }
+    auto* word = memory.TranslateVirtual<xe::be<uint32_t>*>(address);
+    if (write) { *word = value; } else { value = *word; }
+    return true;
   }
-
-  if (result == X_STATUS_TIMEOUT) {
-    return X_ERROR_IO_INCOMPLETE;
+  std::array<uint8_t, 4> bytes{};
+  if (write) {
+    xe::store_and_swap<uint32_t>(bytes.data(), value);
+    return XSUCCEEDED(util::WriteGuestIoBuffer(memory, address, bytes));
   }
-
-  if (XFAILED(result)) {
-    return XThread::GetLastError();
-  }
-
-  if (length_ptr) {
-    *length_ptr = overlapped_ptr->length;
-  }
-
-  return result;
+  if (XFAILED(util::ReadGuestIoBuffer(memory, address, bytes))) { return false; }
+  value = xe::load_and_swap<uint32_t>(bytes.data());
+  return true;
 }
-DECLARE_XAM_EXPORT2(XamGetOverlappedResult, kNone, kImplemented, kSketchy);
+
+uint32_t QueryOverlappedResult(uint32_t overlap, uint32_t length, uint32_t wait,
+                                const ppc_context_t& context,
+                                OverlappedWaitApi api) {
+  auto& memory = *kernel_state()->memory();
+  uint32_t result = 0;
+  if (!OverlappedWord(memory, overlap, result)) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+  if (result == X_ERROR_IO_PENDING) {
+    if (!wait) { return X_ERROR_IO_INCOMPLETE; }
+    uint32_t event = 0;
+    if (overlap > UINT32_MAX - 0xF ||
+        !OverlappedWord(memory, overlap + 0xC, event)) {
+      return X_ERROR_INVALID_PARAMETER;
+    }
+    if (!event) { return X_ERROR_IO_INCOMPLETE; }
+    // These are genuine wait results, distinct from the operation's DWORD.
+    // A completed high-bit operation error is never remapped as a wait error.
+    if (api == OverlappedWaitApi::kWin32) {
+      const uint32_t waited =
+          WaitForSingleObject_entry(event, UINT32_MAX, context);
+      if (waited == X_STATUS_TIMEOUT) { return X_ERROR_IO_INCOMPLETE; }
+      if (waited != X_STATUS_SUCCESS) {
+        return uint32_t(uint64_t(RtlGetLastError_entry(context)));
+      }
+    } else {
+      const uint32_t waited =
+          xboxkrnl::NtWaitForSingleObjectEx(event, 1, 0, nullptr);
+      if (int32_t(waited) < 0) {
+        return xboxkrnl::xeRtlNtStatusToDosError(waited);
+      }
+    }
+  }
+  // Match both supplied 17559 bodies: optional length store FIRST, then read
+  // result again. In particular length==overlap intentionally changes result.
+  if (length) {
+    uint32_t completed_length = 0;
+    if (overlap > UINT32_MAX - 7 ||
+        !OverlappedWord(memory, overlap + 4, completed_length) ||
+        !OverlappedWord(memory, length, completed_length, true)) {
+      return X_ERROR_INVALID_PARAMETER;
+    }
+  }
+  return OverlappedWord(memory, overlap, result) ? result
+                                               : X_ERROR_INVALID_PARAMETER;
+}
+}  // namespace
+
+// Both native completion paths use lwz r3, including high-bit DWORD results.
+// Avoid the generic DWORD shim's sign extension without changing shared ABI.
+qword_result_t XamGetOverlappedResult_entry(
+    pointer_t<XAM_OVERLAPPED> overlapped_ptr, lpdword_t length_ptr,
+    dword_t wait, const ppc_context_t& context) {
+  return QueryOverlappedResult(overlapped_ptr.guest_address(),
+      length_ptr.guest_address(), wait, context, OverlappedWaitApi::kNt);
+}
+DECLARE_XAM_EXPORT2(XamGetOverlappedResult, kNone, kImplemented, kBlocking);
+
+qword_result_t XGetOverlappedResult_entry(
+    pointer_t<XAM_OVERLAPPED> overlapped_ptr, lpdword_t length_ptr,
+    dword_t wait, const ppc_context_t& context) {
+  return QueryOverlappedResult(overlapped_ptr.guest_address(),
+      length_ptr.guest_address(), wait, context, OverlappedWaitApi::kWin32);
+}
+DECLARE_XAM_EXPORT2(XGetOverlappedResult, kNone, kImplemented, kBlocking);
 
 }  // namespace xam
 }  // namespace kernel

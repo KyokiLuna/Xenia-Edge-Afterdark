@@ -407,6 +407,24 @@ class CodeCacheBase : public CodeCache {
     }
   }
 
+  void ResetGuestFunction(uint32_t guest_address) override {
+    auto global_lock = global_critical_region_.Acquire();
+    if (!indirection_table_base_ || !HasIndirectionSlot(guest_address)) {
+      return;
+    }
+    const size_t slot_offset =
+        size_t(guest_address - kIndirectionTableBase) / 4 * 4;
+    const size_t chunk = slot_offset / kIndirectionChunkSize;
+    // Retirement never commits a new table chunk. Every published target's
+    // chunk already exists; an uncommitted entry has no target to withdraw.
+    if (chunk / 64 >= indirection_committed_.size() ||
+        !(indirection_committed_[chunk / 64] & (uint64_t(1) << (chunk % 64)))) {
+      return;
+    }
+    auto* slot = reinterpret_cast<uint32_t*>(indirection_table_base_ + slot_offset);
+    *slot = indirection_default_value_;
+  }
+
   // CRTP hook invoked from PlaceGuestCode after a new function is written.
   void UpdateIndirection(uint32_t guest_address, void* code_execute_address) {
     if (guest_address < kIndirectionTableBase) {

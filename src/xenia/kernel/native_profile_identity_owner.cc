@@ -124,14 +124,16 @@ class IdentityImageFrameGuard final : public gpu::NativeFramePresentationGuard {
  public:
   IdentityImageFrameGuard(std::shared_ptr<const gpu::NativeFramePresentationGuard> parent,
       std::weak_ptr<NativeProfileIdentityOwner> owner,Tasks::Root root,uint64_t source,uint64_t render,
-      std::array<std::optional<identity_detail::NativeImageDraw>,64> draws)
-      :parent(std::move(parent)),owner(std::move(owner)),root(root),source(source),render(render),draws(std::move(draws)){}
+      std::array<std::optional<identity_detail::NativeImageDraw>,64> draws,bool empty_initial=false)
+      :parent(std::move(parent)),owner(std::move(owner)),root(root),source(source),render(render),
+       draws(std::move(draws)),empty_initial(empty_initial){}
   bool IsLive() const noexcept override {return parent && parent->IsLive();}
   bool IsRevoked() const noexcept override {return !parent || parent->IsRevoked();}
   const std::shared_ptr<const gpu::NativeFramePresentationGuard> parent;
   const std::weak_ptr<NativeProfileIdentityOwner> owner;
   const Tasks::Root root;const uint64_t source,render;
   const std::array<std::optional<identity_detail::NativeImageDraw>,64> draws;
+  const bool empty_initial;
   mutable bool captured=false,completed=false;
   mutable uintptr_t request=0;mutable uint64_t backend=0;
   mutable gpu::NativeFrameSubmissionIdentity identity;
@@ -139,6 +141,10 @@ class IdentityImageFrameGuard final : public gpu::NativeFramePresentationGuard {
 XThread* ActualThread() noexcept {
  auto* thread=XThread::GetCurrentFiberThread();
  return thread?thread:(XThread::IsInThread()?XThread::GetCurrentThread():nullptr);
+}
+std::optional<uint8_t> Byte(Memory& memory,uint32_t at) {
+ if(at<0x1000 || memory.QueryRangeAccess(at,1)==memory::PageAccess::kNoAccess)return {};
+ return std::atomic_ref<uint8_t>(*memory.TranslateVirtual<uint8_t*>(at)).load(std::memory_order_acquire);
 }
 std::optional<uint32_t> Word(Memory& memory,uint32_t at) {
  if(at<0x1000 || (at&3) || at>UINT32_MAX-3 ||
@@ -297,6 +303,30 @@ const identity_detail::NativeImageCodeExtent* NativeImageCode(uint32_t at) noexc
  for(const auto& e:identity_detail::kNativeImageCode)if(e.address==at)return &e;
  return nullptr;
 }
+bool CheckContextReferenceCode(GuestRuntimeCallExecutor& calls) {
+ const auto module=calls.module();auto* memory=calls.kernel()->memory();
+ if(!module || !module->xex_module() || !module->native_import_ready() ||
+    module->load_generation()!=calls.load_generation())return false;
+ auto read=global_critical_region::AcquireDirect();
+ for(uint32_t at:{0x816BA3C0u,0x816B7F30u,0x816B7490u,0x8172D3CCu,0x8172D41Cu}){
+  const auto body=std::find_if(std::begin(identity_detail::kNativeIdentityCode),
+      std::end(identity_detail::kNativeIdentityCode),[&](const auto& code){return code.address==at;});
+  if(body==std::end(identity_detail::kNativeIdentityCode) ||
+     memory->QueryRangeAccess(at,body->bytes)==memory::PageAccess::kNoAccess)return false;
+  for(uint32_t n=0;n<body->bytes;n+=4){xex2_section_type type;
+   if(calls.kernel()->processor()->LookupModule(at+n)!=module->xex_module() ||
+      calls.kernel()->GetUserModuleForAddress(at+n).get()!=module.get() ||
+      !module->xex_module()->GetPageSectionType(at+n,&type) || type!=XEX_SECTION_CODE ||
+      module->xex_module()->TranslateCode(at+n)!=memory->TranslateVirtual<const uint8_t*>(at+n))return false;
+  }
+  std::array<uint8_t,32> sum{};
+  if(mbedtls_sha256(memory->TranslateVirtual<const uint8_t*>(at),body->bytes,sum.data(),0))return false;
+  constexpr char hex[]="0123456789abcdef";
+  for(size_t n=0;n<sum.size();++n)
+   if(body->sha256[n*2]!=hex[sum[n]>>4] || body->sha256[n*2+1]!=hex[sum[n]&15])return false;
+ }
+ return true;
+}
 bool CheckImageBody(GuestRuntimeCallExecutor& calls,uint32_t at) {
  const auto* body=NativeImageCode(at);const auto module=calls.module();
  auto* memory=calls.kernel()->memory();
@@ -319,6 +349,37 @@ bool CheckImageBody(GuestRuntimeCallExecutor& calls,uint32_t at) {
   if(body->sha256[n*2]!=hex[sum[n]>>4] || body->sha256[n*2+1]!=hex[sum[n]&15])return false;
  return true;
 }
+// Actual entry authentication for bounded finite SYSTEM consumers.
+// A code lease retains lifetime; these raw and translated-code checks retain
+// the whole body and its real save/restore return ABI at the admission cut.
+bool CheckFiniteSystemThreadCode(GuestRuntimeCallExecutor& calls,uint32_t function) {
+ const auto* consumer=FindNativeFiniteSystemConsumer(function);
+ if(!consumer)return false;
+ const uint32_t group[]={consumer->entry,consumer->save,consumer->restore};
+ const auto module=calls.module();auto* memory=calls.kernel()->memory();
+ if(!module || !module->xex_module() || !module->native_import_ready() ||
+    module->load_generation()!=calls.load_generation())return false;
+ auto guard=global_critical_region::AcquireDirect();
+ for(uint32_t at:group){
+  const auto entry=std::find_if(std::begin(identity_detail::kNativeIdentityCode),
+      std::end(identity_detail::kNativeIdentityCode),[&](const auto& code){return code.address==at;});
+  if(entry==std::end(identity_detail::kNativeIdentityCode) ||
+      memory->QueryRangeAccess(at,entry->bytes)==memory::PageAccess::kNoAccess)return false;
+  for(uint64_t page=at;page<uint64_t(at)+entry->bytes;page=(page&~uint64_t(0xFFF))+0x1000){
+   xex2_section_type type;
+   if(calls.kernel()->GetUserModuleForAddress(uint32_t(page)).get()!=module.get() ||
+      !module->xex_module()->GetPageSectionType(uint32_t(page),&type) || type!=XEX_SECTION_CODE)return false;
+  }
+  for(uint32_t offset=0;offset<entry->bytes;offset+=4)
+   if(module->xex_module()->TranslateCode(at+offset)!=memory->TranslateVirtual<const uint8_t*>(at+offset))return false;
+  std::array<uint8_t,32> sum{};
+  if(mbedtls_sha256(memory->TranslateVirtual<const uint8_t*>(at),entry->bytes,sum.data(),0))return false;
+  constexpr char hex[]="0123456789abcdef";
+  for(size_t n=0;n<sum.size();++n)
+   if(entry->sha256[n*2]!=hex[sum[n]>>4] || entry->sha256[n*2+1]!=hex[sum[n]&15])return false;
+ }
+ return true;
+}
 // The ref-only permission depends on these finite native bodies, including
 // the exact save ABI and ordinary/Wait baseline. Reject bridge overlays too.
 bool CheckTaskReferenceCode(GuestRuntimeCallExecutor& calls) {
@@ -333,12 +394,16 @@ bool CheckTaskReferenceCode(GuestRuntimeCallExecutor& calls) {
       std::end(identity_detail::kNativeIdentityCode),[&](const auto& code){return code.address==at;});
   if(entry==std::end(identity_detail::kNativeIdentityCode) ||
       memory->QueryRangeAccess(at,entry->bytes)==memory::PageAccess::kNoAccess)return false;
-  for(uint32_t offset=0;offset<entry->bytes;offset+=4){
+  // XEX ownership and section type are page facts under this SAME GCRC.
+  // Preserve every original translated-word equality below, including an
+  // interior guest-host bridge within an otherwise valid XEX code page.
+  for(uint64_t page=at;page<uint64_t(at)+entry->bytes;page=(page&~uint64_t(0xFFF))+0x1000){
    xex2_section_type type;
-   if(calls.kernel()->GetUserModuleForAddress(at+offset).get()!=module.get() ||
-      !module->xex_module()->GetPageSectionType(at+offset,&type) || type!=XEX_SECTION_CODE ||
-      module->xex_module()->TranslateCode(at+offset)!=memory->TranslateVirtual<const uint8_t*>(at+offset))return false;
+   if(calls.kernel()->GetUserModuleForAddress(uint32_t(page)).get()!=module.get() ||
+      !module->xex_module()->GetPageSectionType(uint32_t(page),&type) || type!=XEX_SECTION_CODE)return false;
   }
+  for(uint32_t offset=0;offset<entry->bytes;offset+=4)
+   if(module->xex_module()->TranslateCode(at+offset)!=memory->TranslateVirtual<const uint8_t*>(at+offset))return false;
   std::array<uint8_t,32> sum{};
   if(mbedtls_sha256(memory->TranslateVirtual<const uint8_t*>(at),entry->bytes,sum.data(),0))return false;
   constexpr char hex[]="0123456789abcdef";
@@ -510,6 +575,52 @@ struct NativeProfileIdentityOwner::TaskReference::Data {
   resources_retired.store(true,std::memory_order_release);
  }
 };
+namespace {
+// Diagnostic classification only. The low four latest_kind bits retain the
+// existing Work kind; upper bits carry this immutable source table's index+1.
+// No guest read, fresh code-authentication claim or read/admission authority.
+constexpr uint32_t OriginalLogonFunctionRole(uint32_t function) noexcept {
+ for(size_t i=0;i<std::size(identity_detail::kNativeIdentityCode);++i)
+  if(identity_detail::kNativeIdentityCode[i].address==function)return uint32_t(i+1);
+ return 0; // Unknown/not in the source-owned extent table.
+}
+static_assert(std::size(identity_detail::kNativeIdentityCode)<=0xFFu);
+static_assert(OriginalLogonFunctionRole(0)==0);
+using OriginalLogonDiagnostic=xam::ProfileManager::NativeOriginalLogonDiagnostic;
+class OriginalLogonCut final {
+ public:
+  explicit OriginalLogonCut(const xam::NativeOriginalLogonObservation* value)
+      :observation(value?*value:xam::NativeOriginalLogonObservation{}){}
+  template<class T> bool Refused(uint32_t reason,T&& condition,uint32_t line) noexcept {
+    const bool refused=bool(condition);
+    if(refused && !value.reason){value.reason=reason;value.line=line;}
+    return refused;
+  }
+  OriginalLogonCut& Error(const std::error_code& error) noexcept {
+    value.error_available=1;value.error_value=uint32_t(error.value());
+    value.error_category=error.category()==std::generic_category()?1:
+        error.category()==std::system_category()?2:0;return *this;
+  }
+  NativeProfileIdentityOwner::Result Finish(NativeProfileIdentityOwner::Result result) noexcept {
+    value.stage=OriginalLogonDiagnostic::kAdmissionReturn;
+    value.disposition_available=1;value.disposition=uint32_t(result.disposition);
+    value.result_available=1;value.result=result.value;
+    xam::ProfileManager::RecordNativeOriginalLogon(observation,value);return result;
+  }
+  xam::NativeOriginalLogonObservation observation;
+  OriginalLogonDiagnostic value;
+};
+void RecordOriginalLogonRosterResult(const xam::NativeOriginalLogonObservation& observation,
+    uint32_t stage,const xam::ProfileRosterResult& result) noexcept {
+  OriginalLogonDiagnostic d;d.stage=stage;d.phase_available=1;d.phase=uint32_t(result.phase);
+  d.error_available=1;d.error_value=uint32_t(result.error.value());
+  d.error_category=result.error.category()==std::generic_category()?1:
+      result.error.category()==std::system_category()?2:0;
+  d.maps_committed=result.maps_committed;d.writers_available=result.writers_available;
+  xam::ProfileManager::RecordNativeOriginalLogon(observation,d);
+}
+}
+
 struct NativeProfileIdentityOwner::State {
  struct CodeOwner {
   object_ref<UserModule> module;
@@ -519,6 +630,15 @@ struct NativeProfileIdentityOwner::State {
  // Parallel resource holders for the SAME scalar Task ledger. These are
  // execution-only module lifetimes, never a second Task/source registry.
  struct ExecutionTarget {uint32_t callback=0;CodeOwner code;};
+ struct ContextReference {
+  Tasks::ContextReferenceReceipt receipt;
+  object_ref<XThread> thread;
+  cpu::ThreadState* cpu=nullptr;
+  cpu::ppc::PPCContext* context=nullptr;
+  std::shared_ptr<KernelState::UserModuleExecutionLease> code;
+  NativeImportDomain::Operation domain;
+  std::array<std::shared_ptr<ExecutionTarget>,2> targets;
+ };
  struct ExecutionLifetime {
   Tasks::Birth birth{};std::vector<std::shared_ptr<ExecutionTarget>> targets;
   bool uncertain=false,native_freed=false;
@@ -662,6 +782,13 @@ struct NativeProfileIdentityOwner::State {
   std::shared_ptr<Work> listener_parent;
   std::optional<Listeners::Dependencies> listener_dependencies;
   bool owns_task_work=false,owns_persistent_work=false,host_body=false,registered_executor=false;
+  bool system_thread_frame=false; // finite real SYSTEM XThread invocation, never a Task birth
+  bool system_discarded_identity_hint=false; // exact member's A branch reads no profile/payload
+  // Observed ambient execution only. Periodic/unobserved Tasks are never
+  // relabeled as a borrow; SYS0 event keys still carry zero Task/birth fields.
+  uint32_t system_frame_ambient_task=0;
+  Tasks::Birth system_frame_ambient_birth{};
+  bool system_frame_ambient_periodic=false;
   bool physical_work=false,prebody_parked=false,transport_unclaimed=false,transport_only=false,identity_continuation=false,task_release=false,foreign_task_cleanup=false,foreign_avatar_task=false;
   uint64_t release_generation=0,release_receipt=0;
   CodeOwner caller_code;
@@ -669,6 +796,10 @@ struct NativeProfileIdentityOwner::State {
   uint64_t provider_generation=0;
   std::optional<identity_detail::NativeImageInput> image_key_candidate,image_default_result;
   uint64_t image_uri_generation=0;
+  struct ImageQueryNoReadEntry {uint64_t uri_generation=0,version=0;};
+  // Presence records an actual pending==0 entry sample and an intact prior
+  // no-image-history chain, before this same original Query body executes.
+  std::optional<ImageQueryNoReadEntry> image_no_read_entry;
   uint32_t image_event=0,image_modified=0;
 
   std::shared_ptr<NativeIdentityTileWork::Data> tile;
@@ -676,6 +807,7 @@ struct NativeProfileIdentityOwner::State {
   std::array<std::optional<identity_detail::NativeImageDraw>,64> image_draws;
   bool image_draws_unavailable=false;
   std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard;
+  std::optional<Tasks::CompletionRoute> completion_route; // exact shared-IO entry routing only
   bool normal_return=false,uncertain=false;
  };
  struct WorkBlocker {
@@ -701,6 +833,7 @@ struct NativeProfileIdentityOwner::State {
   Tasks::Birth completion_birth{};
   uint32_t completion_context=0,completion_error=0,completion_extended=0,completion_length=0;
   std::atomic<bool> caller_published{false},completion_returned{false};
+  xam::NativeOriginalLogonObservation original_logon_observation;
   uint32_t input=0,overlap=0,flags=0;
   uint32_t value=kAbort;
   std::atomic<bool> bootstrap_alignment{false},external_closed{false},native_entered{false};
@@ -743,6 +876,8 @@ struct NativeProfileIdentityOwner::State {
   std::shared_ptr<TaskReference::Data> reference_release;
   bool reference_only=false;
   uint32_t reference_lookup=0,reference_parent=0;
+  std::shared_ptr<ContextReference> context_reference;
+  Frame context_reference_call;
  };
  struct Provider {
   uint64_t generation=0,completed_source=0,completed_version=0;
@@ -755,6 +890,11 @@ struct NativeProfileIdentityOwner::State {
   std::optional<identity_detail::EncodedImageSource> image_output;
   std::optional<identity_detail::NativeImageInput> image_key;
   uint64_t image_key_generation=0;
+  struct NoReadQuery {
+   Frame frame;Tasks::Birth birth;
+   uint64_t work=0,source=0,provider_generation=0,uri_generation=0,version=0;
+  };
+  std::optional<NoReadQuery> no_read_query;
  };
  struct CountedAllocation {
   uint64_t generation=0;
@@ -904,6 +1044,23 @@ struct NativeProfileIdentityOwner::State {
       [](const auto& r){return !r.live;});
   if(slot==image_strings.end()){LoseImageObservation();return false;}
   *slot={++next_image_string,pointer,field,input,true};return true;
+ }
+ // Caller holds State::mutex. This narrow initial absence fact comes from
+ // the actual PM envelopes and genuine native protocol, never an empty
+ // provider census, lack of notification or a Guide draw alone.
+ bool EmptyInitialFrameCurrent(const std::shared_ptr<const gpu::NativeFramePresentationGuard>& guard,
+     uint64_t source) const {
+  return job && job->bootstrap_alignment.load() && current_read_source==kInitialReadSource &&
+      job->source==source && job->intent && current_roster==job->intent->old_roster() &&
+      job->native_entered.load() && job->native_returned.load() && job->publisher_observed.load() &&
+      !job->transport_running.load() && !job->execution_uncertain.load() && !job->canceled.load() && !job->done.load() &&
+      job->protocol_returned && job->protocol_work && job->protocol_birth.generation &&
+      job->protocol_birth.task && job->protocol_frame.root==root && job->protocol_frame.function==0x8199C838 &&
+      published_source.load(std::memory_order_acquire)==job->source &&
+      render_phase==RenderPhase::kHiddenRefresh && job->hidden_pixels && pixels==job->hidden_pixels &&
+      guard.get()==job->hidden_pixels.get() && !guard.owner_before(job->hidden_pixels) &&
+      !job->hidden_pixels.owner_before(guard) && !stopping.load() && !uncertain.load() && !retired.load() &&
+      job->intent->HasPublishedEmptyUnchangedRows(job->protocol_value);
  }
  std::optional<Frame> ImageShape(cpu::ppc::PPCContext& c,uint32_t at) const {
   auto* thread=ActualThread();
@@ -1130,6 +1287,10 @@ struct NativeProfileIdentityOwner::State {
   bool enabled=false,source_retired=false,parked=false;
   uint32_t reason=0,loops=0,phase=0,active=0,expected=0,attempt=0,flags=0;
   uint32_t old_evaluated=0,old_truth=0,task=0,first_loss=0;
+  uint32_t prepared_evaluated=0,prepared_truth=0,prepared_pending=0;
+  bool prepared_pending_available=false;
+  WorkBlocker prepared_work;Tasks::SourceBlocker prepared_source;
+  Listeners::SourceProducerObservation prepared_origin;
   uint64_t observation=0,job=0,source=0,current_read=0,next_work=0,sp=0,lr=0,pcr=0;
   uint64_t context_thread_state=0,expected_thread_state=0,actual_thread=0;
   Frame frame;Tasks::Birth birth{};
@@ -1141,6 +1302,9 @@ struct NativeProfileIdentityOwner::State {
   bool Old(uint32_t bit,bool value) noexcept {
    if(enabled){old_evaluated|=1u<<bit;if(value)old_truth|=1u<<bit;}return value;
   }
+  bool Prepared(uint32_t bit,bool value) noexcept {
+   if(enabled){prepared_evaluated|=1u<<bit;if(value)prepared_truth|=1u<<bit;}return value;
+  }
   XThread* Actual(XThread* value) noexcept {
    if(enabled)actual_thread=reinterpret_cast<uintptr_t>(value);return value;
   }
@@ -1149,6 +1313,44 @@ struct NativeProfileIdentityOwner::State {
  std::atomic<uint64_t> bootstrap_handoff{0}; // turn:32, actual cut:32
  struct QueryExitCell {std::atomic<uint32_t> state{0};QueryObservation payload;};
  QueryExitCell first_parked_query_exit;
+ // Called only after the original State lock has left scope. Unlike the
+ // legacy summary, this bounded cut report includes normal admission reason24.
+ void ReportPreparedQuery(const QueryObservation& q) noexcept try {
+  if(!q.enabled || !(q.prepared_evaluated&~1u) ||
+     global_critical_region::is_held_by_current_thread())return;
+  const auto& w=q.prepared_work;const auto& b=q.prepared_source;const auto& o=q.prepared_origin;
+  static NativeSystemUiTraceLimiter trace;
+  const uint64_t key=q.job^(uint64_t(q.prepared_evaluated)<<32)^q.prepared_truth^
+      w.serial^b.generation^b.serial^(o.references<<16);
+  trace.EmitTransition(key,"identity","frame_query_prepared_predicates",
+   {{"observation",q.observation},{"job_serial",q.job},{"job_source",q.source},{"current_read",q.current_read},
+    {"reason",q.reason},{"render_phase",q.phase},{"source_retired",q.source_retired},{"parked",q.parked},
+    {"evaluated",q.prepared_evaluated},{"predicate_true",q.prepared_truth},{"expected",q.expected},
+    {"work_available",w.available},{"work_closed",w.closed},{"work_reason",w.reason},
+    {"work",w.serial},{"work_source",w.source},{"work_state",w.state},{"work_first_argument",w.first_argument},
+    {"work_birth",w.birth.generation},{"work_task",w.birth.task},{"work_origin",w.birth.origin},
+    {"work_thread",w.frame.thread},{"work_pcr",w.frame.pcr},{"work_sp",w.frame.sp},
+    {"work_lr",w.frame.lr},{"work_function",w.frame.function},
+    {"listener_available",o.available},{"listener_mode",o.mode},{"listener_evaluated",o.evaluated},{"listener_true",o.truth},
+    {"listener_references_available",o.references_available},{"listener_references",o.references},
+    {"listener_orphan_available",o.orphan_available},{"listener_orphaned",o.orphaned},
+    {"listener_consumers_available",o.consumers_available},{"listener_consumer_reason",o.consumer_reason},
+    {"listener_consumer_work",o.consumer_work},{"listener_active_cell",o.active_cell},
+    {"orphan_capture_state",o.orphan_capture_state},{"orphan_origin_matches",o.orphan_origin_matches},
+    {"orphan_origin",o.first_orphan.origin.serial},{"orphan_origin_slot",o.first_orphan.origin.slot},
+    {"orphan_sequence",o.first_orphan.enqueue_sequence},{"orphan_work_hint",o.first_orphan.consumer_work_hint},
+    {"orphan_thread",o.first_orphan.thread},{"orphan_pcr",o.first_orphan.pcr},
+    {"orphan_sp",o.first_orphan.sp},{"orphan_lr",o.first_orphan.lr},{"orphan_function",o.first_orphan.function},
+    {"orphan_process_type",o.first_orphan.process_type},
+    {"orphan_context",o.first_orphan.context},{"orphan_thread_state",o.first_orphan.thread_state},
+    {"orphan_handle",o.first_orphan.handle},{"orphan_listener",o.first_orphan.listener},
+    {"orphan_area",o.first_orphan.area},{"orphan_event",o.first_orphan.event},
+    {"orphan_data_available",o.first_orphan.data_available},{"orphan_data",o.first_orphan.data},
+    {"orphan_outer_return",o.orphan_outer_return},
+    {"source_available",b.available},{"source_closed",b.closed},{"source_reason",b.kind},
+    {"source",b.source},{"source_generation",b.generation},{"source_task",b.task},{"source_serial",b.serial},
+    {"pending_available",q.prepared_pending_available},{"native_pending",q.prepared_pending}});
+ }catch(...){/* Scalar observation failure never changes native admission. */}
  void ReportQuery(const QueryObservation& q,bool exiting) noexcept try {
   if(!q.enabled || (exiting && q.reason==24))return;
   if(exiting && q.parked){
@@ -1294,6 +1496,15 @@ struct NativeProfileIdentityOwner::State {
  std::vector<std::shared_ptr<Expected>> expected,retired_expected;
  std::array<std::shared_ptr<TaskReference::Data>,64> task_references{};
  uint64_t next_task_reference=1;
+ std::array<std::shared_ptr<ContextReference>,64> context_references{};
+ uint64_t next_context_reference=1;
+ bool context_reference_unavailable=false;
+ std::shared_ptr<ContextReference> CurrentContextReference(const XThread& thread) const {
+  std::shared_ptr<ContextReference> found;
+  for(const auto& row:context_references)if(row && row->thread.get()==&thread &&
+      row->receipt.NewerActiveThan(found?&found->receipt:nullptr))found=row;
+  return found; // An uncertain younger frame shadows every older native ref.
+ }
  std::vector<CodeOwner> apc_code_until_actual_stop;
  std::shared_ptr<const NativeIdentityEventSource> boot_source;
  std::optional<Events::Origin> boot_origin;
@@ -1419,11 +1630,41 @@ struct NativeProfileIdentityOwner::State {
    emit(null_operand,"task_null_schedule_operands",first_null_task_operands);
   }catch(...){/* Pure diagnostic; no source/native/admission result changes. */}
  }
- bool ProvidersFresh(uint64_t source) const {
-  for(const auto& p:providers)if(p && p->initialized && !p->revoked &&
-      !p->buffer_revoked && !p->destroyed && p->completed_source!=source)return false;
-  return true;
+ // Caller holds State::mutex. Initialization is not a read demand. A
+ // later Query may also positively finish without issuing one: its actual
+ // refresh branch ALWAYS increments full A0 before calling the read wrapper.
+ bool ProviderImageDataAbsent(const Provider& p) const {
+  return p.generation && !p.constructing && p.initialized && p.buffer &&
+      ((p.capacity==0x1000 && p.type==0xB) || (p.capacity==0x4000 && p.type==0xA)) &&
+      !p.revoked && !p.buffer_revoked && !p.destroyed &&
+      !p.completed_source && !p.completed_version && !p.completed_status && !p.completed_empty &&
+      !p.last_output && !p.image_output && !p.image_key && !p.image_key_generation;
  }
+ bool ProviderNoImageHistory(const Provider& p) const {
+  if(!ProviderImageDataAbsent(p))return false;
+  if(!p.image_uri_generation)return !p.no_read_query; // Exact constructor/init birth, no prior Query.
+  const auto& q=p.no_read_query;
+  return q && q->frame.valid() && q->frame.root==root && q->frame.function==0x816921C8 &&
+      q->birth.generation && q->birth.origin && q->birth.task && q->work && q->source &&
+      q->provider_generation==p.generation && q->uri_generation==p.image_uri_generation;
+ }
+ bool ProviderWithoutIssuedImageDuty(const Provider& p) const {
+  // The parent event handler may legitimately issue the Query. History
+  // capture is separate from this eventual owner-quiescent acceptance.
+  return ProviderNoImageHistory(p) &&
+      std::none_of(active.begin(),active.end(),[&](const auto& work){
+       return work->provider_generation==p.generation;
+      });
+ }
+ const Provider* FirstUnfreshProvider(uint64_t source) const {
+  // Pristine initialization or an exact returned no-read Query has no
+  // issued image duty. Neither is an output completion or fresh image.
+  for(const auto& p:providers)if(p && p->initialized && !p->revoked &&
+      !p->buffer_revoked && !p->destroyed && p->completed_source!=source &&
+      !ProviderWithoutIssuedImageDuty(*p))return p.get();
+  return nullptr;
+ }
+ bool ProvidersFresh(uint64_t source) const {return !FirstUnfreshProvider(source);}
  bool RecycleRead(const std::shared_ptr<Work>& work) {
   if(!work->read)return true;
   auto* pool=work->read_pool;if(!pool)return false;
@@ -1493,6 +1734,7 @@ struct NativeProfileIdentityOwner::State {
   // never skip it to borrow an older frame that happens to have our source.
   if(!parent || parent->thread.get()!=child.thread.get() || parent->normal_return || parent->uncertain ||
      parent->frame.root!=child.frame.root || parent->frame.pcr!=key.pcr ||
+     (parent->system_thread_frame && !parent->external_birth.generation?Events::WorkOwnerKind::kSystemThreadFrame:Events::WorkOwnerKind::kTask)!=key.owner_kind ||
      parent->birth.generation!=key.task_allocation_generation || parent->birth.task!=key.task ||
      parent->frame.sp<=key.sp || parent->serial>=key.invocation)return {};
   return parent;
@@ -1936,6 +2178,113 @@ struct NativeProfileIdentityOwner::State {
   return job && job->native_entered && !job->execution_uncertain &&
       job->original_caller.get()==thread && parent && parent->source==job->source;
  }
+ // This is API delivery policy for verified non-reading SYSTEM branches,
+ // not a foreign callback/read/Task owner. Only actual slow caller admission
+ // and own-return invoke it, outside State and native listener locks.
+ bool DiscardedIdentityHintCaller(const Work& work,
+     const Listeners::OuterArguments& args,uint32_t stage) const {
+  struct Consumer {
+   uint64_t module_hash;
+   uint32_t base,image_bytes,body,body_bytes,return_lr,import_thunk;
+   const char* body_sha256;
+  };
+  static constexpr Consumer consumers[]={
+   {0xA4E817FC8CE261F3ull,0x91240000,0x4F000,0x9124F010,104,0x9124F05C,0x912853EC,
+    "9c0dce274b1aeeb0494fe461dca1470eb1b3e5283ddb5e77d549452f776708d3"},
+   {0x83B2411DBA4B3FA5ull,0x913E0000,0x49000,0x913F0F00,200,0x913F0F30,0x913FD6D4,
+    "1a58ef30b034936f4435078eac3c481a83901dcf64abcf54a89218bb170bc33f"},
+  };
+  const auto* profile=std::find_if(std::begin(consumers),std::end(consumers),
+      [&](const auto& p){return work.frame.lr==p.return_lr;});
+  if(profile==std::end(consumers))return false; // No ordinary/unrelated API log.
+  struct Observation {
+   uint32_t role=0,stage=0,first_failure=UINT32_MAX;
+   uint64_t evaluated=0,truth=0,work=0;
+   bool authorized=false;
+  } observed;
+  observed.stage=stage;observed.work=work.serial;
+  if(work.thread && work.frame.function==0x816A8C00 &&
+     work.thread->native_frame_thread_identity().process_type==X_PROCTYPE_SYSTEM)
+   observed.role=uint32_t(profile-std::begin(consumers))+1;
+  struct Report {
+   Observation& value;
+   ~Report() {
+    // Declared BEFORE the later GCRC guard: reporting follows its unlock.
+    if(!value.role || value.stage>1 || !cvars::native_system_ui_trace)return;
+    static std::array<NativeSystemUiTraceLimiter,4> traces;
+    const uint64_t key=(uint64_t(value.first_failure)<<32)^value.evaluated^value.truth;
+    traces[(value.role-1)*2+value.stage].EmitTransition(key,"identity","discarded_hint_caller_policy",
+      {{"policy_role",value.role},{"policy_stage",value.stage},{"work",value.work},
+       {"evaluated",value.evaluated},{"predicate_true",value.truth},
+       {"first_failed_predicate",value.first_failure},{"authorized",value.authorized}});
+   }
+  } report{observed};
+  const auto check=[&](uint32_t bit,bool actual){
+   observed.evaluated|=uint64_t(1)<<bit;
+   if(actual)observed.truth|=uint64_t(1)<<bit;
+   else if(observed.first_failure==UINT32_MAX)observed.first_failure=bit;
+   return actual;
+  };
+  const auto& code=work.caller_code;const auto module=code.module;
+  if(!check(0,kernel && config.domain && config.catalog && work.thread && work.domain) ||
+     !check(1,work.frame.root==root && work.frame.function==0x816A8C00 &&
+         work.thread->native_frame_thread_identity().process_type==X_PROCTYPE_SYSTEM) ||
+     !check(2,module && code.lease && code.load_generation) ||
+     !check(3,module->module_format()==UserModule::kModuleFormatXex) ||
+     !check(4,module->xex_module()!=nullptr) ||
+     !check(5,module->is_system_app_module()) || !check(6,bool(module->hash())) ||
+     !check(7,*module->hash()==profile->module_hash) ||
+     !check(8,module->xex_module()->base_address()==profile->base) ||
+     !check(9,module->xex_module()->image_size()==profile->image_bytes) ||
+     !check(10,code.lease->hmodule()==module->hmodule_ptr()) ||
+     !check(11,code.load_generation==module->load_generation()) ||
+     !check(12,module->native_import_ready() && module->native_import_domain_id()==config.domain->id()) ||
+     !check(13,config.domain->active() && config.domain->Contains({module->hmodule_ptr(),code.load_generation})) ||
+     !check(14,args.filter==0) ||
+     !check(15,work.frame.sp<=UINT32_MAX-0x58 && args.id_output==work.frame.sp+0x50 &&
+         args.data_output==work.frame.sp+0x54 && work.frame.sp>=work.thread->stack_limit() &&
+         uint64_t(work.frame.sp)+0x58<=work.thread->stack_base()))return false;
+  auto read=global_critical_region::AcquireDirect();
+  const auto caller=kernel->ResolveNativeImportCaller(work.frame.lr);
+  const auto calls=config.catalog->calls();
+  if(!check(16,caller.scoped && caller.module.get()==module.get() && caller.domain==config.domain) ||
+     !check(17,config.domain->root()==NativeImportDomain::Member{calls->module()->hmodule_ptr(),calls->load_generation()}) ||
+     !check(18,calls->module()->GetProcAddressByOrdinal(0x28B)==0x816A8C00) ||
+     !check(19,kernel->GetExecutableModule().get()!=module.get()))return false;
+  bool import=false;
+  // SetupLibraryImports stores the extensionless base name here, unlike
+  // the on-disk XEX import header. Keep the exact loader-metadata identity.
+  for(const auto& library:*module->xex_module()->import_libraries())if(library.name=="xam")
+   for(const auto& fn:library.imports)if(fn.ordinal==0x28B && fn.thunk_address==profile->import_thunk)
+    import=true;
+  if(!check(20,import))return false;
+  auto* memory=kernel->memory();
+  const auto original_code=[&](uint32_t address,uint32_t bytes){
+   if(memory->QueryRangeAccess(address,bytes)==memory::PageAccess::kNoAccess)return false;
+   for(uint32_t offset=0;offset<bytes;offset+=4){
+    xex2_section_type type;
+    if(kernel->GetUserModuleForAddress(address+offset).get()!=module.get() ||
+       !module->xex_module()->GetPageSectionType(address+offset,&type) || type!=XEX_SECTION_CODE ||
+       module->xex_module()->TranslateCode(address+offset)!=memory->TranslateVirtual<const uint8_t*>(address+offset))return false;
+   }
+   return true;
+  };
+  if(!check(21,original_code(profile->body,profile->body_bytes)) ||
+     !check(22,original_code(profile->import_thunk,16)))return false;
+  // Match the loader's actual native binding, not decoded ordinal placeholders.
+  constexpr std::array<uint32_t,4> thunk={0x3D60816A,0x616B8C00,0x7D6903A6,0x4E800420};
+  bool same_thunk=true;
+  for(size_t i=0;i<thunk.size();++i)
+   same_thunk=same_thunk && xe::load_and_swap<uint32_t>(memory->TranslateVirtual(profile->import_thunk+uint32_t(i)*4))==thunk[i];
+  if(!check(23,same_thunk))return false;
+  std::array<uint8_t,32> sum{};
+  if(!check(24,mbedtls_sha256(memory->TranslateVirtual<const uint8_t*>(profile->body),profile->body_bytes,sum.data(),0)==0))return false;
+  constexpr char hex[]="0123456789abcdef";bool same_body=true;
+  for(size_t i=0;i<sum.size();++i)
+   same_body=same_body && profile->body_sha256[i*2]==hex[sum[i]>>4] && profile->body_sha256[i*2+1]==hex[sum[i]&15];
+  if(!check(25,same_body))return false;
+  observed.authorized=true;return true;
+ }
  std::optional<Frame> ReadFrame(cpu::ppc::PPCContext& c,uint32_t function,
                                 bool allow_title=false,CodeOwner* caller_code=nullptr,bool retained_task_cleanup=false,
                                 const Tasks::PeriodicFrameContext* periodic_context=nullptr,
@@ -2133,7 +2482,10 @@ bool NativeProfileIdentityOwner::TaskCloseUse::Complete(bool executed,uint32_t v
   if(found==s.expected.end() || e->call_returned || (!e->task_release && !e->reference_release)){
    s.RecordTaskCloseRefusal(12,e->args[0]|1u);s.Lose(__LINE__);return false;}
   e->call_returned=true;
-  e->healthy=e->entered && e->returned && e->actual &&
+  const bool context_current=!e->context_reference ||
+      (!s.context_reference_unavailable && s.CurrentContextReference(*e->thread)==e->context_reference &&
+       e->context_reference->receipt.Permits(e->context_reference_call,e->args[0]));
+  e->healthy=context_current && e->entered && e->returned && e->actual &&
       (!e->task_release || e->task_release->Complete(executed,value)) &&
       (!e->reference_release || e->reference_release->receipt.CompleteRelease(executed,value));
   if(!e->healthy){if(e->task_release)e->task_release->Fail();
@@ -2190,6 +2542,8 @@ NativeProfileIdentityOwner::TaskCloseUse NativeProfileIdentityOwner::BeforeNativ
   const auto acquired=reference?reference->data_:nullptr;
   Frame callback_frame,release_call;
   bool nonfinal_baseline=false;
+  bool context_code=false;
+  std::shared_ptr<State::ContextReference> context_reference;
   uint32_t baseline_parent=0;
   if(actual_call){
    auto* cpu=thread.thread_state();auto* c=cpu?cpu->context():nullptr;
@@ -2208,6 +2562,9 @@ NativeProfileIdentityOwner::TaskCloseUse NativeProfileIdentityOwner::BeforeNativ
    const auto actual_task=NativeProfileIdentityTaskContext::Read(*s.config.catalog->calls(),
        *s.config.domain,actual_call->function,*c);
    if(!actual_task || *actual_task!=body)return reject(15);
+   {std::lock_guard lock(s.mutex);context_reference=s.CurrentContextReference(thread);}
+   context_code=context_reference && CheckContextReferenceCode(*s.config.catalog->calls());
+   context_reference.reset();
    // One owned-stack snapshot, no retained guest pointer. An unsupported
    // baseline does not change the original unique-Birth close route.
    const uint32_t limit=thread.stack_limit(),base=thread.stack_base();
@@ -2245,7 +2602,12 @@ NativeProfileIdentityOwner::TaskCloseUse NativeProfileIdentityOwner::BeforeNativ
      s.first_reference_lookup_state.store(2,std::memory_order_release);
     }
    }
-   if(!birth && (!acquired || !nonfinal_baseline ||
+   if(!birth && acquired && context_code && !s.context_reference_unavailable){
+    auto current=s.CurrentContextReference(thread);
+    if(current && current->cpu==thread.thread_state() && current->context==thread.thread_state()->context() &&
+       current->code && current->domain && current->receipt.Permits(release_call,body))context_reference=current;
+   }
+   if(!birth && (!acquired || (!nonfinal_baseline && !context_reference) ||
        (lookup.kind!=Tasks::TransportLookup::Kind::kAbsent &&
         lookup.kind!=Tasks::TransportLookup::Kind::kHistoricalFreed)))return reject(5);
    if(s.expected.size()>=64)return reject(6);
@@ -2259,7 +2621,11 @@ NativeProfileIdentityOwner::TaskCloseUse NativeProfileIdentityOwner::BeforeNativ
     expected->task_release.reset();expected->reference_only=true;expected->source=kBootUnjoinedSource;
    }
    if(acquired){
-    if(!acquired->receipt.BeginRelease(release_call,callback_frame,body,!birth))return reject(15);
+    const bool begun=context_reference?
+        acquired->receipt.BeginContextRelease(release_call,context_reference->receipt,body):
+        acquired->receipt.BeginRelease(release_call,callback_frame,body,!birth);
+    if(!begun)return reject(15);
+    expected->context_reference=context_reference;expected->context_reference_call=release_call;
     expected->reference_release=acquired;expected->reference_lookup=uint32_t(lookup.kind);
     expected->reference_parent=baseline_parent;
    }
@@ -2617,13 +2983,17 @@ void NativeProfileIdentityOwner::ObserveImageTileWrite(
   for(const auto& provider:s.providers){
    if(!provider || !provider->initialized || provider->destroyed)continue;
    const bool overlap=std::any_of(spans.begin(),spans.end(),[&](const auto& span){
-    return span.second && (util::GuestIoRangesOverlap(*s.kernel->memory(),span.first,
-        span.second,provider->buffer,provider->capacity) ||
+    // Revocation already closes this buffer's native image epoch. Its old
+    // numeric address no longer owns unrelated writes after free/reuse;
+    // the still-live provider object remains independently observed below.
+    return span.second && ((!provider->buffer_revoked &&
+        util::GuestIoRangesOverlap(*s.kernel->memory(),span.first,
+            span.second,provider->buffer,provider->capacity)) ||
         util::GuestIoRangesOverlap(*s.kernel->memory(),span.first,span.second,
             provider->object,0xD8));
    });
    if(!overlap)continue;
-   provider->image_epoch.Invalidate();provider->image_output.reset();
+   provider->image_epoch.Invalidate();provider->image_output.reset();provider->no_read_query.reset();
    if(provider->image_uri_generation==UINT64_MAX)
     slot->unavailable_.store(true,std::memory_order_release);
    else ++provider->image_uri_generation;
@@ -2713,7 +3083,23 @@ void NativeProfileIdentityOwner::ObserveImageEntry(void* raw,uint32_t at) noexce
   const auto frame=state.ImageShape(c,at);
   if(!frame){slot->unavailable_.store(true,std::memory_order_release);return;}
   std::optional<uint32_t> actual_task;
-  if(domain && CheckTaskReferenceCode(*calls))actual_task=NativeProfileIdentityTaskContext::Read(*calls,*domain,at,c);
+  // Only these draw wrappers/real upload callers consume ImageCall::render.
+  // Constructors, rebinding, withdrawal and decode still observe their actual
+  // native lifecycle; they do not borrow a Task merely to fill unused metadata.
+  const bool consumes_render=at==0x81798740 || at==0x81798788 ||
+      at==0x81839C18 || at==0x8183A180;
+  bool possible_render=false;
+  if(consumes_render){
+   std::lock_guard lock(state.mutex);
+   possible_render=std::any_of(state.active.begin(),state.active.end(),[&](const auto& work){
+    return work->render_iteration && !work->normal_return && !work->uncertain &&
+        work->frame.thread==frame->thread && work->frame.pcr==frame->pcr && frame->sp<=work->frame.sp;
+   });
+  }
+  // The preliminary metadata filter grants nothing. A useful candidate still
+  // performs the complete original code check and real TLS/Task/birth match.
+  if(possible_render && domain && CheckTaskReferenceCode(*calls))
+   actual_task=NativeProfileIdentityTaskContext::Read(*calls,*domain,at,c);
   current_slot=c.kernel_state->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
   std::lock_guard lock(state.mutex);
   const auto current=slot->current_.load(std::memory_order_acquire);const auto self=owner->weak_from_this();
@@ -2992,8 +3378,16 @@ void NativeProfileIdentityOwner::ObserveImageReturn(void* raw,uint32_t at) noexc
    if(state.retired.load() || !state.config.catalog || state.hooks.load()==UINT64_MAX)return;
    state.hooks.fetch_add(1,std::memory_order_acq_rel);borrow.state=&state;calls=state.config.catalog->calls();
   }
-  if(at==0x8172D590){
-   const auto actual=state.ImageShape(c,at);if(!actual)return;
+  {
+   // Reject an unobserved own-return before whole-body authentication. This
+   // proves no use or return: the final exact owner lookup still runs below.
+   const auto actual=state.ImageShape(c,at);
+   if(!actual){
+    // CRT memcpy has always been neutral without an observed copy frame.
+    // Other malformed returns keep the original deny-only availability cut.
+    if(at!=0x8172D590)slot->unavailable_.store(true,std::memory_order_release);
+    return;
+   }
    std::lock_guard lock(state.mutex);
    if(!state.ImageAt(*actual,reinterpret_cast<uintptr_t>(&c),false))return;
   }
@@ -3226,6 +3620,23 @@ void NativeProfileIdentityOwner::ObserveImageInstruction(void* raw,uint32_t site
    if(state.retired.load() || !state.config.catalog || state.hooks.load()==UINT64_MAX)return;
    state.hooks.fetch_add(1,std::memory_order_acq_rel);borrow.state=&state;
    calls=state.config.catalog->calls();domain=state.config.domain;
+  }
+  {
+   const auto actual=state.ImageShape(c,point.function);
+   if(!actual){slot->unavailable_.store(true,std::memory_order_release);return;}
+   std::lock_guard lock(state.mutex);
+   if(site==14){
+    // This formatter cut belongs to an already-issued provider whole use,
+    // unlike the image-call cuts. No source or Task is issued by this filter.
+    const auto work=state.Latest(actual->thread,0x816921C8);
+    if(!work || work->uncertain || work->normal_return ||
+       work->frame.pcr!=actual->pcr || work->frame.sp<0xB0 ||
+       work->frame.sp-0xB0!=actual->sp)return;
+   }else if(!state.ImageAt(*actual,reinterpret_cast<uintptr_t>(&c),true)){
+    // Match the existing deny-only missing-work disposition before any hash;
+    // an unknown body may not borrow an older call's consumption credit.
+    state.LoseImageObservation();return;
+   }
   }
   auto global=global_critical_region::AcquireDirect();
   if(!calls || !CheckImageBody(*calls,point.function)){
@@ -3527,7 +3938,7 @@ bool NativeProfileIdentityOwner::OwnsScheduledWork(uint64_t serial) const noexce
 bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRosterIntent> intent,
     const NativeProfileIdentityRequest* original,XThread* caller,uint32_t input,
     uint32_t flags,uint32_t overlap,bool bootstrap_alignment,std::error_code& error,
-    bool* retryable_bootstrap) {
+    bool* retryable_bootstrap,const xam::NativeOriginalLogonObservation* observation) {
  error.clear();auto& s=*state_;
  if(retryable_bootstrap)*retryable_bootstrap=false;
  const auto fail_error=[&](uint32_t line,uint32_t stage,const std::error_code& reason,bool retryable=false,
@@ -3535,6 +3946,13 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
   error=reason;
   if(retryable_bootstrap)*retryable_bootstrap=retryable;
   if(bootstrap_alignment)s.RecordBootstrapFailure(stage,line,error,retryable,evaluated,failed);
+  if(observation){
+   OriginalLogonDiagnostic d;d.stage=OriginalLogonDiagnostic::kPrepareFailure;
+   d.reason=stage;d.line=line;d.error_available=1;d.error_value=uint32_t(error.value());
+   d.error_category=error.category()==std::generic_category()?1:error.category()==std::system_category()?2:0;
+   d.evaluated=evaluated;d.failed=failed;
+   xam::ProfileManager::RecordNativeOriginalLogon(*observation,d);
+  }
   return false;
  };
  const auto fail=[&](uint32_t line,uint32_t stage,std::errc reason,bool retryable=false,
@@ -3560,6 +3978,7 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
   return fail(__LINE__,5,std::errc::operation_canceled);
  }
  auto job=std::make_shared<State::Job>();job->intent=intent;job->flags=flags;job->overlap=overlap;
+ if(observation)job->original_logon_observation=*observation;
  job->bootstrap_alignment=bootstrap_alignment;
  if(original)job->original=*original;
  job->domain=s.config.domain->Acquire();
@@ -3766,6 +4185,9 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
   }
   expected->call_returned=true;expected->healthy=true;
   job->native_returned=true;job->value=uint32_t(result.return_value);
+  {OriginalLogonDiagnostic d;d.stage=OriginalLogonDiagnostic::kNativeReturn;
+   d.entered=1;d.returned=1;d.result_available=1;d.result=uint32_t(result.return_value);
+   xam::ProfileManager::RecordNativeOriginalLogon(job->original_logon_observation,d);}
   const auto i=std::find(s.expected.begin(),s.expected.end(),expected);
   if(i==s.expected.end()){s.Lose(__LINE__);job->execution_uncertain=true;return result;}
   s.retired_expected.push_back(*i);s.expected.erase(i);
@@ -3780,41 +4202,82 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
 }
 
 NativeProfileIdentityOwner::Result NativeProfileIdentityOwner::TryLogonOnOriginalCaller(
-    KernelState* kernel,uint16_t ordinal,std::span<const uint64_t> args) noexcept {
+    KernelState* kernel,uint16_t ordinal,std::span<const uint64_t> args,
+    const xam::NativeOriginalLogonObservation* observation) noexcept {
+ OriginalLogonCut diagnostic(observation);
  const Result rejected{Disposition::kRejectedBeforeEntry,kAbort};
  try{
-  if(!kernel)return {};
+  if(diagnostic.Refused(1,!kernel,__LINE__))return diagnostic.Finish({});
   const auto owner=Lookup(kernel);
-  if(!owner)return kernel->native_profile_identity_claimed_.load(std::memory_order_acquire)?rejected:Result{};
+  if(!owner)return diagnostic.Finish(diagnostic.Refused(2,kernel->native_profile_identity_claimed_.load(std::memory_order_acquire),__LINE__)?rejected:Result{});
   auto& s=*owner->state_;auto* caller=ActualThread();
-  if((ordinal!=0x20B && ordinal!=0x224) || args.size()!=3 ||
-     std::any_of(args.begin(),args.end(),[](uint64_t value){return value>UINT32_MAX;}) ||
-     !caller || caller->kernel_state()!=kernel || !caller->thread_state() ||
-     (caller->native_frame_thread_identity().process_type!=X_PROCTYPE_TITLE &&
-      caller->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM) ||
-     global_critical_region::is_held_by_current_thread())return rejected;
+  if(diagnostic.Refused(3,(ordinal!=0x20B && ordinal!=0x224),__LINE__) || diagnostic.Refused(4,args.size()!=3,__LINE__) ||
+     diagnostic.Refused(5,std::any_of(args.begin(),args.end(),[](uint64_t value){return value>UINT32_MAX;}),__LINE__) ||
+     diagnostic.Refused(6,!caller,__LINE__) || diagnostic.Refused(7,caller->kernel_state()!=kernel,__LINE__) || diagnostic.Refused(8,!caller->thread_state(),__LINE__) ||
+     diagnostic.Refused(9,(caller->native_frame_thread_identity().process_type!=X_PROCTYPE_TITLE &&
+      caller->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM),__LINE__) ||
+     diagnostic.Refused(10,global_critical_region::is_held_by_current_thread(),__LINE__))return diagnostic.Finish(rejected);
   {
    std::lock_guard lock(s.mutex);
-   if(!s.aligned || s.job || s.stopping.load() || s.retired.load() || s.uncertain.load() ||
-      s.Latest(caller->thread_id()))return rejected;
+   const auto latest=[&]{
+    const auto work=s.Latest(caller->thread_id());
+    diagnostic.value.latest_available=1;diagnostic.value.latest_present=bool(work);
+    if(work){
+     diagnostic.value.latest_kind=work->execution_only?1:work->transport_only?2:work->creation_only?3:4;
+     diagnostic.value.latest_kind|=OriginalLogonFunctionRole(work->frame.function)<<4;
+     // Provenance categories only: retained object equality, then two scalar
+     // SPs inside that same caller's host-recorded guest stack bounds. Below
+     // does not prove live ancestry; above does not authorize retirement.
+     const bool same_caller=work->thread.get()==caller;
+     diagnostic.value.latest_kind|=uint32_t(work->thread?(same_caller?1:2):0)<<12;
+     if(same_caller){
+      const auto* context=caller->thread_state()->context();
+      const uint64_t current_sp=context?context->r[1]:0;
+      const uint32_t entry_sp=work->frame.sp,limit=caller->stack_limit(),base=caller->stack_base();
+      if(context && limit<base && DwordIs(current_sp,uint32_t(current_sp)) &&
+         !(uint32_t(current_sp)&15) && !(entry_sp&15) &&
+         uint32_t(current_sp)>=limit && uint32_t(current_sp)<=base &&
+         entry_sp>=limit && entry_sp<=base)
+       diagnostic.value.latest_kind|=(uint32_t(current_sp)<=entry_sp?1u:2u)<<14;
+     }
+     diagnostic.value.latest_read_present=bool(work->read);
+     diagnostic.value.latest_borrowed_read_present=bool(work->execution_read_owner);
+     diagnostic.value.latest_same_source=work->source==s.current_read_source;
+    }
+    return bool(work);
+   };
+   if(diagnostic.Refused(11,!s.aligned,__LINE__) || diagnostic.Refused(12,s.job,__LINE__) ||
+      diagnostic.Refused(13,s.stopping.load(),__LINE__) || diagnostic.Refused(14,s.retired.load(),__LINE__) ||
+      diagnostic.Refused(15,s.uncertain.load(),__LINE__) || diagnostic.Refused(16,latest(),__LINE__))return diagnostic.Finish(rejected);
    // A synchronous original ingress cannot wait for its OWN already admitted
    // old render/provider work to drain. Refuse before native/PM entry rather
    // than forge an asynchronous native return or move it to another caller.
   }
-  if(!s.EnterPublic(false))return rejected;
+  if(diagnostic.Refused(17,!s.EnterPublic(false),__LINE__))return diagnostic.Finish(rejected);
   struct PublicExit{State& s;~PublicExit(){s.LeavePublic(false);}} public_exit{s};
   auto* pm=kernel->xam_state()->profile_manager();std::error_code error;
   const auto expected=pm->CaptureRosterExpected(error);
-  if(error || !expected.roster)return rejected;
+  if(diagnostic.Refused(18,error,__LINE__) || diagnostic.Refused(19,!expected.roster,__LINE__))return diagnostic.Error(error).Finish(rejected);
   std::array<uint64_t,4> before{};
-  for(size_t i=0;i<4;++i)before[i]=expected.roster->slots()[i].xuid;
+  diagnostic.value.expected_mask_available=1;
+  for(size_t i=0;i<4;++i){
+   before[i]=expected.roster->slots()[i].xuid;
+   if(before[i]){diagnostic.value.expected_nonempty_mask|=1u<<i;++diagnostic.value.expected_nonempty_count;}
+  }
   const auto bytes=ordinal==0x20B?32u:0x620u;
   std::array<uint8_t,0x620> wire{};
-  if(util::ReadGuestIoBuffer(*kernel->memory(),uint32_t(args[0]),std::span(wire).first(bytes))!=0)return rejected;
+  if(diagnostic.Refused(20,util::ReadGuestIoBuffer(*kernel->memory(),uint32_t(args[0]),std::span(wire).first(bytes))!=0,__LINE__))return diagnostic.Finish(rejected);
   const auto original=NativeProfileIdentityRequest::Capture(ordinal,
       std::span(wire).first(bytes),uint32_t(args[1]),before,error);
-  if(!original || error)return rejected;
+  if(diagnostic.Refused(21,!original,__LINE__) || diagnostic.Refused(22,error,__LINE__))return diagnostic.Error(error).Finish(rejected);
   xam::ProfileRosterDesired desired;desired.xuids=original->desired();
+  diagnostic.value.input_mask_available=1;diagnostic.value.desired_mask_available=1;
+  diagnostic.value.selected_mask=original->selected_mask_;diagnostic.value.remove_mask=original->remove_mask_;
+  diagnostic.value.input_nonempty_mask=original->selected_mask_|original->remove_mask_;
+  for(size_t i=0;i<4;++i){
+   if(diagnostic.value.input_nonempty_mask&(1u<<i))++diagnostic.value.input_nonempty_count;
+   if(desired.xuids[i]){diagnostic.value.desired_nonempty_mask|=1u<<i;++diagnostic.value.desired_nonempty_count;}
+  }
   desired.notify_host_compatibility=false;
   // Original224's actual device selector resolves through the registered
   // writable source capability. Canonical durable Account comparison follows
@@ -3823,8 +4286,10 @@ NativeProfileIdentityOwner::Result NativeProfileIdentityOwner::TryLogonOnOrigina
    if(!(original->selected_mask_&(1u<<slot)))continue;
    const auto device=xe::load_and_swap<uint32_t>(wire.data()+slot*0x188+0x184);
    const auto source=kernel->content_manager()->sources().WritableSource(device);
-   if(!source || !source->available || !source->profile_writable || !source->storage ||
-      source->storage->retiring() || !source->managed_identity || source->managed_identity->retiring())return rejected;
+   if(diagnostic.Refused(23,!source,__LINE__) || diagnostic.Refused(24,!source->available,__LINE__) ||
+      diagnostic.Refused(25,!source->profile_writable,__LINE__) || diagnostic.Refused(26,!source->storage,__LINE__) ||
+      diagnostic.Refused(27,source->storage->retiring(),__LINE__) || diagnostic.Refused(28,!source->managed_identity,__LINE__) ||
+      diagnostic.Refused(29,source->managed_identity->retiring(),__LINE__))return diagnostic.Finish(rejected);
    xam::ProfileRosterSelectionOrigin origin;
    origin.device_id=source->source.device_id;origin.source_id=source->source.id;
    origin.source_generation=source->generation;origin.original_account_row.emplace();
@@ -3832,10 +4297,10 @@ NativeProfileIdentityOwner::Result NativeProfileIdentityOwner::TryLogonOnOrigina
    desired.origins[slot]=std::move(origin);
   }
   const auto intent=pm->PrepareRoster(desired,expected,error);
-  if(!intent || error)return rejected;
-  if(!owner->EnqueuePrepared(intent,&*original,caller,uint32_t(args[0]),uint32_t(args[1]),
-                            uint32_t(args[2]),false,error)){
-   pm->CancelRoster(intent);return rejected;
+  if(diagnostic.Refused(30,!intent,__LINE__) || diagnostic.Refused(31,error,__LINE__))return diagnostic.Error(error).Finish(rejected);
+  if(diagnostic.Refused(32,!owner->EnqueuePrepared(intent,&*original,caller,uint32_t(args[0]),uint32_t(args[1]),
+                            uint32_t(args[2]),false,error,nullptr,observation),__LINE__)){
+   pm->CancelRoster(intent);return diagnostic.Error(error).Finish(rejected);
   }
   const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
   for(;;){
@@ -3847,18 +4312,18 @@ NativeProfileIdentityOwner::Result NativeProfileIdentityOwner::TryLogonOnOrigina
     ready=!closed && s.job->preentry_ready;
    }
    if(ready)break;
-   if(closed || std::chrono::steady_clock::now()>=deadline){owner->CancelQueued(intent);return rejected;}
+   if(diagnostic.Refused(33,closed,__LINE__) || diagnostic.Refused(34,std::chrono::steady_clock::now()>=deadline,__LINE__)){owner->CancelQueued(intent);return diagnostic.Finish(rejected);}
    // Preserve the original caller's process/PCR/fiber and permit genuine old
    // native work to drain; no host CV or metadata/FS lock blocks guest CPU.
    caller->Delay(0,0,uint64_t(-160000ll));
   }
   const auto native=owner->ExecutePreparedOn(*caller);
-  if(!native.succeeded)return {Disposition::kExecutionUncertain,uint32_t(native.return_value)};
+  if(diagnostic.Refused(35,!native.succeeded,__LINE__))return diagnostic.Finish({Disposition::kExecutionUncertain,uint32_t(native.return_value)});
   // Every actual native DWORD, including negative HRESULTs and async normal
   // returns, goes back unchanged. Later consumer completion remains separate.
-  return {Disposition::kActualReturned,uint32_t(native.return_value)};
+  return diagnostic.Finish({Disposition::kActualReturned,uint32_t(native.return_value)});
  }catch(...){if(const auto owner=Lookup(kernel))owner->state_->Lose(__LINE__);
-  return {Disposition::kExecutionUncertain,kAbort};}
+  diagnostic.Refused(36,true,__LINE__);return diagnostic.Finish({Disposition::kExecutionUncertain,kAbort});}
 }
 
 xam::ProfileRosterResult NativeProfileIdentityOwner::SubmitPrepared(
@@ -4414,6 +4879,10 @@ bool NativeProfileIdentityOwner::ObserveExecutionEntry(void* raw,uint32_t at) no
    if(DwordIs(raw_target,uint32_t(raw_target)))work->execution_target=s.RetainExecutionTarget(uint32_t(raw_target));
    if(!work->execution_target)work->execution_uncertain=true;
   }
+  // The final native-memory/ledger admission is one cut. Match the return
+  // path's GCRC -> State order: Word/QueryRangeAccess below also takes GCRC.
+  // Earlier strong holders outlive both guards and unwind after their release.
+  auto memory_read=global_critical_region::AcquireDirect();
   std::lock_guard lock(s.mutex);
   if(s.active.size()>=256 || std::any_of(s.active.begin(),s.active.end(),[&](const auto& old){return old->frame==*shape;})){
    for(const auto& old:s.active)if(old->execution_only && old->frame==*shape){
@@ -4693,12 +5162,82 @@ bool NativeProfileIdentityOwner::ObserveExecutionReturn(void* raw,uint32_t at) n
  }
 }
 
+// This native context owns a separate real B7F30 AddRef until BA42C.
+// It issues only a nonfinal-reference baseline, never a Birth/read/Task result.
+void NativeProfileIdentityOwner::ObserveContextReference(void* raw,uint32_t event) noexcept {
+ if(!raw || event>11)return;
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ std::shared_ptr<NativeProfileIdentityOwner> owner;
+ std::shared_ptr<State::ContextReference> record;
+ std::shared_ptr<State::ExecutionTarget> target;
+ try{
+  owner=NativeSystemUiService::CaptureTaskExecutionOwner(c.kernel_state);if(!owner)return;
+  auto& s=*owner->state_;auto* thread=ActualThread();
+  if(!thread || s.retired.load(std::memory_order_acquire) || thread->kernel_state()!=s.kernel ||
+     thread->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM)return;
+  s.hooks.fetch_add(1,std::memory_order_acq_rel);
+  struct Exit{State& s;~Exit(){s.hooks.fetch_sub(1,std::memory_order_acq_rel);}} exit{s};
+  const uint32_t function=event==1 || event==2 || event==11?0x816B7F30:
+      event==3 || event==4 || event==10?0x816B7490:0x816BA3C0;
+  if(event!=0){
+   {std::lock_guard lock(s.mutex);record=s.CurrentContextReference(*thread);}
+   if(!record)return;
+   if((event==1 || event==2 || event==11) && c.lr!=0x816BA3D4)return;
+   if((event==3 || event==4 || event==10) && c.lr!=0x816BA430)return;
+  }
+  const auto frame=s.TransportShape(c,function);
+  if(!frame || !CheckContextReferenceCode(*s.config.catalog->calls())){
+   std::lock_guard lock(s.mutex);s.context_reference_unavailable=true;return;
+  }
+  if(event==0){
+   record=std::make_shared<State::ContextReference>();
+   record->thread=retain_object(thread);record->cpu=c.thread_state;record->context=&c;
+   record->code=s.root_code;record->domain=s.config.domain->Acquire();
+   std::lock_guard lock(s.mutex);
+   const auto slot=std::find(s.context_references.begin(),s.context_references.end(),nullptr);
+   if(s.retired.load() || slot==s.context_references.end() || !record->code || !record->domain ||
+      !s.next_context_reference || s.next_context_reference==UINT64_MAX ||
+      !record->receipt.Prepare(s.next_context_reference++,*frame,uint32_t(c.r[3]),thread->stack_limit(),thread->stack_base()) ||
+      !DwordIs(c.r[3],record->receipt.context)){
+    s.context_reference_unavailable=true;return;
+   }
+   *slot=record;return;
+  }
+  if(event==6 || event==8){
+   if(DwordIs(c.r[11],uint32_t(c.r[11])))target=s.RetainExecutionTarget(uint32_t(c.r[11]));
+  }
+  std::lock_guard lock(s.mutex);
+  if(s.CurrentContextReference(*thread)!=record || record->cpu!=c.thread_state || record->context!=&c)return;
+  auto& receipt=record->receipt;
+  if(event==1 || event==2){
+   // Unrelated nested getters cannot complete this exact native call.
+   if(frame->lr==0x816BA3D4)receipt.Getter(*frame,event==2,c.r[3]);
+  }else if(event==3 || event==4){
+   if(frame->lr==0x816BA430)receipt.Decrement(*frame,event==4,c.r[3]);
+  }else if(event==10){
+   if(frame->lr==0x816BA430)receipt.AdmitDecrement(*frame);
+  }else if(event==11){
+   if(frame->lr==0x816BA3D4)receipt.AdmitGetter(*frame);
+  }else if(event==5){receipt.Return(*frame);
+  }else{
+   const uint32_t site=event-6;
+   if((site==0 || site==2) && !target){receipt.Fail();return;}
+   if(!DwordIs(c.r[29],receipt.task) || !DwordIs(c.r[31],receipt.context)){
+    receipt.Fail();return;
+   }
+   if(receipt.Callback(site,*frame,uint32_t(c.r[29]),uint32_t(c.r[31]),
+       target?target->callback:0,c.r[3]) && target)record->targets[site/2]=target;
+  }
+ }catch(...){if(owner){std::lock_guard lock(owner->state_->mutex);owner->state_->context_reference_unavailable=true;}}
+}
+
 // These functional cuts observe registers the original native code already
 // loaded. Neutral observer uncertainty is LOCAL: original PPC still executes,
 // no HRESULT/Task completion is synthesized, and no data capability is issued.
 void NativeProfileIdentityOwner::ObserveTaskExecutionInstruction(void* raw,uint32_t site) noexcept {
  ClearTaskAllocationCut();
  if(!raw || site>=kTaskExecutionSites.size())return;
+ if(site>=6){ObserveContextReference(raw,site);return;}
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
  std::shared_ptr<State::Work> work;
  std::shared_ptr<NativeProfileIdentityOwner> owner;
@@ -4895,7 +5434,9 @@ void NativeProfileIdentityOwner::BeforeCompletionPublication(void* raw) noexcept
    std::lock_guard lock(s.mutex);const auto job=s.job;
    const auto whole=s.Latest(frame->thread,0x816A2588);
    const auto* node=s.tasks.FindLiveTask(*task);
-   if(!job || !whole || !job->overlap || whole->source!=job->source ||
+   if(!job || !whole || whole->transport_unclaimed || !whole->completion_route ||
+      !whole->completion_route->StillOwned(job,job->serial,job->source,job->overlap,whole->first) ||
+      !job->overlap || whole->source!=job->source ||
       !job->completion_frame)return; // Unrelated actual app completion.
    const auto& entry=*job->completion_frame;
    if(s.uncertain.load() || job->caller_published || !job->overlap_backing ||
@@ -4906,6 +5447,10 @@ void NativeProfileIdentityOwner::BeforeCompletionPublication(void* raw) noexcept
       uint32_t(c.r[31])!=job->completion_context || uint32_t(c.r[28])!=job->completion_error ||
       uint32_t(c.r[27])!=job->completion_extended || uint32_t(c.r[26])!=job->completion_length){s.Lose(__LINE__);return;}
    job->caller_published=true;retired_overlap=std::move(job->overlap_backing);
+   {OriginalLogonDiagnostic d;d.stage=OriginalLogonDiagnostic::kOverlapBeforeStatus;
+    d.completion_error_available=1;d.completion_error=job->completion_error;
+    d.completion_extended=job->completion_extended;d.completion_length=job->completion_length;
+    xam::ProfileManager::RecordNativeOriginalLogon(job->original_logon_observation,d);}
   }
   // Exact original Status store follows this HIR barrier. The saved364B body
   // has no later caller-overlap access; event/polling callers can reuse their
@@ -4948,7 +5493,7 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
  State::QueryObservation observation;observation.enabled=cvars::native_system_ui_trace;
  observation.source_retired=source_retired;
  struct Reporter {State& state;State::QueryObservation& value;
-  ~Reporter(){state.ReportQuery(value,true);}} reporter{s,observation};
+  ~Reporter(){state.ReportPreparedQuery(value);state.ReportQuery(value,true);}} reporter{s,observation};
  try{
   if(observation.Failed(1,s.retired.load(std::memory_order_acquire)) ||
      observation.Failed(2,global_critical_region::is_held_by_current_thread()) ||
@@ -4980,6 +5525,9 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
      observation.expected=uint32_t(s.expected.size());observation.current_read=s.current_read_source;
      observation.next_work=s.next_work;observation.flags=uint32_t(captured);
      observation.old_evaluated=observation.old_truth=0;observation.work_blocker={};observation.source_blocker={};
+     observation.prepared_evaluated=observation.prepared_truth=0;
+     observation.prepared_work={};observation.prepared_source={};observation.prepared_origin={};
+     observation.prepared_pending_available=false;observation.prepared_pending=0;
      observation.first_loss=s.first_loss_line.load(std::memory_order_relaxed);
      observation.job=observation.source=0;observation.attempt=0;observation.paint={};
      if(s.job){observation.job=s.job->serial;observation.source=s.job->source;observation.attempt=s.job->preentry_attempt;
@@ -4999,13 +5547,20 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
        observation.Old(10,s.wake->InvocationsDrained(NativeAtomicWord(s.native_pending)))){
       s.render_phase=State::RenderPhase::kClosingOld;
     }
-    if(s.render_phase==State::RenderPhase::kHiddenRefresh && source_retired &&
-       s.job && s.job->want_final_barrier && s.job->render_refresh_observed &&
-       s.ProvidersFresh(s.job->source) &&
-       s.IdentityWorkEmpty() && s.expected.empty() &&
-       s.job->event_origin && s.listeners->SourceOnlyProducer(*s.job->event_origin) &&
-       s.tasks.SourceDescendantsClosed(s.job->source) && s.wake && s.native_pending &&
-       s.wake->InvocationsDrained(NativeAtomicWord(s.native_pending))){
+    const auto prepared_drained=[&](){
+     // No added guest read: retain the single original last-cut pending load.
+     const auto pending=NativeAtomicWord(s.native_pending);
+     if(observation.enabled){observation.prepared_pending_available=true;observation.prepared_pending=pending;}
+     return s.wake->InvocationsDrained(pending);
+    };
+    if(observation.Prepared(0,s.render_phase==State::RenderPhase::kHiddenRefresh) && observation.Prepared(1,source_retired) &&
+       observation.Prepared(2,bool(s.job)) && observation.Prepared(3,s.job->want_final_barrier) && observation.Prepared(4,s.job->render_refresh_observed) &&
+       observation.Prepared(5,s.ProvidersFresh(s.job->source)) &&
+       observation.Prepared(6,s.IdentityWorkEmpty(observation.enabled?&observation.prepared_work:nullptr)) && observation.Prepared(7,s.expected.empty()) &&
+       observation.Prepared(8,bool(s.job->event_origin)) && observation.Prepared(9,s.listeners->SourceProducerQuiescent(*s.job->event_origin,
+           observation.enabled?&observation.prepared_origin:nullptr)) &&
+       observation.Prepared(10,s.tasks.SourceDescendantsClosed(s.job->source,observation.enabled?&observation.prepared_source:nullptr)) &&
+       observation.Prepared(11,bool(s.wake)) && observation.Prepared(12,bool(s.native_pending)) && observation.Prepared(13,prepared_drained())){
       s.render_phase=State::RenderPhase::kClosingPrepared;
     }
     if(s.render_phase==State::RenderPhase::kClosingStop && source_retired &&
@@ -5073,6 +5628,7 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
    }
    // A stop request releases this pause without claiming iteration, clear,
    // GPU completion, or restored pixels. Existing admitted work stays owned.
+   s.ReportPreparedQuery(observation);
    s.ReportQuery(observation,false); // independently live while Bootstrap may be blocked
    thread.Delay(0,0,uint64_t(-10000ll));
    if(observation.Failed(21,observation.Actual(ActualThread())!=&thread))return result;
@@ -5107,10 +5663,12 @@ NativeProfileIdentityOwner::CaptureNativeFrameGuard(XThread& thread) noexcept {
     // Optional observation allocation cannot reject an otherwise admitted
     // native frame. The base visibility guard and execution remain unchanged.
     try{
-     if(!work->image_draws_unavailable && s.image_slot && !s.image_slot->unavailable_.load() &&
-        std::any_of(work->image_draws.begin(),work->image_draws.end(),[](const auto& d){return bool(d);}))
+     const bool empty_initial=s.EmptyInitialFrameCurrent(result.guard,work->source);
+     const bool image_observed=!work->image_draws_unavailable && s.image_slot && !s.image_slot->unavailable_.load() &&
+        std::any_of(work->image_draws.begin(),work->image_draws.end(),[](const auto& d){return bool(d);});
+     if(empty_initial || image_observed)
       result.guard=std::make_shared<IdentityImageFrameGuard>(result.guard,owner,s.root,
-          work->source,work->serial,work->image_draws);
+          work->source,work->serial,work->image_draws,empty_initial);
     }catch(...){}
     return result;
    }
@@ -5128,8 +5686,9 @@ void NativeProfileIdentityOwner::ObserveNativeImageFrameCaptured(XThread& thread
      !request.plan() || request.plan()->is_overlay_control() ||
      request.input_provenance()!=gpu::NativeFrameInputProvenance::kImmutableSnapshot ||
      !request.input_snapshot() || !request.input_snapshot()->valid() || !request.identity().valid() ||
-     request.identity().owner.kernel_epoch!=s.root.kernel ||
-     request.identity().owner.module_generation!=s.root.generation ||
+     // Runtime allocation generation and native module LOAD generation are
+     // distinct real counters. Match the complete original allocation owner.
+     request.identity().owner!=s.config.allocation->owner() ||
      !record.primary_physical_address || record.primary.size()!=request.plan()->words().size()*4 ||
      record.primary_physical_address<record.record_physical_address ||
      uint64_t(record.primary_physical_address)+record.primary.size()>
@@ -5143,8 +5702,11 @@ void NativeProfileIdentityOwner::ObserveNativeImageFrameCaptured(XThread& thread
   auto global=global_critical_region::AcquireDirect();
   current_slot=s.kernel->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
   std::lock_guard lock(s.mutex);
-  if(s.retired.load() || image->root!=s.root || image->captured || !s.image_slot || s.image_slot->unavailable_.load() ||
-     !s.config.domain || request.identity().owner.module_hmodule!=s.config.domain->root().hmodule ||
+  if(s.retired.load() || image->root!=s.root || image->captured || !s.image_slot ||
+     !s.config.domain || !s.config.domain->active() ||
+     s.config.domain->root()!=NativeImportDomain::Member{s.config.catalog->calls()->module()->hmodule_ptr(),s.root.generation} ||
+     s.config.catalog->calls()->module()->load_generation()!=s.root.generation ||
+     request.identity().owner.module_hmodule!=s.config.domain->root().hmodule ||
      current_slot.get()!=s.image_slot.get() || current_slot.owner_before(s.image_slot) || s.image_slot.owner_before(current_slot))return;
   const auto current=s.image_slot->current_.load(std::memory_order_acquire);const auto self=owner->weak_from_this();
   if(current.owner_before(self) || self.owner_before(current))return;
@@ -5155,6 +5717,14 @@ void NativeProfileIdentityOwner::ObserveNativeImageFrameCaptured(XThread& thread
   if(render==s.active.end())return;
   const auto* task=s.tasks.FindLiveTask((*render)->birth.task);
   if(!task || task->birth.generation!=(*render)->birth.generation)return;
+  if(image->empty_initial){
+   if(!s.EmptyInitialFrameCurrent(image->parent,image->source))return;
+   // The retained completed record/immutable Source proves this exact hidden
+   // frame; no profile image, texture/default readiness or visibility is issued.
+   image->request=reinterpret_cast<uintptr_t>(&request);image->identity=request.identity();
+   image->backend=request.backend_epoch();image->captured=true;return;
+  }
+  if(s.image_slot->unavailable_.load())return;
   bool match=false;
   for(const auto& candidate:image->draws){
    if(!candidate || candidate->draw.render!=image->render || candidate->draw.dc.root!=s.root ||
@@ -5201,12 +5771,26 @@ void NativeProfileIdentityOwner::ObserveNativeImageFrameCompleted(
   if(s.retired.load() || !request.IsPresentationOwnerCurrent())return;
   current_slot=s.kernel->native_identity_tile_observer_slot_.load(std::memory_order_acquire);
   std::lock_guard lock(s.mutex);
-  if(s.retired.load() || !s.image_slot || s.image_slot->unavailable_.load() || image->root!=s.root ||
+  if(s.retired.load() || !s.image_slot || image->root!=s.root ||
+     request.identity().owner!=s.config.allocation->owner() ||
      current_slot.get()!=s.image_slot.get() || current_slot.owner_before(s.image_slot) || s.image_slot.owner_before(current_slot) ||
      !image->captured || image->completed || image->request!=reinterpret_cast<uintptr_t>(&request) ||
      image->identity!=request.identity() || image->backend!=request.backend_epoch())return;
   const auto current=s.image_slot->current_.load(std::memory_order_acquire);const auto self=owner->weak_from_this();
   if(current.owner_before(self) || self.owner_before(current))return;
+  if(image->empty_initial){
+   if(!request.plan() || request.plan()->is_overlay_control() ||
+      !s.config.domain || !s.config.domain->active() ||
+      s.config.domain->root()!=NativeImportDomain::Member{s.config.catalog->calls()->module()->hmodule_ptr(),s.root.generation} ||
+      s.config.catalog->calls()->module()->load_generation()!=s.root.generation ||
+      !s.EmptyInitialFrameCurrent(image->parent,image->source))return;
+   image->completed=true;
+   // A genuinely completed empty initial frame acknowledges only that no
+   // profile pixel consumption is required. The existing prepared Query,
+   // descendant/wake/provider/paint/PM joins still own eventual reveal.
+   s.job->render_refresh_observed.store(true,std::memory_order_release);s.changed.notify_all();return;
+  }
+  if(s.image_slot->unavailable_.load())return;
   image->completed=true;
   if(s.job && s.job->source==image->source && s.job->native_returned &&
      !s.job->canceled && !s.job->execution_uncertain){
@@ -5277,6 +5861,7 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
   ~ReferenceReapGate(){if(active)state.task_close_frames.fetch_sub(1,std::memory_order_acq_rel);}
  } reference_reap{s};
  std::array<std::shared_ptr<TaskReference::Data>,64> references;
+ std::array<std::shared_ptr<State::ContextReference>,64> retired_contexts;
  {
   std::lock_guard lock(s.mutex);
   if(s.retired.load() || s.uncertain.load() || s.tasks.lost() ||
@@ -5300,6 +5885,10 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
    if(lifetime && lifetime->native_freed && !running){retired_execution.push_back(lifetime);i=s.execution_lifetimes.erase(i);}
    else ++i;
   }
+  if(!s.hooks.load(std::memory_order_acquire) && !s.task_close_frames.load(std::memory_order_acquire))
+   for(size_t n=0;n<s.context_references.size();++n)
+    if(s.context_references[n] && s.context_references[n]->receipt.finished())
+     retired_contexts[n]=std::move(s.context_references[n]);
   retired.swap(s.host_retired);
   // Expected receipts have separate native Data/callback ownership. Preserve
   // their original Step boundary; pending maintenance retires Work only.
@@ -5312,7 +5901,8 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
     if(d && d->receipt.finished() && !d->bound.load(std::memory_order_acquire) &&
         !d->resources_retired.load(std::memory_order_acquire) && !d->reaping.exchange(true))references[n]=d;
    }
-  if(std::any_of(references.begin(),references.end(),[](const auto& d){return bool(d);})){ 
+  if(std::any_of(references.begin(),references.end(),[](const auto& d){return bool(d);}) ||
+     std::any_of(retired_contexts.begin(),retired_contexts.end(),[](const auto& d){return bool(d);})) { 
    s.task_close_frames.fetch_add(1,std::memory_order_acq_rel);reference_reap.active=true;
   }
  }
@@ -5594,8 +6184,23 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
    if(!job->protocol)return false;
   }
   const auto committed=pm->PublishNativeRosterProtocol(job->intent,*job->protocol);
+  RecordOriginalLogonRosterResult(job->original_logon_observation,OriginalLogonDiagnostic::kPublicationFirst,committed);
+  if(committed.maps_committed && committed.writers_available)
+   RecordOriginalLogonRosterResult(job->original_logon_observation,OriginalLogonDiagnostic::kPublicationReady,committed);
   if(committed.phase==xam::ProfileRosterPhase::kUncertain){s.Lose(__LINE__);return false;}
  }
+ // Scalar witness of this ORIGINAL final-readiness evaluation, never a
+ // cross-cut readiness fact. No pointer/resource escapes the State lock.
+ struct FinalReadiness {
+  bool enabled=false;uint32_t evaluated=0,truth=0,phase=0;
+  uint64_t job=0,source=0;bool want=false;
+  uint32_t provider=0,provider_type=0,provider_status=0,provider_flags=0;
+  uint64_t provider_generation=0,provider_source=0,provider_version=0,provider_uri_generation=0;
+  Tasks::SourceBlocker blocker;
+  bool pending_available=false;uint32_t pending=0,no_read_providers=0;
+  uint64_t no_read_work=0,no_read_uri=0;
+ } final_readiness;
+ final_readiness.enabled=cvars::native_system_ui_trace;
  {
   std::lock_guard lock(s.mutex);
   if(s.job!=job || s.published_source.load(std::memory_order_acquire)!=job->source)return false;
@@ -5604,18 +6209,70 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
    s.pixels=job->hidden_pixels;s.render_phase=State::RenderPhase::kHiddenRefresh;
    s.render_query_parked=false;
   }
-  bool providers=true;
-  for(const auto& provider:s.providers)if(provider && provider->initialized &&
-      !provider->revoked && !provider->buffer_revoked && !provider->destroyed &&
-      provider->completed_source!=job->source){providers=false;break;}
+  const auto* provider=s.FirstUnfreshProvider(job->source);
+  const bool providers=!provider;
+  if(final_readiness.enabled)for(const auto& p:s.providers)
+   if(p && p->no_read_query && s.ProviderWithoutIssuedImageDuty(*p)){
+    ++final_readiness.no_read_providers;final_readiness.no_read_work=p->no_read_query->work;
+    final_readiness.no_read_uri=p->no_read_query->uri_generation;
+   }
+  if(provider){
+   if(final_readiness.enabled){
+    final_readiness.provider=provider->object;final_readiness.provider_type=provider->type;
+    final_readiness.provider_generation=provider->generation;
+    final_readiness.provider_uri_generation=provider->image_uri_generation;
+    final_readiness.provider_source=provider->completed_source;
+    final_readiness.provider_version=provider->completed_version;
+    final_readiness.provider_status=provider->completed_status;
+    final_readiness.provider_flags=uint32_t(provider->completed_empty)|
+        (uint32_t(bool(provider->last_output))<<1)|(uint32_t(bool(provider->image_output))<<2)|
+        (uint32_t(bool(provider->image_key))<<3);
+   }
+  }
   // An output is either actual freshly written bytes or the native consumer's
   // exact cleared-pointer handling of a real failed read. These are never
   // conflated with successful image/asset readiness.
   const auto host_duties=job->intent->result();
-  if(job->protocol_returned && host_duties.maps_committed && host_duties.writers_available &&
-     job->native_returned && !job->transport_running && job->render_refresh_observed && providers &&
-     s.tasks.SourceDescendantsClosed(job->source) && s.wake && s.native_pending &&
-     s.wake->InvocationsDrained(NativeAtomicWord(s.native_pending)))job->want_final_barrier=true;
+  const auto observed=[&](uint32_t bit,bool value){
+   if(final_readiness.enabled){final_readiness.evaluated|=1u<<bit;if(value)final_readiness.truth|=1u<<bit;}
+   return value;
+  };
+  const auto drained=[&](){
+   // Preserve the single original pending-word read at the final original cut.
+   const auto pending=NativeAtomicWord(s.native_pending);
+   if(final_readiness.enabled){final_readiness.pending_available=true;final_readiness.pending=pending;}
+   return s.wake->InvocationsDrained(pending);
+  };
+  if(observed(0,job->protocol_returned) && observed(1,host_duties.maps_committed) && observed(2,host_duties.writers_available) &&
+     observed(3,job->native_returned) && observed(4,!job->transport_running) && observed(5,job->render_refresh_observed) && observed(6,providers) &&
+     observed(7,s.tasks.SourceDescendantsClosed(job->source,final_readiness.enabled?&final_readiness.blocker:nullptr)) &&
+     observed(8,bool(s.wake)) && observed(9,bool(s.native_pending)) && observed(10,drained()))job->want_final_barrier=true;
+  if(final_readiness.enabled){
+   final_readiness.job=job->serial;final_readiness.source=job->source;
+   final_readiness.phase=uint32_t(s.render_phase);final_readiness.want=job->want_final_barrier;
+  }
+ }
+ // Bounded reporting occurs after State unlock. Unevaluated predicates and
+ // unavailable descendant/pending fields remain explicitly unavailable.
+ if(final_readiness.enabled){
+  static NativeSystemUiTraceLimiter trace;
+  const auto& d=final_readiness;const auto& b=d.blocker;
+  trace.EmitTransition(d.job^(uint64_t(d.evaluated)<<32)^d.truth^d.provider_generation^b.generation^
+      b.serial^(uint64_t(d.pending)<<16),"identity","final_readiness",
+    {{"job_serial",d.job},{"job_source",d.source},{"render_phase",d.phase},
+     {"evaluated",d.evaluated},{"predicate_true",d.truth},{"want_final_barrier",d.want},
+     {"provider",d.provider},{"provider_generation",d.provider_generation},{"provider_type",d.provider_type},
+     {"provider_uri_generation",d.provider_uri_generation},
+     {"provider_no_read_count",d.no_read_providers},{"provider_no_read_work",d.no_read_work},
+     {"provider_no_read_uri",d.no_read_uri},
+     {"provider_completed_source",d.provider_source},{"provider_completed_version",d.provider_version},
+     {"provider_completed_status",d.provider_status},{"provider_flags",d.provider_flags},
+     {"source_available",b.available},{"source_closed",b.closed},{"source_reason",b.kind},
+     {"source",b.source},{"source_generation",b.generation},{"source_task",b.task},
+     {"source_serial",b.serial},{"recorded_callback",b.callback},{"recorded_argument",b.argument},
+     {"output_slot",b.output},{"source_state",b.state},{"source_thread",b.frame.thread},
+     {"source_pcr",b.frame.pcr},{"source_sp",b.frame.sp},{"source_lr",b.frame.lr},
+     {"source_function",b.frame.function},{"pending_available",d.pending_available},{"native_pending",d.pending}});
  }
  s.changed.notify_all();
  bool new_paused=false;
@@ -5624,7 +6281,7 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   new_paused=s.job==job && job->want_final_barrier && job->render_refresh_observed &&
       s.render_phase==State::RenderPhase::kPreparedPaused && s.render_query_parked &&
       s.IdentityWorkEmpty() && s.expected.empty() && job->event_origin &&
-      s.listeners->SourceOnlyProducer(*job->event_origin) && s.ProvidersFresh(job->source) &&
+      s.listeners->SourceProducerQuiescent(*job->event_origin) && s.ProvidersFresh(job->source) &&
       s.tasks.SourceDescendantsClosed(job->source);
  }
  if(!new_paused)return true;
@@ -5645,10 +6302,12 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
  }
  const auto settled=phase==xam::ProfileRosterPhase::kCommitted?job->intent->result():
      pm->FinalizeNativeRoster(job->intent,*job->joined);
+ RecordOriginalLogonRosterResult(job->original_logon_observation,OriginalLogonDiagnostic::kSettlementFirst,settled);
  if(settled.phase!=xam::ProfileRosterPhase::kCommitted){
   if(settled.phase==xam::ProfileRosterPhase::kUncertain){s.Lose(__LINE__);return false;}
   return true; // Exact factual joined receipt retained across real settle IO.
  }
+ RecordOriginalLogonRosterResult(job->original_logon_observation,OriginalLogonDiagnostic::kSettlementCommitted,settled);
  std::error_code error;const auto current=pm->CaptureRosterExpected(error);
  const auto ticket=error?nullptr:pm->CaptureCurrentNativeReadTicket(s.config.factory_binding,error);
  if(error || !ticket)return true; // A concurrent rejected Prepare/Cancel may still hold the PM gate.
@@ -5661,7 +6320,11 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
  {
   std::lock_guard lock(s.mutex);
   if(s.job!=job || s.render_phase!=State::RenderPhase::kPreparedPaused ||
-     !s.IdentityWorkEmpty() || !s.expected.empty() || s.uncertain.load())return false;
+     s.uncertain.load() || !job->event_origin)return false;
+  // PM settlement may do real IO outside State. Recheck actual consumers at
+  // the final pixel cut; healthy late work waits for another idempotent pass.
+  if(!s.IdentityWorkEmpty() || !s.expected.empty() ||
+     !s.listeners->SourceProducerQuiescent(*job->event_origin))return true;
   if(job->apc_code){
    if(s.apc_code_until_actual_stop.size()>=256){s.Lose(__LINE__);return false;}
    s.apc_code_until_actual_stop.push_back(*job->apc_code);
@@ -5690,30 +6353,75 @@ void NativeProfileIdentityOwner::BeginStop() noexcept {
  }catch(...){state_->Lose(__LINE__);}
  state_->changed.notify_all();
 }
-bool NativeProfileIdentityOwner::Drained() const noexcept {
+namespace {
+using IdentityStopObservation=NativeProfileIdentityOwner::StopObservation;
+bool ObserveIdentityStopConjunct(IdentityStopObservation* d,uint32_t bit,bool passed) noexcept {
+ if(d){d->evaluated|=uint64_t(1)<<bit;if(passed)d->truth|=uint64_t(1)<<bit;
+  else if(!d->first_failed)d->first_failed=bit+1;}
+ return passed;
+}
+bool FinishIdentityStopObservation(IdentityStopObservation* d,bool result) noexcept {
+ if(d){d->result_available=1;d->result=result;}return result;
+}
+// Only the visited leaves of one ORIGINAL row predicate are observed. No
+// missing leaf/row is sampled after native short-circuiting has stopped it.
+struct IdentityStopRowObservation {
+ uint64_t evaluated=0,truth=0;
+ bool Test(uint32_t bit,bool value) noexcept {
+  evaluated|=uint64_t(1)<<bit;if(value)truth|=uint64_t(1)<<bit;return value;
+ }
+ void Rejected(IdentityStopObservation* d,uint32_t kind) const noexcept {
+  if(d && !d->row_class){d->row_class=kind;d->row_evaluated=evaluated;d->row_truth=truth;}
+ }
+};
+} // namespace
+bool NativeProfileIdentityOwner::Drained(StopObservation* observation) const noexcept {
+ if(observation)*observation={};
  try{
   std::lock_guard lock(state_->mutex);
-  const bool counted_work=std::any_of(state_->counted.begin(),state_->counted.end(),[](const auto& row){
-   return row && ((!row->allocated && !row->failed) || (row->delete_entered && !row->free_returned));
+  IdentityStopRowObservation first_counted;
+  const bool counted_work=std::any_of(state_->counted.begin(),state_->counted.end(),[&](const auto& row){
+   if(observation)++observation->visited[0];
+   IdentityStopRowObservation r;
+   const bool bad=r.Test(0,bool(row)) &&
+       ((r.Test(1,!row->allocated) && r.Test(2,!row->failed)) ||
+        (r.Test(3,row->delete_entered) && r.Test(4,!row->free_returned)));
+   if(bad)first_counted=r;return bad;
   });
-  return state_->stopping.load(std::memory_order_acquire) &&
-      !state_->uncertain.load(std::memory_order_acquire) &&
-      !state_->hooks.load(std::memory_order_acquire) &&
-      !state_->identity_executor_frames.load(std::memory_order_acquire) &&
-      state_->PeriodicStopped() && state_->tasks.ExecutionClosed() &&
-      !state_->execution_unavailable.load(std::memory_order_acquire) &&
-      !state_->listener_object_frames.load(std::memory_order_acquire) &&
-      !state_->task_close_frames.load(std::memory_order_acquire) &&
-      !state_->public_calls.load(std::memory_order_acquire) &&
-      !state_->bootstrap_cleanup &&
-      std::all_of(state_->task_references.begin(),state_->task_references.end(),[](const auto& d){
-        return !d || d->receipt.finished();}) &&
-      (!state_->job || state_->job->execution_quiescent) &&
-      !counted_work &&
-      state_->active.empty() && state_->expected.empty() &&
-      (!state_->listeners || !state_->listeners->lost()) &&
-      (!state_->wake || (!state_->wake->lost() && state_->wake->Empty()));
- }catch(...){return false;}
+  const auto checked=[&](uint32_t bit,bool value){
+   if(bit==15 && !value)first_counted.Rejected(observation,1);
+   return ObserveIdentityStopConjunct(observation,bit,value);
+  };
+  return FinishIdentityStopObservation(observation,
+      checked(0,state_->stopping.load(std::memory_order_acquire)) &&
+      checked(1,!state_->uncertain.load(std::memory_order_acquire)) &&
+      checked(2,!state_->hooks.load(std::memory_order_acquire)) &&
+      checked(3,!state_->identity_executor_frames.load(std::memory_order_acquire)) &&
+      checked(4,state_->PeriodicStopped()) && checked(5,state_->tasks.ExecutionClosed()) &&
+      checked(6,!state_->execution_unavailable.load(std::memory_order_acquire)) &&
+      checked(7,!state_->listener_object_frames.load(std::memory_order_acquire)) &&
+      checked(8,!state_->task_close_frames.load(std::memory_order_acquire)) &&
+      checked(9,!state_->context_reference_unavailable) &&
+      checked(10,std::all_of(state_->context_references.begin(),state_->context_references.end(),[&](const auto& d){
+       if(observation)++observation->visited[1];IdentityStopRowObservation r;
+       const bool good=r.Test(0,!d) || r.Test(1,d->receipt.finished());
+       if(!good)r.Rejected(observation,2);return good;
+      })) &&
+      checked(11,!state_->public_calls.load(std::memory_order_acquire)) &&
+      checked(12,!state_->bootstrap_cleanup) &&
+      checked(13,std::all_of(state_->task_references.begin(),state_->task_references.end(),[&](const auto& d){
+       if(observation)++observation->visited[2];IdentityStopRowObservation r;
+       const bool good=r.Test(0,!d) || r.Test(1,d->receipt.finished());
+       if(!good)r.Rejected(observation,3);return good;
+      })) &&
+      checked(14,!state_->job || state_->job->execution_quiescent) &&
+      checked(15,!counted_work) &&
+      checked(16,state_->active.empty()) && checked(17,state_->expected.empty()) &&
+      checked(18,!state_->listeners || !state_->listeners->lost()) &&
+      checked(19,!state_->wake ||
+          (checked(20,!state_->wake->lost()) && checked(21,state_->wake->Empty()))));
+ }catch(...){if(observation)observation->exception=1;
+  return FinishIdentityStopObservation(observation,false);}
 }
 bool NativeProfileIdentityOwner::StopPeriodicOnBootstrap(XThread& bootstrap) noexcept {
  auto owner=shared_from_this();auto& s=*state_;
@@ -5784,41 +6492,83 @@ bool NativeProfileIdentityOwner::StopOnBootstrap(XThread& bootstrap) noexcept {
  // listener/provider/renderer generations remain owned until factual drain.
  return StepOnBootstrap(bootstrap) && Drained();
 }
-bool NativeProfileIdentityOwner::RetainedForActualKernelStop() const noexcept {
+bool NativeProfileIdentityOwner::RetainedForActualKernelStop(StopObservation* observation) const noexcept {
+ if(observation)*observation={};
  try{
   const auto& s=*state_;std::lock_guard lock(s.mutex);
-  if(!s.stopping.load(std::memory_order_acquire) || s.retired.load() ||
-     s.hooks.load(std::memory_order_acquire) || s.external_public_calls.load(std::memory_order_acquire) ||
-     s.auxiliary_host_active.load(std::memory_order_acquire) ||
-     s.identity_executor_frames.load(std::memory_order_acquire) ||
-     s.listener_object_frames.load(std::memory_order_acquire) ||
-     s.task_close_frames.load(std::memory_order_acquire) || !s.kernel || !s.config.catalog || !s.config.domain || !s.config.allocation ||
-     (s.profile_enabled && !s.config.factory_binding) || !s.root_code || !s.resident_domain)return false;
-  if(std::any_of(s.counted.begin(),s.counted.end(),[](const auto& row){
-     return row && ((!row->allocated && !row->failed) || (row->delete_entered && !row->free_returned));
-   }))return false; // Unreturned Ob primitive/deleter host frames are not covered.
-  for(const auto& d:s.task_references)if(d &&
-      (d->bound.load(std::memory_order_acquire) ||
-       (d->reaping.load(std::memory_order_acquire) && !d->resources_retired.load(std::memory_order_acquire)) ||
-       (!d->resources_retired.load(std::memory_order_acquire) &&
-       (!d->thread || !d->code || !d->domain))))return false;
+  const auto failed=[&](uint32_t bit,bool value){
+   ObserveIdentityStopConjunct(observation,bit,!value);return value;
+  };
+  if(failed(0,!s.stopping.load(std::memory_order_acquire)) || failed(1,s.retired.load()) ||
+     failed(2,s.hooks.load(std::memory_order_acquire)) || failed(3,s.external_public_calls.load(std::memory_order_acquire)) ||
+     failed(4,s.auxiliary_host_active.load(std::memory_order_acquire)) ||
+     failed(5,s.identity_executor_frames.load(std::memory_order_acquire)) ||
+     failed(6,s.listener_object_frames.load(std::memory_order_acquire)) ||
+     failed(7,s.task_close_frames.load(std::memory_order_acquire)) || failed(8,!s.kernel) ||
+     failed(9,!s.config.catalog) || failed(10,!s.config.domain) || failed(11,!s.config.allocation) ||
+     failed(12,s.profile_enabled && !s.config.factory_binding) || failed(13,!s.root_code) ||
+     failed(14,!s.resident_domain))return FinishIdentityStopObservation(observation,false);
+  if(failed(15,std::any_of(s.counted.begin(),s.counted.end(),[&](const auto& row){
+    if(observation)++observation->visited[0];IdentityStopRowObservation r;
+    const bool bad=r.Test(0,bool(row)) &&
+        ((r.Test(1,!row->allocated) && r.Test(2,!row->failed)) ||
+         (r.Test(3,row->delete_entered) && r.Test(4,!row->free_returned)));
+    if(bad)r.Rejected(observation,1);return bad;
+   })))return FinishIdentityStopObservation(observation,false);
+  // Unreturned Ob primitive/deleter host frames are not covered.
+  for(const auto& d:s.task_references){
+   if(observation)++observation->visited[2];IdentityStopRowObservation r;
+   const bool bad=r.Test(0,bool(d)) &&
+       (r.Test(1,d->bound.load(std::memory_order_acquire)) ||
+        (r.Test(2,d->reaping.load(std::memory_order_acquire)) &&
+         r.Test(3,!d->resources_retired.load(std::memory_order_acquire))) ||
+        (r.Test(4,!d->resources_retired.load(std::memory_order_acquire)) &&
+         (r.Test(5,!d->thread) || r.Test(6,!d->code) || r.Test(7,!d->domain))));
+   if(bad){r.Rejected(observation,4);failed(16,true);
+    return FinishIdentityStopObservation(observation,false);}
+  }
+  failed(16,false);
   // A live native modal wait has no proved heap-only host-frame coverage.
   // Its genuine return is required; never cancel/Complete/Close it by fiat.
-  for(const auto& work:s.execution_retained)if(!work || !work->normal_return || work->execution_read.pending())return false;
+  for(const auto& work:s.execution_retained){
+   if(observation)++observation->visited[3];IdentityStopRowObservation r;
+   const bool bad=r.Test(0,!work) || r.Test(1,!work->normal_return) ||
+       r.Test(2,work->execution_read.pending());
+   if(bad){r.Rejected(observation,5);failed(17,true);
+    return FinishIdentityStopObservation(observation,false);}
+  }
+  failed(17,false);
   for(const auto& work:s.active){
+   if(observation)++observation->visited[4];IdentityStopRowObservation r;
    // A neutral hook has already returned to original PPC. Its heap-only
    // metadata/code/thread owners remain retained until the separate real
    // CPU-stop barrier; this is not a native callback/Task completion receipt
    // and does not certify an arbitrary active HLE/public/IO frame.
-   if(work && work->execution_only){
-    if(!work->thread || !work->domain || !work->frame.valid() || work->frame.root!=s.root)return false;
+   if(r.Test(0,bool(work)) && r.Test(1,work->execution_only)){
+    if(r.Test(2,!work->thread) || r.Test(3,!work->domain) ||
+       r.Test(4,!work->frame.valid()) || r.Test(5,work->frame.root!=s.root)){
+     r.Rejected(observation,6);failed(18,true);
+     return FinishIdentityStopObservation(observation,false);
+    }
     continue;
    }
-   if(!work || work->transport_unclaimed || work->transport_only || work->creation_only || work->execution_options || work->profile_control || work->periodic_factory || work->task_release || work->foreign_task_cleanup || work->foreign_avatar_task || !work->thread || !work->domain || !work->frame.valid() || work->frame.root!=s.root ||
-      (work->frame.function==0x816F3A40 && !work->prebody_parked))return false;
+   if(r.Test(6,!work) || r.Test(7,work->transport_unclaimed) || r.Test(8,work->transport_only) ||
+      r.Test(9,work->creation_only) || r.Test(10,work->execution_options) ||
+      r.Test(11,bool(work->profile_control)) || r.Test(12,bool(work->periodic_factory)) ||
+      r.Test(13,work->task_release) || r.Test(14,work->foreign_task_cleanup) ||
+      r.Test(15,work->foreign_avatar_task) || r.Test(16,!work->thread) ||
+      r.Test(17,!work->domain) || r.Test(18,!work->frame.valid()) ||
+      r.Test(19,work->frame.root!=s.root) ||
+      (r.Test(20,work->frame.function==0x816F3A40) && r.Test(21,!work->prebody_parked))){
+    r.Rejected(observation,7);failed(18,true);
+    return FinishIdentityStopObservation(observation,false);
+   }
   }
-  return s.PeriodicStopped();
- }catch(...){return false;}
+  failed(18,false);
+  return FinishIdentityStopObservation(observation,
+      ObserveIdentityStopConjunct(observation,19,s.PeriodicStopped()));
+ }catch(...){if(observation)observation->exception=1;
+  return FinishIdentityStopObservation(observation,false);}
 }
 bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
  // Private Service-only all-CPU/GPU-stopped lane. No PPC, GuestStatus,
@@ -5829,6 +6579,7 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
   std::vector<std::shared_ptr<State::ExecutionLifetime>> execution_lifetimes;
   std::vector<std::shared_ptr<State::Expected>> expected,retired_expected;
   std::array<std::shared_ptr<TaskReference::Data>,64> references;
+  std::array<std::shared_ptr<State::ContextReference>,64> contexts;
   std::shared_ptr<State::Job> job;
   std::shared_ptr<xam::ProfileRosterIntent> bootstrap_cleanup;
   std::unique_ptr<Listeners> listeners;
@@ -5872,7 +6623,7 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
     d->bound.store(false,std::memory_order_release);
    }
    state_->DetachTaskDiagnosticsAtActualStop();
-   references.swap(state_->task_references);
+   references.swap(state_->task_references);contexts.swap(state_->context_references);
    state_->retired.store(true,std::memory_order_release);
    state_->stopping.store(true,std::memory_order_release);
    state_->public_calls.store(0,std::memory_order_release);
@@ -5916,6 +6667,9 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
   for(const auto& work:execution_retained)release_work(work);
   for(const auto& call:expected)call->thread.reset();
   for(const auto& call:retired_expected)call->thread.reset();
+  for(const auto& d:contexts)if(d){
+   d->receipt.Retire();d->targets={};d->domain={};d->code.reset();d->thread.reset();d->cpu=nullptr;d->context=nullptr;
+  }
   for(const auto& d:references)if(d){
    d->retired.store(true,std::memory_order_release);
    d->receipt.phase.store(Tasks::ReferenceReceipt::Phase::kRetired,std::memory_order_release);
@@ -6099,12 +6853,172 @@ uint64_t NativeProfileIdentityOwner::EnterFiniteInputBoundary(void* raw,uint32_t
  }catch(...){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
 }
 
+// The descriptor's finite SYSTEM frame owns reads independently of any native
+// Task containing it. Its code/domain/XThread/frame are held BEFORE the body
+// (and its object mutex/GetNext) until this same body genuinely returns. This
+// reuses the same roster scope stack, read pools and whole-consumer ledger.
+uint64_t NativeProfileIdentityOwner::EnterFiniteSystemThreadBoundary(void* raw,uint32_t at) noexcept {
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);auto& s=*state_;
+ s.hooks.fetch_add(1,std::memory_order_acq_rel);
+ struct Exit{State& s;~Exit(){s.hooks.fetch_sub(1,std::memory_order_acq_rel);}} exit{s};
+ try{
+  // A legitimate stop can seal allocation admission before the next tick.
+  // This body has not entered: refuse it without poisoning an owned frame.
+  if(s.stopping.load(std::memory_order_acquire) || s.retired.load(std::memory_order_acquire))
+   return s.Deny(c,at,__LINE__);
+  if(global_critical_region::is_held_by_current_thread()){
+   s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
+  }
+  const auto* consumer=FindNativeFiniteSystemConsumer(at);
+  auto* thread=ActualThread();const auto frame=s.ReadFrame(c,at);
+  // Stop may win after the early check but before ReadFrame's allocation
+  // check. No native body/read/consumer was admitted by this failed capture.
+  if(!frame && (s.stopping.load(std::memory_order_acquire) || s.retired.load(std::memory_order_acquire)))
+   return s.Deny(c,at,__LINE__);
+  if(!consumer || !thread || !frame || frame->lr==0xBCBCBCBC ||
+     thread->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM){
+   s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
+  }
+  std::array<uint32_t,3> arguments{};
+  for(uint32_t i=0;i<consumer->argument_count;++i){
+   if(!DwordIs(c.r[i+3],uint32_t(c.r[i+3]))){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+   arguments[i]=uint32_t(c.r[i+3]);
+  }
+  if(consumer->object_r3 && (arguments[0]<0x1000 || (arguments[0]&3))){
+   s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
+  }
+  const auto ambient=NativeProfileIdentityTaskContext::Read(*s.config.catalog->calls(),*s.config.domain,at,c);
+  auto work=std::make_shared<State::Work>();work->frame=*frame;work->thread=retain_object(thread);
+  work->system_frame_ambient_task=ambient.value_or(0);
+  work->domain=s.config.domain->Acquire();
+  work->first=arguments[0];work->second=arguments[1];work->output=arguments[2];
+  work->system_thread_frame=true;work->physical_work=true;work->prebody_parked=true;
+  {
+   std::lock_guard lock(s.mutex);
+   if(s.stopping.load() || s.retired.load() || s.uncertain.load() || !work->domain ||
+      s.active.size()>=256 || !s.next_work || s.next_work==UINT64_MAX ||
+      std::any_of(s.active.begin(),s.active.end(),[&](const auto& old){return old->frame==*frame;}))
+    return s.Deny(c,at,__LINE__);
+   if(ambient)if(const auto* node=s.tasks.FindLiveTask(*ambient)){
+    work->system_frame_ambient_birth=node->birth;
+    work->system_frame_ambient_periodic=bool(node->periodic_factory);
+   }
+   // No external Task duty is registered while this unentered frame parks.
+   work->serial=s.next_work++;s.active.push_back(work);
+  }
+  for(;;){
+   const bool code=CheckFiniteSystemThreadCode(*s.config.catalog->calls(),at);
+   const auto current=s.ReadFrame(c,at);
+   const auto current_ambient=NativeProfileIdentityTaskContext::Read(*s.config.catalog->calls(),*s.config.domain,at,c);
+   {
+    std::lock_guard lock(s.mutex);
+    if(s.stopping.load() || s.retired.load() || s.uncertain.load()){
+     // The body never entered: withdraw only its prebody metadata reservation.
+     // No Task, native callback return or event consumption is fabricated.
+     const auto retiring=std::find(s.active.begin(),s.active.end(),work);
+     if(retiring==s.active.end()){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+     s.host_retired.push_back(std::move(work));s.active.erase(retiring);return s.Deny(c,at,__LINE__);
+    }
+    // Match the real render iteration's current-ticket policy: draining
+    // still admits bounded OLD reads until the actual ClosingOld cut seals.
+    const bool open=s.render_phase==State::RenderPhase::kOpen ||
+        s.render_phase==State::RenderPhase::kDrainingOld ||
+        s.render_phase==State::RenderPhase::kHiddenRefresh;
+    if(open){
+     bool same_arguments=true;
+     for(uint32_t i=0;i<consumer->argument_count;++i)
+      same_arguments=same_arguments && DwordIs(c.r[i+3],arguments[i]);
+     const auto* ambient_node=current_ambient?s.tasks.FindLiveTask(*current_ambient):nullptr;
+     const bool observed_ambient=bool(work->system_frame_ambient_birth.generation);
+     if(!code || ActualThread()!=thread || !current || *current!=*frame || !same_arguments ||
+        current_ambient.value_or(0)!=work->system_frame_ambient_task ||
+        (observed_ambient && (!ambient_node ||
+         !Tasks::SameBirth(ambient_node->birth,work->system_frame_ambient_birth) ||
+         bool(ambient_node->periodic_factory)!=work->system_frame_ambient_periodic))){
+      s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
+     }
+     const bool prepared=s.job && s.render_phase==State::RenderPhase::kHiddenRefresh;
+     work->source=prepared?s.job->source:s.current_read_source;
+     auto* pool=&s.boot_reads;
+     if(s.job)pool=prepared?&s.job->writer_reads:&s.job->old_reads;
+     const auto slot=std::find_if(pool->begin(),pool->end(),[](const auto& read){return bool(read);});
+     if(slot==pool->end()){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+     auto lifetime=std::make_shared<State::EventLifetime>();lifetime->code=s.root_code;
+     lifetime->domain=s.config.domain->Acquire();lifetime->thread=work->thread;
+     if(prepared)lifetime->intent=s.job->intent;
+     if(!lifetime->domain){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+     work->event_lifetime=lifetime;
+     const Events::Root root{s.root.kernel,s.root.domain,s.root.generation};
+     const bool borrow=observed_ambient && !work->system_frame_ambient_periodic;
+     const auto native_birth=work->system_frame_ambient_birth;
+     const Events::WorkKey key{root,borrow?native_birth.generation:0,work->serial,frame->thread,frame->pcr,
+         borrow?native_birth.task:0,frame->sp,frame->lr,at,
+         borrow?Events::WorkOwnerKind::kTask:Events::WorkOwnerKind::kSystemThreadFrame};
+     const auto prior=s.EarlierListenerParent(frame->thread);
+     if(prior){
+      const bool prior_observed=prior->birth.generation || prior->system_frame_ambient_birth.generation;
+      const bool unknown_ambient=(work->system_frame_ambient_task && !observed_ambient) ||
+          (prior->system_thread_frame && prior->system_frame_ambient_task && !prior->system_frame_ambient_birth.generation);
+      if(unknown_ambient){
+       // Independent finite-frame authority is valid without genealogy; it
+       // cannot downgrade an already observed parent's required ancestry.
+       if(prior_observed){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+      }else{
+       const bool same_ambient=!prior->system_thread_frame ||
+           (prior->system_frame_ambient_task==work->system_frame_ambient_task &&
+            bool(prior->system_frame_ambient_birth.generation)==observed_ambient &&
+            (!observed_ambient || Tasks::SameBirth(prior->system_frame_ambient_birth,native_birth)));
+       if(prior->source!=work->source || !same_ambient){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+       work->listener_parent=s.SynchronousListenerParent(*work,key);
+       if(!work->listener_parent){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+      }
+     }
+     if(borrow){
+      const auto birth=s.tasks.BeginExternalWork(*frame,native_birth.task);
+      if(!birth || !Tasks::SameBirth(*birth,native_birth)){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+      work->birth=work->external_birth=*birth;
+     }
+     work->listener_source=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(
+         key,s.listeners->RetainEarlierSource(work->source),lifetime,
+         work->listener_parent?work->listener_parent->listener_source:nullptr));
+     work->listener_work=s.listeners->AdoptWholeWork(work->listener_source);
+     if(!work->listener_work){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+     work->read_pool=pool;work->read=std::move(*slot);
+     work->physical_work=false;work->prebody_parked=false;
+     if(!work->read->EnterSystemThreadFrame(s.kernel,thread,c.thread_state,
+         frame->sp,frame->lr,at,work->serial,
+         s.config.catalog->calls()->module()->hmodule_ptr(),s.root.generation)){
+      s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
+     }
+     return 1;
+    }
+   }
+   // Sealed phases park BEFORE guest entry: no owner/native/GCRC lock held.
+   thread->Delay(0,0,uint64_t(-10000ll));
+  }
+ }catch(...){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+}
+
 uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noexcept {
+ // Pre-entry revocation and post-admission receipts are outside ALL original
+ // Core guards/locals. No native instruction runs between these exact cuts.
+ if(address==0x816B7490)ObserveContextReference(raw,3);
+ if(address==0x816B7F30)ObserveContextReference(raw,1);
+ const auto admitted=GuardEntryCore(raw,address);
+ if(admitted){
+  if(address==0x816B7490)ObserveContextReference(raw,10);
+  if(address==0x816B7F30)ObserveContextReference(raw,11);
+ }
+ return admitted;
+}
+
+uint64_t NativeProfileIdentityOwner::GuardEntryCore(void* raw,uint64_t address) noexcept {
  ClearTaskAllocationCut();
  if(!raw || address>UINT32_MAX)return 1;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);const auto at=uint32_t(address);
  if(ObservesNativeIdentityImage(at)){ObserveImageEntry(raw,at);return 1;}
  if(at==0x816E6AB0)ObserveImageAllocationFree(raw);
+ if(at==0x816BA3C0){ObserveContextReference(raw,0);return 1;}
  if(at==0x816B8098 || at==0x816B7F30){
   auto* d=c.thread_state?static_cast<TaskReference::Data*>(
       c.thread_state->native_identity_task_reference_cell_.load(std::memory_order_acquire)):nullptr;
@@ -6129,12 +7043,44 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
   if(s.retired.load(std::memory_order_acquire))return s.Deny(c,at,__LINE__);
   if(s.kernel->GetUserModuleForAddress(at).get()!=s.config.catalog->calls()->module().get())return 1;
   if(at==0x816F4088 || at==0x816F3A40)return owner->EnterFiniteInputBoundary(raw,at);
+  if(FindNativeFiniteSystemConsumer(at)){
+   const auto* actual=ActualThread();
+   if(actual && actual->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM)return 1;
+   return owner->EnterFiniteSystemThreadBoundary(raw,at);
+  }
   s.hooks.fetch_add(1,std::memory_order_acq_rel);
   struct Exit{State& s;~Exit(){s.hooks.fetch_sub(1,std::memory_order_acq_rel);}} exit{s};
   const bool cleanup=at==0x816A88E8 || at==0x816934F8;
   if(!HooksNativeProfileIdentity(at))return 1;
   const auto* actual_thread=ActualThread();
   const uint32_t actual_thread_id=actual_thread?actual_thread->thread_id():0;
+  std::optional<Tasks::CompletionRoute> completion_route;
+  if(at==0x816A2588 && actual_thread &&
+      actual_thread->native_frame_thread_identity().process_type==X_PROCTYPE_SYSTEM){
+   // CompleteIO belongs to every native app. Classify the actual owned overlap
+   // BEFORE generic identity-only caller/read admission. Unrelated SYSTEM
+   // callers run the original body/result, with a real neutral own-return
+   // marker so a nested ordinary call cannot consume an older identity call.
+   const auto shape=s.TransportShape(c,at);
+   if(!shape){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+   auto marker=std::make_shared<State::Work>();marker->frame=*shape;
+   marker->thread=retain_object(ActualThread());marker->transport_unclaimed=true;
+   marker->physical_work=true;
+   std::lock_guard lock(s.mutex);
+   completion_route=Tasks::CompletionRoute::Capture(*shape,s.job,
+       s.job?s.job->serial:0,s.job?s.job->source:0,s.job?s.job->overlap:0,c.r[3]);
+   if(completion_route->kind()==Tasks::CompletionRoute::Kind::kInvalid){
+    s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
+   }
+   if(completion_route->kind()==Tasks::CompletionRoute::Kind::kOrdinary){
+    marker->completion_route=std::move(completion_route);
+    if(s.active.size()>=256 || !s.next_work || s.next_work==UINT64_MAX ||
+        std::any_of(s.active.begin(),s.active.end(),[&](const auto& old){return old->frame==*shape;})){
+     s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
+    }
+    marker->serial=s.next_work++;s.active.push_back(marker);return 1;
+   }
+  }
   std::optional<uint32_t> periodic_handle;
   if((at==0x8190A358 || at==0x819068D0) && s.periodic_object && DwordIs(c.r[3],s.periodic_object)){
    auto read=global_critical_region::AcquireDirect();periodic_handle=Word(*s.kernel->memory(),s.periodic_object+0xC);
@@ -6228,6 +7174,7 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
   const bool avatar_cleanup_current=avatar_cleanup && avatar_cleanup->Matches(c) &&
       s.config.allocation->IsAccepting(); // Still outside Profile metadata lock.
   auto work=std::make_shared<State::Work>();work->frame=*frame;work->caller_code=std::move(caller_code);
+  work->completion_route=std::move(completion_route);
   work->task_release=task_claim.retained_cleanup;work->release_generation=task_claim.subject;
   work->release_receipt=task_claim.release_receipt;work->reference_only=task_claim.reference_only;
   work->foreign_task_cleanup=avatar_cleanup_current && avatar_cleanup->IsUnload();
@@ -6238,6 +7185,10 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
   work->periodic_factory=task_claim.periodic_factory;work->periodic_role=task_claim.periodic_role;
   work->periodic_context=std::move(periodic_context);
   work->thread=retain_object(ActualThread());work->domain=s.config.domain->Acquire();
+  if(at==0x816A8C00){
+   const auto args=Listeners::DecodeOuter(at,ListenerRegisters(c));
+   work->system_discarded_identity_hint=args && s.DiscardedIdentityHintCaller(*work,*args,0);
+  }
   auto memory_read=global_critical_region::AcquireDirect();
   work->first=uint32_t(c.r[3]);work->second=uint32_t(c.r[4]);
   if(!work->domain)return cleanup?1:s.Deny(c,at,__LINE__);
@@ -6430,7 +7381,10 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
   }else if(at==0x816A2588){
    // Original local logon uses the same native CompleteIO body. Match the
    // factual original callback/worker, not another family's equal overlap.
-   if(!s.job || !s.job->overlap || work->first!=s.job->overlap)return 1;
+   if(!s.job || !work->completion_route || !work->completion_route->FrameMatches(*frame) ||
+       !work->completion_route->StillOwned(s.job,s.job->serial,s.job->source,s.job->overlap,c.r[3])){
+    s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
+   }
    const auto parent=frame->lr==0x8199E3D0?s.Latest(frame->thread,0x8199E148):
        frame->lr==0x8199DE00?s.Latest(frame->thread,0x8199C838):nullptr;
    const auto* node=current_task?s.tasks.FindLiveTask(*current_task):nullptr;
@@ -6452,7 +7406,9 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
    work->listener_frame=std::shared_ptr<const Listeners::Frame>(new Listeners::Frame(root,
        reinterpret_cast<uintptr_t>(&c),reinterpret_cast<uintptr_t>(c.thread_state),
        reinterpret_cast<uintptr_t>(c.kernel_state),frame->thread,frame->pcr,frame->sp,
-       frame->lr,at,work->event_lifetime));
+       frame->lr,at,work->event_lifetime,work->thread->native_frame_thread_identity().process_type,
+       work->system_discarded_identity_hint?Listeners::ScalarDeliveryMode::kSystemDiscardedIdentityHint:
+                                             Listeners::ScalarDeliveryMode::kNone));
    if(at==0x816A8498){
     const auto allocation=s.FindCounted(args.object);
     const auto areas=Listeners::CaptureAreas(args.object,[&](uint32_t p){return Word(*memory,p);});
@@ -6487,9 +7443,13 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
     }
    }else if(at==0x816A93C8){
     const auto earlier=s.listeners->RetainEarlierSource(work->source);
+    auto admission=Listeners::CellAdmissionStatus::kFailed;
     work->listener_cell=s.listeners->BeforeBroadcast(work->listener_frame,earlier,c.r[4],
-        c.thread_state->native_identity_listener_cell_);
-    if(!work->listener_cell){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
+        c.thread_state->native_identity_listener_cell_,c.r[3],&admission);
+    if(!work->listener_cell){
+     if(admission!=Listeners::CellAdmissionStatus::kClosedHealthy)s.Lose(__LINE__);
+     return s.Deny(c,at,__LINE__); // canceled before native body, never success/drain
+    }
    }else{
     const uint32_t selected=frame->sp>=0xF0?frame->sp-0xF0:0;
     const auto mapped_output=[&](uint32_t output){return !output ||
@@ -6498,12 +7458,17 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
        !mapped_output(args.id_output) || !mapped_output(args.data_output)){
      s.Lose(__LINE__);c.r[3]=0;return 0;
     }
+    auto admission=Listeners::CellAdmissionStatus::kFailed;
     work->listener_cell=s.listeners->BeforeGetNext(work->listener_frame,
         s.EarlierListenerWork(frame->thread),c.r[3],c.r[4],c.r[5],c.r[6],
         memory->TranslateVirtual<const uint8_t*>(selected),
         args.data_output?memory->TranslateVirtual<const uint8_t*>(args.data_output):nullptr,
-        c.thread_state->native_identity_listener_cell_);
-    if(!work->listener_cell){s.Lose(__LINE__);c.r[3]=0;return 0;}
+        c.thread_state->native_identity_listener_cell_,
+        args.id_output?memory->TranslateVirtual<const uint8_t*>(args.id_output):nullptr,&admission);
+    if(!work->listener_cell){
+     if(admission!=Listeners::CellAdmissionStatus::kClosedHealthy)s.Lose(__LINE__);
+     c.r[3]=0;return 0; // BOOL0, output words untouched, no queued event consumed
+    }
    }
   }else if(at==0x81694B48){
    if(s.FindProvider(work->first) || work->first<0x1000 || (work->first&7) ||
@@ -6521,9 +7486,12 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
    if(!provider || provider->constructing || (provider->revoked && !cleanup))return cleanup?1:s.Deny(c,at,__LINE__);
    work->provider_generation=provider->generation;
    if(at==0x816934F8){
-    provider->revoked=true;provider->image_epoch.Revoke();provider->image_output.reset();
+    provider->revoked=true;provider->image_epoch.Revoke();provider->image_output.reset();provider->no_read_query.reset();
    }else if(at==0x81693568){
     if(provider->initialized && !provider->buffer_revoked)return s.Deny(c,at,__LINE__);
+    // The verified init body issues no read and does not write A0. Retain
+    // no-read history for this birth; buffer_revoked withholds current use
+    // until its genuine successful own-return installs the new allocation.
     provider->image_epoch.Revoke();provider->image_output.reset();
    }else if(at==0x81693CD8){
     const auto message=work->second<=UINT32_MAX-4?Word(*memory,work->second+4):std::nullopt;
@@ -6534,9 +7502,17 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
       return old->provider_generation==provider->generation && old->frame.function==0x816921C8;
      });
      if(!terminal || *terminal==997 || querying)return s.Deny(c,at,__LINE__);
+     // Event A frees storage, not the provider birth's no-read history.
      provider->buffer_revoked=true;provider->image_epoch.Revoke();provider->image_output.reset();
     }
    }else{
+    // Retain only a positive chain from actual initialization or the last
+    // exact no-read Query. An unproven/denied Query must never relearn it.
+    const bool no_image_history=s.ProviderNoImageHistory(*provider) &&
+        provider->image_uri_generation!=UINT64_MAX;
+    const auto prior_no_read_version=provider->no_read_query?
+        std::optional<uint64_t>(provider->no_read_query->version):std::nullopt;
+    provider->no_read_query.reset();
     // Query can rewrite its borrowed URI even when it leaves encoded A8
     // bytes untouched. Keep key-copy continuity separate from buffer use.
     if(provider->image_uri_generation==UINT64_MAX){
@@ -6554,6 +7530,14 @@ uint64_t NativeProfileIdentityOwner::GuardEntry(void* raw,uint64_t address) noex
     const auto birth=s.tasks.BeginExternalWork(*frame,*current_task);
     if(!birth){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
     work->external_birth=*birth;work->birth=*birth;
+    if(no_image_history){
+     // GCRC+State protect this entry observation; no guest body has run.
+     const auto pending=Byte(*memory,provider->object+0x98);
+     const auto version=Qword(*memory,provider->object+0xA0);
+     if(pending && !*pending && version &&
+        (!prior_no_read_version || *version==*prior_no_read_version))
+      work->image_no_read_entry=State::Work::ImageQueryNoReadEntry{provider->image_uri_generation,*version};
+    }
    }
   }else if(at==0x81670B68){
    const auto parent=s.Latest(frame->thread,0x816921C8);
@@ -6951,6 +7935,9 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
  if(!raw || address>UINT32_MAX)return;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);const auto at=uint32_t(address);
  if(ObservesNativeIdentityImage(at)){ObserveImageReturn(raw,at);return;}
+ if(at==0x816BA3C0){ObserveContextReference(raw,5);return;}
+ if(at==0x816B7490)ObserveContextReference(raw,4);
+ if(at==0x816B7F30)ObserveContextReference(raw,2);
  if(at==0x816B8098 || at==0x816B7F30){
   auto* d=c.thread_state?static_cast<TaskReference::Data*>(
       c.thread_state->native_identity_task_reference_cell_.load(std::memory_order_acquire)):nullptr;
@@ -6978,10 +7965,21 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
   uint32_t diagnostic_thread=0,diagnostic_pcr=0;
   {
    std::lock_guard lock(s.mutex);
-   if(shape)for(auto i=s.active.rbegin();i!=s.active.rend();++i)
+   if(shape && at==0x816A2588){
+    // The youngest actual same-function entry shadows every older invocation,
+    // even if this return's SP/LR is malformed. Never skip its neutral marker.
+    const auto youngest=s.Latest(shape->thread,at);
+    if(youngest && youngest->completion_route &&
+        youngest->completion_route->FrameMatches(*shape))work=youngest;
+   }else if(shape)for(auto i=s.active.rbegin();i!=s.active.rend();++i)
     if((*i)->frame==*shape){work=*i;break;}
    if(!work){
     auto* thread=ActualThread();const auto prior=thread?s.Latest(thread->thread_id(),at):nullptr;
+    if(at==0x816A2588 && prior && prior->transport_unclaimed && prior->completion_route){
+     // A malformed return cannot be repaired later by an equal-looking frame.
+     // Poison only this actual neutral memento; retain it and every older owner.
+     (void)prior->completion_route->ReturnOrdinary(shape.value_or(Frame{}));
+    }
     if(prior && !prior->transport_unclaimed){
      s.RecordReturnFailure(c,at,prior->frame,*prior,prior->birth,prior->birth.generation?1u:0u,false,8,__LINE__,2);
      s.Lose(__LINE__);prior->uncertain=true;
@@ -6993,6 +7991,9 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    // below retains uncertain work. Diagnostic withdrawal grants no release.
    s.ReturnTaskDiagnostic(*work,c);
    if(work->transport_unclaimed){
+    if(work->completion_route && (!shape || !work->completion_route->ReturnOrdinary(*shape))){
+     s.Lose(__LINE__);return; // keep the actual marker and older identity owner
+    }
     if(work->normal_return){
      s.RecordReturnFailure(c,at,work->frame,*work,work->birth,work->birth.generation?1u:0u,false,9,__LINE__);
      s.Lose(__LINE__);return;
@@ -7008,6 +8009,7 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
   }
   if((work->profile_control || work->profile_producer) && !CheckProfileControlCode(*s.config.catalog->calls())){s.Lose(__LINE__);return;}
   if(work->periodic_factory && !CheckPeriodicCode(*s.config.catalog->calls())){s.Lose(__LINE__);return;}
+  if(work->system_thread_frame && !CheckFiniteSystemThreadCode(*s.config.catalog->calls(),at)){s.Lose(__LINE__);return;}
   State::CodeOwner caller_code;
   // A stored child caller remains the same leased object/load generation on
   // its own return. Never recapture another child as replacement provenance.
@@ -7019,12 +8021,16 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
       work->frame.function==0x816B7600;
   const auto frame=s.ReadFrame(c,at,ListenerOuter(at) || at==0x8199C630 || at==0x8199E3E0 ||
                               work->foreign_avatar_task,
-                              (transport || ListenerOuter(at))?&caller_code:nullptr,work->task_release,
+                              (transport || ListenerOuter(at))?&caller_code:nullptr,work->task_release || work->system_thread_frame || work->system_discarded_identity_hint,
                               work->periodic_body_admitted && work->periodic_context?&*work->periodic_context:nullptr,
                               work->periodic_factory);
   if(!frame){
    s.RecordReturnPartial(c,at,10,__LINE__,diagnostic_thread,diagnostic_pcr);
    s.Lose(__LINE__);return;
+  }
+  if(work->system_discarded_identity_hint &&
+     (!work->listener_arguments || !s.DiscardedIdentityHintCaller(*work,*work->listener_arguments,1))){
+   s.Lose(__LINE__);return; // Never release a delivery pin after caller/code uncertainty.
   }
   // Read the actual restored Task outside metadata. Never install a parent,
   // synthesize TLS, reread a possibly freed packet, or borrow a new read ticket.
@@ -7033,9 +8039,17 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
       std::optional<uint32_t>{};
   const auto control_current=work->profile_control && work->profile_control->kind!=Tasks::ProfileControl::Kind::kDispatch?
       NativeProfileIdentityTaskContext::Read(*s.config.catalog->calls(),*s.config.domain,at,c):std::optional<uint32_t>{};
+  const auto finite_current=work->system_thread_frame?
+      NativeProfileIdentityTaskContext::Read(*s.config.catalog->calls(),*s.config.domain,at,c):std::optional<uint32_t>{};
   auto memory_read=global_critical_region::AcquireDirect();
   std::lock_guard lock(s.mutex);
-  if(work->frame!=*frame || work->normal_return ||
+  const auto* finite_node=finite_current?s.tasks.FindLiveTask(*finite_current):nullptr;
+  const bool finite_ambient_matches=!work->system_thread_frame ||
+      (finite_current.value_or(0)==work->system_frame_ambient_task &&
+       (!work->system_frame_ambient_birth.generation ||
+        (finite_node && Tasks::SameBirth(finite_node->birth,work->system_frame_ambient_birth) &&
+         bool(finite_node->periodic_factory)==work->system_frame_ambient_periodic)));
+  if(work->frame!=*frame || work->normal_return || !finite_ambient_matches ||
      work->caller_code.module.get()!=caller_code.module.get() ||
      work->caller_code.load_generation!=caller_code.load_generation ||
      bool(work->caller_code.lease)!=bool(caller_code.lease)){
@@ -7097,9 +8111,20 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    const auto current=creation_current_task?s.tasks.FindLiveTask(*creation_current_task):nullptr;
    exact=parent && parent->creation && current && parent->creation->ReturnInline(*frame,current->birth);
   }else if(at==0x816A2588){
-   exact=s.job && s.job->completion_frame==*frame && s.job->caller_published &&
+   exact=s.job && work->completion_route &&
+       work->completion_route->StillOwned(s.job,s.job->serial,s.job->source,s.job->overlap,work->first) &&
+       s.job->completion_frame==*frame && s.job->caller_published &&
        !s.job->completion_returned && s.job->completion_birth.generation==work->birth.generation;
-   if(exact)s.job->completion_returned=true;
+   if(exact){
+    s.job->completion_returned=true;
+    OriginalLogonDiagnostic d;d.stage=OriginalLogonDiagnostic::kOverlapReturn;
+    // Completion status comes from its authenticated error operands; do not
+    // interpret the shared CompleteIO body's raw r3 residue as a result.
+    d.entered=1;d.returned=1;
+    d.completion_error_available=1;d.completion_error=s.job->completion_error;
+    d.completion_extended=s.job->completion_extended;d.completion_length=s.job->completion_length;
+    xam::ProfileManager::RecordNativeOriginalLogon(s.job->original_logon_observation,d);
+   }
   }else if(ListenerOuter(at)){
    exact=s.listeners && work->listener_frame;
    if(exact && at==0x816A8498){
@@ -7186,6 +8211,54 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
     if(key && *key==provider->object+0x10 && modified && *modified==1){
      provider->image_key=work->image_key_candidate;
      provider->image_key_generation=provider->image_uri_generation;
+     // The original Query can publish a real module-section default after a
+     // failed native read. It is a DISTINCT successful output source, not a
+     // HOST tile completion or an empty provider census. Join only this same
+     // Query's authenticated fallback and actually published full memory key.
+     const auto& input=*work->image_key_candidate;
+     const auto module=s.config.catalog->calls()->module();
+     if(DwordIs(c.r[3],0) && work->image_default_result &&
+        *work->image_default_result==input && input.section && !input.provider &&
+        input.valid() && input.root()==s.root && input.source()==work->source &&
+        input.section->provider==provider->generation && provider->initialized &&
+        !provider->revoked && !provider->buffer_revoked && !provider->destroyed &&
+        module && s.root_code && s.config.domain && s.config.domain->active() &&
+        s.config.domain->root()==NativeImportDomain::Member{module->hmodule_ptr(),module->load_generation()} &&
+        input.section->module==module->hmodule_ptr() && input.section->module_generation==module->load_generation() &&
+        s.ImageBytesCurrent(input)){
+      const auto ready=Word(*s.kernel->memory(),provider->object+0x90);
+      const auto size=Word(*s.kernel->memory(),provider->object+0x94);
+      const auto version=Qword(*s.kernel->memory(),provider->object+0xA0);
+      if(ready && size && version && *ready==input.address() && *size==input.size() &&
+         *version==input.section->version &&
+         s.kernel->memory()->QueryRangeAccess(input.address(),input.size())!=memory::PageAccess::kNoAccess &&
+         s.kernel->GetUserModuleForAddress(input.address()).get()==module.get() &&
+         s.kernel->GetUserModuleForAddress(input.address()+input.size()-1).get()==module.get() &&
+         NativeMemoryKeyMatches(*s.kernel->memory(),provider->object+0x10,*ready,*size,*version)){
+       provider->completed_source=input.source();provider->completed_version=*version;
+       provider->completed_empty=false;provider->completed_status=0;
+      }
+     }
+    }
+   }
+   if(exact && at==0x816921C8 && provider && work->image_no_read_entry &&
+      DwordIs(c.r[3],0) && work->frame.function==0x816921C8 && work->frame.root==s.root &&
+      work->serial && work->source && work->birth.generation && work->birth.origin && work->birth.task &&
+      provider->generation==work->provider_generation &&
+      provider->image_uri_generation==work->image_no_read_entry->uri_generation &&
+      work->image_uri_generation==work->image_no_read_entry->uri_generation &&
+      !work->image_key_candidate && !work->image_default_result && s.ProviderImageDataAbsent(*provider)){
+    const auto pending=Byte(*s.kernel->memory(),provider->object+0x98);
+    const auto ready=Word(*s.kernel->memory(),provider->object+0x90);
+    const auto version=Qword(*s.kernel->memory(),provider->object+0xA0);
+    if(pending && !*pending && ready && !*ready && version &&
+       *version==work->image_no_read_entry->version){
+     // Same full A0 proves that the actual refresh/read branch was not
+     // taken, even if a nested read observer would have refused admission.
+     // No output/source/readiness receipt is minted. The owning Work remains
+     // active until ALL existing whole-return/read/listener joins succeed.
+     provider->no_read_query=State::Provider::NoReadQuery{*frame,work->birth,work->serial,
+         work->source,provider->generation,work->image_no_read_entry->uri_generation,*version};
     }
    }
   }else if(at==0x816B9A18){
@@ -7293,7 +8366,8 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    work->listener_dependencies=s.listeners->CaptureDependencies(*work->listener_work);
    const Events::Root root{s.root.kernel,s.root.domain,s.root.generation};
    const Events::WorkKey key{root,work->birth.generation,work->serial,frame->thread,
-       frame->pcr,work->birth.task,frame->sp,frame->lr,at};
+       frame->pcr,work->birth.task,frame->sp,frame->lr,at,
+       work->system_thread_frame && !work->external_birth.generation?Events::WorkOwnerKind::kSystemThreadFrame:Events::WorkOwnerKind::kTask};
    exact=work->listener_dependencies && s.listeners->FinishWholeWorkNormally(*work->listener_work,key,work->listener_source);
    if(!exact)return_phase=work->listener_dependencies?4:3;
   }
@@ -7349,6 +8423,9 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    job->protocol_work=work->serial;job->protocol_frame=*frame;
    job->protocol_birth=work->birth;job->protocol_value=value;
    job->protocol_returned=true;
+   {OriginalLogonDiagnostic d;d.stage=OriginalLogonDiagnostic::kProtocolReturn;
+    d.entered=1;d.returned=1;d.result_available=1;d.result=value;
+    xam::ProfileManager::RecordNativeOriginalLogon(job->original_logon_observation,d);}
   }
   const auto retire=[&](std::shared_ptr<State::Work>& item){
    const auto i=std::find(s.active.begin(),s.active.end(),item);

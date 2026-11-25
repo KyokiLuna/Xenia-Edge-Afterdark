@@ -2,6 +2,28 @@
 #pragma once
 #include <cstdint>
 namespace xe::kernel {
+// Known finite native17559 SYSTEM consumer bodies. A frame is the ownership
+// unit even when an ordinary Task happens to contain it; this table grants no
+// Task birth/cleanup/descendant authority. Query retains its separate Task path.
+struct NativeFiniteSystemConsumer {
+ uint32_t entry,save,restore,argument_count;
+ bool object_r3; // false: 9EA0 has two optional DWORD output pointers
+};
+inline constexpr NativeFiniteSystemConsumer kNativeFiniteSystemConsumers[]={
+ {0x817046C0,0x8172D3C8,0x8172D418,1,true},
+ {0x8170BA20,0x8172D3C0,0x8172D410,1,true},
+ {0x8172CD88,0x8172D3CC,0x8172D41C,3,true},
+ {0x81879EA0,0x8172D3B8,0x8172D408,2,false},
+ {0x8187DE10,0x8172D3C8,0x8172D418,1,true},
+ {0x818CEE08,0x8172D3C8,0x8172D418,1,true},
+ {0x81905090,0x8172D3BC,0x8172D40C,1,true},
+ {0x819345E8,0x8172D3CC,0x8172D41C,1,true},
+ {0x81A3F848,0x8172D3BC,0x8172D40C,1,true},
+};
+constexpr const NativeFiniteSystemConsumer* FindNativeFiniteSystemConsumer(uint32_t at) noexcept {
+ for(const auto& consumer:kNativeFiniteSystemConsumers)if(consumer.entry==at)return &consumer;
+ return nullptr;
+}
 // Entry/own-return hooks only. The separate hash cohort also contains helper
 // bodies needed to authenticate these paths; those are not extra callbacks.
 // Original image functions use the same entry/own-return ABI, but the Owner
@@ -50,6 +72,7 @@ constexpr bool ObservesNativeIdentityImage(uint32_t at) noexcept {
  }
 }
 constexpr bool HooksNativeProfileIdentity(uint32_t at) noexcept {
+ if(FindNativeFiniteSystemConsumer(at))return true;
  if(ObservesNativeIdentityImage(at))return true;
  switch(at){
   case 0x8190A358:case 0x819068D0:case 0x816B8B08:case 0x816B7DE8:
@@ -60,7 +83,7 @@ constexpr bool HooksNativeProfileIdentity(uint32_t at) noexcept {
   case 0x816A2CF0:case 0x816A2A48:case 0x816B9D68:
   case 0x816BA440:case 0x816B9A18:case 0x816B9BB8:
   case 0x816BA668:case 0x816B9AA8:case 0x816B7490:
-  case 0x816B8098:case 0x816B7F30:
+  case 0x816B8098:case 0x816B7F30:case 0x816BA3C0:
   case 0x816B7D98:case 0x816B7500:case 0x816E6AB0:
   case 0x816DA428:case 0x816F44D0:case 0x816F3A40:
   case 0x816F25E0:case 0x816B7B68:case 0x816B7600:

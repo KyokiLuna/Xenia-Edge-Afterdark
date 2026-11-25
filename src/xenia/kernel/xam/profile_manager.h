@@ -84,6 +84,7 @@ const static inline uint64_t GenerateOnlineXuid() {
   return (0x9ULL << 48) + (gen() % (1ULL << 31));
 }
 
+class NativeOriginalLogonObservation;
 namespace test { class ProfileSettingsReadTestAccess; }
 class ProfileManager;
 struct NativeProfileProjection; // synchronous POD diagnostic only
@@ -179,6 +180,77 @@ class ProfileManager {
   ProfileGpdWriter CaptureGpdWriter(uint64_t xuid, std::error_code&);
   ProfileGpdWriter CaptureGpdWriter(uint8_t slot, std::error_code&);
   std::error_code ReloadGpdModel(uint64_t xuid);
+
+  // Advisory scalar creation observations only. Capture is allocation/lock/IO
+  // free; the existing host-only native profile reporter emits them later.
+  // No identity, name, guest pointer or Account bytes enter these records.
+  struct NativeCreationDiagnostic {
+    enum class Operation : uint32_t { kApi230=1, kProducer=2, kConsumer234=3, kTransaction=4 };
+    enum class Reason : uint32_t {
+      kNone=0, kApiBuffers=1, kApiCopy=2, kApiDelegated=3,
+      kProducerGate=100, kProducerOutput=101, kProducerGlobalLock=102,
+      kProducerOutputRange=103, kProducerAllocation=104, kProducerOutputWrite=105,
+      kProducerAccountFlagsWrite=106, kProducerGeneratedIdentityWrite=107,
+      kProducerSuppliedIdentityClass=108, kProducerOnlinePhase=109,
+      kProducerDeviceRead=110, kProducerDeviceWriteRange=111,
+      kProducerNoDefaultDevice=112, kProducerDeviceWrite=113,
+      kProducerDeviceReload=114, kProducerException=115, kProducerCompletion=116,
+      kConsumerGate=200, kConsumerInput=201, kConsumerUnknownRecord=202,
+      kConsumerPending=203, kConsumerDestination=204, kConsumerWrite=205,
+      kConsumerTerminal=206, kConsumerGlobalLock=207,
+      kTransactionGate=300, kTransactionInput=301, kTransactionGlobalLock=302,
+      kTransactionReservation=303, kTransactionExists=304,
+      kTransactionDevice=305, kTransactionPermission=306,
+      kTransactionVolume=307, kTransactionInstalled=308, kTransactionRecipe=309,
+      kTransactionSource=310, kTransactionPublication=311,
+      kTransactionDiscovery=312, kTransactionSignin=313,
+    };
+    uint32_t operation=0, reason=0, failure=0;
+    uint32_t flags_available=0, flags=0;
+    uint32_t return_available=0, return_value=0;
+    uint32_t result_available=0, result_status=0;
+    uint32_t published=0, discovered=0, signed_in=0;
+    uint32_t error_available=0, error_category=0, error_value=0;
+  };
+  // Bounded diagnostics of actual original20B/224 calls. No input bytes,
+  // identities, guest pointers or permission are carried by these records.
+  struct NativeOriginalLogonDiagnostic {
+    enum Stage:uint32_t {kEntry,kAdmissionReturn,kPrepareFailure,kNativeReturn,
+      kProtocolReturn,kPublicationFirst,kPublicationReady,kSettlementFirst,
+      kSettlementCommitted,kExportReturn,kOverlapBeforeStatus,kOverlapReturn,kStageCount};
+    uint64_t journal=0,capture_sequence=0;
+    uint32_t stage=0,ordinal=0,flags=0,overlap_present=0,reason=0,line=0;
+    uint32_t disposition_available=0,disposition=0,result_available=0,result=0;
+    uint32_t error_available=0,error_category=0,error_value=0,evaluated=0,failed=0;
+    uint32_t expected_mask_available=0,expected_nonempty_mask=0,expected_nonempty_count=0;
+    uint32_t input_mask_available=0,input_nonempty_mask=0,input_nonempty_count=0;
+    uint32_t desired_mask_available=0,desired_nonempty_mask=0,desired_nonempty_count=0;
+    uint32_t selected_mask=0,remove_mask=0;
+    uint32_t latest_available=0,latest_present=0,latest_kind=0;
+    uint32_t latest_read_present=0,latest_borrowed_read_present=0,latest_same_source=0;
+    uint32_t entered=0,returned=0,phase_available=0,phase=0;
+    uint32_t maps_committed=0,writers_available=0;
+    uint32_t completion_error_available=0,completion_error=0,completion_extended=0,completion_length=0;
+  };
+  struct NativeCreationDiagnosticSink;  // Scalar-only; may outlive this PM.
+  // Capture at valid entry, before delegation/admission. This is diagnostic
+  // ownership only and never grants a borrowed PM/Kernel/provider lifetime.
+  std::shared_ptr<NativeCreationDiagnosticSink> CaptureNativeCreationDiagnosticSink() const noexcept {
+    return creation_diagnostics_;
+  }
+  static void RecordNativeProfileCreation(
+      const std::shared_ptr<NativeCreationDiagnosticSink>&,
+      const NativeCreationDiagnostic&) noexcept;
+
+  static NativeOriginalLogonObservation BeginNativeOriginalLogon(
+      const std::shared_ptr<NativeCreationDiagnosticSink>&,uint32_t ordinal,
+      uint32_t flags,bool overlap_present) noexcept;
+  static void RecordNativeOriginalLogon(const NativeOriginalLogonObservation&,
+      NativeOriginalLogonDiagnostic) noexcept;
+  static bool CopyNativeOriginalLogon(const NativeOriginalLogonObservation&,
+      uint32_t stage,NativeOriginalLogonDiagnostic&,uint32_t* observed=nullptr) noexcept;
+  static bool CopyNativeOriginalLogon(const std::shared_ptr<NativeCreationDiagnosticSink>&,
+      uint32_t attempt,uint32_t stage,NativeOriginalLogonDiagnostic&,uint32_t* observed=nullptr) noexcept;
 
   struct ProfileCreationResult {
     X_RESULT status = X_ERROR_FUNCTION_FAILED;
@@ -506,6 +578,9 @@ class ProfileManager {
     ProfileCreationResult result;
     bool completed = false, consuming = false;
   };
+  static std::shared_ptr<NativeCreationDiagnosticSink> CreateNativeCreationDiagnosticSink();
+  const std::shared_ptr<NativeCreationDiagnosticSink> creation_diagnostics_ =
+      CreateNativeCreationDiagnosticSink();
   std::mutex profile_creation_mutex_;
   std::map<uint32_t, GuestProfileCreationResult> profile_creation_results_;
 
@@ -514,6 +589,16 @@ class ProfileManager {
   // XamState is still being constructed during initial account discovery.
   // Use its already constructed catalog without routing back through it.
   ContentManager& content_manager_;
+};
+
+class NativeOriginalLogonObservation final {
+ public:
+  bool active() const noexcept {return sink_ && slot_<8;}
+  uint32_t attempt() const noexcept {return active()?slot_+1:0;}
+ private:
+  friend class ProfileManager;
+  std::shared_ptr<ProfileManager::NativeCreationDiagnosticSink> sink_;
+  uint32_t slot_=UINT32_MAX,ordinal_=0,flags_=0,overlap_=0;
 };
 
 }  // namespace xam

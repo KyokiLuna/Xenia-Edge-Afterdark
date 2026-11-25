@@ -1580,24 +1580,34 @@ dword_result_t XamUserLogon_entry(lpqword_t xuids_ptr, dword_t flags,
                                   pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
   const std::array<uint64_t, 3> original = {
       xuids_ptr.guest_address(), static_cast<uint32_t>(flags), overlapped_ptr.guest_address()};
+  const auto observation=ProfileManager::BeginNativeOriginalLogon(
+      kernel_state()->xam_state()->profile_manager()->CaptureNativeCreationDiagnosticSink(),
+      0x20b,static_cast<uint32_t>(flags),bool(overlapped_ptr));
   const auto native = NativeProfileIdentityOwner::TryLogonOnOriginalCaller(
-      kernel_state(), 0x20B, original);
-  if (!native.may_use_legacy()) { return native.value; }
+      kernel_state(), 0x20B, original,&observation);
+  const auto finish=[&](uint32_t value){
+    ProfileManager::NativeOriginalLogonDiagnostic d;
+    d.stage=ProfileManager::NativeOriginalLogonDiagnostic::kExportReturn;
+    d.disposition_available=1;d.disposition=uint32_t(native.disposition);
+    d.result_available=1;d.result=value;
+    ProfileManager::RecordNativeOriginalLogon(observation,d);return value;
+  };
+  if (!native.may_use_legacy()) { return finish(native.value); }
   if (!xuids_ptr) {
-    return X_ERROR_INVALID_PARAMETER;
+    return finish(X_ERROR_INVALID_PARAMETER);
   }
   std::array<uint8_t, XUserMaxUserCount * 8> bytes{};
   if (XFAILED(util::ReadGuestIoBuffer(*kernel_memory(),
                                       xuids_ptr.guest_address(), bytes))) {
-    return X_ERROR_INVALID_PARAMETER;
+    return finish(X_ERROR_INVALID_PARAMETER);
   }
   std::vector<uint64_t> xuids;
   xuids.reserve(XUserMaxUserCount);
   for (uint32_t i = 0; i != XUserMaxUserCount; ++i) {
     xuids.push_back(xe::load_and_swap<uint64_t>(bytes.data() + i * 8));
   }
-  return UserLogon(xuids,
-      flags, overlapped_ptr.guest_address());
+  return finish(UserLogon(xuids,
+      flags, overlapped_ptr.guest_address()));
 }
 DECLARE_XAM_EXPORT1(XamUserLogon, kUserProfiles, kImplemented);
 
@@ -1610,16 +1620,26 @@ dword_result_t XamUserLogonEx_entry(pointer_t<X_PROFILEENUMRESULT> profiles_ptr,
                                     pointer_t<XAM_OVERLAPPED> overlapped_ptr) {
   const std::array<uint64_t, 3> original = {
       profiles_ptr.guest_address(), static_cast<uint32_t>(flags), overlapped_ptr.guest_address()};
+  const auto observation=ProfileManager::BeginNativeOriginalLogon(
+      kernel_state()->xam_state()->profile_manager()->CaptureNativeCreationDiagnosticSink(),
+      0x224,static_cast<uint32_t>(flags),bool(overlapped_ptr));
   const auto native = NativeProfileIdentityOwner::TryLogonOnOriginalCaller(
-      kernel_state(), 0x224, original);
-  if (!native.may_use_legacy()) { return native.value; }
+      kernel_state(), 0x224, original,&observation);
+  const auto finish=[&](uint32_t value){
+    ProfileManager::NativeOriginalLogonDiagnostic d;
+    d.stage=ProfileManager::NativeOriginalLogonDiagnostic::kExportReturn;
+    d.disposition_available=1;d.disposition=uint32_t(native.disposition);
+    d.result_available=1;d.result=value;
+    ProfileManager::RecordNativeOriginalLogon(observation,d);return value;
+  };
+  if (!native.may_use_legacy()) { return finish(native.value); }
   if (!profiles_ptr) {
-    return X_ERROR_INVALID_PARAMETER;
+    return finish(X_ERROR_INVALID_PARAMETER);
   }
   std::array<uint8_t, sizeof(X_PROFILEENUMRESULT) * XUserMaxUserCount> bytes{};
   if (XFAILED(util::ReadGuestIoBuffer(*kernel_memory(),
                                       profiles_ptr.guest_address(), bytes))) {
-    return X_ERROR_INVALID_PARAMETER;
+    return finish(X_ERROR_INVALID_PARAMETER);
   }
   std::array<std::optional<ProfileRosterSelectionOrigin>, 4> origins{};
   std::vector<uint64_t> xuids;
@@ -1631,7 +1651,7 @@ dword_result_t XamUserLogonEx_entry(pointer_t<X_PROFILEENUMRESULT> profiles_ptr,
     if (profile.xuid_offline) {
       std::error_code error;
       const auto metadata = kernel_state()->xam_state()->profile_manager()->CaptureCachedAccount(profile.xuid_offline, error);
-      if (!metadata || error || metadata->device_id() != uint32_t(profile.device_id)) { return X_ERROR_INVALID_PARAMETER; }
+      if (!metadata || error || metadata->device_id() != uint32_t(profile.device_id)) { return finish(X_ERROR_INVALID_PARAMETER); }
       ProfileRosterSelectionOrigin origin;
       origin.device_id = metadata->device_id(); origin.source_id = metadata->source_id();
       origin.source_generation = metadata->source_generation();
@@ -1641,7 +1661,7 @@ dword_result_t XamUserLogonEx_entry(pointer_t<X_PROFILEENUMRESULT> profiles_ptr,
     }
 
   }
-  return UserLogon(xuids, flags, overlapped_ptr.guest_address(), std::move(origins));
+  return finish(UserLogon(xuids, flags, overlapped_ptr.guest_address(), std::move(origins)));
 }
 DECLARE_XAM_EXPORT1(XamUserLogonEx, kUserProfiles, kImplemented);
 

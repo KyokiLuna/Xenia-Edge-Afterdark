@@ -9,6 +9,7 @@
 #include "xenia/vfs/devices/host_path_device.h"
 #include <limits>
 #include <set>
+#include <source_location>
 #include <utility>
 #include "xenia/base/logging.h"
 #include "xenia/base/native_system_ui_trace.h"
@@ -43,6 +44,19 @@ template <typename T> struct NativeProfileDiagnosticCell {
     if(complete!=2)return false;
     out=payload;return true;
   }
+};
+// Independent scalar backing: an observation retaining this object cannot
+// retain the PM, roster rows, Account/model/storage, Kernel or provider owners.
+struct ProfileManager::NativeCreationDiagnosticSink {
+  std::array<std::array<NativeProfileDiagnosticCell<NativeCreationDiagnostic>,2>,4> first;
+  NativeProfileDiagnosticCell<NativeCreationDiagnostic> consumer_terminal;
+  uint64_t original_generation=0;
+  std::atomic<uint64_t> original_sequence{1};
+  std::atomic<uint32_t> original_next{0};
+  std::atomic<bool> original_exhausted{false};
+  std::array<std::array<NativeProfileDiagnosticCell<NativeOriginalLogonDiagnostic>,
+      NativeOriginalLogonDiagnostic::kStageCount>,8> original;
+
 };
 struct NativeProfileProjection {
   uint32_t slot=0,reason=0,available=0,ordinary=0,scoped=0,following=0;
@@ -148,6 +162,9 @@ struct ProfileRosterIntent::State {
   std::array<uint8_t, 4 * 0x188> native_rows{};
   std::atomic<ProfileRosterPhase> phase{ProfileRosterPhase::kPreparing};
   ProfileRosterResult result;
+  // Set once from the actual held PM envelopes before publishing Prepared.
+  // Empty slot numbers alone never substitute for absent native row owners.
+  bool empty_unchanged_rows = false;
   enum Milestone:uint32_t { kProtocol=1, kRead=2, kMaps=4, kWriters=8, kRetired=16 };
   std::atomic<uint32_t> milestones{0}, native_protocol_value{0};
   uint64_t operation = 0;
@@ -189,7 +206,10 @@ struct ProfileRosterNativeReadScope::State {
   XThread* thread = nullptr;
   cpu::ThreadState* cpu = nullptr;
   void* previous = nullptr;
+  enum class Kind : uint8_t { kTask, kSystemThreadFrame };
+  Kind kind = Kind::kTask;
   uint32_t task = 0, root_hmodule = 0;
+  uint32_t entry_sp = 0, entry_lr = 0, function = 0;
   uint64_t task_birth = 0, work_generation = 0, root_generation = 0;
   bool entered = false;
 };
@@ -268,6 +288,69 @@ void ProfileManager::RecordNativeSigninUi(uint32_t user,uint32_t users,uint32_t 
   d.caller.ordinary=a->ordinary.load(std::memory_order_acquire);
   d.caller.open=a->open.load(std::memory_order_acquire);a->first_signin_ui.Record(d);
 }
+std::shared_ptr<ProfileManager::NativeCreationDiagnosticSink>
+ProfileManager::CreateNativeCreationDiagnosticSink() {
+  auto sink=std::make_shared<NativeCreationDiagnosticSink>();
+  static std::atomic<uint64_t> next{1};
+  static_assert(NativeOriginalLogonDiagnostic::kStageCount>=5 && NativeOriginalLogonDiagnostic::kStageCount<32);
+  const uint64_t limit=UINT64_MAX>>NativeOriginalLogonDiagnostic::kStageCount;
+  auto serial=next.load(std::memory_order_relaxed);
+  while(serial<limit && !next.compare_exchange_weak(serial,serial+1,std::memory_order_relaxed)){}
+  if(serial<limit)sink->original_generation=serial;
+  else sink->original_exhausted.store(true,std::memory_order_relaxed);
+  return sink;
+}
+void ProfileManager::RecordNativeProfileCreation(
+    const std::shared_ptr<NativeCreationDiagnosticSink>& sink,
+    const NativeCreationDiagnostic& value) noexcept {
+  // This path can run after a counted PM Use has dropped or after a failed
+  // admission. Its saved scalar sink is the ONLY object dereferenced here.
+  if(!sink || !cvars::native_system_ui_trace || value.operation<1 || value.operation>4)return;
+  auto& cells=sink->first[value.operation-1];
+  cells[0].Record(value);
+  if(value.failure)cells[1].Record(value);
+  // Pending234 has no terminal result. A genuine consumed result is captured
+  // separately, so an earlier normal pending poll cannot hide terminal success.
+  if(value.operation==uint32_t(NativeCreationDiagnostic::Operation::kConsumer234) &&
+      value.result_available && value.return_available)sink->consumer_terminal.Record(value);
+}
+NativeOriginalLogonObservation ProfileManager::BeginNativeOriginalLogon(
+    const std::shared_ptr<NativeCreationDiagnosticSink>& sink,uint32_t ordinal,
+    uint32_t flags,bool overlap) noexcept {
+  NativeOriginalLogonObservation token;
+  if(!sink || !sink->original_generation || !cvars::native_system_ui_trace || (ordinal!=0x20B && ordinal!=0x224))return token;
+  auto slot=sink->original_next.load(std::memory_order_relaxed);
+  do {
+    if(slot>=sink->original.size()){sink->original_exhausted.store(true,std::memory_order_release);return token;}
+  }while(!sink->original_next.compare_exchange_weak(slot,slot+1,std::memory_order_acq_rel));
+  token.sink_=sink;token.slot_=slot;token.ordinal_=ordinal;token.flags_=flags;token.overlap_=overlap;
+  NativeOriginalLogonDiagnostic value;value.stage=NativeOriginalLogonDiagnostic::kEntry;
+  RecordNativeOriginalLogon(token,value);return token;
+}
+void ProfileManager::RecordNativeOriginalLogon(const NativeOriginalLogonObservation& token,
+    NativeOriginalLogonDiagnostic value) noexcept {
+  if(!token.active() || !cvars::native_system_ui_trace || value.stage>=NativeOriginalLogonDiagnostic::kStageCount)return;
+  value.journal=token.sink_->original_generation;
+  value.ordinal=token.ordinal_;value.flags=token.flags_;value.overlap_present=token.overlap_;
+  auto& cell=token.sink_->original[token.slot_][value.stage];
+  uint32_t empty=0;
+  if(!cell.state.compare_exchange_strong(empty,1,std::memory_order_relaxed))return;
+  // At most8*stageCount winners; this observation sequence cannot wrap.
+  // It orders scalar capture cuts, not guest scheduling or APC delivery.
+  value.capture_sequence=token.sink_->original_sequence.fetch_add(1,std::memory_order_relaxed);
+  cell.payload=value;cell.state.store(2,std::memory_order_release);
+}
+bool ProfileManager::CopyNativeOriginalLogon(const NativeOriginalLogonObservation& token,
+    uint32_t stage,NativeOriginalLogonDiagnostic& value,uint32_t* observed) noexcept {
+  if(!token.active() || stage>=NativeOriginalLogonDiagnostic::kStageCount){if(observed)*observed=0;return false;}
+  return CopyNativeOriginalLogon(token.sink_,token.slot_+1,stage,value,observed);
+}
+bool ProfileManager::CopyNativeOriginalLogon(const std::shared_ptr<NativeCreationDiagnosticSink>& sink,
+    uint32_t attempt,uint32_t stage,NativeOriginalLogonDiagnostic& value,uint32_t* observed) noexcept {
+  if(!sink || !attempt || attempt>sink->original.size() || stage>=NativeOriginalLogonDiagnostic::kStageCount){if(observed)*observed=0;return false;}
+  return sink->original[attempt-1][stage].Copy(value,observed);
+}
+
 void ProfileManager::ReportNativeProfileDiagnostics(const char* boundary) const noexcept {
   if(XThread::GetCurrentFiberThread() || global_critical_region::is_held_by_current_thread())return;
   try {
@@ -288,6 +371,76 @@ void ProfileManager::ReportNativeProfileDiagnostics(const char* boundary) const 
     }
     NativeSigninUiObservation ui;uint32_t uis=0;const bool uia=a->first_signin_ui.Copy(ui,&uis);
     const uint32_t cut=NativeProfileBoundary(boundary);
+    // Capture may have happened under inherited GCRC or a PM reservation.
+    // This existing reporter has already refused GCRC/fiber entry; no capture
+    // logs, waits, rereads guest memory, or acquires any extra lock.
+    const auto creation=creation_diagnostics_;
+    static std::array<std::array<NativeSystemUiTraceLimiter,3>,4> creation_trace;
+    for(size_t op=0;op<4;++op)for(size_t kind=0;kind<3;++kind){
+      NativeCreationDiagnostic d;
+      const auto* cell=!creation?nullptr:kind<2?&creation->first[op][kind]:
+          op==2?&creation->consumer_terminal:nullptr;
+      if(!cell || !cell->Copy(d))continue;
+      creation_trace[op][kind].EmitTransition(
+          (uint64_t(d.reason)<<32)^d.return_value^d.result_status,
+          "profile","creation_operation_result",
+          {{"boundary",cut},{"operation",d.operation},{"sample_kind",kind},
+           {"reason",d.reason},{"failure",d.failure},
+           {"flags_available",d.flags_available},{"flags",d.flags},
+           {"return_available",d.return_available},{"return_value",d.return_value},
+           {"result_available",d.result_available},{"result_status",d.result_status},
+           {"published",d.published},{"discovered",d.discovered},{"signed_in",d.signed_in},
+           {"std_error_available",d.error_available},{"std_error_category",d.error_category},
+           {"std_error_value",d.error_value}});
+    }
+    // Original-export attempt cells are independent from first-title queries
+    // and bootstrap alignment. Never read an in-progress payload or wait here.
+    static std::array<std::array<NativeSystemUiTraceLimiter,
+        NativeOriginalLogonDiagnostic::kStageCount>,8> logon_trace;
+    static NativeSystemUiTraceLimiter logon_capacity;
+    static std::array<NativeSystemUiTraceLimiter,8> logon_progress;
+    if(creation){
+      const auto reserved=std::min<uint32_t>(creation->original_next.load(std::memory_order_acquire),8);
+      for(size_t slot=0;slot<reserved;++slot){
+        uint32_t captured=0,in_progress=0;
+        for(size_t stage=0;stage<NativeOriginalLogonDiagnostic::kStageCount;++stage){
+          NativeOriginalLogonDiagnostic d;uint32_t state=0;
+          if(!creation->original[slot][stage].Copy(d,&state)){
+            if(state==1)in_progress|=1u<<stage;
+            continue;
+          }
+          captured|=1u<<stage;
+          logon_trace[slot][stage].EmitTransition(d.journal,"profile","original_logon_attempt",
+            {{"boundary",cut},{"journal",d.journal},{"capture_sequence",d.capture_sequence},{"attempt",slot+1},{"ordinal",d.ordinal},{"flags",d.flags},
+             {"overlap_present",d.overlap_present},{"stage",d.stage},{"reason",d.reason},{"line",d.line},
+             {"disposition_available",d.disposition_available},{"disposition",d.disposition},
+             {"result_available",d.result_available},{"result",d.result},
+             {"error_available",d.error_available},{"error_category",d.error_category},{"error_value",d.error_value},
+             {"evaluated",d.evaluated},{"failed",d.failed},
+             {"expected_mask_available",d.expected_mask_available},{"expected_nonempty_mask",d.expected_nonempty_mask},{"expected_nonempty_count",d.expected_nonempty_count},
+             {"input_mask_available",d.input_mask_available},{"input_nonempty_mask",d.input_nonempty_mask},{"input_nonempty_count",d.input_nonempty_count},
+             {"desired_mask_available",d.desired_mask_available},{"desired_nonempty_mask",d.desired_nonempty_mask},{"desired_nonempty_count",d.desired_nonempty_count},
+             {"selected_mask",d.selected_mask},{"remove_mask",d.remove_mask},
+             {"latest_available",d.latest_available},{"latest_present",d.latest_present},{"latest_kind",d.latest_kind&0xFu},
+             {"latest_function_role",(d.latest_kind>>4)&0xFFu},
+             {"latest_caller_available",((d.latest_kind>>12)&3u)!=0},
+             {"latest_same_caller",((d.latest_kind>>12)&3u)==1},
+             {"latest_sp_relation",(d.latest_kind>>14)&3u},
+             {"latest_read_present",d.latest_read_present},{"latest_borrowed_read_present",d.latest_borrowed_read_present},
+             {"latest_same_source",d.latest_same_source},{"entered",d.entered},{"returned",d.returned},
+             {"phase_available",d.phase_available},{"phase",d.phase},{"maps_committed",d.maps_committed},
+             {"writers_available",d.writers_available},{"completion_error_available",d.completion_error_available},
+             {"completion_error",d.completion_error},{"completion_extended",d.completion_extended},{"completion_length",d.completion_length}});
+        }
+        logon_progress[slot].EmitTransition((creation->original_generation<<NativeOriginalLogonDiagnostic::kStageCount)|captured,
+            "profile","original_logon_progress",
+            {{"journal",creation->original_generation},{"attempt",slot+1},
+             {"captured_stage_mask",captured},{"in_progress_stage_mask",in_progress}});
+      }
+      const bool exhausted=creation->original_exhausted.load(std::memory_order_acquire);
+      logon_capacity.EmitTransition((creation->original_generation<<5)|(uint64_t(reserved)<<1)|exhausted,"profile","original_logon_capacity",
+          {{"journal",creation->original_generation},{"reserved_attempts",reserved},{"exhausted",exhausted},{"capacity",8}});
+    }
     static NativeSystemUiTraceLimiter state_trace,ui_trace;
     static std::array<NativeSystemUiTraceLimiter,4> projection_trace;
     static std::array<std::array<NativeSystemUiTraceLimiter,5>,2> query_trace;
@@ -333,6 +486,14 @@ ProfileRosterResult ProfileRosterIntent::result() const {
   out.owners_retired=bool(duties&State::kRetired);
   out.native_protocol_value=state_->native_protocol_value.load(std::memory_order_acquire);
   return out;
+}
+bool ProfileRosterIntent::HasPublishedEmptyUnchangedRows(uint32_t actual_protocol_value) const {
+  const auto observed = result();
+  return observed.phase == ProfileRosterPhase::kPublished && !observed.error &&
+      observed.native_protocol_returned && observed.selected_reads_available &&
+      observed.maps_committed && observed.writers_available &&
+      observed.native_protocol_value == actual_protocol_value &&
+      state_->empty_unchanged_rows;
 }
 const std::array<uint8_t, 4 * 0x188>& ProfileRosterIntent::NativeRowsForPrepared() const {
   return state_->native_rows;
@@ -453,8 +614,47 @@ bool ProfileRosterNativeReadScope::Enter(KernelState* kernel, XThread* thread,
       t.authority->LeaveScope(); return false;
     }
   }
+  s.kind = State::Kind::kTask;
   s.kernel = kernel; s.thread = thread; s.cpu = cpu; s.task = task;
   s.task_birth = birth; s.work_generation = work; s.root_hmodule = root;
+  s.root_generation = root_generation; s.entered = true;
+  cpu->native_profile_roster_read_.store(this, std::memory_order_release);
+  return true;
+}
+bool ProfileRosterNativeReadScope::EnterSystemThreadFrame(
+    KernelState* kernel, XThread* thread, cpu::ThreadState* cpu,
+    uint32_t entry_sp, uint32_t entry_lr, uint32_t function,
+    uint64_t work, uint32_t root, uint64_t root_generation) noexcept {
+  auto& s = *state_;
+  auto& t = *s.ticket->state_;
+  // All module/domain/code leases remain in the earlier native whole owner.
+  // This scalar-only cut joins only the same actual read stack and count.
+  if (s.entered || !kernel || !thread || !cpu || !work || !root ||
+      !root_generation || !entry_sp || (entry_sp & 15) ||
+      entry_lr < 4 || (entry_lr & 3) || function < 4 || (function & 3) ||
+      ActualRosterThread() != thread || thread->kernel_state() != kernel ||
+      thread->thread_state() != cpu || !cpu->context() ||
+      cpu->context()->thread_state != cpu || cpu->context()->kernel_state != kernel ||
+      cpu->context()->r[13] != thread->pcr_ptr() ||
+      cpu->context()->r[1] != entry_sp || cpu->context()->lr != entry_lr ||
+      thread->native_frame_thread_identity().process_type != X_PROCTYPE_SYSTEM ||
+      thread->stack_limit() > entry_sp || entry_sp > thread->stack_base() ||
+      t.authority->kernel != kernel || !t.open.load(std::memory_order_acquire) ||
+      !t.authority->EnterScope()) { return false; }
+  if (!t.open.load(std::memory_order_acquire)) { t.authority->LeaveScope(); return false; }
+  s.previous = cpu->native_profile_roster_read_.load(std::memory_order_acquire);
+  if (s.previous) {
+    auto* parent = static_cast<ProfileRosterNativeReadScope*>(s.previous);
+    if (!parent->state_->entered || parent->state_->kernel != kernel ||
+        parent->state_->binding != s.binding || parent->state_->cpu != cpu) {
+      t.authority->LeaveScope(); return false;
+    }
+  }
+  s.kind = State::Kind::kSystemThreadFrame;
+  s.kernel = kernel; s.thread = thread; s.cpu = cpu;
+  s.task = 0; s.task_birth = 0;
+  s.entry_sp = entry_sp; s.entry_lr = entry_lr; s.function = function;
+  s.work_generation = work; s.root_hmodule = root;
   s.root_generation = root_generation; s.entered = true;
   cpu->native_profile_roster_read_.store(this, std::memory_order_release);
   return true;
@@ -807,16 +1007,28 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
     }
   }
   reap.clear(); // native owners released after leaving the PM metadata lock
-  auto fail = [&](std::error_code reason) -> std::shared_ptr<ProfileRosterIntent> {
+  auto fail = [&](std::error_code reason,
+                  std::source_location where = std::source_location::current()) -> std::shared_ptr<ProfileRosterIntent> {
     // The pending metadata may already be observed by host cleanup retries.
     // Keep it immutable; this failed Prepare returns its real reason directly.
     error = reason ? reason : Stale();
     CancelRoster(intent); // genuine cleanup, retaining canceling if real busy
+    // This cut owns no PM/cache/filesystem guard. Observe only the completed
+    // original refusal after real cancellation; direct pre-pending exits are
+    // deliberately outside this bounded diagnostic.
+    static NativeSystemUiTraceLimiter trace;
+    trace.EmitTransition((uint64_t(where.line()) << 32) | uint32_t(error.value()),
+        "profile", "roster_prepare_refusal",
+        {{"line", where.line()}, {"operation", state->operation},
+         {"error", uint32_t(error.value())},
+         {"category", error.category() == std::generic_category() ? 1u :
+             error.category() == std::system_category() ? 2u : 0u}});
     return {};
   };
-  auto fail_locked = [&](std::unique_lock<std::recursive_mutex>& lock, std::error_code reason) {
+  auto fail_locked = [&](std::unique_lock<std::recursive_mutex>& lock, std::error_code reason,
+                         std::source_location where = std::source_location::current()) {
     if (lock.owns_lock()) { lock.unlock(); }
-    return fail(reason);
+    return fail(reason, where);
   };
   // Existing old roster stays valid while affected writers are reversibly
   // excluded. No Logout, model retirement or epoch publication occurs here.
@@ -953,6 +1165,20 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
     if (a->pending != operation || !a->open.load(std::memory_order_acquire) ||
         a->current->roster != expected.roster || !BeforeCurrent(*operation) ||
         !ProfileRosterAuthority::LogicalCurrent(*next)) { return fail_locked(lock, Stale()); }
+    const auto empty = [](const ProfileRosterAuthority::Envelope& envelope) {
+      if (!envelope.roster) { return false; }
+      for (size_t slot = 0; slot != 4; ++slot) {
+        const auto& row = envelope.rows[slot];
+        const auto& selected = envelope.roster->slots()[slot];
+        if (row.profile || row.model || row.identity || row.account || row.storage ||
+            selected != ProfileRosterSlot{}) { return false; }
+      }
+      return true;
+    };
+    state->empty_unchanged_rows = empty(*operation->before) && empty(*operation->after) &&
+        state->result.before_epoch == state->result.after_epoch &&
+        std::none_of(state->result.changed.begin(), state->result.changed.end(), [](bool v) { return v; }) &&
+        std::all_of(state->native_rows.begin(), state->native_rows.end(), [](uint8_t v) { return v == 0; });
     state->phase.store(ProfileRosterPhase::kPrepared, std::memory_order_release);
     a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kPrepared),std::memory_order_release);
   }

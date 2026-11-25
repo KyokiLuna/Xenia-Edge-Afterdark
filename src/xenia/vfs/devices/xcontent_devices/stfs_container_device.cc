@@ -316,7 +316,9 @@ size_t StfsContainerDevice::BlockToHashBlockOffset(uint32_t block_index,
 const uint8_t StfsContainerDevice::GetAmountOfHashLevelsToCheck(
     uint32_t total_block_count) const {
   for (uint8_t level = 0; level < kBlocksHashLevelAmount; level++) {
-    if (total_block_count < kBlocksPerHashLevel[level]) {
+    // A completely filled level still owns all of its data blocks. A parent
+    // table is needed only for the next block, not for the boundary count.
+    if (total_block_count <= kBlocksPerHashLevel[level]) {
       return level;
     }
   }

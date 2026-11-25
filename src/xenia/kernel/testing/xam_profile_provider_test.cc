@@ -29,6 +29,10 @@
 #include "xenia/base/xdbf_view.h"
 #include "xenia/emulator.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/xthread.h"
+#include "xenia/kernel/xevent.h"
+#include "xenia/cpu/thread_state.h"
+#include "xenia/base/threading.h"
 #include "xenia/kernel/testing/isolated_kernel_runtime_settings.h"
 #include "xenia/kernel/xam/xam_content_device.h"
 #include "xenia/kernel/xam/content_manager.h"
@@ -46,6 +50,9 @@
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/file.h"
 #include "xenia/memory.h"
+
+DECLARE_int32(log_level);
+DECLARE_bool(native_system_ui_trace);
 
 namespace xe::kernel::xam::test {
 namespace {
@@ -1330,6 +1337,10 @@ class ProfileSettingsReadTestAccess final {
     return pm.PrepareRosterAttempt(desired,expected,error,&retained);
   }
   static auto ClaimRoster(ProfileManager& pm) { return pm.ClaimNativeRosterFactory(); }
+  static bool PublishedEmptyRows(const std::shared_ptr<ProfileRosterIntent>& intent,
+                                 uint32_t native_value = 0) {
+    return intent && intent->HasPublishedEmptyUnchangedRows(native_value);
+  }
   static auto Ticket(ProfileRosterIntent& intent,const ProfileRosterNativeBinding& binding,
       std::error_code& error) { return intent.NativeReadTicket(false,binding,&error); }
   static void RetryCleanup(ProfileManager& pm) { pm.RetryRosterSettlement(); }
@@ -1369,6 +1380,22 @@ class ProfileSettingsReadTestAccess final {
       const std::shared_ptr<const ProfileRosterNativeBinding>& binding) {
     return ProfileRosterNativeReadScope::Prepare(ticket, binding);
   }
+  static bool EnterSystemFrame(ProfileRosterNativeReadScope& scope, KernelState* kernel,
+      XThread* thread, cpu::ThreadState* cpu, uint32_t sp, uint32_t lr,
+      uint32_t function, uint64_t work = 1) {
+    return scope.EnterSystemThreadFrame(kernel, thread, cpu, sp, lr, function,
+                                       work, 0x81000000, 1);
+  }
+  static bool EnterWithoutTask(ProfileRosterNativeReadScope& scope, KernelState* kernel,
+      XThread* thread, cpu::ThreadState* cpu) {
+    return scope.Enter(kernel, thread, cpu, 0, 0, 1, 0x81000000, 1);
+  }
+  static bool Leave(ProfileRosterNativeReadScope& scope) { return scope.Leave(); }
+  static auto Current(KernelState* kernel, cpu::ThreadState* cpu) {
+    return ProfileRosterNativeReadScope::FromActualThread(kernel, cpu);
+  }
+  static void BeginStop(ProfileManager& pm) { pm.BeginRosterStop(); }
+  static void Close(ProfileManager& pm) { pm.CloseRosterAuthority(); }
 };
 namespace {
 constexpr uint32_t kReadAppearance = 0x63E80045;  // INFO2, opaque 1000 bytes.
@@ -3340,6 +3367,77 @@ TEST_CASE("Native protocol commits selected maps without claiming image joins or
   CHECK(ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol).error);
   CheckRoster(pm, {b.xuid, 0, 0, 0}); a.Unchanged(); b.Unchanged();
 }
+TEST_CASE("Empty native alignment requires actual unchanged row owners and protocol map writer commitment",
+          "[kernel][profile][roster][native][empty_initial_frame]") {
+  ProfileAbiRuntime runtime;
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster); REQUIRE_FALSE(error);
+  for (const auto& slot : expected.roster->slots()) { REQUIRE(slot == ProfileRosterSlot{}); }
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  auto desired = RosterDesired({0, 0, 0, 0});
+  desired.notify_host_compatibility = false; desired.remember_slots = false;
+  auto intent = pm.PrepareRoster(desired, expected, error); REQUIRE(intent); REQUIRE_FALSE(error);
+  CHECK(intent->old_roster() == expected.roster);
+  CHECK(intent->prepared_roster()->epoch() == expected.roster->epoch());
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent));
+  auto cell = ProfileSettingsReadTestAccess::EnterNative(pm, intent, binding, error);
+  REQUIRE(cell); REQUIRE_FALSE(error);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent));
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  // Original cache publication alone is neither protocol nor host-map completion.
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent));
+  auto protocol = ProfileSettingsReadTestAccess::Protocol(intent, binding, 0); REQUIRE(protocol);
+  const auto committed = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
+  REQUIRE_FALSE(committed.error); REQUIRE(committed.phase == ProfileRosterPhase::kPublished);
+  CHECK(committed.native_protocol_returned); CHECK(committed.selected_reads_available);
+  CHECK(committed.maps_committed); CHECK(committed.writers_available); CHECK_FALSE(committed.owners_retired);
+  for (const auto changed : committed.changed) { CHECK_FALSE(changed); }
+  CHECK(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent, 1));
+  // This metadata fact has no frame/GPU/pixel authority. Genuine finalization
+  // still needs the separate existing joined role even for an empty roster.
+  CHECK(ProfileSettingsReadTestAccess::Finalize(pm, intent, *protocol).error);
+  auto joined = ProfileSettingsReadTestAccess::Joined(intent, binding); REQUIRE(joined);
+  const auto finished = ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined);
+  REQUIRE_FALSE(finished.error); REQUIRE(finished.phase == ProfileRosterPhase::kCommitted);
+  CHECK(finished.owners_retired); CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent));
+  expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster); REQUIRE_FALSE(error);
+  auto canceled = pm.PrepareRoster(desired, expected, error); REQUIRE(canceled); REQUIRE_FALSE(error);
+  REQUIRE(pm.CancelRoster(canceled).phase == ProfileRosterPhase::kCanceled);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(canceled));
+}
+TEST_CASE("Published nonempty no-op and real signout never become empty initial alignment",
+          "[kernel][profile][roster][native][empty_initial_frame][refusal]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime, 0xe000000000000551ull, 71);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster); REQUIRE_FALSE(error);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({profile.xuid, 0, 0, 0}), expected).error);
+  expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster); REQUIRE_FALSE(error);
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  auto desired = RosterDesired({profile.xuid, 0, 0, 0});
+  bool signout = false;
+  SECTION("an unchanged nonempty roster retains its actual profile image duties") {}
+  SECTION("empty after a real signout is not the initial empty before tuple") {
+    desired = RosterDesired({0, 0, 0, 0}); signout = true;
+  }
+  auto intent = pm.PrepareRoster(desired, expected, error); REQUIRE(intent); REQUIRE_FALSE(error);
+  REQUIRE(intent->old_roster()->slots()[0].xuid == profile.xuid);
+  CHECK(intent->result().changed[0] == signout);
+  auto cell = ProfileSettingsReadTestAccess::EnterNative(pm, intent, binding, error);
+  REQUIRE(cell); REQUIRE_FALSE(error); REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  auto protocol = ProfileSettingsReadTestAccess::Protocol(intent, binding, 0); REQUIRE(protocol);
+  const auto committed = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
+  REQUIRE_FALSE(committed.error); REQUIRE(committed.phase == ProfileRosterPhase::kPublished);
+  REQUIRE(committed.maps_committed); REQUIRE(committed.writers_available);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent));
+  auto joined = ProfileSettingsReadTestAccess::Joined(intent, binding); REQUIRE(joined);
+  const auto finished = ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined);
+  REQUIRE_FALSE(finished.error); REQUIRE(finished.phase == ProfileRosterPhase::kCommitted);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent)); profile.Unchanged();
+}
 TEST_CASE("A genuine pending unchanged model delays host maps without hiding the published read row",
           "[kernel][profile][roster][native][protocol][pending_model]") {
   ProfileAbiRuntime runtime;
@@ -3549,6 +3647,538 @@ TEST_CASE("Native joined retirement keeps a busy old File and reuses its exact m
   REQUIRE_FALSE(done.error); CHECK(done.phase == ProfileRosterPhase::kCommitted); CHECK(done.owners_retired);
   CHECK(pm.CaptureProfile(uint8_t(0)) == selected); a.Unchanged(); b.Unchanged();
 }
+
+namespace {
+// These execute the production read-stack/count on a real SYSTEM XHostThread.
+// Frame coordinates are test metadata, not a claim to execute retail PPC,
+// issue a XamTask, pin a native root image, or establish native rendering.
+struct SystemReadThreadJoin {
+  object_ref<XHostThread>& thread;
+  xe::threading::Event* release = nullptr;
+  bool created = false;
+  ~SystemReadThreadJoin() {
+    if (release) release->Set();
+    if (created && xe::threading::Wait(thread->thread(), false,
+            std::chrono::seconds(10)) != xe::threading::WaitResult::kSuccess)
+      std::terminate(); // Never unwind live read scopes or test captures.
+  }
+};
+}
+TEST_CASE("Bounded SYSTEM thread reads use the real native scope stack without a Task",
+          "[kernel][profile][roster][native][system_thread_read]") {
+  ProfileAbiRuntime runtime;
+  auto* kernel = runtime.emulator->kernel_state();
+  auto& pm = *kernel->xam_state()->profile_manager();
+  std::error_code error;
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  auto intent = pm.PrepareRoster(RosterDesired({0, 0, 0, 0}), expected, error);
+  REQUIRE(intent); REQUIRE_FALSE(error);
+  auto ticket = ProfileSettingsReadTestAccess::Ticket(*intent, *binding, error); REQUIRE(ticket);
+  auto outer = ProfileSettingsReadTestAccess::Scope(ticket, binding); REQUIRE(outer);
+  auto inner = ProfileSettingsReadTestAccess::Scope(ticket, binding); REQUIRE(inner);
+  std::array<bool, 15> facts{};
+  object_ref<XHostThread> thread;
+  SystemReadThreadJoin join{thread};
+  thread = object_ref<XHostThread>(new XHostThread(kernel, 128 * 1024, 0, [&] {
+    auto* self = XThread::GetCurrentThread(); auto* cpu = self->thread_state();
+    auto* c = cpu->context();
+    const auto saved_sp = c->r[1], saved_lr = c->lr;
+    c->r[1] = self->stack_base() - 0x100; c->lr = 0x81001000;
+    const auto sp = uint32_t(c->r[1]), lr = uint32_t(c->lr);
+    facts[0] = self->native_frame_thread_identity().process_type == X_PROCTYPE_SYSTEM;
+    facts[1] = !ProfileSettingsReadTestAccess::EnterWithoutTask(*outer, kernel, self, cpu);
+    facts[2] = !ProfileSettingsReadTestAccess::EnterSystemFrame(*outer, kernel, self, cpu,
+                                                            sp - 16, lr, 0x81A3F848);
+    facts[3] = !ProfileSettingsReadTestAccess::EnterSystemFrame(*outer, kernel, self, cpu,
+                                                            sp, lr + 4, 0x81A3F848);
+    facts[4] = !ProfileSettingsReadTestAccess::EnterSystemFrame(*outer, kernel, self, cpu,
+                                                            sp, lr, 0x81A3F849);
+    facts[5] = !ProfileSettingsReadTestAccess::EnterSystemFrame(*outer, kernel, self, cpu,
+                                                            sp, lr, 0x81A3F848, 0);
+    facts[6] = ProfileSettingsReadTestAccess::EnterSystemFrame(*outer, kernel, self, cpu,
+                                                           sp, lr, 0x81A3F848);
+    if (facts[6]) {
+      facts[7] = ProfileSettingsReadTestAccess::Current(kernel, cpu) == outer.get();
+      facts[8] = !ProfileSettingsReadTestAccess::EnterSystemFrame(*outer, kernel, self, cpu,
+                                                              sp, lr, 0x81A3F848);
+      c->r[1] = sp - 0x40; c->lr = 0x81A3F890;
+      facts[9] = ProfileSettingsReadTestAccess::EnterSystemFrame(*inner, kernel, self, cpu,
+          uint32_t(c->r[1]), uint32_t(c->lr), 0x816A8C00, 2);
+      if (facts[9]) {
+        facts[10] = !ProfileSettingsReadTestAccess::Leave(*outer) &&
+                    ProfileSettingsReadTestAccess::Current(kernel, cpu) == inner.get();
+        facts[11] = ProfileSettingsReadTestAccess::Leave(*inner) &&
+                    ProfileSettingsReadTestAccess::Current(kernel, cpu) == outer.get();
+      }
+      c->r[1] = sp; c->lr = lr;
+      facts[12] = ProfileSettingsReadTestAccess::Leave(*outer);
+      facts[13] = ProfileSettingsReadTestAccess::Current(kernel, cpu) == nullptr;
+      facts[14] = !ProfileSettingsReadTestAccess::Leave(*outer);
+    }
+    c->r[1] = saved_sp; c->lr = saved_lr;
+    return 0;
+  }, kernel->GetSystemProcess()));
+  join.created = thread->Create() == X_STATUS_SUCCESS; REQUIRE(join.created);
+  REQUIRE(xe::threading::Wait(thread->thread(), false, std::chrono::seconds(10)) ==
+          xe::threading::WaitResult::kSuccess);
+  for (const bool fact : facts) CHECK(fact);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Leave(*outer));
+}
+TEST_CASE("Actual SYSTEM read scope keeps profile authority close pending until Leave",
+          "[kernel][profile][roster][native][system_thread_read][lifetime]") {
+  ProfileAbiRuntime runtime;
+  auto* kernel = runtime.emulator->kernel_state();
+  auto& pm = *kernel->xam_state()->profile_manager();
+  std::error_code error;
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  auto intent = pm.PrepareRoster(RosterDesired({0, 0, 0, 0}), expected, error);
+  REQUIRE(intent); REQUIRE_FALSE(error);
+  auto ticket = ProfileSettingsReadTestAccess::Ticket(*intent, *binding, error); REQUIRE(ticket);
+  auto scope = ProfileSettingsReadTestAccess::Scope(ticket, binding); REQUIRE(scope);
+  auto entered = xe::threading::Event::CreateManualResetEvent(false);
+  auto release = xe::threading::Event::CreateManualResetEvent(false);
+  REQUIRE(entered); REQUIRE(release);
+  std::atomic<bool> admitted{false}, left{false}, held{false};
+  object_ref<XHostThread> thread;
+  SystemReadThreadJoin join{thread, release.get()};
+  thread = object_ref<XHostThread>(new XHostThread(kernel, 128 * 1024, 0, [&] {
+    auto* self = XThread::GetCurrentThread(); auto* cpu = self->thread_state();
+    auto* c = cpu->context(); const auto saved_sp = c->r[1], saved_lr = c->lr;
+    c->r[1] = self->stack_base() - 0x100; c->lr = 0x81001000;
+    admitted.store(ProfileSettingsReadTestAccess::EnterSystemFrame(*scope, kernel, self, cpu,
+        uint32_t(c->r[1]), uint32_t(c->lr), 0x81A3F848));
+    entered->Set();
+    if (admitted.load()) {
+      held.store(xe::threading::Wait(release.get(), false, std::chrono::seconds(5)) ==
+                 xe::threading::WaitResult::kSuccess);
+      left.store(ProfileSettingsReadTestAccess::Leave(*scope));
+    }
+    c->r[1] = saved_sp; c->lr = saved_lr; return 0;
+  }, kernel->GetSystemProcess()));
+  join.created = thread->Create() == X_STATUS_SUCCESS; REQUIRE(join.created);
+  REQUIRE(xe::threading::Wait(entered.get(), false, std::chrono::seconds(5)) ==
+          xe::threading::WaitResult::kSuccess);
+  REQUIRE(admitted.load());
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Leave(*scope)); // Wrong actual thread.
+  ProfileSettingsReadTestAccess::BeginStop(pm);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(ticket, binding));
+  auto close = std::async(std::launch::async, [&] { ProfileSettingsReadTestAccess::Close(pm); });
+  const auto waiting = close.wait_for(std::chrono::milliseconds(50));
+  release->Set();
+  REQUIRE(xe::threading::Wait(thread->thread(), false, std::chrono::seconds(10)) ==
+          xe::threading::WaitResult::kSuccess);
+  REQUIRE(close.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+  close.get();
+  CHECK(waiting == std::future_status::timeout);
+  CHECK(held.load()); CHECK(left.load());
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(ticket, binding));
+}
+#endif
+
+namespace {
+class OverlappedLogging {
+ public:
+  OverlappedLogging() : previous_(cvars::log_level) {
+    // The Debug ABI formatter dereferences lpdword output parameters before
+    // entry. Guard-page probes exercise the ordinary registered ABI/body.
+    cvars::log_level = std::min(previous_, int32_t(2));
+  }
+  ~OverlappedLogging() { cvars::log_level = previous_; }
+ private:
+  int32_t previous_;
+};
+struct OverlappedAbiFixture {
+  OverlappedLogging logging;
+  ProfileAbiRuntime runtime;
+  LastErrorAbiStorage callers{*runtime.emulator};
+  Memory& memory = *runtime.emulator->memory();
+  uint32_t page = memory.SystemHeapAlloc(0x1000, 0x1000);
+  OverlappedAbiFixture() { REQUIRE(page); Reset(0); }
+  ~OverlappedAbiFixture() { memory.SystemHeapFree(page); }
+  uint32_t overlap() const { return page + 0x100; }
+  uint32_t output() const { return page + 0x200; }
+  xe::be<uint32_t>& Word(uint32_t at) { return callers.Word(at); }
+  void Reset(uint32_t result, uint32_t event = 0, uint32_t length = 0x12345678) {
+    std::memset(memory.TranslateVirtual(page), 0xA7, 0x1000);
+    memory.Zero(overlap(), sizeof(XAM_OVERLAPPED));
+    Word(overlap()) = result; Word(overlap() + 4) = length;
+    Word(overlap() + 0xC) = event;
+  }
+  const cpu::Export* Entry(uint16_t ordinal) {
+    const auto* entry = runtime.emulator->export_resolver()->GetExportByOrdinal("xam.xex", ordinal);
+    REQUIRE(entry); REQUIRE(entry->is_implemented()); REQUIRE(entry->function_data.trampoline);
+    return entry;
+  }
+  uint64_t Call(uint16_t ordinal, uint32_t pointer, uint32_t length, uint32_t wait,
+                uint32_t caller = 0) {
+    auto& c = callers.contexts[caller];
+    c.r[3] = 0xBADC0FFE00000000ull | pointer;
+    c.r[4] = 0xCAFEF00D00000000ull | length;
+    c.r[5] = 0xFEDCBA9800000000ull | wait;
+    Entry(ordinal)->function_data.trampoline(&c);
+    return c.r[3];
+  }
+  uint32_t GuardedPage() {
+    constexpr uint32_t address = 0x90011000;
+    auto* heap = memory.LookupHeap(address); REQUIRE(heap);
+    REQUIRE(heap->AllocFixed(address - 0x1000, 0x3000, 0x1000,
+        kMemoryAllocationReserve, kMemoryProtectRead | kMemoryProtectWrite));
+    REQUIRE(heap->AllocFixed(address, 0x1000, 0x1000,
+        kMemoryAllocationCommit, kMemoryProtectRead | kMemoryProtectWrite));
+    std::memset(memory.TranslateVirtual(address), 0xA7, 0x1000);
+    return address;
+  }
+};
+}  // namespace
+TEST_CASE("Registered overlapped queries return completed operation DWORDs and length",
+          "[kernel][overlapped][abi]") {
+  const auto ordinal = GENERATE(uint16_t(0x1FB), uint16_t(0x43B));
+  const auto result = GENERATE(0u, 5u, 0x80004005u);
+  OverlappedAbiFixture f;
+  const auto* entry = f.Entry(ordinal);
+  CHECK(std::string_view(entry->name) == (ordinal == 0x43B ? "XGetOverlappedResult" : "XamGetOverlappedResult"));
+  f.Reset(result, 0xFFFFFFFF); // Completed calls must not look this event up.
+  const auto original = f.callers.Word(f.callers.Error(0));
+  CHECK(f.Call(ordinal, f.overlap(), f.output(), 1) == uint64_t(result));
+  CHECK(f.Word(f.output()) == 0x12345678);
+  CHECK(f.Word(f.output() - 4) == 0xA7A7A7A7);
+  CHECK(f.Word(f.output() + 4) == 0xA7A7A7A7);
+  CHECK(f.Word(f.overlap()) == result);
+  CHECK(f.callers.Word(f.callers.Error(0)) == original);
+  CHECK(f.callers.Word(f.callers.Error(1)) == 0x11223345);
+}
+TEST_CASE("Pending nonwaiting and eventless queries leave output and LastError alone",
+          "[kernel][overlapped][abi]") {
+  const auto ordinal = GENERATE(uint16_t(0x1FB), uint16_t(0x43B));
+  const bool eventless = GENERATE(false, true);
+  OverlappedAbiFixture f;
+  f.Reset(X_ERROR_IO_PENDING, eventless ? 0u : 0xFFFFFFFFu);
+  CHECK(f.Call(ordinal, f.overlap(), f.output(), eventless ? 1u : 0u) == X_ERROR_IO_INCOMPLETE);
+  CHECK(f.Word(f.output()) == 0xA7A7A7A7);
+  CHECK(f.Word(f.overlap()) == X_ERROR_IO_PENDING);
+  CHECK(f.callers.Word(f.callers.Error(0)) == 0x11223344);
+}
+TEST_CASE("Overlapped queries access only native branch-selected words across guards",
+          "[kernel][overlapped][guards]") {
+  const auto ordinal = GENERATE(uint16_t(0x1FB), uint16_t(0x43B));
+  OverlappedAbiFixture f;
+  const uint32_t last_word = f.GuardedPage() + 0xFFC;
+  f.Word(last_word) = 0x80004005;
+  CHECK(f.Call(ordinal, last_word, 0, 1) == 0x80004005u); // No event/length read.
+  f.Word(last_word) = X_ERROR_IO_PENDING;
+  CHECK(f.Call(ordinal, last_word, f.output(), 0) == X_ERROR_IO_INCOMPLETE);
+  CHECK(f.Word(f.output()) == 0xA7A7A7A7);
+  CHECK(f.Call(ordinal, last_word, f.output(), 1) == X_ERROR_INVALID_PARAMETER);
+  f.Word(last_word) = 0;
+  CHECK(f.Call(ordinal, last_word, f.output(), 0) == X_ERROR_INVALID_PARAMETER);
+  CHECK(f.Word(f.output()) == 0xA7A7A7A7);
+  CHECK(f.Call(ordinal, 0, f.output(), 0) == X_ERROR_INVALID_PARAMETER);
+  CHECK(f.Call(ordinal, f.overlap(), last_word + 4, 0) == X_ERROR_INVALID_PARAMETER);
+  CHECK(f.Word(last_word) == 0);
+}
+TEST_CASE("Native length-store then result-reread order survives aliasing and inherited GCRC",
+          "[kernel][overlapped][abi]") {
+  const auto ordinal = GENERATE(uint16_t(0x1FB), uint16_t(0x43B));
+  OverlappedAbiFixture f;
+  f.Reset(5, 0xFFFFFFFF, 0x6ABCDEF0);
+  {
+    auto lock = global_critical_region::AcquireDirect();
+    CHECK(f.Call(ordinal, f.overlap(), f.overlap(), 0) == 0x6ABCDEF0u);
+  }
+  CHECK(f.Word(f.overlap()) == 0x6ABCDEF0);
+  f.Reset(0x80004005, 0xFFFFFFFF, 0x6ABCDEF0);
+  CHECK(f.Call(ordinal, f.overlap(), f.overlap() + 0xC, 1) == 0x80004005u);
+  CHECK(f.Word(f.overlap() + 0xC) == 0x6ABCDEF0); // No completed-event lookup.
+  CHECK(f.callers.Word(f.callers.Error(0)) == 0x11223344);
+}
+
+#if XE_PLATFORM_LINUX
+namespace {
+// Observe entry to the REAL registered event's wait handle. Return exactly the
+// production primitive; no wait status/completion is supplied by this observer.
+class OverlappedObservedEvent final : public XEvent {
+ public:
+  OverlappedObservedEvent(KernelState* kernel, std::shared_ptr<xe::threading::Event> entered)
+      : XEvent(kernel), entered_(std::move(entered)) {}
+ protected:
+  xe::threading::WaitHandle* GetWaitHandle() override {
+    entered_->Set();
+    return XEvent::GetWaitHandle();
+  }
+ private:
+  std::shared_ptr<xe::threading::Event> entered_;
+};
+struct OverlappedThreadJoin {
+  object_ref<XHostThread>& thread;
+  object_ref<XEvent> release;
+  bool created = false;
+  ~OverlappedThreadJoin() {
+    if (!created) { return; }
+    // Test failure cleanup releases a real wait before fixture destruction;
+    // this never becomes a successful operation/completion assertion.
+    if (release) { release->Set(0, false); }
+    if (xe::threading::Wait(thread->thread(), false, std::chrono::seconds(10)) !=
+        xe::threading::WaitResult::kSuccess) { std::terminate(); }
+  }
+};
+}  // namespace
+TEST_CASE("Actual SYSTEM query waits for a later registered completion and rereads error or success",
+          "[kernel][overlapped][wait][lifetime]") {
+  const auto ordinal = GENERATE(uint16_t(0x1FB), uint16_t(0x43B));
+  const auto operation = GENERATE(0u, 5u, 0x80004005u);
+  OverlappedAbiFixture f;
+  auto* kernel = f.runtime.emulator->kernel_state();
+  auto entered = std::shared_ptr<xe::threading::Event>(xe::threading::Event::CreateManualResetEvent(false));
+  REQUIRE(entered);
+  object_ref<XEvent> event(new OverlappedObservedEvent(kernel, entered));
+  event->Initialize(false, false);
+  f.Reset(X_ERROR_IO_PENDING, event->handle(), 0xBAADF00D);
+  const auto* query = f.Entry(ordinal); const auto* complete = f.Entry(0x1F5);
+  uint32_t result = 0xBAADF00D, completion = 0xBAADF00D, error_after = 0;
+  bool actual_system = false;
+  object_ref<XHostThread> waiter, producer;
+  OverlappedThreadJoin waiter_join{waiter, event}, producer_join{producer, event};
+  waiter = object_ref<XHostThread>(new XHostThread(kernel, 128 * 1024, 0, [&] {
+    auto* self = XThread::GetCurrentThread(); auto* c = self->thread_state()->context();
+    actual_system = self->native_frame_thread_identity().process_type == X_PROCTYPE_SYSTEM;
+    const uint32_t kt = f.Word(uint32_t(c->r[13]) + 0x100);
+    f.Word(kt + 0x160) = 0x31415926;
+    c->r[3] = f.overlap(); c->r[4] = f.output(); c->r[5] = 1;
+    query->function_data.trampoline(c);
+    result = uint32_t(c->r[3]); error_after = f.Word(kt + 0x160);
+    return 0;
+  }, kernel->GetSystemProcess()));
+  waiter_join.created = waiter->Create() == X_STATUS_SUCCESS; REQUIRE(waiter_join.created);
+  REQUIRE(xe::threading::Wait(entered.get(), false, std::chrono::seconds(5)) == xe::threading::WaitResult::kSuccess);
+  CHECK(xe::threading::Wait(waiter->thread(), false, std::chrono::milliseconds(0)) == xe::threading::WaitResult::kTimeout);
+  CHECK(f.Word(f.output()) == 0xA7A7A7A7);
+  producer = object_ref<XHostThread>(new XHostThread(kernel, 128 * 1024, 0, [&] {
+    auto* c = XThread::GetCurrentThread()->thread_state()->context();
+    c->r[3] = f.overlap(); c->r[4] = operation; c->r[5] = operation; c->r[6] = 0x76543210;
+    complete->function_data.trampoline(c); completion = uint32_t(c->r[3]); return 0;
+  }, kernel->GetSystemProcess()));
+  producer_join.created = producer->Create() == X_STATUS_SUCCESS; REQUIRE(producer_join.created);
+  REQUIRE(xe::threading::Wait(producer->thread(), false, std::chrono::seconds(10)) == xe::threading::WaitResult::kSuccess);
+  REQUIRE(xe::threading::Wait(waiter->thread(), false, std::chrono::seconds(10)) == xe::threading::WaitResult::kSuccess);
+  CHECK(actual_system); CHECK(completion == X_ERROR_SUCCESS); CHECK(result == operation);
+  CHECK(f.Word(f.output()) == 0x76543210); CHECK(error_after == 0x31415926);
+  CHECK(f.Word(f.overlap()) == operation);
+}
+TEST_CASE("Successful real event wait rereads a still-pending operation instead of inventing success",
+          "[kernel][overlapped][wait][lifetime]") {
+  const auto ordinal = GENERATE(uint16_t(0x1FB), uint16_t(0x43B));
+  OverlappedAbiFixture f; auto* kernel = f.runtime.emulator->kernel_state();
+  object_ref<XEvent> event(new XEvent(kernel)); event->Initialize(false, true);
+  f.Reset(X_ERROR_IO_PENDING, event->handle(), 0x12345678);
+  const auto* query = f.Entry(ordinal); uint32_t result = 0xBAADF00D;
+  object_ref<XHostThread> thread; OverlappedThreadJoin join{thread, event};
+  thread = object_ref<XHostThread>(new XHostThread(kernel, 128 * 1024, 0, [&] {
+    auto* c = XThread::GetCurrentThread()->thread_state()->context();
+    c->r[3] = f.overlap(); c->r[4] = f.output(); c->r[5] = 1;
+    query->function_data.trampoline(c); result = uint32_t(c->r[3]); return 0;
+  }, kernel->GetSystemProcess()));
+  join.created = thread->Create() == X_STATUS_SUCCESS; REQUIRE(join.created);
+  REQUIRE(xe::threading::Wait(thread->thread(), false, std::chrono::seconds(10)) == xe::threading::WaitResult::kSuccess);
+  CHECK(result == X_ERROR_IO_PENDING); CHECK(f.Word(f.output()) == 0x12345678);
+  CHECK(f.Word(f.overlap()) == X_ERROR_IO_PENDING);
+}
+TEST_CASE("Pending invalid-event wait uses per-API errors and the passed PCR instead of TLS",
+          "[kernel][overlapped][wait][last_error]") {
+  const auto ordinal = GENERATE(uint16_t(0x1FB), uint16_t(0x43B));
+  const bool inhibited = GENERATE(false, true);
+  OverlappedAbiFixture f; auto* kernel = f.runtime.emulator->kernel_state();
+  f.Reset(X_ERROR_IO_PENDING, 0xFFFFFFFF);
+  f.Word(f.callers.Pcr(0) + 0x150) = inhibited ? 1u : 0u;
+  const auto* query = f.Entry(ordinal);
+  uint32_t result = 0xBAADF00D, actual_error = 0;
+  object_ref<XHostThread> thread; OverlappedThreadJoin join{thread, {}};
+  thread = object_ref<XHostThread>(new XHostThread(kernel, 128 * 1024, 0, [&] {
+    auto* actual = XThread::GetCurrentThread()->thread_state()->context();
+    const uint32_t kt = f.Word(uint32_t(actual->r[13]) + 0x100);
+    f.Word(kt + 0x160) = 0x31415926;
+    auto& supplied = f.callers.contexts[0];
+    supplied.r[3] = f.overlap(); supplied.r[4] = f.output(); supplied.r[5] = 1;
+    query->function_data.trampoline(&supplied);
+    result = uint32_t(supplied.r[3]); actual_error = f.Word(kt + 0x160); return 0;
+  }, kernel->GetSystemProcess()));
+  join.created = thread->Create() == X_STATUS_SUCCESS; REQUIRE(join.created);
+  REQUIRE(xe::threading::Wait(thread->thread(), false, std::chrono::seconds(10)) == xe::threading::WaitResult::kSuccess);
+  CHECK(result == (ordinal == 0x43B && inhibited ? 0u : X_ERROR_INVALID_HANDLE));
+  CHECK(f.Word(f.callers.Error(0)) == (ordinal == 0x43B && !inhibited ? X_ERROR_INVALID_HANDLE : 0x11223344u));
+  CHECK(f.Word(f.callers.Error(1)) == 0x11223345);
+  CHECK(actual_error == 0x31415926); CHECK(f.Word(f.output()) == 0xA7A7A7A7);
+}
+#endif
+
+
+#if XE_PLATFORM_LINUX
+TEST_CASE("Registered profile mount survives namespace contention for new and reused aliases",
+          "[kernel][profile_creation][profile_mount][contention][abi]") {
+  const bool reuse = GENERATE(false, true);
+  ProfileAbiRuntime runtime;
+  constexpr uint64_t xuid = 0xE000000000000481ull;
+  X_XAMACCOUNTINFO account{};
+  const auto original = SeedOwnedAccount(runtime, xuid, account);
+  auto* pm = runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  auto* fs = runtime.emulator->file_system();
+  REQUIRE(pm->LoadAccount(xuid));
+  const auto alias = HostAccountMount(xuid);
+  if (reuse) { REQUIRE(pm->MountProfile(xuid)); }
+  const auto previous_device = fs->AcquireDevice(alias);
+  REQUIRE(bool(previous_device) == reuse);
+  ReadExAbiFixture f(*runtime.emulator);
+  const auto* entry = runtime.emulator->export_resolver()->GetExportByOrdinal("xam.xex", 0x237);
+  // Ordinal237 is XamProfileOpen in this export table.
+  REQUIRE(entry); REQUIRE(entry->function_data.trampoline);
+  *f.memory.TranslateVirtual<uint8_t*>(f.allocation + 0x80) = 0;
+  auto context = f.context;
+  context.r[3] = xuid; context.r[4] = f.allocation + 0x80;
+  context.r[5] = 0; context.r[6] = f.Output();
+  std::promise<void> entered;
+  auto entered_future = entered.get_future();
+  std::promise<uint32_t> completed;
+  auto result = completed.get_future();
+  auto namespace_owner = global_critical_region::AcquireDirect();
+  std::thread caller([&] {
+    entered.set_value();
+    try {
+      entry->function_data.trampoline(&context);
+      completed.set_value(uint32_t(context.r[3]));
+    } catch (...) { completed.set_exception(std::current_exception()); }
+  });
+  auto finish = [&](void*) {
+    if (namespace_owner.owns_lock()) { namespace_owner.unlock(); }
+    if (caller.joinable()) { caller.join(); }
+  };
+  std::unique_ptr<void, decltype(finish)> join(reinterpret_cast<void*>(1), finish);
+  REQUIRE(entered_future.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+  // Keep a real competing GCRC owner until this observation completes. The
+  // operation must not report INVALID_PARAMETER just because it contends.
+  CHECK(result.wait_for(std::chrono::milliseconds(500)) == std::future_status::timeout);
+  // A namespace-waiting opener must not retain PM metadata and prevent the
+  // current namespace owner from making this ordinary metadata observation.
+  CHECK(pm->GetAccountCount() == 1);
+  join.reset();
+  const auto status = result.get();
+  CHECK(status == X_ERROR_SUCCESS);
+  if (status == X_ERROR_SUCCESS) {
+    XCONTENT_AGGREGATE_DATA descriptor{};
+    std::memcpy(&descriptor, f.memory.TranslateVirtual(f.Output()), sizeof(descriptor));
+    CHECK(descriptor.content_type == XContentType::kProfile);
+    CHECK(uint32_t(descriptor.title_id) == kDashboardID);
+    CHECK(uint32_t(descriptor.device_id) == 1);
+    CHECK(descriptor.file_name() == xe::string_util::to_hex_string(xuid));
+    CHECK(*f.memory.TranslateVirtual<uint8_t*>(f.Output() - 1) == 0xA7);
+    CHECK(*f.memory.TranslateVirtual<uint8_t*>(f.Output() + sizeof(descriptor)) == 0xA7);
+    const auto actual_device = fs->AcquireDevice(alias); REQUIRE(actual_device);
+    if (reuse) { CHECK(actual_device == previous_device); }
+    REQUIRE(pm->DismountProfile(xuid)); // Release exactly this successful open.
+  }
+  if (reuse) { REQUIRE(pm->DismountProfile(xuid)); }
+  CHECK_FALSE(fs->AcquireDevice(alias));
+  CHECK(OwnedAccountDisk(runtime, xuid) == original);
+  // An inherited caller GCRC still refuses before host I/O. This is distinct
+  // from waiting for another thread's short namespace ownership.
+  std::memset(f.memory.TranslateVirtual(f.Output()), 0xA7, sizeof(XCONTENT_AGGREGATE_DATA));
+  context = f.context;
+  context.r[3] = xuid; context.r[4] = f.allocation + 0x80;
+  context.r[5] = 0; context.r[6] = f.Output();
+  {
+    auto inherited = global_critical_region::AcquireDirect();
+    entry->function_data.trampoline(&context);
+    CHECK(uint32_t(context.r[3]) == X_ERROR_INVALID_PARAMETER);
+  }
+  const auto* output = f.memory.TranslateVirtual<uint8_t*>(f.Output());
+  CHECK(std::all_of(output, output + sizeof(XCONTENT_AGGREGATE_DATA),
+                    [](uint8_t value) { return value == 0xA7; }));
+  CHECK_FALSE(fs->AcquireDevice(alias));
+  CHECK(OwnedAccountDisk(runtime, xuid) == original);
+}
 #endif
 
 }  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+namespace {
+struct OriginalLogonTraceSetting {
+  bool before=cvars::native_system_ui_trace;
+  OriginalLogonTraceSetting(){cvars::native_system_ui_trace=true;}
+  ~OriginalLogonTraceSetting(){cvars::native_system_ui_trace=before;}
+};
+}
+// Journal payload tests confer no native entry/completion/read authority.
+TEST_CASE("Original logon scalar journal survives issuer teardown and preserves stage correlation",
+          "[kernel][profile_creation][original_logon][lifetime]") {
+  OriginalLogonTraceSetting trace;
+  using D=ProfileManager::NativeOriginalLogonDiagnostic;
+  NativeOriginalLogonObservation first,second;
+  {
+    ProfileAbiRuntime runtime;
+    auto sink=runtime.emulator->kernel_state()->xam_state()->profile_manager()->CaptureNativeCreationDiagnosticSink();
+    first=ProfileManager::BeginNativeOriginalLogon(sink,0x20B,0x24,true);
+    second=ProfileManager::BeginNativeOriginalLogon(sink,0x224,0x120424,false);
+    REQUIRE(first.active());REQUIRE(second.active());CHECK(first.attempt()!=second.attempt());
+    sink.reset();runtime.emulator.reset();CHECK(KernelState::shared()==nullptr);
+  }
+  D out;uint32_t observed=99;out.result=0xCD;
+  CHECK_FALSE(ProfileManager::CopyNativeOriginalLogon(first,D::kNativeReturn,out,&observed));
+  CHECK(observed==0);CHECK(out.result==0xCD);
+  D value;value.stage=D::kProtocolReturn;value.result_available=1;value.result=0x1234;value.input_mask_available=1;value.input_nonempty_mask=0;value.input_nonempty_count=0;
+  ProfileManager::RecordNativeOriginalLogon(first,value);
+  value.stage=D::kExportReturn;value.result=0;
+  ProfileManager::RecordNativeOriginalLogon(first,value);
+  REQUIRE(ProfileManager::CopyNativeOriginalLogon(first,D::kProtocolReturn,out,&observed));
+  CHECK(observed==2);CHECK(out.ordinal==0x20B);CHECK(out.flags==0x24);CHECK(out.overlap_present==1);CHECK(out.result==0x1234);CHECK(out.journal!=0);CHECK(out.input_mask_available==1);CHECK(out.input_nonempty_mask==0);CHECK(out.input_nonempty_count==0);
+  const auto journal=out.journal;const auto protocol_sequence=out.capture_sequence;CHECK(protocol_sequence!=0);
+  value.stage=D::kProtocolReturn;value.result=0xFFFF;
+  ProfileManager::RecordNativeOriginalLogon(first,value);
+  REQUIRE(ProfileManager::CopyNativeOriginalLogon(first,D::kProtocolReturn,out));CHECK(out.result==0x1234);
+  REQUIRE(ProfileManager::CopyNativeOriginalLogon(first,D::kExportReturn,out));CHECK(out.result==0);CHECK(out.capture_sequence>protocol_sequence);
+  CHECK_FALSE(ProfileManager::CopyNativeOriginalLogon(second,D::kProtocolReturn,out));
+  REQUIRE(ProfileManager::CopyNativeOriginalLogon(second,D::kEntry,out));
+  CHECK(out.ordinal==0x224);CHECK(out.flags==0x120424);CHECK(out.overlap_present==0);CHECK(out.journal==journal);
+}
+TEST_CASE("Original logon scalar journal bounds attempts and publishes one complete concurrent stage",
+          "[kernel][profile_creation][original_logon][lifetime]") {
+  OriginalLogonTraceSetting trace;ProfileAbiRuntime runtime;
+  using D=ProfileManager::NativeOriginalLogonDiagnostic;
+  auto sink=runtime.emulator->kernel_state()->xam_state()->profile_manager()->CaptureNativeCreationDiagnosticSink();
+  std::array<NativeOriginalLogonObservation,8> attempts;
+  for(size_t i=0;i<attempts.size();++i){attempts[i]=ProfileManager::BeginNativeOriginalLogon(sink,i&1?0x224:0x20B,uint32_t(i),false);REQUIRE(attempts[i].active());CHECK(attempts[i].attempt()==i+1);}
+  CHECK_FALSE(ProfileManager::BeginNativeOriginalLogon(sink,0x20B,0x24,true).active());
+  runtime.emulator.reset();sink.reset();
+  const auto publish=[&](uint32_t result){D d;d.stage=D::kNativeReturn;d.result_available=1;d.result=result;d.error_available=1;d.error_value=result^0x55;ProfileManager::RecordNativeOriginalLogon(attempts[0],d);};
+  std::thread one(publish,0x1234),two(publish,0x5678);one.join();two.join();
+  D out;uint32_t observed=0;
+  REQUIRE(ProfileManager::CopyNativeOriginalLogon(attempts[0],D::kNativeReturn,out,&observed));
+  CHECK(observed==2);CHECK((out.result==0x1234 || out.result==0x5678));CHECK(out.error_value==(out.result^0x55));
+  for(size_t i=0;i<attempts.size();++i){REQUIRE(ProfileManager::CopyNativeOriginalLogon(attempts[i],D::kEntry,out));CHECK(out.flags==i);}
+}
+TEST_CASE("Registered original logon exports retain invalid-buffer ABI and observable legacy return",
+          "[kernel][profile_creation][original_logon][abi]") {
+  OriginalLogonTraceSetting trace;ProfileAbiRuntime runtime;
+  using D=ProfileManager::NativeOriginalLogonDiagnostic;
+  auto* kernel=runtime.emulator->kernel_state();
+  auto sink=kernel->xam_state()->profile_manager()->CaptureNativeCreationDiagnosticSink();
+  for(const uint32_t ordinal:{0x20Bu,0x224u}){
+    const auto* entry=runtime.emulator->export_resolver()->GetExportByOrdinal("xam.xex",ordinal);
+    REQUIRE(entry);REQUIRE(entry->function_data.trampoline);
+    PPCContext context{};context.kernel_state=kernel;context.r[3]=0;context.r[4]=0x24;context.r[5]=0;
+    entry->function_data.trampoline(&context);CHECK(context.r[3]==X_ERROR_INVALID_PARAMETER);
+  }
+  D out;uint32_t observed=0;
+  for(uint32_t attempt=1;attempt<=2;++attempt){
+    REQUIRE(ProfileManager::CopyNativeOriginalLogon(sink,attempt,D::kEntry,out,&observed));
+    CHECK(observed==2);CHECK(out.ordinal==(attempt==1?0x20Bu:0x224u));CHECK(out.flags==0x24);CHECK(out.overlap_present==0);
+    REQUIRE(ProfileManager::CopyNativeOriginalLogon(sink,attempt,D::kAdmissionReturn,out));
+    CHECK(out.disposition_available==1);CHECK(out.disposition==0); // unavailable native; real legacy route
+    REQUIRE(ProfileManager::CopyNativeOriginalLogon(sink,attempt,D::kExportReturn,out));
+    CHECK(out.result_available==1);CHECK(out.result==X_ERROR_INVALID_PARAMETER);
+    CHECK_FALSE(ProfileManager::CopyNativeOriginalLogon(sink,attempt,D::kNativeReturn,out));
+  }
+  const auto third=ProfileManager::BeginNativeOriginalLogon(sink,0x20B,0,false);
+  REQUIRE(third.active());CHECK(third.attempt()==3);
+}
+} // namespace xe::kernel::xam::test

@@ -52,14 +52,21 @@ class NativeIdentityEventOrigins {
     uint32_t slot = 0, object = 0;
     bool operator==(const Listener&) const = default;
   };
+  // Taskless ownership is explicit: the concrete owner pins the real SYSTEM
+  // XThread/code/domain/frame through its bounded body's own return. It grants
+  // no Task generation/reference/descendant authority. Task rules stay exact.
+  enum class WorkOwnerKind : uint32_t { kTask=0, kSystemThreadFrame=1 };
   struct WorkKey {
     Root root;
     uint64_t task_allocation_generation = 0, invocation = 0;
     uint32_t thread = 0, pcr = 0, task = 0, sp = 0, lr = 0, function = 0;
+    WorkOwnerKind owner_kind = WorkOwnerKind::kTask;
     bool valid() const {
-      return root.valid() && task_allocation_generation && invocation && thread && pcr && task >= 0x1000 &&
-             !(task & 3) && sp && !(sp & 15) && lr >= 4 && !(lr & 3) &&
-             function >= 4 && !(function & 3);
+      const bool owner=owner_kind==WorkOwnerKind::kTask ?
+          task_allocation_generation && task>=0x1000 && !(task&3) :
+          owner_kind==WorkOwnerKind::kSystemThreadFrame && !task_allocation_generation && !task;
+      return root.valid() && owner && invocation && thread && pcr &&
+             sp && !(sp & 15) && lr >= 4 && !(lr & 3) && function >= 4 && !(function & 3);
     }
     bool operator==(const WorkKey&) const = default;
   };
@@ -69,10 +76,14 @@ class NativeIdentityEventOrigins {
     uint32_t slot = 0;
     bool operator==(const Work&) const = default;
   };
+  // An existing queue pin transferred into one preallocated actual API cell.
+  // This is delivery only, never a whole consumer/read/Task completion receipt.
+  struct ScalarDelivery { Origin origin;uint64_t enqueue_sequence=0; };
   struct Dequeued {
     bool native_success = false, origin_known = false, retained_by_work = false;
     uint64_t enqueue_sequence = 0;
     Origin origin;
+    ScalarDelivery scalar_delivery;
     // An existing work's earlier entry origin is never changed by dequeue.
     // Multiple source origins are retained as separate dependencies, not
     // collapsed into a current-user/current-epoch label.
@@ -113,6 +124,7 @@ class NativeIdentityEventOrigins {
       if (!origins_[i].serial.compare_exchange_strong(empty, kReserved)) continue;
       origins_[i].references.store(1, std::memory_order_relaxed);
       origins_[i].producer.store(true, std::memory_order_relaxed);
+      origins_[i].orphan_seen.store(false, std::memory_order_relaxed);
       origins_[i].provenance.store(uint32_t(provenance), std::memory_order_relaxed);
       origins_[i].serial.store(id, std::memory_order_release);
       if (closed_.load(std::memory_order_acquire)) {
@@ -211,7 +223,8 @@ class NativeIdentityEventOrigins {
   // normalized_id is the native area's ID (r29 on8328 unlock), not a host ID
   // normalized after GetNext or a per-listener FIFO ordinal.
   bool ReplaceQueued(Listener listener, uint32_t area, uint32_t normalized_id,
-                     uint32_t actual_data, std::optional<Origin> origin) {
+                     uint32_t actual_data, std::optional<Origin> origin,
+                     bool public_identity_hint=false) {
     auto* value = Find(listener);
     if (!value || !Address(area) || !normalized_id || lost()) { Lose(__LINE__,6); return false; }
     Event* destination = nullptr;
@@ -229,14 +242,16 @@ class NativeIdentityEventOrigins {
     // ALWAYS replace origin, even when actual_data is numerically identical.
     // An unowned internal publication overwrites the prior known origin.
     *destination = Event{Event::Kind::kQueued, area, normalized_id, actual_data,
-                         sequence, origin.value_or(Origin{})};
+                         sequence, origin.value_or(Origin{}),
+                         public_identity_hint && actual_data<=0xFu};
     if (old.serial) Release(old);
     return !lost();
   }
   Dequeued TransferSuccessfulDequeue(Listener listener, uint32_t area,
                                     uint32_t normalized_id,
                                     std::optional<uint32_t> actual_data,
-                                    std::optional<Work> consuming_work) {
+                                    std::optional<Work> consuming_work,
+                                    bool allow_scalar_delivery=false) {
     Dequeued result;
     result.native_success = true;
     auto* value = Find(listener);
@@ -254,9 +269,19 @@ class NativeIdentityEventOrigins {
         entry = {};
         return result;
       }
+      if(!work && !consuming_work && allow_scalar_delivery && entry.identity_hint){
+        // Transfer the SAME pin; no Release/Pin gap and no owning resource
+        // operation under the native area lock. A real whole Work wins above.
+        result.scalar_delivery={entry.origin,entry.sequence};entry={};return result;
+      }
       if (!work) {
         // The native queue did consume this entry. Preserve its prior origin
         // as an orphan instead of releasing it at GetNext/API return.
+        // Sticky for this exact origin generation: outer GetNext return or
+        // listener destruction cannot prove this unowned consumer unwound.
+        auto* origin=Find(entry.origin);
+        if(!origin){Lose(__LINE__,7);return result;}
+        origin->orphan_seen.store(true,std::memory_order_release);
         entry.kind = Event::Kind::kOrphan;
         return result;
       }
@@ -291,7 +316,8 @@ class NativeIdentityEventOrigins {
       const uint64_t serial = value.serial.load(std::memory_order_acquire);
       if (!serial || serial == kReserved) continue;
       const auto old = value.key.Load();
-      const bool reused_task = old.task == key.task &&
+      const bool reused_task = old.owner_kind==WorkOwnerKind::kTask &&
+          key.owner_kind==WorkOwnerKind::kTask && old.task == key.task &&
           old.task_allocation_generation != key.task_allocation_generation;
       const bool equal_frame = old.thread == key.thread && old.pcr == key.pcr &&
           old.task == key.task && old.sp == key.sp && old.lr == key.lr &&
@@ -306,7 +332,7 @@ class NativeIdentityEventOrigins {
       // The bridge binds the exact earlier owner, before this native child
       // enters. Same-address tasks, unrelated threads and later equal frames
       // never become a synchronous consumption parent.
-      if (!parent || before.root != key.root ||
+      if (!parent || before.root != key.root || before.owner_kind != key.owner_kind ||
           before.task_allocation_generation != key.task_allocation_generation ||
           before.thread != key.thread || before.pcr != key.pcr ||
           before.task != key.task || before.sp <= key.sp ||
@@ -336,8 +362,10 @@ class NativeIdentityEventOrigins {
     if (entry_origin) Release(*entry_origin);
     Lose(__LINE__,8); return {};
   }
-  // Read only on the same prebound native consuming thread while it owns its
-  // whole body. Other owner/stop threads use owned_empty's atomic facts only.
+  // Read on the same prebound consuming thread, OR while the concrete
+  // bridge owns its metadata mutex and has excluded EVERY active fast cell.
+  // At that latter cut all mutable dependency writers are excluded: fast
+  // transfers require a live cell, host Begin/Finish own the same mutex.
   std::optional<WorkFacts> Facts(Work work) const {
     const auto* value = Find(work);
     if (!value || lost()) return {};
@@ -417,6 +445,15 @@ class NativeIdentityEventOrigins {
     return true;
   }
  private:
+  // Bridge-only matched actual API return. Never touches native Event arrays,
+  // re-pins an origin, or clears this generation's earlier orphan history.
+  bool FinishScalarDelivery(ScalarDelivery& delivery) {
+    if(!delivery.origin.serial || !delivery.enqueue_sequence || lost() || !Find(delivery.origin)){
+      Lose(__LINE__,13);return false;
+    }
+    if(!Release(delivery.origin))return false;
+    delivery={};return true;
+  }
   static constexpr uint64_t kReserved = UINT64_MAX;
   static bool Address(uint32_t value) { return value >= 0x1000 && !(value & 3); }
   uint64_t Next(std::atomic<uint64_t>& counter) {
@@ -428,6 +465,7 @@ class NativeIdentityEventOrigins {
     std::atomic<uint64_t> serial{0};
     std::atomic<uint32_t> references{0};
     std::atomic<bool> producer{false};
+    std::atomic<bool> orphan_seen{false};
     std::atomic<uint32_t> provenance{uint32_t(Provenance::kUnjoinedNativeRequest)};
   };
   struct Event {
@@ -436,6 +474,7 @@ class NativeIdentityEventOrigins {
     uint32_t area = 0, id = 0, data = 0;
     uint64_t sequence = 0;
     Origin origin;
+    bool identity_hint=false; // original public A with mask0..F, never normalized-ID guessing
   };
   struct ListenerEntry {
     std::atomic<uint64_t> serial{0};
@@ -448,16 +487,18 @@ class NativeIdentityEventOrigins {
   // origin set itself is owned by that work's one actual native thread.
   struct AtomicWorkKey {
     std::atomic<uint64_t> kernel{0}, domain{0}, generation{0}, task_generation{0}, invocation{0};
-    std::atomic<uint32_t> thread{0}, pcr{0}, task{0}, sp{0}, lr{0}, function{0};
+    std::atomic<uint32_t> thread{0}, pcr{0}, task{0}, sp{0}, lr{0}, function{0}, owner_kind{0};
     void Store(const WorkKey& key) {
       kernel.store(key.root.kernel); domain.store(key.root.domain); generation.store(key.root.generation);
       task_generation.store(key.task_allocation_generation); invocation.store(key.invocation);
       thread.store(key.thread); pcr.store(key.pcr);
       task.store(key.task); sp.store(key.sp); lr.store(key.lr); function.store(key.function);
+      owner_kind.store(uint32_t(key.owner_kind));
     }
     WorkKey Load() const {
       return {{kernel.load(), domain.load(), generation.load()}, task_generation.load(), invocation.load(),
-              thread.load(), pcr.load(), task.load(), sp.load(), lr.load(), function.load()};
+              thread.load(), pcr.load(), task.load(), sp.load(), lr.load(), function.load(),
+              WorkOwnerKind(owner_kind.load())};
     }
   };
   struct WorkEntry {

@@ -37,11 +37,14 @@ class NativeProfileIdentityRequest final {
        original.size()!=(ordinal==0x20B?32:4*kRowBytes)){
       error=std::make_error_code(std::errc::invalid_argument);return {};
     }
-    // No inferred Local/Gold/NoNetwork values. The authenticated subset is
-    // raw0..F;4000 is natively invalid and unproved families/suppressed native
-    // publication must fail BEFORE any guest entry.
+    // Preserve the established local modes and the two exact local 17559 SignIn
+    // requests. Their service/preflight/UI policy bits execute natively; they
+    // do not provision a Live Account or suppress identity publication.
     if(flags&0x4000u){error=std::make_error_code(std::errc::invalid_argument);return {};}
-    if(flags&~0xFu){error=std::make_error_code(std::errc::operation_not_supported);return {};}
+    const bool native_signin=flags==0x00120420u || flags==0x00120424u;
+    if((flags&~0x2Fu) && !native_signin){
+      error=std::make_error_code(std::errc::operation_not_supported);return {};
+    }
     NativeProfileIdentityRequest out;out.ordinal_=ordinal;out.flags_=flags;
     std::copy(original.begin(),original.end(),out.bytes_.begin());
     const bool add=bool(flags&4u),remove=!add && bool(flags&8u);

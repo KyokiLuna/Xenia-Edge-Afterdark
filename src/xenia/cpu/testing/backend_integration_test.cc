@@ -9,6 +9,7 @@
 
 #include "xenia/cpu/testing/util.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -1421,3 +1422,111 @@ TEST_CASE("STACKPOINT_DESCRIBES_ITS_OWN_FRAME", "[backend]") {
 
   memory->SystemHeapFree(stack_address);
 }
+
+
+#if XE_ARCH_AMD64 || XE_ARCH_ARM64
+TEST_CASE("REMOVE_MODULE_PRESERVES_READY_FOREIGN_OWNER_AT_RETAINED_ENTRY",
+          "[processor][backend][module_retirement]") {
+  const bool forgotten = GENERATE(false, true);
+  CAPTURE(forgotten);
+  constexpr uint32_t kCaller = 0x80050000;
+  constexpr uint32_t kTarget = 0x90118000;
+  constexpr uint64_t kOld = 0xA111A222A333A444ull;
+  constexpr uint64_t kLive = 0xB111B222B333B444ull;
+  constexpr uint64_t kCanary = 0x1122334455667788ull;
+  auto memory = std::make_unique<Memory>();
+  REQUIRE(memory->Initialize());
+  auto processor = std::make_unique<Processor>(memory.get(), nullptr);
+  REQUIRE(processor->Setup(CreateBackend()));
+#if XE_ARCH_AMD64
+  auto* cache = static_cast<backend::x64::X64CodeCache*>(
+      processor->backend()->code_cache());
+#else
+  auto* cache = static_cast<backend::a64::A64CodeCache*>(
+      processor->backend()->code_cache());
+#endif
+  REQUIRE(cache); REQUIRE(cache->has_indirection_table());
+  REQUIRE(cache->HasIndirectionSlot(kTarget));
+  bool old_claims = true;
+  auto old_module = std::make_unique<TestModule>(
+      processor.get(), "Overlap",
+      [&](uint32_t address) { return old_claims && address == kTarget; },
+      [](HIRBuilder& b) {
+        StoreGPR(b, 22, b.Add(LoadGPR(b, 22), b.LoadConstantUint64(1)));
+        StoreGPR(b, 3, b.LoadConstantUint64(kOld)); b.Return(); return true;
+      });
+  Module* old_owner = old_module.get();
+  REQUIRE(processor->AddModule(std::move(old_module)));
+  auto resident = std::make_unique<TestModule>(
+      processor.get(), "Resident",
+      [](uint32_t address) { return address == kCaller; },
+      [](HIRBuilder& b) {
+        b.CallIndirect(LoadGPR(b, 12));
+        StoreGPR(b, 20, b.LoadConstantUint64(kCanary)); b.Return(); return true;
+      }, /*skip_cf_simplification=*/true);
+  REQUIRE(processor->AddModule(std::move(resident)));
+  processor->backend()->CommitExecutableRange(kCaller, kCaller + 0x1000);
+  processor->backend()->CommitExecutableRange(kTarget, kTarget + 0x1000);
+  auto* caller = processor->ResolveFunction(kCaller); REQUIRE(caller);
+  struct Stack {
+    Memory& memory; uint32_t address;
+    ~Stack() { if (address) { memory.SystemHeapFree(address); } }
+  } stack{*memory, memory->SystemHeapAlloc(64 * 1024)};
+  REQUIRE(stack.address);
+  auto thread = std::make_unique<ThreadState>(
+      processor.get(), 0x100, stack.address + 64 * 1024);
+  auto* context = thread->context();
+  processor->backend()->SetGuestRoundingMode(context, 0);
+  context->r[22] = context->r[23] = 0;
+  const auto call = [&] {
+    context->lr = 0xBCBCBCBC; context->r[12] = kTarget;
+    context->r[3] = context->r[20] = 0;
+    REQUIRE(caller->Call(thread.get(), uint32_t(context->lr)));
+    CHECK(context->r[20] == kCanary); return context->r[3];
+  };
+  REQUIRE(call() == kOld);
+  REQUIRE(context->r[22] == 1);
+  // Both states can exist in the real common registry: an older owned symbol
+  // remains in map_, or ForgetSymbol has left only its retained generation.
+  processor->RemoveFunctionByAddress(kTarget);
+  if (forgotten) { old_owner->ForgetSymbol(kTarget); }
+  CHECK(bool(old_owner->LookupSymbol(kTarget, false)) == !forgotten);
+  bool retained = false;
+  old_owner->ForEachFunction([&](Function* f) { retained |= f->address() == kTarget; });
+  REQUIRE(retained);
+  old_claims = false;
+  auto live_module = std::make_unique<TestModule>(
+      processor.get(), "Overlap",
+      [](uint32_t address) { return address == kTarget; },
+      [](HIRBuilder& b) {
+        StoreGPR(b, 23, b.Add(LoadGPR(b, 23), b.LoadConstantUint64(1)));
+        StoreGPR(b, 3, b.LoadConstantUint64(kLive)); b.Return(); return true;
+      });
+  Module* live_owner = live_module.get();
+  REQUIRE(processor->AddModule(std::move(live_module)));
+  // Normal new-owner publication resets its extent, then actual execution
+  // compiles/publishes B at the shared key before A is removed.
+  processor->backend()->CommitExecutableRange(kTarget, kTarget + 0x1000);
+  REQUIRE(call() == kLive);
+  auto* live_function = processor->QueryFunction(kTarget); REQUIRE(live_function);
+  REQUIRE(live_function->module() == live_owner);
+  const auto slot = [&] {
+    const auto host = cache->indirection_table_base_address() +
+                      (kTarget - cache->indirection_guest_base());
+    uint32_t value; std::memcpy(&value, reinterpret_cast<const void*>(host), 4);
+    return value;
+  };
+  const uint32_t live_slot = slot();
+  processor->RemoveModule(old_owner);
+  // Stop before any dispatch if retirement lost the still-live owner or its
+  // normal slot. No retired Function or host target is called in this test.
+  REQUIRE(processor->QueryFunction(kTarget) == live_function);
+  REQUIRE(slot() == live_slot);
+  CHECK(processor->GetModule("Overlap") == live_owner);
+  REQUIRE(processor->ResolveFunction(kTarget) == live_function);
+  context->r[22] = context->r[23] = 0;
+  REQUIRE(call() == kLive);
+  CHECK(context->r[22] == 0); CHECK(context->r[23] == 1);
+  CHECK(processor->QueryFunction(kCaller) == caller);
+}
+#endif

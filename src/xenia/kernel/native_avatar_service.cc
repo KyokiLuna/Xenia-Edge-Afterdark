@@ -426,6 +426,7 @@ struct NativeAvatarService::State {
     std::optional<NativeAvatarAssetSizes> asset_sizes;
     std::shared_ptr<Session> sizing_session;
     bool bootstrap_close = false;
+    bool shutdown_admission_observed = false;  // advisory first entry only
   };
   explicit State(Config c) : config(std::move(c)) {}
   Config config;
@@ -474,7 +475,8 @@ struct NativeAvatarService::State {
     kCoreEntry, kCoreReturn, kCompletionPublication, kPublicReturn,
     kAssetOpenEntry, kAssetOpenAdmission, kAssetOpenReturn, kGuardDenial,
     kAssetOpenArguments, kCompleteEntry, kAnimationWriterEntry,
-    kAnimationWriterReturn, kAnimationCoreReturn, kAnimationJobReturn, kCount
+    kAnimationWriterReturn, kAnimationCoreReturn, kAnimationJobReturn,
+    kBootstrapShutdownAdmission, kCount
   };
   struct DiagnosticPayload {
     uint32_t phase=0,line=0,address=0,status=0,status_kind=0,available=0;
@@ -500,6 +502,26 @@ struct NativeAvatarService::State {
   };
   std::array<DiagnosticCell,size_t(DiagnosticPhase::kCount)> diagnostic_phases;
   DiagnosticCell first_negative;
+  // Stack-only advisory cuts for the already-owned bootstrap Shutdown call.
+  // Each original predicate is evaluated once, in its original short-circuit
+  // position; no authority or resource is acquired by this receipt.
+  struct ShutdownAdmissionCut {
+    enum Stage : uint32_t {
+      kFrame=1, kGuardRoot, kPublicRoot, kReader, kUncertain, kF3,
+      kStopping, kCapacity, kSerial, kSession, kSessionReady,
+      kShutdownEntered, kTitle, kDomain, kFinalTitle, kFinalReader,
+      kFinalUncertain, kFinalF3, kFinalStopping, kFinalCapacity,
+      kSessionChanged, kFinalSerial, kFinalSession, kFinalShutdownEntered,
+      kFinalSessionReady, kWaitUncertain, kWaitDeadline, kOtherGuardExit
+    };
+    uint32_t evaluated=0, failed=0, line=0;
+    bool admitted=false;
+    bool Refused(Stage stage, bool value, uint32_t source) noexcept {
+      evaluated|=uint32_t(1)<<uint32_t(stage);
+      if(value && !failed){failed=uint32_t(stage);line=source;}
+      return value;
+    }
+  };
   // First ORIGINAL uncertainty assignment, independent of negative return
   // phases. Site IDs map to the pinned original source; no resource authority.
   struct UncertaintyPayload {
@@ -736,7 +758,8 @@ struct NativeAvatarService::State {
   bool CloseRequestTask(XThread&,const std::shared_ptr<Request>&,const Frame&,uint32_t);
   void ReapCompleted();
   bool EnterPublic(cpu::ppc::PPCContext&, const Frame&,
-                     const NativeSystemUiPublicCallProfile&);
+                     const NativeSystemUiPublicCallProfile&,
+                     ShutdownAdmissionCut* = nullptr);
   void LeavePublic(cpu::ppc::PPCContext&, const Frame&,
                      const NativeSystemUiPublicCallProfile&);
   bool EnterResident(cpu::ppc::PPCContext&, const Frame&, uint32_t);
@@ -769,8 +792,13 @@ NativeAvatarService::State::NativeSizes(XThread& thread, uint16_t mask) {
 
 bool NativeAvatarService::State::EnterPublic(
     cpu::ppc::PPCContext& c, const Frame& frame,
-    const NativeSystemUiPublicCallProfile& profile) {
-  if (!RootCurrent(profile.address) || !ReaderCurrent() ||
+    const NativeSystemUiPublicCallProfile& profile, ShutdownAdmissionCut* shutdown_cut) {
+  using Cut=ShutdownAdmissionCut;
+  const auto refused=[&](Cut::Stage stage,bool value,uint32_t line) noexcept {
+    return shutdown_cut?shutdown_cut->Refused(stage,value,line):value;
+  };
+  if (refused(Cut::kPublicRoot,!RootCurrent(profile.address),__LINE__) ||
+      refused(Cut::kReader,!ReaderCurrent(),__LINE__) ||
       (profile.call==NativeSystemUiPublicCall::kAvatarLoadAnimation && !AnimationCurrent())) return false;
   std::vector<uint64_t> args;
   for (size_t n = 0; n < profile.argument_count; ++n) {
@@ -790,17 +818,21 @@ bool NativeAvatarService::State::EnterPublic(
         invocation = candidate;
     }
     closing = invocation && invocation->bootstrap_close;
-    if (uncertain || !f3_ready || (stopping && !closing) || requests.size() >= 64 ||
-        next_serial == UINT64_MAX) return false;
+    if (refused(Cut::kUncertain,uncertain,__LINE__) ||
+        refused(Cut::kF3,!f3_ready,__LINE__) ||
+        refused(Cut::kStopping,(stopping && !closing),__LINE__) ||
+        refused(Cut::kCapacity,requests.size() >= 64,__LINE__) ||
+        refused(Cut::kSerial,next_serial == UINT64_MAX,__LINE__)) return false;
     captured_session = session;
     if (profile.call == NativeSystemUiPublicCall::kAvatarInitialize) {
       if (captured_session) return false;
     } else if (IsF2(profile.call)) {
-      if (!captured_session || (!captured_session->ready && !closing) ||
-          captured_session->shutdown_entered) return false;
+      if (refused(Cut::kSession,!captured_session,__LINE__) ||
+          refused(Cut::kSessionReady,(!captured_session->ready && !closing),__LINE__) ||
+          refused(Cut::kShutdownEntered,captured_session->shutdown_entered,__LINE__)) return false;
     }
   }
-  if (!TitleCurrent(closing)) return false;
+  if (refused(Cut::kTitle,!TitleCurrent(closing),__LINE__)) return false;
   auto request = std::make_shared<Request>();
   request->call = profile.call;
   request->message = MessageFor(profile.call);
@@ -809,7 +841,7 @@ bool NativeAvatarService::State::EnterPublic(
   request->public_frame = frame;
   request->caller = retain_object(frame.thread);
   request->domain = config.domain->Acquire();
-  if (!request->domain) return false;
+  if (refused(Cut::kDomain,!request->domain,__LINE__)) return false;
   if (invocation) request->caller_code = invocation->caller_code;
   else {
     if (frame.lr < 4 || (frame.lr & 3)) return false;
@@ -892,15 +924,21 @@ bool NativeAvatarService::State::EnterPublic(
     request->backing = config.kernel->memory()->BorrowNativeAvatarBacking(backing);
     if (!request->backing) return false;
   }
-  if (!TitleCurrent(closing) || !ReaderCurrent()) return false;
+  if (refused(Cut::kFinalTitle,!TitleCurrent(closing),__LINE__) ||
+      refused(Cut::kFinalReader,!ReaderCurrent(),__LINE__)) return false;
   {
     std::lock_guard lock(mutex);
-    if (uncertain || !f3_ready || (stopping && !closing) || requests.size() >= 64 ||
-        session != captured_session || next_serial == UINT64_MAX) return false;
+    if (refused(Cut::kFinalUncertain,uncertain,__LINE__) ||
+        refused(Cut::kFinalF3,!f3_ready,__LINE__) ||
+        refused(Cut::kFinalStopping,(stopping && !closing),__LINE__) ||
+        refused(Cut::kFinalCapacity,requests.size() >= 64,__LINE__) ||
+        refused(Cut::kSessionChanged,session != captured_session,__LINE__) ||
+        refused(Cut::kFinalSerial,next_serial == UINT64_MAX,__LINE__)) return false;
     if (IsF2(profile.call) &&
         profile.call != NativeSystemUiPublicCall::kAvatarInitialize &&
-        (!captured_session || captured_session->shutdown_entered ||
-         (!captured_session->ready && !closing))) return false;
+        (refused(Cut::kFinalSession,!captured_session,__LINE__) ||
+         refused(Cut::kFinalShutdownEntered,captured_session->shutdown_entered,__LINE__) ||
+         refused(Cut::kFinalSessionReady,(!captured_session->ready && !closing),__LINE__))) return false;
     request->serial = next_serial++;
     if (profile.call == NativeSystemUiPublicCall::kAvatarInitialize) {
       request->session->serial = request->serial;
@@ -919,13 +957,13 @@ bool NativeAvatarService::State::EnterPublic(
     for(;;){
       bool ready=true;
       {std::lock_guard lock(mutex);
-        if(uncertain)return false;
+        if(refused(Cut::kWaitUncertain,uncertain,__LINE__))return false;
         for(const auto& [serial,other]:requests)
           if(other!=request && other->session==request->session &&
              !other->public_returned)ready=false;
       }
       if(ready)break;
-      if(std::chrono::steady_clock::now()>=deadline){Poison(__LINE__,2,request,&frame,profile.address);return false;}
+      if(refused(Cut::kWaitDeadline,std::chrono::steady_clock::now()>=deadline,__LINE__)){Poison(__LINE__,2,request,&frame,profile.address);return false;}
       // Same actual original caller/context, no service/Kernel lock held.
       // Already-returned asynchronous jobs remain for original native Stop.
       frame.thread->Delay(0,0,uint64_t(-160000ll));
@@ -2081,6 +2119,24 @@ void NativeAvatarService::ReportDiagnosticsOnHost(const char* boundary) const no
   if(XThread::GetCurrentFiberThread() ||
      global_critical_region::is_held_by_current_thread())return;
   const auto& s=*state_;
+  if(boundary && !std::strcmp(boundary,"StopFailure")){
+    const auto& cell=s.diagnostic_phases[size_t(State::DiagnosticPhase::kBootstrapShutdownAdmission)];
+    const auto captured=cell.state.load(std::memory_order_acquire);
+    const auto taint=s.first_uncertainty.state.load(std::memory_order_acquire);
+    State::UncertaintyPayload origin;
+    if(taint==2)origin=s.first_uncertainty.payload;
+    static NativeSystemUiTraceLimiter shutdown;
+    if(captured==2){
+      const auto& value=cell.payload;
+      shutdown.Emit("avatar","bootstrap_shutdown_admission",
+          {{"phase",value.phase},{"line",value.line},{"evaluated",value.evaluated},
+           {"failed",value.failed},{"admitted",value.flags},{"native_completion",0},
+           {"uncertainty_capture_state",taint},{"uncertainty_line",origin.line},
+           {"uncertainty_site",origin.site}});
+    }else shutdown.Emit("avatar","bootstrap_shutdown_admission_unavailable",
+          {{"capture_state",captured},{"native_completion",0}});
+    return;  // No existing caller/frame/resource payload is republished here.
+  }
   const uint32_t boundary_code=boundary && !std::strcmp(boundary,"Bootstrap")?1u:
       boundary && !std::strcmp(boundary,"Coordinator")?2u:
       boundary && !std::strcmp(boundary,"ForegroundReady")?3u:0u;
@@ -2497,6 +2553,48 @@ uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
       c->r[3]=address==kAnimationWriter?0:uint64_t(int64_t(int32_t(kNotReady)));return 0;
     }
     auto& state=*service->state_;
+    // Observe only the exact call already installed by ShutdownOnBootstrap.
+    // This holder is retained before its short metadata lookup and released
+    // after all original GuardEntry locks, including exceptional unwinding.
+    std::shared_ptr<State::Invocation> shutdown_invocation;
+    if(address==0x81674940 && XThread::IsInThread()){
+      auto* thread=XThread::GetCurrentThread();
+      std::lock_guard lock(state.mutex);
+      const auto it=state.invocations.find(thread);
+      if(it!=state.invocations.end() && !it->second.empty()){
+        const auto& candidate=it->second.back();
+        if(candidate->bootstrap_close && !candidate->shutdown_admission_observed &&
+           candidate->original.thread==thread &&
+           candidate->call==NativeSystemUiPublicCall::kAvatarShutdown && candidate->args.empty()){
+          candidate->shutdown_admission_observed=true;
+          shutdown_invocation=candidate;
+        }
+      }
+    }
+    State::ShutdownAdmissionCut shutdown_cut;
+    struct ShutdownAdmissionPublication {
+      State& state;
+      State::ShutdownAdmissionCut& cut;
+      bool active;
+      ~ShutdownAdmissionPublication() noexcept {
+        if(!active)return;
+        State::DiagnosticPayload value;
+        value.phase=uint32_t(State::DiagnosticPhase::kBootstrapShutdownAdmission);
+        value.line=cut.line;
+        value.address=0x81674940;
+        // This is an admission cut, not an observed native HRESULT/return.
+        value.status=0;value.status_kind=0;
+        value.evaluated=cut.evaluated;
+        value.failed=cut.failed?cut.failed:(cut.admitted?0:uint32_t(State::ShutdownAdmissionCut::kOtherGuardExit));
+        value.flags=cut.admitted;
+        // Preallocated scalar publication only. No log, guest read, resource
+        // release, lock, allocation or callback even under inherited GCRC.
+        state.RecordDiagnostic(value);
+      }
+    } shutdown_publication{state,shutdown_cut,bool(shutdown_invocation)};
+    const auto refused=[&](State::ShutdownAdmissionCut::Stage stage,bool value,uint32_t line) noexcept {
+      return shutdown_invocation?shutdown_cut.Refused(stage,value,line):value;
+    };
     bool resident_scope=false;
     if(address==kFrontend || address==kBuiltin){
       std::lock_guard lock(state.mutex);
@@ -2504,7 +2602,8 @@ uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
       if(!resident_scope)return 1;
     }
     const auto frame=ActualFrame(*c,c->kernel_state);
-    if(!frame || !state.RootCurrent(uint32_t(address))){
+    if(refused(State::ShutdownAdmissionCut::kFrame,!frame,__LINE__) ||
+       refused(State::ShutdownAdmissionCut::kGuardRoot,!state.RootCurrent(uint32_t(address)),__LINE__)){
       if(!resident_scope && !AvatarOnlyIngress(*c,uint32_t(address)))return 1;
       TraceAvatarIngressDenied(*c,uint32_t(address),kNotReady);
       c->r[3]=address==kAnimationWriter?0:uint64_t(int64_t(int32_t(kNotReady)));return 0;
@@ -2541,8 +2640,9 @@ uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
       }
       if(!owned)return passthrough();
     }
-    const bool admitted=profile?state.EnterPublic(*c,*frame,*profile):
-                                state.EnterInternal(*c,*frame,uint32_t(address));
+    const bool admitted=profile?state.EnterPublic(*c,*frame,*profile,
+        shutdown_invocation?&shutdown_cut:nullptr):state.EnterInternal(*c,*frame,uint32_t(address));
+    shutdown_cut.admitted=admitted;
     if(!admitted){
       if(address==kAnimationJob || address==kAnimationCore || address==kAnimationWriter)
         state.Poison(__LINE__,70,{},&*frame,uint32_t(address));

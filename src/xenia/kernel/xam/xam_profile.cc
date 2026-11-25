@@ -74,12 +74,22 @@ dword_result_t XamProfileCreate_entry(
     lpdword_t profile_info_ptr) {
   auto* kernel = kernel_state();
   auto& memory = *kernel->memory();
+  using Observation=ProfileManager::NativeCreationDiagnostic;
+  const auto diagnostic_sink=kernel->xam_state()->profile_manager()->CaptureNativeCreationDiagnosticSink();
+  Observation observation;observation.operation=uint32_t(Observation::Operation::kApi230);
+  observation.flags_available=1;observation.flags=uint32_t(flags);
+  const auto observed_return=[&](Observation::Reason reason,uint32_t value){
+    observation.reason=uint32_t(reason);observation.failure=int32_t(value)<0;
+    observation.return_available=1;observation.return_value=value;
+    ProfileManager::RecordNativeProfileCreation(diagnostic_sink,observation);
+    return value;
+  };
   const auto output = profile_info_ptr.guest_address();
   const auto device = device_id.guest_address();
   if (!account || !output || !device ||
       !util::GuestIoRangeValid(memory, output, 4, true) ||
       !util::GuestIoRangeValid(memory, device, 4, false)) {
-    return X_E_INVALIDARG;
+    return observed_return(Observation::Reason::kApiBuffers,X_E_INVALIDARG);
   }
   // Retail17559 r4 points to a mutable device DWORD. Copy the complete input
   // packet without borrowing any caller pointer across provider work.
@@ -99,12 +109,13 @@ dword_result_t XamProfileCreate_entry(
       (owner_token && XFAILED(util::ReadGuestIoBuffer(memory,
           owner_token.guest_address(),
           std::span<uint8_t>(bytes).subspan(0xA9C, 0x1C))))) {
-    return X_E_INVALIDARG;
+    return observed_return(Observation::Reason::kApiCopy,X_E_INVALIDARG);
   }
   // This manager-owned synchronous provider result is distinct from the
   // original native callback/Task protocol. It never fabricates packet+AB8.
-  return kernel->xam_state()->profile_manager()->ProduceProfileCreationResult(
-      std::move(bytes), output);
+  return observed_return(Observation::Reason::kApiDelegated,
+      kernel->xam_state()->profile_manager()->ProduceProfileCreationResult(
+          std::move(bytes), output));
 }
 DECLARE_XAM_EXPORT1(XamProfileCreate, kNone, kSketchy);
 

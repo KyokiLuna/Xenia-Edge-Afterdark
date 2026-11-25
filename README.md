@@ -56,6 +56,8 @@ The project is developed in tested milestones. The [implementation roadmap](docs
 
 The [HDD checkpoint notes for 2026-11-23](docs/research/17559-hdd-milestone-20261123.md) describe the current integration, validation boundaries and remaining work. Its release bundle carries the actual engineering and AppImage acceptance records. The [2026-11-18 milestone notes](docs/research/17559-hdd-milestone-20261118.md) remain available as a historical record.
 
+Current source progress and the unresolved native sign-in/shutdown failures are recorded in the [Guide regression report](docs/research/17559-checkpoint-guide-regression-20261123.md). The [2026-11-25 source backup](docs/research/17559-source-backup-20261125.md) saves the newer work and an explicitly unapplied research draft; it does not add a checkpoint release or close the HDD gate.
+
 The [V62 checkpoint notes](docs/research/17559-hdd-profile-checkpoint-v62.md) remain a historical record of its Linux profile-persistence and Call of Duty: Black Ops storage/control-setting tests. V62 is a public prerelease; its results do not establish acceptance of later native profile or avatar work.
 
 ## Upstream integration

@@ -8,6 +8,9 @@
  */
 
 #include "xenia/cpu/ppc/ppc_frontend.h"
+
+#include <iterator>
+#include <type_traits>
 #include "xenia/kernel/native_avatar_service.h"
 #include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/kernel/native_xmsg_provenance.h"
@@ -194,11 +197,16 @@ bool PPCFrontend::Initialize() {
     "NativeTaskOperand8","NativeTaskOperand9","NativeTaskOperand10","NativeTaskOperand11"};
   for(uintptr_t i=0;i<12;++i)builtins_.native_identity_task_diagnostic[i]=processor_->DefineBuiltin(
       names[i],NativeIdentityTaskDiagnostic,reinterpret_cast<void*>(i),nullptr);
-  constexpr const char* execution_names[6]={
+  constexpr const char* execution_names[]={
     "NativeTaskExecution0","NativeTaskExecution1","NativeTaskExecution2",
-    "NativeTaskExecution3","NativeTaskExecution4","NativeTaskExecution5"};
-  static_assert(xe::kernel::NativeProfileIdentityOwner::kTaskExecutionSites.size()==6);
-  for(uintptr_t i=0;i<6;++i)builtins_.native_identity_task_execution[i]=processor_->DefineBuiltin(
+    "NativeTaskExecution3","NativeTaskExecution4","NativeTaskExecution5",
+    "NativeTaskExecution6","NativeTaskExecution7","NativeTaskExecution8",
+    "NativeTaskExecution9"};
+  static_assert(std::size(execution_names)==
+      xe::kernel::NativeProfileIdentityOwner::kTaskExecutionSites.size());
+  static_assert(std::size(execution_names)==
+      std::extent_v<decltype(PPCBuiltins::native_identity_task_execution)>);
+  for(uintptr_t i=0;i<std::size(execution_names);++i)builtins_.native_identity_task_execution[i]=processor_->DefineBuiltin(
       execution_names[i],NativeIdentityTaskExecution,reinterpret_cast<void*>(i),nullptr);
   constexpr const char* image_names[17]={
     "NativeImageOperand0",

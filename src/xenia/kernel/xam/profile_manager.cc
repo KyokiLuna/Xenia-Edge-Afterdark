@@ -19,6 +19,7 @@
 #include "xenia/base/filesystem.h"
 #include "xenia/base/host_storage.h"
 #include "xenia/base/logging.h"
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/base/utf8.h"
 #include "xenia/config.h"
 #include "xenia/emulator.h"
@@ -521,6 +522,138 @@ UserProfile* ProfileManager::GetProfile(uint8_t slot) const {
   return held.get();
 }
 
+namespace {
+// Diagnostic metadata only. Each real Load/Mount invocation owns its first
+// refusal, independently of other guest fibers sharing this host thread.
+// No Account identity, names, paths or payload bytes enter this record.
+enum class ProfileAdmissionReason : uint32_t {
+  kNone = 0,
+  kLoadGateClosed = 1,
+  kLoadMetadataLock = 2,
+  kLoadConflictingCachedAccount = 3,
+  kLoadMount = 4,
+  kLoadDurableSnapshot = 5,
+  kLoadCachePublication = 6,
+  kMountCallerGlobalLock = 7,
+  kMountEditReadConflict = 8,
+  kMountEditAlreadyMounted = 9,
+  kMountEditIdentity = 10,
+  kMountSourceMetadataLock = 11,
+  kMountConflictingCachedAccount = 12,
+  kMountSelectedAccount = 13,
+  kMountSelectedSourceMissing = 14,
+  kMountSelectedGeneration = 15,
+  kMountSelectedDevice = 16,
+  kMountSelectedStorage = 17,
+  kMountSelectedIdentity = 18,
+  kMountExactSourceMissing = 19,
+  kMountExactGeneration = 20,
+  kMountExactDevice = 21,
+  kMountExactStorage = 22,
+  kMountExactIdentity = 23,
+  kMountSourceMissing = 24,
+  kMountSourceUnavailable = 25,
+  kMountSourceNotWritable = 26,
+  kMountSourceStorageMissing = 27,
+  kMountSourceStorageRetiring = 28,
+  kMountSourceIdentityMissing = 29,
+  kMountSourceIdentityRetiring = 30,
+  kMountExistingMetadataLock = 31,
+  kMountExistingGlobalLock = 32,
+  kMountProfileRetiring = 33,
+  kMountHeldIdentity = 34,
+  kMountHeldSourceGeneration = 35,
+  kMountHeldSourceAuthority = 36,
+  kMountHeldGuestGeneration = 37,
+  kMountHeldGuestRetiring = 38,
+  kMountHeldViewRetiring = 39,
+  kMountHeldManagedIdentity = 40,
+  kMountHeldDeviceMissing = 41,
+  kMountHeldDeviceRegistration = 42,
+  kMountHeldDeviceStorage = 43,
+  kMountHeldReadUseMissing = 44,
+  kMountHeldReadUseClosed = 45,
+  kMountHeldReadAlreadyMounted = 46,
+  kMountHeldGenerationMissing = 47,
+  kMountHeldReadOverflow = 48,
+  kMountHeldReferencesOverflow = 49,
+  kMountAliasOccupied = 50,
+  kMountGenerationMissing = 51,
+  kMountGenerationExhausted = 52,
+  kMountStorageSubroot = 53,
+  kMountStorageVolume = 54,
+  kMountDeviceInitialization = 55,
+  kMountRecoveryUnavailable = 56,
+  kMountInitialManagedFence = 57,
+  kMountAccountSnapshot = 58,
+  kMountSnapshotReservation = 59,
+  kMountInstallReservation = 60,
+  kMountFinalManagedFence = 61,
+  kMountPrepareRegistration = 62,
+  kMountPreparedDeviceType = 63,
+  kMountPreparedReadUseMissing = 64,
+  kMountPreparedReadUseClosed = 65,
+  kMountPreparedReadAlreadyMounted = 66,
+  kMountPublicationMetadataLock = 67,
+  kMountPublicationProfileRetiring = 68,
+  kMountPublicationAliasOccupied = 69,
+  kMountPublicationStorageRetiring = 70,
+  kMountPublicationIdentityRetiring = 71,
+  kMountPublicationGlobalLock = 72,
+  kMountRegisterPreparedDevice = 73,
+};
+class ProfileAdmissionDiagnostic final {
+ public:
+  enum class Operation : uint32_t { kLoad = 1, kMount = 2 };
+  explicit ProfileAdmissionDiagnostic(Operation operation) noexcept
+      : operation_(operation) { own_.operation = uint32_t(operation); }
+  ~ProfileAdmissionDiagnostic() {
+    // Local guards have unwound, but a caller may still own inherited GCRC.
+    // Diagnostics must not allocate/format/log while that native lock is held.
+    if (!own_.reason || global_critical_region::is_held_by_current_thread()) { return; }
+    static NativeSystemUiTraceLimiter trace;
+    trace.EmitTransition((uint64_t(own_.operation) << 32) | own_.reason,
+        "profile", "account_admission_refused",
+        {{"operation", own_.operation}, {"failed_operation", own_.failed_operation},
+         {"reason", own_.reason}, {"std_error_observed", own_.error_observed},
+         {"std_error_category", own_.error_category}, {"std_error_value", own_.error_value},
+         {"native_status_observed", own_.native_observed}, {"native_status", own_.native_status}});
+  }
+  bool Refused(ProfileAdmissionReason reason, bool refused,
+               const std::error_code* error = nullptr) noexcept {
+    if (refused && !own_.reason) {
+      own_.reason = uint32_t(reason);
+      own_.failed_operation = uint32_t(operation_);
+      if (error) {
+        own_.error_observed = 1;
+        own_.error_value = uint32_t(error->value());
+        own_.error_category = error->category() == std::generic_category() ? 1u :
+            error->category() == std::system_category() ? 2u : 3u;
+      }
+    }
+    return refused;
+  }
+  bool Fail(ProfileAdmissionReason reason,
+            const std::error_code* error = nullptr) noexcept {
+    Refused(reason, true, error); return false;
+  }
+  bool NativeRefused(ProfileAdmissionReason reason, uint32_t status) noexcept {
+    const bool refused = XFAILED(status);
+    if (refused && !own_.reason) {
+      own_.native_observed = 1; own_.native_status = status;
+    }
+    return Refused(reason, refused);
+  }
+ private:
+  struct Record {
+    uint32_t operation = 0, failed_operation = 0, reason = 0;
+    uint32_t error_observed = 0, error_category = 0, error_value = 0;
+    uint32_t native_observed = 0, native_status = 0;
+  } own_;
+  Operation operation_;
+};
+}  // namespace
+
 bool ProfileManager::LoadAccount(const uint64_t xuid) {
   return LoadAccountInternal(xuid, nullptr);
 }
@@ -528,23 +661,27 @@ bool ProfileManager::LoadAccount(const uint64_t xuid) {
 bool ProfileManager::LoadAccountInternal(
     uint64_t xuid, const ContentSourceState* exact_source,
     std::optional<uint64_t> discovery_revision) {
+  ProfileAdmissionDiagnostic diagnostic(ProfileAdmissionDiagnostic::Operation::kLoad);
+  using Reason = ProfileAdmissionReason;
   auto use = account_commit_gate_->Acquire();
-  if (!use) { return false; }
+  if (!use) { return diagnostic.Fail(Reason::kLoadGateClosed); }
   {
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
-    if (!lock.owns_lock()) { return false; }
+    if (!lock.owns_lock()) { return diagnostic.Fail(Reason::kLoadMetadataLock); }
     if (profile_discovery_conflicts_.contains(xuid) &&
         (!discovery_revision || *discovery_revision != profile_discovery_revision_)) {
       std::error_code selected_error;
       // A current exact committed row is an existing data producer, not a
       // fresh XUID-only source choice. Preserve its ordinary read/update path.
-      if (!CaptureCachedAccount(xuid, selected_error)) { return false; }
+      if (!CaptureCachedAccount(xuid, selected_error)) {
+        return diagnostic.Fail(Reason::kLoadConflictingCachedAccount, &selected_error);
+      }
     }
   }
   const std::string mount_name = fmt::format(kDefaultMountFormat, xuid) + ':';
   ReapReleasedProfileReads();
   if (!MountProfileInternal(xuid, {}, {}, exact_source)) {
-    return false;
+    return diagnostic.Fail(Reason::kLoadMount);
   }
   struct MountScope {
     ProfileManager& manager;
@@ -559,8 +696,9 @@ bool ProfileManager::LoadAccountInternal(
 
   std::error_code error;
   auto snapshot = CaptureDurableAccount(xuid, error);
-  if (!snapshot || !PublishAccountCache(std::move(snapshot), error,
-                                        discovery_revision)) {
+  if (diagnostic.Refused(Reason::kLoadDurableSnapshot, !snapshot, &error) ||
+      diagnostic.Refused(Reason::kLoadCachePublication,
+          !PublishAccountCache(std::move(snapshot), error, discovery_revision), &error)) {
     XELOGW("Profile {:016X}: durable Account load refused ({})", xuid,
            error.message());
     return false;
@@ -623,10 +761,14 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
     std::shared_ptr<ProfileReadMountNode> read,
     const ContentSourceState* exact_source, uint32_t* mounted_device_id,
     HostProfileAccountEdit::State* edit) {
+  ProfileAdmissionDiagnostic diagnostic(ProfileAdmissionDiagnostic::Operation::kMount);
+  using Reason = ProfileAdmissionReason;
   if (xe::global_critical_region::is_held_by_current_thread()) {
-    return false;
+    return diagnostic.Fail(Reason::kMountCallerGlobalLock);
   }
-  if (edit && (read || edit->mounted || edit->xuid != xuid)) { return false; }
+  if (edit && (diagnostic.Refused(Reason::kMountEditReadConflict, bool(read)) ||
+      diagnostic.Refused(Reason::kMountEditAlreadyMounted, edit->mounted) ||
+      diagnostic.Refused(Reason::kMountEditIdentity, edit->xuid != xuid))) { return false; }
   const auto bind_edit = [&](const ProfileMount& held) {
     if (!edit) { return; }
     // Same successful lock/counter/namespace publication as the real mount.
@@ -655,12 +797,14 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
     // Legacy primary discovery/creation has no known row yet. Once a genuine
     // Account row exists its exact owning source, not XUID alone, selects it.
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
-    if (!lock.owns_lock()) { return false; }
+    if (!lock.owns_lock()) { return diagnostic.Fail(Reason::kMountSourceMetadataLock); }
     if (profile_discovery_conflicts_.contains(xuid)) {
       std::error_code selected_error;
-      if (!CaptureCachedAccount(xuid, selected_error)) { return false; }
+      if (!CaptureCachedAccount(xuid, selected_error)) {
+        return diagnostic.Fail(Reason::kMountConflictingCachedAccount, &selected_error);
+      }
       const auto selected = CaptureRosterAccount(xuid);
-      if (!selected) { return false; }
+      if (!selected) { return diagnostic.Fail(Reason::kMountSelectedAccount); }
       selected_storage = selected->identity()->storage();
     }
     if (const auto row = account_metadata_.find(xuid);
@@ -671,22 +815,26 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
   const auto source = exact_source
       ? content_manager_.sources().Source(exact_source->source.id)
       : content_manager_.sources().Source(known_source);
-  if (selected_storage && (!source ||
-      source->generation != selected_storage->source_generation() ||
-      source->source.device_id != selected_storage->device_id() ||
-      source->storage != selected_storage->guest_generation() ||
-      source->managed_identity != selected_storage->managed_identity())) {
+  if (selected_storage && (diagnostic.Refused(Reason::kMountSelectedSourceMissing, !source) ||
+      diagnostic.Refused(Reason::kMountSelectedGeneration, source->generation != selected_storage->source_generation()) ||
+      diagnostic.Refused(Reason::kMountSelectedDevice, source->source.device_id != selected_storage->device_id()) ||
+      diagnostic.Refused(Reason::kMountSelectedStorage, source->storage != selected_storage->guest_generation()) ||
+      diagnostic.Refused(Reason::kMountSelectedIdentity, source->managed_identity != selected_storage->managed_identity()))) {
     return false;
   }
-  if (exact_source && (!source || source->generation != exact_source->generation ||
-      source->source.device_id != exact_source->source.device_id ||
-      source->storage != exact_source->storage ||
-      source->managed_identity != exact_source->managed_identity)) {
+  if (exact_source && (diagnostic.Refused(Reason::kMountExactSourceMissing, !source) || diagnostic.Refused(Reason::kMountExactGeneration, source->generation != exact_source->generation) ||
+      diagnostic.Refused(Reason::kMountExactDevice, source->source.device_id != exact_source->source.device_id) ||
+      diagnostic.Refused(Reason::kMountExactStorage, source->storage != exact_source->storage) ||
+      diagnostic.Refused(Reason::kMountExactIdentity, source->managed_identity != exact_source->managed_identity))) {
     return false;
   }
-  if (!source || !source->available || !source->profile_writable ||
-      !source->storage || source->storage->retiring() ||
-      !source->managed_identity || source->managed_identity->retiring()) {
+  if (diagnostic.Refused(Reason::kMountSourceMissing, !source) ||
+      diagnostic.Refused(Reason::kMountSourceUnavailable, !source->available) ||
+      diagnostic.Refused(Reason::kMountSourceNotWritable, !source->profile_writable) ||
+      diagnostic.Refused(Reason::kMountSourceStorageMissing, !source->storage) ||
+      diagnostic.Refused(Reason::kMountSourceStorageRetiring, source->storage->retiring()) ||
+      diagnostic.Refused(Reason::kMountSourceIdentityMissing, !source->managed_identity) ||
+      diagnostic.Refused(Reason::kMountSourceIdentityRetiring, source->managed_identity->retiring())) {
     return false;
   }
   // Intent publication keeps the exact internal identity authority. Guest
@@ -697,47 +845,51 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
   auto* fs = kernel_state_->file_system();
   uint64_t mount_generation = 0;
   {
+    // Namespace admission may wait for an unrelated short kernel critical
+    // region, but never while holding PM metadata. The PM lock stays a try-lock
+    // and this scope performs only retained namespace/counter observation.
+    auto global = xe::global_critical_region::AcquireDirect();
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
     if (!lock.owns_lock()) {
-      return false;
-    }
-    auto global = xe::global_critical_region::TryAcquire();
-    if (!global.owns_lock()) {
-      return false;
+      return diagnostic.Fail(Reason::kMountExistingMetadataLock);
     }
     if (retiring_profiles_.contains(xuid)) {
-      return false;
+      return diagnostic.Fail(Reason::kMountProfileRetiring);
     }
     if (auto found = profile_mounts_.find(key); found != profile_mounts_.end()) {
       auto& held = found->second;
       const auto& device = held.device;
-    if (held.xuid != xuid || held.source_generation != source->generation ||
-        held.source != source_authority ||
-        held.guest_generation != source->storage ||
-        held.guest_generation->retiring() || held.view->retiring() ||
-          held.managed_identity != source->managed_identity || !device ||
-          fs->AcquireDevice(device->mount_path()) != device ||
-          device->storage() != held.view) {
+    if (diagnostic.Refused(Reason::kMountHeldIdentity, held.xuid != xuid) || diagnostic.Refused(Reason::kMountHeldSourceGeneration, held.source_generation != source->generation) ||
+        diagnostic.Refused(Reason::kMountHeldSourceAuthority, held.source != source_authority) ||
+        diagnostic.Refused(Reason::kMountHeldGuestGeneration, held.guest_generation != source->storage) ||
+        diagnostic.Refused(Reason::kMountHeldGuestRetiring, held.guest_generation->retiring()) || diagnostic.Refused(Reason::kMountHeldViewRetiring, held.view->retiring()) ||
+          diagnostic.Refused(Reason::kMountHeldManagedIdentity, held.managed_identity != source->managed_identity) || diagnostic.Refused(Reason::kMountHeldDeviceMissing, !device) ||
+          diagnostic.Refused(Reason::kMountHeldDeviceRegistration, fs->AcquireDevice(device->mount_path()) != device) ||
+          diagnostic.Refused(Reason::kMountHeldDeviceStorage, device->storage() != held.view)) {
       return false;
     }
     if (read) {
       const auto use = read->use.lock();
-      if (!use || !use->Current() || read->mount_generation || !held.mount_generation ||
-          held.read_references == SIZE_MAX) { return false; }
+      if (diagnostic.Refused(Reason::kMountHeldReadUseMissing, !use) ||
+          diagnostic.Refused(Reason::kMountHeldReadUseClosed, !use->Current()) ||
+          diagnostic.Refused(Reason::kMountHeldReadAlreadyMounted, bool(read->mount_generation)) ||
+          diagnostic.Refused(Reason::kMountHeldGenerationMissing, !held.mount_generation) ||
+          diagnostic.Refused(Reason::kMountHeldReadOverflow, held.read_references == SIZE_MAX)) { return false; }
       read->mount_generation = held.mount_generation;
       read->next = held.read_head;
       held.read_head = std::move(read);
       ++held.read_references;
     } else {
-      if (held.references == SIZE_MAX) { return false; }
+      if (held.references == SIZE_MAX) { return diagnostic.Fail(Reason::kMountHeldReferencesOverflow); }
       ++held.references;
     }
     bind_edit(held);
     if (mounted_device_id) { *mounted_device_id = held.device_id; }
     return true;
   }
-  if (fs->AcquireDevice(mount_path) || !next_profile_mount_generation_ ||
-      next_profile_mount_generation_ == UINT64_MAX) {
+  if (diagnostic.Refused(Reason::kMountAliasOccupied, bool(fs->AcquireDevice(mount_path))) ||
+      diagnostic.Refused(Reason::kMountGenerationMissing, !next_profile_mount_generation_) ||
+      diagnostic.Refused(Reason::kMountGenerationExhausted, next_profile_mount_generation_ == UINT64_MAX)) {
       return false;
     }
     mount_generation = next_profile_mount_generation_++;
@@ -748,33 +900,35 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
   auto storage = source->storage->Subroot(
       profile_path.lexically_relative(source->storage->path()), false, error);
   if (!storage) {
-    return false;
+    return diagnostic.Fail(Reason::kMountStorageSubroot, &error);
   }
   auto device = std::make_unique<vfs::HostPathDevice>(
       mount_path, profile_path, false, false, "STFS", storage,
       source->storage);
   const auto storage_volume = content_manager_.sources().CaptureStorageVolume(*source);
-  if (!device->SetStorageVolume(storage_volume) || !device->Initialize()) {
+  if (diagnostic.Refused(Reason::kMountStorageVolume, !device->SetStorageVolume(storage_volume)) ||
+      diagnostic.Refused(Reason::kMountDeviceInitialization, !device->Initialize())) {
     return false;
   }
   auto view = device->storage();
   const auto volume = content_manager_.Volume(source->source.id);
   auto recovery = volume && volume->profile_writable() ? volume->recovery() : nullptr;
-  if (!recovery) { return false; }
+  if (!recovery) { return diagnostic.Fail(Reason::kMountRecoveryUnavailable); }
   auto account_service = std::make_shared<ProfileAccountFileService>(
       xuid, view, recovery, account_commit_gate_);
   // First close new raw alias admission under the SAME namespace lock as
   // VFS OpenFile. A preexisting raw open has already completed its native open
   // by that boundary. A later queued open enters this policy before mutation.
   // On subsequent failure the weak registry retains only a closed tombstone.
-  if (!fs->RegisterManagedFile(account_service)) { return false; }
+  if (!fs->RegisterManagedFile(account_service)) { return diagnostic.Fail(Reason::kMountInitialManagedFence); }
   auto account_observed = view->CaptureSnapshot(
       "Account", ProfileAccountSnapshot::kMaximumBytes, error, true);
-  if (!account_observed) { return false; }
+  if (!account_observed) { return diagnostic.Fail(Reason::kMountAccountSnapshot, &error); }
   // The actual namespace claim is common to VFS and direct base/content IO,
   // remains valid after CAS changes the inode, and refuses all old raw aliases.
   auto reserved = view->ReserveSnapshotFile(account_observed, error);
-  if (!reserved || !device->InstallSnapshotReservation(reserved)) { return false; }
+  if (diagnostic.Refused(Reason::kMountSnapshotReservation, !reserved, &error) ||
+      diagnostic.Refused(Reason::kMountInstallReservation, !device->InstallSnapshotReservation(reserved))) { return false; }
   view = std::move(reserved);
   auto final_service = std::make_shared<ProfileAccountFileService>(
       xuid, view, recovery, account_commit_gate_);
@@ -783,7 +937,7 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
   // an old service's last native-storage owner can run down after that release.
   // Neither service nor the actual target reservation is dropped while locked.
   account_service->Retire();
-  if (!fs->RegisterManagedFile(final_service)) { return false; }
+  if (!fs->RegisterManagedFile(final_service)) { return diagnostic.Fail(Reason::kMountFinalManagedFence); }
   account_service = std::move(final_service);
   // Complete actual guest/backing admission BEFORE either manager/GCRC lock.
   // The opaque VFS capsule keeps the exact admitted device on every failure;
@@ -791,7 +945,7 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
   std::unique_ptr<vfs::Device> registration_device = std::move(device);
   auto prepared_registration = fs->PrepareDeviceRegistration(
       registration_device,error);
-  if (!prepared_registration) { return false; }
+  if (!prepared_registration) { return diagnostic.Fail(Reason::kMountPrepareRegistration, &error); }
   // Allocate the map node outside the metadata publication boundary as well.
   // Inserting this extracted same-allocator node cannot allocate after the
   // device becomes visible in VFS.
@@ -802,11 +956,13 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
   auto& prepared_record = prepared_mount.begin()->second;
   prepared_record.device = std::dynamic_pointer_cast<vfs::HostPathDevice>(
       prepared_registration->device());
-  if (!prepared_record.device) { return false; }
+  if (!prepared_record.device) { return diagnostic.Fail(Reason::kMountPreparedDeviceType); }
   prepared_record.mount_generation = mount_generation;
   if (read) {
     const auto use = read->use.lock();
-    if (!use || !use->Current() || read->mount_generation) { return false; }
+    if (diagnostic.Refused(Reason::kMountPreparedReadUseMissing, !use) ||
+        diagnostic.Refused(Reason::kMountPreparedReadUseClosed, !use->Current()) ||
+        diagnostic.Refused(Reason::kMountPreparedReadAlreadyMounted, bool(read->mount_generation))) { return false; }
     read->mount_generation = mount_generation;
     prepared_record.read_references = 1;
     prepared_record.read_head = std::move(read);
@@ -815,19 +971,19 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
   // Retain a successful registration through any metadata-only rollback;
   // native device/root destruction must follow release of both locks.
   std::shared_ptr<vfs::Device> registration_keepalive;
-  // Destruction of the detached device is ordered after release of this lock.
+  // Acquire namespace before PM metadata. All prepared/native owners above
+  // outlive both guards, so failure/rollback destruction follows their release.
+  auto global = xe::global_critical_region::AcquireDirect();
   std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
-  if (!lock.owns_lock() || retiring_profiles_.contains(xuid) ||
-      profile_mounts_.contains(key) || source->storage->retiring() ||
-      source->managed_identity->retiring()) {
+  if (diagnostic.Refused(Reason::kMountPublicationMetadataLock, !lock.owns_lock()) ||
+      diagnostic.Refused(Reason::kMountPublicationProfileRetiring, retiring_profiles_.contains(xuid)) ||
+      diagnostic.Refused(Reason::kMountPublicationAliasOccupied, profile_mounts_.contains(key)) ||
+      diagnostic.Refused(Reason::kMountPublicationStorageRetiring, source->storage->retiring()) ||
+      diagnostic.Refused(Reason::kMountPublicationIdentityRetiring, source->managed_identity->retiring())) {
     return false;
   }
-  auto global = xe::global_critical_region::TryAcquire();
-  if (!global.owns_lock()) {
-    return false;
-  }
-  if (XFAILED(fs->RegisterPreparedDeviceExclusive(
-          *prepared_registration,registration_keepalive))) {
+  if (diagnostic.NativeRefused(Reason::kMountRegisterPreparedDevice,
+          fs->RegisterPreparedDeviceExclusive(*prepared_registration,registration_keepalive))) {
     return false;
   }
   const auto inserted_mount = profile_mounts_.insert(std::move(mount_node));
@@ -1658,23 +1814,60 @@ void ProfileManager::DiscardProfileCreationResultEntered(uint32_t address) {
   if (owned) { kernel_state_->memory()->SystemHeapFree(address); }
 }
 
+namespace {
+class ProfileCreationDiagnostic final {
+ public:
+  using Observation=ProfileManager::NativeCreationDiagnostic;
+  using Operation=Observation::Operation;
+  using Reason=Observation::Reason;
+  ProfileCreationDiagnostic(std::shared_ptr<ProfileManager::NativeCreationDiagnosticSink> sink,
+      Operation operation) noexcept :sink_(std::move(sink)){
+    value_.operation=uint32_t(operation);
+  }
+  ~ProfileCreationDiagnostic(){ProfileManager::RecordNativeProfileCreation(sink_,value_);}
+  void Flags(uint32_t flags) noexcept {value_.flags_available=1;value_.flags=flags;}
+  void Fail(Reason reason,const std::error_code* error=nullptr) noexcept {
+    if(value_.reason)return;
+    value_.reason=uint32_t(reason);value_.failure=1;
+    if(error){value_.error_available=1;value_.error_value=uint32_t(error->value());
+      value_.error_category=error->category()==std::generic_category()?1u:
+          error->category()==std::system_category()?2u:3u;}
+  }
+  bool Refused(Reason reason,bool refused) noexcept {if(refused)Fail(reason);return refused;}
+  void Result(const ProfileManager::ProfileCreationResult& result) noexcept {
+    value_.result_available=1;value_.result_status=result.status;
+    value_.published=result.published;value_.discovered=result.discovered;value_.signed_in=result.signed_in;
+  }
+  uint32_t Return(uint32_t result) noexcept {
+    value_.return_available=1;value_.return_value=result;return result;
+  }
+  void Pending() noexcept {value_.reason=uint32_t(Reason::kConsumerPending);}
+ private:
+  std::shared_ptr<ProfileManager::NativeCreationDiagnosticSink> sink_;
+  Observation value_;
+};
+}
+
 X_HRESULT ProfileManager::ProduceProfileCreationResult(
     std::array<uint8_t, 0xAC0> bytes, uint32_t output_address) {
+  ProfileCreationDiagnostic diagnostic(CaptureNativeCreationDiagnosticSink(),ProfileCreationDiagnostic::Operation::kProducer);
+  using Reason=ProfileCreationDiagnostic::Reason;
   auto use = account_commit_gate_->Acquire();
-  if (!use) { return X_E_FAIL; }
+  if (!use) { diagnostic.Fail(Reason::kProducerGate); return diagnostic.Return(X_E_FAIL); }
   auto& memory = *kernel_state_->memory();
-  if (!output_address || global_critical_region::is_held_by_current_thread() ||
-      !util::GuestIoRangeValid(memory, output_address, 4, true)) {
-    return X_E_INVALIDARG;
+  if (diagnostic.Refused(Reason::kProducerOutput,!output_address) ||
+      diagnostic.Refused(Reason::kProducerGlobalLock,global_critical_region::is_held_by_current_thread()) ||
+      diagnostic.Refused(Reason::kProducerOutputRange,!util::GuestIoRangeValid(memory, output_address, 4, true))) {
+    return diagnostic.Return(X_E_INVALIDARG);
   }
   std::error_code error;
   const auto record = AllocateProfileCreationResultEntered(bytes, error);
-  if (!record) { return X_HRESULT_FROM_WIN32(X_ERROR_NOT_ENOUGH_MEMORY); }
+  if (!record) { diagnostic.Fail(Reason::kProducerAllocation,&error); return diagnostic.Return(X_HRESULT_FROM_WIN32(X_ERROR_NOT_ENOUGH_MEMORY)); }
   std::array<uint8_t, 4> word{};
   xe::store_and_swap<uint32_t>(word.data(), record);
   if (XFAILED(util::WriteGuestIoBuffer(memory, output_address, word))) {
     DiscardProfileCreationResultEntered(record);
-    return X_E_INVALIDARG;
+    diagnostic.Fail(Reason::kProducerOutputWrite);return diagnostic.Return(X_E_INVALIDARG);
   }
   // This synchronous HLE provider publishes its owned pending result before
   // processing the device DWORD. Retail Schedule may run its native callback
@@ -1684,10 +1877,11 @@ X_HRESULT ProfileManager::ProduceProfileCreationResult(
   const auto process = [&] {
     const uint32_t flags = xe::load_and_swap<uint32_t>(bytes.data());
     const bool high_flag = xe::load_and_swap<uint32_t>(bytes.data() + 0xABC) != 0;
+    diagnostic.Flags(flags|(high_flag?0x80000000u:0u));
     if ((flags & 1) || high_flag) {
       uint32_t account_flags = xe::load_and_swap<uint32_t>(bytes.data() + 8) | 1;
-      if (std::all_of(bytes.begin() + 0x40, bytes.begin() + 0x44,
-                      [](uint8_t value) { return value == 0; })) {
+      if (std::any_of(bytes.begin() + 0x40, bytes.begin() + 0x44,
+                      [](uint8_t value) { return value != 0; })) {
         account_flags |= 0x10000000u;
       }
       if (high_flag) {
@@ -1697,6 +1891,7 @@ X_HRESULT ProfileManager::ProduceProfileCreationResult(
       xe::store_and_swap<uint32_t>(bytes.data() + 8, account_flags);
       if (XFAILED(util::WriteGuestIoBuffer(memory, record + 8,
               std::span<const uint8_t>(bytes).subspan(8, 4)))) {
+        diagnostic.Fail(Reason::kProducerAccountFlagsWrite);
         result.status = X_ERROR_INVALID_PARAMETER; return;
       }
     }
@@ -1707,37 +1902,44 @@ X_HRESULT ProfileManager::ProduceProfileCreationResult(
       xe::store_and_swap<uint64_t>(bytes.data() + 0xA78, result.xuid);
       if (XFAILED(util::WriteGuestIoBuffer(memory, record + 0xA78,
               std::span<const uint8_t>(bytes).subspan(0xA78, 8)))) {
+        diagnostic.Fail(Reason::kProducerGeneratedIdentityWrite);
         result.status = X_ERROR_INVALID_PARAMETER; return;
       }
     } else if ((result.xuid & 0xF000000000000000ull) != 0xE000000000000000ull) {
+      diagnostic.Fail(Reason::kProducerSuppliedIdentityClass);
       result.status = X_ERROR_INVALID_PARAMETER; return;
     }
     if (flags & 2) {
       // This paired HLE provider creates local profiles. The native machine
       // logon/provisioning phase is unavailable, not an invalid native flag or
       // an invented disconnected/online success. Preserve all supplied data.
+      diagnostic.Fail(Reason::kProducerOnlinePhase);
       result.status = X_ERROR_NOT_SUPPORTED; return;
     }
     const uint32_t device_address = xe::load_and_swap<uint32_t>(bytes.data() + 4);
     if (XFAILED(util::ReadGuestIoBuffer(memory, device_address, word))) {
+      diagnostic.Fail(Reason::kProducerDeviceRead);
       result.status = X_ERROR_INVALID_PARAMETER; return;
     }
     if (!xe::load_and_swap<uint32_t>(word.data())) {
       if (!util::GuestIoRangeValid(memory, device_address, 4, true)) {
+        diagnostic.Fail(Reason::kProducerDeviceWriteRange);
         result.status = X_ERROR_INVALID_PARAMETER; return;
       }
       // Use the same real default-device selection as the registered content
       // provider. Its guest write precedes creation and is never rolled back.
       const auto devices = ListStorageDevices(kernel_state_, true);
-      if (devices.empty()) { result.status = X_ERROR_DEVICE_NOT_CONNECTED; return; }
+      if (devices.empty()) { diagnostic.Fail(Reason::kProducerNoDefaultDevice); result.status = X_ERROR_DEVICE_NOT_CONNECTED; return; }
       xe::store_and_swap<uint32_t>(word.data(), devices.front().device_id);
       if (XFAILED(util::WriteGuestIoBuffer(memory, device_address, word))) {
+        diagnostic.Fail(Reason::kProducerDeviceWrite);
         result.status = X_ERROR_INVALID_PARAMETER; return;
       }
     }
     // Retail reloads after the default-device phase. No translated pointer
     // or reference to caller memory crosses real provider/filesystem work.
     if (XFAILED(util::ReadGuestIoBuffer(memory, device_address, word))) {
+      diagnostic.Fail(Reason::kProducerDeviceReload);
       result.status = X_ERROR_INVALID_PARAMETER; return;
     }
     const uint32_t device_id = xe::load_and_swap<uint32_t>(word.data());
@@ -1746,31 +1948,34 @@ X_HRESULT ProfileManager::ProduceProfileCreationResult(
     result = CreateProfileDetailed(account, result.xuid, false, 0, 0, device_id);
   };
   try { process(); }
-  catch (...) { result.status = X_ERROR_FUNCTION_FAILED; }
+  catch (...) { diagnostic.Fail(Reason::kProducerException); result.status = X_ERROR_FUNCTION_FAILED; }
   // Complete the already-issued result under this operation's original Use,
   // even if admission closed while the genuine transaction was in flight.
   if (!CompleteProfileCreationResultEntered(record, result)) {
     DiscardProfileCreationResultEntered(record);
-    return X_E_FAIL;
+    diagnostic.Fail(Reason::kProducerCompletion);diagnostic.Result(result);return diagnostic.Return(X_E_FAIL);
   }
-  return X_E_SUCCESS;
+  diagnostic.Result(result);return diagnostic.Return(X_E_SUCCESS);
 }
 
 X_HRESULT ProfileManager::ConsumeProfileCreationResult(
     uint32_t address, uint32_t xuid_destination) {
+  ProfileCreationDiagnostic diagnostic(CaptureNativeCreationDiagnosticSink(),ProfileCreationDiagnostic::Operation::kConsumer234);
+  using Reason=ProfileCreationDiagnostic::Reason;
   auto use = account_commit_gate_->Acquire();
-  if (!use) { return X_E_FAIL; }
-  if (!address || global_critical_region::is_held_by_current_thread()) {
-    return X_E_INVALIDARG;
+  if (!use) { diagnostic.Fail(Reason::kConsumerGate); return diagnostic.Return(X_E_FAIL); }
+  if (diagnostic.Refused(Reason::kConsumerInput,!address) ||
+      diagnostic.Refused(Reason::kConsumerGlobalLock,global_critical_region::is_held_by_current_thread())) {
+    return diagnostic.Return(X_E_INVALIDARG);
   }
   ProfileCreationResult result;
   {
     std::lock_guard lock(profile_creation_mutex_);
     const auto found = profile_creation_results_.find(address);
     if (found == profile_creation_results_.end() || found->second.consuming) {
-      return X_E_INVALIDARG;
+      diagnostic.Fail(Reason::kConsumerUnknownRecord);return diagnostic.Return(X_E_INVALIDARG);
     }
-    if (!found->second.completed) { return 0x8000000Au; }
+    if (!found->second.completed) { diagnostic.Pending();return diagnostic.Return(0x8000000Au); }
     found->second.consuming = true;
     result = found->second.result;
   }
@@ -1785,21 +1990,23 @@ X_HRESULT ProfileManager::ConsumeProfileCreationResult(
       util::GuestIoRangesOverlap(*kernel_state_->memory(), address, 0xAC0,
                                  xuid_destination, 8)) {
     cancel_consumption();
-    return X_E_INVALIDARG;
+    diagnostic.Fail(Reason::kConsumerDestination);return diagnostic.Return(X_E_INVALIDARG);
   }
   std::array<uint8_t, 8> bytes{};
   xe::store_and_swap<uint64_t>(bytes.data(), result.xuid);
   if (XFAILED(util::WriteGuestIoBuffer(*kernel_state_->memory(),
                                       xuid_destination, bytes))) {
     cancel_consumption();
-    return X_E_INVALIDARG;
+    diagnostic.Fail(Reason::kConsumerWrite);return diagnostic.Return(X_E_INVALIDARG);
   }
   {
     std::lock_guard lock(profile_creation_mutex_);
     profile_creation_results_.erase(address);
   }
   kernel_state_->memory()->SystemHeapFree(address);
-  return X_HRESULT_FROM_WIN32(result.status);
+  diagnostic.Result(result);
+  if(result.status!=X_ERROR_SUCCESS)diagnostic.Fail(Reason::kConsumerTerminal);
+  return diagnostic.Return(X_HRESULT_FROM_WIN32(result.status));
 }
 
 ProfileManager::ProfileCreationResult ProfileManager::CreateProfileDetailed(
@@ -1822,28 +2029,34 @@ ProfileManager::ProfileCreationResult ProfileManager::CreateProfileDetailed(
     const X_XAMACCOUNTINFO& account, uint64_t xuid, bool autologin,
     uint32_t avatar_preset, uint32_t stock_picture,
     std::optional<uint32_t> selected_device) {
+  ProfileCreationDiagnostic diagnostic(CaptureNativeCreationDiagnosticSink(),ProfileCreationDiagnostic::Operation::kTransaction);
+  using Reason=ProfileCreationDiagnostic::Reason;
   ProfileCreationResult result;
   result.xuid = xuid;
   auto use = account_commit_gate_->Acquire();
-  if (!use) { result.status = X_ERROR_CANCELLED; return result; }
+  if (!use) { diagnostic.Fail(Reason::kTransactionGate); result.status = X_ERROR_CANCELLED; diagnostic.Result(result); return result; }
   if (!xuid || !IsGamertagValid(account.GetGamertagString())) {
+    diagnostic.Fail(Reason::kTransactionInput);
     result.status = X_ERROR_INVALID_PARAMETER;
-    return result;
+    diagnostic.Result(result); return result;
   }
   if (global_critical_region::is_held_by_current_thread()) {
+    diagnostic.Fail(Reason::kTransactionGlobalLock);
     result.status = X_ERROR_BUSY;
-    return result;
+    diagnostic.Result(result); return result;
   }
   {
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
     if (!lock.owns_lock() || preparing_profiles_.contains(xuid) ||
         retiring_profiles_.contains(xuid)) {
+      diagnostic.Fail(Reason::kTransactionReservation);
       result.status = X_ERROR_BUSY;
-      return result;
+      diagnostic.Result(result); return result;
     }
     if (accounts_.contains(xuid)) {
+      diagnostic.Fail(Reason::kTransactionExists);
       result.status = X_ERROR_ALREADY_EXISTS;
-      return result;
+      diagnostic.Result(result); return result;
     }
     preparing_profiles_.insert(xuid);
   }
@@ -1859,40 +2072,45 @@ ProfileManager::ProfileCreationResult ProfileManager::CreateProfileDetailed(
   if (selected_device) {
     source = content_manager_.sources().WritableSource(*selected_device);
     if (!source) {
+      diagnostic.Fail(Reason::kTransactionDevice);
       const auto candidates = content_manager_.sources().Sources(*selected_device);
       const bool has_writable = std::any_of(candidates.begin(), candidates.end(),
           [](const auto& candidate) { return !candidate.source.read_only; });
       result.status = !has_writable && std::any_of(candidates.begin(), candidates.end(),
           [](const auto& candidate) { return candidate.available; })
           ? X_ERROR_ACCESS_DENIED : X_ERROR_DEVICE_NOT_CONNECTED;
-      return result;
+      diagnostic.Result(result); return result;
     }
-    if (!source->profile_writable) { result.status = X_ERROR_ACCESS_DENIED; return result; }
+    if (!source->profile_writable) { diagnostic.Fail(Reason::kTransactionPermission); result.status = X_ERROR_ACCESS_DENIED; diagnostic.Result(result); return result; }
     if (!source->available || !content_manager_.sources().CaptureStorageVolume(*source)) {
+      diagnostic.Fail(Reason::kTransactionVolume);
       result.status = X_ERROR_DEVICE_NOT_CONNECTED;
-      return result;
+      diagnostic.Result(result); return result;
     }
   }
   const auto& installed = kernel_state_->emulator()->installed_system_source();
   if (!installed) {
+    diagnostic.Fail(Reason::kTransactionInstalled);
     result.status = X_ERROR_FILE_NOT_FOUND;
-    return result;
+    diagnostic.Result(result); return result;
   }
   std::error_code error;
   auto recipe = BuildInitialLocalProfile(account, xuid, installed->snapshot(),
                                          avatar_preset, stock_picture, error);
   if (!recipe) {
+    diagnostic.Fail(Reason::kTransactionRecipe,&error);
     XELOGW("Profile {:016X}: complete initial recipe unavailable ({})", xuid,
            error.message());
     result.status = X_ERROR_FUNCTION_FAILED;
-    return result;
+    diagnostic.Result(result); return result;
   }
   // Existing host callers retain their hdd default and its original recipe
   // ordering; the registered ABI passes an explicit resolved device instead.
   if (!selected_device) { source = content_manager_.sources().Source("hdd"); }
   if (!source || !source->available || !source->profile_writable) {
+    diagnostic.Fail(Reason::kTransactionSource);
     result.status = X_ERROR_DEVICE_NOT_CONNECTED;
-    return result;
+    diagnostic.Result(result); return result;
   }
   recipe->descriptor.device_id = source->source.device_id;
   // Publication takes its own copy. Retain this exact origin for the first
@@ -1900,9 +2118,10 @@ ProfileManager::ProfileCreationResult ProfileManager::CreateProfileDetailed(
   result.status = content_manager_.CreateInitialPackage(
       xuid, recipe->descriptor, recipe->members, source);
   if (result.status != X_ERROR_SUCCESS) {
+    diagnostic.Fail(Reason::kTransactionPublication);
     XELOGW("Profile {:016X}: complete initial publication failed ({:08X})",
            xuid, result.status);
-    return result;
+    diagnostic.Result(result); return result;
   }
   result.published = true;
   // Release creation admission before ordinary discovery and sign-in enter
@@ -1918,10 +2137,11 @@ ProfileManager::ProfileCreationResult ProfileManager::CreateProfileDetailed(
     result.signed_in = bool(CaptureProfile(xuid));
   }
   if (!result.discovered || (autologin && !result.signed_in)) {
+    diagnostic.Fail(!result.discovered?Reason::kTransactionDiscovery:Reason::kTransactionSignin);
     XELOGW("Profile {:016X} created durably; {} must be retried", xuid,
            result.discovered ? "sign-in" : "discovery");
   }
-  return result;
+  diagnostic.Result(result); return result;
 }
 
 bool ProfileManager::CreateProfile(const std::string gamertag, bool autologin,

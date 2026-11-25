@@ -10,6 +10,277 @@ namespace xe::kernel {
 // or renderer/GPU acknowledgment is constructed by these source tests.
 class NativeIdentityListenerBridgeTestAccess final {
  public:
+  static void SystemThreadFrameConsumer(bool wrong_return){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto life=std::make_shared<int>(23);
+    const auto source_a=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life));
+    const auto source_b=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,32,38,life));
+    const auto origin_a=bridge.AdoptSource(source_a),origin_b=bridge.AdoptSource(source_b);REQUIRE(origin_a);REQUIRE(origin_b);
+    const auto registration=ListenerFrame(root,0x816A8498,life);const B::Area area{0x90005000,0xA,0xA};
+    const auto listener=bridge.BeforeRegistration(registration,0x81A821FC,0x90004000,std::span(&area,1),life);
+    REQUIRE(listener);REQUIRE(bridge.RegistrationReturned(*listener,*registration));
+    const L::WorkKey key{root,0,43,41,0x90002000,0,0x707DF740,0x81A4011C,0x81A3F848,L::WorkOwnerKind::kSystemThreadFrame};
+    REQUIRE(key.valid());CHECK(key.task==0);CHECK(key.task_allocation_generation==0);
+    const auto whole=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(key,source_a,life));
+    const auto work=bridge.AdoptWholeWork(whole);REQUIRE(work);
+    REQUIRE(bridge.ledger_.ReplaceQueued(*listener,area.address,0xA,0,*origin_b));
+    const auto next=std::shared_ptr<const B::Frame>(new B::Frame(root,101,103,107,41,0x90002000,
+        0x707DF640,0x81A3F890,0x816A8C00,life,2));
+    std::array<uint8_t,4> selected{0,0,0,0xA};std::atomic<void*> cell_slot{nullptr};
+    auto* cell=bridge.BeforeGetNext(next,*work,0x10000180,0,0,0,selected.data(),nullptr,cell_slot);REQUIRE(cell);
+    REQUIRE(bridge.ReferenceReturned(cell,0x10000180,0,0x90004000));
+    auto regs=FastRegisters();regs.lr=0x816A8C94;regs.r[1]=0x707DF640-0x90;regs.r[3]=area.address;
+    REQUIRE(B::FastEnter(cell,regs,0x816A8648));
+    regs.lr=0x816A8874;regs.r[1]-=0xB0;regs.r[3]=0x9000401C;regs.r[30]=area.address;regs.r[25]=0;
+    REQUIRE(B::FastBeforeUnlock(cell,regs));
+    regs.lr=0x816A8C94;regs.r[1]+=0xB0;regs.r[3]=0;REQUIRE(B::FastReturn(cell,regs,0x816A8648));
+    REQUIRE(bridge.BeforeReferenceRelease(cell,0x90004000));REQUIRE(bridge.ReferenceReleaseReturned(cell,0x90004000));
+    REQUIRE(bridge.OuterReturned(cell,next,1));CHECK(cell_slot.load()==nullptr);
+    // BOOL1 completed the public API, but the real finite F848 consumer has
+    // not returned. Its entry A and consumed B remain separate owned duties.
+    B::SourceProducerObservation observation;
+    CHECK_FALSE(bridge.SourceProducerQuiescent(*origin_a,&observation));CHECK(observation.consumer_reason==4);
+    CHECK_FALSE(bridge.SourceProducerQuiescent(*origin_b,&observation));CHECK(observation.consumer_reason==5);CHECK_FALSE(observation.orphaned);
+    auto facts=bridge.CaptureDependencies(*work);REQUIRE(facts);CHECK(facts->entry==source_a);
+    CHECK(facts->count==1);CHECK(facts->dequeued[0]==source_b);CHECK_FALSE(facts->unknown);
+    auto returned=key;if(wrong_return)returned.lr+=4;
+    if(wrong_return){CHECK_FALSE(bridge.FinishWholeWorkNormally(*work,returned,whole));CHECK(bridge.lost());return;}
+    REQUIRE(bridge.FinishWholeWorkNormally(*work,returned,whole));
+    CHECK(bridge.SourceOnlyProducer(*origin_a));CHECK(bridge.SourceOnlyProducer(*origin_b));CHECK_FALSE(bridge.lost());
+  }
+  static void SystemThreadFrameKeyRefusesTaskClaims(uint32_t variant){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto life=std::make_shared<int>(23);
+    const auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life));
+    REQUIRE(bridge.AdoptSource(source));
+    L::WorkKey key{root,0,43,41,0x90002000,0,0x707DF740,0x81A4011C,0x81A3F848,L::WorkOwnerKind::kSystemThreadFrame};
+    if(variant==0)key.owner_kind=L::WorkOwnerKind::kTask;
+    if(variant==1)key.task=0x90003000;
+    if(variant==2)key.task_allocation_generation=41;
+    if(variant==3)key.owner_kind=static_cast<L::WorkOwnerKind>(2);
+    CHECK_FALSE(key.valid());
+    const auto whole=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(key,source,life));
+    CHECK_FALSE(bridge.AdoptWholeWork(whole));CHECK(bridge.SourceOnlyProducer(*bridge.SourceOrigin(source)));
+  }
+  static void SystemFrameParentAuthorityRefusesMixedClaims(uint32_t variant){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto life=std::make_shared<int>(23);
+    const auto a=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life));
+    const auto b=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,32,38,life));
+    const auto oa=bridge.AdoptSource(a),ob=bridge.AdoptSource(b);REQUIRE(oa);REQUIRE(ob);
+    L::WorkKey parent_key{root,41,43,47,0x90001000,0x90002000,0x71000000,0x816CD70C,0x8187DE10};
+    if(variant==1){parent_key.task=0;parent_key.task_allocation_generation=0;parent_key.owner_kind=L::WorkOwnerKind::kSystemThreadFrame;}
+    const auto parent=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(parent_key,a,life));
+    const auto parent_work=bridge.AdoptWholeWork(parent);REQUIRE(parent_work);
+    const auto listener=bridge.ledger_.RegisterListener(0x90004000);REQUIRE(listener);
+    REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,0,*ob));
+    REQUIRE(bridge.ledger_.TransferSuccessfulDequeue(*listener,0x90005000,0xA,0,*parent_work).retained_by_work);
+    auto child_key=parent_key;child_key.invocation=44;child_key.sp-=0x90;child_key.lr=0x8187DEC0;child_key.function=0x81879EA0;
+    auto entry=a;auto claimed_parent=parent;
+    if(variant==0){child_key.task=0;child_key.task_allocation_generation=0;child_key.owner_kind=L::WorkOwnerKind::kSystemThreadFrame;}
+    if(variant==1){child_key.task=0x90002000;child_key.task_allocation_generation=41;child_key.owner_kind=L::WorkOwnerKind::kTask;}
+    if(variant==2)entry=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life)); // unregistered equal source
+    if(variant==3)claimed_parent=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(parent_key,a,life)); // equal value, different retained owner
+    if(variant==4)++child_key.task_allocation_generation; // recycled Task cannot become synchronous parent
+    const auto child=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(child_key,entry,life,claimed_parent));
+    CHECK_FALSE(bridge.AdoptWholeWork(child));CHECK(bridge.lost());
+    // Fail-closed refusal keeps the genuine whole parent and both registered
+    // source owners retained; lost ledger metadata is deliberately unreadable.
+    const auto* retained=bridge.WorkFor(*parent_work);REQUIRE(retained);
+    CHECK(retained->source==parent);CHECK(retained->id==*parent_work);
+    CHECK_FALSE(retained->finished);
+    CHECK(bridge.sources_[oa->slot]==a);CHECK(bridge.origins_[oa->slot]==*oa);
+    CHECK(bridge.sources_[ob->slot]==b);CHECK(bridge.origins_[ob->slot]==*ob);
+  }
+  static void TypedScalarDelivery(uint32_t variant){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto life=std::make_shared<int>(23);
+    const auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life));
+    const auto origin=bridge.AdoptSource(source);REQUIRE(origin);
+    const auto registration=ListenerFrame(root,0x816A8498,life);const B::Area area{0x90005000,0xA,0xA};
+    const auto listener=bridge.BeforeRegistration(registration,0x81A821FC,0x90004000,std::span(&area,1),life);
+    REQUIRE(listener);REQUIRE(bridge.RegistrationReturned(*listener,*registration));
+    const auto enqueue=[&](std::shared_ptr<const NativeIdentityEventSource> from,uint32_t public_id,uint32_t data){
+      const auto frame=ListenerFrame(root,0x816A93C8,life);std::atomic<void*> slot{nullptr};
+      auto* cell=bridge.BeforeBroadcast(frame,from,data,slot,public_id);REQUIRE(cell);
+      auto regs=FastRegisters();regs.lr=0x816A8478;regs.r[1]=0x707DF640-0xF0;
+      regs.r[3]=area.address;regs.r[5]=data;REQUIRE(B::FastEnter(cell,regs,0x816A8328));
+      regs.lr=0x816A8410;regs.r[1]-=0x80;regs.r[3]=0x9000401C;regs.r[31]=area.address;regs.r[28]=data;regs.r[29]=0xA;
+      REQUIRE(B::FastBeforeUnlock(cell,regs));regs.lr=0x816A8478;regs.r[1]+=0x80;regs.r[3]=0;
+      REQUIRE(B::FastReturn(cell,regs,0x816A8328));REQUIRE(bridge.OuterReturned(cell,frame,0));
+    };
+    if(variant==16){
+      enqueue(source,0xA,0);const auto orphan=bridge.ledger_.TransferSuccessfulDequeue(*listener,area.address,0xA,0,{});
+      CHECK(orphan.origin_known);CHECK_FALSE(orphan.scalar_delivery.origin.serial);
+    }
+    const uint32_t data=variant==3?0x10u:variant==12?0xFu:0u;
+    enqueue(variant==13?nullptr:source,variant==2?0xBu:0xAu,data);
+    auto expected_source=source;auto expected_origin=*origin;
+    if(variant==10)enqueue(source,0xB,data); // identical data cannot retain old typedness
+    if(variant==11){
+      expected_source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,32,38,life));
+      const auto second=bridge.AdoptSource(expected_source);REQUIRE(second);expected_origin=*second;
+      enqueue(expected_source,0xA,data);CHECK(bridge.SourceOnlyProducer(*origin));
+    }
+    std::shared_ptr<const NativeIdentityEventWorkSource> whole;std::optional<L::Work> work;
+    std::shared_ptr<const NativeIdentityEventSource> replacement_source;std::optional<L::Origin> replacement_origin;
+    L::WorkKey whole_key{root,41,43,41,0x90002000,0x90003000,0x707DF740,0x816CD70C,0x816CD6E8};
+    if(variant==4 || variant==21){whole=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(whole_key,source,life));work=bridge.AdoptWholeWork(whole);REQUIRE(work);}
+    const auto mode=variant==1?B::ScalarDeliveryMode::kNone:
+        variant==15?static_cast<B::ScalarDeliveryMode>(2):B::ScalarDeliveryMode::kSystemDiscardedIdentityHint;
+    const auto next=std::shared_ptr<const B::Frame>(new B::Frame(root,101,103,107,41,0x90002000,
+        0x707DF640,0x9124F05C,0x816A8C00,life,variant==14?1u:2u,mode));
+    std::array<uint8_t,4> selected{0,0,0,0xA},actual_data{0,0,0,uint8_t(data)},public_id{0,0,0,0};
+    std::atomic<void*> slot{nullptr};
+    const uint32_t id_output=0x707DF690,data_output=variant==12?0u:0x707DF694u;
+    auto* cell=bridge.BeforeGetNext(next,work,0x10000180,0,id_output,data_output,selected.data(),
+        data_output?actual_data.data():nullptr,slot,variant==18?nullptr:public_id.data());
+    if(variant==14 || variant==15 || variant==18){CHECK_FALSE(cell);CHECK(bridge.lost());return;}
+    REQUIRE(cell);
+    if(variant==20 || variant==21)bridge.CloseNewSources();
+    REQUIRE(bridge.ReferenceReturned(cell,0x10000180,0,0x90004000));
+    auto regs=FastRegisters();regs.lr=0x816A8C94;regs.r[1]=0x707DF640-0x90;regs.r[3]=area.address;regs.r[4]=id_output;regs.r[5]=data_output;
+    REQUIRE(B::FastEnter(cell,regs,0x816A8648));regs.lr=0x816A8874;regs.r[1]-=0xB0;regs.r[3]=0x9000401C;
+    regs.r[30]=area.address;regs.r[22]=id_output;regs.r[23]=data_output;regs.r[25]=0;
+    REQUIRE(B::FastBeforeUnlock(cell,regs));
+    const bool delivery=variant!=1 && variant!=2 && variant!=3 && variant!=4 && variant!=21 && variant!=10 && variant!=13;
+    CHECK(bool(cell->scalar_delivery_.origin.serial)==delivery);
+    if(delivery){CHECK(cell->scalar_delivery_.origin==expected_origin);CHECK(cell->scalar_delivery_.enqueue_sequence!=0);}
+    B::SourceProducerObservation before_return;
+    CHECK_FALSE(bridge.SourceProducerQuiescent(expected_origin,&before_return)); // actual API cell still active
+    if(variant==1 || variant==2 || variant==3 || variant==10 || variant==16)CHECK(before_return.orphaned);
+    // Original inverse mapping writes the caller output before inner return.
+    public_id=variant==17?std::array<uint8_t,4>{0x8A,0,0,0xA}:
+        (variant==4 || variant==21)?std::array<uint8_t,4>{0,0,0,0xB}:std::array<uint8_t,4>{0,0,0,0xA};
+    regs.lr=0x816A8C94;regs.r[1]+=0xB0;regs.r[3]=0;REQUIRE(B::FastReturn(cell,regs,0x816A8648));
+    if(variant!=6){
+      REQUIRE(bridge.BeforeReferenceRelease(cell,0x90004000));
+      if(variant==8){const auto destroy=ListenerFrame(root,0x816A88E8,life);REQUIRE(bridge.BeforeDestruction(destroy,0x90004000));REQUIRE(bridge.DestructionReturned(0x90004000,*destroy));}
+      REQUIRE(bridge.ReferenceReleaseReturned(cell,0x90004000));
+    }
+    if(variant==9)REQUIRE(bridge.FinishSourceAfterDescendants(expected_origin));
+    if(variant==19){
+      // After native dequeue, a separate serialized native publication may
+      // reuse the empty Event slot before this older API returns.
+      replacement_source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,32,38,life));
+      replacement_origin=bridge.AdoptSource(replacement_source);REQUIRE(replacement_origin);
+      REQUIRE(bridge.ledger_.ReplaceQueued(*listener,area.address,0xA,0,*replacement_origin,true));
+      CHECK_FALSE(bridge.SourceOnlyProducer(*replacement_origin));
+    }
+    auto returned=next;
+    if(variant==7)returned=std::shared_ptr<const B::Frame>(new B::Frame(root,101,103,107,41,0x90002000,
+        0x707DF640,0x9124F05C,0x816A8C00,life,2,mode));
+    const bool complete=bridge.OuterReturned(cell,returned,variant==5?0u:1u);
+    if(variant==5 || variant==6 || variant==7 || variant==17){CHECK_FALSE(complete);CHECK(bridge.lost());CHECK(slot.load()==cell);CHECK(cell->scalar_delivery_.origin==expected_origin);return;}
+    REQUIRE(complete);CHECK(slot.load()==nullptr);CHECK_FALSE(cell->scalar_delivery_.origin.serial);
+    if(variant==20 || variant==21){
+      auto status=B::CellAdmissionStatus::kOpened;
+      CHECK_FALSE(bridge.BeforeGetNext(next,work,0x10000180,0,id_output,data_output,selected.data(),
+          data_output?actual_data.data():nullptr,slot,public_id.data(),&status));
+      CHECK(status==B::CellAdmissionStatus::kClosedHealthy);CHECK_FALSE(bridge.lost());
+    }
+    if(variant==19){
+      // Scalar completion released only A's transferred pin; the newer B
+      // event is still queued and must independently reach its real consumer.
+      CHECK(bridge.SourceOnlyProducer(*origin));CHECK_FALSE(bridge.SourceOnlyProducer(*replacement_origin));
+      const auto later=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(whole_key,source,life));
+      const auto later_work=bridge.AdoptWholeWork(later);REQUIRE(later_work);
+      const auto consumed=bridge.ledger_.TransferSuccessfulDequeue(*listener,area.address,0xA,0,*later_work);
+      CHECK(consumed.origin==*replacement_origin);CHECK(consumed.retained_by_work);
+      REQUIRE(bridge.FinishWholeWorkNormally(*later_work,whole_key,later));CHECK(bridge.SourceOnlyProducer(*replacement_origin));
+    }
+    if(variant==4 || variant==21){
+      auto facts=bridge.CaptureDependencies(*work);REQUIRE(facts);CHECK(facts->count==1);CHECK(facts->dequeued[0]==source);
+      CHECK_FALSE(bridge.SourceOnlyProducer(*origin));REQUIRE(bridge.FinishWholeWorkNormally(*work,whole_key,whole));
+    }
+    if(variant==1 || variant==2 || variant==3 || variant==10 || variant==16){
+      B::SourceProducerObservation after;CHECK_FALSE(bridge.SourceProducerQuiescent(expected_origin,&after));CHECK(after.orphaned);
+      CHECK_FALSE(bridge.SourceOnlyProducer(expected_origin));
+    }else if(variant==9){
+      auto retired=bridge.ReapOnHostOutsideGuestLocks();CHECK(retired.count>0); // producer+delivery both genuinely ended
+    }else CHECK(bridge.SourceOnlyProducer(expected_origin));
+    CHECK_FALSE(bridge.lost());
+  }
+  static void ClosedCellAdmissionIsCancellation(bool broadcast){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto life=std::make_shared<int>(23);
+    const auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life));
+    const auto origin=bridge.AdoptSource(source);REQUIRE(origin);bridge.CloseNewSources();
+    const auto frame=ListenerFrame(root,broadcast?0x816A93C8:0x816A8C00,life);
+    std::atomic<void*> slot{nullptr};std::array<uint8_t,4> selected{0xDE,0xAD,0xBE,0xEF},data{0xCA,0xFE,0xBA,0xBE};
+    auto status=B::CellAdmissionStatus::kOpened;
+    auto* cell=broadcast?bridge.BeforeBroadcast(frame,source,0,slot,0xA,&status):
+        bridge.BeforeGetNext(frame,{},0x10000180,0,0x707DF690,0x707DF694,
+            selected.data(),data.data(),slot,nullptr,&status);
+    CHECK_FALSE(cell);CHECK(status==B::CellAdmissionStatus::kClosedHealthy);
+    CHECK(slot.load()==nullptr);CHECK_FALSE(bridge.lost());CHECK(bridge.FirstFailure().state==0);
+    CHECK(selected[0]==0xDE);CHECK(data[0]==0xCA);CHECK(bridge.SourceOnlyProducer(*origin));
+    // Closing admission never claims the retained producer completed.
+    REQUIRE(bridge.FinishSourceAfterDescendants(*origin));
+    CHECK(bridge.ReapOnHostOutsideGuestLocks().count>0);
+  }
+  static void ClosedAdmissionPreservesFailures(uint32_t variant){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto life=std::make_shared<int>(23);
+    const auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life));
+    REQUIRE(bridge.AdoptSource(source));
+    auto frame=ListenerFrame(root,0x816A8C00,life);std::atomic<void*> slot{nullptr};std::array<uint8_t,4> selected{};
+    std::optional<L::Work> work;
+    if(variant==2){
+      const L::WorkKey key{root,41,43,42,0x90002000,0x90003000,0x707DF740,0x816CD70C,0x816CD6E8};
+      const auto whole=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(key,source,life));
+      work=bridge.AdoptWholeWork(whole);REQUIRE(work); // genuine Work, wrong actual thread
+    }
+    B::FastCell* prior=nullptr;
+    if(variant==3){prior=bridge.BeforeGetNext(frame,{},0x10000180,0,0,0,selected.data(),nullptr,slot);REQUIRE(prior);}
+    if(variant==4)work=L::Work{root,999,0};
+    if(variant==5)CHECK_FALSE(bridge.ledger_.ReplaceQueued({},0x90005000,0,0,{}));
+    std::array<std::atomic<void*>,B::kCells+1> slots{};
+    if(variant==6){
+      for(uint32_t i=0;i<B::kCells;++i){
+        const auto next=std::shared_ptr<const B::Frame>(new B::Frame(root,101+i,103+i,107,41+i,
+            0x90002000+i*0x1000,0x707DF640,0x816CD70C,0x816A8C00,life));
+        REQUIRE(bridge.BeforeGetNext(next,{},0x10000180,0,0,0,selected.data(),nullptr,slots[i]));
+      }
+      auto open=B::CellAdmissionStatus::kClosedHealthy;
+      CHECK_FALSE(bridge.BeforeGetNext(frame,{},0x10000180,0,0,0,selected.data(),nullptr,slots[B::kCells],nullptr,&open));
+      CHECK(open==B::CellAdmissionStatus::kFailed);CHECK(bridge.lost());
+    }
+    bridge.CloseNewSources();
+    auto status=B::CellAdmissionStatus::kClosedHealthy;
+    if(variant==0)frame=ListenerFrame(root,0x816A93C8,life); // wrong original ABI
+    B::FastCell* result=nullptr;
+    if(variant==7){
+      const auto broadcast=ListenerFrame(root,0x816A93C8,life);
+      result=bridge.BeforeBroadcast(broadcast,source,0x1234567800000000ull,slot,0xA,&status);
+    }else result=bridge.BeforeGetNext(frame,work,variant==1?0x1234567810000180ull:0x10000180,0,0,0,
+        selected.data(),nullptr,slot,nullptr,&status);
+    CHECK_FALSE(result);CHECK(status==B::CellAdmissionStatus::kFailed);CHECK(bridge.lost());
+    if(variant==3)CHECK(slot.load()==prior); // seal cannot erase an existing collision
+  }
+  static void AdmittedBroadcastSurvivesSeal(){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto life=std::make_shared<int>(23);
+    const auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life));
+    const auto origin=bridge.AdoptSource(source);REQUIRE(origin);
+    const auto registration=ListenerFrame(root,0x816A8498,life);const B::Area area{0x90005000,0xA,0xA};
+    const auto listener=bridge.BeforeRegistration(registration,0x81A821FC,0x90004000,std::span(&area,1),life);
+    REQUIRE(listener);REQUIRE(bridge.RegistrationReturned(*listener,*registration));
+    const auto frame=ListenerFrame(root,0x816A93C8,life);std::atomic<void*> slot{nullptr};auto status=B::CellAdmissionStatus::kFailed;
+    auto* cell=bridge.BeforeBroadcast(frame,source,9,slot,0xA,&status);REQUIRE(cell);CHECK(status==B::CellAdmissionStatus::kOpened);
+    bridge.CloseNewSources();
+    auto regs=FastRegisters();regs.lr=0x816A8478;regs.r[1]=0x707DF640-0xF0;regs.r[3]=area.address;regs.r[5]=9;
+    REQUIRE(B::FastEnter(cell,regs,0x816A8328));regs.lr=0x816A8410;regs.r[1]-=0x80;
+    regs.r[3]=0x9000401C;regs.r[31]=area.address;regs.r[28]=9;regs.r[29]=0xA;REQUIRE(B::FastBeforeUnlock(cell,regs));
+    regs.lr=0x816A8478;regs.r[1]+=0x80;regs.r[3]=0;REQUIRE(B::FastReturn(cell,regs,0x816A8328));
+    REQUIRE(bridge.OuterReturned(cell,frame,0));CHECK(slot.load()==nullptr);CHECK_FALSE(bridge.SourceOnlyProducer(*origin));
+    status=B::CellAdmissionStatus::kOpened;
+    CHECK_FALSE(bridge.BeforeBroadcast(frame,source,9,slot,0xA,&status));
+    CHECK(status==B::CellAdmissionStatus::kClosedHealthy);CHECK_FALSE(bridge.lost());
+    CHECK_FALSE(bridge.SourceOnlyProducer(*origin)); // queue wasn't cleared or falsely consumed
+    const auto destroy=ListenerFrame(root,0x816A88E8,life);REQUIRE(bridge.BeforeDestruction(destroy,0x90004000));
+    REQUIRE(bridge.DestructionReturned(0x90004000,*destroy));CHECK(bridge.SourceOnlyProducer(*origin));
+  }
   static void PreparedOriginWorkLifetime(){
     using Bridge=NativeIdentityListenerBridge;using Ledger=NativeIdentityEventLedger;
     const Ledger::Root root{11,13,17};Bridge bridge(root);
@@ -40,6 +311,154 @@ class NativeIdentityListenerBridgeTestAccess final {
     CHECK_FALSE(lifetime.expired());
     CHECK(retired.count>0);CHECK_FALSE(bridge.lost());
     retired={};CHECK(lifetime.expired());
+  }
+  static void CurrentProducerKeepsQueuedHints(){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);
+    auto resource=std::make_shared<int>(23);std::weak_ptr<int> lifetime=resource;
+    auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,resource));
+    const auto origin=bridge.AdoptSource(source);REQUIRE(origin);
+    const auto listener=bridge.ledger_.RegisterListener(0x90004000);REQUIRE(listener);
+    REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,9,*origin));
+    B::SourceProducerObservation held,strict;
+    REQUIRE(bridge.SourceProducerQuiescent(*origin,&held));CHECK(held.mode==1);
+    CHECK(held.evaluated==255);CHECK(held.truth==239);CHECK(held.references_available);CHECK(held.references==2);
+    CHECK_FALSE(bridge.SourceOnlyProducer(*origin,&strict));CHECK(strict.mode==0);
+    CHECK(strict.evaluated==31);CHECK(strict.truth==15);CHECK(strict.references==2);
+    // Genuine native coalescing replaces payload, not a completed consumer.
+    REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,17,*origin));
+    REQUIRE(bridge.SourceProducerQuiescent(*origin,&held));CHECK(held.references==2);
+    CHECK_FALSE(bridge.SourceOnlyProducer(*origin));
+    const L::WorkKey key{root,41,43,47,0x90001000,0x90002000,0x91000000,0x816CD70C,0x816CD6E8};
+    auto whole=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(key,source,resource));
+    const auto work=bridge.AdoptWholeWork(whole);REQUIRE(work);
+    // Calling ProducerHeld did not consume or replace the queued entry.
+    const auto consumed=bridge.ledger_.TransferSuccessfulDequeue(*listener,0x90005000,0xA,17,*work);
+    CHECK(consumed.native_success);CHECK(consumed.origin_known);CHECK(consumed.retained_by_work);
+    auto facts=bridge.CaptureDependencies(*work);REQUIRE(facts);CHECK(facts->count==1);CHECK(facts->dequeued[0]==source);
+    REQUIRE(bridge.WorkFor(*work));CHECK_FALSE(bridge.WorkFor(*work)->finished);
+    CHECK_FALSE(bridge.SourceProducerQuiescent(*origin,&held));CHECK(held.consumer_reason==4);
+    CHECK(held.consumer_work==work->serial);CHECK_FALSE(bridge.SourceOnlyProducer(*origin));
+    // Entered consumption remains a separate real whole-work obligation.
+    REQUIRE(bridge.FinishWholeWorkNormally(*work,key,whole));REQUIRE(bridge.SourceOnlyProducer(*origin));
+    REQUIRE(bridge.FinishSourceAfterDescendants(*origin));CHECK_FALSE(bridge.SourceProducerQuiescent(*origin));
+    REQUIRE(bridge.ledger_.RetireListenerAfterNativeDestruction(*listener));
+    facts.reset();whole.reset();source.reset();resource.reset();CHECK_FALSE(lifetime.expired());
+    auto retired=bridge.ReapOnHostOutsideGuestLocks();CHECK(retired.count>0);CHECK_FALSE(lifetime.expired());
+    retired={};CHECK(lifetime.expired());CHECK_FALSE(bridge.lost());
+  }
+  static void CurrentProducerRejectsUnownedOrFinished(uint32_t variant){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto resource=std::make_shared<int>(23);
+    const auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,resource));
+    const auto origin=bridge.AdoptSource(source);REQUIRE(origin);
+    auto wrong=*origin;
+    if(variant==0)++wrong.root.generation;
+    if(variant==1)++wrong.serial;
+    if(variant==2)++wrong.slot;
+    if(variant==3)wrong.provenance=L::Provenance::kUnjoinedNativeRequest;
+    if(variant<4){CHECK_FALSE(bridge.SourceProducerQuiescent(wrong));CHECK_FALSE(bridge.lost());return;}
+    REQUIRE(variant==4);
+    const auto listener=bridge.ledger_.RegisterListener(0x90004000);REQUIRE(listener);
+    REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,9,*origin));
+    REQUIRE(bridge.SourceProducerQuiescent(*origin));REQUIRE(bridge.FinishSourceAfterDescendants(*origin));
+    B::SourceProducerObservation observation;
+    CHECK_FALSE(bridge.SourceProducerQuiescent(*origin,&observation));CHECK(observation.mode==1);
+    CHECK(observation.evaluated==15);CHECK(observation.truth==7);CHECK_FALSE(observation.references_available);
+    CHECK_FALSE(bridge.SourceOnlyProducer(*origin));CHECK(bridge.ReapOnHostOutsideGuestLocks().count==0);
+    // The unread queued hint still owns its lifetime after producer completion.
+    REQUIRE(bridge.ledger_.RetireListenerAfterNativeDestruction(*listener));
+    auto retired=bridge.ReapOnHostOutsideGuestLocks();CHECK(retired.count>0);CHECK_FALSE(bridge.lost());
+  }
+  static void CurrentSourceOrphanStillRefuses(bool unrelated){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto resource=std::make_shared<int>(23);
+    const auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,resource));
+    const auto origin=bridge.AdoptSource(source);REQUIRE(origin);
+    auto consumed_origin=*origin;
+    if(unrelated){
+      const auto other=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,32,38,resource));
+      const auto other_origin=bridge.AdoptSource(other);REQUIRE(other_origin);consumed_origin=*other_origin;
+    }
+    const auto listener=bridge.ledger_.RegisterListener(0x90004000);REQUIRE(listener);
+    REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,9,consumed_origin));
+    REQUIRE(bridge.SourceProducerQuiescent(*origin));
+    const auto result=bridge.ledger_.TransferSuccessfulDequeue(*listener,0x90005000,0xA,9,{});
+    CHECK(result.native_success);CHECK(result.origin_known);CHECK_FALSE(result.retained_by_work);
+    B::SourceProducerObservation observation;
+    CHECK_FALSE(bridge.SourceProducerQuiescent(consumed_origin,&observation));CHECK(observation.orphan_available);CHECK(observation.orphaned);
+    CHECK(bridge.SourceProducerQuiescent(*origin)==unrelated); // Orphan state belongs to its exact origin.
+    REQUIRE(bridge.ledger_.RetireListenerAfterNativeDestruction(*listener));
+    CHECK_FALSE(bridge.SourceProducerQuiescent(consumed_origin)); // Destruction is not downstream completion.
+    REQUIRE(bridge.FinishSourceAfterDescendants(consumed_origin));CHECK(bridge.ReapOnHostOutsideGuestLocks().count==0);
+    CHECK_FALSE(bridge.lost());
+  }
+  static void CurrentSourceRejectsCriticalOrUnknown(bool critical){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto resource=std::make_shared<int>(23);
+    const auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,resource));
+    const auto origin=bridge.AdoptSource(source);REQUIRE(origin);REQUIRE(bridge.SourceProducerQuiescent(*origin));
+    B::SourceProducerObservation observation;
+    if(critical){
+      auto frame=ListenerFrame(root,0x816A8C00,resource);std::atomic<void*> slot{nullptr};std::array<uint8_t,4> selected{};
+      auto* cell=bridge.BeforeGetNext(frame,{},0x10000180,0,0,0,selected.data(),nullptr,slot);REQUIRE(cell);
+      CHECK_FALSE(bridge.SourceProducerQuiescent(*origin,&observation));CHECK(observation.consumer_reason==1);CHECK(observation.active_cell>0);
+      REQUIRE(bridge.ReferenceReturned(cell,0x10000180,0xC0000008,0));REQUIRE(bridge.OuterReturned(cell,frame,0));
+    }else{
+      const L::WorkKey key{root,41,43,47,0x90001000,0x90002000,0x91000000,0x816CD70C,0x816CD6E8};
+      const auto whole=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(key,{},resource));
+      const auto work=bridge.AdoptWholeWork(whole);REQUIRE(work);
+      CHECK_FALSE(bridge.SourceProducerQuiescent(*origin,&observation));CHECK(observation.consumer_reason==3);CHECK(observation.consumer_work==work->serial);
+      REQUIRE(bridge.FinishWholeWorkNormally(*work,key,whole));
+    }
+    CHECK(bridge.SourceProducerQuiescent(*origin));CHECK_FALSE(bridge.lost());
+  }
+  static void CurrentSourceNestedCrossOriginConsumer(bool duplicate,bool system_frame=false,bool finite_task=false){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);auto resource=std::make_shared<int>(23);
+    const auto source_a=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,resource));
+    const auto source_b=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,32,38,resource));
+    const auto origin_a=bridge.AdoptSource(source_a),origin_b=bridge.AdoptSource(source_b);REQUIRE(origin_a);REQUIRE(origin_b);
+    const auto listener=bridge.ledger_.RegisterListener(0x90004000);REQUIRE(listener);
+    L::WorkKey parent_key{root,41,43,47,0x90001000,0x90002000,0x71000000,0x816CD70C,0x816CD6E8};
+    if(system_frame){
+      parent_key.task=0;parent_key.task_allocation_generation=0;
+      parent_key.owner_kind=L::WorkOwnerKind::kSystemThreadFrame;
+      parent_key.function=0x8187DE10;
+    }
+    if(finite_task)parent_key.function=0x8187DE10;
+    const auto parent=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(parent_key,source_a,resource));
+    const auto parent_work=bridge.AdoptWholeWork(parent);REQUIRE(parent_work);
+    const auto consume_b=[&](L::Work work){
+      REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,9,*origin_b));
+      const auto consumed=bridge.ledger_.TransferSuccessfulDequeue(*listener,0x90005000,0xA,9,work);
+      CHECK(consumed.origin_known);CHECK(consumed.retained_by_work);
+    };
+    if(duplicate)consume_b(*parent_work);
+    auto child_key=parent_key;child_key.invocation=44;child_key.sp-=system_frame?0x90:0x100;
+    child_key.function=system_frame || finite_task?0x81879EA0:0x816921C8;
+    if(system_frame || finite_task)child_key.lr=0x8187DEC0;
+    const auto child=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(child_key,source_a,resource,parent));
+    const auto child_work=bridge.AdoptWholeWork(child);REQUIRE(child_work);consume_b(*child_work);
+    B::SourceProducerObservation observation;
+    CHECK_FALSE(bridge.SourceProducerQuiescent(*origin_b,&observation));CHECK(observation.consumer_reason==5);
+    CHECK(observation.consumer_work==(duplicate?parent_work->serial:child_work->serial));
+    CHECK_FALSE(bridge.SourceProducerQuiescent(*origin_a));
+    auto facts=bridge.CaptureDependencies(*child_work);REQUIRE(facts);CHECK(facts->entry==source_a);
+    CHECK(facts->count==1);CHECK(facts->dequeued[0]==source_b);CHECK_FALSE(facts->unknown);
+    REQUIRE(bridge.FinishWholeWorkNormally(*child_work,child_key,child));
+    CHECK_FALSE(bridge.WorkFor(*child_work));
+    facts=bridge.CaptureDependencies(*parent_work);REQUIRE(facts);CHECK(facts->entry==source_a);
+    CHECK(facts->count==1);CHECK(facts->dequeued[0]==source_b);CHECK_FALSE(facts->unknown);
+    // Child normal return transferred B's dependency into the earlier parent;
+    // dedup may release the child's extra pin, never the parent's real duty.
+    CHECK_FALSE(bridge.SourceProducerQuiescent(*origin_b,&observation));CHECK(observation.consumer_reason==5);
+    CHECK(observation.consumer_work==parent_work->serial);CHECK_FALSE(bridge.SourceOnlyProducer(*origin_b));
+    REQUIRE(bridge.FinishWholeWorkNormally(*parent_work,parent_key,parent));
+    CHECK(bridge.SourceProducerQuiescent(*origin_b));CHECK(bridge.SourceOnlyProducer(*origin_b));
+    CHECK(bridge.SourceProducerQuiescent(*origin_a));
+    REQUIRE(bridge.FinishSourceAfterDescendants(*origin_a));REQUIRE(bridge.FinishSourceAfterDescendants(*origin_b));
+    REQUIRE(bridge.ledger_.RetireListenerAfterNativeDestruction(*listener));CHECK_FALSE(bridge.lost());
   }
   static void DroppedQueueIsNotConsumption(bool destroy){
     using Bridge=NativeIdentityListenerBridge;using Ledger=NativeIdentityEventLedger;
@@ -607,8 +1026,50 @@ class NativeIdentityListenerBridgeTestAccess final {
     CHECK(bridge.ReapOnHostOutsideGuestLocks().count==0);
   }
 };
+TEST_CASE("Dedicated SYSTEM thread consumption outlives GetNext until exact finite-body return", "[identity_listener][system_thread_frame][lifetime]"){
+ NativeIdentityListenerBridgeTestAccess::SystemThreadFrameConsumer(GENERATE(false,true));
+}
+TEST_CASE("Dedicated SYSTEM thread work cannot fabricate or erase a native Task claim", "[identity_listener][system_thread_frame][authority]"){
+ NativeIdentityListenerBridgeTestAccess::SystemThreadFrameKeyRefusesTaskClaims(GENERATE(0u,1u,2u,3u));
+}
+TEST_CASE("Typed discarded identity hints retain real API delivery without fabricating read duty", "[identity_listener][scalar_delivery][lifetime]"){
+ NativeIdentityListenerBridgeTestAccess::TypedScalarDelivery(GENERATE(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,16u,17u,18u,19u,20u,21u));
+}
+TEST_CASE("Closed healthy listener admission cancels new calls without claiming completion", "[identity_listener][closed_admission]"){
+ NativeIdentityListenerBridgeTestAccess::ClosedCellAdmissionIsCancellation(GENERATE(false,true));
+}
+TEST_CASE("Listener seal cannot hide ABI ownership collision loss or capacity failures", "[identity_listener][closed_admission][authority]"){
+ NativeIdentityListenerBridgeTestAccess::ClosedAdmissionPreservesFailures(GENERATE(0u,1u,2u,3u,4u,5u,6u,7u));
+}
+TEST_CASE("Already admitted native broadcasts finish after sealing without dropping queues", "[identity_listener][closed_admission][lifetime]"){
+ NativeIdentityListenerBridgeTestAccess::AdmittedBroadcastSurvivesSeal();
+}
 TEST_CASE("Prepared identity origins survive actual whole-work retirement cuts", "[identity_listener][lifetime]"){
  NativeIdentityListenerBridgeTestAccess::PreparedOriginWorkLifetime();
+}
+TEST_CASE("Current identity producer preserves queued hints and genuine whole consumer ownership", "[identity_listener][current_source][lifetime]"){
+ NativeIdentityListenerBridgeTestAccess::CurrentProducerKeepsQueuedHints();
+}
+TEST_CASE("Current producer ownership rejects forged origins and a finished producer", "[identity_listener][current_source][authority]"){
+ NativeIdentityListenerBridgeTestAccess::CurrentProducerRejectsUnownedOrFinished(GENERATE(0u,1u,2u,3u,4u));
+}
+TEST_CASE("Current source quiescence never retires unowned consumed events", "[identity_listener][current_source][orphan]"){
+ NativeIdentityListenerBridgeTestAccess::CurrentSourceOrphanStillRefuses(GENERATE(false,true));
+}
+TEST_CASE("Current source quiescence excludes critical cells and unknown whole consumers", "[identity_listener][current_source][quiescence]"){
+ NativeIdentityListenerBridgeTestAccess::CurrentSourceRejectsCriticalOrUnknown(GENERATE(false,true));
+}
+TEST_CASE("Cross-origin child consumption remains a parent duty through transfer and dedup", "[identity_listener][current_source][nested_consumption]"){
+ NativeIdentityListenerBridgeTestAccess::CurrentSourceNestedCrossOriginConsumer(GENERATE(false,true));
+}
+TEST_CASE("Nested finite SYSTEM consumers retain transferred origin duty through full parent return", "[identity_listener][system_thread_frame][nested_consumption]"){
+ NativeIdentityListenerBridgeTestAccess::CurrentSourceNestedCrossOriginConsumer(GENERATE(false,true),true);
+}
+TEST_CASE("Finite helpers with actual Task keys preserve parent render dependency credit", "[identity_listener][system_thread_frame][task_borrow]"){
+ NativeIdentityListenerBridgeTestAccess::CurrentSourceNestedCrossOriginConsumer(GENERATE(false,true),false,true);
+}
+TEST_CASE("Finite SYSTEM frame parent claims reject Task and source ancestry substitution", "[identity_listener][system_thread_frame][parent_authority]"){
+ NativeIdentityListenerBridgeTestAccess::SystemFrameParentAuthorityRefusesMixedClaims(GENERATE(0u,1u,2u,3u,4u));
 }
 TEST_CASE("An unregistered prepared-looking source cannot be adopted by work", "[identity_listener][authority]"){
  NativeIdentityListenerBridgeTestAccess::UnknownCannotBePrepared();

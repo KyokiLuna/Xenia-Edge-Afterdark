@@ -373,7 +373,7 @@ TEST_CASE("Installed initial local profiles create real Account GPD stock tiles 
     const auto* completion=memory.TranslateVirtual<uint8_t*>(record);
     REQUIRE(xe::load_and_swap<uint32_t>(completion)==0x21);
     REQUIRE(xe::load_and_swap<uint32_t>(completion+4)==page.address+0x50);
-    auto expected_account=account; expected_account.reserved_flags=0x50000001u;
+    auto expected_account=account; expected_account.reserved_flags=0x40000001u;
     REQUIRE(std::memcmp(completion+8,&expected_account,sizeof(account))==0);
     REQUIRE(std::memcmp(memory.TranslateVirtual(page.address+0x100),&account,sizeof(account))==0);
     REQUIRE(xe::load_and_swap<uint64_t>(completion+0xA78)==native_xuid);
@@ -716,7 +716,7 @@ TEST_CASE("Registered profile creation takes a device DWORD pointer and reports 
   const auto* bytes=memory.TranslateVirtual<uint8_t*>(record);
   REQUIRE(xe::load_and_swap<uint32_t>(bytes)==0x11);
   REQUIRE(xe::load_and_swap<uint32_t>(bytes+4)==page.address+0x50);
-  auto expected_account=account; expected_account.reserved_flags=0x50000001u;
+  auto expected_account=account; expected_account.reserved_flags=0x40000001u;
   REQUIRE(std::memcmp(bytes+8,&expected_account,sizeof(account))==0);
   REQUIRE(std::memcmp(memory.TranslateVirtual(page.address+0x100),&account,sizeof(account))==0);
   REQUIRE(xe::load_and_swap<uint64_t>(bytes+0xA78)==xuid);
@@ -794,6 +794,65 @@ TEST_CASE("Profile creation completion ownership rejects pending null repeated a
   REQUIRE(runtime.profiles().GetAccountCount()==0);
 }
 
+TEST_CASE("Registered profile creation preserves native passcode flag truth table and caller account",
+          "[kernel][profile_creation][abi][passcode]") {
+  CreationRuntime runtime;
+  CreationPage page(*runtime.emulator->memory());
+  auto& memory=page.memory;
+  const auto source=runtime.content().sources().Source("hdd"); REQUIRE(source);
+  struct Row {
+    uint32_t flags,initial,expected;
+    std::array<uint8_t,4> passcode;
+  };
+  // Native17559: zero helper returns1 for four zero bytes, so the native
+  // callback skips its OR10000000. Any nonzero byte sets it; existing bits
+  // are never cleared. Flag2 terminates before filesystem/profile work.
+  const std::array<Row,12> rows{{
+    {3,0x100,0x00000101,{{0,0,0,0}}},
+    {3,0x100,0x10000101,{{1,0,0,0}}},
+    {3,0x100,0x10000101,{{0,2,0,0}}},
+    {3,0x100,0x10000101,{{0,0,0x80,0}}},
+    {3,0x100,0x10000101,{{0,0,0,0xFF}}},
+    {3,0x10000100,0x10000101,{{0,0,0,0}}},
+    {0x80000002,0x100,0x40000101,{{0,0,0,0}}},
+    {0x80000002,0x100,0x50000101,{{0xFF,0,0,0}}},
+    {0xC0000002,0x100,0xC0000101,{{0,0,0,0}}},
+    {0xC0000002,0x100,0xD0000101,{{0,1,0,1}}},
+    {2,0x100,0x00000100,{{0,0,0,0}}},
+    {2,0x100,0x00000100,{{1,2,3,4}}}
+  }};
+  for(size_t i=0;i<rows.size();++i) {
+    INFO("passcode contract row="<<i);
+    const auto& row=rows[i];
+    X_XAMACCOUNTINFO account{}; account.reserved_flags=row.initial;
+    string_util::copy_and_swap_truncating(account.gamertag,u"Passcode ABI",xe::countof(account.gamertag));
+    std::memcpy(account.passcode,row.passcode.data(),row.passcode.size());
+    account.passport_password[7]=char(0x8E);
+    account.owner_passport_membername[13]=char(0xB7);
+    std::memcpy(memory.TranslateVirtual(page.address+0x100),&account,sizeof(account));
+    xe::store_and_swap<uint32_t>(memory.TranslateVirtual(page.address+0x50),source->source.device_id);
+    auto context=CreationContext(runtime,page.address+0x2800);
+    context.r[3]=row.flags;context.r[4]=page.address+0x50;
+    context.r[5]=0xE000000000000100ull+i;context.r[6]=page.address+0x100;
+    context.r[7]=context.r[8]=context.r[9]=0;context.r[10]=page.address+0x40;
+    REQUIRE(CallCreationExport(runtime,0x230,context)==X_E_SUCCESS);
+    const auto record=xe::load_and_swap<uint32_t>(memory.TranslateVirtual(page.address+0x40));
+    REQUIRE(record); REQUIRE(RegionSize(memory,record)>=0xAC0);
+    const auto* packet=memory.TranslateVirtual<uint8_t*>(record);
+    auto expected=account; expected.reserved_flags=row.expected;
+    REQUIRE(std::memcmp(packet+8,&expected,sizeof(account))==0);
+    REQUIRE(std::memcmp(memory.TranslateVirtual(page.address+0x100),&account,sizeof(account))==0);
+    REQUIRE(xe::load_and_swap<uint32_t>(packet+0xAB8)==0); // No invented native Task.
+    REQUIRE(*memory.TranslateVirtual<uint8_t*>(page.address+0x3F)==0xA5);
+    REQUIRE(*memory.TranslateVirtual<uint8_t*>(page.address+0x44)==0xA5);
+    context=CreationContext(runtime,page.address+0x2800);
+    context.r[3]=record;context.r[4]=page.address+0x60;
+    REQUIRE(CallCreationExport(runtime,0x234,context)==X_HRESULT_FROM_WIN32(X_ERROR_NOT_SUPPORTED));
+    REQUIRE(RegionSize(memory,record)==0);
+    REQUIRE(runtime.profiles().GetAccountCount()==0);
+  }
+}
+
 TEST_CASE("Registered local profile creation preserves native XUID branches and opaque input on failure",
           "[kernel][profile_creation][abi][failure]") {
   CreationRuntime runtime; CreationPage page(*runtime.emulator->memory()); auto& memory=page.memory;
@@ -803,13 +862,13 @@ TEST_CASE("Registered local profile creation preserves native XUID branches and 
   const std::array<Row,9> rows{{
     {0,0x100,X_ERROR_INVALID_PARAMETER,false,true},
     {0,0x100,recipe_status,false,false},
-    {1,0x10000101,recipe_status,true,false},
-    {0x80000001,0x50000101,X_ERROR_INVALID_PARAMETER,false,true},
-    {0x80000001,0x50000101,recipe_status,false,false},
-    {0xC0000001,0xD0000101,recipe_status,false,false},
+    {1,0x00000101,recipe_status,true,false},
+    {0x80000001,0x40000101,X_ERROR_INVALID_PARAMETER,false,true},
+    {0x80000001,0x40000101,recipe_status,false,false},
+    {0xC0000001,0xC0000101,recipe_status,false,false},
     {0x40000020,0x100,recipe_status,false,false},
     {2,0x100,X_ERROR_NOT_SUPPORTED,false,false},
-    {3,0x10000101,X_ERROR_NOT_SUPPORTED,true,false}
+    {3,0x00000101,X_ERROR_NOT_SUPPORTED,true,false}
   }};
   std::array<uint8_t,0x8F0> payment{}; for(size_t i=0;i<payment.size();++i)payment[i]=uint8_t(i^0xC7);
   const std::array<uint8_t,0x1C> token{{0xA7,0,0x38,0xC1}};

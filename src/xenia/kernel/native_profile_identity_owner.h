@@ -34,6 +34,7 @@ class NativeXmsgProvenance;
 namespace xam {
 class HostRoster;
 class ProfileManager;
+class NativeOriginalLogonObservation;
 class ProfileRosterIntent;
 class ProfileRosterNativeBinding;
 struct ProfileRosterResult;
@@ -53,7 +54,8 @@ class NativeProfileIdentityOwner final
     bool may_use_legacy() const {return disposition==Disposition::kUnavailableBeforeNative;}
   };
   static Result TryLogonOnOriginalCaller(KernelState*,uint16_t ordinal,
-                                         std::span<const uint64_t>) noexcept;
+                                         std::span<const uint64_t>,
+      const xam::NativeOriginalLogonObservation* observation=nullptr) noexcept;
   // Authenticated actual PPC entry/own-return hooks. Default unrelated work
   // remains unchanged; no process, TLS, currentTask or native cache is made up.
   static uint64_t GuardEntry(void*,uint64_t) noexcept;
@@ -71,15 +73,20 @@ class NativeProfileIdentityOwner final
   }};
   static void ObserveTaskDiagnosticInstruction(void*,uint32_t site) noexcept;
   // Exact common native instruction cuts, not callback-address permissions.
-  static constexpr std::array<TaskDiagnosticSite,6> kTaskExecutionSites{{
+  static constexpr std::array<TaskDiagnosticSite,10> kTaskExecutionSites{{
     {0x816B9BB8,0x816B9C14,0x2B0B0001},
     {0x816B9D68,0x816B9E1C,0x817E0008},
     {0x816B8B08,0x816B8B5C,0x7D6903A6},
     {0x816B8B08,0x816B8B64,0x907F0038},
     {0x816B7DE8,0x816B7E9C,0x7D6903A6},
-    {0x816B7DE8,0x816B7EA4,0x817F0008}
+    {0x816B7DE8,0x816B7EA4,0x817F0008},
+    {0x816BA3C0,0x816BA3E4,0x4E800421},
+    {0x816BA3C0,0x816BA3E8,0x3D608000},
+    {0x816BA3C0,0x816BA420,0x4E800421},
+    {0x816BA3C0,0x816BA424,0x7C7E1B78}
   }};
   static void ObserveTaskExecutionInstruction(void*,uint32_t site) noexcept;
+  static void ObserveContextReference(void*,uint32_t event) noexcept;
   // Observer-only loaded operands. Original calls/returns retain their native
   // ABI; opaque D3D return words are never interpreted as HRESULT success.
   static constexpr std::array<TaskDiagnosticSite,17> kImageObservationSites{{
@@ -209,8 +216,16 @@ class NativeProfileIdentityOwner final
   void BeginStop() noexcept;
   // Stop quiescence may retain an unjoined entered operation until actual
   // CPU/GPU-stop tombstoning; it never means native/host identity committed.
-  bool Drained() const noexcept;
+  // Optional caller-owned numeric snapshot of the ORIGINAL stop checks.
+  // No resource identity, native completion or retention permission is issued.
+  struct StopObservation {
+    uint64_t evaluated=0,truth=0,row_evaluated=0,row_truth=0;
+    uint32_t result_available=0,result=0,exception=0,first_failed=0,row_class=0;
+    std::array<uint32_t,5> visited{}; // counted,context refs,task refs,retained,active
+  };
+  bool Drained(StopObservation* observation=nullptr) const noexcept;
  private:
+  static uint64_t GuardEntryCore(void*,uint64_t) noexcept;
   friend class NativeAvatarService;
   friend class NativeIdentityTilePublication;
   static void ObserveImageEntry(void*,uint32_t) noexcept;
@@ -314,7 +329,8 @@ class NativeProfileIdentityOwner final
   bool EnqueuePrepared(std::shared_ptr<xam::ProfileRosterIntent>,
       const NativeProfileIdentityRequest*,XThread*,uint32_t input,uint32_t flags,
       uint32_t overlap,bool bootstrap_alignment,std::error_code&,
-      bool* retryable_bootstrap = nullptr);
+      bool* retryable_bootstrap = nullptr,
+      const xam::NativeOriginalLogonObservation* observation=nullptr);
   GuestRuntime::ExecutionResult ExecutePreparedOn(XThread&);
   GuestRuntime::ExecutionResult RunScheduledBody(XThread&,uint64_t serial,
       const std::function<GuestRuntime::ExecutionResult(XThread&)>&);
@@ -338,12 +354,13 @@ class NativeProfileIdentityOwner final
   bool StopPeriodicOnBootstrap(XThread&) noexcept;
   bool StopOnBootstrap(XThread&) noexcept;
   // Exact strong-owner coverage only; never normal Drained/native Close proof.
-  bool RetainedForActualKernelStop() const noexcept;
+  bool RetainedForActualKernelStop(StopObservation* observation=nullptr) const noexcept;
   bool RetireAfterActualKernelStop() noexcept;
   static GuestRuntime::ExecutionResult ExecuteBootstrapInputAuxiliary(
       GuestRuntimeCallExecutor&,XThread&,const GuestRuntime::Function&,
       std::span<const uint32_t>);
   uint64_t EnterFiniteInputBoundary(void*,uint32_t) noexcept;
+  uint64_t EnterFiniteSystemThreadBoundary(void*,uint32_t) noexcept;
   static uint64_t EnterPreboundNativePublisher(void*) noexcept;
   static void ReturnPreboundNativePublisher(void*) noexcept;
   struct State;

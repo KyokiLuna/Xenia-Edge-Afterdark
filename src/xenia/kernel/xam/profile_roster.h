@@ -90,6 +90,9 @@ class ProfileRosterIntent final {
   std::shared_ptr<const HostRoster> prepared_roster() const;
   ProfileRosterResult result() const; // value-only, no readiness claim
  private:
+  // Actual PM-issued before/after envelope emptiness plus native protocol/map
+  // duties. This is not a frame, provider census, pixel or writer permission.
+  bool HasPublishedEmptyUnchangedRows(uint32_t actual_protocol_value) const;
   const std::array<uint8_t, 4 * 0x188>& NativeRowsForPrepared() const;
   // Fixed old work never follows the publisher selector. Only exact writer
   // descendants may receive the separately preallocated following ticket.
@@ -190,6 +193,13 @@ class ProfileRosterNativeReadScope final {
   bool Enter(KernelState*, XThread*, cpu::ThreadState*, uint32_t task,
       uint64_t task_birth_generation, uint64_t whole_work_generation,
       uint32_t root_hmodule, uint64_t root_load_generation) noexcept;
+  // A real bounded SYSTEM-thread body may have no XamTask. The native owner
+  // already retains its exact code/domain/thread/frame and chooses the same
+  // current/prepared ticket before entry. This grants no Task/birth identity.
+  bool EnterSystemThreadFrame(KernelState*, XThread*, cpu::ThreadState*,
+      uint32_t entry_sp, uint32_t entry_lr, uint32_t function,
+      uint64_t whole_work_generation, uint32_t root_hmodule,
+      uint64_t root_load_generation) noexcept;
   bool Leave() noexcept;
   // Owner-only final rundown after actual CPU/GPU stop with retained XThreads,
   // in reverse actual entry order. Never an ordinary cancellation shortcut.

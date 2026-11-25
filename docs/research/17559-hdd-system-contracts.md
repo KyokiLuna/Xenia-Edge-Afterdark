@@ -79,9 +79,35 @@ achievements, saves, custom pictures, appearance or unknown fields.
   Recover these native requests and carry owned launch data through the
   existing asynchronous lifecycle. An explicit Xbox Home request is separate
   from the boot_to_dashboard startup preference.
-- Sign-in, storage selection and profile creation still use host fallback
-  paths. Extend the existing native public-call coordinator, preserving the
-  original user, OSK behavior, cancellation and completion.
+- At gate entry, sign-in, storage selection and profile creation used host
+  fallback paths. Native flows now execute through the public-call coordinator,
+  but successful native creation and successful native sign-in remain separate
+  acceptance conditions. Preserve the original user, OSK behavior, cancellation
+  and completion on both surfaces.
+
+### Recovered profile and task boundaries, 2026-11-25
+
+| Boundary | Producer/consumer contract | Current evidence |
+| --- | --- | --- |
+| Account passcode | The native producer sets `0x10000000` when any of the four passcode bytes is nonzero; existing flag bits are preserved. An empty passcode does not synthesize that flag. | V115 corrects the inverted HLE predicate; registered 230/234 tests cover each byte and caller-data preservation. Existing Accounts are not rewritten from this finding alone. |
+| Creation to sign-in | The creator consumes the owned 234 result, then uses a separate four-XUID 20B LogonTask with flags `0x24` when its requested user is not already current. The specific Can't Sign In dialog follows a negative logon result. | V115 observed successful creation, publication and discovery, followed by that native error. Creation success is not sign-in or avatar acceptance. |
+| Logon flags and publication | Native `0x20` suppresses the UI sign-in popup; it does not suppress the identity broadcast or refresh. Those are controlled separately by `0x200000`. The ordinary native SignIn interface forwards exact `0x120420`/`0x120424` requests into 224, including their native preflight and error policy. | The original `0xF` mask rejects both creator `0x24` and common SignIn requests before native entry. The composed V120 correction admits the existing local subset plus `0x20` and the two exact SignIn requests. Raw flags, native policy/errors, completion and all publication checks remain unchanged. Its build, 1,389 kernel cases and 62 focused cases passed; native validation is pending. Optional `0x80` machine-service variants remain a separate Live prerequisite. |
+| Profile namespace | Prepare source/device/reservation/file-service owners outside namespace and PM locks. Both short mount scopes acquire GCRC before trying PM metadata; resource destruction follows both unlocks. An inherited caller GCRC remains refused. | V116 passed 1,381 default kernel cases and 50 installed-focus cases, including registered ProfileOpen under real namespace contention for cold/reused aliases. Native sign-in needs a new runtime check. |
+| Asynchronous Task reference | Each genuine BA3C0 context episode acquires its own native CurrentTask reference before either callback and closes it before returning, including pending episodes. A resumed episode has a fresh worker/frame/reference. This may prove a nonfinal close of an independently held reference; it does not mint a Task allocation generation or revive a historical address. | The completed V118 build passed full kernel and all six lifecycle cases. Actual asynchronous avatar-path and shutdown acceptance remain pending. |
+| CPU observation binding | Shared native observation descriptors, frontend builtin storage, registration names and HIR indices must agree. A descriptor-only change is incomplete. | V117's compile-time assertion caught the omitted frontend integration. V118 adds matching ten-slot bindings; the completed relink passed all five direct suites, five CPU cases and 56 installed-focus cases. Its unsigned native Guide opens/reopens and releases dashboard input; native local sign-in and successful shutdown remain unaccepted. |
+| Original logon ingress | The default module/import provider leaves 20B/224 on their registered HLE trampolines. The native creator uses a custom XUI task queue; its class name does not prove an ambient XamTask dispatch or absence of a caller-held profile read. | Static routing is recovered. Actual V120 ingress, caller ownership and returned logon status remain unobserved. A scalar journal covering the real export and existing admission checks is being prepared; no caller/read barrier is relaxed from an assumption. |
+| Initializer versus publication | Native 224 accesses existing native cache/auxiliary state before queueing work. With an overlap, pending is written into that overlap and the initial function normally returns zero; later C838 publication, protocol status and overlap completion are separate facts. | Moving all protection to the cache-publication edge is not justified. Preserve original short-circuit checks and distinguish initial return from actual completion. Returning to name entry can be native post-logon error recovery after durable profile creation. |
+
+The post-creation logon bridge prepares the roster and mounts its profile before
+native execution. This places mounting on the actual sign-in admission path,
+although the precise runtime error phase still needs verification. The creator
+does not import ProfileOpen directly; do not infer a missing 237 call from its
+import table alone.
+
+Use the [checkpoint regression record](17559-checkpoint-guide-regression-20261123.md)
+for current build and native-flow results. In particular, closing while a native
+error modal remains open is not an idle dashboard shutdown comparison. Native
+waits and cancellation still require real lifecycle completion.
 
 ## Qualified runtime checkpoint, 2026-11-06
 

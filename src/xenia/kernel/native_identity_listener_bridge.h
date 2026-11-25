@@ -82,6 +82,10 @@ class NativeIdentityListenerBridge final {
     std::array<Area,kAreas> areas{};
     size_t count=0;
   };
+  enum class ScalarDeliveryMode : uint8_t { kNone, kSystemDiscardedIdentityHint };
+  // Captured by the same locked admission attempt, never inferred later from
+  // a generic null. Closure cancels new entry, not any admitted native duty.
+  enum class CellAdmissionStatus : uint8_t { kFailed, kOpened, kClosedHealthy };
   class Frame final {
    private:
     friend class NativeProfileIdentityOwner;
@@ -89,13 +93,18 @@ class NativeIdentityListenerBridge final {
     friend class NativeIdentityListenerBridgeTestAccess;
     Frame(Root root, uintptr_t context, uintptr_t thread_state,
         uintptr_t kernel, uint32_t thread, uint32_t pcr, uint32_t sp,
-        uint32_t lr, uint32_t function, std::shared_ptr<const void> lifetime)
+        uint32_t lr, uint32_t function, std::shared_ptr<const void> lifetime,
+        uint32_t actual_process_type=UINT32_MAX,
+        ScalarDeliveryMode actual_delivery_mode=ScalarDeliveryMode::kNone)
         : root_(root), context_(context), thread_state_(thread_state),
           kernel_(kernel), thread_(thread), pcr_(pcr), sp_(sp), lr_(lr),
-          function_(function), lifetime_(std::move(lifetime)) {}
+          function_(function), process_type_(actual_process_type), delivery_mode_(actual_delivery_mode),
+          lifetime_(std::move(lifetime)) {}
     const Root root_;
     const uintptr_t context_, thread_state_, kernel_;
     const uint32_t thread_, pcr_, sp_, lr_, function_;
+    const uint32_t process_type_; // immutable copy from actual admitted XThread
+    const ScalarDeliveryMode delivery_mode_; // exact earlier code/member proof; no read authority
     const std::shared_ptr<const void> lifetime_;
   };
   class FastCell final {
@@ -112,12 +121,15 @@ class NativeIdentityListenerBridge final {
     std::optional<Origin> origin_;
     std::optional<Work> work_;
     uint32_t argument_ = 0,handle_ = 0;
+    uint32_t public_event_=0;bool public_event_known_=false;
+    Ledger::ScalarDelivery scalar_delivery_;
     Listener referenced_listener_;
     bool reference_returned_=false,reference_taken_=false;
     bool dereference_entered_=false,dereference_returned_=false;
     uint32_t id_output_ = 0, data_output_ = 0;
     const uint8_t* selected_id_ = nullptr;
     const uint8_t* actual_data_ = nullptr;
+    const uint8_t* public_id_output_ = nullptr; // caller output prebound before native locks
     uint32_t inner_ = 0, inner_sp_ = 0, area_ = 0;
     Listener listener_;
     bool linearized_ = false;
@@ -125,6 +137,8 @@ class NativeIdentityListenerBridge final {
     uint64_t diagnostic_incoming_id_=0;
     uint32_t diagnostic_inner_function_=0,diagnostic_selected_id_=0;
     bool diagnostic_selected_available_=false;
+    uint32_t diagnostic_first_orphan_slot_=UINT32_MAX;
+    uint64_t diagnostic_first_orphan_serial_=0; // exact origin generation captured by this call
     std::atomic<bool> active_{false};
   };
   struct Failure {
@@ -245,6 +259,11 @@ class NativeIdentityListenerBridge final {
                                                Ledger::Provenance::kUnjoinedNativeRequest;
     auto origin=ledger_.BeginProducerWithProvenance(kind);
     if (!origin || sources_[origin->slot]) { Lose(__LINE__,1);return {}; }
+    // No old source owns this recycled slot. A genuine orphan keeps its
+    // origin pin, so its diagnostic slot cannot be recycled while observed.
+    auto& orphan=first_orphans_[origin->slot];
+    orphan.state.store(0,std::memory_order_relaxed);
+    orphan.outer_return.store(0,std::memory_order_relaxed);orphan.data={};
     sources_[origin->slot]=std::move(source);origins_[origin->slot]=*origin;
     return origin;
   }
@@ -258,15 +277,83 @@ class NativeIdentityListenerBridge final {
     for (const auto& source:sources_) if (source && source->source_serial_==serial) return source;
     return {};
   }
-  // Scalar refcount join only. Exactly the producer reference remains: all
-  // queued/coalesced event and actual whole-work dependencies have drained.
-  // This never proves provider output, native Task, renderer or pixels alone.
-  bool SourceOnlyProducer(Origin origin) {
+  enum class SourceProducerRequirement:uint32_t {kOnlyReference=0,kCurrentQuiescent=1};
+  struct OrphanObservation {
+    Origin origin;uint64_t enqueue_sequence=0,consumer_work_hint=0;
+    uintptr_t context=0,thread_state=0,kernel=0;
+    uint32_t thread=0,pcr=0,sp=0,lr=0,function=0,process_type=UINT32_MAX;
+    uint32_t handle=0,listener=0,area=0,event=0,data=0;bool data_available=false;
+  };
+  struct SourceProducerObservation {
+    bool available=false,references_available=false;
+    uint32_t mode=0,evaluated=0,truth=0,consumer_reason=0,active_cell=0;
+    uint64_t references=0,consumer_work=0;
+    bool orphan_available=false,orphaned=false,consumers_available=false;
+    uint32_t orphan_capture_state=0,orphan_outer_return=0;
+    bool orphan_origin_matches=false;OrphanObservation first_orphan;
+  };
+  bool ObserveSourceProducer(Origin origin,SourceProducerRequirement requirement,
+      SourceProducerObservation* observation) {
     std::lock_guard lock(mutex_);
+    if(observation){*observation={};observation->available=true;observation->mode=uint32_t(requirement);}
     auto* value=ledger_.Find(origin);
-    return !lost() && SourceFor(origin) && value &&
-        value->producer.load(std::memory_order_acquire) &&
-        value->references.load(std::memory_order_acquire)==1;
+    const auto observed=[&](uint32_t bit,bool actual){
+      if(observation){observation->evaluated|=1u<<bit;if(actual)observation->truth|=1u<<bit;}
+      return actual;
+    };
+    if(!(observed(0,!lost()) && observed(1,bool(SourceFor(origin))) && observed(2,bool(value)) &&
+         observed(3,value->producer.load(std::memory_order_acquire))))return false;
+    const auto references=value->references.load(std::memory_order_acquire);
+    if(observation){observation->references_available=true;observation->references=references;}
+    // Bit4 always retains its original factual meaning, refs==1. Current
+    // mode separately proves no active/unknown consumer while queues may live.
+    const bool only=observed(4,references==1);
+    if(requirement==SourceProducerRequirement::kOnlyReference)return only;
+    if(!observed(5,references!=0))return false;
+    const bool orphaned=value->orphan_seen.load(std::memory_order_acquire);
+    if(observation){
+      observation->orphan_available=true;observation->orphaned=orphaned;
+      const auto& orphan=first_orphans_[origin.slot];
+      const auto state=orphan.state.load(std::memory_order_acquire);observation->orphan_capture_state=state;
+      if(state==2 && orphan.data.origin==origin){
+        observation->orphan_origin_matches=true;observation->first_orphan=orphan.data;
+        observation->orphan_outer_return=orphan.outer_return.load(std::memory_order_acquire);
+      }
+    }
+    return observed(6,!orphaned) && observed(7,SourceConsumersQuiescent(origin,observation));
+  }
+  // Caller owns mutex_. Fast dependency writers must own an active cell;
+  // registration/withdrawal and all host Work mutations also own mutex_.
+  // Excluding EVERY active cell therefore makes these bounded Facts reads
+  // stable, without scanning any concurrently mutable native queue entries.
+  bool SourceConsumersQuiescent(Origin origin,SourceProducerObservation* observation) {
+    if(observation)observation->consumers_available=true;
+    for(uint32_t i=0;i<cells_.size();++i)if(cells_[i].active_.load(std::memory_order_acquire)){
+      if(observation){observation->consumer_reason=1;observation->active_cell=i+1;}return false;
+    }
+    for(const auto& row:works_)if(row.source && !row.finished){
+      const auto facts=ledger_.Facts(row.id);
+      const auto blocked=[&](uint32_t reason){
+        if(observation){observation->consumer_reason=reason;observation->consumer_work=row.id.serial;}return false;
+      };
+      if(!facts)return blocked(2);
+      if(facts->unknown_input)return blocked(3);
+      if(facts->entry_origin==origin.serial)return blocked(4);
+      for(uint32_t i=0;i<facts->count;++i)if(facts->dequeued_origins[i]==origin.serial)return blocked(5);
+    }
+    return true;
+  }
+  // Strict OLD-source retirement: all queued/coalesced event and actual
+  // whole-work dependencies have drained, leaving exactly the producer pin.
+  bool SourceOnlyProducer(Origin origin,SourceProducerObservation* observation=nullptr) {
+    return ObserveSourceProducer(origin,SourceProducerRequirement::kOnlyReference,observation);
+  }
+  // A NEW source remains current after reveal. Passive queue pins keep
+  // their lifetimes; actual/unknown whole consumers, orphaned consumption and
+  // active fast calls still refuse this factual quiescence check. It supplies
+  // neither a read ticket nor pixels; the concrete owner keeps its other joins.
+  bool SourceProducerQuiescent(Origin origin,SourceProducerObservation* observation=nullptr) {
+    return ObserveSourceProducer(origin,SourceProducerRequirement::kCurrentQuiescent,observation);
   }
   bool FinishSourceAfterDescendants(Origin origin) {
     std::lock_guard lock(mutex_);
@@ -390,29 +477,43 @@ class NativeIdentityListenerBridge final {
   }
   FastCell* BeforeBroadcast(std::shared_ptr<const Frame> frame,
       std::shared_ptr<const NativeIdentityEventSource> earlier,uint64_t actual_data,
-      std::atomic<void*>& actual_thread_cell) {
+      std::atomic<void*>& actual_thread_cell,uint64_t actual_public_id=UINT64_MAX,
+      CellAdmissionStatus* admission=nullptr) {
     std::lock_guard lock(mutex_);
-    if (!frame || !FrameValid(*frame,0x816A93C8) || !Dword(actual_data)) { Lose(__LINE__,10,nullptr,nullptr,frame.get());return nullptr; }
+    if(admission)*admission=CellAdmissionStatus::kFailed;
+    if (!frame || !FrameValid(*frame,0x816A93C8) || !Dword(actual_data) ||
+        (actual_public_id!=UINT64_MAX && !Dword(actual_public_id))) { Lose(__LINE__,10,nullptr,nullptr,frame.get());return nullptr; }
     const auto origin=SourceOrigin(earlier);
     if (earlier && !origin) { Lose(__LINE__,10,nullptr,nullptr,frame.get());return nullptr; }
-    return OpenCell(std::move(frame),FastCell::Kind::kBroadcast,origin,{},uint32_t(actual_data),
-                    0,0,nullptr,nullptr,actual_thread_cell);
+    auto* cell=OpenCell(std::move(frame),FastCell::Kind::kBroadcast,origin,{},uint32_t(actual_data),
+                    0,0,nullptr,nullptr,actual_thread_cell,admission);
+    if(cell){cell->public_event_known_=actual_public_id!=UINT64_MAX;cell->public_event_=uint32_t(actual_public_id);}
+    return cell;
   }
   FastCell* BeforeGetNext(std::shared_ptr<const Frame> frame,std::optional<Work> earlier_whole_work,
       uint64_t actual_handle,uint64_t actual_filter,uint64_t id_output,uint64_t data_output,
       const uint8_t* prebound_future_selected_id,const uint8_t* prebound_actual_data,
-      std::atomic<void*>& actual_thread_cell) {
+      std::atomic<void*>& actual_thread_cell,const uint8_t* prebound_public_id=nullptr,
+      CellAdmissionStatus* admission=nullptr) {
     std::lock_guard lock(mutex_);
+    if(admission)*admission=CellAdmissionStatus::kFailed;
     if (!frame || !FrameValid(*frame,0x816A8C00) || frame->sp_<0x140 ||
         !Dword(actual_handle) || !Dword(actual_filter) || !Dword(id_output) || !Dword(data_output) ||
         (id_output && (!Address(uint32_t(id_output)) || uint32_t(id_output)>UINT32_MAX-3)) ||
         !prebound_future_selected_id ||
         (data_output && (!Address(uint32_t(data_output)) || uint32_t(data_output)>UINT32_MAX-3 || !prebound_actual_data))) { Lose(__LINE__,11,nullptr,nullptr,frame.get());return nullptr; }
+    // Only the concrete owner can construct a granted Frame after exact
+    // SYSTEM member/code/import proof. TITLE and unknown modes stay ungranted.
+    if(frame->delivery_mode_!=ScalarDeliveryMode::kNone &&
+       (frame->delivery_mode_!=ScalarDeliveryMode::kSystemDiscardedIdentityHint || frame->process_type_!=2 ||
+        !id_output || !prebound_public_id)){
+      Lose(__LINE__,11,nullptr,nullptr,frame.get());return nullptr;
+    }
     if (earlier_whole_work && !WorkFor(*earlier_whole_work)) { Lose(__LINE__,11,nullptr,nullptr,frame.get());return nullptr; }
     auto* cell=OpenCell(std::move(frame),FastCell::Kind::kGetNext,{},earlier_whole_work,
         uint32_t(actual_filter),uint32_t(id_output),uint32_t(data_output),prebound_future_selected_id,
-        data_output?prebound_actual_data:nullptr,actual_thread_cell);
-    if(cell)cell->handle_=uint32_t(actual_handle);return cell;
+        data_output?prebound_actual_data:nullptr,actual_thread_cell,admission);
+    if(cell){cell->handle_=uint32_t(actual_handle);cell->public_id_output_=prebound_public_id;}return cell;
   }
   // The real Object Manager primitive has already returned outside GCRC.
   // Handle->body comes ONLY from its actual counted-success branch, never
@@ -497,7 +598,8 @@ class NativeIdentityListenerBridge final {
           !DwordIs(regs.r[31],cell->area_) || !DwordIs(regs.r[28],cell->argument_) ||
           normalized_id<area->second.minimum || normalized_id>area->second.maximum) { self.Lose(__LINE__,16,&regs,context_current?cell:nullptr,nullptr,reinterpret_cast<uintptr_t>(cell),uint32_t(regs.lr));return false; }
       cell->linearized_=self.ledger_.ReplaceQueued(cell->listener_,cell->area_,
-          normalized_id,uint32_t(regs.r[28]),cell->origin_);
+          normalized_id,uint32_t(regs.r[28]),cell->origin_,
+          cell->public_event_known_ && cell->public_event_==0xAu);
     } else {
       if (cell->inner_!=0x816A8648 || !DwordIs(regs.r[1],cell->inner_sp_-0xB0) ||
           !DwordIs(regs.r[30],cell->area_) || !DwordIs(regs.r[22],cell->id_output_) ||
@@ -508,9 +610,15 @@ class NativeIdentityListenerBridge final {
         const uint32_t selected=ReadBe(cell->selected_id_);
         cell->diagnostic_selected_id_=selected;cell->diagnostic_selected_available_=true;
         if (selected<area->second.minimum || selected>area->second.maximum) { self.Lose(__LINE__,16,&regs,context_current?cell:nullptr,nullptr,reinterpret_cast<uintptr_t>(cell),uint32_t(regs.lr));return false; }
-        self.ledger_.TransferSuccessfulDequeue(cell->listener_,cell->area_,selected,
-            cell->actual_data_ ? std::optional<uint32_t>(ReadBe(cell->actual_data_)) : std::nullopt,
-            cell->work_);
+        // Retain the same original optional data load; diagnostics add none.
+        const auto data=cell->actual_data_ ? std::optional<uint32_t>(ReadBe(cell->actual_data_)) : std::nullopt;
+        if(cell->scalar_delivery_.origin.serial){self.Lose(__LINE__,16,&regs,cell);return false;}
+        const auto result=self.ledger_.TransferSuccessfulDequeue(cell->listener_,cell->area_,selected,data,cell->work_,
+            cell->frame_->delivery_mode_==ScalarDeliveryMode::kSystemDiscardedIdentityHint);
+        if(result.scalar_delivery.origin.serial)cell->scalar_delivery_=result.scalar_delivery;
+        if(result.native_success && result.origin_known && !result.retained_by_work &&
+           !result.scalar_delivery.origin.serial && !self.lost())
+          self.RecordFirstOrphan(*cell,result,selected,data);
       }
       cell->linearized_=true; // genuine native failure consumed no queue node
     }
@@ -554,7 +662,9 @@ class NativeIdentityListenerBridge final {
         reinterpret_cast<uintptr_t>(cell),native_result,0,0,checks);return false; }
     if(cell->kind_==FastCell::Kind::kGetNext &&
        (!cell->reference_returned_ || native_result>1 ||
-        (cell->reference_taken_ ? !cell->dereference_returned_ : native_result!=0))){Lose(__LINE__,18,nullptr,cell,retained_return.get(),reinterpret_cast<uintptr_t>(cell),native_result,0,0,checks);return false;}
+        (cell->reference_taken_ ? !cell->dereference_returned_ : native_result!=0) ||
+        (cell->scalar_delivery_.origin.serial && (native_result!=1 || !cell->public_id_output_ ||
+         ReadBe(cell->public_id_output_)!=0xAu)))){Lose(__LINE__,18,nullptr,cell,retained_return.get(),reinterpret_cast<uintptr_t>(cell),native_result,0,0,checks);return false;}
     if (cell->previous_ && (!cell->previous_->active_.load() ||
         !SameThread(*cell->previous_->frame_,*retained_return))) { Lose(__LINE__,18,nullptr,cell,retained_return.get(),reinterpret_cast<uintptr_t>(cell),native_result,0,0,checks);return false; }
     void* expected=cell;
@@ -563,6 +673,17 @@ class NativeIdentityListenerBridge final {
       auto* row=WorkFor(*cell->work_);
       if (!row || !row->cells.load()) { Lose(__LINE__,18,nullptr,cell,retained_return.get(),reinterpret_cast<uintptr_t>(cell),native_result,0,0,checks);return false; }
       row->cells.fetch_sub(1);
+    }
+    // All genuine normal-return/frame/ref/withdrawal joins above passed.
+    // Release only the transferred scalar pin, before publishing cell idle.
+    if(cell->scalar_delivery_.origin.serial && !ledger_.FinishScalarDelivery(cell->scalar_delivery_)){
+      Lose(__LINE__,18,nullptr,cell,retained_return.get());return false;
+    }
+    if(cell->diagnostic_first_orphan_slot_<first_orphans_.size()){
+      auto& orphan=first_orphans_[cell->diagnostic_first_orphan_slot_];
+      if(orphan.state.load(std::memory_order_acquire)==2 &&
+         orphan.data.origin.serial==cell->diagnostic_first_orphan_serial_)
+        orphan.outer_return.store(1u+native_result,std::memory_order_release);
     }
     cell->active_.store(false,std::memory_order_release);
     // The genuine outer/inner/ref lifetime ended and the exact ThreadState
@@ -573,13 +694,15 @@ class NativeIdentityListenerBridge final {
     cell->frame_.reset();cell->bridge_=nullptr;cell->thread_cell_=nullptr;
     cell->previous_=nullptr;cell->origin_.reset();cell->work_.reset();
     cell->argument_=0;cell->handle_=0;cell->referenced_listener_={};
+    cell->public_event_=0;cell->public_event_known_=false;cell->scalar_delivery_={};
     cell->reference_returned_=false;cell->reference_taken_=false;
     cell->dereference_entered_=false;cell->dereference_returned_=false;
     cell->id_output_=0;cell->data_output_=0;
-    cell->selected_id_=nullptr;cell->actual_data_=nullptr;
+    cell->selected_id_=nullptr;cell->actual_data_=nullptr;cell->public_id_output_=nullptr;
     cell->inner_=0;cell->inner_sp_=0;cell->area_=0;cell->listener_={};cell->linearized_=false;
     cell->diagnostic_incoming_id_=0;cell->diagnostic_inner_function_=0;
     cell->diagnostic_selected_id_=0;cell->diagnostic_selected_available_=false;
+    cell->diagnostic_first_orphan_slot_=UINT32_MAX;cell->diagnostic_first_orphan_serial_=0;
     return true;
   }
   Retired ReapOnHostOutsideGuestLocks() {
@@ -602,7 +725,7 @@ class NativeIdentityListenerBridge final {
     }
     for (auto& cell:cells_) if (!cell.active_.load() && cell.frame_) {
       take(cell.frame_);cell.bridge_=nullptr;cell.thread_cell_=nullptr;
-      cell.origin_.reset();cell.work_.reset();cell.selected_id_=nullptr;cell.actual_data_=nullptr;
+      cell.origin_.reset();cell.work_.reset();cell.selected_id_=nullptr;cell.actual_data_=nullptr;cell.public_id_output_=nullptr;
     }
     for (auto& listener:listeners_) if (listener.retired) {
       take(listener.registration);take(listener.destruction);take(listener.lifetime);
@@ -610,7 +733,10 @@ class NativeIdentityListenerBridge final {
     }
     return result;
   }
-  void CloseNewSources() { stopping_.store(true,std::memory_order_release);ledger_.CloseNewProducers(); }
+  void CloseNewSources() {
+    std::lock_guard lock(mutex_); // same linearization as new FastCell admission
+    stopping_.store(true,std::memory_order_release);ledger_.CloseNewProducers();
+  }
   // Private actual-stop seam only. The owner has already joined every guest
   // CPU/fiber and graph consumer; a timeout or metadata poison is insufficient.
   // Leave all owning resources in this object for out-of-lock host destruction.
@@ -742,8 +868,9 @@ class NativeIdentityListenerBridge final {
   FastCell* OpenCell(std::shared_ptr<const Frame> frame,FastCell::Kind kind,
       std::optional<Origin> origin,std::optional<Work> work,uint32_t argument,
       uint32_t id_output,uint32_t data_output,const uint8_t* selected_id,
-      const uint8_t* actual_data,std::atomic<void*>& thread_cell) {
-    if (stopping_.load() || lost()) return nullptr;
+      const uint8_t* actual_data,std::atomic<void*>& thread_cell,
+      CellAdmissionStatus* admission) {
+    if (lost()) return nullptr;
     // Actual mapped17559 routes do not recursively call these outer owners.
     // Reject collision, retaining the EXACT earlier cell; never overwrite or
     // dereference a foreign/stale void pointer. Owner must perform the same
@@ -752,24 +879,55 @@ class NativeIdentityListenerBridge final {
     WorkRow* row=work?WorkFor(*work):nullptr;
     if (work && (!row || row->source->key_.thread!=frame->thread_ ||
         row->source->key_.pcr!=frame->pcr_ || row->source->key_.sp<frame->sp_)) { Lose(__LINE__,20);return nullptr; }
+    // Invalid/colliding ownership remains a failure even after the seal.
+    // A healthy closed result is captured only after those checks, under the
+    // same mutex as CloseNewSources; no new cell can open after that cut.
+    if(stopping_.load(std::memory_order_acquire)){
+      if(admission)*admission=CellAdmissionStatus::kClosedHealthy;
+      return nullptr;
+    }
     for (auto& cell:cells_) {
       if (cell.frame_) continue;
       cell.bridge_=this;cell.frame_=std::move(frame);cell.thread_cell_=&thread_cell;
       cell.previous_=nullptr;cell.kind_=kind;cell.origin_=origin;cell.work_=work;
       cell.argument_=argument;cell.handle_=0;cell.referenced_listener_={};
+      cell.public_event_=0;cell.public_event_known_=false;cell.scalar_delivery_={};
       cell.reference_returned_=false;cell.reference_taken_=false;
       cell.dereference_entered_=false;cell.dereference_returned_=false;cell.id_output_=id_output;cell.data_output_=data_output;
-      cell.selected_id_=selected_id;cell.actual_data_=actual_data;
+      cell.selected_id_=selected_id;cell.actual_data_=actual_data;cell.public_id_output_=nullptr;
       cell.inner_=0;cell.area_=0;cell.linearized_=false;
       cell.diagnostic_incoming_id_=0;cell.diagnostic_inner_function_=0;
       cell.diagnostic_selected_id_=0;cell.diagnostic_selected_available_=false;
+      cell.diagnostic_first_orphan_slot_=UINT32_MAX;cell.diagnostic_first_orphan_serial_=0;
       cell.active_.store(true,std::memory_order_release);
       void* expected=nullptr;
       if (!thread_cell.compare_exchange_strong(expected,&cell)) { Lose(__LINE__,20);return nullptr; }
-      if (row) row->cells.fetch_add(1);return &cell;
+      if (row) row->cells.fetch_add(1);
+      if(admission)*admission=CellAdmissionStatus::kOpened;return &cell;
     }
     Lose(__LINE__,20);return nullptr;
   }
+  // Native area-lock seam: finite scalar copy only, no lookup/allocation,
+  // logging, new guest access or owning resource transfer. State1 is never read.
+  void RecordFirstOrphan(FastCell& cell,const Ledger::Dequeued& result,uint32_t selected,
+      std::optional<uint32_t> data) noexcept {
+    if(result.origin.slot>=first_orphans_.size())return;
+    auto& orphan=first_orphans_[result.origin.slot];
+    uint32_t empty=0;
+    if(!orphan.state.compare_exchange_strong(empty,1,std::memory_order_relaxed))return;
+    const auto& f=*cell.frame_;
+    orphan.data={result.origin,result.enqueue_sequence,cell.work_?cell.work_->serial:0,
+        f.context_,f.thread_state_,f.kernel_,f.thread_,f.pcr_,f.sp_,f.lr_,f.function_,f.process_type_,
+        cell.handle_,cell.listener_.object,cell.area_,selected,data.value_or(0),bool(data)};
+    cell.diagnostic_first_orphan_slot_=result.origin.slot;
+    cell.diagnostic_first_orphan_serial_=result.origin.serial;
+    orphan.state.store(2,std::memory_order_release);
+  }
+  struct FirstOrphan {
+    std::atomic<uint32_t> state{0},outer_return{0};
+    OrphanObservation data;
+  };
+  std::array<FirstOrphan,Ledger::kOrigins> first_orphans_{};
   const Root root_;
   std::atomic<uint32_t> first_failure_state_{0};
   Failure first_failure_;

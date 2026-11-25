@@ -21,6 +21,23 @@ Explicit platform/text/service limits and historical failures remain recorded;
 a shared-foundation regression reopens repair work. Later gates remain open and
 follow the release contract below.
 
+## Current HDD pre-closure review
+
+The user's 2026-11-25 instruction adds a core review before closing the combined
+HDD gate. First produce a meaningful tested HDD AppImage and sync its source
+to GitHub. Then review XNA, XMA, GPU and CPU behavior under the
+[console fidelity and overhead policy](17559-console-fidelity-policy.md),
+before moving to Live. The supplied XNA launcher title update is a primary
+version-specific reference, alongside the mapped dashboard modules.
+
+Runtime work absent from the console needs a concrete host-emulation or
+correctness reason. Disable unnecessary logging, diagnostic capture and helper
+work while retaining their source. Do not remove real completion/ownership
+requirements or fabricate success to reduce work. After resulting changes,
+repeat affected acceptance and package/test/sync the matching final artifacts.
+The earlier test AppImage does not itself close the gate or qualify a stable
+finished-gate release.
+
 ## Upstream review at each gate
 
 The [upstream integration policy](17559-upstream-integration-policy.md) governs
@@ -55,6 +72,10 @@ different goal.
    current as of that recorded review, not a promise about future commits.
 
 ## AppImage and acceptance
+
+These requirements apply to the final finished-gate packet. A requested earlier
+development AppImage must identify its tested scope and unfinished behavior;
+it does not substitute for final gate acceptance.
 
 - Close the gate's agreed behavior and regression checks. Record every remaining
   prerequisite or later-system dependency explicitly; unresolved in-scope

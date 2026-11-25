@@ -654,6 +654,31 @@ claimed. Runtime checks allow transitions to settle, keep capture overhead
 low, and distinguish delayed display from input rejection or invisible output.
 MangoHud and GameMode remain disabled. No replacement AppImage was produced.
 
+V123 applied the reviewed one-file two-phase candidate and built normally in
+42.93 seconds. The extended 81-case selection passed 13,166 assertions,
+including three installed-resource fixtures and sixteen additional real
+PM/read/overlap cases. Other test products stayed unchanged; this is supporting
+coverage, not a native scheduling test.
+
+The actual native trial created and discovered its fresh profile, but still
+showed "Can't Sign In." Its selected render/read/caller/root/Task/stack proof
+passed; the eligibility mask was `0xFFF` with only `0x400` failing. This is the
+new blanket `other_owner` condition, which rejects another retained ordinary,
+read, Commit, borrowed or suspended owner. No initializer, worker, protocol or
+overlap-completion stage ran. The other Work's identity was not captured and
+must not be inferred from older reports. The next change requires a shared
+initializer-access classification: compatible retained readers versus genuine
+cache/resource mutations or opaque execution, while preserving all later
+frame/read/source/paint retirement obligations.
+
+Before a normal WM close, the V123 supervisor received an external termination
+signal at 237.91 seconds. The sender is unestablished. Its recorded trigger was
+`explicit_signal`; memory remained above the floor. Owned cleanup left no live
+or unverified processes, while `leader_reaped` stayed false and is preserved
+exactly. No native shutdown diagnostics were recorded. This is an interrupted
+run with no normal-close result; V122's separate hook-stop failure is not a
+V123 outcome. The virtual controller was removed, and no release was created.
+
 The controller regression sequence uses isolated state and no MangoHud:
 
 1. Select Skip Sign-In, open Guide, wait for its animation, and capture it.

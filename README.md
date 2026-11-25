@@ -38,6 +38,10 @@ These are the areas Afterdark is extending or prioritizing on top of the inherit
 
 Core rule: reproduce the Xbox 360's shared behavior. Missing console behavior must remain visible and diagnosable.
 
+The [console fidelity and overhead policy](docs/research/17559-console-fidelity-policy.md)
+is a standing rule: host-only work needs a concrete emulation reason, and
+unnecessary diagnostics are disabled with their code retained for later use.
+
 ## Development status
 
 The project is developed in tested milestones. The [implementation roadmap](docs/research/17559-roadmap.md) and [gate/release policy](docs/research/17559-gate-releases.md) describe the larger plan.
@@ -49,10 +53,10 @@ The project is developed in tested milestones. The [implementation roadmap](docs
 | Native account/profile UI | Integration and runtime validation remain in progress. Native sign-in and profile/avatar initialization are not established as working across the requested scenarios. |
 | Avatar system | Stock appearance/preview data is present in local profile work; full 3D rendering, editing, persistence and game consumption remain unfinished. |
 | Media & libraries | Part of the combined HDD gate. Reference/import and catalog work is under development; complete native playback and seeking remain unverified. The native AAC route still needs the Optional Media Update package. |
-| XNA / Xbox Live Indie Games | Further integration and validation remain later work. |
+| XNA / Xbox Live Indie Games | The supplied launcher title update is the primary reference. XNA review follows the HDD test AppImage/source sync, before gate closure and Live work. |
 | Direct P2P social / Live replacement | Planned and under research; not a working public Xbox Live replacement. |
 | Remaining system apps & online-service compatibility | Later milestones, dependent on the system foundation. |
-| Performance and broader compatibility | Ongoing research and regression testing; no game-wide FPS or compatibility guarantee. |
+| Performance and broader compatibility | XMA, GPU and CPU console-fidelity review follows XNA before HDD gate closure. No game-wide FPS or compatibility guarantee. |
 
 The [HDD checkpoint notes for 2026-11-23](docs/research/17559-hdd-milestone-20261123.md) describe the current integration, validation boundaries and remaining work. Its release bundle carries the actual engineering and AppImage acceptance records. The [2026-11-18 milestone notes](docs/research/17559-hdd-milestone-20261118.md) remain available as a historical record.
 

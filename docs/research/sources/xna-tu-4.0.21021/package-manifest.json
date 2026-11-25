@@ -1,0 +1,762 @@
+{
+  "schema": 1,
+  "status": "SUPPLIED_TU_AND_MEMBER_METADATA_VERIFIED_NOT_INSTALLED_OR_RUNTIME_ACCEPTANCE",
+  "source_directory": "/home/kyoki/Documents/emulations/360/XNA Title update/584E07D2/000B0000/",
+  "package": {
+    "bytes": 28303360,
+    "sha256": "2e5a4f44cfd9135a940954474f67bd6100050844c0093ec73a70dfc7d239c249"
+  },
+  "filename": "tu32000100_00000000",
+  "header": {
+    "magic": "LIVE",
+    "title_id": "584E07D2",
+    "media_id": "00000000",
+    "content_type": "000B0000",
+    "content_type_source_enum": "XContentType::kInstaller",
+    "content_id": "d955ea41e17613fa4f9d29a94fb20ea7d7c8f59e",
+    "version": "32000100",
+    "version_decoded": "3.2.1.0",
+    "base_version": "32000100",
+    "base_version_decoded": "3.2.1.0"
+  },
+  "counts": {
+    "CLR_managed_PE_assemblies": 32,
+    "NLP_assets": 30,
+    "full_native_XEX_modules": 10,
+    "launcher_delta_XEX": 1,
+    "package_members": 73,
+    "runtime_version_folders": [
+      "v3.0",
+      "v3.1",
+      "v4.0"
+    ]
+  },
+  "launcher_delta": {
+    "member": "xna_titlelauncher.xexp",
+    "sha256": "df2645683b0a8cb8f1223d7bf131468ef843e36bd80d29995416661e5270f673",
+    "descriptor_header_key": "XEX_HEADER_DELTA_PATCH_DESCRIPTOR=0x000005FF",
+    "source_version_decoded": "3.2.1.0",
+    "target_version_decoded": "4.0.21021.0",
+    "digest_source_sha1": "0586e913a1cbf032f1811c082217fec24789c68c",
+    "delta_image_source_size": 1232896
+  },
+  "integrity": {
+    "accessed_blocks": 6857,
+    "all_member_chains_bounds_paths_and_duplicate_names_checked": true,
+    "level0_tables_verified": 41,
+    "publisher_RSA_or_console_license_signature_verified": false,
+    "read_only_single_copy_format": true,
+    "root_hash_verified": true,
+    "scope": "Internal STFS root/table/data SHA1 and member SHA256, not publisher authenticity, entitlement or successful update application.",
+    "sha1_data_blocks_verified": 6857,
+    "total_allocated_data_blocks": 6857
+  },
+  "members": [
+    {
+      "name": "HostLoader.dll",
+      "size": 1175552,
+      "sha256": "353c52fb5e9bf62bfa3258c0b9596594e6c5b51af1a6deacceac84c0bbf8d57d",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 2
+      }
+    },
+    {
+      "name": "xna_titlelauncher.xexp",
+      "size": 589824,
+      "sha256": "df2645683b0a8cb8f1223d7bf131468ef843e36bd80d29995416661e5270f673",
+      "format": "XEX2",
+      "native": {
+        "is_patch": true,
+        "title_id": null,
+        "media_id": null,
+        "compression_type": 3
+      }
+    },
+    {
+      "name": "Runtime/v3.0/BackCompatShim.xex",
+      "size": 884736,
+      "sha256": "b951a61c50bcfd4c415b8adc85ba80edcf0bdfff33912a8cd6f97759be09c6b9",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 2
+      }
+    },
+    {
+      "name": "Runtime/v3.0/big5.nlp",
+      "size": 66728,
+      "sha256": "fe9f3bc997c419bfae873d144738f4a0c99d73241d955cb00a6bc34e45ef81c2",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.0/bopomofo.nlp",
+      "size": 82172,
+      "sha256": "806a76ec0139b46251af5df840c785cf83ae8893f5ef47ad58fa32f02bc1e54d",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.0/ksc.nlp",
+      "size": 116756,
+      "sha256": "b6a0ed5ceed4a6d9056562e92d5faf5789f251da335bc24aca5ff0c7bd9f4ad7",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.0/l_except_3_5.nlp",
+      "size": 9696,
+      "sha256": "72f3ff824e9cf8b9742eb4203ba43a94a90abe072a0a681650a69a6ad80ea4c7",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.0/l_intl_3_5.nlp",
+      "size": 7120,
+      "sha256": "48d958b5850f318329bee7a71e064cc56f028a2afe3ee2b1bbb91737f8656aa1",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.0/Microsoft.Xna.Framework.dlx",
+      "size": 675840,
+      "sha256": "872a4ee0badc38824d952283f34249f979b9be584e974e1f72a254fe2d9f5f96",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.0/Microsoft.Xna.Framework.Game.dlx",
+      "size": 77824,
+      "sha256": "a5da752c19b55d015b6ccb58280b70d7679ec9e4577cf8f984412a21e4752e94",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.0/mscorlib.dlx",
+      "size": 794112,
+      "sha256": "67ec006217333306f915f601474346b62521290c7273715b3d51332483e7053c",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.0/netcfusermode.dll",
+      "size": 495616,
+      "sha256": "f94de30e246a55f031bc50f4c84910a1d02e7c288da67639d51b9ab5172636bb",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 1
+      }
+    },
+    {
+      "name": "Runtime/v3.0/prc.nlp",
+      "size": 83748,
+      "sha256": "92485a228bf1112712bdd0f86a16f4f048fa252f9a777f931816a2f5b0045db8",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.0/prcp.nlp",
+      "size": 83748,
+      "sha256": "e6c45967b943ff5b6fabce8fb55c47f959632904403cdb82ebd952d7b68ec81c",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.0/runtimehost.xex",
+      "size": 2793472,
+      "sha256": "d6cdf8a591bcfab266be56a18c097f5d62fcf5489ed6ef75df5f455a686baf90",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 2
+      }
+    },
+    {
+      "name": "Runtime/v3.0/sortkey_3_5.nlp",
+      "size": 262148,
+      "sha256": "3c3f9ba18287209e40b5c60bf8257c0128b3a70e7f142e5ed9b9f78b8e019a0c",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.0/sorttbls_3_5.nlp",
+      "size": 20320,
+      "sha256": "df5e8eb6a8eb303143c4b31941741b8913da38591cc6a6329f92ee82c50c4ba8",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.0/system.core.dlx",
+      "size": 78336,
+      "sha256": "6c2fa017504c329a629e89faa771e6a4de9fd7ca47229e1e486615cdf672aae3",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.0/system.dlx",
+      "size": 276480,
+      "sha256": "b30e0b2c678a1b20e9d8508e75b42d5cb7b79460177a9dff2e2d901ea2fb03ee",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.0/system.sr.dlx",
+      "size": 334848,
+      "sha256": "bfad709fc32f43984128a721746218585d2a20fcfe479742909fcef7812c3a8a",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.0/system.xml.dlx",
+      "size": 1027072,
+      "sha256": "153551b2672bcb3f3cbf15245b942998f38773fa3d9dfc6913b643dad07c45b2",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.0/system.xml.linq.dlx",
+      "size": 82944,
+      "sha256": "adcd073e2262b55689152ad41ffb17bd4c92656b96732f9082c301d61b4f6af9",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.0/xjis.nlp",
+      "size": 28288,
+      "sha256": "6f725bf1acb1c11f71fd5ce494419fabebd23ebf5a0fc070f0259ac0fac4976b",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/BackCompatShim.xex",
+      "size": 1007616,
+      "sha256": "a10f994c4d6bdf3d121e253db5af9690ef88e1a8322adf3a586c955169a420a1",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 2
+      }
+    },
+    {
+      "name": "Runtime/v3.1/big5.nlp",
+      "size": 66728,
+      "sha256": "fe9f3bc997c419bfae873d144738f4a0c99d73241d955cb00a6bc34e45ef81c2",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/bopomofo.nlp",
+      "size": 82172,
+      "sha256": "806a76ec0139b46251af5df840c785cf83ae8893f5ef47ad58fa32f02bc1e54d",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/ksc.nlp",
+      "size": 116756,
+      "sha256": "b6a0ed5ceed4a6d9056562e92d5faf5789f251da335bc24aca5ff0c7bd9f4ad7",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/l_except_3_5.nlp",
+      "size": 9696,
+      "sha256": "72f3ff824e9cf8b9742eb4203ba43a94a90abe072a0a681650a69a6ad80ea4c7",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/l_intl_3_5.nlp",
+      "size": 7120,
+      "sha256": "48d958b5850f318329bee7a71e064cc56f028a2afe3ee2b1bbb91737f8656aa1",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/Microsoft.Xna.Framework.dlx",
+      "size": 704512,
+      "sha256": "0ec8392cfc962dfb2ad2769f086807be9e5c9b2afe022769f267027af3139826",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.1/Microsoft.Xna.Framework.Game.dlx",
+      "size": 77824,
+      "sha256": "06db8e1b9d84b88fc232ff3eaaada7fcb308a72a4a3c4832877912ca67032399",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.1/mscorlib.dlx",
+      "size": 794112,
+      "sha256": "5df2b520705e132a358681b8496c308d594e6f16ea2a4db94460ba4db096acf1",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.1/netcfusermode.dll",
+      "size": 192512,
+      "sha256": "7a669b34e08ef680022eed6047dbffa6fcbe7dec91a56a75e066cdd4d3b58205",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 2
+      }
+    },
+    {
+      "name": "Runtime/v3.1/prc.nlp",
+      "size": 83748,
+      "sha256": "92485a228bf1112712bdd0f86a16f4f048fa252f9a777f931816a2f5b0045db8",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/prcp.nlp",
+      "size": 83748,
+      "sha256": "e6c45967b943ff5b6fabce8fb55c47f959632904403cdb82ebd952d7b68ec81c",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/runtimehost.xex",
+      "size": 2990080,
+      "sha256": "b45b82149db1eed3761eec880256bad95fb8e494c07fdaea1e845f2d9a6bf07b",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 2
+      }
+    },
+    {
+      "name": "Runtime/v3.1/sortkey_3_5.nlp",
+      "size": 262148,
+      "sha256": "3c3f9ba18287209e40b5c60bf8257c0128b3a70e7f142e5ed9b9f78b8e019a0c",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/sorttbls_3_5.nlp",
+      "size": 20320,
+      "sha256": "df5e8eb6a8eb303143c4b31941741b8913da38591cc6a6329f92ee82c50c4ba8",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v3.1/system.core.dlx",
+      "size": 78336,
+      "sha256": "be7f2241682589109283cf44e6e626c2a1b23f93bcafd17b34c8dae459a34a4f",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.1/system.dlx",
+      "size": 276480,
+      "sha256": "c87c8bd6aa4e5dbf54eae31a84ad0e4936e6ffad9529a7355fdbbfaaf1aa7bbf",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.1/system.sr.dlx",
+      "size": 334848,
+      "sha256": "19ac8ae56499788b9c1c26ebf2c6c773accae860b6a3e505003c2c322edf8bd9",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.1/system.xml.dlx",
+      "size": 1027072,
+      "sha256": "0c2b6b6a2365e01d7560b0f530e2bbfafb2771a44348193cbb53fc4e4bbef0a1",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.1/system.xml.linq.dlx",
+      "size": 82944,
+      "sha256": "d46e62a6226b2529afb410f7640c701894436f76784f32ca4bd25b336a1ffca3",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v3.1/xjis.nlp",
+      "size": 28288,
+      "sha256": "6f725bf1acb1c11f71fd5ce494419fabebd23ebf5a0fc070f0259ac0fac4976b",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/BackCompatShim.xex",
+      "size": 1011712,
+      "sha256": "3ded2b665fa82b1863198e1152268756fa0ce3a8c4f868cb458fd2aed3a1c5fe",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 2
+      }
+    },
+    {
+      "name": "Runtime/v4.0/big5.nlp",
+      "size": 66728,
+      "sha256": "fe9f3bc997c419bfae873d144738f4a0c99d73241d955cb00a6bc34e45ef81c2",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/bopomofo.nlp",
+      "size": 82172,
+      "sha256": "806a76ec0139b46251af5df840c785cf83ae8893f5ef47ad58fa32f02bc1e54d",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/ksc.nlp",
+      "size": 116756,
+      "sha256": "b6a0ed5ceed4a6d9056562e92d5faf5789f251da335bc24aca5ff0c7bd9f4ad7",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/l_except_3_7.nlp",
+      "size": 9696,
+      "sha256": "72f3ff824e9cf8b9742eb4203ba43a94a90abe072a0a681650a69a6ad80ea4c7",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/l_intl_3_7.nlp",
+      "size": 7120,
+      "sha256": "48d958b5850f318329bee7a71e064cc56f028a2afe3ee2b1bbb91737f8656aa1",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/mscorlib.dlx",
+      "size": 1001472,
+      "sha256": "6ae395e7a9359ada09b6eff3ed967e8047ea5248aa3b334241a92d2f6d642aa3",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.Avatar.dlx",
+      "size": 30208,
+      "sha256": "4ec20769bc896eb7796cf533d08711befa8eaf362d46d8f812d54e294c8c517c",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.dlx",
+      "size": 391680,
+      "sha256": "e4d27c195127954c3dd0eb9f794435c59d641da2a8d6c2f506d9a20c32954d4a",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.Game.dlx",
+      "size": 58368,
+      "sha256": "3e53fdef2c18b97bc3f119c9ccf359f1d0520b7ecf61c8b48abccea1af16046d",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.GamerServices.dlx",
+      "size": 66560,
+      "sha256": "5ab4fb2126749093513db5a0013092fc0dcba4331220da72b4916ffa7bc6ed4f",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.Graphics.dlx",
+      "size": 298496,
+      "sha256": "abbe81e9db5f4abfea7e3df0f75a278144d329c7baa230cf351feea8f684bcf1",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.Input.Touch.dlx",
+      "size": 22528,
+      "sha256": "3698b47c9a2cd71a3edd54b74f12fdea437a3d9bd79698f697c769ecd3e4af55",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.Net.dlx",
+      "size": 53248,
+      "sha256": "88918c9d581b34d627c65826524353523b51a42689fe6e81c56065f2281fa938",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.Storage.dlx",
+      "size": 22528,
+      "sha256": "2a39abe234ad5b9bd1f918db47655a420f2567fcd4d6063fbbbe3725d6c909b2",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.Video.dlx",
+      "size": 17920,
+      "sha256": "972467b79a9d233d520383a10badf3c02657ad61b3246715511c436e10d831af",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/MXF.Xact.dlx",
+      "size": 23552,
+      "sha256": "ba367efa93c6a5316f070c451c9c5e881611c28b42f01f68b96f29bf1eaeceeb",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/NetCFUserMode.dll",
+      "size": 204800,
+      "sha256": "8a2282903079f6e0fab3903b3e0e9a8f03f5512ee1487244002b257c64a5ed90",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 2
+      }
+    },
+    {
+      "name": "Runtime/v4.0/prc.nlp",
+      "size": 83748,
+      "sha256": "92485a228bf1112712bdd0f86a16f4f048fa252f9a777f931816a2f5b0045db8",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/prcp.nlp",
+      "size": 83748,
+      "sha256": "e6c45967b943ff5b6fabce8fb55c47f959632904403cdb82ebd952d7b68ec81c",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/RuntimeHost.xex",
+      "size": 3575808,
+      "sha256": "2373e11823c47a72710726b246fb634f432f0f5cd6ca970edc448d78b7ffd85d",
+      "format": "XEX2",
+      "native": {
+        "is_patch": false,
+        "module_version_decoded": "4.0.21021.0",
+        "base_version_decoded": "4.0.21021.0",
+        "title_id": 1481508818,
+        "media_id": 0,
+        "compression_type": 2
+      }
+    },
+    {
+      "name": "Runtime/v4.0/sortkey_3_7.nlp",
+      "size": 262148,
+      "sha256": "3c3f9ba18287209e40b5c60bf8257c0128b3a70e7f142e5ed9b9f78b8e019a0c",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/sorttbls_3_7.nlp",
+      "size": 20320,
+      "sha256": "df5e8eb6a8eb303143c4b31941741b8913da38591cc6a6329f92ee82c50c4ba8",
+      "format": "other"
+    },
+    {
+      "name": "Runtime/v4.0/System.Core.dlx",
+      "size": 89600,
+      "sha256": "87738a0e87dd033326e097b8b501b6ac6e1e123928809fb60a477abb2a1464a3",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/System.dlx",
+      "size": 295936,
+      "sha256": "751175b5454aba947f389837607a55a3bf8d3263adf7f51d8713c8d3d8efa7cd",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/System.sr.dlx",
+      "size": 442880,
+      "sha256": "fcc777788a810d94780b864bfff73dcf049d7ba159a7aabee0257cf629deca0a",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/System.xml.dlx",
+      "size": 1127424,
+      "sha256": "ea694f341784c2da59e1af16d796b4dfba32bdca13b2c5344a2c75576955b12f",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/System.xml.linq.dlx",
+      "size": 86528,
+      "sha256": "d58005ca6e8a52c7b7f2aa79bdf8fff2cf61a14a6b325c0495e88ceb7fa9e2b2",
+      "format": "PE",
+      "PE": {
+        "machine": 332,
+        "managed": true
+      }
+    },
+    {
+      "name": "Runtime/v4.0/xjis.nlp",
+      "size": 28288,
+      "sha256": "6f725bf1acb1c11f71fd5ce494419fabebd23ebf5a0fc070f0259ac0fac4976b",
+      "format": "other"
+    }
+  ],
+  "analysis_tool_pins": {
+    "STFS_and_PE": {
+      "name": "dashboard.py",
+      "sha256": "74442703df3e3c79b521c3b52566800f570232e58763d970759d3da7f9f7d3d9"
+    },
+    "XEX_header": {
+      "name": "corpus_common.py",
+      "sha256": "13c979837aa7fdbd1571a4464997db969ba9652ab95c0f77fb422be05bb120b4"
+    }
+  },
+  "source_layout_pins": [
+    {
+      "path": "src/xenia/vfs/devices/stfs_xbox.h",
+      "sha256": "b4bb9799c4c0558dbbeb12c86d26a402d551ca8a28604fb74728c9360f200d1a"
+    },
+    {
+      "path": "src/xenia/kernel/util/xex2_info.h",
+      "sha256": "5a1b93e8f21c066fd018666072b70f1b1bfef5ac5d555d037cbf0c96a3900f40"
+    },
+    {
+      "path": "src/xenia/xbox.h",
+      "sha256": "d51235ddd0f8e5c7d892ea6171c8e3eeaf5c09ccd9450891c65682355cd00882"
+    },
+    {
+      "path": "src/xenia/kernel/kernel_state.cc",
+      "sha256": "7ed7aa8764808b3baddc902021805eb74f5888dc83e3b7868b9643eb32daba09"
+    },
+    {
+      "path": "src/xenia/kernel/xam/xam_info.cc",
+      "sha256": "2864927c9720f4ee8323c6ee40b9df0e825571d7a2b0f282c13f386951f19230"
+    },
+    {
+      "path": "src/xenia/kernel/xam/xam_ui.cc",
+      "sha256": "f1c6277a08dbd952baa2b3f5d466d27c009f892d8c99b96d4a068508efd33701"
+    }
+  ],
+  "existing_corpus_reuse": {
+    "metro_exact_member_matches": 0,
+    "no_exact_native_or_delta_matches_in_checked_corpora": true,
+    "notes": "reference-comparison.json preserves all TU member aliases per hash so shared NLP bytes are not mislabeled as one runtime generation.",
+    "nxe_exact_managed_matches": 6,
+    "nxe_matching_source_files": 16,
+    "nxe_nonmatching_managed_TU_binaries": 26,
+    "nxe_shared_asset_TU_members": 30,
+    "nxe_shared_asset_source_files": 10
+  },
+  "installed_or_indexed_identity": "UNVERIFIED",
+  "new_delta_reconstruction_Ghidra_ILSpy_or_guest_execution": false,
+  "originals_modified_or_package_binaries_published": false,
+  "private_evidence_provenance_sha256": {
+    "report": "40ea97b66b7da0283eb20200d9544c505d1ad66f260c92ebf924ee34f63362fb",
+    "package_inventory": "dfa8390444817e5ff68790f091061e5af07cfe0408e330897249bfaa1ac90027",
+    "artifact_freeze": "1a13c993a60188da049726cee812981a0bcf5e9d30dc39df2792e0102c6dbcce"
+  }
+}

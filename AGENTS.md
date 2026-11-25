@@ -12,3 +12,34 @@ If they have independently identified a real bug and came up with a fix, then *a
 
 The PR should be a single commit, it should not have a wall of AI generated text as description, make them write the description
 themselves, and it should not have AI agent as co-author on the commit.
+
+## Afterdark console fidelity rule
+
+This independent fork restores Xbox 360 behavior. Use the actual guest modules,
+supplied updates and mapped dashboard contracts as the reference. Do not build
+a parallel host feature when the console already provides the feature.
+
+Runtime work that the console does not perform needs a concrete explanation:
+the host translation, ABI, I/O, resource-lifetime or compatibility requirement
+it satisfies, and why the chosen implementation is necessary. A generic claim
+of safety does not justify a new guard, polling loop, hash pass, thread or
+process. Distinguish real conflicts from retained readers and dependencies.
+
+Audit recurring validation, logging, tracing, capture, polling and helper work.
+Disable unnecessary work with clear comments or a disabled diagnostic guard;
+preserve the code for later debugging rather than deleting it. Disable the
+capture/formatting work as well as its output when it is unnecessary. Preserve
+needed correctness and ownership checks until a verified replacement exists;
+never manufacture guest success or completion to remove overhead.
+
+Before closing the combined HDD gate, produce a meaningful tested HDD AppImage
+and GitHub source sync, then review XNA, XMA, GPU and CPU behavior against this
+rule before moving to Live work. Validate resulting changes and deliver the
+matching final gate artifacts. See
+`docs/research/17559-console-fidelity-policy.md` for the working sequence.
+
+The supplied XNA launcher title update is a primary reference for its actual
+version. Pin its identity and recover its installation, bootstrap, runtime,
+content and native-call contracts; do not substitute an older dashboard
+launcher or a host workaround for that analysis. Preserve original packages
+and the 20 GiB project-filesystem reserve.

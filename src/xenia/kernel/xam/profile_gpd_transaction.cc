@@ -2,16 +2,76 @@
 #include "xenia/kernel/xam/profile_gpd_transaction.h"
 #include "xenia/base/mutex.h"
 #include "xenia/base/logging.h"
+#include "xenia/base/native_system_ui_trace.h"
 #include "xenia/kernel/xam/tile_service.h"
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <source_location>
 #include "xenia/base/xdbf_view.h"
 #include "xenia/vfs/devices/host_path_device.h"
 #include <set>
 namespace xe::kernel::xam {
+bool ProfilePreparationProgress::Retry(const std::error_code& error) const {
+  if((error!=std::errc::device_or_resource_busy &&
+      error!=std::errc::resource_unavailable_try_again) ||
+      global_critical_region::is_held_by_current_thread() ||
+      (admission_open && !admission_open->load(std::memory_order_acquire)) ||
+      std::chrono::steady_clock::now()>=deadline || !wait)return false;
+  return wait() && (!admission_open || admission_open->load(std::memory_order_acquire)) &&
+      std::chrono::steady_clock::now()<deadline;
+}
 namespace {
 std::error_code Error(std::errc code) { return std::make_error_code(code); }
+// Scalar-only optional observation. Declare first in each observed function,
+// so every model/cache/filesystem/native guard is destroyed before emission.
+// No ProfileManager, Kernel, model, account, path or native owner is retained.
+class GpdLoadRefusal final {
+ public:
+  explicit GpdLoadRefusal(bool repair) noexcept
+      : enabled_(cvars::native_system_ui_trace), repair_(repair) {}
+  ~GpdLoadRefusal() {
+    // An inherited caller GCRC is not ours to release. Keep that real refusal
+    // unchanged and do not format/log under it (as for admission diagnostics).
+    if (!enabled_ || !stage_ ||
+        global_critical_region::is_held_by_current_thread())
+      return;
+    static NativeSystemUiTraceLimiter trace;
+    trace.EmitTransition(
+        (uint64_t(repair_) << 63) | (uint64_t(cache_refusal_ & 3u) << 56) |
+            (uint64_t(stage_) << 32) | error_,
+        "profile", repair_ ? "gpd_repair_refusal" : "gpd_reload_refusal",
+        {{"stage", stage_},
+         {"source_line", line_},
+         {"error", error_},
+         {"category", category_},{"cache_refusal",cache_refusal_}});
+  }
+  std::error_code Result(
+      uint32_t stage, std::error_code error,
+      std::source_location where = std::source_location::current()) noexcept {
+    // Disabled mode performs no field/category/line capture or formatting.
+    if (enabled_ && error && !stage_) {
+      stage_ = stage;
+      line_ = where.line();
+      error_ = uint32_t(error.value());
+      category_ = error.category() == std::generic_category()  ? 1u
+                  : error.category() == std::system_category() ? 2u
+                                                               : 3u;
+    }
+    return error;
+  }
+  std::error_code CacheResult(uint32_t stage,std::error_code error,
+      vfs::HostPathDevice::SnapshotCacheRefusal why,
+      std::source_location where=std::source_location::current()) noexcept {
+    if(enabled_ && error && !stage_)cache_refusal_=uint32_t(why);
+    return Result(stage,error,where);
+  }
+
+ private:
+  const bool enabled_;
+  const bool repair_;
+  uint32_t stage_ = 0, line_ = 0, error_ = 0, category_ = 0, cache_refusal_ = 0;
+};
 GpdSnapshotLoad LoadCurrentFile(const std::shared_ptr<ProfileStorageLease>& lease,
     uint32_t title, const filesystem::SnapshotPublicationSet* members) {
   const GpdSnapshotIdentity identity{lease->xuid(), lease->source_generation(), title};
@@ -105,14 +165,20 @@ std::optional<std::pair<std::u16string, std::array<uint32_t, 3>>> LegacyLittleEn
 }
 }  // namespace
 std::error_code ProfileGpdWriter::RepairLegacyPictureKeys(
-    std::shared_ptr<const vfs::InstalledSystemSource::Snapshot> installed) const {
+    std::shared_ptr<const vfs::InstalledSystemSource::Snapshot> installed,
+    const ProfilePreparationProgress* progress) const {
+  GpdLoadRefusal diagnostic(true);
   if (xe::global_critical_region::is_held_by_current_thread()) {
-    return Error(std::errc::operation_would_block);
+    return diagnostic.Result(1, Error(std::errc::operation_would_block));
   }
-  if (!model || !owner || !recovery) { return Error(std::errc::no_such_device); }
+  if (!model || !owner || !recovery) {
+    return diagnostic.Result(2, Error(std::errc::no_such_device));
+  }
   std::error_code error;
   const auto captured = model->CaptureRead(error);
-  if (!captured) { return error; }
+  if (!captured) {
+    return diagnostic.Result(3, error);
+  }
   ProfileGpdMutation command;
   command.kind = ProfileGpdMutationKind::kSetSettings;
   command.title_id = kDashboardID;
@@ -144,88 +210,115 @@ std::error_code ProfileGpdWriter::RepairLegacyPictureKeys(
   if (command.settings.empty()) { return {}; }
   X_HRESULT status;
   const auto stock = TileService::CaptureStockSource(std::move(installed), status);
-  if (!stock || status != X_E_SUCCESS) { return Error(std::errc::no_such_device); }
+  if (!stock || status != X_E_SUCCESS) {
+    return diagnostic.Result(4, Error(std::errc::no_such_device));
+  }
   // Revalidate the actual tuple against genuine installed resources. Repair
   // changes only its proven byte order; it does not create/replace any image.
   for (const auto index : indexes) {
     for (bool small : {false, true}) {
       const auto picture = TileService::ReadStock(*stock, {index, small});
       if (picture.status != X_E_SUCCESS || picture.bytes.empty()) {
-        return Error(std::errc::no_such_file_or_directory);
+        return diagnostic.Result(5,
+                                 Error(std::errc::no_such_file_or_directory));
       }
     }
   }
   command.request_id = model->AllocateRequestId(error);
-  if (error) { return error; }
+  if (error) {
+    return diagnostic.Result(6, error);
+  }
   // Existing checked upsert/journal preserves the old GPD as recovery bytes,
   // unknown headers/suffixes, actual source, identity and model-version CAS.
-  const auto attempt = Submit(std::move(command), captured->origin.stamp);
-  if (attempt.error) { return attempt.error; }
-  if (attempt.state != ProfileGpdTransactionAttempt::State::kCommitted &&
-      attempt.state != ProfileGpdTransactionAttempt::State::kAlreadyCommitted) {
-    return Error(std::errc::operation_would_block);
+  for(;;){
+    const auto attempt=Submit(command,captured->origin.stamp);
+    if(attempt.error){
+      if(progress && progress->Retry(attempt.error))continue;
+      return diagnostic.Result(7,attempt.error);
+    }
+    if(attempt.state==ProfileGpdTransactionAttempt::State::kCommitted ||
+        attempt.state==ProfileGpdTransactionAttempt::State::kAlreadyCommitted)return {};
+    const auto busy=Error(std::errc::operation_would_block);
+    if((attempt.state!=ProfileGpdTransactionAttempt::State::kPending &&
+        attempt.state!=ProfileGpdTransactionAttempt::State::kDurablePendingCommit) ||
+        !progress || !progress->Retry(busy))return diagnostic.Result(8,busy);
+    // SAME command/request/stamp; the real pending transaction owns any
+    // durable intent. Never allocate/rebase a second repair after partial IO.
   }
-  return {};
 }
-std::error_code ProfileGpdWriter::Reload() const {
+std::error_code ProfileGpdWriter::Reload(const ProfilePreparationProgress* progress) const {
+  GpdLoadRefusal diagnostic(false);
   if (xe::global_critical_region::is_held_by_current_thread()) {
-    return Error(std::errc::operation_would_block);
+    return diagnostic.Result(1, Error(std::errc::operation_would_block));
   }
   if (!model || !owner || !recovery) {
-    return Error(std::errc::no_such_device);
+    return diagnostic.Result(2, Error(std::errc::no_such_device));
   }
   const auto lease = model->storage();
   std::error_code pending_error;
   const auto pending = model->Pending(pending_error);
   if (pending_error) {
-    return pending_error;
+    return diagnostic.Result(3, pending_error);
   }
   if (pending) {
-    return Error(std::errc::device_or_resource_busy);
+    return diagnostic.Result(4, Error(std::errc::device_or_resource_busy));
   }
   auto error = ProfileGpdTransaction::ReplayBeforeLoad(lease, owner, recovery, metadata);
   if (error) {
-    return error;
+    return diagnostic.Result(5, error);
   }
   auto previous = model->CaptureLoads(error);
   if (error) {
-    return error;
+    return diagnostic.Result(6, error);
   }
   auto current = LoadCurrentModels(lease, previous.get(), error);
   if (!current) {
-    return error;
+    return diagnostic.Result(7, error);
   }
   auto pictures = CaptureProfilePictures(lease->view(), error);
-  if (!pictures) { return error; }
+  if (!pictures) {
+    return diagnostic.Result(8, error);
+  }
   auto prepared = model->PrepareLoaded(std::move(*current), error, std::move(pictures));
   if (!prepared) {
-    return error;
+    return diagnostic.Result(9, error);
   }
-  auto cache = lease->device()->PrepareSnapshotCache(prepared->tokens(), error);
-  if (!cache) {
-    return error;
+  std::shared_ptr<vfs::HostPathDevice::PreparedSnapshotCache> cache;
+  for(;;){
+    if(!cache){
+      cache=lease->device()->PrepareSnapshotCache(prepared->tokens(),error);
+      if(!cache){
+        if(progress && progress->Retry(error))continue;
+        return diagnostic.CacheResult(10,error,error==std::errc::device_or_resource_busy?
+            vfs::HostPathDevice::SnapshotCacheRefusal::kNamespaceBusy:vfs::HostPathDevice::SnapshotCacheRefusal::kNone);
+      }
+    }
+    auto checked=lease->view()->ValidateSnapshotBatch(prepared->tokens(),error);
+    if(!checked){
+      if(progress && progress->Retry(error))continue;
+      return diagnostic.Result(11,error);
+    }
+    std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(std::move(checked));
+    auto model_commit=model->TryCommitPreserving(prepared,batch,error);
+    if(!model_commit){
+      batch.reset(); // actual filesystem guard ends BEFORE any wait
+      if(progress && progress->Retry(error))continue;
+      return diagnostic.Result(12,error);
+    }
+    vfs::HostPathDevice::SnapshotCacheRefusal why;
+    auto cache_commit=lease->device()->TryCommitSnapshotCache(cache,batch,error,&why);
+    if(!cache_commit){
+      prepared=model_commit->ReleaseUnapplied();model_commit.reset();batch.reset();
+      if(!prepared)return diagnostic.Result(13,Error(std::errc::operation_canceled));
+      if(why==vfs::HostPathDevice::SnapshotCacheRefusal::kCapacityChanged)cache.reset();
+      // Immutable models/tokens stay owned. Every new final attempt performs
+      // genuine snapshot validation; stale bytes never become a fresh load.
+      if(progress && progress->Retry(error))continue;
+      return diagnostic.CacheResult(13,error,why);
+    }
+    if(!model_commit->Apply())return diagnostic.Result(14,Error(std::errc::operation_canceled));
+    cache_commit->Apply();return {};
   }
-  auto checked =
-      lease->view()->ValidateSnapshotBatch(prepared->tokens(), error);
-  if (!checked) {
-    return error;
-  }
-  std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(
-      std::move(checked));
-  auto model_commit = model->TryCommit(std::move(prepared), batch, error);
-  if (!model_commit) {
-    return error;
-  }
-  auto cache_commit =
-      lease->device()->TryCommitSnapshotCache(std::move(cache), batch, error);
-  if (!cache_commit) {
-    return error;
-  }
-  if (!model_commit->Apply()) {
-    return std::make_error_code(std::errc::operation_canceled);
-  }
-  cache_commit->Apply();
-  return {};
 }
 std::optional<ProfileGpdMutationOrigin>
 ProfileGpdWriter::CaptureCurrentOrigin(const ProfileGpdMutation &command,

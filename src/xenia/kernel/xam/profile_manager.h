@@ -12,6 +12,8 @@
 
 #include <array>
 #include <bitset>
+#include <chrono>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -427,7 +429,19 @@ class ProfileManager {
   std::shared_ptr<ProfileRosterIntent> PrepareRosterAttempt(
       const ProfileRosterDesired&, const ProfileRosterExpected&,
       std::error_code&, std::shared_ptr<ProfileRosterIntent>* retained_attempt,
+      const ProfileDeletionReservation* deletion = nullptr,
+      const ProfilePreparationProgress* progress=nullptr);
+  // Same immutable request/CAS across bounded contention retries. Each wait
+  // occurs only after the complete one-shot attempt and cancellation unwind.
+  std::shared_ptr<ProfileRosterIntent> PrepareRosterWithProgress(
+      const ProfileRosterDesired&, const ProfileRosterExpected&,
+      std::error_code&, std::chrono::steady_clock::time_point,
+      const std::function<bool()>&,
       const ProfileDeletionReservation* deletion = nullptr);
+  // Failed cancellation remains owned by the exact pending operation and,
+  // when bound, the existing native Bootstrap cleanup slot through real stop.
+  ProfileRosterResult CancelRosterPreparation(
+      const std::shared_ptr<ProfileRosterIntent>&);
   std::shared_ptr<const ProfileAccountSnapshot> RefreshRosterAccount(
       const std::shared_ptr<const ProfileAccountSnapshot>&);
   std::shared_ptr<UserProfile> CaptureRosterProfile(uint8_t) const;
@@ -515,7 +529,8 @@ class ProfileManager {
   std::error_code LoadGpdModel(
       std::shared_ptr<ProfileGpdModelAuthority>,
       std::shared_ptr<ProfileStorageLease>,
-      std::shared_ptr<const filesystem::ProfileIntentOwner>);
+      std::shared_ptr<const filesystem::ProfileIntentOwner>,
+      const ProfilePreparationProgress* progress=nullptr);
   std::bitset<XUserMaxUserCount> preparing_slots_;
   std::array<uint64_t, XUserMaxUserCount> preparing_generations_{};
   std::set<uint64_t> preparing_profiles_, retiring_profiles_;

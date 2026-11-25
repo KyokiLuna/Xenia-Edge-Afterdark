@@ -44,6 +44,7 @@ class Device;
 class SymbolicLinkToken;
 enum class DeviceRetirementPolicy;
 class XContentContainerDevice;
+class ManagedFileService;
 }  // namespace vfs
 }  // namespace xe
 
@@ -632,6 +633,8 @@ class ContentManager {
   std::mutex content_flush_mutex_;
   std::map<uint64_t, std::shared_ptr<ContentFlush>> content_flushes_;
   uint64_t next_content_flush_ = 1;
+  X_STATUS PrepareNativeFolderPolicies(const ContentSourceState&,
+      std::vector<std::shared_ptr<vfs::ManagedFileService>>&);
   X_RESULT PublishContentHeader(uint64_t, XCONTENT_AGGREGATE_DATA, bool create,
                                PackageSelection* created_selection = nullptr,
                                std::span<const filesystem::ContentPackageInitialMember>

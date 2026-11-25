@@ -29,6 +29,8 @@
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xfile.h"
 #include "xenia/kernel/xstfs_device.h"
+#include "xenia/kernel/xam/native_folder_content.h"
+#include "xenia/base/snapshot_publication_set.h"
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/devices/stfs_xbox.h"
 #include "xenia/vfs/devices/xcontent_devices/stfs_container_device.h"
@@ -40,6 +42,46 @@ DECLARE_string(logged_profile_slot_0_xuid);
 DECLARE_string(logged_profile_slot_1_xuid);
 DECLARE_string(logged_profile_slot_2_xuid);
 DECLARE_string(logged_profile_slot_3_xuid);
+
+namespace xe::kernel::xam {
+class NativeFolderContentTestAccess final {
+ public:
+  using Session = filesystem::ContentMutationOwner::ProfileHeaderPublication;
+  static std::shared_ptr<NativeFolderContent> Prepare(const ContentSourceState& source,
+      std::filesystem::path package,
+      std::shared_ptr<const filesystem::HostStorageSnapshotToken> actual,
+      const ConsoleSigningIdentity::Certificate& certificate,
+      folder_content_detail::PackageIdentity expected, std::error_code& error) {
+    return NativeFolderContent::Prepare({source.storage, source.volume,
+        source.storage_volume, certificate}, std::move(package), std::move(actual), expected, error);
+  }
+  static std::shared_ptr<Session> Issue(filesystem::ContentMutationOwner& cm,
+      const std::filesystem::path& package,
+      std::shared_ptr<const filesystem::HostStorageSnapshotToken> header,
+      const std::shared_ptr<filesystem::SnapshotPublicationSet>& members,
+      std::error_code& error) { return cm.PrepareProfileHeader(package, std::move(header), members, error); }
+  static auto Seal(Session& session, std::error_code& error) { return session.Seal(error); }
+  static auto PrepareCommit(Session& session,
+      const filesystem::SnapshotPublicationSet& members, std::error_code& error) {
+    return session.PrepareCanonical(members, error);
+  }
+  static auto Commit(Session& session, const filesystem::SnapshotPublicationSet& members) {
+    return session.CommitCanonical(members);
+  }
+  static auto CaptureHeader(vfs::FolderContentPackage& file,
+      std::span<const uint8_t> actual_before, std::error_code& error) {
+    return file.CaptureHeaderBefore(actual_before, error);
+  }
+  static X_STATUS Adopt(vfs::FolderContentPackage& file, std::shared_ptr<Session> session,
+      std::span<const uint8_t> owned_native_before) {
+    return file.AdoptHeaderPublication(std::move(session), owned_native_before);
+  }
+  static X_STATUS Promote(vfs::FolderContentPackage& file, const std::shared_ptr<Session>& session,
+      std::shared_ptr<const filesystem::HostStorageSnapshotToken> current) {
+    return file.PromoteCommittedHeader(session, std::move(current));
+  }
+};
+}
 
 namespace xe::kernel {
 class NativeStfsDeviceTestAccess final {
@@ -132,7 +174,8 @@ class Fixture {
   Fixture(bool readonly = true, bool single_hash = true,
           bool nested_package = false,
           filesystem::ConsoleStorageType source_type = filesystem::ConsoleStorageType::Invalid,
-          bool content_subroot = false, bool managed_folder = false) {
+          bool content_subroot = false, bool managed_folder = false,
+          bool native_content_edge = false) {
     REQUIRE(KernelState::shared() == nullptr);
     for (const auto& name : {"content", "cache", "packages"}) {
       REQUIRE(std::filesystem::create_directory(scratch.path / name));
@@ -195,7 +238,8 @@ class Fixture {
           ? xam::DeviceType::HDD : xam::DeviceType::USBMASS;
       REQUIRE(kernel().content_manager()->RegisterManagedSource(
           {"native-wire", 3, type, xam::ContentSourceKind::kManaged, scratch.path / "packages",
-           "\\Device\\PirsSource", u"Native wire", false, 0, "\\Device\\PirsVolume", {}, scratch.path}));
+           native_content_edge ? "\\Device\\PirsVolume\\Content" : "\\Device\\PirsSource",
+           u"Native wire", false, 0, "\\Device\\PirsVolume", {}, scratch.path}));
       const auto selected = kernel().content_manager()->sources().Source("native-wire");
       REQUIRE(selected); REQUIRE(selected->available); REQUIRE(selected->storage_volume);
       std::error_code error; storage = selected->storage->Subroot({}, readonly, error);
@@ -1236,3 +1280,389 @@ TEST_CASE("Borrowed preparation cannot publish a replaced source and retries onl
   CHECK(f.fs().AcquireDevice(descriptor.guest_root) == actual);
 }
 }  // namespace xe::kernel::test
+
+#if XE_PLATFORM_LINUX
+namespace xe::kernel::test {
+namespace {
+struct FolderFileCloser { void operator()(vfs::File* file) const { if (file) { file->Destroy(); } } };
+using FolderFile = std::unique_ptr<vfs::File, FolderFileCloser>;
+class FolderDeniedMember final : public vfs::ManagedFileService {
+ public:
+  FolderDeniedMember(std::filesystem::path file,
+      std::shared_ptr<const filesystem::HostStorageDirectoryIdentity> parent)
+      : path_(std::move(file)), parent_(std::move(parent)) {}
+  const std::filesystem::path& backing_path() const override { return path_; }
+  auto backing_directory() const -> std::shared_ptr<const filesystem::HostStorageDirectoryIdentity> override { return parent_; }
+  bool retiring() const override { return false; }
+  X_STATUS Open(std::shared_ptr<vfs::Device>, std::string, vfs::FileDisposition,
+      uint32_t, bool, vfs::File** output, vfs::FileAction* action) override {
+    ++attempts; *output = nullptr; *action = vfs::FileAction::kDoesNotExist; return X_STATUS_ACCESS_DENIED;
+  }
+  unsigned attempts = 0;
+ private:
+  std::filesystem::path path_;
+  std::shared_ptr<const filesystem::HostStorageDirectoryIdentity> parent_;
+};
+// Real CM/retained filesystem/crypto/managed registry/VFS/Kernel path below
+// XAM's original parser and actual native cache issuer. No PPC body executes,
+// no native SAVE/frame/image gate is claimed, and no retail attestation exists.
+class FolderFixture {
+ public:
+  FolderFixture() : f(false, true, false, filesystem::ConsoleStorageType::HDD,
+                      false, false, true) {
+    const auto selected = f.kernel().content_manager()->sources().Source("native-wire");
+    REQUIRE(selected); source = *selected;
+    REQUIRE(source.storage); REQUIRE(source.volume); REQUIRE(source.storage_volume);
+    REQUIRE(f.kernel().console_signing_identity());
+    vfs::XContentContainerHeader value{};
+    value.content_header.magic = vfs::XContentPackageType::kCon;
+    value.content_header.header_size = sizeof(value) + extra_header_bytes;
+    value.content_metadata.metadata_version = 2;
+    value.content_metadata.content_type = XContentType::kProfile;
+    value.content_metadata.profile_id = xuid;
+    value.content_metadata.execution_info.title_id = 0xFFFE07D1;
+    value.content_metadata.content_size = payload.size() + protected_bytes.size();
+    value.content_metadata.volume_descriptor.stfs.descriptor_length = 36;
+    value.content_metadata.volume_descriptor.stfs.file_table_block_count = 1;
+    value.content_metadata.volume_descriptor.stfs.total_block_count = 3;
+    const auto console_id = f.kernel().console_signing_identity()->console_id();
+    std::copy(console_id.begin(), console_id.end(), value.content_metadata.console_id);
+    // Existing aligned source fixture: extra Header and NONZERO real padding
+    // are owned bytes; the later sidecar tail is preserved but never raw data.
+    header.resize(aligned_header_bytes + sidecar_tail_bytes, 0xA9);
+    std::memcpy(header.data(), &value, sizeof(value));
+    std::fill(header.begin() + sizeof(value), header.begin() + sizeof(value) + extra_header_bytes, 0x7B);
+    std::fill(header.begin() + sizeof(value) + extra_header_bytes,
+              header.begin() + aligned_header_bytes, 0xD3);
+    REQUIRE_FALSE(xam::folder_content_detail::SignNativeHeader(header, *f.kernel().console_signing_identity()));
+    std::error_code error;
+    auto absent = source.volume->mutations()->CaptureMetadata(filesystem::ContentMutationOwner::Kind::kCreate,
+        package, target, error);
+    REQUIRE(absent); REQUIRE_FALSE(error); REQUIRE_FALSE(absent->exists());
+    const std::array<filesystem::ContentPackageInitialMember, 2> members{{
+        {"FFFE07D1.gpd", payload, false}, {"denied.bin", protected_bytes, false}}};
+    const auto created = source.volume->mutations()->CreateInitial(package, absent, header, members);
+    REQUIRE_FALSE(created.error); REQUIRE(created.complete);
+    before = source.volume->mutations()->CaptureMetadata(filesystem::ContentMutationOwner::Kind::kHeader,
+        package, target, error);
+    REQUIRE(before); REQUIRE_FALSE(error);
+    // Exercise the actual source mount producer; no private policy Prepare
+    // helper or test registry shortcut supplies this raw CON capability.
+    auto actual_package = source.storage->Subroot(package, false, error);
+    REQUIRE(actual_package); REQUIRE_FALSE(error);
+    denied = std::make_shared<FolderDeniedMember>(source.storage->path() / package / "denied.bin",
+                                                 actual_package->directory_identity());
+    REQUIRE(f.fs().RegisterManagedFile(denied));
+    REQUIRE(f.kernel().content_manager()->MountManagedSourceDevices("native-wire") == X_STATUS_SUCCESS);
+    vfs::File* opened = nullptr; vfs::FileAction action{};
+    const auto status = f.fs().OpenFile(nullptr, guest_package, vfs::FileDisposition::kOpen,
+        filesystem::FileAccess::kFileReadData | filesystem::FileAccess::kFileWriteData,
+        false, true, &opened, &action);
+    FolderFile close_on_failure(opened);
+    REQUIRE(status == X_STATUS_SUCCESS); REQUIRE(opened); REQUIRE(action == vfs::FileAction::kOpened);
+    raw = object_ref<XFile>(new XFile(&f.kernel(), close_on_failure.release(), true, false, true));
+    raw_handle = raw->handle();
+    f.Store32(0x18, raw_handle);
+    auto* packet = f.memory().TranslateVirtual(f.packet()); packet[0x53] = 1;
+    std::memcpy(packet + 0x1C, &value.content_metadata.volume_descriptor.stfs, 36);
+  }
+  ~FolderFixture() { raw.reset(); }
+  void CloseRawHandle() {
+    REQUIRE(f.kernel().object_table()->ReleaseHandle(raw_handle) == X_STATUS_SUCCESS);
+    raw.reset(); raw_handle = 0;
+  }
+  FolderFile OpenMember(std::string_view leaf, uint32_t access, X_STATUS& status) {
+    vfs::File* file = nullptr; vfs::FileAction action{};
+    status = f.fs().OpenFile(nullptr, std::string("\\Device\\NativePirs0\\") + std::string(leaf),
+        vfs::FileDisposition::kOpen, access, false, true, &file, &action);
+    return FolderFile(file);
+  }
+  std::span<const uint8_t> NativeHeader() const {
+    return std::span<const uint8_t>(header).first(aligned_header_bytes);
+  }
+  std::vector<uint8_t> ActualHeader() {
+    std::vector<uint8_t> bytes; REQUIRE_FALSE(source.volume->content()->ReadFile(target, 1 << 20, bytes)); return bytes;
+  }
+  Fixture f;
+  static constexpr uint64_t xuid = 0xE000000000000001ull;
+  static constexpr uint32_t extra_header_bytes = 37;
+  static constexpr uint32_t aligned_header_bytes = 0xA000;
+  static constexpr uint32_t sidecar_tail_bytes = 11;
+  const std::filesystem::path package = "E000000000000001/FFFE07D1/00010000/E000000000000001";
+  const std::filesystem::path target = "E000000000000001/FFFE07D1/Headers/00010000/E000000000000001.header";
+  const std::string guest_package = "\\Device\\PirsVolume\\Content\\E000000000000001\\FFFE07D1\\00010000\\E000000000000001";
+  const std::vector<uint8_t> payload{0x10, 0, 0x20, 0x30, 0x40, 0, 0x50, 0x60};
+  const std::vector<uint8_t> protected_bytes{7, 8, 9};
+  xam::ContentSourceState source;
+  std::vector<uint8_t> header;
+  std::shared_ptr<const filesystem::HostStorageSnapshotToken> before;
+  std::shared_ptr<FolderDeniedMember> denied;
+  object_ref<XFile> raw;
+  X_HANDLE raw_handle = 0;
+};
+}
+TEST_CASE("CM folder Header projection reaches the real Stfs kernel mount and existing member policies",
+          "[kernel][stfs][folder_con][ownership]") {
+  FolderFixture f;
+  auto* const original_file = f.raw->file();
+  const auto* const original_entry = original_file->entry();
+  vfs::File::Information info{};
+  REQUIRE(original_file->QueryInformation(&info) == X_STATUS_SUCCESS);
+  // Two real payload blocks + exact one-table descriptor + paired hashes.
+  // This is the explicitly owned virtual range, not packed physical storage.
+  CHECK(info.end_of_file == 0xF000);
+  CHECK_FALSE(info.attributes & vfs::kFileAttributeDirectory);
+  std::vector<uint8_t> actual(0xA000); size_t count = 99;
+  REQUIRE(original_file->ReadSync(actual, 0, &count) == X_STATUS_SUCCESS);
+  REQUIRE(count == actual.size());
+  REQUIRE(std::equal(f.NativeHeader().begin(), f.NativeHeader().end(), actual.begin()));
+  REQUIRE(actual[sizeof(vfs::XContentContainerHeader) + FolderFixture::extra_header_bytes] == 0xD3);
+  CHECK(f.ActualHeader() == f.header); // unknown sidecar tail was not exposed
+  std::array<uint8_t, 2> attempted{};
+  CHECK(original_file->ReadSync(attempted, 0xA000, &count) == X_STATUS_NOT_SUPPORTED); CHECK(count == 0);
+  CHECK(original_file->WriteSync(attempted, 0, &count) == X_STATUS_ACCESS_DENIED); CHECK(count == 0);
+  REQUIRE(f.denied->attempts == 0);
+  const auto old_content = f.f.fs().AcquireDevice("\\Device\\PirsVolume\\Content");
+  REQUIRE(old_content);
+  CHECK(XFAILED(f.f.kernel().content_manager()->RefreshManagedContentView("native-wire")));
+  CHECK(f.f.fs().AcquireDevice("\\Device\\PirsVolume\\Content") == old_content);
+  CHECK(f.raw->file() == original_file);
+  f.raw->set_position(37);
+  REQUIRE(f.f.Create() == X_STATUS_SUCCESS); CHECK(f.raw->position() == 37);
+  const auto body_address = f.f.Load32(0x48); auto body = XStfsDevice::Lookup(f.f.kernel(), body_address);
+  REQUIRE(body); REQUIRE_FALSE(body->retired());
+  CHECK(xe::load_and_swap<uint32_t>(f.f.memory().TranslateVirtual(body->context_address())) == 0);
+  // Kernel only allocates its genuine context; original native code must still
+  // populate its own 971A header/context, which this low-level case does not run.
+  X_STATUS status; auto member = f.OpenMember("FFFE07D1.gpd", filesystem::FileAccess::kFileReadData, status);
+  REQUIRE(status == X_STATUS_SUCCESS); REQUIRE(member);
+  std::array<uint8_t, 8> bytes{};
+  REQUIRE(member->ReadSync(bytes, 0, &count) == X_STATUS_SUCCESS);
+  REQUIRE(count == bytes.size()); REQUIRE(std::equal(bytes.begin(), bytes.end(), f.payload.begin()));
+  auto refused = f.OpenMember("denied.bin", filesystem::FileAccess::kFileReadData, status);
+  REQUIRE_FALSE(refused); REQUIRE(status == X_STATUS_ACCESS_DENIED); REQUIRE(f.denied->attempts == 1);
+  const uint32_t output = f.f.allocation + 0x600;
+  REQUIRE(f.f.Call(0x25A, {body_address, 3, output}) == X_STATUS_SUCCESS);
+  CHECK(std::memcmp(f.f.memory().TranslateVirtual(output), body->descriptor().data(), 36) == 0);
+  CHECK(f.f.Call(0x25A, {body_address, 2, 0}) == X_STATUS_INVALID_DEVICE_REQUEST);
+  CHECK(original_file == f.raw->file()); CHECK(original_entry == f.raw->file()->entry());
+  member.reset();
+  REQUIRE(f.f.Call(0x3B, {body_address}) == X_STATUS_SUCCESS);
+  REQUIRE(body->retired());
+  CHECK(f.f.Call(0x25A, {body_address, 3, output}) == XStfsDevice::kDisconnected);
+  f.CloseRawHandle();
+  REQUIRE(f.f.kernel().content_manager()->RefreshManagedContentView("native-wire") == X_STATUS_SUCCESS);
+  const auto fresh_content = f.f.fs().AcquireDevice("\\Device\\PirsVolume\\Content");
+  REQUIRE(fresh_content); CHECK(fresh_content != old_content);
+  CHECK(old_content->namespace_retiring());
+  vfs::File* reopened = nullptr; vfs::FileAction action{};
+  const auto refreshed = f.f.fs().OpenFile(nullptr, f.guest_package, vfs::FileDisposition::kOpen,
+      filesystem::FileAccess::kFileReadData, false, true, &reopened, &action);
+  FolderFile close_reopened(reopened);
+  REQUIRE(refreshed == X_STATUS_SUCCESS); REQUIRE(close_reopened);
+  CHECK(bool(close_reopened->folder_content_package()));
+}
+TEST_CASE("Native folder mount preparation releases its Header lease and refuses a replaced Header on later mounts",
+          "[kernel][stfs][folder_con][source]") {
+  FolderFixture f;
+  REQUIRE(f.f.Create() == X_STATUS_SUCCESS);
+  auto body = XStfsDevice::Lookup(f.f.kernel(), f.f.Load32(0x48)); REQUIRE(body);
+  auto changed = f.header;
+  auto* metadata = reinterpret_cast<vfs::XContentContainerHeader*>(changed.data());
+  metadata->content_metadata.description_raw.uint[0][0] = u'X';
+  REQUIRE_FALSE(xam::folder_content_detail::SignNativeHeader(changed, *f.f.kernel().console_signing_identity()));
+  const auto committed = f.source.volume->mutations()->WriteMetadata(
+      filesystem::ContentMutationOwner::Kind::kHeader, f.package, f.before, changed);
+  REQUIRE_FALSE(committed.error); REQUIRE(committed.complete); REQUIRE(f.ActualHeader() == changed);
+  // There was no permanently held Header read lease after the actual first
+  // kernel publication. That old immutable File is not relabeled as new data.
+  const std::string second = "\\Device\\NativeConOld";
+  std::memcpy(f.f.memory().TranslateVirtual(f.f.allocation + 0x200), second.data(), second.size());
+  f.f.Store16(0, uint16_t(second.size())); f.f.Store16(2, uint16_t(second.size()));
+  f.f.Store32(0x48, 0xA1A2A3A4); f.f.Store32(0x4C, 0xB1B2B3B4);
+  CHECK(XFAILED(f.f.Create()));
+  CHECK(f.f.Load32(0x48) == 0xA1A2A3A4); CHECK(f.f.Load32(0x4C) == 0xB1B2B3B4);
+  CHECK_FALSE(f.f.fs().AcquireDevice(second));
+  std::vector<uint8_t> owned(f.NativeHeader().size()); size_t count = 0;
+  REQUIRE(f.raw->file()->ReadSync(owned, 0, &count) == X_STATUS_SUCCESS);
+  CHECK(std::equal(owned.begin(), owned.end(), f.NativeHeader().begin()));
+  CHECK(f.ActualHeader() == changed);
+  REQUIRE(body->Dismount() == X_STATUS_SUCCESS);
+}
+TEST_CASE("Native raw Header uses one issued stage and a stable File through genuine common CAS",
+          "[kernel][stfs][folder_con][header_stage]") {
+  FolderFixture f;
+  auto* const file = f.raw->file(); const auto* const entry = file->entry();
+  auto source = file->folder_content_package(); REQUIRE(source);
+  std::error_code error;
+  auto wrong_before = std::vector<uint8_t>(f.NativeHeader().begin(), f.NativeHeader().end());
+  wrong_before[0x344] ^= 1;
+  CHECK_FALSE(xam::NativeFolderContentTestAccess::CaptureHeader(*source, wrong_before, error));
+  CHECK(error == std::errc::permission_denied); CHECK(f.ActualHeader() == f.header);
+  // Even actual matching H bytes (or an unknown short sidecar tail) cannot
+  // stand in for native ctx+0x98AC's complete retained aligned remainder.
+  const auto h = sizeof(vfs::XContentContainerHeader) + FolderFixture::extra_header_bytes;
+  CHECK_FALSE(xam::NativeFolderContentTestAccess::CaptureHeader(*source, f.NativeHeader().first(h), error));
+  CHECK(error == std::errc::permission_denied);
+  CHECK_FALSE(xam::NativeFolderContentTestAccess::CaptureHeader(*source, f.header, error));
+  CHECK(error == std::errc::permission_denied); // full sidecar is not flattened raw context
+  const auto captured = xam::NativeFolderContentTestAccess::CaptureHeader(*source, f.NativeHeader(), error);
+  REQUIRE(captured); REQUIRE_FALSE(error);
+  CHECK(captured->root() == f.source.volume->content());
+  CHECK(captured->relative() == f.before->relative());
+  CHECK(captured->info().file_id == f.before->info().file_id);
+  REQUIRE(std::equal(captured->bytes().begin(), captured->bytes().end(), f.header.begin(), f.header.end()));
+  auto profile = f.source.storage->Subroot(f.package, false, error); REQUIRE(profile); REQUIRE_FALSE(error);
+  auto gpd = profile->CaptureSnapshot("FFFE07D1.gpd", 4096, error, true); REQUIRE(gpd); REQUIRE_FALSE(error);
+  auto members = filesystem::SnapshotPublicationSet::Reserve(profile, {gpd}, error);
+  REQUIRE(members); REQUIRE_FALSE(error);
+  auto session = xam::NativeFolderContentTestAccess::Issue(*f.source.volume->mutations(),
+      f.package, captured, members, error);
+  REQUIRE(session); REQUIRE_FALSE(error);
+  REQUIRE(xam::NativeFolderContentTestAccess::Adopt(*source, session, f.NativeHeader()) == X_STATUS_SUCCESS);
+  CHECK_FALSE(xam::NativeFolderContentTestAccess::CaptureHeader(*source, f.NativeHeader(), error));
+  CHECK(error == std::errc::device_or_resource_busy);
+  auto changed = f.header;
+  auto* body = reinterpret_cast<vfs::XContentContainerHeader*>(changed.data());
+  body->content_metadata.thumbnail_size = 3;
+  body->content_metadata.thumbnail[0] = 0x31;
+  body->content_metadata.thumbnail[1] = 0x32;
+  body->content_metadata.thumbnail[2] = 0x33;
+  REQUIRE_FALSE(xam::folder_content_detail::SignNativeHeader(changed, *f.f.kernel().console_signing_identity()));
+  size_t count = 0;
+  SECTION("partial prefix keeps the actual old aligned remainder") {
+    constexpr size_t dirty_end = 0x171D; // signature/hash + three thumbnail bytes
+    REQUIRE(file->WriteSync(std::span<const uint8_t>(changed).first(dirty_end), 0, &count) == X_STATUS_SUCCESS);
+    REQUIRE(count == dirty_end);
+  }
+  SECTION("full native extra-Header write includes its real alignment bytes") {
+    REQUIRE(file->WriteSync(std::span<const uint8_t>(changed).first(0x971A), 0, &count) == X_STATUS_SUCCESS);
+    REQUIRE(count == 0x971A);
+    const auto remainder = std::span<const uint8_t>(changed).subspan(0x971A,
+        FolderFixture::aligned_header_bytes - 0x971A);
+    REQUIRE(file->WriteSync(remainder, 0x971A, &count) == X_STATUS_SUCCESS);
+    REQUIRE(count == remainder.size());
+  }
+  const std::array<uint8_t, 1> unowned_tail{0};
+  CHECK(file->WriteSync(unowned_tail, FolderFixture::aligned_header_bytes, &count) == X_STATUS_NOT_SUPPORTED);
+  CHECK(count == 0);
+  REQUIRE(file->Flush() == X_STATUS_SUCCESS);
+  // Read through the issued original token, not a public-path bypass of its
+  // genuine reservation. Complete public bytes remain original before CAS.
+  REQUIRE(session->expected()->bytes().size() == f.header.size());
+  REQUIRE(std::equal(f.header.begin(), f.header.end(), session->expected()->bytes().begin()));
+  const auto sealed = xam::NativeFolderContentTestAccess::Seal(*session, error);
+  REQUIRE(sealed); REQUIRE_FALSE(error); REQUIRE(*sealed == changed);
+  const auto prepared = xam::NativeFolderContentTestAccess::PrepareCommit(*session, *members, error);
+  REQUIRE(prepared); REQUIRE_FALSE(error);
+  const auto stage_inode = prepared->stage_info().file_id;
+  const auto committed = xam::NativeFolderContentTestAccess::Commit(*session, *members);
+  REQUIRE_FALSE(committed.error); REQUIRE(committed.published); REQUIRE(committed.durable);
+  REQUIRE(committed.current); CHECK(committed.current->info().file_id == stage_inode);
+  // TestAccess exercises this boundary BELOW the genuine native cache issuer;
+  // the real NativeProfileSave owner must supply its actual checkpoint first.
+  REQUIRE(xam::NativeFolderContentTestAccess::Promote(*source, session, committed.current) == X_STATUS_SUCCESS);
+  CHECK(file == f.raw->file()); CHECK(entry == f.raw->file()->entry());
+  session.reset(); members.reset();
+  auto ordinary = f.source.storage->OpenFile(f.package / "FFFE07D1.gpd",
+      filesystem::FileAccess::kFileWriteData, error);
+  REQUIRE(ordinary); REQUIRE_FALSE(error); ordinary.reset();
+  // The cached File retains only independent Header bytes/layout pins, not
+  // the released Header or GPD publication permits/admission/session.
+  std::vector<uint8_t> read(FolderFixture::aligned_header_bytes);
+  REQUIRE(file->ReadSync(read, 0, &count) == X_STATUS_SUCCESS);
+  REQUIRE(std::equal(read.begin(), read.end(), changed.begin()));
+  REQUIRE(f.ActualHeader() == changed); // CAS/promotion preserved opaque tail too
+  REQUIRE(std::all_of(changed.begin() + FolderFixture::aligned_header_bytes,
+                      changed.end(), [](uint8_t b) { return b == 0xA9; }));
+}
+TEST_CASE("CM folder raw source refuses missing or altered actual alignment bytes without zero fabrication",
+          "[kernel][stfs][folder_con][native_header_alignment][source]") {
+  FolderFixture f; f.CloseRawHandle();
+  auto malformed = f.header;
+  SECTION("H-only Header with an unclassified short sidecar tail") {
+    malformed.resize(sizeof(vfs::XContentContainerHeader) + FolderFixture::extra_header_bytes + 11);
+  }
+  SECTION("actual padding changed without the corresponding native digest") {
+    malformed[sizeof(vfs::XContentContainerHeader) + FolderFixture::extra_header_bytes + 1] ^= 1;
+  }
+  const auto written = f.source.volume->mutations()->WriteMetadata(
+      filesystem::ContentMutationOwner::Kind::kHeader, f.package, f.before, malformed);
+  REQUIRE_FALSE(written.error); REQUIRE(written.complete);
+  vfs::File* raw = nullptr; vfs::FileAction action{};
+  const auto status = f.f.fs().OpenFile(nullptr, f.guest_package, vfs::FileDisposition::kOpen,
+      filesystem::FileAccess::kFileReadData, false, true, &raw, &action);
+  FolderFile close(raw);
+  CHECK(XFAILED(status)); CHECK_FALSE(close); CHECK(action == vfs::FileAction::kDoesNotExist);
+  CHECK(f.ActualHeader() == malformed); // refusal never repairs or rewrites input
+}
+TEST_CASE("Native folder virtual extent includes structural hash thresholds and refuses unowned geometry",
+          "[kernel][stfs][folder_con][virtual_extent]") {
+  FolderFixture f;
+  f.CloseRawHandle();
+  uint32_t total = 170;
+  uint64_t virtual_blocks = 174;
+  bool single = false, invalid = false;
+  enum class Refusal { kNone, kFree, kOverallocated, kCount, kTable, kDomain } refusal{};
+  SECTION("paired tables include trailing L1 at170") {}
+  SECTION("paired tables include trailing L2 at28900") { total = 28900; virtual_blocks = 29244; }
+  SECTION("single-copy format uses the actual L0-only consumer") { single = true; virtual_blocks = 171; }
+  SECTION("free-state ownership cannot be inferred from its count") { invalid = true; refusal = Refusal::kFree; }
+  SECTION("directory overallocation needs its own real source") { invalid = true; refusal = Refusal::kOverallocated; }
+  SECTION("declared blocks cannot enlarge the actual retained layout") { invalid = true; refusal = Refusal::kCount; }
+  SECTION("a missing real native file table cannot be manufactured") { invalid = true; refusal = Refusal::kTable; }
+  SECTION("unsupported top-level domain never adopts decoder fallback0") { invalid = true; refusal = Refusal::kDomain; }
+  // One real sparse member resize supplies the exact retained logical sizes.
+  // No payload copy/clone, fake FileHandle, header-only enlarged EOF or guest
+  // output success supplies these real member identities and byte lengths.
+  std::error_code error;
+  {
+    auto member = f.source.storage->OpenFile(f.package / "FFFE07D1.gpd",
+        filesystem::FileAccess::kFileWriteData, error);
+    REQUIRE(member); REQUIRE_FALSE(error);
+    REQUIRE_FALSE(member->ResizeResult(size_t(total - 2) * 4096));
+    REQUIRE_FALSE(member->FlushResult());
+    const auto observed = member->QueryInfo(error);
+    REQUIRE(observed); REQUIRE_FALSE(error); REQUIRE(observed->size == uint64_t(total - 2) * 4096);
+  }
+  auto changed = f.header;
+  auto* parsed = reinterpret_cast<vfs::XContentContainerHeader*>(changed.data());
+  auto& descriptor = parsed->content_metadata.volume_descriptor.stfs;
+  descriptor.total_block_count = total;
+  descriptor.flags.bits.read_only_format = single;
+  parsed->content_metadata.content_size = virtual_blocks * 4096;
+  switch (refusal) {
+    case Refusal::kFree: descriptor.free_block_count = 1; break;
+    case Refusal::kOverallocated: descriptor.flags.bits.directory_overallocated = 1; break;
+    case Refusal::kCount: descriptor.total_block_count = total + 1; break;
+    case Refusal::kTable: descriptor.file_table_block_count = 0; break;
+    case Refusal::kDomain: descriptor.total_block_count = 4913000; break;
+    default: break;
+  }
+  REQUIRE_FALSE(xam::folder_content_detail::SignNativeHeader(changed,
+      *f.f.kernel().console_signing_identity()));
+  const auto written = f.source.volume->mutations()->WriteMetadata(
+      filesystem::ContentMutationOwner::Kind::kHeader, f.package, f.before, changed);
+  REQUIRE_FALSE(written.error); REQUIRE(written.complete);
+  vfs::File* raw = nullptr; vfs::FileAction action{};
+  const auto opened = f.f.fs().OpenFile(nullptr, f.guest_package, vfs::FileDisposition::kOpen,
+      filesystem::FileAccess::kFileReadData, false, true, &raw, &action);
+  FolderFile close(raw);
+  if (invalid) {
+    CHECK(XFAILED(opened)); CHECK_FALSE(close); CHECK(action == vfs::FileAction::kDoesNotExist);
+    CHECK(f.ActualHeader() == changed); return;
+  }
+  REQUIRE(opened == X_STATUS_SUCCESS); REQUIRE(close); CHECK(action == vfs::FileAction::kOpened);
+  vfs::File::Information info{};
+  REQUIRE(close->QueryInformation(&info) == X_STATUS_SUCCESS);
+  CHECK(info.end_of_file == 0xA000 + virtual_blocks * 4096);
+  // An owned virtual range is not an invented readable/hash-verified sector.
+  std::array<uint8_t, 8> output{}; output.fill(0xA7); size_t count = 99;
+  CHECK(close->ReadSync(output, 0xA000, &count) == X_STATUS_NOT_SUPPORTED);
+  CHECK(count == 0); CHECK(std::all_of(output.begin(), output.end(), [](auto b) { return b == 0xA7; }));
+  CHECK(close->ReadSync(output, size_t(info.end_of_file), &count) == X_STATUS_END_OF_FILE);
+  CHECK(count == 0); CHECK(f.ActualHeader() == changed);
+}
+}  // namespace xe::kernel::test
+
+#endif  // XE_PLATFORM_LINUX: actual protected local signing/storage backend

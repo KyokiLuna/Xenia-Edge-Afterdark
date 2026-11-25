@@ -10,6 +10,7 @@
 
 #include "third_party/mbedtls/include/mbedtls/bignum.h"
 #include "third_party/mbedtls/include/mbedtls/rsa.h"
+#include "third_party/mbedtls/include/mbedtls/sha1.h"
 
 // Performs RSA public-key encryption/decryption matching
 // XeCryptBnQwNeRsaPubCrypt. All buffers use the Xbox 360 layout: big-endian
@@ -115,6 +116,52 @@ inline bool XeCryptVerifyRsaSha1Pkcs1(std::span<const uint8_t> public_key,
                                 signature_be.data());
   mbedtls_rsa_free(&context);
   return valid;
+}
+
+// Parse only the genuine public certificate wire format. This is arithmetic
+// input, NOT certificate trust or a native/filesystem permission. No private
+// key or ConsoleSigningIdentity owner is needed by retained package Files.
+inline bool XeCryptConsoleCertificatePublicKey(
+    std::span<const uint8_t> certificate, std::array<uint8_t, 144>& key) {
+  if (certificate.size() != 0x1A8 || certificate[0] != 1 ||
+      certificate[1] != 0xA8) { return false; }
+  key = {}; key[3] = 16;
+  std::copy_n(certificate.data() + 0x24, 4, key.data() + 4);
+  std::copy_n(certificate.data() + 0x28, 128, key.data() + 16);
+  return true;
+}
+
+// The caller supplies its ALREADY-TRUSTED local console certificate from the
+// actual ConsoleDataOwner producer, never from this signature/header itself.
+// Equality with that exact complete public certificate is the local anchor.
+// A different certificate needs a real supplied MASTER key and chain check;
+// absent/unknown trust never accepts a foreign self-signed certificate.
+// comparison preserves native zero-same/nonzero-different certificate bytes,
+// not a claim of retail attestation or a cached console-identity permission.
+inline bool XeCryptVerifyConsoleSignature(
+    std::span<const uint8_t> trusted_local_certificate,
+    std::span<const uint8_t> hash, std::span<const uint8_t> signature,
+    uint32_t& comparison,
+    std::span<const uint8_t> trusted_master_public_key = {}) {
+  if (trusted_local_certificate.size() != 0x1A8 || hash.size() != 20 ||
+      signature.size() != 0x228) { return false; }
+  const auto certificate = signature.first(0x1A8);
+  comparison = 0;
+  for (size_t i = 0; i != certificate.size(); ++i) {
+    comparison |= uint32_t(certificate[i] ^ trusted_local_certificate[i]);
+  }
+  if (comparison) {
+    std::array<uint8_t, 20> digest{};
+    if (trusted_master_public_key.size() != 272 ||
+        mbedtls_sha1(certificate.data(), 0xA8, digest.data()) ||
+        !XeCryptVerifyRsaSha1Pkcs1(trusted_master_public_key, digest,
+                                  certificate.subspan(0xA8, 256))) {
+      return false;
+    }
+  }
+  std::array<uint8_t, 144> key{};
+  return XeCryptConsoleCertificatePublicKey(certificate, key) &&
+      XeCryptVerifyRsaSha1Pkcs1(key, hash, signature.subspan(0x1A8, 128));
 }
 
 #endif  // XECRYPT_RSA_H_

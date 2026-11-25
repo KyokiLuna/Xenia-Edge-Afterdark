@@ -1,6 +1,7 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #ifndef XENIA_VFS_MANAGED_FILE_SERVICE_H_
 #define XENIA_VFS_MANAGED_FILE_SERVICE_H_
+#include <atomic>
 #include <filesystem>
 #include <memory>
 #include <utility>
@@ -11,6 +12,24 @@
 #include "xenia/vfs/file_open_context.h"
 #include "xenia/vfs/entry.h"
 namespace xe::vfs {
+// Pure cached namespace values derived by the existing managed package owner.
+// This owns NO native descriptor, Device, source/model/capability or callback;
+// reading/updating it never grants File access or touches the filesystem.
+class ManagedFileNamespaceView final {
+ public:
+  explicit ManagedFileNamespaceView(std::shared_ptr<const File::Information> initial)
+      : current_(std::move(initial)) {}
+  std::shared_ptr<const File::Information> Snapshot() const noexcept {
+    return current_.load(std::memory_order_acquire);
+  }
+  // The actual producer prepares the plain value before its namespace commit.
+  // Existing Source/CM transaction ownership, not this cache, grants publication.
+  void PublishPrepared(std::shared_ptr<const File::Information> value) noexcept {
+    current_.store(std::move(value),std::memory_order_release);
+  }
+ private:
+  std::atomic<std::shared_ptr<const File::Information>> current_;
+};
 // Host-owned, exact managed leaves only. Matching selects an existing policy;
 // neither a filename nor a guessed Account layout creates storage authority.
 // Open runs after releasing namespace ownership, before any disposition effect.
@@ -21,6 +40,21 @@ class ManagedFileService {
   virtual std::shared_ptr<const filesystem::HostStorageDirectoryIdentity>
   backing_directory() const = 0;  // prepared real native pin, metadata only
   virtual bool retiring() const = 0;  // metadata/atomics only
+  enum class NamespaceRole { kProtectedLeaf, kRawFolderProjection };
+  // The explicit CM-issued raw folder projection manages the actual package
+  // node, not its independently opened member leaves. The real member Device
+  // still uses every ordinary/Account/GPD/PNG per-open policy. Defaults retain
+  // existing descendant protection; tombstones retain the published role.
+  virtual NamespaceRole namespace_role() const noexcept {
+    return NamespaceRole::kProtectedLeaf;
+  }
+  // Optional source/catalog-derived file projection over the SAME physical
+  // managed leaf, prepared outside namespace ownership. The producer checks
+  // the exact actual Device/volume generation. Default ordinary services do
+  // not change namespace shape. OpenWithContext still owns every permission.
+  virtual std::shared_ptr<const ManagedFileNamespaceView> NamespaceView(
+      const Device&) const { return {}; }
+
   virtual X_STATUS Open(std::shared_ptr<Device> requested_device,
       std::string requested_path, FileDisposition, uint32_t access,
       bool directory, File**, FileAction*) = 0;
@@ -56,6 +90,8 @@ class ManagedFileRegistry final {
     std::filesystem::path path;
     std::shared_ptr<const filesystem::HostStorageDirectoryIdentity> parent;
     std::weak_ptr<ManagedFileService> service;
+    ManagedFileService::NamespaceRole role =
+        ManagedFileService::NamespaceRole::kProtectedLeaf;
   };
   // Tombstones retain genuine directory/ancestor pins, never a mounted device,
   // Account file handle or producer authority. This prevents inode reuse from

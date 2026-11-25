@@ -8,6 +8,7 @@
  */
 
 #include "xenia/vfs/devices/host_path_device.h"
+#include "xenia/vfs/managed_file_service.h"
 #include <algorithm>
 #include <limits>
 #include <system_error>
@@ -53,6 +54,9 @@ HostPathDevice::PrepareSnapshotCache(
         tokens,
     std::error_code& error) {
   error.clear();
+  if(namespace_retiring()){
+    error=std::make_error_code(std::errc::operation_canceled);return {};
+  }
   if (read_only_ || !storage_ || tokens.empty() ||
       tokens.size() >
           filesystem::HostStorageRoot::kMaximumSnapshotBatchTokens) {
@@ -94,6 +98,11 @@ HostPathDevice::PrepareSnapshotCache(
     error = std::make_error_code(std::errc::device_or_resource_busy);
     return {};
   }
+  // Withdrawal publishes under this same namespace lock. The pre-lock fast
+  // negative alone cannot prevent retirement racing successful admission.
+  if(namespace_retiring()){
+    error=std::make_error_code(std::errc::operation_canceled);return {};
+  }
   auto* root = static_cast<HostPathEntry*>(root_entry_.get());
   if (!root) {
     error = std::make_error_code(std::errc::no_such_device);
@@ -108,8 +117,11 @@ std::unique_ptr<HostPathDevice::SnapshotCacheCommit>
 HostPathDevice::TryCommitSnapshotCache(
     std::shared_ptr<PreparedSnapshotCache> prepared,
     std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch,
-    std::error_code& error) {
-  error.clear();
+    std::error_code& error,SnapshotCacheRefusal* refusal) {
+  error.clear();if(refusal)*refusal=SnapshotCacheRefusal::kNone;
+  if(namespace_retiring()){
+    error=std::make_error_code(std::errc::operation_canceled);return {};
+  }
   if (!prepared || prepared->device.get() != this || !batch ||
       batch->root() != storage_ || read_only_ ||
       prepared->rows.size() != batch->tokens().size()) {
@@ -122,8 +134,14 @@ HostPathDevice::TryCommitSnapshotCache(
   result->batch_ = std::move(batch);
   result->namespace_lock_ = xe::global_critical_region::TryAcquire();
   if (!result->namespace_lock_.owns_lock()) {
+    if(refusal)*refusal=SnapshotCacheRefusal::kNamespaceBusy;
     error = std::make_error_code(std::errc::device_or_resource_busy);
     return {};
+  }
+  // Withdrawal publishes under this same namespace lock. The pre-lock fast
+  // negative alone cannot prevent retirement racing successful admission.
+  if(namespace_retiring()){
+    error=std::make_error_code(std::errc::operation_canceled);return {};
   }
   auto* root = static_cast<HostPathEntry*>(root_entry_.get());
   if (!root) {
@@ -179,6 +197,7 @@ HostPathDevice::TryCommitSnapshotCache(
          existing->has_open_files() || existing->overwritten_.load() ||
          existing->overwrite_handle_ || existing->overwrite_lease_ ||
          existing->reported_size_fixed_)) {
+      if(refusal)*refusal=SnapshotCacheRefusal::kActiveEntry;
       error = std::make_error_code(std::errc::device_or_resource_busy);
       return {};
     }
@@ -191,6 +210,7 @@ HostPathDevice::TryCommitSnapshotCache(
     }
   }
   if (root->children_.capacity() - root->children_.size() < additions) {
+    if(refusal)*refusal=SnapshotCacheRefusal::kCapacityChanged;
     error = std::make_error_code(std::errc::device_or_resource_busy);
     return {};
   }
@@ -476,6 +496,26 @@ void HostPathDevice::PopulateEntry(
                                  .lexically_relative(storage_->path()),
                              filesystem::FileAccess::kFileReadData, error);
       if (!visible) {
+        continue;
+      }
+    }
+
+    // The existing managed package policy, when present, supplies only cached
+    // namespace metadata. Keep its actual directory leaf as the backing path;
+    // native raw opens must reach that exact policy before any disposition.
+    // Registry binding happens in real unpublished Device preparation, outside
+    // GCRC and before this tree is visible. A closed/unknown managed leaf never
+    // falls through to legacy payload substitution or child enumeration.
+    if (collapse_content_packages_ &&
+        child_info.type==xe::filesystem::FileInfo::Type::kDirectory &&
+        IsContentTypeName(parent_entry->name())) {
+      const auto physical=parent_entry->host_path()/child_info.name;
+      if (const auto managed=ManagedFile(physical)) {
+        const auto view=managed->NamespaceView(*this);
+        auto* projected=HostPathEntry::Create(this,parent_entry,physical,child_info);
+        projected->managed_namespace_view_=view;
+        if (view) projected->ApplyManagedNamespaceView();
+        parent_entry->children_.emplace_back(projected);
         continue;
       }
     }

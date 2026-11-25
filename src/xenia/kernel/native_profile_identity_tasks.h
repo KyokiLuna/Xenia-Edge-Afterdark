@@ -560,14 +560,48 @@ class NativeProfileIdentityTasks final {
   static uint32_t ProfileProducerFrameBytes(uint32_t function) noexcept {
     return function==0x8199E3E0?0x190u:function==0x8199E148?0xD0u:0u;
   }
+  // Scalar prepublication provenance only, never an allocation lease.
+  struct ProfileOutput {
+    enum class Kind:uint8_t {kStack,kAsyncPacket};
+    Kind kind=Kind::kStack;uint32_t packet=0,overlap=0;
+    bool operator==(const ProfileOutput&) const=default;
+  };
+  static std::optional<ProfileOutput> CaptureProfileOutput(Frame owner,Frame schedule,
+      uint32_t output,uint32_t overlap,uint32_t packet,std::array<uint32_t,3> linkage) noexcept {
+    const auto bytes=ProfileProducerFrameBytes(owner.function);
+    if(!owner.valid() || !schedule.valid() || owner.root!=schedule.root ||
+       owner.thread!=schedule.thread || owner.pcr!=schedule.pcr || !bytes || owner.sp<bytes ||
+       schedule.function!=0x816BA440 || schedule.sp!=owner.sp-bytes ||
+       schedule.lr!=(owner.function==0x8199E3E0?0x8199F01Cu:0x8199E248u))return {};
+    if(!overlap){
+      if(packet || linkage!=std::array<uint32_t,3>{} ||
+         output!=schedule.sp+(owner.function==0x8199E3E0?0x5Cu:0x50u))return {};
+      return ProfileOutput{};
+    }
+    if(owner.function!=0x8199E3E0 || !Address(overlap) || overlap>UINT32_MAX-0x1B ||
+       !Address(packet) || packet>UINT32_MAX-0x1B || output!=packet+0x18 ||
+       linkage!=std::array<uint32_t,3>{0xFEu,overlap,packet})return {};
+    return ProfileOutput{ProfileOutput::Kind::kAsyncPacket,packet,overlap};
+  }
+  // Original224's error tail completes its own caller on the original frame,
+  // without a scheduled worker Birth. This proves only that actual ABI edge.
+  static bool MatchesInitializerErrorCompletion(Frame owner,Frame completion,
+      uint32_t owner_overlap,uint32_t overlap,uint32_t error,uint32_t extended,uint32_t length) noexcept {
+    return owner.valid() && completion.valid() && owner.function==0x8199E3E0 &&
+        completion.function==0x816A2588 && completion.lr==0x8199EEBC &&
+        owner.root==completion.root && owner.thread==completion.thread && owner.pcr==completion.pcr &&
+        owner.sp>=0x190 && completion.sp==owner.sp-0x190 && Address(owner_overlap) &&
+        overlap==owner_overlap && int32_t(extended)<0 && error==0x65B && !length;
+  }
   // A producer receipt preserves only the actual creator/transport/output
   // metadata. It owns no Work, read ticket, stack pointer or native reference.
   struct ProfileProducer {
     uint64_t owner_serial=0;Frame owner,schedule;
-    Birth birth{};uint32_t callback=0,argument=0,output=0;
+    Birth birth{};uint32_t callback=0,argument=0,output=0;ProfileOutput output_proof{};
     std::array<uint32_t,2> options{};bool has_options=false;
     uint32_t native_flags=0,native_data=0;bool native_bound=false;
     bool published=false,schedule_returned=false,schedule_succeeded=false,owner_close_entered=false;
+    bool release_started=false; // Real deleting-destructor entry, not completion.
     bool MatchesOwner(uint64_t serial,Frame actual) const noexcept {
       return owner_serial && serial==owner_serial && owner==actual;
     }
@@ -583,7 +617,8 @@ class NativeProfileIdentityTasks final {
     bool entered=false,returned=false,body_admitted=false,failed=false;
     bool Enter(const ProfileProducer& producer,uint64_t serial,Frame owner,
         Frame actual,Birth actual_target,Birth actual_parent,uint32_t tagged) noexcept {
-      if(entered || failed || !producer.MatchesOwner(serial,owner) || !producer.published ||
+      if(entered || failed || producer.output_proof.kind!=ProfileOutput::Kind::kStack ||
+         !producer.MatchesOwner(serial,owner) || !producer.published ||
          !producer.schedule_returned || !producer.schedule_succeeded || producer.owner_close_entered || !producer.native_bound ||
          !SameBirth(producer.birth,actual_target) || !actual_parent.generation || !actual_parent.origin ||
          !Address(actual_parent.task) || SameBirth(actual_target,actual_parent) ||
@@ -1347,7 +1382,7 @@ class NativeProfileIdentityTasks final {
     Lose(__LINE__,7);return 0;
   }
   bool BindProfileProducer(uint64_t schedule,uint64_t serial,Frame owner,
-      std::optional<std::array<uint32_t,2>> options) {
+      std::optional<std::array<uint32_t,2>> options,ProfileOutput output_proof) {
     auto* call=FindSchedule(schedule);
     if(lost_ || !call || call->producer || !serial || !Match(owner) || call->origin<=2 ||
        call->created_persistent || call->resident_physical || call->transport_only ||
@@ -1355,12 +1390,17 @@ class NativeProfileIdentityTasks final {
        owner.thread!=call->frame.thread || owner.pcr!=call->frame.pcr ||
        !ProfileProducerFrameBytes(owner.function) || owner.sp<ProfileProducerFrameBytes(owner.function) ||
        call->frame.sp!=owner.sp-ProfileProducerFrameBytes(owner.function) ||
-       call->output<call->frame.sp || uint64_t(call->output)+4>owner.sp ||
-       bool(call->parameters)!=bool(options) ||
+       CaptureProfileOutput(owner,call->frame,call->output,output_proof.overlap,output_proof.packet,
+           output_proof.kind==ProfileOutput::Kind::kAsyncPacket?
+             std::array<uint32_t,3>{0xFEu,output_proof.overlap,output_proof.packet}:std::array<uint32_t,3>{})!=
+         std::optional<ProfileOutput>{output_proof} ||
+       (output_proof.kind==ProfileOutput::Kind::kStack && (output_proof.packet || output_proof.overlap)) ||
+       call->parameters!=call->frame.sp+(owner.function==0x8199E3E0?0x70u:0x58u) ||
+       !options ||
        (owner.function==0x8199E3E0 ? call->callback!=0x8199C838 && call->callback!=0x8199E148 :
         call->callback!=0x8199C838))return false;
     ProfileProducer p;p.owner_serial=serial;p.owner=owner;p.schedule=call->frame;
-    p.callback=call->callback;p.argument=call->argument;p.output=call->output;
+    p.callback=call->callback;p.argument=call->argument;p.output=call->output;p.output_proof=output_proof;
     p.has_options=bool(options);if(options)p.options=*options;call->producer=p;return true;
   }
   bool BindProfileNativeState(uint64_t schedule,uint32_t task,uint32_t flags,uint32_t data) {
@@ -1368,7 +1408,7 @@ class NativeProfileIdentityTasks final {
     if(lost_ || !call || !node || node->birth.task!=task || !node->producer ||
        !node->published || node->producer->native_bound)return false;
     node->producer->native_flags=flags;node->producer->native_data=data;
-    node->producer->native_bound=true;return true;
+    node->producer->native_bound=true;call->producer=node->producer;return true;
   }
   bool ObserveProfileCancelState(Birth birth,uint32_t flags,uint32_t data) {
     auto* node=FindBirth(birth.generation);
@@ -1377,7 +1417,10 @@ class NativeProfileIdentityTasks final {
     auto& p=*node->producer;
     if(!p.native_bound || p.native_data!=data ||
        (flags!=p.native_flags && flags!=(p.native_flags&~0x10000000u)))return false;
-    p.native_flags=flags;return true; // Observe only real native Cancel mutation.
+    p.native_flags=flags;
+    for(auto& call:schedules_)if(call && call->birth==birth.generation && call->producer)
+      call->producer->native_flags=flags;
+    return true; // Observe only real native Cancel mutation.
   }
   const ProfileProducer* ProfileProducerFor(Birth birth) const noexcept {
     const auto* node=FindBirthConst(birth.generation);
@@ -1388,7 +1431,7 @@ class NativeProfileIdentityTasks final {
     auto* node=FindBirth(birth.generation);
     if(!node || !SameBirth(node->birth,birth) || !node->producer)return;
     auto& p=*node->producer;
-    if(p.schedule_returned && actual.function==0x816B7490 && actual.root==p.owner.root &&
+    if(p.output_proof.kind==ProfileOutput::Kind::kStack && p.schedule_returned && actual.function==0x816B7490 && actual.root==p.owner.root &&
        actual.thread==p.owner.thread && actual.pcr==p.owner.pcr && actual.sp==p.schedule.sp)
       p.owner_close_entered=true; // Conservative withdrawal, never a release receipt.
   }
@@ -1417,7 +1460,7 @@ class NativeProfileIdentityTasks final {
       value->transport_only=call->transport_only;value->continuation_ticket=call->continuation_ticket;
       value->persistent_output=call->created_persistent?call->output:0;
       value->periodic_factory=call->periodic_factory;
-      if(call->producer){value->producer=call->producer;value->producer->birth=birth;}
+      if(call->producer){call->producer->birth=birth;value->producer=call->producer;}
       call->birth=generation;return birth;
     } }
     Lose(__LINE__,18);return {};
@@ -1437,7 +1480,7 @@ class NativeProfileIdentityTasks final {
         !actual_tagged_output || *actual_tagged_output!=(actual_task|1u) ||
         (node->periodic_factory && !node->periodic_allocation)) { Lose(__LINE__,3);return false; }
     call->publish_entered=true;node->published=true;
-    if(node->producer)node->producer->published=true;
+    if(node->producer){node->producer->published=true;call->producer=node->producer;}
     return true;
   }
   bool ReturnSchedule(uint64_t schedule,Frame frame,uint32_t actual_hresult,
@@ -1445,18 +1488,24 @@ class NativeProfileIdentityTasks final {
     auto* call=FindSchedule(schedule);
     if (!call || lost_ || call->created_persistent || frame!=call->frame || !call->allocation_returned ||
         (int32_t(actual_hresult)>=0 && !call->publish_entered)) { Lose(__LINE__,26);return false; }
-    if(auto* node=FindBirth(call->birth);node && node->producer){
-      auto& p=*node->producer;
+    if(call->producer && call->birth){
+      auto& p=*call->producer;auto* node=FindBirth(call->birth);
+      if(!SameBirth(p.birth,Birth{call->birth,call->origin,p.birth.task}))return false;
       if(int32_t(actual_hresult)>=0){
-        // B9BB8 alone may clear native flag00080000 before publication.
-        // This captures its actual state, not a host store or permission.
-        if(!p.native_bound || !actual_native_state || (*actual_native_state)[1]!=p.native_data ||
-           ((*actual_native_state)[0]!=p.native_flags &&
-            (*actual_native_state)[0]!=(p.native_flags&~0x00080000u)))return false;
-        p.native_flags=(*actual_native_state)[0];
+        // Genuine deletion can race this older own-return. The exact scalar
+        // receipt survives address/slot reuse; no freed Task/packet is read.
+        if(!p.native_bound)return false;
+        if(p.release_started){if(actual_native_state)return false;}
+        else {
+          if(!node || !SameBirth(node->birth,p.birth) || node->delete_entered || node->free_entered || node->freed ||
+             !actual_native_state || (*actual_native_state)[1]!=p.native_data ||
+             ((*actual_native_state)[0]!=p.native_flags &&
+              (*actual_native_state)[0]!=(p.native_flags&~0x00080000u)))return false;
+          p.native_flags=(*actual_native_state)[0];
+        }
       }
-      node->producer->schedule_returned=true;
-      node->producer->schedule_succeeded=int32_t(actual_hresult)>=0;
+      p.schedule_returned=true;p.schedule_succeeded=int32_t(actual_hresult)>=0;
+      if(node && SameBirth(node->birth,p.birth) && node->producer)node->producer=p;
     }
     if(const auto* node=FindBirthConst(call->birth);node && node->periodic_factory &&
         int32_t(actual_hresult)>=0 && (!actual_native_state ||
@@ -1601,7 +1650,15 @@ class NativeProfileIdentityTasks final {
     for(const auto& work:external_)if(work && work->birth.generation==node->birth.generation){Lose(__LINE__,13);return false;}
     for(const auto& modify:modifications_)if(modify && modify->birth==node->birth.generation){Lose(__LINE__,13);return false;}
     if(!parent){Lose(__LINE__,13);return false;}
-    for(auto& d:deletions_)if(!d){d=Deletion{frame,{},node->birth.generation,node->execution_only};node->delete_entered=true;return true;}
+    for(auto& d:deletions_)if(!d){
+      d=Deletion{frame,{},node->birth.generation,node->execution_only};node->delete_entered=true;
+      if(node->producer){
+        node->producer->release_started=true;
+        for(auto& call:schedules_)if(call && call->birth==node->birth.generation && call->producer)
+          call->producer->release_started=true;
+      }
+      return true;
+    }
     Lose(__LINE__,13);return false;
   }
   bool EnterTaskFree(Frame frame,uint32_t actual_task) {

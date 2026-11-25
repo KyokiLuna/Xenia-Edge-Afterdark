@@ -67,6 +67,7 @@ bool ManagedFileRegistry::Register(std::shared_ptr<ManagedFileService> service) 
       service->backing_path().lexically_normal() != service->backing_path() ||
       service->retiring()) { return false; }
   const auto parent=service->backing_directory();
+  const auto role = service->namespace_role();
   if (!parent || parent->path()!=service->backing_path().parent_path()) { return false; }
   // Weak locking can race external retirement. Retain every acquired old
   // service until AFTER the registry/GCRC owner is destroyed on every return.
@@ -81,13 +82,15 @@ bool ManagedFileRegistry::Register(std::shared_ptr<ManagedFileService> service) 
       const auto& owner=retired_keepalive.emplace_back(old.service.lock());
       if (owner == service) { return true; }
       if (owner && !owner->retiring()) { return false; }
-      if (physical) { old.service = service; return true; }
+      if (physical) {
+        old.service = service; old.role = role; return true;
+      }
       // A new physical directory at the same spelling does not erase the old
       // retained alias tombstone. The new row wins exact current-path lookup.
     }
   }
   if (services_.size() == 4096) { return false; }
-  services_.push_back({service->backing_path(),parent,service});
+  services_.push_back({service->backing_path(),parent,service,role});
   return true;
 }
 std::shared_ptr<ManagedFileService> ManagedFileRegistry::Find(
@@ -120,13 +123,33 @@ bool ManagedFileRegistry::Protects(const std::filesystem::path& path,
   auto lock = namespace_.Acquire();
   for (const auto& service : services_) {
     if (SameManagedLeaf(service.path, path) ||
-        (root && service.parent->Overlaps(service.path.filename(),*root,
-                                         relative,subtree,true)) ||
         (subtree && ContainsManagedLeaf(path, service.path))) {
       return true;
     }
+    if (!root || !service.parent->Overlaps(service.path.filename(), *root,
+                                           relative, subtree, true)) {
+      continue;
+    }
+    if (service.role == ManagedFileService::NamespaceRole::kRawFolderProjection &&
+        service.parent->OverlapsKnown(service.path.filename(), *root,
+                                      relative, false, true) &&
+        !service.parent->SameEntry(service.path.filename(), *root,
+                                   relative, true)) {
+      // This is a PROVED physical descendant of the projected package node.
+      // It needs its own real member File policy, not the raw package policy.
+      // Exact package/ancestor operations and unknown physical ancestry still
+      // refuse. Other exact managed member rows are checked independently.
+      continue;
+    }
+    return true;
   }
   return false;
+}
+bool VirtualFileSystem::BindManagedFileRegistryForPreparation(Device& device) {
+  if (global_critical_region::is_held_by_current_thread() ||
+      !device.weak_from_this().expired() || device.namespace_retiring()) return false;
+  device.SetManagedFileRegistry(managed_files_);
+  return true;
 }
 VirtualFileSystem::VirtualFileSystem()
     : managed_files_(std::make_shared<ManagedFileRegistry>()) {}

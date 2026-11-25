@@ -2371,7 +2371,7 @@ namespace {
 std::filesystem::path WriteHostImportPackage(ContentRestartRuntime& runtime,
     std::string_view leaf, std::span<const uint8_t> payload,
     XContentType type = XContentType::kMarketplaceContent, uint32_t version = 0,
-    bool malformed_name = false) {
+    bool malformed_name = false, bool nonzero_alignment = false) {
   constexpr size_t block = 0x1000;
   auto header = std::make_unique<vfs::XContentContainerHeader>();
   header->content_header.magic = vfs::XContentPackageType::kPirs;
@@ -2413,6 +2413,9 @@ std::filesystem::path WriteHostImportPackage(ContentRestartRuntime& runtime,
   const auto base = xe::round_up(sizeof(*header), block);
   std::vector<uint8_t> bytes(base + (blocks + 2) * block);
   std::memcpy(bytes.data(), header.get(), sizeof(*header));
+  if (nonzero_alignment) {
+    std::fill(bytes.begin() + sizeof(*header), bytes.begin() + base, 0x6D);
+  }
   std::memcpy(bytes.data() + base, &hash, sizeof(hash));
   std::memcpy(bytes.data() + base + block, &directory, sizeof(directory));
   std::memcpy(bytes.data() + base + 2 * block, payload.data(), payload.size());
@@ -2606,6 +2609,32 @@ TEST_CASE("Host import validates original header destination and commits retaine
     REQUIRE(row.attributes.size == payload.size());
     REQUIRE(row.package_path == destination);
   }
+}
+
+TEST_CASE("Host native content import retains actual aligned Header bytes from the opened packed source",
+          "[kernel][content][host_import][folder_con][native_header_alignment]") {
+  ContentRestartRuntime runtime;
+  const std::array<uint8_t, 5> payload{0x31, 0, 0x80, 0xFF, 0x52};
+  // Test-owned PIRS shape exercises import/source ownership only. It is not
+  // claimed to carry retail attestation or grant the writable CON capability.
+  const auto input = WriteHostImportPackage(runtime, "aligned-import", payload,
+      XContentType::kMarketplaceContent, 0, false, true);
+  const auto before = filesystem::ReadAllBytes(input);
+  REQUIRE(before.size() > 0xA000); REQUIRE(before[0x971A] == 0x6D);
+  std::error_code error; auto operation = runtime.emulator->TryBeginHostContentImport(error);
+  REQUIRE(operation); REQUIRE_FALSE(error);
+  Emulator::ContentInstallEntry entry(input);
+  REQUIRE(operation->Prepare(input, entry) == X_STATUS_SUCCESS);
+  const auto destination = entry.data_installation_path_;
+  REQUIRE(operation->Install(entry) == X_STATUS_SUCCESS);
+  const auto sidecar = destination.parent_path().parent_path() / "Headers" /
+      destination.parent_path().filename() / (destination.filename().string() + ".header");
+  const auto actual = filesystem::ReadAllBytes(sidecar);
+  REQUIRE(actual.size() == 0xA000);
+  CHECK(std::equal(actual.begin(), actual.end(), before.begin()));
+  CHECK(actual[0x971A] == 0x6D); CHECK(actual.back() == 0x6D);
+  CHECK(ReadText(destination / "payload.bin") == std::string(payload.begin(), payload.end()));
+  CHECK(filesystem::ReadAllBytes(input) == before);
 }
 
 // Explicit research integration only: supplied packages stay in place. The

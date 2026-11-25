@@ -12,6 +12,7 @@
 #include <source_location>
 #include <utility>
 #include "xenia/base/logging.h"
+#include "xenia/base/threading.h"
 #include "xenia/base/native_system_ui_trace.h"
 #include "xenia/cpu/thread_state.h"
 #include "xenia/kernel/kernel_state.h"
@@ -158,10 +159,17 @@ struct ProfileRosterExpected::Proof {
 };
 struct ProfileRosterIntent::State {
   std::weak_ptr<ProfileRosterAuthority> authority;
-  std::shared_ptr<const HostRoster> old_roster, new_roster;
+  std::shared_ptr<const HostRoster> old_roster, new_roster, canceled_empty_roster;
   std::array<uint8_t, 4 * 0x188> native_rows{};
   std::atomic<ProfileRosterPhase> phase{ProfileRosterPhase::kPreparing};
-  ProfileRosterResult result;
+  // Advisory request only. Only CancelRoster's original PM-locked transition
+  // may change phase, and entered/published native operations are excluded.
+  std::atomic<bool> preparation_cancel_requested{false};
+  std::weak_ptr<::xe::kernel::NativeProfileIdentityOwner> preparation_owner;
+  ProfileRosterResult result, canceled_empty_result;
+  // Zero before publication; 1=requested, 2=canceled-empty. Chosen once before
+  // the Published release. Neither prepared metadata nor wire rows change.
+  std::atomic<uint32_t> published_choice{0};
   // Set once from the actual held PM envelopes before publishing Prepared.
   // Empty slot numbers alone never substitute for absent native row owners.
   bool empty_unchanged_rows = false;
@@ -173,6 +181,8 @@ struct ProfileRosterPublicationCell::State {
   std::shared_ptr<ProfileRosterAuthority> authority; // revocable metadata
   ProfileRosterAuthority::Envelope* old_envelope = nullptr;
   ProfileRosterAuthority::Envelope* new_envelope = nullptr;
+  ProfileRosterAuthority::Envelope* canceled_empty_envelope = nullptr;
+  std::array<ProfileGpdModelAuthority::RosterPause*,4> unchanged_model_pauses{};
   std::shared_ptr<ProfileRosterIntent::State> intent;
   std::atomic<bool> armed{false};
 };
@@ -194,6 +204,7 @@ struct ProfileRosterNativeReadTicket::State {
   ProfileRosterAuthority::Envelope* fixed = nullptr;
   ProfileRosterAuthority::Envelope* writer_old = nullptr;
   ProfileRosterAuthority::Envelope* writer_new = nullptr;
+  ProfileRosterAuthority::Envelope* writer_empty = nullptr;
   const ProfileRosterNativeBinding* binding = nullptr;
   uint64_t operation = 0;
   bool following = false;
@@ -215,9 +226,10 @@ struct ProfileRosterNativeReadScope::State {
 };
 struct ProfileRosterAuthority::Operation {
   std::shared_ptr<ProfileRosterIntent> intent;
-  std::shared_ptr<Envelope> before, after;
+  std::shared_ptr<Envelope> before, after, canceled_empty;
   ProfileRosterDesired desired;
-  std::array<bool, 4> staged_mount{}, old_mount_released{};
+  std::array<bool, 4> staged_mount{}, old_mount_released{}, unused_mount_released{};
+  std::array<bool,4> reserved_slots{};
   std::atomic<bool> settling{false};
   std::array<std::unique_ptr<ProfileAccountIdentity::RosterPause>, 8> account_pauses;
   std::array<std::unique_ptr<ProfileGpdModelAuthority::RosterPause>, 4> model_pauses;
@@ -233,6 +245,12 @@ struct ProfileRosterAuthority::Operation {
   std::map<uint64_t, X_XAMACCOUNTINFO> accounts;
   std::map<uint64_t, uint64_t> generations;
   std::map<uint64_t, std::shared_ptr<ProfileGpdModelAuthority>> models;
+  // Empty destinations are constructed before arm too. Requested maps retain
+  // their genuine resources even when the native canceled branch selects none.
+  decltype(profiles) empty_profiles;
+  decltype(snapshots) empty_snapshots;
+  decltype(generations) empty_generations;
+  decltype(models) empty_models;
   bool maps_settled = false, effects_applied = false, old_owners_retired = false;
   // Exact per-roster host effects, never an ambient ordinary-writer bypass.
   // Commands and their real selected writer survive Busy/durable-pending IO.
@@ -478,8 +496,12 @@ ProfileRosterIntent::ProfileRosterIntent(std::shared_ptr<State> s) : state_(std:
 std::shared_ptr<const HostRoster> ProfileRosterIntent::old_roster() const { return state_->old_roster; }
 std::shared_ptr<const HostRoster> ProfileRosterIntent::prepared_roster() const { return state_->new_roster; }
 ProfileRosterResult ProfileRosterIntent::result() const {
-  auto out = state_->result;
-  out.phase = state_->phase.load(std::memory_order_acquire);
+  // Published release follows outcome choice, so a reported Published phase
+  // can never be combined with the earlier requested-only result.
+  const auto phase=state_->phase.load(std::memory_order_acquire);
+  auto out = state_->published_choice.load(std::memory_order_acquire)==2
+      ? state_->canceled_empty_result : state_->result;
+  out.phase = phase;
   const auto duties=state_->milestones.load(std::memory_order_acquire);
   out.native_protocol_returned=bool(duties&State::kProtocol);
   out.selected_reads_available=bool(duties&State::kRead);
@@ -489,12 +511,25 @@ ProfileRosterResult ProfileRosterIntent::result() const {
   out.native_protocol_value=state_->native_protocol_value.load(std::memory_order_acquire);
   return out;
 }
+std::optional<ProfileRosterPublicationOutcome> ProfileRosterIntent::publication_outcome() const {
+  const auto choice=state_->published_choice.load(std::memory_order_acquire);
+  if(choice==1)return ProfileRosterPublicationOutcome::kRequested;
+  if(choice==2)return ProfileRosterPublicationOutcome::kCanceledEmpty;
+  return {};
+}
+std::shared_ptr<const HostRoster> ProfileRosterIntent::published_roster() const {
+  const auto choice=publication_outcome();
+  if(!choice)return {};
+  return *choice==ProfileRosterPublicationOutcome::kRequested
+      ? state_->new_roster : state_->canceled_empty_roster;
+}
 bool ProfileRosterIntent::HasPublishedEmptyUnchangedRows(uint32_t actual_protocol_value) const {
   const auto observed = result();
   return observed.phase == ProfileRosterPhase::kPublished && !observed.error &&
       observed.native_protocol_returned && observed.selected_reads_available &&
       observed.maps_committed && observed.writers_available &&
       observed.native_protocol_value == actual_protocol_value &&
+      publication_outcome()==ProfileRosterPublicationOutcome::kRequested &&
       state_->empty_unchanged_rows;
 }
 const std::array<uint8_t, 4 * 0x188>& ProfileRosterIntent::NativeRowsForPrepared() const {
@@ -502,19 +537,27 @@ const std::array<uint8_t, 4 * 0x188>& ProfileRosterIntent::NativeRowsForPrepared
 }
 ProfileRosterPublicationCell::ProfileRosterPublicationCell(std::shared_ptr<State> s)
     : state_(std::move(s)) {}
-bool ProfileRosterPublicationCell::PublishFromNative() noexcept {
+bool ProfileRosterPublicationCell::PublishFromNative(
+    ProfileRosterPublicationOutcome outcome) noexcept {
   auto* s = state_.get();
   if (!s || !s->armed.load(std::memory_order_acquire) ||
       !s->authority->open.load(std::memory_order_acquire)) { return false; }
   // Exact actual native issuer/frame/Task validation precedes this call. No
   // resource owner is copied/destroyed at this guest publication instruction.
+  auto* selected=outcome==ProfileRosterPublicationOutcome::kRequested?s->new_envelope:
+      outcome==ProfileRosterPublicationOutcome::kCanceledEmpty?s->canceled_empty_envelope:nullptr;
+  if(!selected)return false;
   auto expected = s->old_envelope;
-  if (!s->authority->selected.compare_exchange_strong(expected, s->new_envelope,
+  if (!s->authority->selected.compare_exchange_strong(expected, selected,
           std::memory_order_release, std::memory_order_relaxed)) { return false; }
   s->armed.store(false, std::memory_order_release);
+  s->intent->published_choice.store(outcome==ProfileRosterPublicationOutcome::kRequested?1u:2u,
+      std::memory_order_release);
+  if(outcome==ProfileRosterPublicationOutcome::kRequested)
+    for(auto* pause:s->unchanged_model_pauses)if(pause)pause->UnpauseKnownOutcomeFromNative();
   s->intent->phase.store(ProfileRosterPhase::kPublished, std::memory_order_release);
   s->authority->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kPublished),std::memory_order_release);
-  s->authority->DiagnosticSelected(s->new_envelope);
+  s->authority->DiagnosticSelected(selected);
   return true;
 }
 ProfileRosterNativeBinding::ProfileRosterNativeBinding(std::shared_ptr<State> s)
@@ -574,6 +617,7 @@ std::shared_ptr<ProfileRosterNativeReadTicket> ProfileRosterIntent::NativeReadTi
   s->operation = state_->operation; s->following = following;
   s->fixed = authority->pending->before.get();
   s->writer_old = s->fixed; s->writer_new = authority->pending->after.get();
+  s->writer_empty = authority->pending->canceled_empty.get();
   auto ticket = std::shared_ptr<ProfileRosterNativeReadTicket>(new ProfileRosterNativeReadTicket(std::move(s)));
   if (authority->tickets.size() >= 4096) { return fail(std::errc::no_buffer_space); }
   authority->tickets.push_back(ticket);
@@ -726,7 +770,7 @@ void ProfileManager::CloseRosterAuthority() {
   };
   retire(a->current);
   for (const auto& old : a->retired) { retire(old); }
-  if (a->pending) { retire(a->pending->before); retire(a->pending->after); }
+  if (a->pending) { retire(a->pending->before); retire(a->pending->after); retire(a->pending->canceled_empty); }
   auto pending = std::move(a->pending);
   a->selected.store(nullptr, std::memory_order_release);
   a->DiagnosticSelected(nullptr);a->diagnostic_pending.store(false,std::memory_order_release);
@@ -786,7 +830,7 @@ std::shared_ptr<const HostRoster> ProfileManager::CaptureSelectedRoster(
     const auto& t = *scope->state_->ticket->state_;
     if(diagnostic){diagnostic->scoped=1;diagnostic->following=t.following;}
     e = t.following ? a->selected.load(std::memory_order_acquire) : t.fixed;
-    if (t.following && e != t.writer_old && e != t.writer_new) { if(diagnostic)diagnostic->reason=3; return {}; }
+    if (t.following && e != t.writer_old && e != t.writer_new && e != t.writer_empty) { if(diagnostic)diagnostic->reason=3; return {}; }
   } else {
     const bool ordinary=a->ordinary.load(std::memory_order_acquire);
     if(diagnostic){diagnostic->ordinary=ordinary;diagnostic->available|=16;}
@@ -818,7 +862,7 @@ bool ProfileManager::RosterIdentityRebindAvailable(uint64_t xuid) const {
   if (!lock.owns_lock()) { return false; }
   if (a->pending && !a->pending->old_owners_retired) {
     for (uint8_t slot = 0; slot != 4; ++slot) {
-      if (a->pending->intent->state_->result.changed[slot] &&
+      if (a->pending->reserved_slots[slot] &&
           a->pending->before->roster->slots()[slot].xuid == xuid) { return false; }
     }
   }
@@ -858,6 +902,7 @@ std::shared_ptr<UserProfile> ProfileManager::CaptureRosterProfile(uint8_t slot) 
   if (a->pending) {
     if (a->pending->before->roster == roster) { e = a->pending->before.get(); }
     if (a->pending->after->roster == roster) { e = a->pending->after.get(); }
+    if (a->pending->canceled_empty && a->pending->canceled_empty->roster == roster) { e = a->pending->canceled_empty.get(); }
   }
   for (const auto& old : a->retired) { if (old->roster == roster) { e = old.get(); } }
   diagnostic.available|=8;diagnostic.profile_present=e && bool(e->rows[slot].profile);
@@ -873,7 +918,7 @@ std::shared_ptr<ProfileGpdModelAuthority> ProfileManager::CaptureRosterModel(uin
     return {};
   };
   if (auto v = find(a->current)) { return v; }
-  if (a->pending) { if (auto v = find(a->pending->before)) { return v; } if (auto v = find(a->pending->after)) { return v; } }
+  if (a->pending) { if (auto v = find(a->pending->before)) { return v; } if (auto v = find(a->pending->after)) { return v; } if (auto v = find(a->pending->canceled_empty)) { return v; } }
   for (const auto& e : a->retired) { if (auto v = find(e)) { return v; } } return {};
 }
 std::shared_ptr<const ProfileAccountSnapshot> ProfileManager::CaptureRosterAccount(uint64_t xuid) const {
@@ -883,7 +928,7 @@ std::shared_ptr<const ProfileAccountSnapshot> ProfileManager::CaptureRosterAccou
     if (e && e->roster == roster) { for (const auto& row : e->rows) { if (row.profile && row.profile->xuid() == xuid) { return row.account; } } } return {};
   };
   if (auto v = find(a->current)) { return v; }
-  if (a->pending) { if (auto v = find(a->pending->before)) { return v; } if (auto v = find(a->pending->after)) { return v; } }
+  if (a->pending) { if (auto v = find(a->pending->before)) { return v; } if (auto v = find(a->pending->after)) { return v; } if (auto v = find(a->pending->canceled_empty)) { return v; } }
   for (const auto& e : a->retired) { if (auto v = find(e)) { return v; } } return {};
 }
 std::shared_ptr<ProfileAccountIdentity> ProfileManager::CaptureRosterIdentity(uint64_t xuid) const {
@@ -898,7 +943,8 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRoster(
 std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
     const ProfileRosterDesired& desired, const ProfileRosterExpected& expected,
     std::error_code& error, std::shared_ptr<ProfileRosterIntent>* retained_attempt,
-    const ProfileDeletionReservation* deletion) {
+    const ProfileDeletionReservation* deletion,
+    const ProfilePreparationProgress* progress) {
   if (retained_attempt) { retained_attempt->reset(); }
   error.clear();
   if (xe::global_critical_region::is_held_by_current_thread()) { error = Busy(); return {}; }
@@ -962,6 +1008,7 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
     if (!a->scopes.load(std::memory_order_acquire)) { reap.swap(a->retired); }
     operation->before = a->current;
     state->authority = a; state->operation = a->next_operation++;
+    state->preparation_owner = a->native_owner;
     state->old_roster = expected.roster; state->result.before_epoch = expected.roster->epoch();
     metadata->epoch = expected.roster->epoch();
     bool changed = false;
@@ -994,8 +1041,26 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
     // Only selected-row nodes are prepared. Unrelated signed-out inventory
     // and Account writers remain independent and cannot be rolled back by a
     // whole-map copy made before native execution.
-    retired_gpd_models_.reserve(retired_gpd_models_.size() + 4);
-    a->retired.reserve(a->retired.size() + 1); // no allocation after publication
+    if(a->binding){
+      auto empty_metadata=std::make_shared<HostRoster::State>();
+      empty_metadata->epoch=expected.roster->epoch();
+      bool removed=false;
+      state->canceled_empty_result.before_epoch=expected.roster->epoch();
+      for(size_t slot=0;slot<4;++slot){
+        const bool changed=expected.roster->slots()[slot].xuid!=0;
+        state->canceled_empty_result.changed[slot]=changed;removed|=changed;
+      }
+      if(removed){
+        if(empty_metadata->epoch==UINT64_MAX){error=std::make_error_code(std::errc::value_too_large);return {};}
+        ++empty_metadata->epoch;
+      }
+      state->canceled_empty_result.after_epoch=empty_metadata->epoch;
+      operation->canceled_empty=std::make_shared<ProfileRosterAuthority::Envelope>();
+      operation->canceled_empty->roster.reset(new HostRoster(empty_metadata));
+      state->canceled_empty_roster=operation->canceled_empty->roster;
+    }
+    retired_gpd_models_.reserve(retired_gpd_models_.size() + (a->binding?8:4));
+    a->retired.reserve(a->retired.size() + (a->binding?2:1)); // no allocation after publication
     a->pending = operation;
     if (retained_attempt) { *retained_attempt = intent; }
     a->diagnostic_intent.store(reinterpret_cast<uintptr_t>(intent.get()),std::memory_order_release);
@@ -1004,11 +1069,14 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
     a->diagnostic_pending.store(true,std::memory_order_release);
     a->diagnostic_available.fetch_or(4,std::memory_order_release);
     for (uint8_t slot = 0; slot != 4; ++slot) {
-      if (state->result.changed[slot]) { preparing_slots_.set(slot); }
+      operation->reserved_slots[slot]=state->result.changed[slot] ||
+          (bool(operation->canceled_empty) && bool(operation->before->rows[slot].model));
+      if (operation->reserved_slots[slot]) { preparing_slots_.set(slot); }
       if (desired.xuids[slot]) { preparing_profiles_.insert(desired.xuids[slot]); }
     }
   }
   reap.clear(); // native owners released after leaving the PM metadata lock
+  uint32_t cache_refusal=0; // optional terminal scalar only, never admission
   auto fail = [&](std::error_code reason,
                   std::source_location where = std::source_location::current()) -> std::shared_ptr<ProfileRosterIntent> {
     // The pending metadata may already be observed by host cleanup retries.
@@ -1022,6 +1090,7 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
     trace.EmitTransition((uint64_t(where.line()) << 32) | uint32_t(error.value()),
         "profile", "roster_prepare_refusal",
         {{"line", where.line()}, {"operation", state->operation},
+         {"cache_refusal",cache_refusal},
          {"error", uint32_t(error.value())},
          {"category", error.category() == std::generic_category() ? 1u :
              error.category() == std::system_category() ? 2u : 0u}});
@@ -1044,7 +1113,7 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
       operation->account_pauses[slot] = old.identity->PauseForRoster(error);
       if (!operation->account_pauses[slot]) { return fail(error); }
     }
-    if (state->result.changed[slot] && old.model) {
+    if (operation->reserved_slots[slot] && old.model) {
       operation->model_pauses[slot] = old.model->PauseForRoster(error);
       if (!operation->model_pauses[slot]) { return fail(error); }
     }
@@ -1095,13 +1164,15 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
       if (!MountProfileInternal(xuid, {}, {}, &*source)) { return fail(Busy()); }
       operation->staged_mount[slot] = true;
       row.storage = AcquireProfileStorageLease(xuid, error);
+      while(!row.storage && progress && progress->Retry(error))
+        row.storage=AcquireProfileStorageLease(xuid,error);
       if (!row.storage || row.storage->source_id() != source_id ||
           row.storage->source_generation() != source->generation ||
           row.storage->device_id() != source->source.device_id) { return fail(error); }
       const auto generation = metadata->slots[slot].sign_in_generation;
       row.model = ProfileGpdModelAuthority::Create(xuid, slot, generation, row.storage, error);
       const auto owner = content_manager_.ProfileIntents(source_id);
-      if (!row.model || !owner || (error = LoadGpdModel(row.model, row.storage, owner))) { return fail(error); }
+      if (!row.model || !owner || (error = LoadGpdModel(row.model, row.storage, owner,progress))) { return fail(error); }
       row.identity = ProfileAccountIdentity::Capture(row.storage, slot, generation, error);
       if (!row.identity) { return fail(error); }
       operation->account_pauses[4 + slot] = row.identity->PauseForRoster(error);
@@ -1120,18 +1191,29 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
         !std::equal(bytes.begin(), bytes.end(), desired.origins[slot]->original_account_row->begin())) {
       return fail(Stale());
     }
-    auto cache = row.storage->device()->PrepareSnapshotCache({row.account->token()}, error);
-    if (!cache) { return fail(error); }
-    {
-      auto checked = row.storage->view()->ValidateSnapshotBatch({row.account->token()}, error);
-      if (checked) {
-        std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(std::move(checked));
-        auto commit = row.storage->device()->TryCommitSnapshotCache(cache, batch, error);
-        if (commit) { commit->Apply(); } // exact bytes, not roster publication
-        else if (!error) { error = Stale(); }
-      } else if (!error) { error = Stale(); }
+    std::shared_ptr<vfs::HostPathDevice::PreparedSnapshotCache> cache;
+    for(;;){
+      if(!cache){
+        cache=row.storage->device()->PrepareSnapshotCache({row.account->token()},error);
+        if(!cache){
+          if(progress && progress->Retry(error))continue;
+          if(cvars::native_system_ui_trace && error==std::errc::device_or_resource_busy)
+            cache_refusal=uint32_t(vfs::HostPathDevice::SnapshotCacheRefusal::kNamespaceBusy);
+          return fail(error);
+        }
+      }
+      auto checked=row.storage->view()->ValidateSnapshotBatch({row.account->token()},error);
+      if(!checked){if(progress && progress->Retry(error))continue;return fail(error);}
+      std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(std::move(checked));
+      vfs::HostPathDevice::SnapshotCacheRefusal why;
+      auto commit=row.storage->device()->TryCommitSnapshotCache(cache,batch,error,&why);
+      if(commit){commit->Apply();break;} // exact bytes, never roster publication
+      batch.reset(); // no validation or cache guard survives caller progress
+      if(why==vfs::HostPathDevice::SnapshotCacheRefusal::kCapacityChanged)cache.reset();
+      if(progress && progress->Retry(error))continue;
+      if(cvars::native_system_ui_trace)cache_refusal=uint32_t(why);
+      if(!error)error=Stale();return fail(error);
     }
-    if (error) { return fail(error); } // all native guards released before cleanup
     const auto old_account = row.profile ? row.profile->account_info_.load(std::memory_order_acquire) : nullptr;
     if (!old_account || std::memcmp(old_account.get(), &row.account->account(), sizeof(X_XAMACCOUNTINFO))) {
       auto prepared_profile = std::make_shared<UserProfile>(xuid, &row.account->account(), row.model);
@@ -1192,6 +1274,83 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
   }
   if (intent) { CancelRoster(intent); }
   return {};
+}
+
+std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterWithProgress(
+    const ProfileRosterDesired& desired, const ProfileRosterExpected& expected,
+    std::error_code& error, std::chrono::steady_clock::time_point deadline,
+    const std::function<bool()>& wait,
+    const ProfileDeletionReservation* deletion) {
+  error.clear();
+  // An inherited namespace lock is a self dependency, not foreign contention.
+  if (global_critical_region::is_held_by_current_thread()) { error=Busy();return {}; }
+  auto use=account_commit_gate_->Acquire();
+  if(!use){error=Stale();return {};}
+  const auto authority=roster_authority_;
+  const ProfilePreparationProgress phase_progress{deadline,wait,authority?&authority->open:nullptr};
+  std::shared_ptr<ProfileRosterIntent> retained;
+  const auto retryable=[](const std::error_code& e){
+    return e==std::errc::device_or_resource_busy ||
+        e==std::errc::resource_unavailable_try_again;
+  };
+  const auto open=[&]{return authority && authority->open.load(std::memory_order_acquire);};
+  const auto progress=[&]{
+    return open() && !global_critical_region::is_held_by_current_thread() &&
+        std::chrono::steady_clock::now()<deadline && wait && wait() && open();
+  };
+  try {
+    for(;;){
+      if(!open()){error=Stale();return {};}
+      if(std::chrono::steady_clock::now()>=deadline){error=Busy();return {};}
+      auto prepared=PrepareRosterAttempt(desired,expected,error,&retained,deletion,&phase_progress);
+      const auto failure=error?error:Stale();
+      if(prepared && !error){
+        if(open() && std::chrono::steady_clock::now()<deadline)return prepared;
+        error=open()?Busy():Stale();CancelRosterPreparation(retained);return {};
+      }
+      // A null result may have published mounts/pauses. Finish the exact
+      // canceled operation before another Prepare, regardless of error kind.
+      while(retained && retained->result().phase!=ProfileRosterPhase::kCanceled){
+        const auto canceled=CancelRoster(retained);
+        if(canceled.phase==ProfileRosterPhase::kCanceled)break;
+        if(!retryable(canceled.error) || !progress()){
+          CancelRosterPreparation(retained);error=open()?failure:Stale();return {};
+        }
+      }
+      retained.reset();
+      if(!retryable(failure) || !progress()){error=open()?failure:Stale();return {};}
+      // expected/desired/source origins remain EXACT. The one-shot CAS will
+      // reject a changed roster; no new snapshot silently adopts another user.
+    }
+  } catch(...) {
+    if(retained)CancelRosterPreparation(retained);
+    error=std::make_error_code(std::errc::invalid_argument);return {};
+  }
+}
+ProfileRosterResult ProfileManager::CancelRosterPreparation(
+    const std::shared_ptr<ProfileRosterIntent>& intent) {
+  // Capture immutable metadata before attempting a new gate admission. The
+  // originating whole preparation/Adopt scope already retains its real Use;
+  // after a closing gate refuses, only this independent intent is touched.
+  if(!intent || intent->state_->authority.lock()!=roster_authority_){
+    ProfileRosterResult result;result.error=Stale();return result;
+  }
+  auto use=account_commit_gate_->Acquire();
+  ProfileRosterResult result;
+  if(!use){result=intent->result();result.error=Stale();}
+  else try { result=CancelRoster(intent); }
+  catch(...) { result=intent->result();result.error=std::make_error_code(std::errc::io_error); }
+  if(result.phase==ProfileRosterPhase::kCanceled)return result;
+  const auto phase=intent->state_->phase.load(std::memory_order_acquire);
+  if(phase!=ProfileRosterPhase::kPreparing && phase!=ProfileRosterPhase::kPrepared &&
+      phase!=ProfileRosterPhase::kCanceling)return result; // Native owns outcome.
+  intent->state_->preparation_cancel_requested.store(true,std::memory_order_release);
+  if(auto owner=intent->state_->preparation_owner.lock())
+    owner->RetainPreparationCleanup(intent);
+  // The actual PM pending Operation already retains every mount/pause. For
+  // an unbound host it remains owned through actual KernelStop and the PM's
+  // existing CloseRosterAuthority; it is never an invented canceled result.
+  return result;
 }
 
 ProfileRosterResult ProfileManager::CancelRoster(const std::shared_ptr<ProfileRosterIntent>& intent) {
@@ -1268,13 +1427,14 @@ ProfileRosterResult ProfileManager::CommitHostRoster(const std::shared_ptr<Profi
   }
   {
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
-    if (!lock.owns_lock() || a->pending != op || a->binding ||
-        !BeforeCurrent(*op) ||
+    if (!lock.owns_lock()) { auto r=intent->result();r.error=Busy();return r; }
+    if (a->pending != op || a->binding || !BeforeCurrent(*op) ||
         !ProfileRosterAuthority::LogicalCurrent(*op->after) ||
         intent->state_->phase.load(std::memory_order_acquire) != ProfileRosterPhase::kPrepared) {
-      auto r = intent->result(); r.error = Busy(); return r;
+      auto r = intent->result(); r.error = Stale(); return r;
     }
     a->selected.store(op->after.get(), std::memory_order_release);
+    intent->state_->published_choice.store(1,std::memory_order_release);
     a->DiagnosticSelected(op->after.get());
     intent->state_->phase.store(ProfileRosterPhase::kPublished, std::memory_order_release);
     a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kPublished),std::memory_order_release);
@@ -1288,7 +1448,18 @@ ProfileRosterResult ProfileManager::AdoptRoster(const ProfileRosterDesired& desi
 ProfileRosterResult ProfileManager::AdoptRosterInternal(const ProfileRosterDesired& desired,
     const ProfileRosterExpected& expected, const ProfileDeletionReservation* deletion) {
   std::error_code error;
-  auto intent = PrepareRosterAttempt(desired, expected, error, nullptr, deletion);
+  auto use=account_commit_gate_->Acquire();
+  if(!use){ProfileRosterResult result;result.error=Stale();return result;}
+  const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+  const auto wait=[] {
+    // Legacy guest UserLogon can reach this facade before any Owner public
+    // frame is counted, including an unbound fallback. Preserve its real
+    // one-shot Busy; never strand a PM Use on an uncounted guest fiber.
+    // Original native 20B/224 use TryLogon's already-counted caller adapter.
+    if(ActualRosterThread())return false;
+    threading::Sleep(std::chrono::milliseconds(16));return true;
+  };
+  auto intent=PrepareRosterWithProgress(desired,expected,error,deadline,wait,deletion);
   if (!intent) { ProfileRosterResult r; r.error = error; return r; }
   std::shared_ptr<::xe::kernel::NativeProfileIdentityOwner> owner;
   bool claimed = false;
@@ -1297,9 +1468,25 @@ ProfileRosterResult ProfileManager::AdoptRosterInternal(const ProfileRosterDesir
     claimed = bool(roster_authority_->binding);
     owner = roster_authority_->native_owner.lock();
   }
-  if (!claimed) { return CommitHostRoster(intent); }
-  if (!owner) { auto result = CancelRoster(intent); result.error = Busy(); return result; }
-  return owner->SubmitPrepared(intent); // no PM/native/FS lock across dispatch
+  if (!claimed) {
+    for(;;){
+      auto result=CommitHostRoster(intent);
+      if(!result.error || result.phase!=ProfileRosterPhase::kPrepared)return result;
+      if((result.error!=std::errc::device_or_resource_busy &&
+          result.error!=std::errc::resource_unavailable_try_again) ||
+          std::chrono::steady_clock::now()>=deadline ||
+          !roster_authority_->open.load(std::memory_order_acquire)){
+        CancelRosterPreparation(intent);return result;
+      }
+      if(!wait()){CancelRosterPreparation(intent);return result;} // all commit guards unwound
+    }
+  }
+  if (!owner) { auto result = CancelRosterPreparation(intent); result.error = Busy(); return result; }
+  auto result=owner->SubmitPreparedUntil(intent,deadline); // no PM/native/FS lock across dispatch
+  if(result.error && (result.phase==ProfileRosterPhase::kPreparing ||
+      result.phase==ProfileRosterPhase::kPrepared || result.phase==ProfileRosterPhase::kCanceling))
+    CancelRosterPreparation(intent);
+  return result;
 }
 
 std::shared_ptr<const ProfileRosterNativeBinding> ProfileManager::ClaimNativeRosterFactory() {
@@ -1381,10 +1568,14 @@ std::shared_ptr<ProfileRosterPublicationCell> ProfileManager::EnterNativeRoster(
   }
   auto s = std::make_shared<ProfileRosterPublicationCell::State>();
   s->authority = a; s->old_envelope = op->before.get(); s->new_envelope = op->after.get(); s->intent = intent->state_;
+  s->canceled_empty_envelope=op->canceled_empty.get();
+  for(size_t slot=0;slot<4;++slot)if(!intent->state_->result.changed[slot])
+    s->unchanged_model_pauses[slot]=op->model_pauses[slot].get();
   auto cell = std::shared_ptr<ProfileRosterPublicationCell>(new ProfileRosterPublicationCell(s));
   {
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
-    if (!lock.owns_lock() || a->pending != op || !a->open.load(std::memory_order_acquire) ||
+    if (!lock.owns_lock()) { error=Busy();return {}; }
+    if (a->pending != op || !a->open.load(std::memory_order_acquire) ||
         a->binding != binding || a->selected.load(std::memory_order_acquire) != op->before.get() ||
         !BeforeCurrent(*op) || !ProfileRosterAuthority::LogicalCurrent(*op->after) ||
         intent->state_->phase.load(std::memory_order_acquire) != ProfileRosterPhase::kPrepared) {
@@ -1420,8 +1611,11 @@ ProfileRosterResult ProfileManager::PublishNativeRosterProtocol(
     if (!a->open.load(std::memory_order_acquire) || !a->pending ||
         a->pending->intent != intent ||
         (phase != ProfileRosterPhase::kPublished && phase != ProfileRosterPhase::kFinalizing) ||
-        a->selected.load(std::memory_order_acquire) != a->pending->after.get() ||
-        !ProfileRosterAuthority::LogicalCurrent(*a->pending->after)) {
+        !intent->publication_outcome() ||
+        a->selected.load(std::memory_order_acquire) !=
+            (intent->publication_outcome()==ProfileRosterPublicationOutcome::kCanceledEmpty
+                ?a->pending->canceled_empty.get():a->pending->after.get()) ||
+        !ProfileRosterAuthority::LogicalCurrent(*a->selected.load(std::memory_order_acquire))) {
       auto result = intent->result(); result.error = Stale(); return result;
     }
     const auto duties = intent->state_->milestones.load(std::memory_order_acquire);
@@ -1460,6 +1654,8 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
   if (!use) { auto r = intent->result(); r.error = Stale(); return r; }
   const auto a = roster_authority_;
   std::shared_ptr<ProfileRosterAuthority::Operation> op;
+  std::shared_ptr<ProfileRosterAuthority::Envelope> selected;
+  const auto changed=intent->result().changed;
   std::array<std::shared_ptr<const ProfileGpdPendingMutation>, 4> pending_models;
   {
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
@@ -1471,7 +1667,12 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
       auto r = intent->result(); r.error = Stale(); return r;
     }
     op = a->pending;
-    if (!op->maps_settled) {
+    selected=intent->publication_outcome()==ProfileRosterPublicationOutcome::kCanceledEmpty
+        ?op->canceled_empty:op->after;
+    if(!selected){auto result=intent->result();result.error=Stale();return result;}
+    // Requested resources stay owned even when none becomes selected. Actual
+    // pending IO must finish before their final retirement, never be discarded.
+    if (!op->maps_settled || (retire_owners && selected!=op->after)) {
       for (size_t slot = 0; slot != 4; ++slot) {
         if (!op->after->rows[slot].model) { continue; }
         std::error_code pending_error;
@@ -1485,8 +1686,8 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
     if (!op->settling.compare_exchange_strong(idle, true, std::memory_order_acq_rel)) {
       auto r = intent->result(); r.error = Busy(); return r;
     }
-    if (a->selected.load(std::memory_order_acquire) != op->after.get() ||
-        !ProfileRosterAuthority::LogicalCurrent(*op->after)) {
+    if (a->selected.load(std::memory_order_acquire) != selected.get() ||
+        !ProfileRosterAuthority::LogicalCurrent(*selected)) {
       op->settling.store(false, std::memory_order_release);
       intent->state_->phase.store(ProfileRosterPhase::kUncertain, std::memory_order_release);
       a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kUncertain),std::memory_order_release);
@@ -1497,10 +1698,11 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
       a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kFinalizing),std::memory_order_release);
     }
     if (!op->maps_settled) {
-      logged_profiles_.swap(op->profiles);
-      account_snapshots_.swap(op->snapshots);
-      profile_sign_in_generations_.swap(op->generations);
-      gpd_models_.swap(op->models);
+      const bool canceled=selected==op->canceled_empty;
+      logged_profiles_.swap(canceled?op->empty_profiles:op->profiles);
+      account_snapshots_.swap(canceled?op->empty_snapshots:op->snapshots);
+      profile_sign_in_generations_.swap(canceled?op->empty_generations:op->generations);
+      gpd_models_.swap(canceled?op->empty_models:op->models);
       auto publish_nodes = [](auto& current, auto& prepared) {
         for (auto it = prepared.begin(); it != prepared.end();) {
           auto next = std::next(it);
@@ -1510,9 +1712,11 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
           it = next;
         }
       };
-      publish_nodes(account_identities_, op->identities);
-      publish_nodes(account_metadata_, op->metadata);
-      publish_nodes(accounts_, op->accounts);
+      if(!canceled){
+        publish_nodes(account_identities_, op->identities);
+        publish_nodes(account_metadata_, op->metadata);
+        publish_nodes(accounts_, op->accounts);
+      } // canceled publication never applies prepared-request inventory data
       for (uint8_t slot = 0; slot != 4; ++slot) {
         const auto old_xuid = op->before->roster->slots()[slot].xuid;
         if (old_xuid && !gpd_models_.contains(old_xuid)) {
@@ -1520,8 +1724,8 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
         }
       }
       account_publication_->Advance(); op->maps_settled = true;
-      a->current = op->after;
-      a->DiagnosticCurrent(op->after.get());
+      a->current = selected;
+      a->DiagnosticCurrent(selected.get());
       intent->state_->milestones.fetch_or(ProfileRosterIntent::State::kMaps,
                                           std::memory_order_release);
     }
@@ -1532,7 +1736,7 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
   // native publisher or while holding PM/GCRC/native storage locks.
   if (!op->effects_applied) {
     for (uint8_t slot = 0; slot != 4; ++slot) {
-      if (!intent->state_->result.changed[slot]) { continue; }
+      if (!changed[slot]) { continue; }
       const auto old = op->before->roster->slots()[slot].xuid;
       if (!op->removed[slot]) {
         if (old) { user_tracker_->RemoveUser(old); }
@@ -1542,8 +1746,8 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
     // Complete every removal before any addition: an A/B slot swap must not
     // remove B after the preceding slot already attempted to add that UID.
     for (uint8_t slot = 0; slot != 4; ++slot) {
-      if (!intent->state_->result.changed[slot]) { continue; }
-      const auto now = op->after->roster->slots()[slot].xuid;
+      if (!changed[slot]) { continue; }
+      const auto now = selected->roster->slots()[slot].xuid;
       if (!op->added[slot]) {
         if (now) { user_tracker_->TrackUser(now); }
         op->added[slot] = true;
@@ -1559,13 +1763,13 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
     // and any later conflicting pending mutation makes this exact Submit busy.
     std::error_code effect_error;
     for (uint8_t slot = 0; slot != 4; ++slot) {
-      if (!op->after->roster->slots()[slot].xuid) { continue; }
+      if (!selected->roster->slots()[slot].xuid) { continue; }
       if (!op->title_prepared[slot]) {
         std::error_code prepare_error;
         auto command = user_tracker_->CapturePlayedTitleMutation(prepare_error);
         if (prepare_error) { if (!effect_error) { effect_error = prepare_error; } continue; }
         if (command) {
-          const auto& row = op->after->rows[slot];
+          const auto& row = selected->rows[slot];
           const auto volume = content_manager_.Volume(row.storage->source_id());
           const auto owner = content_manager_.ProfileIntents(row.storage->source_id());
           const auto recovery = volume && volume->profile_writable() ? volume->recovery() : nullptr;
@@ -1596,9 +1800,9 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
     if (effect_error) { auto result = intent->result(); result.error = effect_error; return result; }
     if (op->desired.remember_slots) { UpdateConfig(0, 0); }
     if (!native_path && op->desired.notify_host_compatibility &&
-        std::any_of(intent->state_->result.changed.begin(), intent->state_->result.changed.end(), [](bool b) { return b; })) {
+        std::any_of(changed.begin(), changed.end(), [](bool b) { return b; })) {
       uint32_t used = 0;
-      for (uint8_t slot = 0; slot != 4; ++slot) { if (op->after->roster->slots()[slot].xuid) { used |= uint32_t(1) << slot; } }
+      for (uint8_t slot = 0; slot != 4; ++slot) { if (selected->roster->slots()[slot].xuid) { used |= uint32_t(1) << slot; } }
       // Retains existing host compatibility policy only; not a newly recovered
       // 17559 payload encoder. Native original path sends its own actual event.
       kernel_state_->BroadcastNotification(kXNotificationSystemSignInChanged, used);
@@ -1609,22 +1813,27 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
   // Account exclusions; changed old models/identities remain paused until the
   // independently authenticated full join. No visual readiness is implied.
   for (uint8_t slot = 0; slot != 4; ++slot) {
-    if (!intent->state_->result.changed[slot] && op->account_pauses[slot]) {
-      op->account_pauses[slot]->ReleaseKnownOutcome(); op->account_pauses[slot].reset();
+    if (!changed[slot]) {
+      if(op->account_pauses[slot]){op->account_pauses[slot]->ReleaseKnownOutcome();op->account_pauses[slot].reset();}
+      if(op->model_pauses[slot]){op->model_pauses[slot]->ReleaseKnownOutcome();op->model_pauses[slot].reset();}
     }
-    if (op->account_pauses[4 + slot]) {
+    // Unselected requested identities remain excluded until the actual join.
+    if (selected==op->after && op->account_pauses[4 + slot]) {
       op->account_pauses[4 + slot]->ReleaseKnownOutcome(); op->account_pauses[4 + slot].reset();
     }
   }
   {
     std::lock_guard lock(profile_mount_mutex_);
-    if (a->pending != op || a->current != op->after ||
-        a->selected.load(std::memory_order_acquire) != op->after.get() ||
-        !ProfileRosterAuthority::LogicalCurrent(*op->after)) {
+    if (a->pending != op || a->current != selected ||
+        a->selected.load(std::memory_order_acquire) != selected.get() ||
+        !ProfileRosterAuthority::LogicalCurrent(*selected)) {
       auto result = intent->result(); result.error = Stale(); return result;
     }
     for (uint8_t slot = 0; slot != 4; ++slot) { preparing_slots_.reset(slot); preparing_generations_[slot] = 0; }
-    for (const auto xuid : op->desired.xuids) { preparing_profiles_.erase(xuid); }
+    // Unused requested rows still belong to entered native work. Keep their
+    // Account/rebind exclusion until its real full join, despite empty maps.
+    if(selected==op->after)
+      for (const auto xuid : op->desired.xuids) { preparing_profiles_.erase(xuid); }
     a->selected_read.store(true, std::memory_order_release);
     a->ordinary.store(true, std::memory_order_release);
     intent->state_->milestones.fetch_or(ProfileRosterIntent::State::kRead |
@@ -1635,12 +1844,23 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
     std::lock_guard lock(profile_mount_mutex_);
     if (a->pending != op) { auto result = intent->result(); result.error = Stale(); return result; }
     if (!op->old_owners_retired) {
-      for (uint8_t slot = 0; slot != 4; ++slot) {
-        const auto& old = op->before->rows[slot];
-        if (!intent->state_->result.changed[slot]) { continue; }
-        if (old.identity) { old.identity->Retire(); }
-        if (old.model) { retired_gpd_models_.push_back(old.model); old.model->Retire(); }
-      }
+      std::array<const ProfileAccountIdentity*,8> identities{};
+      std::array<const ProfileGpdModelAuthority*,8> models{};
+      size_t identity_count=0,model_count=0;
+      const auto retire_unselected=[&](const auto& row){
+        if(row.identity && std::none_of(selected->rows.begin(),selected->rows.end(),
+            [&](const auto& current){return current.identity==row.identity;}) &&
+            std::find(identities.begin(),identities.begin()+identity_count,row.identity.get())==identities.begin()+identity_count){
+          identities[identity_count++]=row.identity.get();row.identity->Retire();
+        }
+        if(row.model && std::none_of(selected->rows.begin(),selected->rows.end(),
+            [&](const auto& current){return current.model==row.model;}) &&
+            std::find(models.begin(),models.begin()+model_count,row.model.get())==models.begin()+model_count){
+          models[model_count++]=row.model.get();retired_gpd_models_.push_back(row.model);row.model->Retire();
+        }
+      };
+      for(const auto& old:op->before->rows)retire_unselected(old);
+      if(selected!=op->after)for(const auto& unused:op->after->rows)retire_unselected(unused);
       op->old_owners_retired = true;
     }
   }
@@ -1649,12 +1869,18 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
   bool busy = false;
   for (uint8_t slot = 0; slot != 4; ++slot) {
     const auto& old = op->before->rows[slot];
-    if (intent->state_->result.changed[slot] && old.profile && !op->old_mount_released[slot]) {
+    if (changed[slot] && old.profile && !op->old_mount_released[slot]) {
       // Old mount reference is the old roster's actual reference, not the new
       // staged reference. Busy keeps Finalizing; no replay of original224.
       if (!DismountProfile(old.profile->xuid())) { busy = true; }
       else { op->old_mount_released[slot] = true; }
     }
+  }
+  if(selected!=op->after)for(uint8_t slot=0;slot<4;++slot){
+    if(!op->staged_mount[slot] || op->unused_mount_released[slot])continue;
+    const auto& unused=op->after->rows[slot];
+    if(!DismountProfile(unused.profile?unused.profile->xuid():op->after->roster->slots()[slot].xuid))busy=true;
+    else op->unused_mount_released[slot]=true;
   }
   if (busy) { auto r = intent->result(); r.error = Busy(); return r; }
   {
@@ -1671,6 +1897,9 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
     // Active actual read scopes may still finish this host finalization call.
     // Retain old resources until a later host reaping opportunity/PM stop.
     a->retired.push_back(op->before);
+    // A following ticket could still name the unused requested envelope. Its
+    // resources, maps and live scopes are reaped only by the existing authority.
+    if(selected!=op->after)a->retired.push_back(op->after);
     a->pending.reset(); a->ordinary.store(true, std::memory_order_release);
     a->diagnostic_pending.store(false,std::memory_order_release);
     intent->state_->milestones.fetch_or(ProfileRosterIntent::State::kRetired, std::memory_order_release);
@@ -1707,6 +1936,10 @@ void ProfileManager::RetryRosterSettlement() {
   // Native settlement remains with its actual completed native owner. Host
   // cleanup may retry genuine busy dismounts without re-publishing anything.
   if (!native && phase == ProfileRosterPhase::kFinalizing) { SettleRoster(intent, RosterSettlementStage::kHostComplete); }
-  else if (phase == ProfileRosterPhase::kCanceling) { CancelRoster(intent); }
+  else if (phase == ProfileRosterPhase::kCanceling ||
+      ((phase==ProfileRosterPhase::kPreparing || phase==ProfileRosterPhase::kPrepared) &&
+       intent->state_->preparation_cancel_requested.load(std::memory_order_acquire))) {
+    CancelRoster(intent);
+  }
 }
 } // namespace xe::kernel::xam

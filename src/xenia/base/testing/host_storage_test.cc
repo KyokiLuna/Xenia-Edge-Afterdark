@@ -2,6 +2,9 @@
 #define _GNU_SOURCE
 #endif
 #include "xenia/base/host_storage.h"
+#include "xenia/base/mutex.h"
+#include "xenia/base/utf8.h"
+#include <algorithm>
 #include <array>
 #include <barrier>
 #include <chrono>
@@ -1794,6 +1797,153 @@ TEST_CASE("Storage NUL components cannot read or mutate their existing prefix",
   REQUIRE_FALSE(same->WriteNewFile("valid name", changed).error);
   REQUIRE_FALSE(same->ReadFile("valid name", 32, bytes));
   CHECK(bytes == std::vector<uint8_t>(changed.begin(), changed.end()));
+}
+
+TEST_CASE("Retained package layout is metadata-only with live Files and readonly views",
+          "[storage_policy][content_layout]") {
+  Scratch scratch;
+  auto root = scratch.Root();
+  REQUIRE_FALSE(root->Create("package", true));
+  const std::array<uint8_t, 4> bytes{2, 4, 6, 8};
+  REQUIRE_FALSE(root->WriteNewFile("package/save", bytes, false).error);
+  std::error_code error;
+  auto writer = root->OpenFile("package/save", FileAccess::kGenericWrite, error);
+  REQUIRE(writer); REQUIRE_FALSE(error);
+  auto reader = root->OpenFile("package/save", FileAccess::kGenericRead, error);
+  REQUIRE(reader); REQUIRE_FALSE(error);
+  auto readonly = scratch.Root(true);
+  auto captured = readonly->CaptureContentLayout("package", error);
+  REQUIRE(captured); REQUIRE_FALSE(error);
+  REQUIRE(captured->entries().size() == 2);
+  const auto& payload = captured->entries().back();
+  CHECK(payload.relative == "save"); CHECK_FALSE(payload.directory);
+  CHECK(payload.bytes == bytes.size()); CHECK(payload.file != 0);
+  const auto actual_allocation = reader->QueryAllocatedBytes(error);
+  REQUIRE(actual_allocation); REQUIRE_FALSE(error);
+  CHECK(captured->statistics().file_bytes == bytes.size());
+  CHECK(captured->statistics().data_extent == 4096);
+  CHECK(captured->statistics().allocated_bytes == *actual_allocation);
+  CHECK_FALSE(captured->CheckCurrent());
+  // The census holds no payload read/write lease and does not turn into an
+  // exclusive overwrite or a whole-package retirement permission.
+  std::array<uint8_t, 4> actual{};
+  const auto read = reader->ReadResult(0, actual);
+  REQUIRE_FALSE(read.error); REQUIRE(read.bytes == actual.size());
+  CHECK(actual == bytes);
+  // The census is metadata-only, but the ordinary reader still owns its
+  // live File lease. Resize must preserve that lease until it is released.
+  REQUIRE(writer->ResizeResult(12) == std::errc::device_or_resource_busy);
+  CHECK_FALSE(captured->CheckCurrent());
+  reader.reset();
+  REQUIRE_FALSE(writer->ResizeResult(12));
+  CHECK(captured->entries().back().bytes == 4);
+  CHECK(captured->CheckCurrent() == std::errc::state_not_recoverable);
+  auto after = readonly->CaptureContentLayout("package", error);
+  REQUIRE(after); REQUIRE_FALSE(error);
+  CHECK(after->entries().back().bytes == 12);
+  CHECK(after->statistics().file_bytes == 12);
+  CHECK(after->statistics().data_extent == 4096);
+  const auto resized_allocation = writer->QueryAllocatedBytes(error);
+  REQUIRE(resized_allocation); REQUIRE_FALSE(error);
+  CHECK(after->statistics().allocated_bytes == *resized_allocation);
+  CHECK_FALSE(after->CheckCurrent());
+}
+
+TEST_CASE("Retained package layout rejects member replacement and unsafe native kinds",
+          "[storage_policy][content_layout]") {
+  Scratch scratch;
+  auto root = scratch.Root();
+  REQUIRE_FALSE(root->Create("package", true));
+  const std::array<uint8_t, 3> bytes{7, 8, 9};
+  REQUIRE_FALSE(root->WriteNewFile("package/save", bytes, false).error);
+  std::error_code error;
+  auto captured = root->CaptureContentLayout("package", error);
+  REQUIRE(captured); REQUIRE_FALSE(error);
+  const auto original = captured->entries();
+  SECTION("Equal bytes at a different retained inode are not the old layout") {
+    std::filesystem::rename(scratch.path / "package/save", scratch.path / "old-save");
+    REQUIRE_FALSE(root->WriteNewFile("package/save", bytes, false).error);
+    CHECK(captured->CheckCurrent() == std::errc::state_not_recoverable);
+    CHECK(captured->entries() == original);
+    auto current = root->CaptureContentLayout("package", error);
+    REQUIRE(current); REQUIRE_FALSE(error);
+    CHECK(current->entries().back().file != original.back().file);
+    CHECK_FALSE(current->CheckCurrent());
+  }
+  SECTION("A new actual member cannot borrow the old namespace census") {
+    REQUIRE_FALSE(root->WriteNewFile("package/new", bytes, false).error);
+    CHECK(captured->CheckCurrent() == std::errc::state_not_recoverable);
+    CHECK(captured->entries() == original);
+  }
+  SECTION("Symlink is never adopted as an owned native extent") {
+    std::filesystem::create_symlink(scratch.path / "old-save", scratch.path / "package/alias");
+    CHECK_FALSE(root->CaptureContentLayout("package", error)); CHECK(error);
+    CHECK(std::filesystem::is_symlink(scratch.path / "package/alias"));
+  }
+  SECTION("Hardlinked payload is refused without deleting either alias") {
+    std::filesystem::create_hard_link(scratch.path / "package/save", scratch.path / "alias");
+    CHECK_FALSE(root->CaptureContentLayout("package", error)); CHECK(error);
+    CHECK(std::filesystem::exists(scratch.path / "alias"));
+    CHECK(std::filesystem::file_size(scratch.path / "package/save") == bytes.size());
+  }
+  SECTION("Non-ASCII case stays distinct under the actual member lookup rule") {
+    const std::string upper = "\xC3\x89", lower = "\xC3\xA9";
+    REQUIRE_FALSE(xe::utf8::equal_case(upper, lower));
+    REQUIRE_FALSE(root->WriteNewFile(std::filesystem::path("package") / upper, bytes, false).error);
+    REQUIRE_FALSE(root->WriteNewFile(std::filesystem::path("package") / lower, bytes, false).error);
+    auto unicode = root->CaptureContentLayout("package", error);
+    REQUIRE(unicode); REQUIRE_FALSE(error);
+    CHECK(unicode->entries().size() == 4);
+    CHECK_FALSE(unicode->CheckCurrent());
+  }
+  SECTION("ASCII case collision after a UTF8 prefix matches real member lookup") {
+    const std::string upper = "\xC3\xA9" "A", lower = "\xC3\xA9" "a";
+    REQUIRE(xe::utf8::equal_case(upper, lower));
+    REQUIRE_FALSE(root->WriteNewFile(std::filesystem::path("package") / upper, bytes, false).error);
+    REQUIRE_FALSE(root->WriteNewFile(std::filesystem::path("package") / lower, bytes, false).error);
+    CHECK_FALSE(root->CaptureContentLayout("package", error));
+    CHECK(error == std::errc::state_not_recoverable);
+  }
+  SECTION("Invalid UTF8 is rejected before member Device equality can decode it") {
+    const auto invalid = std::filesystem::path("package") / (std::string("bad") + char(0xFF));
+    REQUIRE_FALSE(root->WriteNewFile(invalid, bytes, false).error);
+    CHECK_FALSE(root->CaptureContentLayout("package", error));
+    CHECK(error == std::errc::illegal_byte_sequence);
+    CHECK(std::filesystem::exists(scratch.path / invalid));
+  }
+  SECTION("FIFO is refused without opening it for payload IO") {
+    REQUIRE(mkfifo((scratch.path / "package/fifo").c_str(), 0600) == 0);
+    CHECK_FALSE(root->CaptureContentLayout("package", error)); CHECK(error);
+    struct stat native{};
+    REQUIRE(lstat((scratch.path / "package/fifo").c_str(), &native) == 0);
+    CHECK(S_ISFIFO(native.st_mode));
+  }
+}
+
+TEST_CASE("Retained package layout refuses GCRC invalid paths and retired sources",
+          "[storage_policy][content_layout]") {
+  Scratch scratch;
+  auto root = scratch.Root();
+  REQUIRE_FALSE(root->Create("package", true));
+  const std::array<uint8_t, 1> bytes{42};
+  REQUIRE_FALSE(root->WriteNewFile("package/save", bytes, false).error);
+  std::error_code error;
+  auto captured = root->CaptureContentLayout("package", error);
+  REQUIRE(captured); REQUIRE_FALSE(error);
+  {
+    auto namespace_lock = global_critical_region::AcquireDirect();
+    CHECK_FALSE(root->CaptureContentLayout("package", error));
+    CHECK(error == std::errc::operation_not_permitted);
+    CHECK(captured->CheckCurrent() == std::errc::operation_not_permitted);
+  }
+  CHECK_FALSE(root->CaptureContentLayout("../package", error)); CHECK(error);
+  CHECK_FALSE(root->CaptureContentLayout(scratch.path / "package", error)); CHECK(error);
+  CHECK_FALSE(root->CaptureContentLayout("package/save", error));
+  CHECK(error == std::errc::not_a_directory);
+  root->Retire();
+  CHECK(captured->CheckCurrent() == std::errc::no_such_device);
+  CHECK(captured->entries().back().bytes == bytes.size());
+  CHECK(std::filesystem::file_size(scratch.path / "package/save") == bytes.size());
 }
 
 }

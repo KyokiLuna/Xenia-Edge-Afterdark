@@ -2,6 +2,8 @@
 #include "xenia/base/managed_volume_authority.h"
 #include "xenia/base/managed_storage_bootstrap.h"
 #include "xenia/base/content_mutation_owner.h"
+#include "xenia/base/snapshot_publication_set.h"
+#include "xenia/base/mutex.h"
 #include <algorithm>
 #include <array>
 #include <fstream>
@@ -18,6 +20,46 @@
 namespace xe::filesystem {
 class ContentMutationOwnerTestAccess final {
  public:
+  class OpaqueFixtureHeaderFormat final : public ContentMutationOwner::NativeHeaderFormat {
+   public:
+    bool SameBinding(const ContentMutationOwner::NativeHeaderFormat& other) const noexcept override {
+      return dynamic_cast<const OpaqueFixtureHeaderFormat*>(&other) != nullptr;
+    }
+    std::error_code ValidateCurrent(const std::filesystem::path& package,
+        std::span<const uint8_t> bytes) const override {
+      // Deliberate NON-NATIVE storage fixture format. Its known exact shape
+      // tests reservations/stage/CAS only and makes no CON/crypto claim.
+      return content_mutation_wire::ValidPackage(package) && bytes.size() == 0x971A
+          ? std::error_code{} : std::make_error_code(std::errc::bad_message);
+    }
+    std::error_code ValidateNativeChange(const std::filesystem::path& package,
+        std::span<const uint8_t> before, std::span<const uint8_t> after) const override {
+      if (auto error = ValidateCurrent(package, before)) { return error; }
+      return ValidateCurrent(package, after);
+    }
+  };
+  static bool InstallOpaqueHeaderFormat(ContentMutationOwner& owner, std::error_code& error) {
+    return owner.InstallNativeHeaderFormat(std::make_shared<const OpaqueFixtureHeaderFormat>(), error);
+  }
+  using Header = ContentMutationOwner::ProfileHeaderPublication;
+  static std::shared_ptr<Header> PrepareHeader(ContentMutationOwner& owner,
+      const std::filesystem::path& package,
+      std::shared_ptr<const HostStorageSnapshotToken> actual,
+      const std::shared_ptr<SnapshotPublicationSet>& members, std::error_code& error) {
+    return owner.PrepareProfileHeader(package, std::move(actual), members, error);
+  }
+  static auto SealHeader(Header& header, std::error_code& error) { return header.Seal(error); }
+  static const PreparedSnapshotPublication* PrepareHeaderCommit(Header& header,
+      const SnapshotPublicationSet& members, std::error_code& error) {
+    return header.PrepareCanonical(members, error);
+  }
+  static SnapshotPublicationReceipt CommitHeader(Header& header,
+      const SnapshotPublicationSet& members) { return header.CommitCanonical(members); }
+  static std::error_code HeaderGuard(const Header& header,
+      const SnapshotPublicationSet& members, const HostStorageSnapshotBatch& batch,
+      std::shared_ptr<const HostStorageSnapshotToken> token) {
+    return header.CheckWithSnapshotGuard(members, batch, token);
+  }
   static std::filesystem::path RecordDirectory(const ContentMutationOwner& owner) { return owner.records_->path(); }
   static std::filesystem::path StageDirectory(const ContentMutationOwner& owner) { return owner.staging_->path(); }
   static std::filesystem::path RecoveryDirectory(const ContentMutationOwner& owner) { return owner.recovery_->root()->path(); }
@@ -458,7 +500,8 @@ struct VolumeScratch {
     std::error_code error;
     std::filesystem::remove_all(path, error);
   }
-  std::shared_ptr<const ManagedVolumeAuthority> Open(bool nested = false) {
+  std::shared_ptr<const ManagedVolumeAuthority> Open(bool nested = false,
+      std::shared_ptr<const ContentMutationOwner::NativeHeaderFormat> format = {}) {
     std::error_code error;
     auto parent = root;
     if (nested) {
@@ -471,6 +514,7 @@ struct VolumeScratch {
     options.source_id = "test-device";
     options.device_id = 3;
     options.state_parent_override = parent;
+    options.native_header_format = std::move(format);
     auto owner = ManagedVolumeAuthority::Open(std::move(options));
     REQUIRE(owner);
     REQUIRE_FALSE(owner->error());
@@ -4174,6 +4218,286 @@ TEST_CASE("A failed historical profile proof cannot resume through an unsealed f
   REQUIRE(recovered->identity()->uuid()==uuid);
   REQUIRE(recovered->identity()->content_epoch()==epoch+1);
   REQUIRE_FALSE(std::filesystem::exists(scratch.path/"before-format.bin"));
+}
+}  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+namespace {
+// Exercises the real format-neutral CM stage/reservation/CAS boundary. These
+// opaque raw metadata bytes are NOT claimed to be native-valid signed CON;
+// the actual CM/native codec consumer must prove that separate contract.
+struct ExternalHeaderFixture {
+  VolumeScratch scratch;
+  // This real factory/replay path must install its known test format BEFORE
+  // guest admission. No post-open setter supplies the Header capability.
+  std::shared_ptr<const ManagedVolumeAuthority> volume = scratch.Open(false,
+      std::make_shared<const ContentMutationOwnerTestAccess::OpaqueFixtureHeaderFormat>());
+  std::shared_ptr<ContentMutationOwner> owner = volume->mutations();
+  std::filesystem::path package = "0000000000000001/FFFE07D1/00010000/0000000000000001";
+  std::filesystem::path target = "0000000000000001/FFFE07D1/Headers/00010000/0000000000000001.header";
+  std::vector<uint8_t> original = std::vector<uint8_t>(0x971A, 0x59);
+  std::shared_ptr<HostStorageRoot> profile;
+  std::shared_ptr<const HostStorageSnapshotToken> gpd, actual;
+  std::shared_ptr<SnapshotPublicationSet> members;
+  ExternalHeaderFixture() {
+    std::error_code error;
+    auto absent = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate,
+        package, target, error);
+    REQUIRE(absent); REQUIRE_FALSE(error); REQUIRE_FALSE(absent->exists());
+    const auto made = owner->Create(package, absent, original);
+    REQUIRE_FALSE(made.error); REQUIRE(made.complete);
+    profile = volume->content()->Subroot(package, false, error);
+    REQUIRE(profile); REQUIRE_FALSE(error);
+    const std::array<uint8_t, 3> bytes{0x11, 0x22, 0x33};
+    const auto written = profile->WriteNewFile("FFFE07D1.gpd", bytes);
+    REQUIRE_FALSE(written.error); REQUIRE(written.bytes == bytes.size());
+    gpd = profile->CaptureSnapshot("FFFE07D1.gpd", 4096, error, true);
+    REQUIRE(gpd); REQUIRE_FALSE(error);
+    members = SnapshotPublicationSet::Reserve(profile, {gpd}, error);
+    REQUIRE(members); REQUIRE_FALSE(error);
+    actual = owner->CaptureMetadata(ContentMutationOwner::Kind::kHeader,
+        package, target, error);
+    REQUIRE(actual); REQUIRE_FALSE(error); REQUIRE(actual->exists());
+  }
+  std::shared_ptr<ContentMutationOwner::ProfileHeaderPublication> Open() {
+    std::error_code error;
+    auto result = ContentMutationOwnerTestAccess::PrepareHeader(*owner, package,
+        actual, members, error);
+    REQUIRE(result); REQUIRE_FALSE(error); return result;
+  }
+  std::vector<uint8_t> HeaderBytes() const {
+    return BootstrapFile(scratch.path / target);
+  }
+};
+}
+TEST_CASE("External profile header stages once and uses the same retained stage for common CAS",
+          "[base][storage][content_mutation][profile_header]") {
+  ExternalHeaderFixture f;
+  const auto records_before = TreeBytes(ContentMutationOwnerTestAccess::RecordDirectory(*f.owner));
+  auto header = f.Open();
+  REQUIRE_FALSE(f.owner->idle());
+  REQUIRE(header->package() == f.package); REQUIRE(header->target() == f.target);
+  const auto artifact = f.scratch.path / f.target.parent_path() / header->stage_artifact();
+  struct stat before{}; REQUIRE(stat(artifact.c_str(), &before) == 0);
+  const std::array<uint8_t, 4> changed{1, 2, 3, 4};
+  const auto wrote = header->Write(0x174A, changed);
+  REQUIRE_FALSE(wrote.error); REQUIRE(wrote.bytes == changed.size());
+  REQUIRE_FALSE(header->Flush());
+  REQUIRE(f.HeaderBytes() == f.original);
+  REQUIRE(TreeBytes(ContentMutationOwnerTestAccess::RecordDirectory(*f.owner)) == records_before);
+  std::error_code error;
+  const auto sealed = ContentMutationOwnerTestAccess::SealHeader(*header, error);
+  REQUIRE(sealed); REQUIRE_FALSE(error);
+  auto intended = f.original; std::copy(changed.begin(), changed.end(), intended.begin() + 0x174A);
+  REQUIRE(*sealed == intended);
+  // Cached File/session may remain live: this exact stage is readable, while
+  // later writes and length extension are refused before any actual effect.
+  std::array<uint8_t, 4> read{};
+  const auto loaded = header->Read(0x174A, read);
+  REQUIRE_FALSE(loaded.error); REQUIRE(loaded.bytes == read.size()); REQUIRE(read == changed);
+  REQUIRE(header->Write(0, changed).error == std::errc::device_or_resource_busy);
+  REQUIRE(header->Resize(f.original.size() + 1) == std::errc::device_or_resource_busy);
+  const auto prepared = ContentMutationOwnerTestAccess::PrepareHeaderCommit(*header, *f.members, error);
+  REQUIRE(prepared); REQUIRE_FALSE(error);
+  REQUIRE(prepared->receipt().stage == header->stage_artifact());
+  REQUIRE(prepared->stage_info().file_id == uint64_t(before.st_ino));
+  REQUIRE(prepared->stage_info().filesystem_id == uint64_t(before.st_dev));
+  REQUIRE(f.HeaderBytes() == f.original);
+  // Direct TestAccess exercises only the SAME real publisher; production
+  // can reach this method only through its complete PIS durable intent.
+  const auto committed = ContentMutationOwnerTestAccess::CommitHeader(*header, *f.members);
+  REQUIRE_FALSE(committed.error); REQUIRE(committed.published); REQUIRE(committed.durable);
+  REQUIRE(f.HeaderBytes() == intended);
+  {
+    // The session stays alive, but its renamed exclusive stage handle must
+    // not block the actual issued canonical File read/durability admission.
+    auto canonical = committed.current->root()->OpenFile(committed.current->relative(),
+        FileAccess::kFileReadData, error);
+    REQUIRE(canonical); REQUIRE_FALSE(error);
+    const auto actual = canonical->QueryInfo(error);
+    REQUIRE(actual); REQUIRE_FALSE(error); REQUIRE(actual->file_id == uint64_t(before.st_ino));
+    std::vector<uint8_t> loaded(intended.size());
+    const auto read = canonical->ReadResult(0, loaded);
+    REQUIRE_FALSE(read.error); REQUIRE(read.bytes == loaded.size()); REQUIRE(loaded == intended);
+  }
+  REQUIRE_FALSE(std::filesystem::exists(artifact));
+  REQUIRE(BootstrapFile(ContentMutationOwnerTestAccess::RecoveryDirectory(*f.owner) /
+      committed.recovery) == f.original);
+  {
+    const auto batch = f.members->Validate({f.gpd}, error);
+    REQUIRE(batch); REQUIRE_FALSE(error);
+    REQUIRE_FALSE(ContentMutationOwnerTestAccess::HeaderGuard(*header, *f.members, *batch, committed.current));
+  }
+  REQUIRE(header->Read(0x174A, read).bytes == read.size()); REQUIRE(read == changed);
+  header.reset(); REQUIRE(f.owner->idle());
+}
+TEST_CASE("External profile header joins the existing profile guard and rejects real header replacement",
+          "[base][storage][content_mutation][profile_header]") {
+  ExternalHeaderFixture f; auto header = f.Open(); std::error_code error;
+  {
+    const auto batch = f.members->Validate({f.gpd}, error);
+    REQUIRE(batch); REQUIRE_FALSE(error);
+    REQUIRE_FALSE(ContentMutationOwnerTestAccess::HeaderGuard(*header, *f.members, *batch, header->expected()));
+    // A same-path source token is still not this participant's issued token.
+    REQUIRE(ContentMutationOwnerTestAccess::HeaderGuard(*header, *f.members, *batch, f.actual) == std::errc::permission_denied);
+  }
+  {
+    // Explicit Header coordinates must not waive a real, separate File lease.
+    // Open it before the profile batch so no filesystem guard is reacquired.
+    const auto reader = header->expected()->root()->OpenFile(
+        header->expected()->relative(), FileAccess::kFileReadData, error);
+    REQUIRE(reader); REQUIRE_FALSE(error);
+    const auto batch = f.members->Validate({f.gpd}, error);
+    REQUIRE(batch); REQUIRE_FALSE(error);
+    REQUIRE(ContentMutationOwnerTestAccess::HeaderGuard(*header, *f.members,
+        *batch, header->expected()) == std::errc::device_or_resource_busy);
+  }
+  {
+    // Releasing only the real reader restores admission with the same session,
+    // member set and issued token; no permit or currentness proof is replaced.
+    const auto batch = f.members->Validate({f.gpd}, error);
+    REQUIRE(batch); REQUIRE_FALSE(error);
+    REQUIRE_FALSE(ContentMutationOwnerTestAccess::HeaderGuard(*header, *f.members,
+        *batch, header->expected()));
+  }
+  const auto actual = f.scratch.path / f.target;
+  std::filesystem::rename(actual, actual.string() + ".preserved");
+  { std::ofstream replacement(actual, std::ios::binary);
+    replacement.write(reinterpret_cast<const char*>(f.original.data()), f.original.size());
+    REQUIRE(replacement.good()); }
+  {
+    const auto batch = f.members->Validate({f.gpd}, error);
+    REQUIRE(batch); REQUIRE_FALSE(error);
+    REQUIRE(ContentMutationOwnerTestAccess::HeaderGuard(*header, *f.members, *batch, header->expected()));
+  }
+  REQUIRE(f.HeaderBytes() == f.original);
+  // The already-owned native stage remains its OWN retained bytes; physical
+  // replacement never retargets its before token or fabricates publication.
+  std::vector<uint8_t> owned(f.original.size());
+  const auto read = header->Read(0, owned);
+  REQUIRE_FALSE(read.error); REQUIRE(read.bytes == owned.size()); REQUIRE(owned == f.original);
+  auto foreign = SnapshotPublicationSet::Reserve(f.profile, {}, error);
+  REQUIRE_FALSE(foreign); REQUIRE(error);
+  const auto sealed = ContentMutationOwnerTestAccess::SealHeader(*header, error);
+  REQUIRE(sealed); REQUIRE_FALSE(error);
+  const auto prepared = ContentMutationOwnerTestAccess::PrepareHeaderCommit(*header, *f.members, error);
+  REQUIRE(prepared); REQUIRE_FALSE(error);
+  const auto refused = ContentMutationOwnerTestAccess::CommitHeader(*header, *f.members);
+  REQUIRE(refused.error); REQUIRE_FALSE(refused.published);
+  const auto artifact = f.scratch.path / f.target.parent_path() / header->stage_artifact();
+  REQUIRE(std::filesystem::is_regular_file(artifact));
+  auto closed = header->expected()->root()->OpenFile(header->stage_artifact(), FileAccess::kFileReadData, error);
+  REQUIRE_FALSE(closed); REQUIRE(error == std::errc::device_or_resource_busy);
+  // An unpublished failure retains its actual stage owner, unlike a factual
+  // successful rename. Neither error path overwrites/deletes the replacement.
+  REQUIRE(f.HeaderBytes() == f.original);
+}
+TEST_CASE("External header CloseMutation and GCRC refusal preserve original and uncertain stage bytes",
+          "[base][storage][content_mutation][profile_header]") {
+  ExternalHeaderFixture f; auto header = f.Open(); std::error_code error;
+  const auto artifact = f.scratch.path / f.target.parent_path() / header->stage_artifact();
+  const std::array<uint8_t, 3> change{7, 0, 9};
+  const auto written = header->Write(0, change);
+  REQUIRE_FALSE(written.error); REQUIRE(written.bytes == change.size());
+  header->CloseMutation();
+  REQUIRE(header->Write(4, change).error == std::errc::device_or_resource_busy);
+  {
+    auto lock = global_critical_region::AcquireDirect();
+    std::array<uint8_t, 3> bytes{};
+    REQUIRE(header->Read(0, bytes).error == std::errc::operation_would_block);
+    REQUIRE(header->Write(0, change).error == std::errc::operation_would_block);
+    REQUIRE(header->Flush() == std::errc::operation_would_block);
+    REQUIRE_FALSE(header->Query(error)); REQUIRE(error == std::errc::operation_would_block);
+  }
+  REQUIRE(f.HeaderBytes() == f.original);
+  header.reset(); REQUIRE(f.owner->idle());
+  REQUIRE(std::filesystem::is_regular_file(artifact));
+  auto stage = BootstrapFile(artifact);
+  REQUIRE(stage.size() == f.original.size());
+  REQUIRE(std::equal(change.begin(), change.end(), stage.begin()));
+  REQUIRE(std::equal(f.original.begin() + change.size(), f.original.end(), stage.begin() + change.size()));
+  REQUIRE(f.HeaderBytes() == f.original);
+}
+}  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+TEST_CASE("External header participant cannot survive actual admitted source retirement or join a foreign profile",
+          "[base][storage][content_mutation][profile_header]") {
+  ExternalHeaderFixture f;
+  SECTION("foreign members never issue another source header authority") {
+    ExternalHeaderFixture foreign;
+    const auto before = TreeBytes(f.scratch.path);
+    std::error_code error;
+    const auto refused = ContentMutationOwnerTestAccess::PrepareHeader(*f.owner,
+        f.package, f.actual, foreign.members, error);
+    REQUIRE_FALSE(refused); REQUIRE(error == std::errc::permission_denied);
+    REQUIRE(TreeBytes(f.scratch.path) == before); REQUIRE(f.owner->idle());
+  }
+  SECTION("a retired existing source dependency cannot be hidden by a live cached base") {
+    f.members.reset();
+    std::error_code error;
+    auto source_view = f.volume->content()->Subroot(f.package.parent_path(), false, error);
+    REQUIRE(source_view); REQUIRE_FALSE(error);
+    auto dependent = f.profile->WithDependency(source_view, error);
+    REQUIRE(dependent); REQUIRE_FALSE(error);
+    f.gpd = dependent->CaptureSnapshot("FFFE07D1.gpd", 4096, error, true);
+    REQUIRE(f.gpd); REQUIRE_FALSE(error);
+    f.members = SnapshotPublicationSet::Reserve(dependent, {f.gpd}, error);
+    REQUIRE(f.members); REQUIRE_FALSE(error);
+    auto header = f.Open();
+    const auto sealed = ContentMutationOwnerTestAccess::SealHeader(*header, error);
+    REQUIRE(sealed); REQUIRE_FALSE(error);
+    REQUIRE_FALSE(dependent->retiring()); source_view->Retire();
+    REQUIRE_FALSE(dependent->retiring()); // existing cached semantics intentionally stay exact
+    std::array<uint8_t, 1> bytes{};
+    REQUIRE(header->Read(0, bytes).error == std::errc::no_such_device);
+    REQUIRE(header->Write(0, bytes).error == std::errc::no_such_device);
+    REQUIRE(*sealed == f.original); REQUIRE(f.HeaderBytes() == f.original);
+  }
+  SECTION("sealed bytes are owned but future physical effects still depend on the actual source") {
+    auto header = f.Open(); std::error_code error;
+    const auto sealed = ContentMutationOwnerTestAccess::SealHeader(*header, error);
+    REQUIRE(sealed); REQUIRE_FALSE(error); REQUIRE(*sealed == f.original);
+    f.profile->Retire();
+    std::array<uint8_t, 1> bytes{};
+    REQUIRE(header->Read(0, bytes).error == std::errc::operation_canceled);
+    REQUIRE(header->Write(0, bytes).error == std::errc::operation_canceled);
+    REQUIRE_FALSE(ContentMutationOwnerTestAccess::PrepareHeaderCommit(*header, *f.members, error));
+    REQUIRE(error == std::errc::operation_canceled);
+    REQUIRE(*sealed == f.original); REQUIRE(f.HeaderBytes() == f.original);
+  }
+}
+}  // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+TEST_CASE("Header member census uses the actual profile admission without retaining its publication permits",
+          "[base][storage][content_mutation][profile_header]") {
+  ExternalHeaderFixture f; auto header = f.Open(); std::error_code error;
+  // The ordinary source must NOT bypass another owned publication's slots.
+  const auto refused = f.volume->content()->CaptureContentLayout(f.package, error);
+  REQUIRE_FALSE(refused); REQUIRE(error == std::errc::device_or_resource_busy);
+  auto actual = header->CaptureMemberLayout(error);
+  REQUIRE(actual); REQUIRE_FALSE(error); REQUIRE(actual->entries().size() == 2);
+  CHECK(actual->relative() == f.package);
+  CHECK(actual->entries().back().relative == "FFFE07D1.gpd");
+  CHECK(actual->statistics().file_bytes == 3); CHECK(actual->statistics().data_extent == 4096);
+  // The returned proof has NO retained member permission. Its ordinary
+  // observing recheck still refuses while the real publication owns the slot.
+  CHECK(actual->CheckCurrent() == std::errc::device_or_resource_busy);
+  f.members.reset(); header.reset(); REQUIRE(f.owner->idle());
+  // No cached layout may keep GPD/PNG/header reservations alive indefinitely.
+  // Original-source metadata becomes available after genuine owner rundown.
+  REQUIRE_FALSE(actual->CheckCurrent());
+  const auto gpd = f.volume->content()->OpenFile(f.package / "FFFE07D1.gpd",
+      FileAccess::kGenericWrite, error);
+  REQUIRE(gpd); REQUIRE_FALSE(error);
+  REQUIRE(f.HeaderBytes() == f.original);
 }
 }  // namespace xe::filesystem::test
 #endif

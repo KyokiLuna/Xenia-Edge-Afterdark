@@ -2,6 +2,7 @@
 #ifndef XENIA_BASE_SNAPSHOT_PUBLICATION_SET_H_
 #define XENIA_BASE_SNAPSHOT_PUBLICATION_SET_H_
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 #include "xenia/base/snapshot_publisher.h"
@@ -28,6 +29,12 @@ class SnapshotPublicationSet final {
   std::shared_ptr<const HostStorageSnapshotToken> Capture(
       const std::filesystem::path&, uint64_t maximum, std::error_code&,
       bool ascii_folded_leaf = false) const;
+  // Read-only metadata of this exact owned/projected tuple through its real
+  // existing reservation scope. The temporary descriptor closes before return;
+  // callers still join their final tokens with Validate(). No write/promotion
+  // or native semantic authority is created by this filesystem observation.
+  std::optional<RetainedFileMetadata> ObserveRetainedMetadata(
+      std::shared_ptr<const HostStorageSnapshotToken>, std::error_code&) const;
   SnapshotPublicationReceipt Publish(
       const SnapshotRecoveryOwner&,
       std::shared_ptr<const HostStorageSnapshotToken> expected,
@@ -58,6 +65,9 @@ class SnapshotPublicationSet final {
       std::shared_ptr<HostStorageRoot> reserved,
       std::shared_ptr<const HostStorageSnapshotToken> actual_before,
       std::shared_ptr<const void> admission_owner, std::error_code&);
+  std::unique_ptr<HostStorageContentLayout> CaptureContentLayoutForCM(
+      const HostStorageRoot& exact_source, const std::filesystem::path& exact_package,
+      std::error_code&) const;
   struct State;
   explicit SnapshotPublicationSet(std::shared_ptr<State>);
   std::shared_ptr<State> state_;

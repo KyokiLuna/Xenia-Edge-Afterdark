@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <regex>
 #include <new>
+#include <source_location>
 #include "xenia/kernel/xam/profile_manager.h"
 #include "xenia/kernel/xam/local_profile_initial_recipe.h"
 #include "xenia/kernel/xam/content_source.h"
@@ -601,6 +602,45 @@ enum class ProfileAdmissionReason : uint32_t {
   kMountPublicationIdentityRetiring = 71,
   kMountPublicationGlobalLock = 72,
   kMountRegisterPreparedDevice = 73,
+};
+// Scalar-only optional observation. Declare first in each observed function,
+// so every model/cache/filesystem/native guard is destroyed before emission.
+// No ProfileManager, Kernel, model, account, path or native owner is retained.
+class GpdLoadRefusal final {
+ public:
+  GpdLoadRefusal() noexcept : enabled_(cvars::native_system_ui_trace) {}
+  ~GpdLoadRefusal() {
+    // An inherited caller GCRC is not ours to release. Keep that real refusal
+    // unchanged and do not format/log under it (as for admission diagnostics).
+    if (!enabled_ || !stage_ ||
+        global_critical_region::is_held_by_current_thread())
+      return;
+    static NativeSystemUiTraceLimiter trace;
+    trace.EmitTransition((uint64_t(stage_) << 32) | error_, "profile",
+                         "gpd_load_refusal",
+                         {{"stage", stage_},
+                          {"source_line", line_},
+                          {"error", error_},
+                          {"category", category_}});
+  }
+  std::error_code Result(
+      uint32_t stage, std::error_code error,
+      std::source_location where = std::source_location::current()) noexcept {
+    // Disabled mode performs no field/category/line capture or formatting.
+    if (enabled_ && error && !stage_) {
+      stage_ = stage;
+      line_ = where.line();
+      error_ = uint32_t(error.value());
+      category_ = error.category() == std::generic_category()  ? 1u
+                  : error.category() == std::system_category() ? 2u
+                                                               : 3u;
+    }
+    return error;
+  }
+
+ private:
+  const bool enabled_;
+  uint32_t stage_ = 0, line_ = 0, error_ = 0, category_ = 0;
 };
 class ProfileAdmissionDiagnostic final {
  public:
@@ -1540,20 +1580,25 @@ ProfileGpdWriter ProfileManager::CaptureGpdWriter(uint8_t slot,
 std::error_code ProfileManager::LoadGpdModel(
     std::shared_ptr<ProfileGpdModelAuthority> model,
     std::shared_ptr<ProfileStorageLease> lease,
-    std::shared_ptr<const filesystem::ProfileIntentOwner> owner) {
+    std::shared_ptr<const filesystem::ProfileIntentOwner> owner,
+    const ProfilePreparationProgress* progress) {
+  GpdLoadRefusal diagnostic;
   if (xe::global_critical_region::is_held_by_current_thread()) {
-    return std::make_error_code(std::errc::operation_would_block);
+    return diagnostic.Result(
+        1, std::make_error_code(std::errc::operation_would_block));
   }
   const auto volume = lease ? content_manager_.Volume(lease->source_id()) : nullptr;
   const auto recovery = volume && volume->profile_writable() ? volume->recovery() : nullptr;
   if (!model || !lease || !owner || !recovery) {
-    return std::make_error_code(std::errc::no_such_device);
+    return diagnostic.Result(2,
+                             std::make_error_code(std::errc::no_such_device));
   }
   std::vector<std::shared_ptr<ProfileGpdModelAuthority>> retired;
   {
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
     if (!lock.owns_lock()) {
-      return std::make_error_code(std::errc::device_or_resource_busy);
+      return diagnostic.Result(
+          3, std::make_error_code(std::errc::device_or_resource_busy));
     }
     retired = retired_gpd_models_;
   }
@@ -1561,16 +1606,19 @@ std::error_code ProfileManager::LoadGpdModel(
     if (old->xuid() == lease->xuid()) {
       auto error = old->ReleaseRetiredPublication();
       if (error) {
-        return error;
+        return diagnostic.Result(4, error);
       }
     }
   }
   const ProfileGpdWriter writer{model, owner, recovery, volume->mutations()};
-  if (const auto error = writer.Reload()) { return error; }
+  if (const auto error = writer.Reload(progress)) {
+    return diagnostic.Result(5, error);
+  }
   // Reload's cache/model commit guards have ended before the real repair IO.
   // A failed repair cannot publish a false successful native sign-in row.
   const auto& installed = kernel_state_->emulator()->installed_system_source();
-  return writer.RepairLegacyPictureKeys(installed ? installed->snapshot() : nullptr);
+  return diagnostic.Result(6, writer.RepairLegacyPictureKeys(
+                                  installed ? installed->snapshot() : nullptr,progress));
 }
 
 std::error_code ProfileManager::ReloadGpdModel(uint64_t xuid) {

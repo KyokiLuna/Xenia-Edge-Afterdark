@@ -14,12 +14,14 @@
 #include "xenia/base/content_package_mutation_wire.h"
 #include "xenia/base/managed_device_identity.h"
 #include "xenia/base/snapshot_publisher.h"
+namespace xe::kernel::xam { class ContentManager; class NativeFolderContent; class NativeFolderContentTestAccess; }
 namespace xe::filesystem {
 class ManagedVolumeAuthority;
 class ManagedStorageBootstrap;
 class ManagedBootstrapCreationPermit;
 class SnapshotPublicationSet;
 class ProfilePublicationIntentStore;
+class ProfilePublicationIntentTestAccess;
 // One exact managed Content epoch. Factory admission and restart recovery run
 // before catalog/guest publication. This is a separate journal purpose from
 // profile intents, format phases and single-file backup storage.
@@ -147,14 +149,87 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
     std::shared_ptr<Data> data_;
   };
 
+
+  // Pure source-owned format policy. This contains public verification data
+  // only, invokes no native/guest/IO callbacks, and supplies no source/writer
+  // authority by itself. CM installs it before native worker admission.
+  class NativeHeaderFormat {
+   public:
+    virtual ~NativeHeaderFormat() = default;
+    virtual bool SameBinding(const NativeHeaderFormat&) const noexcept = 0;
+    virtual std::error_code ValidateCurrent(const std::filesystem::path& package,
+        std::span<const uint8_t> complete_header) const = 0;
+    virtual std::error_code ValidateNativeChange(const std::filesystem::path& package,
+        std::span<const uint8_t> before, std::span<const uint8_t> intended) const = 0;
+   protected:
+    NativeHeaderFormat() = default;
+  };
+  // ONE external signed Header participant of the SAME profile transaction.
+  // Issued only by the complete store after source/profile/members admission;
+  // neither a guest path nor a native packet can construct this authority.
+  // Destruction releases views only and NEVER publishes or cancels a journal.
+  // Retire/destroy the last operation owner outside GCRC/metadata locks.
+  class ProfileHeaderPublication final {
+   public:
+    ~ProfileHeaderPublication();
+    ProfileHeaderPublication(const ProfileHeaderPublication&) = delete;
+    FileIoResult Read(size_t, std::span<uint8_t>);
+    FileIoResult Write(size_t, std::span<const uint8_t>);
+    std::error_code Resize(size_t);
+    std::error_code Flush();
+    std::optional<RetainedFileMetadata> Query(std::error_code&);
+    // Metadata only through this SAME actual member admission. Returned
+    // layout keeps independent native pins, not the member reservation scope.
+    std::unique_ptr<HostStorageContentLayout> CaptureMemberLayout(std::error_code&) const;
+    // Deny future writes without taking a lock, waiting or implying native
+    // cancellation/completion. A real already-entered IO owner may drain.
+    void CloseMutation() noexcept;
+    const std::filesystem::path& package() const;
+    const std::filesystem::path& target() const;
+    const std::filesystem::path& stage_artifact() const;
+    const std::shared_ptr<const HostStorageSnapshotToken>& expected() const;
+   private:
+    friend class ContentMutationOwner;
+    friend class ProfilePublicationIntentStore;
+    friend class ContentMutationOwnerTestAccess;
+    friend class xe::kernel::xam::NativeFolderContentTestAccess;
+    struct Data;
+    explicit ProfileHeaderPublication(std::shared_ptr<Data>);
+    // Only the whole owner, after the actual native IO quiescence, may seal.
+    // The stable cached File need not be destroyed. Seal closes mutation on
+    // its first attempt, drains our IO mutex, flushes and retains exact bytes.
+    // The CM/native header parser must validate the COMPLETE signed output
+    // before it records this role. Parseability alone is not write authority.
+    std::shared_ptr<const std::vector<uint8_t>> Seal(std::error_code&);
+    std::error_code CheckCurrent(const SnapshotPublicationSet&) const;
+    std::error_code CheckWithSnapshotGuard(const SnapshotPublicationSet&,
+        const HostStorageSnapshotBatch&,
+        const std::shared_ptr<const HostStorageSnapshotToken>&) const;
+    // Transfers the ONE actual native stage into the common CAS publisher;
+    // the PIS must durably record the complete joined intent BEFORE Commit.
+    const PreparedSnapshotPublication* PrepareCanonical(
+        const SnapshotPublicationSet&, std::error_code&);
+    SnapshotPublicationReceipt CommitCanonical(const SnapshotPublicationSet&);
+    std::shared_ptr<Data> data_;
+  };
+
  private:
+  friend class xe::kernel::xam::ContentManager;
+  friend class xe::kernel::xam::NativeFolderContent;
+  friend class ProfilePublicationIntentTestAccess;
+  bool InstallNativeHeaderFormat(std::shared_ptr<const NativeHeaderFormat>, std::error_code&);
   friend class ProfilePublicationIntentStore;
   std::shared_ptr<ProfileThumbnailParticipant> PrepareProfileThumbnail(
       const std::filesystem::path& exact_package,
       const std::shared_ptr<SnapshotPublicationSet>&, std::error_code&);
+  std::shared_ptr<ProfileHeaderPublication> PrepareProfileHeader(
+      const std::filesystem::path& exact_package,
+      std::shared_ptr<const HostStorageSnapshotToken> actual_source_header,
+      const std::shared_ptr<SnapshotPublicationSet>&, std::error_code&);
   friend class ManagedVolumeAuthority;
   friend class ManagedStorageBootstrap;
   friend class ContentMutationOwnerTestAccess;
+  friend class xe::kernel::xam::NativeFolderContentTestAccess;
   ContentMutationOwner() = default;
   static std::shared_ptr<ContentMutationOwner> OpenInternal(
       std::shared_ptr<HostStorageRoot> content,
@@ -229,6 +304,8 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
   std::shared_ptr<HostStorageRoot> content_, parent_, records_, staging_;
   std::shared_ptr<const ManagedDeviceIdentity> identity_;
   std::shared_ptr<const SnapshotRecoveryOwner> recovery_;
+  // Installed once for this actual CM epoch, before native source publication.
+  std::shared_ptr<const NativeHeaderFormat> native_header_format_;
   // Serializes actual host operations, never held by native/GCRC/model locks
   // and never across guest/UI callbacks. StreamSource is synchronous native
   // host I/O, not an emulated provider dispatch. Cached state uses atomics only.

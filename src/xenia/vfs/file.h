@@ -28,6 +28,7 @@ namespace vfs {
 
 class Entry;
 class Device;
+class FolderContentPackage;
 
 // Pure checked guest-unit conversion; this grants no filesystem/allocation
 // authority and is never a substitute for an actual backend observation.
@@ -52,6 +53,11 @@ class File {
     return device_owner_;
   }
   virtual ~File() = default;
+  // Only the real raw-folder backend returns this already-issued source.
+  // Ordinary/packed/managed member Files grant no native mount authority.
+  virtual std::shared_ptr<FolderContentPackage> folder_content_package() const {
+    return {};
+  }
 
   virtual void Destroy() = 0;
   virtual std::shared_ptr<const filesystem::HostStorageFileLease>

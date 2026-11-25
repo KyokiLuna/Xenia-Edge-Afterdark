@@ -59,6 +59,38 @@ struct ContentPackageInitialEntry {
   std::array<uint8_t, 32> digest{};
   bool operator==(const ContentPackageInitialEntry&) const = default;
 };
+// Metadata-only native layout of one retained package directory. This opens
+// no payload bytes and grants no File read/write, namespace reservation or
+// delete/truncate authority. The physical pins prevent inode reuse; consumers
+// still revalidate the exact layout and their independent source/open policy
+// before using it. Existing compatible owned File views may coexist.
+class HostStorageContentLayout final {
+ public:
+  ~HostStorageContentLayout();
+  HostStorageContentLayout(const HostStorageContentLayout&) = delete;
+  HostStorageContentLayout& operator=(const HostStorageContentLayout&) = delete;
+  const std::vector<ContentPackageTreeEntry>& entries() const;
+  const FileHandleInfo& top_info() const;
+  const std::filesystem::path& relative() const;
+  struct Statistics {
+    uint64_t file_bytes = 0;
+    // Each actual retained regular member owns this many virtual 4KiB bytes.
+    // This is backing geometry, never source permission or raw read authority.
+    uint64_t data_extent = 0;
+    // Actual native st_blocks attribution for those SAME retained members.
+    uint64_t allocated_bytes = 0;
+    bool operator==(const Statistics&) const = default;
+  };
+  const Statistics& statistics() const;
+  // Observing native metadata I/O, only in a real owned host-I/O scope and
+  // outside GCRC. This is not a cached liveness check or immutable byte lease.
+  std::error_code CheckCurrent() const;
+ private:
+  friend class HostStorageRoot;
+  struct State;
+  explicit HostStorageContentLayout(std::unique_ptr<State>);
+  std::unique_ptr<State> state_;
+};
 // Minted only by the native-FD/common-lease producer. Guest record paths or
 // caller-filled entry arrays cannot construct a live mutation authority.
 // Destroy outside GCRC/metadata locks: it releases actual native descriptors.

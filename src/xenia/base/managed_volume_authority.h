@@ -2,6 +2,7 @@
 #ifndef XENIA_BASE_MANAGED_VOLUME_AUTHORITY_H_
 #define XENIA_BASE_MANAGED_VOLUME_AUTHORITY_H_
 #include <optional>
+#include "xenia/base/content_mutation_owner.h"
 #include "xenia/base/managed_device_identity.h"
 #include "xenia/base/profile_intent_owner.h"
 #include "xenia/base/snapshot_publisher.h"
@@ -38,6 +39,10 @@ class ManagedVolumeAuthority final {
     std::shared_ptr<HostStorageRoot> content;
     std::string source_id;
     uint32_t device_id = 0;
+    // Immutable PUBLIC verification/shape policy from the actual process
+    // console owner. Install before typed Header replay, never after workers.
+    // It contains no signing key, File, source/writer permission or callback.
+    std::shared_ptr<const ContentMutationOwner::NativeHeaderFormat> native_header_format;
     // Explicit legacy primary policy only. Never infer Parent(Content).
     std::shared_ptr<HostStorageRoot> legacy_private_parent;
     std::shared_ptr<HostStorageRoot> legacy_public_root;
@@ -117,6 +122,7 @@ class ManagedVolumeAuthority final {
   std::shared_ptr<const ProfileIntentOwner> intents_;
   std::shared_ptr<const SnapshotRecoveryOwner> recovery_;
   std::shared_ptr<ContentMutationOwner> mutations_;
+  std::shared_ptr<const ContentMutationOwner::NativeHeaderFormat> native_header_format_;
   std::shared_ptr<const HostStorageGuestProjection> projection_;
   std::error_code error_;
 };
@@ -152,6 +158,7 @@ class ManagedVolumeFormatHandoff final {
   std::shared_ptr<const HostStorageGuestProjection> projection_;
   std::weak_ptr<const ProfileIntentOwner> previous_intents_;
   std::weak_ptr<ContentMutationOwner> previous_mutations_;
+  std::shared_ptr<const ContentMutationOwner::NativeHeaderFormat> native_header_format_;
   std::unique_ptr<ManagedDeviceIdentity::Handoff> operation_;
   std::shared_ptr<const ManagedVolumeAuthority> partial_;
   std::array<uint8_t, 32> binding_{};

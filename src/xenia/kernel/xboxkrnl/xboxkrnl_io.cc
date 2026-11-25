@@ -1100,7 +1100,8 @@ DECLARE_XBOXKRNL_EXPORT1(StfsCreateDevice, kFileSystem, kImplemented);
 dword_result_t StfsControlDevice_entry(lpvoid_t device, dword_t control_code,
                                        lpvoid_t buffer) {
   auto stfs = XStfsDevice::Lookup(*kernel_state(), device.guest_address());
-  return stfs ? stfs->Control(control_code) : X_STATUS_INVALID_PARAMETER;
+  return stfs ? stfs->Control(control_code, buffer.guest_address())
+              : X_STATUS_INVALID_PARAMETER;
 }
 DECLARE_XBOXKRNL_EXPORT1(StfsControlDevice, kFileSystem, kImplemented);
 

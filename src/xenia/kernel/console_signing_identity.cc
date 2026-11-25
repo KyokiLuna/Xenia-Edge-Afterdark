@@ -79,13 +79,6 @@ class BootstrapLock {
  }
  private:int fd_=-1;
 };
-bool PublicKey(std::span<const uint8_t> certificate,std::array<uint8_t,144>& key){
- if(certificate.size()!=0x1A8 || certificate[0]!=1 || certificate[1]!=0xA8)return false;
- key={};key[3]=16;
- std::copy_n(certificate.data()+0x24,4,key.data()+4);
- std::copy_n(certificate.data()+0x28,128,key.data()+16);
- return true;
-}
 } // namespace
 struct ConsoleSigningIdentity::State {
  std::shared_ptr<filesystem::HostStorageRoot> root;
@@ -226,15 +219,7 @@ bool ConsoleSigningIdentity::Verify(std::span<const uint8_t> hash,
     std::span<const uint8_t> signature,uint32_t& difference,
     std::span<const uint8_t> master) const {
  if(hash.size()!=20 || signature.size()!=kSignatureBytes || state_->root->retiring())return false;
- const auto cert=signature.first(kCertificateBytes);
- difference=0;for(size_t i=0;i<cert.size();++i)difference|=uint32_t(cert[i]^state_->certificate[i]);
- if(difference){
-  std::array<uint8_t,20> digest{};
-  if(master.size()!=272 || mbedtls_sha1(cert.data(),0xA8,digest.data()) ||
-     !XeCryptVerifyRsaSha1Pkcs1(master,digest,cert.subspan(0xA8,256)))return false;
- }
- std::array<uint8_t,144> key{};
- return PublicKey(cert,key) && XeCryptVerifyRsaSha1Pkcs1(key,hash,signature.subspan(kCertificateBytes,128));
+ return XeCryptVerifyConsoleSignature(state_->certificate,hash,signature,difference,master);
 }
 X_STATUS ConsoleSigningIdGuest(Memory& memory,const ConsoleSigningIdentity& identity,uint32_t raw_bytes,uint32_t text) {
  // Native public cross-check writes raw ID before its formatted text, so

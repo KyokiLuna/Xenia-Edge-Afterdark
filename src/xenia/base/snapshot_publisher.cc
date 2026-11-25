@@ -177,7 +177,8 @@ std::unique_ptr<PreparedSnapshotPublication> SnapshotPublisher::PrepareInternal(
     std::shared_ptr<const HostStorageSnapshotToken> expected,
     std::span<const uint8_t> intended, const std::atomic<bool>* canceled,
     std::string_view exact_nonce, std::error_code post_stage_parent_error,
-    PrivateSnapshotPurpose purpose) {
+    PrivateSnapshotPurpose purpose,
+    std::unique_ptr<HostStorageSnapshotStage> retained_stage) {
   auto prepared = std::make_unique<PreparedSnapshotPublication>();
   auto& receipt = prepared->receipt_;
   receipt.expected = expected;
@@ -210,20 +211,53 @@ std::unique_ptr<PreparedSnapshotPublication> SnapshotPublisher::PrepareInternal(
   if (receipt.error) { return prepared; }
   receipt.phase = SnapshotPublicationPhase::kStageCreate;
   std::unique_ptr<HostStorageSnapshotStage> stage;
-  if (exact_nonce.empty()) {
-    stage = NewStage(root, expected->relative().parent_path(), false,
-                     receipt.stage, receipt.stage_created, receipt.error);
+  if (retained_stage) {
+    // Issued CM session has already closed mutation and supplies this exact
+    // owned native stage. Verify its actual retained bytes before preparing
+    // the old-byte backup. CAS still independently verifies them at commit.
+    stage = std::move(retained_stage);
+    receipt.stage = stage->relative();
+    receipt.stage_created = true;
+    if (stage->root_ != root || stage->relative().parent_path() !=
+        expected->relative().parent_path()) {
+      receipt.error = std::make_error_code(std::errc::permission_denied);
+      prepared->stage_ = std::move(stage); return prepared;
+    }
+    receipt.phase = SnapshotPublicationPhase::kStageWrite;
+    const auto info = stage->QueryInfo(receipt.error);
+    if (!info || !info->regular || info->links != 1 ||
+        info->size != intended.size()) {
+      if (!receipt.error) { receipt.error = std::make_error_code(std::errc::state_not_recoverable); }
+      prepared->stage_ = std::move(stage); return prepared;
+    }
+    std::array<uint8_t, 4096> scratch;
+    for (size_t offset = 0; offset < intended.size();) {
+      const auto count = std::min(scratch.size(), intended.size() - offset);
+      const auto read = stage->ReadResult(offset, std::span(scratch).first(count));
+      if (read.error || read.bytes != count || !SameBytes(
+          std::span<const uint8_t>(scratch).first(count), intended.subspan(offset, count))) {
+        receipt.error = read.error ? read.error : std::make_error_code(std::errc::state_not_recoverable);
+        prepared->stage_ = std::move(stage); return prepared;
+      }
+      offset += count;
+    }
+    receipt.staged_count = intended.size();
   } else {
-    receipt.stage = expected->relative().parent_path() /
-        (".xenia-stage-" + std::string(exact_nonce) + ".tmp");
-    stage = root->CreateSnapshotStage(receipt.stage, receipt.stage_created, receipt.error);
+    if (exact_nonce.empty()) {
+      stage = NewStage(root, expected->relative().parent_path(), false,
+                       receipt.stage, receipt.stage_created, receipt.error);
+    } else {
+      receipt.stage = expected->relative().parent_path() /
+          (".xenia-stage-" + std::string(exact_nonce) + ".tmp");
+      stage = root->CreateSnapshotStage(receipt.stage, receipt.stage_created, receipt.error);
+    }
+    if (!stage) { return prepared; }
+    receipt.phase = SnapshotPublicationPhase::kStageWrite;
+    const auto staged = WriteSnapshotBytes(*stage, intended, canceled);
+    receipt.error = staged.error;
+    receipt.staged_count = staged.bytes;
   }
-  if (!stage) { return prepared; }
-  receipt.phase = SnapshotPublicationPhase::kStageWrite;
-  const auto staged = WriteSnapshotBytes(*stage, intended, canceled);
-  receipt.error = staged.error;
-  receipt.staged_count = staged.bytes;
-  if (receipt.error || stop()) { return prepared; }
+  if (receipt.error || stop()) { prepared->stage_ = std::move(stage); return prepared; }
   receipt.phase = SnapshotPublicationPhase::kStageFlush;
   receipt.error = stage->FlushResult();
   // The durable journal records this exact stage name and native identity.

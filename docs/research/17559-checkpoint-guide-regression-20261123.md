@@ -1,14 +1,16 @@
 # 17559 checkpoint Guide regression — 2026-11-23
 
-Status: current V126 Linux ELF passed unsigned native Guide visibility,
-close/input release and reopen with isolated data and a virtual controller.
-Its genuine empty startup baseline no longer sends the redundant startup
-sign-in request that stalled V125. Actual profile selection now returns EBUSY
-at the GPD preparation check before native sign-in entry. Shutdown still fails
-its nonzero-hook check. Sign-in, Avatar Editor and successful shutdown remain
-unaccepted. Full base/network/kernel/VFS/UI and focused CPU/installed-system
-tests passed. See the [native profile admission update](17559-native-profile-admission-20261125.md)
-for the latest source, tests and observed limits.
+Status: current V131 Linux ELF displays the unsigned dashboard and native
+Guide/profile picker. All five full direct suites and focused CPU/installed
+selections passed, including twelve new lifecycle cases. The coherent native
+request/outcome change passed the earlier Task producer boundary: the real
+initializer returned zero and a C838 Task/read/commit record was observed.
+No protocol completion, roster publication or owned CompleteIO followed;
+the dashboard stayed unsigned and Guide did not reopen after selection.
+An owned WM close was requested; process exit was one, fully reaped without
+forced signals. This is not sign-in, Avatar Editor or AppImage acceptance.
+See the [native profile admission update](17559-native-profile-admission-20261125.md)
+for current evidence and historical results.
 The published `hdd-milestone-20261123` AppImage remains affected. Its release page
 carries a critical-regression notice. The combined HDD goal is active again;
 repairing this checkpoint remains the immediate priority.

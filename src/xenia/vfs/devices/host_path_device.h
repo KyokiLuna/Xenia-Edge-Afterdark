@@ -29,6 +29,9 @@ class HostPathDevice : public Device {
  public:
   class PreparedSnapshotCache;
   class SnapshotCacheCommit;
+  enum class SnapshotCacheRefusal : uint8_t {
+    kNone,kNamespaceBusy,kCapacityChanged,kActiveEntry
+  };
   // Flat managed leaves only. Allocation/capacity preparation precedes storage
   // currentness admission; no file is created or opened through these APIs.
   std::shared_ptr<PreparedSnapshotCache> PrepareSnapshotCache(
@@ -39,7 +42,7 @@ class HostPathDevice : public Device {
   std::unique_ptr<SnapshotCacheCommit> TryCommitSnapshotCache(
       std::shared_ptr<PreparedSnapshotCache>,
       std::shared_ptr<const filesystem::HostStorageSnapshotBatch>,
-      std::error_code&);
+      std::error_code&,SnapshotCacheRefusal* refusal=nullptr);
   // Only a caller registering a whole virtual folder volume may grant disk
   // geometry controls. Content/package/system roots are not volumes by name.
   enum class ControlRole { kNone, kFolderVolume };

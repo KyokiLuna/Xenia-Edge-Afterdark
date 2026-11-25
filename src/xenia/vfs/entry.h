@@ -153,6 +153,10 @@ class Entry {
                                                    size_t length = 0) {
     return nullptr;
   }
+  // Cached namespace values only. Implementations must never touch a native
+  // handle, weak source owner, provider, filesystem or wait for guest work.
+  // Directory enumeration may invoke this while holding its actual GCRC.
+  virtual void RefreshNamespaceMetadata() {}
   virtual void update() { return; }
 
  protected:

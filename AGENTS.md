@@ -19,6 +19,15 @@ This independent fork restores Xbox 360 behavior. Use the actual guest modules,
 supplied updates and mapped dashboard contracts as the reference. Do not build
 a parallel host feature when the console already provides the feature.
 
+Use a systems approach by default. Recover the complete affected lifecycle
+and producer/consumer contracts from the matching maps and executable before
+changing a failing boundary. Compare those contracts with all current native,
+host fallback, persistence and teardown paths. Implement a coherent subsystem
+change, including related mismatches and their consumers, rather than repeating
+one symptom patch and one runtime retry. A single fix is appropriate when it
+corrects the shared system contract. Validate the affected lifecycle, including
+error/cancel/restart behavior, before calling a subsystem functional.
+
 Runtime work that the console does not perform needs a concrete explanation:
 the host translation, ABI, I/O, resource-lifetime or compatibility requirement
 it satisfies, and why the chosen implementation is necessary. A generic claim

@@ -1,6 +1,7 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "xenia/base/testing/snapshot_fixture.h"
 #include "xenia/base/xdbf_view.h"
+#include "xenia/base/mutex.h"
 #include "xenia/kernel/xam/profile_gpd_model.h"
 #include "xenia/kernel/xam/profile_gpd_transaction.h"
 #include "xenia/kernel/xam/user_profile.h"
@@ -10,6 +11,10 @@
 #include "xenia/vfs/file.h"
 #include "xenia/vfs/virtual_file_system.h"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <future>
+#include <thread>
 #include <cstdio>
 #include <cstring>
 #include <string_view>
@@ -1736,5 +1741,215 @@ TEST_CASE("Shared picture writer rejects malformed PNG before pending admission 
   REQUIRE(after->origin.stamp.model_version==before->origin.stamp.model_version);
   REQUIRE(after->pictures==before->pictures); f.UnchangedOnDisk();
 }
+namespace {
+// Competing real host owner, not inherited GCRC on the loader thread. The
+// bounded release prevents a future blocking regression from hanging the test;
+// RAII always releases/joins before the actual fixture can be torn down.
+struct GpdReloadNamespaceHolder {
+  std::promise<void> entered, release;
+  std::future<void> ready;
+  std::thread worker;
+  std::atomic<bool> watchdog_released{false};
+  GpdReloadNamespaceHolder() : ready(entered.get_future()) {
+    auto wait = release.get_future();
+    worker = std::thread([this, wait = std::move(wait)]() mutable {
+      auto lock = global_critical_region::AcquireDirect();
+      entered.set_value();
+      if (wait.wait_for(std::chrono::seconds(5)) != std::future_status::ready)
+        watchdog_released.store(true, std::memory_order_release);
+    });
+  }
+  bool released=false;
+  void Release() {
+    if(released)return;
+    released=true;release.set_value();worker.join();
+  }
+  ~GpdReloadNamespaceHolder() { Release(); }
+};
+}  // namespace
+TEST_CASE(
+    "Fresh GPD reload preserves model and cache across real namespace "
+    "contention and retry",
+    "[profile_gpd_model][gpd_load][contention]") {
+  ModelFixture f;
+  std::error_code error;
+  // Authority() deliberately installs a model; this case starts BEFORE that
+  // first publication, matching the incoming model in PrepareRoster.
+  auto model = xam::ProfileGpdModelAuthority::Create(ModelFixture::kXuid, 1, 29,
+                                                     f.storage, error);
+  REQUIRE(model);
+  REQUIRE_FALSE(error);
+  REQUIRE_FALSE(model->CaptureLoads(error));
+  REQUIRE_FALSE(error);
+  REQUIRE_FALSE(model->Pending(error));
+  REQUIRE_FALSE(error);
+  auto* dashboard_cache = f.fs.ResolvePath("Model:\\FFFE07D1.gpd");
+  auto* title_cache = f.fs.ResolvePath("Model:\\12345678.gpd");
+  REQUIRE(dashboard_cache);
+  REQUIRE(title_cache);
+  xam::ProfileGpdWriter writer{model, f.intent_owner, f.recovery};
+  {
+    GpdReloadNamespaceHolder held;
+    REQUIRE(held.ready.wait_for(std::chrono::seconds(2)) ==
+            std::future_status::ready);
+    REQUIRE(writer.Reload() == std::errc::device_or_resource_busy);
+    REQUIRE_FALSE(held.watchdog_released.load(std::memory_order_acquire));
+    REQUIRE_FALSE(model->CaptureLoads(error));
+    REQUIRE_FALSE(error);
+    REQUIRE_FALSE(model->Pending(error));
+    REQUIRE_FALSE(error);
+  }
+  REQUIRE(f.fs.ResolvePath("Model:\\FFFE07D1.gpd") == dashboard_cache);
+  REQUIRE(f.fs.ResolvePath("Model:\\12345678.gpd") == title_cache);
+  REQUIRE_FALSE(model->CaptureRead(error));
+  REQUIRE(error == std::errc::operation_canceled);
+  f.UnchangedOnDisk();
+  REQUIRE_FALSE(
+      writer.Reload());  // actual new attempt after the holder released
+  const auto loaded = model->CaptureRead(error);
+  REQUIRE(loaded);
+  REQUIRE_FALSE(error);
+  REQUIRE(loaded->origin.stamp.model_version == 1);
+  REQUIRE(loaded->origin.user_slot == 1);
+  REQUIRE(loaded->models->titles.contains(ModelFixture::kTitle));
+  REQUIRE(f.fs.ResolvePath("Model:\\FFFE07D1.gpd"));
+  REQUIRE(f.fs.ResolvePath("Model:\\12345678.gpd"));
+  f.UnchangedOnDisk();
+}
+
+
+TEST_CASE("A retained cold GPD plan is issued by one exact model even on the same lease",
+          "[profile_gpd_model][phase_progress][issuer]") {
+  ModelFixture f;std::error_code error;
+  auto issuer=xam::ProfileGpdModelAuthority::Create(ModelFixture::kXuid,0,19,f.storage,error);
+  auto foreign=xam::ProfileGpdModelAuthority::Create(ModelFixture::kXuid,0,19,f.storage,error);
+  REQUIRE(issuer);REQUIRE(foreign);REQUIRE_FALSE(error);
+  auto prepared=issuer->PrepareLoaded(f.Loads(),error);REQUIRE(prepared);
+  auto older=issuer->PrepareLoaded(f.Loads(),error);REQUIRE(older);
+  const auto* exact_older=older.get();
+  const auto* exact=prepared.get();const auto tokens=prepared->tokens();
+  auto cache=f.device->PrepareSnapshotCache(tokens,error);REQUIRE(cache);
+  auto checked=f.storage->view()->ValidateSnapshotBatch(tokens,error);REQUIRE(checked);
+  std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(std::move(checked));
+  CHECK_FALSE(foreign->TryCommitPreserving(prepared,batch,error));
+  CHECK(error==std::errc::operation_canceled);REQUIRE(prepared.get()==exact);
+  CHECK(prepared->tokens()==tokens);
+  auto model_commit=issuer->TryCommitPreserving(prepared,batch,error);REQUIRE(model_commit);
+  REQUIRE_FALSE(error);CHECK_FALSE(prepared);
+  auto cache_commit=f.device->TryCommitSnapshotCache(cache,batch,error);REQUIRE(cache_commit);
+  REQUIRE(model_commit->Apply());cache_commit->Apply();
+  cache_commit.reset();model_commit.reset();batch.reset();
+  const auto read=issuer->CaptureRead(error);REQUIRE(read);REQUIRE_FALSE(error);
+  CHECK(read->origin.stamp.model_version==1);CHECK(read->origin.user_slot==0);
+  CHECK_FALSE(foreign->CaptureLoads(error));CHECK_FALSE(error);
+  checked=f.storage->view()->ValidateSnapshotBatch(older->tokens(),error);REQUIRE(checked);
+  batch=std::shared_ptr<const filesystem::HostStorageSnapshotBatch>(std::move(checked));
+  CHECK_FALSE(issuer->TryCommitPreserving(older,batch,error));
+  CHECK(error==std::errc::operation_canceled);CHECK(older.get()==exact_older);
+  batch.reset();f.UnchangedOnDisk();
+}
+TEST_CASE("A final namespace refusal releases every guard and returns the same unapplied GPD plan",
+          "[profile_gpd_model][phase_progress][guard_drop]") {
+  ModelFixture f;std::error_code error;
+  auto space=filesystem::HostStorageSpace::ForPath(f.storage->view()->path(),20ull<<30,error);
+  REQUIRE(space);REQUIRE_FALSE(error);
+  auto model=xam::ProfileGpdModelAuthority::Create(ModelFixture::kXuid,0,19,f.storage,error);
+  REQUIRE(model);
+  auto prepared=model->PrepareLoaded(f.Loads(),error);REQUIRE(prepared);
+  const auto* exact=prepared.get();const auto tokens=prepared->tokens();
+  auto cache=f.device->PrepareSnapshotCache(tokens,error);REQUIRE(cache);
+  GpdReloadNamespaceHolder held;
+  REQUIRE(held.ready.wait_for(std::chrono::seconds(2))==std::future_status::ready);
+  auto checked=f.storage->view()->ValidateSnapshotBatch(tokens,error);REQUIRE(checked);
+  std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(std::move(checked));
+  auto guard=model->TryCommitPreserving(prepared,batch,error);REQUIRE(guard);
+  REQUIRE_FALSE(prepared);
+  auto why=vfs::HostPathDevice::SnapshotCacheRefusal::kNone;
+  CHECK_FALSE(f.device->TryCommitSnapshotCache(cache,batch,error,&why));
+  REQUIRE(error==std::errc::device_or_resource_busy);
+  CHECK(why==vfs::HostPathDevice::SnapshotCacheRefusal::kNamespaceBusy);
+  const auto busy=error;
+  prepared=guard->ReleaseUnapplied();REQUIRE(prepared.get()==exact);
+  CHECK_FALSE(guard->Apply());CHECK_FALSE(guard->ReleaseUnapplied());
+  guard.reset();batch.reset();
+  size_t waits=0;
+  const std::function<bool()> wait=[&]{
+    ++waits;std::error_code observed;
+    CHECK_FALSE(model->CaptureLoads(observed));CHECK_FALSE(observed);
+    auto actual=space->TryBegin(f.storage->view()->path(),observed);
+    CHECK(actual);CHECK_FALSE(observed);actual.reset();
+    held.Release();return true;
+  };
+  xam::ProfilePreparationProgress progress{std::chrono::steady_clock::now()+std::chrono::seconds(2),wait};
+  REQUIRE(progress.Retry(busy));CHECK(waits==1);CHECK_FALSE(held.watchdog_released.load());
+  CHECK(prepared->tokens()==tokens);
+  checked=f.storage->view()->ValidateSnapshotBatch(tokens,error);REQUIRE(checked);
+  batch=std::shared_ptr<const filesystem::HostStorageSnapshotBatch>(std::move(checked));
+  guard=model->TryCommitPreserving(prepared,batch,error);REQUIRE(guard);REQUIRE_FALSE(prepared);
+  auto cache_commit=f.device->TryCommitSnapshotCache(cache,batch,error,&why);REQUIRE(cache_commit);
+  CHECK(why==vfs::HostPathDevice::SnapshotCacheRefusal::kNone);
+  REQUIRE(guard->Apply());cache_commit->Apply();
+  cache_commit.reset();guard.reset();batch.reset();
+  const auto read=model->CaptureRead(error);REQUIRE(read);CHECK(read->origin.stamp.model_version==1);
+  f.UnchangedOnDisk();
+}
+TEST_CASE("Retained GPD phase progress refuses changed real file tokens instead of rebasing",
+          "[profile_gpd_model][phase_progress][stale]") {
+  ModelFixture f;std::error_code error;
+  auto model=xam::ProfileGpdModelAuthority::Create(ModelFixture::kXuid,0,19,f.storage,error);REQUIRE(model);
+  auto prepared=model->PrepareLoaded(f.Loads(),error);REQUIRE(prepared);
+  const auto* exact=prepared.get();const auto tokens=prepared->tokens();
+  auto checked=f.storage->view()->ValidateSnapshotBatch(tokens,error);REQUIRE(checked);
+  std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(std::move(checked));
+  auto guard=model->TryCommitPreserving(prepared,batch,error);REQUIRE(guard);
+  prepared=guard->ReleaseUnapplied();guard.reset();batch.reset();
+  REQUIRE(prepared.get()==exact);
+  auto replaced=f.dashboard_wire;replaced.insert(replaced.end(),{9,8,7,6});
+  f.NativeWrite(kDashboardID,replaced);
+  CHECK_FALSE(f.storage->view()->ValidateSnapshotBatch(prepared->tokens(),error));
+  CHECK(error==std::errc::state_not_recoverable);
+  CHECK(prepared.get()==exact);CHECK(prepared->tokens()==tokens);
+  CHECK_FALSE(model->CaptureLoads(error));CHECK_FALSE(error);
+  xam::ProfileGpdWriter writer{model,f.intent_owner,f.recovery};
+  REQUIRE_FALSE(writer.Reload()); // explicit NEW load, not a retained-plan rebase
+  const auto read=model->CaptureRead(error);REQUIRE(read);CHECK(read->origin.stamp.model_version==1);
+}
+TEST_CASE("GPD reload with caller progress publishes once after genuine namespace release",
+          "[profile_gpd_model][phase_progress][reload]") {
+  ModelFixture f;std::error_code error;
+  auto model=xam::ProfileGpdModelAuthority::Create(ModelFixture::kXuid,0,19,f.storage,error);REQUIRE(model);
+  GpdReloadNamespaceHolder held;
+  REQUIRE(held.ready.wait_for(std::chrono::seconds(2))==std::future_status::ready);
+  size_t waits=0;
+  const std::function<bool()> wait=[&]{
+    ++waits;std::error_code observed;
+    CHECK_FALSE(model->CaptureLoads(observed));CHECK_FALSE(observed);
+    held.Release();return true;
+  };
+  xam::ProfilePreparationProgress progress{std::chrono::steady_clock::now()+std::chrono::seconds(2),wait};
+  xam::ProfileGpdWriter writer{model,f.intent_owner,f.recovery};
+  REQUIRE_FALSE(writer.Reload(&progress));CHECK(waits==1);
+  CHECK_FALSE(held.watchdog_released.load());
+  const auto read=model->CaptureRead(error);REQUIRE(read);CHECK(read->origin.stamp.model_version==1);
+  f.UnchangedOnDisk();
+}
+TEST_CASE("Retained cache metadata plans cannot publish into a withdrawn namespace generation",
+          "[profile_gpd_model][phase_progress][retirement]") {
+  ModelFixture f;std::error_code error;
+  auto model=xam::ProfileGpdModelAuthority::Create(ModelFixture::kXuid,0,19,f.storage,error);REQUIRE(model);
+  auto prepared=model->PrepareLoaded(f.Loads(),error);REQUIRE(prepared);
+  auto cache=f.device->PrepareSnapshotCache(prepared->tokens(),error);REQUIRE(cache);
+  auto checked=f.storage->view()->ValidateSnapshotBatch(prepared->tokens(),error);REQUIRE(checked);
+  std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(std::move(checked));
+  auto guard=model->TryCommitPreserving(prepared,batch,error);REQUIRE(guard);
+  f.device->BeginNamespaceRetirement();
+  auto why=vfs::HostPathDevice::SnapshotCacheRefusal::kNone;
+  CHECK_FALSE(f.device->TryCommitSnapshotCache(cache,batch,error,&why));
+  CHECK(error==std::errc::operation_canceled);
+  CHECK(why==vfs::HostPathDevice::SnapshotCacheRefusal::kNone);
+  prepared=guard->ReleaseUnapplied();guard.reset();batch.reset();REQUIRE(prepared);
+  CHECK_FALSE(model->CaptureLoads(error));CHECK_FALSE(error);f.UnchangedOnDisk();
+}
+
 }  // namespace xe::kernel::test
 #endif

@@ -19,6 +19,7 @@
 #include <system_error>
 #include <vector>
 #include "xenia/base/filesystem.h"
+#include "xenia/base/retained_file_metadata.h"
 #include "xenia/base/mapped_memory.h"
 namespace xe::filesystem {
 namespace content_package_mutation_wire { struct Record; }
@@ -483,6 +484,13 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   // authority. A later error can follow partial successful syncs.
   std::error_code FlushTree(
       const std::filesystem::path& relative = {}) const;
+  // Retain a bounded, source-confined native directory/member census without
+  // reading payloads or adopting the DELETE/TRUNCATE operation's authority.
+  // Read-only roots and compatible live Files are allowed. Namespace/private
+  // protection, actual root generation, real mount and nofollow checks remain.
+  // The caller must own a host-I/O scope outside GCRC; later use revalidates.
+  std::unique_ptr<HostStorageContentLayout> CaptureContentLayout(
+      const std::filesystem::path&, std::error_code&) const;
   std::error_code ReadFile(const std::filesystem::path&, uint64_t maximum,
                            std::vector<uint8_t>& output) const;
   std::unique_ptr<MappedMemory> MapRead(const std::filesystem::path&,
@@ -496,6 +504,15 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   friend class SnapshotRecoveryOwner;
   friend class SnapshotPublisher;
   friend class ContentMutationOwner;
+  // Closed CM external-header join only. This reservation is over the real
+  // Header parent, separate from the profile-root batch. Never projects its
+  // token into that profile root or grants ../ / arbitrary multi-root IO.
+  // Requires the SAME actually held native filesystem guard, outside GCRC.
+  std::error_code ValidateExternalContentHeaderWithSnapshotGuard(
+      const HostStorageSnapshotBatch&, const HostStorageRoot& content_source,
+      const std::filesystem::path& exact_package,
+      const std::filesystem::path& exact_header_target,
+      const HostStorageSnapshotToken& actual_header) const;
   friend class CacheStorageOwner;
   friend class MediaReferenceStore;
   friend class HostStorageSnapshotTestAccess;
@@ -516,6 +533,16 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
       std::span<const std::shared_ptr<const HostStorageSnapshotToken>> actual,
       std::vector<std::shared_ptr<const HostStorageSnapshotToken>> projected,
       std::error_code&);
+  friend class HostStorageContentLayout;
+  // Exact CM/profile scope only: metadata/FD observation through the SAME
+  // existing member permits. Returned layout is rebound to this ordinary CM
+  // source and retains NO publication namespace permits or payload rights.
+  std::unique_ptr<HostStorageContentLayout> CaptureAdmittedContentLayout(
+      const std::filesystem::path& exact_package,
+      std::shared_ptr<const HostStorageRoot> exact_profile_scope,
+      std::error_code&) const;
+  std::unique_ptr<HostStorageContentLayout> CaptureContentLayoutInternal(
+      const std::filesystem::path&, bool exact_current_root, std::error_code&) const;
   friend class ProfilePublicationIntentStore;
   IntentWriteResult WriteNewProfileDoneWithSnapshotGuard(
       const HostStorageSnapshotBatch&, const std::filesystem::path&,
@@ -864,6 +891,12 @@ class HostStorageManagedMetadata final {
 // staged/uncertain file. Caller records the leaf in its recovery receipt.
 class HostStorageSnapshotStage final {
  public:
+  // Owned physical staging view; no raw native handle escapes. As with Write,
+  // reads/resizes/metadata fail after the first real CAS sealing attempt.
+  FileIoResult ReadResult(size_t, std::span<uint8_t>);
+  FileIoResult WriteAllResult(size_t, std::span<const uint8_t>);
+  std::error_code ResizeResult(size_t);
+  std::optional<RetainedFileMetadata> QueryMetadata(std::error_code&);
   FileIoResult WriteResult(size_t, std::span<const uint8_t>);
   // Verification happens again under the common CAS mutation guard. No raw
   // native handle escapes and writes are refused after the first CAS attempt.
@@ -872,6 +905,7 @@ class HostStorageSnapshotStage final {
   const std::filesystem::path& relative() const { return relative_; }
  private:
   friend class HostStorageRoot;
+  friend class SnapshotPublisher;
   HostStorageSnapshotStage(std::shared_ptr<const HostStorageRoot> root,
       std::filesystem::path relative, std::unique_ptr<FileHandle> file)
       : root_(std::move(root)), relative_(std::move(relative)),

@@ -73,6 +73,9 @@ enum class ProfileRosterPhase : uint8_t {
   kPreparing, kPrepared, kNativeEntered, kPublished, kFinalizing,
   kCommitted, kCanceling, kCanceled, kUncertain
 };
+// Only authenticated native publisher branches select one of these preheld
+// outcomes. The requested roster and its wire rows remain immutable.
+enum class ProfileRosterPublicationOutcome : uint8_t { kRequested, kCanceledEmpty };
 struct ProfileRosterResult final {
   std::error_code error;
   ProfileRosterPhase phase = ProfileRosterPhase::kPreparing;
@@ -88,6 +91,8 @@ class ProfileRosterIntent final {
  public:
   std::shared_ptr<const HostRoster> old_roster() const;
   std::shared_ptr<const HostRoster> prepared_roster() const;
+  std::shared_ptr<const HostRoster> published_roster() const;
+  std::optional<ProfileRosterPublicationOutcome> publication_outcome() const;
   ProfileRosterResult result() const; // value-only, no readiness claim
  private:
   // Actual PM-issued before/after envelope emptiness plus native protocol/map
@@ -119,7 +124,8 @@ class ProfileRosterPublicationCell final {
   friend class ProfileManager;
   friend struct ProfileRosterAuthority;
   friend class ::xe::kernel::NativeProfileIdentityOwner;
-  bool PublishFromNative() noexcept; // atomics/scalars only, no release/lookup
+  bool PublishFromNative(ProfileRosterPublicationOutcome =
+      ProfileRosterPublicationOutcome::kRequested) noexcept; // atomics only
   struct State;
   explicit ProfileRosterPublicationCell(std::shared_ptr<State>);
   // Independently retained revocable metadata; never a dangling intent pointer.

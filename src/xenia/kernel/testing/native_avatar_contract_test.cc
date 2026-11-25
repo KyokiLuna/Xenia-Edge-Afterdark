@@ -1,6 +1,10 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
+#include <future>
+#include <thread>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -383,6 +387,191 @@ TEST_CASE("Avatar shared Request producers join each real wrapper to queued allo
   CHECK_FALSE(NativeAvatarRequestStart(NativeSystemUiPublicCall::kAvatarShutdown));
 }
 
+namespace {
+using HookRundown = identity_detail::NativeIdentityHookRundown;
+// Real host concurrency against the production admission/release word. The
+// held frame returns only after release, and every assertion unwind joins it.
+struct HeldHookUse {
+  std::promise<void> entered, release;
+  std::future<void> ready = entered.get_future();
+  std::atomic<bool> acquired{false}, parkable{false};
+  std::thread worker;
+  bool joined = false;
+  HeldHookUse(std::shared_ptr<HookRundown> control, bool may_park) {
+    auto done = release.get_future();
+    worker = std::thread([this, control = std::move(control), may_park,
+                          done = std::move(done)]() mutable {
+      HookRundown::Use use;
+      acquired.store(use.Acquire(control, std::make_shared<int>(1), may_park),
+                     std::memory_order_release);
+      parkable.store(use.may_park(), std::memory_order_release);
+      entered.set_value();
+      done.wait();  // OS host wait, not a guest fiber suspension.
+    });
+  }
+  void ReturnAndJoin() {
+    if (joined) return;
+    release.set_value();
+    worker.join();
+    joined = true;
+  }
+  ~HeldHookUse() { ReturnAndJoin(); }
+};
+struct HookBackingObservation {
+  std::shared_ptr<HookRundown> control;
+  uint32_t& active;
+  uint32_t& parkable;
+  bool& destroyed;
+  HookBackingObservation(std::shared_ptr<HookRundown> value, uint32_t& count,
+                         uint32_t& parked, bool& ended)
+      : control(std::move(value)), active(count), parkable(parked),
+        destroyed(ended) {}
+  ~HookBackingObservation() {
+    const auto value = control->Capture();
+    active = value.active;
+    parkable = value.parkable;
+    destroyed = true;
+  }
+};
+}  // namespace
+TEST_CASE("Hook rundown refuses missing ownership without claiming a sealed drain",
+          "[native_avatar_contract][hook_rundown]") {
+  auto control = std::make_shared<HookRundown>();
+  HookRundown::Use use;
+  REQUIRE_FALSE(use.Acquire({}, std::make_shared<int>(1), true));
+  REQUIRE_FALSE(use.Acquire(control, {}, true));
+  REQUIRE_FALSE(use);
+  REQUIRE(control->Capture().active == 0);
+  REQUIRE_FALSE(control->Capture().fully_drained());
+  REQUIRE_FALSE(control->Capture().retain_until_worker_join());
+  control->SealParkable();
+  REQUIRE(control->Capture().fully_drained());
+}
+TEST_CASE("Hook rundown seals parkable admission while preserving real cleanup frames",
+          "[native_avatar_contract][hook_rundown]") {
+  auto control = std::make_shared<HookRundown>();
+  auto backing = std::make_shared<int>(1);
+  HookRundown::Use parked, late_tick, cleanup;
+  REQUIRE(parked.Acquire(control, backing, true));
+  REQUIRE(parked.may_park());
+  control->SealParkable();
+  REQUIRE(late_tick.Acquire(control, backing, true));
+  REQUIRE_FALSE(late_tick.may_park());
+  REQUIRE(cleanup.Acquire(control, backing, false));
+  REQUIRE(control->Capture().active == 3);
+  REQUIRE(control->Capture().parkable == 1);
+  REQUIRE_FALSE(control->Capture().retain_until_worker_join());
+  late_tick.Reset();
+  parked.Reset();
+  REQUIRE(control->Capture().active == 1);
+  REQUIRE(control->Capture().retain_until_worker_join());
+  REQUIRE_FALSE(control->Capture().fully_drained());
+  cleanup.Reset();
+  REQUIRE(control->Capture().fully_drained());
+}
+TEST_CASE("Hook frame releases its last owning backing before publishing count zero",
+          "[native_avatar_contract][hook_rundown]") {
+  auto control = std::make_shared<HookRundown>();
+  uint32_t active = 0, parkable = 0;
+  bool destroyed = false;
+  HookRundown::Use use;
+  auto backing = std::make_shared<HookBackingObservation>(
+      control, active, parkable, destroyed);
+  REQUIRE(use.Acquire(control, backing, true));
+  backing.reset();
+  control->SealParkable();
+  REQUIRE_FALSE(destroyed);
+  REQUIRE_FALSE(control->Capture().retain_until_worker_join());
+  use.Reset();
+  REQUIRE(destroyed);
+  REQUIRE(active == 1);
+  REQUIRE(parkable == 1);
+  REQUIRE(control->Capture().fully_drained());
+}
+TEST_CASE("Hook frame scope keeps outer owner and code holders counted through unwind",
+          "[native_avatar_contract][hook_rundown]") {
+  auto control = std::make_shared<HookRundown>();
+  std::array<uint32_t, 3> active{}, parkable{};
+  std::array<bool, 3> destroyed{};
+  [&] {
+    HookRundown::Use use;  // production wrapper order: before ALL owning locals
+    auto owner = std::make_shared<HookBackingObservation>(
+        control, active[0], parkable[0], destroyed[0]);
+    REQUIRE(use.Acquire(control, owner, true));
+    auto work = std::make_shared<HookBackingObservation>(
+        control, active[1], parkable[1], destroyed[1]);
+    auto code = std::make_shared<HookBackingObservation>(
+        control, active[2], parkable[2], destroyed[2]);
+    control->SealParkable();
+  }();
+  for (size_t i = 0; i < destroyed.size(); ++i) {
+    REQUIRE(destroyed[i]);
+    REQUIRE(active[i] == 1);
+    REQUIRE(parkable[i] == 1);
+  }
+  REQUIRE(control->Capture().fully_drained());
+}
+TEST_CASE("Moving a live hook lease preserves its parked obligation and releases only replaced use",
+          "[native_avatar_contract][hook_rundown]") {
+  auto control = std::make_shared<HookRundown>();
+  auto backing = std::make_shared<int>(1);
+  HookRundown::Use first, replacement;
+  REQUIRE(first.Acquire(control, backing, true));
+  REQUIRE(replacement.Acquire(control, backing, false));
+  REQUIRE_FALSE(first.Acquire(control, backing, false));
+  replacement = std::move(first);
+  first.Reset();
+  REQUIRE_FALSE(first);
+  REQUIRE(replacement.Matches(control.get(), backing.get()));
+  REQUIRE(control->Capture().active == 1);
+  REQUIRE(control->Capture().parkable == 1);
+  control->SealParkable();
+  REQUIRE_FALSE(control->Capture().retain_until_worker_join());
+  replacement.Reset();
+  replacement.Reset();
+  REQUIRE(control->Capture().fully_drained());
+}
+TEST_CASE("Parkable hook admission racing stop has one exact production CAS outcome",
+          "[native_avatar_contract][hook_rundown]") {
+  for (size_t i = 0; i < 32; ++i) {
+    auto control = std::make_shared<HookRundown>();
+    HeldHookUse entered(control, true);
+    control->SealParkable();
+    REQUIRE(entered.ready.wait_for(std::chrono::seconds(2)) ==
+            std::future_status::ready);
+    REQUIRE(entered.acquired.load(std::memory_order_acquire));
+    const auto snapshot = control->Capture();
+    REQUIRE(snapshot.active == 1);
+    REQUIRE(snapshot.parkable_sealed);
+    REQUIRE(snapshot.parkable ==
+            uint32_t(entered.parkable.load(std::memory_order_acquire)));
+    REQUIRE(snapshot.retain_until_worker_join() == !snapshot.parkable);
+    REQUIRE_FALSE(snapshot.fully_drained());
+    entered.ReturnAndJoin();
+    REQUIRE(control->Capture().fully_drained());
+  }
+}
+TEST_CASE("Real hook return leaves concurrent cleanup owned until its own host join",
+          "[native_avatar_contract][hook_rundown]") {
+  auto control = std::make_shared<HookRundown>();
+  HeldHookUse parked(control, true);
+  REQUIRE(parked.ready.wait_for(std::chrono::seconds(2)) ==
+          std::future_status::ready);
+  REQUIRE(parked.parkable.load(std::memory_order_acquire));
+  control->SealParkable();
+  HeldHookUse cleanup(control, false);
+  REQUIRE(cleanup.ready.wait_for(std::chrono::seconds(2)) ==
+          std::future_status::ready);
+  REQUIRE(cleanup.acquired.load(std::memory_order_acquire));
+  REQUIRE(control->Capture().active == 2);
+  REQUIRE_FALSE(control->Capture().retain_until_worker_join());
+  parked.ReturnAndJoin();
+  REQUIRE(control->Capture().active == 1);
+  REQUIRE(control->Capture().retain_until_worker_join());
+  REQUIRE_FALSE(control->Capture().fully_drained());
+  cleanup.ReturnAndJoin();
+  REQUIRE(control->Capture().fully_drained());
+}
 }  // namespace xe::kernel::test
 namespace xe::kernel::test {
 TEST_CASE(
@@ -413,3 +602,142 @@ TEST_CASE(
   CHECK(host->function_data.trampoline != nullptr);
 }
 }  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+namespace {
+struct AvatarReturnFrame {
+  uint64_t thread;
+  uint32_t pcr,sp,lr,process;
+  bool operator==(const AvatarReturnFrame&) const = default;
+};
+enum class AvatarReturnKind : uint8_t { kNone, kCore, kCopy };
+struct AvatarReturnRequest {
+  uint64_t serial;
+  NativeAvatarCallPair<AvatarReturnFrame> core;
+  bool* destroyed = nullptr;
+  ~AvatarReturnRequest() { if(destroyed)*destroyed=true; }
+};
+using AvatarReturnBinding = NativeAvatarRequestEntry<AvatarReturnRequest,AvatarReturnKind>;
+using AvatarReturnStack = NativeAvatarEntryStack<AvatarReturnFrame,AvatarReturnBinding>;
+constexpr AvatarReturnFrame kActualCoreReturn{
+    139947520497296ull,0x30052000,0x704DFBC0,0x81965B4C,2};
+}
+TEST_CASE("Avatar own returns retain exact requests across identical physical frames",
+          "[kernel][native_avatar_contract][avatar_request_return]") {
+  auto first=std::make_shared<AvatarReturnRequest>();first->serial=7;
+  auto second=std::make_shared<AvatarReturnRequest>();second->serial=8;
+  REQUIRE(first->core.Enter(kActualCoreReturn,0x200720,101));
+  REQUIRE(second->core.Enter(kActualCoreReturn,0x200760,102));
+  AvatarReturnStack stack;
+  stack.EnterOwned(kActualCoreReturn,{first,7,101,AvatarReturnKind::kCore});
+  stack.EnterOwned(kActualCoreReturn,{second,8,102,AvatarReturnKind::kCore});
+  AvatarReturnBinding returned;
+  REQUIRE(stack.ObserveReturn(kActualCoreReturn,&returned)==NativeAvatarEntryReturn::kOwned);
+  REQUIRE(returned.Matches(AvatarReturnKind::kCore));
+  REQUIRE(returned.request==second);
+  REQUIRE(second->core.Finish(kActualCoreReturn,returned.invocation));
+  REQUIRE_FALSE(first->core.returned);
+  returned={};
+  REQUIRE(stack.ObserveReturn(kActualCoreReturn,&returned)==NativeAvatarEntryReturn::kOwned);
+  REQUIRE(returned.request==first);
+  REQUIRE(first->core.Finish(kActualCoreReturn,returned.invocation));
+  REQUIRE(stack.empty());
+  REQUIRE(stack.ObserveReturn(kActualCoreReturn)==NativeAvatarEntryReturn::kAbsent);
+}
+TEST_CASE("Avatar a new exact return does not invent an older missing request return",
+          "[kernel][native_avatar_contract][avatar_request_return]") {
+  auto unresolved=std::make_shared<AvatarReturnRequest>();unresolved->serial=20;
+  auto current=std::make_shared<AvatarReturnRequest>();current->serial=21;
+  REQUIRE(unresolved->core.Enter(kActualCoreReturn,0x200720,201));
+  REQUIRE(current->core.Enter(kActualCoreReturn,0x200760,202));
+  AvatarReturnStack stack;
+  stack.EnterOwned(kActualCoreReturn,{current,21,202,AvatarReturnKind::kCore});
+  AvatarReturnBinding returned;
+  REQUIRE(stack.ObserveReturn(kActualCoreReturn,&returned)==NativeAvatarEntryReturn::kOwned);
+  REQUIRE(returned.Matches(AvatarReturnKind::kCore));
+  REQUIRE(returned.request==current);
+  REQUIRE(current->core.Finish(kActualCoreReturn,returned.invocation));
+  REQUIRE(unresolved->core.entered);
+  REQUIRE_FALSE(unresolved->core.returned);
+  REQUIRE_FALSE(unresolved->core.Finish(kActualCoreReturn,returned.invocation));
+}
+TEST_CASE("Avatar request bindings preserve neutral nesting and reject malformed frame adoption",
+          "[kernel][native_avatar_contract][avatar_request_return]") {
+  auto outer=std::make_shared<AvatarReturnRequest>();outer->serial=30;
+  auto child=std::make_shared<AvatarReturnRequest>();child->serial=31;
+  const auto actual=kActualCoreReturn;
+  auto neutral=actual;neutral.sp-=0x80;neutral.lr=0x816B7EA4;
+  auto inner=neutral;inner.sp-=0x80;
+  REQUIRE(outer->core.Enter(actual,0x200720,301));
+  REQUIRE(child->core.Enter(inner,0x200760,302));
+  AvatarReturnStack stack;
+  stack.EnterOwned(actual,{outer,30,301,AvatarReturnKind::kCore});
+  REQUIRE(stack.EnterPassthroughIfNested(neutral));
+  stack.EnterOwned(inner,{child,31,302,AvatarReturnKind::kCore});
+  auto wrong=inner;const auto field=GENERATE(0u,1u,2u,3u,4u);
+  if(field==0)wrong.thread+=8;else if(field==1)wrong.pcr+=0x1000;
+  else if(field==2)wrong.sp+=0x10;else if(field==3)wrong.lr+=4;else wrong.process=1;
+  AvatarReturnBinding returned;
+  REQUIRE(stack.ObserveReturn(wrong,&returned)==NativeAvatarEntryReturn::kMismatch);
+  REQUIRE_FALSE(returned.request);
+  REQUIRE(stack.expected()==inner);
+  REQUIRE(stack.ObserveReturn(actual,&returned)==NativeAvatarEntryReturn::kMismatch);
+  REQUIRE_FALSE(returned.request);
+  REQUIRE(stack.ObserveReturn(inner,&returned)==NativeAvatarEntryReturn::kOwned);
+  REQUIRE(returned.request==child);
+  REQUIRE(child->core.Finish(inner,returned.invocation));
+  returned={};
+  REQUIRE(stack.ObserveReturn(neutral,&returned)==NativeAvatarEntryReturn::kPassthrough);
+  REQUIRE_FALSE(returned.request);
+  REQUIRE_FALSE(outer->core.returned);
+  REQUIRE(stack.ObserveReturn(actual,&returned)==NativeAvatarEntryReturn::kOwned);
+  REQUIRE(returned.request==outer);
+  REQUIRE(outer->core.Finish(actual,returned.invocation));
+}
+TEST_CASE("Avatar request return serials reject stale attempts and wrong pair kinds",
+          "[kernel][native_avatar_contract][avatar_request_return]") {
+  auto request=std::make_shared<AvatarReturnRequest>();request->serial=40;
+  AvatarReturnBinding old{request,40,401,AvatarReturnKind::kCore};
+  REQUIRE(request->core.Enter(kActualCoreReturn,0x200720,old.invocation));
+  REQUIRE(old.Matches(AvatarReturnKind::kCore));
+  REQUIRE_FALSE(old.Matches(AvatarReturnKind::kCopy));
+  REQUIRE_FALSE(old.Matches(AvatarReturnKind::kNone));
+  REQUIRE_FALSE(request->core.Finish(kActualCoreReturn,old.invocation+1));
+  REQUIRE_FALSE(request->core.returned);
+  REQUIRE(request->core.Finish(kActualCoreReturn,old.invocation));
+  REQUIRE_FALSE(request->core.Finish(kActualCoreReturn,old.invocation));
+  request->core={};
+  REQUIRE(request->core.Enter(kActualCoreReturn,0x200760,402));
+  REQUIRE_FALSE(request->core.Finish(kActualCoreReturn,old.invocation));
+  REQUIRE_FALSE(request->core.returned);
+  AvatarReturnBinding malformed{request,41,402,AvatarReturnKind::kCore};
+  REQUIRE_FALSE(malformed.Matches(AvatarReturnKind::kCore));
+  malformed={request,40,0,AvatarReturnKind::kCore};
+  REQUIRE_FALSE(malformed.Matches(AvatarReturnKind::kCore));
+  REQUIRE(request->core.Finish(kActualCoreReturn,402));
+}
+TEST_CASE("Avatar request entry retains its target through registry removal and return tail",
+          "[kernel][native_avatar_contract][avatar_request_return]") {
+  bool destroyed=false;
+  auto registry_target=std::make_shared<AvatarReturnRequest>();
+  registry_target->serial=50;registry_target->destroyed=&destroyed;
+  REQUIRE(registry_target->core.Enter(kActualCoreReturn,0x200720,501));
+  std::weak_ptr<AvatarReturnRequest> lifetime=registry_target;
+  AvatarReturnStack stack;
+  stack.EnterOwned(kActualCoreReturn,{registry_target,50,501,AvatarReturnKind::kCore});
+  registry_target.reset();
+  REQUIRE_FALSE(lifetime.expired());REQUIRE_FALSE(destroyed);
+  auto wrong=kActualCoreReturn;wrong.sp+=0x10;
+  AvatarReturnBinding returned;
+  REQUIRE(stack.ObserveReturn(wrong,&returned)==NativeAvatarEntryReturn::kMismatch);
+  REQUIRE_FALSE(returned.request);REQUIRE_FALSE(destroyed);
+  REQUIRE(stack.ObserveReturn(kActualCoreReturn,&returned)==NativeAvatarEntryReturn::kOwned);
+  REQUIRE(stack.empty());REQUIRE_FALSE(destroyed);
+  REQUIRE(returned.Matches(AvatarReturnKind::kCore));
+  REQUIRE(returned.request->core.Finish(kActualCoreReturn,returned.invocation));
+  // Exact returned holder remains alive through the host completion tail;
+  // no model of native Complete/free/TaskClose success is supplied here.
+  returned={};
+  REQUIRE(destroyed);REQUIRE(lifetime.expired());
+}
+}

@@ -351,19 +351,7 @@ struct NativeAvatarService::State {
     xam::ContentSourceState source;
     bool callbacks_copied = false, ready = false, shutdown_entered = false;
   };
-  struct Pair {
-    Frame frame;
-    bool entered = false, returned = false;
-    uint32_t value = 0;
-    bool Enter(Frame f, uint32_t v) {
-      if (entered || returned) return false;
-      frame = f; value = v; entered = true; return true;
-    }
-    bool Finish(Frame f) {
-      if (!entered || returned || frame != f) return false;
-      returned = true; return true;
-    }
-  };
+  using Pair = NativeAvatarCallPair<Frame>;
   struct FrontendResident {
     Frame caller;
     object_ref<XThread> thread;
@@ -416,6 +404,53 @@ struct NativeAvatarService::State {
          prepare_returned = false;
     bool uncertain = false, done = false;
   };
+  enum class RequestPairKind : uint8_t {
+    kNone, kStart, kCopy, kDispatch, kComplete, kFinalize, kCoreInit,
+    kCoreDispatch, kAnimationJob, kAnimationCore, kAnimationWriter
+  };
+  using RequestEntry = NativeAvatarRequestEntry<Request,RequestPairKind>;
+  static Pair* RequestPair(Request& r, RequestPairKind kind) {
+    switch (kind) {
+      case RequestPairKind::kStart: return &r.start;
+      case RequestPairKind::kCopy: return &r.copy;
+      case RequestPairKind::kDispatch: return &r.dispatch;
+      case RequestPairKind::kComplete: return &r.completion;
+      case RequestPairKind::kFinalize: return &r.finalize;
+      case RequestPairKind::kCoreInit: return &r.core_init;
+      case RequestPairKind::kCoreDispatch: return &r.core_dispatch;
+      case RequestPairKind::kAnimationJob: return &r.animation_job;
+      case RequestPairKind::kAnimationCore: return &r.animation_core;
+      case RequestPairKind::kAnimationWriter: return &r.animation_writer;
+      default: return nullptr;
+    }
+  }
+  static RequestPairKind RequestKind(uint32_t at) {
+    switch (at) {
+      case kStart: return RequestPairKind::kStart;
+      case kCopy: return RequestPairKind::kCopy;
+      case kDispatch: return RequestPairKind::kDispatch;
+      case kComplete: return RequestPairKind::kComplete;
+      case kFinalize: return RequestPairKind::kFinalize;
+      case kCoreInit: return RequestPairKind::kCoreInit;
+      case kCoreDispatch: return RequestPairKind::kCoreDispatch;
+      case kAnimationJob: return RequestPairKind::kAnimationJob;
+      case kAnimationCore: return RequestPairKind::kAnimationCore;
+      case kAnimationWriter: return RequestPairKind::kAnimationWriter;
+      default: return RequestPairKind::kNone;
+    }
+  }
+  // Called at the successful admitted-entry cut under mutex. This owns only
+  // the exact observed Request/attempt, not a native Task or completion.
+  bool EnterRequestPair(const std::shared_ptr<Request>& r, RequestPairKind kind,
+                        const Frame& frame, uint32_t value, RequestEntry& entry) {
+    auto* pair = r ? RequestPair(*r, kind) : nullptr;
+    if (!pair || entry.request || !r->serial || !next_request_entry ||
+        next_request_entry == UINT64_MAX) return false;
+    const auto invocation = next_request_entry++;
+    if (!pair->Enter(frame, value, invocation)) return false;
+    entry = {r, r->serial, invocation, kind};
+    return true;
+  }
   struct Invocation {
     NativeSystemUiPublicCall call;
     std::vector<uint64_t> args;
@@ -440,13 +475,13 @@ struct NativeAvatarService::State {
   bool shutdown_done = false, shutdown_claimed = false, f3_shutdown_entered = false;
   std::atomic<bool> stopped_retired{false};
   bool animation_enabled = false; // Immutable optional plan extension after Create.
-  uint64_t next_serial = 1;
+  uint64_t next_serial = 1, next_request_entry = 1;
   std::shared_ptr<Session> session;
   std::shared_ptr<Control> f3_unload;
   std::map<XThread*,std::vector<std::shared_ptr<Invocation>>> invocations;
   std::map<XThread*,std::vector<std::shared_ptr<Request>>> public_calls;
   std::map<uint64_t,std::shared_ptr<Request>> requests;
-  std::map<std::pair<XThread*,uint32_t>,NativeAvatarEntryStack<Frame>> entries;
+  std::map<std::pair<XThread*,uint32_t>,NativeAvatarEntryStack<Frame,RequestEntry>> entries;
   std::shared_ptr<FrontendResident> frontend_resident;
   // Shared native functions can run unowned callbacks while an owned call
   // waits on the SAME thread. Caller holds mutex and proved the exact live
@@ -764,8 +799,8 @@ struct NativeAvatarService::State {
                      const NativeSystemUiPublicCallProfile&);
   bool EnterResident(cpu::ppc::PPCContext&, const Frame&, uint32_t);
   void LeaveResident(cpu::ppc::PPCContext&, const Frame&, uint32_t);
-  bool EnterInternal(cpu::ppc::PPCContext&, const Frame&, uint32_t);
-  void LeaveInternal(cpu::ppc::PPCContext&, const Frame&, uint32_t);
+  bool EnterInternal(cpu::ppc::PPCContext&, const Frame&, uint32_t, RequestEntry&);
+  void LeaveInternal(cpu::ppc::PPCContext&, const Frame&, uint32_t, const RequestEntry&);
   std::optional<NativeAvatarAssetSizes> NativeSizes(XThread&,uint16_t);
 };
 
@@ -1237,7 +1272,7 @@ void NativeAvatarService::State::LeaveResident(
 }
 
 bool NativeAvatarService::State::EnterInternal(
-    cpu::ppc::PPCContext& c, const Frame& frame, uint32_t at) {
+    cpu::ppc::PPCContext& c, const Frame& frame, uint32_t at, RequestEntry& entry) {
   auto& memory = *config.kernel->memory();
   if (at == kFrontend || at == kBuiltin || at == kF3Lock)
     return EnterResident(c, frame, at);
@@ -1308,7 +1343,7 @@ bool NativeAvatarService::State::EnterInternal(
       std::lock_guard lock(mutex);
       for (const auto& [serial,other] : requests)
         if (other != r && !other->done && !other->client_published && other->overlap == overlap) return false;
-      if (!r->start.Enter(frame,overlap)) { r->uncertain = true; (RecordFirstUncertainty(__LINE__,36,&frame,at), uncertain = true); return false; }
+      if (!EnterRequestPair(r,RequestPairKind::kStart,frame,overlap,entry)) { r->uncertain = true; (RecordFirstUncertainty(__LINE__,36,&frame,at), uncertain = true); return false; }
       r->overlap = overlap; r->input = *input; r->overlap_backing = std::move(backing);
       r->start_parameters=*parameters;r->parameters_backing=std::move(parameter_backing);
       if(r->call==NativeSystemUiPublicCall::kAvatarInitialize)
@@ -1326,7 +1361,7 @@ bool NativeAvatarService::State::EnterInternal(
       Poison(__LINE__,5,r,&frame,at); return false;
     }
     std::lock_guard lock(mutex);
-    if (!r->copy.Enter(frame,*output)) { r->uncertain = true; (RecordFirstUncertainty(__LINE__,37,&frame,at), uncertain = true); return false; }
+    if (!EnterRequestPair(r,RequestPairKind::kCopy,frame,*output,entry)) { r->uncertain = true; (RecordFirstUncertainty(__LINE__,37,&frame,at), uncertain = true); return false; }
     r->copy_output = *output;
     return true;
   }
@@ -1353,7 +1388,7 @@ bool NativeAvatarService::State::EnterInternal(
       // a replacement packet/Task generation.
       r->dispatch = {};
       r->dispatch_returned = false;
-      r->dispatch.Enter(frame,*packet);
+      if(!EnterRequestPair(r,RequestPairKind::kDispatch,frame,*packet,entry))return false;
     }
     const auto acquisition = already_referenced ? OwnedAcquire{} :
         AcquireOwnedTask(*frame.thread,frame,at,r,r->task_reference_receipt);
@@ -1397,7 +1432,7 @@ bool NativeAvatarService::State::EnterInternal(
       Poison(__LINE__,8,r,&frame,at); return false;
     }
     std::lock_guard lock(mutex);
-    if (!r->completion.Enter(frame,*overlap)) { r->uncertain=true;(RecordFirstUncertainty(__LINE__,41,&frame,at), uncertain=true);return false; }
+    if (!EnterRequestPair(r,RequestPairKind::kComplete,frame,*overlap,entry)) { r->uncertain=true;(RecordFirstUncertainty(__LINE__,41,&frame,at), uncertain=true);return false; }
     if(r->call==NativeSystemUiPublicCall::kAvatarLoadAnimation){
       const bool ran=r->animation_job.entered;
       const uint32_t expected=r->animation_job.value==0x8000000Au?0x80004005u:r->animation_job.value;
@@ -1429,7 +1464,7 @@ bool NativeAvatarService::State::EnterInternal(
         r->message.app != 0xF2 || r->call == NativeSystemUiPublicCall::kAvatarInitialize)
       return false;
     std::lock_guard lock(mutex);
-    if (!r->finalize.Enter(frame,*object)) { r->uncertain=true;(RecordFirstUncertainty(__LINE__,42,&frame,at), uncertain=true);return false; }
+    if (!EnterRequestPair(r,RequestPairKind::kFinalize,frame,*object,entry)) { r->uncertain=true;(RecordFirstUncertainty(__LINE__,42,&frame,at), uncertain=true);return false; }
     r->result = *result;
     return true;
   }
@@ -1462,7 +1497,7 @@ bool NativeAvatarService::State::EnterInternal(
     }
     std::lock_guard lock(mutex);
     if (r->session != session || session->callbacks_copied ||
-        !r->core_init.Enter(frame,*payload)) return false;
+        !EnterRequestPair(r,RequestPairKind::kCoreInit,frame,*payload,entry)) return false;
     session->callbacks=callbacks;
     session->callback_code=std::move(owners);
     session->callbacks_copied=true;
@@ -1704,19 +1739,19 @@ bool NativeAvatarService::State::EnterInternal(
          !MatchesNativeAvatarAnimationEdge(NativeAvatarAnimationEdge::kWorkerJob,
              held->worker_frame->sp,frame.sp,frame.lr) ||
          descriptor!=0x81632D90 || packet!=r->packet ||
-         !r->animation_job.Enter(frame,job))return false;
+         !EnterRequestPair(r,RequestPairKind::kAnimationJob,frame,job,entry))return false;
       r->animation_job_address=job;return true;
     }
     if(at==kAnimationCore){
       if(*first!=r->payload || *second!=r->animation->control ||
          !MatchesNativeAvatarAnimationEdge(NativeAvatarAnimationEdge::kJobCore,
              r->animation_job.frame.sp,frame.sp,frame.lr))return false;
-      return r->animation_core.Enter(frame,*first);
+      return EnterRequestPair(r,RequestPairKind::kAnimationCore,frame,*first,entry);
     }
     if(*first!=r->animation->control || frame.sp>UINT32_MAX-0x190 || *second!=frame.sp+0x190 ||
        !MatchesNativeAvatarAnimationEdge(NativeAvatarAnimationEdge::kCoreWriter,
            r->animation_core.frame.sp,frame.sp,frame.lr))return false;
-    if(!r->animation_writer.Enter(frame,*first))return false;
+    if(!EnterRequestPair(r,RequestPairKind::kAnimationWriter,frame,*first,entry))return false;
     RecordDiagnostic(DiagnosticLocked(DiagnosticPhase::kAnimationWriterEntry,__LINE__,0,0,frame,r.get(),nullptr,*task));
     return true;
   }
@@ -1726,7 +1761,7 @@ bool NativeAvatarService::State::EnterInternal(
     const auto r=packet ? by_packet(*packet) : nullptr;
     if (!r || !task || !NativeAvatarTaskReferenceMatchesBody(r->task_reference_handle,*task) || r->message.app!=0xF2) return false;
     std::lock_guard lock(mutex);
-    return r->core_dispatch.Enter(frame,*packet);
+    return EnterRequestPair(r,RequestPairKind::kCoreDispatch,frame,*packet,entry);
   }
   if (at==0x819650F8) {
     // This is the actual native worker scheduled by the owned CoreInit. An
@@ -1848,7 +1883,7 @@ bool NativeAvatarService::State::EnterInternal(
 }
 
 void NativeAvatarService::State::LeaveInternal(
-    cpu::ppc::PPCContext& c, const Frame& frame, uint32_t at) {
+    cpu::ppc::PPCContext& c, const Frame& frame, uint32_t at, const RequestEntry& entry) {
   bool resident_return = at == kFrontend || at == kBuiltin;
   { std::lock_guard lock(mutex);
     const auto& r = frontend_resident;
@@ -1945,33 +1980,27 @@ void NativeAvatarService::State::LeaveInternal(
       }
     }
   }
+  // The exact successful entry owns its Request association across native
+  // callbacks and physical-frame reuse. Never rediscover it by scanning all
+  // outstanding Requests, or complete an older missing return by inference.
   std::shared_ptr<Request> request;
-  const auto pair=[&](Request& r)->Pair* {
-    if(at==kStart)return &r.start;
-    if(at==kCopy)return &r.copy;
-    if(at==kDispatch)return &r.dispatch;
-    if(at==kComplete)return &r.completion;
-    if(at==kFinalize)return &r.finalize;
-    if(at==kCoreInit)return &r.core_init;
-    if(at==kCoreDispatch)return &r.core_dispatch;
-    if(at==kAnimationJob)return &r.animation_job;
-    if(at==kAnimationCore)return &r.animation_core;
-    if(at==kAnimationWriter)return &r.animation_writer;
-    return nullptr;
-  };
   {
     std::lock_guard lock(mutex);
-    for (const auto& [serial,r]:requests) {
-      const auto p=pair(*r);
-      if(p && p->entered && !p->returned && p->frame==frame) {
-        if(request){(RecordFirstUncertainty(__LINE__,50,&frame,at), uncertain=true);r->uncertain=true;request->uncertain=true;return;}
-        request=r;
+    if(entry.request) {
+      request=entry.request;
+      const auto kind=RequestKind(at);
+      if(!entry.Matches(kind)) {
+        request->uncertain=true;
+        (RecordFirstUncertainty(__LINE__,50,&frame,at), uncertain=true);return;
+      }
+      auto* own=RequestPair(*request,kind);
+      if(!own || !own->Finish(frame,entry.invocation)) {
+        request->uncertain=true;
+        (RecordFirstUncertainty(__LINE__,51,&frame,at), uncertain=true);return;
       }
     }
-    if(request && !pair(*request)->Finish(frame)) {
-      request->uncertain=true;(RecordFirstUncertainty(__LINE__,51,&frame,at), uncertain=true);return;
-    }
   }
+  const auto pair=[&](Request& r)->Pair* {return RequestPair(r,RequestKind(at));};
   if(at==kCopy && request) {
     // The original copier returned the actual allocation. Capture before
     // native Start queues it; never derive/adopt an address by a name or scan.
@@ -2542,6 +2571,7 @@ bool AvatarOnlyIngress(cpu::ppc::PPCContext& c,uint32_t at) {
 }
 }
 uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
+  State::RequestEntry request_entry;
   auto* c=static_cast<cpu::ppc::PPCContext*>(raw);
   if(!c || !c->kernel_state || !HooksFunction(uint32_t(address)))return 1;
   try{
@@ -2641,7 +2671,7 @@ uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
       if(!owned)return passthrough();
     }
     const bool admitted=profile?state.EnterPublic(*c,*frame,*profile,
-        shutdown_invocation?&shutdown_cut:nullptr):state.EnterInternal(*c,*frame,uint32_t(address));
+        shutdown_invocation?&shutdown_cut:nullptr):state.EnterInternal(*c,*frame,uint32_t(address),request_entry);
     shutdown_cut.admitted=admitted;
     if(!admitted){
       if(address==kAnimationJob || address==kAnimationCore || address==kAnimationWriter)
@@ -2659,7 +2689,7 @@ uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
     // completion. Every other observed own return consumes one exact frame.
     if(address!=0x81674940 && address!=kF3 && address!=kF3Lock){
       std::lock_guard lock(state.mutex);
-      state.entries[{frame->thread,uint32_t(address)}].EnterOwned(*frame);
+      state.entries[{frame->thread,uint32_t(address)}].EnterOwned(*frame,request_entry);
     }
     return 1;
   }catch(...){if(const auto s=Lookup(c->kernel_state))s->state_->Poison(__LINE__,16,{},nullptr,0);
@@ -2708,6 +2738,7 @@ void NativeAvatarService::BeforeCompletionPublication(void* raw) noexcept{
   }catch(...){if(const auto service=Lookup(c->kernel_state))service->state_->Poison(__LINE__,17,{},nullptr,0);}
 }
 void NativeAvatarService::ObserveReturn(void* raw,uint64_t address) noexcept {
+  State::RequestEntry request_entry;
   auto* c=static_cast<cpu::ppc::PPCContext*>(raw);
   if(!c || !c->kernel_state)return;
   try{
@@ -2720,7 +2751,7 @@ void NativeAvatarService::ObserveReturn(void* raw,uint64_t address) noexcept {
       std::lock_guard lock(state.mutex);
       const auto it=state.entries.find({frame->thread,uint32_t(address)});
       if(it==state.entries.end() || it->second.empty())return; // unobserved ingress
-      const auto paired=it->second.ObserveReturn(*frame);
+      const auto paired=it->second.ObserveReturn(*frame,&request_entry);
       if(paired==NativeAvatarEntryReturn::kMismatch){
         (state.RecordFirstUncertainty(__LINE__,61,&*frame,uint32_t(address),&it->second.expected()), state.uncertain=true);return;
       }
@@ -2730,7 +2761,7 @@ void NativeAvatarService::ObserveReturn(void* raw,uint64_t address) noexcept {
       if(paired!=NativeAvatarEntryReturn::kOwned)return;
     }
     if(const auto* profile=PublicAt(uint32_t(address)))state.LeavePublic(*c,*frame,*profile);
-    else state.LeaveInternal(*c,*frame,uint32_t(address));
+    else state.LeaveInternal(*c,*frame,uint32_t(address),request_entry);
   }catch(...){if(const auto s=Lookup(c->kernel_state))s->state_->Poison(__LINE__,18,{},nullptr,0);}
 }
 

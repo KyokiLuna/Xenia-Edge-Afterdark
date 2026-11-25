@@ -1555,6 +1555,8 @@ bool ManagedStorageBootstrap::Open(ManagedVolumeAuthority& out,
   // Replay the typed profile tuple only after actual CM recovery and before
   // the source can issue its first public guest view. A pending/corrupt intent
   // never becomes a partially initialized default profile.
+  if (options.native_header_format && !out.mutations_->InstallNativeHeaderFormat(
+      options.native_header_format,error)) { return fail(); }
   error=ProfilePublicationIntentStore::ReplayBeforeGuestAdmission(
       out.intents_,recovery,out.mutations_);if (error) {return fail();}
   error=b.identity->CheckCurrent();if (error) {return fail();}
@@ -1640,6 +1642,7 @@ std::shared_ptr<const ManagedVolumeAuthority>
 ManagedVolumeAuthority::OpenInternal(Options options, bool inspect, unsigned bootstrap_stop) {
   auto result =
       std::shared_ptr<ManagedVolumeAuthority>(new ManagedVolumeAuthority);
+  result->native_header_format_ = options.native_header_format;
   auto& error = result->error_;
   if (xe::global_critical_region::is_held_by_current_thread()) {
     error = std::make_error_code(std::errc::operation_not_permitted);
@@ -1673,6 +1676,7 @@ std::shared_ptr<const ManagedVolumeAuthority>
 ManagedVolumeAuthority::OpenLegacyInternal(
     Options options, std::shared_ptr<HostStorageRoot> content_anchor,
     std::shared_ptr<ManagedVolumeAuthority> result, bool inspect) {
+  result->native_header_format_ = options.native_header_format;
   auto& error = result->error_;
   // Native identity observation belongs to this actual producer, whose
   // existing friendship grants precisely that authority, not to its caller.
@@ -2081,6 +2085,10 @@ ManagedVolumeAuthority::OpenLegacyInternal(
       error = std::make_error_code(std::errc::io_error);
     }
   }
+  if (!error && result->native_header_format_ &&
+      !result->mutations_->InstallNativeHeaderFormat(result->native_header_format_, error)) {
+    if (!error) { error = Denied(); }
+  }
   if (!error) {
     error = ProfilePublicationIntentStore::ReplayBeforeGuestAdmission(
         result->intents_, result->recovery_, result->mutations_);
@@ -2170,6 +2178,7 @@ ManagedVolumeAuthority::CaptureFormatHandoff() const {
   ticket->projection_ = projection_;
   ticket->previous_intents_ = intents_;
   ticket->previous_mutations_ = mutations_;  // Weak; never blocks actual drain.
+  ticket->native_header_format_ = native_header_format_;
   return ticket;
 }
 std::unique_ptr<ManagedVolumeFormatHandoff>
@@ -2187,6 +2196,7 @@ ManagedVolumeAuthority::InspectFormatRecovery(Options options) {
   if (ticket->error_) { return ticket; }
   ticket->identity_ = inspected->identity_;
   ticket->source_id_ = ticket->identity_->source_id();
+  ticket->native_header_format_ = inspected->native_header_format_;
   ticket->content_ = inspected->content_;
   ticket->private_parent_ = inspected->private_parent_;
   ticket->public_authority_ = inspected->public_authority_;
@@ -2399,6 +2409,7 @@ std::array<uint8_t, 32> ManagedVolumeAuthority::FormatTicketDigest(
 std::shared_ptr<ManagedVolumeAuthority> ManagedVolumeAuthority::BuildFormatVolume(
     ManagedVolumeFormatHandoff& ticket, bool completed) {
   auto result = std::shared_ptr<ManagedVolumeAuthority>(new ManagedVolumeAuthority);
+  result->native_header_format_ = ticket.native_header_format_;
   auto& error = result->error_;
   if (xe::global_critical_region::is_held_by_current_thread()) {
     error = std::make_error_code(std::errc::operation_not_permitted); return result;
@@ -2508,6 +2519,10 @@ std::shared_ptr<ManagedVolumeAuthority> ManagedVolumeAuthority::BuildFormatVolum
       error = result->mutations_ ? result->mutations_->error() : Denied();
       if (!error) { error = std::make_error_code(std::errc::operation_in_progress); }
     }
+  }
+  if (!error && result->native_header_format_ &&
+      !result->mutations_->InstallNativeHeaderFormat(result->native_header_format_, error)) {
+    if (!error) { error = Denied(); }
   }
   if (!error) {
     error = ProfilePublicationIntentStore::ReplayBeforeGuestAdmission(

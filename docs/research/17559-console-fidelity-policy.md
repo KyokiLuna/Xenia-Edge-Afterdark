@@ -4,6 +4,22 @@ The Xbox 360's actual behavior is the reference for Afterdark. This is a
 standing development rule, including code inherited from upstream and code
 already added in this fork.
 
+## Systems approach
+
+Use a systems approach by default throughout the project. Before implementation,
+recover the full affected lifecycle from the matching mapped code and executable:
+producers, consumers, request/data formats, ownership, asynchronous completion,
+cancellation, persistence and teardown. Compare that contract with the current
+native and host fallback paths together. Record established facts separately
+from inference and unobserved runtime behavior.
+
+Choose a coherent subsystem correction that accounts for related mismatches
+and downstream consumers before the next build/runtime cycle. Do not repeat a
+sequence of isolated symptom fixes when the surrounding contract is recoverable.
+A single fix is appropriate when it repairs the shared system-level contract;
+this does not require bundling unrelated changes. Test the affected lifecycle
+and truthful failure/recovery paths, then exercise its real guest consumers.
+
 ## Implementation decisions
 
 Establish the guest producer/consumer contract from the matching executable,

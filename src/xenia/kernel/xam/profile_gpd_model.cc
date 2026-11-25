@@ -841,11 +841,14 @@ void ProfileGpdModelAuthority::Retire() {
 ProfileGpdModelAuthority::RosterPause::~RosterPause() {
   if (!sealed_) { ReleaseKnownOutcome(); }
 }
-void ProfileGpdModelAuthority::RosterPause::ReleaseKnownOutcome() {
+void ProfileGpdModelAuthority::RosterPause::UnpauseKnownOutcomeFromNative() noexcept {
   if (!owner_) { return; }
   uint64_t expected = serial_;
   owner_->roster_pause_.compare_exchange_strong(expected, 0,
                                                std::memory_order_release);
+}
+void ProfileGpdModelAuthority::RosterPause::ReleaseKnownOutcome() {
+  UnpauseKnownOutcomeFromNative();
   owner_.reset();
 }
 std::unique_ptr<ProfileGpdModelAuthority::RosterPause>
@@ -905,6 +908,7 @@ ProfileGpdModelAuthority::PrepareLoaded(
     return {};
   }
   auto prepared = std::unique_ptr<PreparedCommit>(new PreparedCommit);
+  prepared->issuer=shared_from_this();
   for (const auto& [id, load] : loaded) {
     prepared->checked.push_back(load.token);
   }
@@ -1385,6 +1389,7 @@ ProfileGpdModelAuthority::PrepareCommit(
   // The common final batch proves all of them still current together.
   auto next = std::make_shared<std::map<uint32_t, GpdSnapshotLoad>>(current);
   auto prepared = std::unique_ptr<PreparedCommit>(new PreparedCommit);
+  prepared->issuer=shared_from_this();
   prepared->checked.reserve(current.size());
   for (const auto& [title, file] : plan->files) {
     auto found = current.find(title);
@@ -1434,15 +1439,24 @@ ProfileGpdModelAuthority::TryCommit(
     std::unique_ptr<PreparedCommit> prepared,
     std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch,
     std::error_code& error) {
+  return TryCommitPreserving(prepared,std::move(batch),error);
+}
+std::unique_ptr<ProfileGpdModelAuthority::CommitGuard>
+ProfileGpdModelAuthority::TryCommitPreserving(
+    std::unique_ptr<PreparedCommit>& prepared,
+    std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch,
+    std::error_code& error) {
   error.clear();
   if (!prepared || !batch || batch->root() != storage_->view() ||
       batch->tokens() != prepared->checked) {
     error = Error(std::errc::invalid_argument);
     return {};
   }
+  if(prepared->issuer.lock().get()!=this){
+    error=Error(std::errc::operation_canceled);return {};
+  }
   auto result = std::unique_ptr<CommitGuard>(new CommitGuard);
   result->owner_ = shared_from_this();
-  result->prepared_ = std::move(prepared);
   result->batch_ = std::move(batch);
   result->lock_ = std::unique_lock(mutex_, std::try_to_lock);
   if (!result->lock_.owns_lock()) {
@@ -1453,7 +1467,7 @@ ProfileGpdModelAuthority::TryCommit(
     error = Error(std::errc::device_or_resource_busy);
     return {};
   }
-  const auto& prepared_state = *result->prepared_;
+  const auto& prepared_state = *prepared;
   const auto& pending = prepared_state.pending;
   if (retired_.load(std::memory_order_acquire) || storage_->retiring() ||
       pending_ != pending || prepared_state.expected_version != version_ ||
@@ -1471,12 +1485,22 @@ ProfileGpdModelAuthority::TryCommit(
       return {};
     }
   }
+  result->prepared_=std::move(prepared);
   return result;
+}
+std::unique_ptr<ProfileGpdModelAuthority::PreparedCommit>
+ProfileGpdModelAuthority::CommitGuard::ReleaseUnapplied() noexcept {
+  if(applied_)return {};
+  auto prepared=std::move(prepared_);
+  if(lock_.owns_lock())lock_.unlock();
+  batch_.reset();owner_.reset();
+  return prepared;
 }
 bool ProfileGpdModelAuthority::CommitGuard::Apply() noexcept {
   if (applied_) {
     return true;
   }
+  if(!owner_ || !prepared_ || !batch_ || !lock_.owns_lock())return false;
   if (owner_->retired_.load(std::memory_order_acquire) ||
       owner_->roster_pause_.load(std::memory_order_acquire) ||
       owner_->storage_->retiring()) {

@@ -13,10 +13,10 @@
 
 #include "xenia/kernel/xobject.h"
 
-namespace xe::vfs { class Device; }
+namespace xe::vfs { class Device; class FolderContentPackage; }
 namespace xe::kernel {
 
-// PIRS-only immutable native mount. The body and caller context are retained
+// Native PIRS reader or CM-issued folder-CON member mount. The body and caller context are retained
 // conservatively through Kernel stop: the recovered callers do not establish
 // retail initial/final reference counts. A retired tombstone owns NO backing,
 // VFS Device, XFile or source lease. Existing member Files own their own reader.
@@ -33,7 +33,7 @@ class XStfsDevice final : public XObject {
   void ReferencePointer();
   void DereferencePointer();
   X_STATUS Dismount();
-  X_STATUS Control(uint32_t code) const;
+  X_STATUS Control(uint32_t code, uint32_t output = 0) const;
   uint32_t context_address() const { return context_; }
   uint32_t context_size() const { return context_size_; }
   uint64_t pointer_references() const;
@@ -61,6 +61,8 @@ class XStfsDevice final : public XObject {
   bool retired_ = true, dismounting_ = false;
   // VFS owns active mounts; an ABI body is only a weak tombstone observer.
   std::weak_ptr<vfs::Device> active_device_;
+  // Weak only: the active Device owns the exact original backing XFile.
+  std::weak_ptr<vfs::FolderContentPackage> folder_backend_;
   // No owning reference in a tombstone. Kernel stop checks this after its
   // XFiles drain, before destroying the Kernel an escaped alias would use.
   std::weak_ptr<void> backing_lifetime_;

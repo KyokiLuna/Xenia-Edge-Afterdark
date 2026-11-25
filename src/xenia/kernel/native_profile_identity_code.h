@@ -155,5 +155,8 @@ inline constexpr NativeIdentityCodeExtent kNativeIdentityCode[] = {
   {0x816B9218, 64, "3604fc889924444d84c743f2f26aa00e462cda7e2bf1d821c8f4909d5186c348"},
   {0x816B9258, 108, "4e8b5645d4ee5a6a4c9ff13ed6a0dc012ec7c72c0d603b35e28471fa5c3c885e"},
   {0x816BA8D0, 120, "ed6168ac78aef1359f5bc2e4d97ba5786b6997ac281981726836df8ac7ee6ec3"},
+  // C838 canceled-empty title accessor and original row reset.
+  {0x816DF990, 12, "7d69e8e07de3fcb1bb20eca570ac60f99a62e8d519e584ffd8dfc4e1f41a115c"},
+  {0x8199B4F0, 84, "137b5c95368c5a1f7b524a572f7ee252c614c194df3032c0114fd87eeb2b72d5"},
 };
 }  // namespace xe::kernel::identity_detail

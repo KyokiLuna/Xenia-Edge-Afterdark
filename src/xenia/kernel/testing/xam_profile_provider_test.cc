@@ -1336,6 +1336,22 @@ class ProfileSettingsReadTestAccess final {
       std::error_code& error,std::shared_ptr<ProfileRosterIntent>& retained) {
     return pm.PrepareRosterAttempt(desired,expected,error,&retained);
   }
+  static auto PrepareAttemptPhases(ProfileManager& pm,
+      const ProfileRosterDesired& desired,const ProfileRosterExpected& expected,
+      std::error_code& error,std::shared_ptr<ProfileRosterIntent>& retained,
+      const ProfilePreparationProgress* progress) {
+    return pm.PrepareRosterAttempt(desired,expected,error,&retained,nullptr,progress);
+  }
+  static auto PrepareWithProgress(ProfileManager& pm,
+      const ProfileRosterDesired& desired,const ProfileRosterExpected& expected,
+      std::error_code& error,std::chrono::steady_clock::time_point deadline,
+      const std::function<bool()>& wait) {
+    return pm.PrepareRosterWithProgress(desired,expected,error,deadline,wait);
+  }
+  static auto CancelPreparation(ProfileManager& pm,
+      const std::shared_ptr<ProfileRosterIntent>& intent) {
+    return pm.CancelRosterPreparation(intent);
+  }
   static auto ClaimRoster(ProfileManager& pm) { return pm.ClaimNativeRosterFactory(); }
   static auto CurrentTicket(ProfileManager& pm,
       const std::shared_ptr<const ProfileRosterNativeBinding>& binding,std::error_code& error) {
@@ -1365,8 +1381,17 @@ class ProfileSettingsReadTestAccess final {
       const std::shared_ptr<const ProfileRosterNativeBinding>& binding, std::error_code& error) {
     return pm.EnterNativeRoster(intent, binding, error);
   }
-  static bool Publish(const std::shared_ptr<ProfileRosterPublicationCell>& cell) {
-    return cell && cell->PublishFromNative();
+  static bool Publish(const std::shared_ptr<ProfileRosterPublicationCell>& cell,
+      ProfileRosterPublicationOutcome outcome=ProfileRosterPublicationOutcome::kRequested) {
+    return cell && cell->PublishFromNative(outcome);
+  }
+  static auto FollowingTicket(ProfileRosterIntent& intent,const ProfileRosterNativeBinding& binding,
+      std::error_code& error) {return intent.NativeReadTicket(true,binding,&error);}
+  static auto PreparedWire(const ProfileRosterIntent& intent) {return intent.NativeRowsForPrepared();}
+  static size_t MountReferences(ProfileManager& pm,uint64_t xuid) {
+    std::lock_guard lock(pm.profile_mount_mutex_);size_t references=0;
+    for(const auto& [name,mount]:pm.profile_mounts_)if(mount.xuid==xuid)references+=mount.references;
+    return references;
   }
   static auto Protocol(const std::shared_ptr<ProfileRosterIntent>& intent,
       const std::shared_ptr<const ProfileRosterNativeBinding>& binding,
@@ -2574,6 +2599,228 @@ TEST_CASE("Bootstrap cleanup cannot prepare over a busy exact cancellation",
   CHECK(pm.CaptureRosterExpected(error).roster == before.roster);
   profile.Unchanged();
 }
+namespace {
+// Real global namespace contention, no fake Busy injection or cache writes.
+struct HeldRosterNamespace {
+  std::promise<void> entered, release;
+  std::future<void> ready;
+  std::thread worker;
+  bool released=false;
+  std::atomic<bool> watchdog_released{false};
+  HeldRosterNamespace():ready(entered.get_future()) {
+    auto done=release.get_future();
+    worker=std::thread([this,done=std::move(done)]()mutable{
+      auto guard=xe::global_critical_region::AcquireDirect();
+      entered.set_value();
+      if(done.wait_for(std::chrono::seconds(5))!=std::future_status::ready)
+        watchdog_released.store(true,std::memory_order_release);
+    });
+  }
+  void Release(){if(!released){released=true;release.set_value();worker.join();}}
+  ~HeldRosterNamespace(){Release();}
+};
+}
+TEST_CASE("Shared roster preparation retries real namespace contention with the same accepted roster",
+          "[kernel][profile][roster][prepare_retry][namespace]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime,0xe000000000000101ull,41);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  pm.Login(profile.xuid,0,false);
+  std::error_code error;
+  const auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);REQUIRE_FALSE(error);
+  const auto desired=RosterDesired({profile.xuid,0,0,0});
+  auto model=pm.AcquireProfileGpdModel(uint8_t(0),error);REQUIRE(model);
+  const auto origin=model->CaptureOrigin(error);REQUIRE(origin);
+  HeldRosterNamespace held;
+  REQUIRE(held.ready.wait_for(std::chrono::seconds(1))==std::future_status::ready);
+  size_t waits=0;
+  const auto prepared=ProfileSettingsReadTestAccess::PrepareWithProgress(
+      pm,desired,expected,error,std::chrono::steady_clock::now()+std::chrono::seconds(2),[&]{
+        ++waits;held.Release();return true;
+      });
+  REQUIRE(prepared);REQUIRE_FALSE(error);CHECK(waits==1);
+  CHECK_FALSE(held.watchdog_released.load(std::memory_order_acquire));
+  CHECK(prepared->old_roster()==expected.roster);
+  CHECK(prepared->prepared_roster()->slots()==expected.roster->slots());
+  CHECK(prepared->result().phase==ProfileRosterPhase::kPrepared);
+  CHECK(model->IsCurrent(*origin));CheckRoster(pm,desired.xuids);
+  CHECK(pm.CancelRoster(prepared).phase==ProfileRosterPhase::kCanceled);
+  profile.Unchanged();
+}
+TEST_CASE("Host roster adoption waits for real namespace contention instead of aborting sign in",
+          "[kernel][profile][roster][prepare_retry][host]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime,0xe000000000000106ull,46);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  pm.Login(profile.xuid,0,false);
+  std::error_code error;const auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  const auto desired=RosterDesired({profile.xuid,0,0,0});
+  std::promise<ProfileRosterResult> returned;auto done=returned.get_future();
+  std::jthread worker;
+  {
+    auto foreign_namespace=xe::global_critical_region::AcquireDirect();
+    worker=std::jthread([&]{returned.set_value(pm.AdoptRoster(desired,expected));});
+    CHECK(done.wait_for(std::chrono::milliseconds(50))==std::future_status::timeout);
+  }
+  REQUIRE(done.wait_for(std::chrono::seconds(5))==std::future_status::ready);
+  const auto result=done.get();REQUIRE_FALSE(result.error);
+  CHECK(result.phase==ProfileRosterPhase::kCommitted);
+  const auto after=pm.CaptureRosterExpected(error);REQUIRE(after.roster);
+  CHECK(after.roster->slots()==expected.roster->slots());CheckRoster(pm,desired.xuids);
+  profile.Unchanged();
+}
+TEST_CASE("Shared roster preparation never starts a fresh attempt over busy exact cancellation",
+          "[kernel][profile][roster][prepare_retry][cancel]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime,0xe000000000000102ull,42);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;
+  const auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  std::shared_ptr<ProfileRosterIntent> retained;
+  const auto prepared=ProfileSettingsReadTestAccess::PrepareAttempt(
+      pm,RosterDesired({profile.xuid,0,0,0}),expected,error,retained);
+  REQUIRE(prepared);REQUIRE(retained);
+  {
+    HeldRosterMetadata held(pm);
+    REQUIRE(held.ready.wait_for(std::chrono::seconds(1))==std::future_status::ready);
+    const auto canceled=ProfileSettingsReadTestAccess::CancelPreparation(pm,retained);
+    CHECK(canceled.error==std::errc::device_or_resource_busy);
+    CHECK(canceled.phase==ProfileRosterPhase::kPrepared);
+    size_t waits=0;
+    const auto another=ProfileSettingsReadTestAccess::PrepareWithProgress(
+        pm,RosterDesired({}),expected,error,std::chrono::steady_clock::now(),[&]{++waits;return true;});
+    CHECK_FALSE(another);CHECK(waits==0);
+    CHECK(retained->result().phase==ProfileRosterPhase::kPrepared);
+  }
+  size_t fresh_waits=0;
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PrepareWithProgress(pm,RosterDesired({}),expected,error,
+      std::chrono::steady_clock::now()+std::chrono::seconds(1),[&]{++fresh_waits;return true;}));
+  CHECK(error==std::errc::operation_canceled);CHECK(fresh_waits==0);
+  CHECK(retained->result().phase==ProfileRosterPhase::kPrepared);
+  ProfileSettingsReadTestAccess::RetryCleanup(pm);
+  CHECK(retained->result().phase==ProfileRosterPhase::kCanceled);
+  const auto after=pm.CaptureRosterExpected(error);REQUIRE(after.roster);
+  CHECK(after.roster==expected.roster);CheckRoster(pm,{});profile.Unchanged();
+}
+TEST_CASE("Shared roster preparation preserves hard stale and inherited namespace refusals",
+          "[kernel][profile][roster][prepare_retry][hard_error]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime,0xe000000000000103ull,43);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;const auto old=pm.CaptureRosterExpected(error);REQUIRE(old.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({profile.xuid,0,0,0}),old).error);
+  size_t waits=0;
+  const auto wait=[&]{++waits;return true;};
+  auto prepared=ProfileSettingsReadTestAccess::PrepareWithProgress(pm,RosterDesired({}),old,error,
+      std::chrono::steady_clock::now()+std::chrono::seconds(1),wait);
+  CHECK_FALSE(prepared);CHECK(error==std::errc::operation_canceled);CHECK(waits==0);
+  const auto current=pm.CaptureRosterExpected(error);REQUIRE(current.roster);
+  prepared=ProfileSettingsReadTestAccess::PrepareWithProgress(pm,
+      RosterDesired({profile.xuid,profile.xuid,0,0}),current,error,
+      std::chrono::steady_clock::now()+std::chrono::seconds(1),wait);
+  CHECK_FALSE(prepared);CHECK(error==std::errc::invalid_argument);CHECK(waits==0);
+  {
+    auto namespace_guard=xe::global_critical_region::AcquireDirect();
+    prepared=ProfileSettingsReadTestAccess::PrepareWithProgress(pm,RosterDesired({}),current,error,
+        std::chrono::steady_clock::now()+std::chrono::seconds(1),wait);
+    CHECK_FALSE(prepared);CHECK(error==std::errc::device_or_resource_busy);CHECK(waits==0);
+  }
+  CheckRoster(pm,{profile.xuid,0,0,0});profile.Unchanged();
+}
+TEST_CASE("Deferred preparation cancellation remains owned and can finish after admission stop",
+          "[kernel][profile][roster][prepare_retry][stop]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime,0xe000000000000104ull,44);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;const auto before=pm.CaptureRosterExpected(error);REQUIRE(before.roster);
+  std::shared_ptr<ProfileRosterIntent> retained;
+  REQUIRE(ProfileSettingsReadTestAccess::PrepareAttempt(
+      pm,RosterDesired({profile.xuid,0,0,0}),before,error,retained));
+  {
+    HeldRosterMetadata held(pm);
+    REQUIRE(held.ready.wait_for(std::chrono::seconds(1))==std::future_status::ready);
+    CHECK(ProfileSettingsReadTestAccess::CancelPreparation(pm,retained).phase==ProfileRosterPhase::kPrepared);
+    ProfileSettingsReadTestAccess::BeginStop(pm);
+  }
+  size_t waits=0;
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PrepareWithProgress(pm,RosterDesired({}),before,error,
+      std::chrono::steady_clock::now()+std::chrono::seconds(1),[&]{++waits;return true;}));
+  CHECK(error==std::errc::operation_canceled);CHECK(waits==0);
+  ProfileSettingsReadTestAccess::RetryCleanup(pm);
+  CHECK(retained->result().phase==ProfileRosterPhase::kCanceled);
+  CHECK_FALSE(runtime.emulator->file_system()->AcquireDevice(fmt::format(kDefaultMountFormat,profile.xuid)+':'));
+  profile.Unchanged();
+}
+TEST_CASE("A deferred preparation cancel cannot cancel a later genuinely armed native PM operation",
+          "[kernel][profile][roster][prepare_retry][late_enter]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime,0xe000000000000105ull,45);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;const auto before=pm.CaptureRosterExpected(error);REQUIRE(before.roster);
+  const auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto prepared=pm.PrepareRoster(RosterDesired({profile.xuid,0,0,0}),before,error);REQUIRE(prepared);
+  {
+    HeldRosterMetadata held(pm);
+    REQUIRE(held.ready.wait_for(std::chrono::seconds(1))==std::future_status::ready);
+    CHECK(ProfileSettingsReadTestAccess::CancelPreparation(pm,prepared).phase==ProfileRosterPhase::kPrepared);
+  }
+  // Real PM arm, not an invented PPC execution/protocol/completion receipt.
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,prepared,binding,error);
+  REQUIRE(cell);REQUIRE_FALSE(error);
+  REQUIRE(prepared->result().phase==ProfileRosterPhase::kNativeEntered);
+  ProfileSettingsReadTestAccess::RetryCleanup(pm);
+  CHECK(prepared->result().phase==ProfileRosterPhase::kNativeEntered);
+  CHECK(pm.CancelRoster(prepared).phase==ProfileRosterPhase::kNativeEntered);
+  CHECK(prepared->result().native_protocol_returned==false);
+  CHECK(prepared->result().maps_committed==false);
+  profile.Unchanged();
+}
+
+TEST_CASE("Account cache phase progress keeps one real preparing intent across namespace contention",
+          "[kernel][profile][roster][phase_progress][account_cache]") {
+  ProfileAbiRuntime runtime;ReadFixtureProfile profile(runtime,0xe000000000000107ull,47);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  pm.Login(profile.xuid,0,false);
+  std::error_code error;const auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  const auto desired=RosterDesired({profile.xuid,0,0,0});
+  HeldRosterNamespace held;
+  REQUIRE(held.ready.wait_for(std::chrono::seconds(1))==std::future_status::ready);
+  std::shared_ptr<ProfileRosterIntent> retained,observed;
+  size_t waits=0;
+  const std::function<bool()> wait=[&]{
+    ++waits;observed=retained;REQUIRE(observed);
+    CHECK(observed->result().phase==ProfileRosterPhase::kPreparing);
+    held.Release();return true;
+  };
+  ProfilePreparationProgress progress{std::chrono::steady_clock::now()+std::chrono::seconds(2),wait};
+  const auto prepared=ProfileSettingsReadTestAccess::PrepareAttemptPhases(
+      pm,desired,expected,error,retained,&progress);
+  REQUIRE(prepared);REQUIRE_FALSE(error);CHECK(waits==1);
+  CHECK(prepared==observed);CHECK(prepared==retained);
+  CHECK(prepared->result().phase==ProfileRosterPhase::kPrepared);
+  CHECK(prepared->old_roster()==expected.roster);
+  CHECK_FALSE(held.watchdog_released.load());
+  CHECK(pm.CancelRoster(prepared).phase==ProfileRosterPhase::kCanceled);
+  CheckRoster(pm,desired.xuids);profile.Unchanged();
+}
+TEST_CASE("Stopping nested profile phase progress cancels the exact preparation without another attempt",
+          "[kernel][profile][roster][phase_progress][stop]") {
+  ProfileAbiRuntime runtime;ReadFixtureProfile profile(runtime,0xe000000000000108ull,48);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  pm.Login(profile.xuid,0,false);
+  std::error_code error;const auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  HeldRosterNamespace held;
+  REQUIRE(held.ready.wait_for(std::chrono::seconds(1))==std::future_status::ready);
+  size_t waits=0;
+  const auto prepared=ProfileSettingsReadTestAccess::PrepareWithProgress(pm,
+      RosterDesired({profile.xuid,0,0,0}),expected,error,
+      std::chrono::steady_clock::now()+std::chrono::seconds(2),[&]{
+        ++waits;ProfileSettingsReadTestAccess::BeginStop(pm);held.Release();return true;
+      });
+  CHECK_FALSE(prepared);CHECK(error==std::errc::operation_canceled);CHECK(waits==1);
+  CHECK_FALSE(held.watchdog_released.load());
+  ProfileSettingsReadTestAccess::RetryCleanup(pm);profile.Unchanged();
+}
 TEST_CASE("Prepared native read tickets distinguish actual PM contention from stale authority",
           "[kernel][profile][roster][bootstrap_retry][ticket]") {
   ProfileAbiRuntime runtime;
@@ -3462,6 +3709,11 @@ TEST_CASE("A genuine pending unchanged model delays host maps without hiding the
   expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
   auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
   auto intent = pm.PrepareRoster(desired, expected, error); REQUIRE(intent);
+  // Canceled-empty can remove this otherwise unchanged row. It is drained and
+  // paused before arm, then the real Requested publisher reopens only this
+  // known selected model using its exact pause serial without dropping owners.
+  CHECK_FALSE(writer.model->AllocateRequestId(error));
+  CHECK(error == std::errc::device_or_resource_busy);
   auto cell = ProfileSettingsReadTestAccess::EnterNative(pm, intent, binding, error); REQUIRE(cell);
   REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
   ProfileGpdMutation command; command.kind = ProfileGpdMutationKind::kSetSetting;
@@ -4270,4 +4522,170 @@ TEST_CASE("Initial empty baseline refuses occupied roster and expired foreign fa
   CHECK_FALSE(ProfileSettingsReadTestAccess::InitialEmptySequence(pm,foreign,occupied,ticket));
   CHECK(pm.CaptureRosterExpected(error).roster==occupied.roster);
 }
+
+#if XE_PLATFORM_LINUX
+TEST_CASE("Native canceled-empty publication removes unchanged old rows without changing the requested roster",
+          "[kernel][profile][roster][native][native_terminal]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime,0xe000000000000a11ull,81);
+  ReadFixtureProfile b(runtime,0xe000000000000a12ull,82);
+  ReadFixtureProfile c(runtime,0xe000000000000a13ull,83);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid,b.xuid,0,0}),expected).error);
+  auto old_a=pm.AcquireProfileGpdModel(uint8_t(0),error);REQUIRE(old_a);
+  auto old_b=pm.AcquireProfileGpdModel(uint8_t(1),error);REQUIRE(old_b);
+  const auto origin_a=old_a->CaptureOrigin(error);REQUIRE(origin_a);
+  const auto origin_b=old_b->CaptureOrigin(error);REQUIRE(origin_b);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  const auto desired=RosterDesired({a.xuid,b.xuid,c.xuid,0});
+  auto intent=pm.PrepareRoster(desired,expected,error);REQUIRE(intent);REQUIRE_FALSE(error);
+  const auto requested=intent->prepared_roster();
+  const auto wire=ProfileSettingsReadTestAccess::PreparedWire(*intent);
+  CHECK_FALSE(intent->publication_outcome());CHECK_FALSE(intent->published_roster());
+  CHECK_FALSE(old_a->AllocateRequestId(error));CHECK(error==std::errc::device_or_resource_busy);
+  CHECK_FALSE(old_b->AllocateRequestId(error));CHECK(error==std::errc::device_or_resource_busy);
+  const auto staged=ProfileSettingsReadTestAccess::MountReferences(pm,c.xuid);REQUIRE(staged>0);
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,intent,binding,error);REQUIRE(cell);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Publish(cell,ProfileRosterPublicationOutcome(255)));
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell,ProfileRosterPublicationOutcome::kCanceledEmpty));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Publish(cell));
+  CHECK(intent->publication_outcome()==ProfileRosterPublicationOutcome::kCanceledEmpty);
+  REQUIRE(intent->published_roster());CHECK(intent->published_roster()!=requested);
+  CHECK(intent->published_roster()->epoch()==expected.roster->epoch()+1);
+  CHECK(intent->prepared_roster()==requested);CHECK(requested->slots()[2].xuid==c.xuid);
+  CHECK(ProfileSettingsReadTestAccess::PreparedWire(*intent)==wire);
+  CHECK_FALSE(old_a->AllocateRequestId(error));CHECK(error==std::errc::device_or_resource_busy);
+  auto protocol=ProfileSettingsReadTestAccess::Protocol(intent,binding,0x800704c7u);REQUIRE(protocol);
+  const auto published=ProfileSettingsReadTestAccess::CommitProtocol(pm,intent,*protocol);
+  REQUIRE_FALSE(published.error);CHECK(published.maps_committed);CHECK(published.writers_available);
+  CHECK_FALSE(published.owners_retired);CHECK(published.native_protocol_value==0x800704c7u);
+  CHECK((published.changed==std::array<bool,4>{true,true,false,false}));
+  CheckRoster(pm,{0,0,0,0});
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(pm,c.xuid)==staged);
+  CHECK(old_a->IsCurrent(*origin_a));CHECK(old_b->IsCurrent(*origin_b));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent,0x800704c7u));
+  CHECK_FALSE(pm.CaptureGpdWriter(a.xuid,error).model);REQUIRE(error);
+  auto joined=ProfileSettingsReadTestAccess::Joined(intent,binding);REQUIRE(joined);
+  const auto done=ProfileSettingsReadTestAccess::Finalize(pm,intent,*joined);
+  REQUIRE_FALSE(done.error);CHECK(done.phase==ProfileRosterPhase::kCommitted);
+  CHECK(done.owners_retired);CHECK_FALSE(old_a->IsCurrent(*origin_a));CHECK_FALSE(old_b->IsCurrent(*origin_b));
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(pm,c.xuid)==0);
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(pm,a.xuid)==0);
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(pm,b.xuid)==0);
+  CHECK(intent->prepared_roster()==requested);CHECK(intent->published_roster()->slots()[2].xuid==0);
+  REQUIRE(pm.CaptureCachedAccount(c.xuid,error));REQUIRE_FALSE(error);
+  a.Unchanged();b.Unchanged();c.Unchanged();
+}
+TEST_CASE("Canceled-empty from an empty baseline is a distinct factual outcome and not an initial-frame receipt",
+          "[kernel][profile][roster][native][native_terminal]") {
+  ProfileAbiRuntime runtime;ReadFixtureProfile a(runtime,0xe000000000000a14ull,84);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();std::error_code error;
+  auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto intent=pm.PrepareRoster(RosterDesired({a.xuid,0,0,0}),expected,error);REQUIRE(intent);
+  const auto requested=intent->prepared_roster();
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,intent,binding,error);REQUIRE(cell);
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell,ProfileRosterPublicationOutcome::kCanceledEmpty));
+  CHECK(intent->published_roster()!=expected.roster);CHECK(intent->published_roster()!=requested);
+  CHECK(intent->published_roster()->epoch()==expected.roster->epoch());
+  auto protocol=ProfileSettingsReadTestAccess::Protocol(intent,binding,0x800704c7u);REQUIRE(protocol);
+  const auto maps=ProfileSettingsReadTestAccess::CommitProtocol(pm,intent,*protocol);REQUIRE_FALSE(maps.error);
+  CHECK(std::none_of(maps.changed.begin(),maps.changed.end(),[](bool v){return v;}));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent,0x800704c7u));
+  CheckRoster(pm,{0,0,0,0});CHECK(intent->prepared_roster()->slots()[0].xuid==a.xuid);
+  auto joined=ProfileSettingsReadTestAccess::Joined(intent,binding);REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,intent,*joined).error);
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(pm,a.xuid)==0);a.Unchanged();
+}
+TEST_CASE("Actual fixed and following SYSTEM read scopes keep old and canceled-empty projections distinct",
+          "[kernel][profile][roster][native][native_terminal][system_thread_read]") {
+  ProfileAbiRuntime runtime;ReadFixtureProfile a(runtime,0xe000000000000a15ull,85);
+  auto* kernel=runtime.emulator->kernel_state();auto& pm=*kernel->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid,0,0,0}),expected).error);
+  auto old=pm.CaptureProfile(uint8_t(0));REQUIRE(old);
+  expected=pm.CaptureRosterExpected(error);auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto intent=pm.PrepareRoster(RosterDesired({a.xuid,0,0,0}),expected,error);REQUIRE(intent);
+  auto fixed_ticket=ProfileSettingsReadTestAccess::Ticket(*intent,*binding,error);REQUIRE(fixed_ticket);
+  auto following_ticket=ProfileSettingsReadTestAccess::FollowingTicket(*intent,*binding,error);REQUIRE(following_ticket);
+  auto fixed=ProfileSettingsReadTestAccess::Scope(fixed_ticket,binding);REQUIRE(fixed);
+  auto following=ProfileSettingsReadTestAccess::Scope(following_ticket,binding);REQUIRE(following);
+  auto entered=xe::threading::Event::CreateManualResetEvent(false);
+  auto published=xe::threading::Event::CreateManualResetEvent(false);REQUIRE(entered);REQUIRE(published);
+  std::array<bool,7> facts{};object_ref<XHostThread> thread;SystemReadThreadJoin join{thread,published.get()};
+  thread=object_ref<XHostThread>(new XHostThread(kernel,128*1024,0,[&]{
+    auto* self=XThread::GetCurrentThread();auto* cpu=self->thread_state();auto* c=cpu->context();
+    const auto saved_sp=c->r[1],saved_lr=c->lr;
+    c->r[1]=self->stack_base()-0x100;c->lr=0x81001000;
+    facts[0]=ProfileSettingsReadTestAccess::EnterSystemFrame(*fixed,kernel,self,cpu,uint32_t(c->r[1]),uint32_t(c->lr),0x81A3F848);
+    entered->Set();
+    if(facts[0]){
+      facts[1]=xe::threading::Wait(published.get(),false,std::chrono::seconds(5))==xe::threading::WaitResult::kSuccess;
+      facts[2]=pm.CaptureProfile(uint8_t(0))==old;
+      c->r[1]-=0x40;c->lr=0x81A3F890;
+      facts[3]=ProfileSettingsReadTestAccess::EnterSystemFrame(*following,kernel,self,cpu,uint32_t(c->r[1]),uint32_t(c->lr),0x816A8C00,2);
+      if(facts[3]){facts[4]=!pm.CaptureProfile(uint8_t(0));facts[5]=ProfileSettingsReadTestAccess::Leave(*following);}
+      c->r[1]+=0x40;c->lr=0x81001000;facts[6]=ProfileSettingsReadTestAccess::Leave(*fixed);
+    }
+    c->r[1]=saved_sp;c->lr=saved_lr;return 0;
+  },kernel->GetSystemProcess()));
+  join.created=thread->Create()==X_STATUS_SUCCESS;REQUIRE(join.created);
+  REQUIRE(xe::threading::Wait(entered.get(),false,std::chrono::seconds(5))==xe::threading::WaitResult::kSuccess);
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,intent,binding,error);REQUIRE(cell);
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell,ProfileRosterPublicationOutcome::kCanceledEmpty));
+  auto protocol=ProfileSettingsReadTestAccess::Protocol(intent,binding,0x800704c7u);REQUIRE(protocol);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::CommitProtocol(pm,intent,*protocol).error);
+  CheckRoster(pm,{0,0,0,0});published->Set();
+  REQUIRE(xe::threading::Wait(thread->thread(),false,std::chrono::seconds(10))==xe::threading::WaitResult::kSuccess);
+  for(const auto fact:facts)CHECK(fact);
+  auto joined=ProfileSettingsReadTestAccess::Joined(intent,binding);REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,intent,*joined).error);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(fixed_ticket,binding));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(following_ticket,binding));a.Unchanged();
+}
+TEST_CASE("A native-entered operation without a publisher cannot forge a terminal roster or rollback",
+          "[kernel][profile][roster][native][native_terminal][refusal]") {
+  ProfileAbiRuntime runtime;ReadFixtureProfile a(runtime,0xe000000000000a16ull,86);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();std::error_code error;
+  auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto intent=pm.PrepareRoster(RosterDesired({a.xuid,0,0,0}),expected,error);REQUIRE(intent);
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,intent,binding,error);REQUIRE(cell);
+  CHECK_FALSE(intent->published_roster());CHECK_FALSE(intent->publication_outcome());
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Protocol(intent,binding,0x80004004u));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Joined(intent,binding));
+  const auto canceled=pm.CancelRoster(intent);CHECK(canceled.error==std::errc::device_or_resource_busy);
+  CHECK(canceled.phase==ProfileRosterPhase::kNativeEntered);
+  CHECK_FALSE(canceled.maps_committed);CHECK_FALSE(canceled.owners_retired);
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(pm,a.xuid)>0);
+  CHECK(intent->prepared_roster()->slots()[0].xuid==a.xuid);
+  CHECK_FALSE(pm.CaptureRosterExpected(error).roster);REQUIRE(error);
+  // Fixture teardown uses real Kernel/PM close. No fake publisher, native
+  // rollback, protocol, or worker birth is introduced to release this state.
+  a.Unchanged();
+}
+TEST_CASE("Canceled-capable preparation drains a genuine pending model even for a requested unchanged row",
+          "[kernel][profile][roster][native][native_terminal][pending_model]") {
+  ProfileAbiRuntime runtime;ReadFixtureProfile a(runtime,0xe000000000000a17ull,87);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();std::error_code error;
+  auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  const auto desired=RosterDesired({a.xuid,0,0,0});REQUIRE_FALSE(pm.AdoptRoster(desired,expected).error);
+  auto writer=pm.CaptureGpdWriter(a.xuid,error);REQUIRE(writer.model);
+  ProfileGpdMutation command;command.kind=ProfileGpdMutationKind::kSetSetting;command.title_id=kDashboardID;
+  command.request_id=writer.model->AllocateRequestId(error);REQUIRE(command.request_id);
+  command.setting.emplace(static_cast<UserSettingId>(kReadScalar),int32_t(97));
+  bool retry=false;auto pending=writer.model->Begin(command,retry,error);REQUIRE(pending);REQUIRE_FALSE(error);
+  expected=pm.CaptureRosterExpected(error);auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  CHECK_FALSE(pm.PrepareRoster(desired,expected,error));CHECK(error==std::errc::device_or_resource_busy);
+  const auto written=writer.ExecutePending(pending);REQUIRE_FALSE(written.error);
+  CHECK(written.state==ProfileGpdTransactionAttempt::State::kCommitted);
+  auto intent=pm.PrepareRoster(desired,expected,error);REQUIRE(intent);REQUIRE_FALSE(error);
+  CHECK_FALSE(writer.model->AllocateRequestId(error));CHECK(error==std::errc::device_or_resource_busy);
+  CHECK(pm.CancelRoster(intent).phase==ProfileRosterPhase::kCanceled);
+  REQUIRE(writer.model->AllocateRequestId(error));REQUIRE_FALSE(error);
+}
+#endif
+
 } // namespace xe::kernel::xam::test

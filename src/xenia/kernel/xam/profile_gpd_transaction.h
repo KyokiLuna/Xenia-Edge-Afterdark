@@ -1,10 +1,21 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #ifndef XENIA_KERNEL_XAM_PROFILE_GPD_TRANSACTION_H_
 #define XENIA_KERNEL_XAM_PROFILE_GPD_TRANSACTION_H_
+#include <chrono>
+#include <functional>
 #include "xenia/kernel/xam/profile_gpd_model.h"
 #include "xenia/kernel/xam/xdbf/gpd_durable_intent.h"
 #include "xenia/vfs/installed_system_source.h"
 namespace xe::kernel::xam {
+// Synchronous borrowed caller policy, never an ownership/read/IO permit. The
+// real preparation frame and its existing deadline outlive every nested use.
+// Call Retry only AFTER all model/cache/batch/namespace guards are destroyed.
+struct ProfilePreparationProgress final {
+  std::chrono::steady_clock::time_point deadline;
+  const std::function<bool()>& wait;
+  const std::atomic<bool>* admission_open=nullptr; // borrowed negative-only stop flag
+  bool Retry(const std::error_code&) const;
+};
 // Live-epoch event only. No persisted UI protocol: replayed historical awards
 // restore data and NEVER manufacture a new event/counter increment.
 class DurableAchievementEvent final {
@@ -49,12 +60,13 @@ struct ProfileGpdWriter {
   // its original clone/stamp; no reload can normalize partially published data.
   std::optional<ProfileGpdMutationOrigin>
   CaptureCurrentOrigin(const ProfileGpdMutation &, std::error_code &) const;
-  std::error_code Reload() const;
+  std::error_code Reload(const ProfilePreparationProgress* progress=nullptr) const;
   // Selected-model preparation only, before native roster publication. Only
   // demonstrably LE stock keys are repaired through the normal durable writer.
   // Valid/unknown/custom data is preserved; read-only observers never coerce it.
   std::error_code RepairLegacyPictureKeys(
-      std::shared_ptr<const vfs::InstalledSystemSource::Snapshot>) const;
+      std::shared_ptr<const vfs::InstalledSystemSource::Snapshot>,
+      const ProfilePreparationProgress* progress=nullptr) const;
   ProfileGpdTransactionAttempt Submit(
       ProfileGpdMutation,
       std::optional<ProfileGpdModelStamp> required_stamp = {}) const;

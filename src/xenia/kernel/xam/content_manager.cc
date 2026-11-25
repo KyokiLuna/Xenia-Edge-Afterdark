@@ -28,6 +28,7 @@
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/xam/profile_manager.h"
+#include "xenia/kernel/xam/native_folder_content.h"
 #include "xenia/kernel/xam/user_profile.h"
 #include "xenia/kernel/xam/xam_content_device.h"
 #include "xenia/kernel/xam/xam_state.h"
@@ -986,6 +987,14 @@ bool ContentManager::RegisterManagedSource(ContentSource source) {
   options.content = storage;
   options.source_id = source.id;
   options.device_id = source.device_id;
+  // PIS05 replay occurs inside MVA Open, BEFORE native raw-policy preparation.
+  // Pass only the actual process owner's public verification identity now;
+  // absence preserves truthful Header-replay refusal, not self-cert trust.
+  if (kernel_state_ && kernel_state_->console_signing_identity()) {
+    options.native_header_format = std::make_shared<const
+        folder_content_detail::NativeFolderHeaderFormat>(
+            kernel_state_->console_signing_identity()->certificate());
+  }
   // The primary default HDD keeps its old journal/recovery/public paths.
   // Nondefault Content, including another host FS, receives its own bundle.
   const bool primary =
@@ -1069,6 +1078,121 @@ bool ContentManager::RegisterManagedSource(ContentSource source) {
   }
   return sources_.RegisterManaged(std::move(source), volume->identity(), volume);
 }
+// Prepare exact existing source/package policies before HostPathDevice builds
+// its namespace. Retention belongs to the REAL mount resources, never another
+// source/device registry. No payload bytes are read, migrated or repacked here.
+// Legacy aggregate sidecars remain unchanged; their real native-layout producer
+// is a separate mandatory boundary and cannot be invented by this projection.
+X_STATUS ContentManager::PrepareNativeFolderPolicies(const ContentSourceState& source,
+    std::vector<std::shared_ptr<vfs::ManagedFileService>>& retained) try {
+  if (!kernel_state_ || global_critical_region::is_held_by_current_thread() ||
+      !source.storage || !source.volume || !source.storage_volume || !source.available ||
+      !source.volume->mutations() || !sources_.CaptureStorageVolume(source)) {
+    return X_STATUS(0xC000009D);
+  }
+  const auto signer = kernel_state_->console_signing_identity();
+  // Fresh/no-signing-owner state still has its real managed HDD. No raw CON
+  // policy or Header05 trust is issued without the actual process anchor.
+  if (!signer) { return X_STATUS_SUCCESS; }
+  auto* fs = kernel_state_->file_system();
+  NativeFolderContent::Source binding{source.storage, source.volume,
+      source.storage_volume, signer->certificate()}; // PUBLIC material only
+  const auto hex = [](std::string_view value, size_t width) {
+    return value.size() == width && std::all_of(value.begin(), value.end(), [](unsigned char c) {
+      return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
+    });
+  };
+  const auto number = [](std::string_view value) {
+    uint64_t result = 0;
+    for (unsigned char c : value) { result = result * 16 +
+        (c >= '0' && c <= '9' ? c - '0' : c >= 'A' && c <= 'F' ? c - 'A' + 10 : c - 'a' + 10); }
+    return result;
+  };
+  std::error_code error;
+  size_t visited = 0;
+  // Directory names are merely a bounded candidate census. Every candidate is
+  // authenticated through this exact source's no-follow Subroot, CM token and
+  // retained layout before any policy can be registered.
+  const auto children = [&](const std::filesystem::path& relative, size_t width,
+      std::vector<std::filesystem::path>& output) -> X_STATUS {
+    auto root = relative.empty() ? source.storage : source.storage->Subroot(relative, false, error);
+    if (!root) { return vfs::HostStorageError(error); }
+    error = root->CheckGuestAccess({}); if (error) { return vfs::HostStorageError(error); }
+    std::filesystem::directory_iterator it(root->path(), error), end;
+    for (; !error && it != end; it.increment(error)) {
+      if (++visited > 16384) { return X_STATUS_NO_MEMORY; }
+      const auto leaf = it->path().filename(); const auto spelling = leaf.generic_string();
+      if (spelling == "Headers" || !hex(spelling, width)) { continue; }
+      const auto status = it->symlink_status(error);
+      if (error) { break; }
+      if (!std::filesystem::is_directory(status)) { continue; }
+      auto exact = root->Subroot(leaf, false, error);
+      if (!exact) { return vfs::HostStorageError(error); }
+      output.push_back(relative / leaf);
+    }
+    return error ? vfs::HostStorageError(error) : X_STATUS_SUCCESS;
+  };
+  std::vector<std::filesystem::path> xuids;
+  auto status = children({}, 16, xuids); if (XFAILED(status)) { return status; }
+  for (const auto& xuid : xuids) {
+    std::vector<std::filesystem::path> titles;
+    status = children(xuid, 8, titles); if (XFAILED(status)) { return status; }
+    for (const auto& title : titles) {
+      std::vector<std::filesystem::path> types;
+      status = children(title, 8, types); if (XFAILED(status)) { return status; }
+      for (const auto& type : types) {
+        auto root = source.storage->Subroot(type, false, error);
+        if (!root) { return vfs::HostStorageError(error); }
+        std::filesystem::directory_iterator it(root->path(), error), end;
+        for (; !error && it != end; it.increment(error)) {
+          if (++visited > 16384 || retained.size() == 4096) { return X_STATUS_NO_MEMORY; }
+          const auto leaf = it->path().filename(); const auto package = type / leaf;
+          if (!filesystem::content_mutation_wire::ValidPackage(package)) { continue; }
+          const auto kind = it->symlink_status(error);
+          if (error) { break; }
+          if (!std::filesystem::is_directory(kind)) { continue; }
+          auto physical = source.storage->Subroot(package, false, error);
+          if (!physical) { return vfs::HostStorageError(error); }
+          const auto target = package.parent_path().parent_path() / "Headers" /
+              package.parent_path().filename() / (leaf.generic_string() + ".header");
+          const auto actual = source.volume->mutations()->CaptureMetadata(
+              filesystem::ContentMutationOwner::Kind::kHeader, package, target, error);
+          if (!actual) { return vfs::HostStorageError(error); }
+          if (!actual->exists() || actual->bytes().size() < 4 ||
+              std::memcmp(actual->bytes().data(), "CON ", 4)) { continue; }
+          std::shared_ptr<NativeFolderContent> policy;
+          // Existing source-view refresh reuses the exact SAME live policy.
+          // A foreign/closed policy is not adopted by filename or certificate.
+          const auto old = fs->managed_files_->Find(source.storage->path() / package,
+                                                    root->directory_identity());
+          if (old && !old->retiring()) {
+            policy = std::dynamic_pointer_cast<NativeFolderContent>(old);
+            if (!policy || !policy->SameSource(binding, package)) { return X_STATUS_ACCESS_DENIED; }
+            if (auto refresh = policy->RefreshNamespace()) { return vfs::HostStorageError(refresh); }
+          } else {
+            folder_content_detail::PackageIdentity identity{number(xuid.filename().generic_string()),
+                uint32_t(number(title.filename().generic_string())),
+                XContentType(uint32_t(number(type.filename().generic_string())))};
+            policy = NativeFolderContent::Prepare(binding, package, actual, identity, error);
+            if (!policy) {
+              // Unknown foreign/root/raw layout stays unactivated, preserving
+              // the existing package and ordinary source view. IO/currentness
+              // failures are not hidden as an unsupported-format decision.
+              if (error == std::errc::operation_not_supported) { error.clear(); continue; }
+              return vfs::HostStorageError(error);
+            }
+            if (!fs->RegisterManagedFile(policy)) { return X_STATUS_ACCESS_DENIED; }
+          }
+          retained.push_back(std::move(policy));
+        }
+        if (error) { return vfs::HostStorageError(error); }
+      }
+    }
+  }
+  return sources_.CaptureStorageVolume(source) ? X_STATUS_SUCCESS : X_STATUS(0xC000009D);
+} catch (const std::bad_alloc&) { return X_STATUS_NO_MEMORY; }
+  catch (...) { return X_STATUS_UNSUCCESSFUL; }
+
 X_STATUS ContentManager::MountManagedSourceDevices(const std::string& source_id) {
   if (!kernel_state_ || global_critical_region::is_held_by_current_thread()) {
     return X_STATUS_INVALID_PARAMETER;
@@ -1099,13 +1223,17 @@ X_STATUS ContentManager::MountManagedSourceDevices(const std::string& source_id)
   struct MountResources {
     ContentSourceState source;
     std::shared_ptr<const filesystem::ManagedVolumeAuthority> owner;
+    std::vector<std::shared_ptr<vfs::ManagedFileService>> policies;
   };
-  auto resources = std::make_shared<MountResources>(MountResources{*source, owner});
+  auto resources = std::make_shared<MountResources>(MountResources{*source, owner, {}});
+  const auto policies = PrepareNativeFolderPolicies(*source, resources->policies);
+  if (XFAILED(policies)) { return policies; }
   std::unique_ptr<vfs::Device> volume = std::make_unique<vfs::HostPathDevice>(
       volume_path, owner->public_root()->path(), false, false, "FATX",
       owner->public_root(), source->storage,
       vfs::HostPathDevice::ControlRole::kFolderVolume);
-  if (!volume->SetStorageVolume(identity) || !volume->Initialize() ||
+  if (!volume->SetStorageVolume(identity) ||
+      !fs->BindManagedFileRegistryForPreparation(*volume) || !volume->Initialize() ||
       !volume->RetainMountResource(resources)) {
     return X_STATUS_UNSUCCESSFUL;
   }
@@ -1117,7 +1245,8 @@ X_STATUS ContentManager::MountManagedSourceDevices(const std::string& source_id)
   std::unique_ptr<vfs::Device> content = std::make_unique<vfs::HostPathDevice>(
       content_path, source->storage->path(), false, true, "FATX",
       source->storage, source->storage);
-  if (!content->SetStorageVolume(identity) || !content->Initialize() ||
+  if (!content->SetStorageVolume(identity) ||
+      !fs->BindManagedFileRegistryForPreparation(*content) || !content->Initialize() ||
       !content->RetainMountResource(resources)) {
     return X_STATUS_UNSUCCESSFUL;
   }
@@ -1197,11 +1326,15 @@ X_STATUS ContentManager::RefreshManagedContentView(const std::string& source_id)
   struct Resources {
     ContentSourceState source;
     std::shared_ptr<const filesystem::ManagedVolumeAuthority> owner;
+    std::vector<std::shared_ptr<vfs::ManagedFileService>> policies;
   };
-  auto resources=std::make_shared<Resources>(Resources{*source,owner});
+  auto resources=std::make_shared<Resources>(Resources{*source,owner,{}});
+  const auto policies=PrepareNativeFolderPolicies(*source,resources->policies);
+  if(XFAILED(policies))return policies;
   std::unique_ptr<vfs::Device> content=std::make_unique<vfs::HostPathDevice>(
       content_path,source->storage->path(),false,true,"FATX",source->storage,source->storage);
-  if(!content->SetStorageVolume(identity) || !content->Initialize() ||
+  if(!content->SetStorageVolume(identity) ||
+      !fs->BindManagedFileRegistryForPreparation(*content) || !content->Initialize() ||
       !content->RetainMountResource(resources))return X_STATUS_UNSUCCESSFUL;
   std::error_code error;
   auto prepared=fs->PrepareDeviceRegistration(content,error,parent);
@@ -3819,8 +3952,18 @@ class NativeContentImportSource final
     if (!parsed || !parsed->content_header.is_magic_valid()) {
       error = std::make_error_code(std::errc::bad_message); return {};
     }
-    const uint64_t header_size = std::max<uint64_t>(
-        sizeof(header), uint32_t(parsed->content_header.header_size));
+    const uint32_t declared_header_size = parsed->content_header.header_size;
+    const bool stfs_header =
+        parsed->content_metadata.volume_type == vfs::XContentVolumeType::kStfs;
+    if (stfs_header && declared_header_size < sizeof(header)) {
+      error = std::make_error_code(std::errc::bad_message); return {};
+    }
+    // Preserve the actual packed source's alignment bytes. The
+    // native STFS reader/writer hashes through this boundary; copying only H
+    // loses their provenance and cannot later justify a zero-filled raw view.
+    const uint64_t header_size = stfs_header
+        ? ((uint64_t(declared_header_size) + 0xFFF) & ~uint64_t(0xFFF))
+        : std::max<uint64_t>(sizeof(header), declared_header_size);
     if (header_size > backing->extent() ||
         header_size > filesystem::content_mutation_wire::kMaximumMetadataBytes) {
       error = std::make_error_code(std::errc::file_too_large); return {};

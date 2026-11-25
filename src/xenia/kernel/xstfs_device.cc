@@ -20,6 +20,7 @@
 #include "xenia/vfs/devices/xcontent_container_device.h"
 #include "xenia/vfs/devices/xcontent_devices/stfs_container_device.h"
 #include "xenia/vfs/host_storage_errors.h"
+#include "xenia/vfs/folder_content_package.h"
 
 namespace xe::kernel {
 namespace {
@@ -139,15 +140,44 @@ bool XStfsDevice::retired() const {
   }
   return retired || !active || active->namespace_retiring();
 }
-X_STATUS XStfsDevice::Control(uint32_t /*code*/) const {
-  std::shared_ptr<vfs::Device> active; bool retired;
+X_STATUS XStfsDevice::Control(uint32_t code, uint32_t output_address) const {
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  std::shared_ptr<vfs::Device> active;
+  std::shared_ptr<vfs::FolderContentPackage> folder;
+  bool retired;
   {
     std::lock_guard lock(state_mutex_);
     retired = retired_ || dismounting_; active = active_device_.lock();
+    folder = folder_backend_.lock();
   }
-  if (retired || !active || active->namespace_retiring() ||
-      static_cast<const vfs::StfsContainerDevice*>(active.get())->retired()) { return kDisconnected; }
-  return X_STATUS_INVALID_DEVICE_REQUEST;
+  if (retired || !active || active->namespace_retiring()) { return kDisconnected; }
+  if (!folder) {
+    const auto* packed = dynamic_cast<const vfs::StfsContainerDevice*>(active.get());
+    return !packed || packed->retired() ? kDisconnected : X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  if (folder->retiring()) { return kDisconnected; }
+  // Only the real recovered output shape is admitted. Unknown sector/control
+  // operations stay unsupported; ignored Control0/1 are not canned success.
+  if (code > 4) { return X_STATUS_INVALID_DEVICE_REQUEST; }
+  const uint32_t size = code == 3 ? 36 : 0;
+  if (size && !util::GuestIoRangeValid(*memory(), output_address, size, true)) {
+    return X_STATUS_ACCESS_VIOLATION;
+  }
+  std::array<uint8_t, 36> owned{};
+  uint32_t transferred = 0;
+  X_STATUS status = X_STATUS_UNSUCCESSFUL;
+  const auto invoked = kernel_state()->RunBlockingIo([&] {
+    status = folder->Control(code, std::span(owned).first(size), &transferred);
+  }, active->supports_concurrent_io() ? GuestScheduler::BlockingCallClass::kConcurrent
+                                     : GuestScheduler::BlockingCallClass::kSerial);
+  if (invoked != HostCallOutcome::kReturned) { return HostCallFailureStatus(invoked); }
+  if (status != X_STATUS_SUCCESS) { return status; }
+  if (transferred != size) { return vfs::HostStorageError(std::make_error_code(std::errc::io_error)); }
+  // This host copy owns detached bytes; no guest pointer survived the wait.
+  return size ? util::WriteGuestIoBuffer(*memory(), output_address,
+      std::span<const uint8_t>(owned).first(size)) : status;
 }
 
 X_STATUS XStfsDevice::Dismount() {
@@ -191,7 +221,8 @@ X_STATUS XStfsDevice::CreateInternal(KernelState& kernel, uint32_t address,
   if (!util::GuestIoRangeValid(memory, output, 8, true)) {
     return X_STATUS_ACCESS_VIOLATION;
   }
-  if (packet.signature_class != 4 || packet.reserved ||
+  if ((packet.signature_class != 1 && packet.signature_class != 2 &&
+       packet.signature_class != 4) || packet.reserved ||
       packet.owner_option > 1 || packet.content_nonzero > 1 ||
       packet.pages < 5 || packet.pages > 64 ||
       !packet.context_bytes || packet.context_bytes > kMaximumContext ||
@@ -228,11 +259,37 @@ X_STATUS XStfsDevice::CreateInternal(KernelState& kernel, uint32_t address,
       return kDisconnected;
     }
   }
-  std::unique_ptr<vfs::XContentContainerDevice> device;
+  std::unique_ptr<vfs::Device> device;
+  // This bounded source/header lease ends at function exit, outside GCRC and
+  // before original PPC resumes. It is not retained by the mounted Device.
+  std::unique_ptr<vfs::FolderContentPackage::MountAdmission> folder_admission;
+  const auto folder = shared->folder_content_package();
   const auto read_error = std::make_shared<std::atomic<X_STATUS>>(X_STATUS_SUCCESS);
   const bool concurrent = shared->retained_device() &&
                           shared->retained_device()->supports_concurrent_io();
   const auto invoked = kernel.RunBlockingIo([&] {
+    if (folder) {
+      vfs::FolderContentPackage::MountRequest request;
+      request.data_offset = packet.data_offset;
+      request.logical_geometry = packet.logical_geometry;
+      request.context_bytes = packet.context_bytes;
+      request.descriptor = packet.descriptor;
+      request.owner_option = packet.owner_option;
+      request.content_nonzero = packet.content_nonzero;
+      request.signature_class = packet.signature_class;
+      status = folder->PrepareMemberDevice(name, request, shared, device, folder_admission);
+      if (status != X_STATUS_SUCCESS) { return; }
+      const auto volume = parent->storage_volume();
+      if (!device || !folder_admission || folder->retiring() || !volume ||
+          !volume->available_cached() || !device->SetStorageVolume(volume) ||
+          !device->RetainMountResource(owner) ||
+          !kernel.file_system()->BindManagedFileRegistryForPreparation(*device) ||
+          !device->Initialize()) {
+        device.reset(); status = X_STATUS_UNSUCCESSFUL;
+      }
+      return;
+    }
+    if (packet.signature_class != 4) { status = X_STATUS_INVALID_PARAMETER; return; }
     auto backing = vfs::XContentReadBacking::FromSharedFile(shared, &status);
     if (!backing) { return; }
     auto checked = std::make_unique<StatusBacking>(std::move(backing), read_error);
@@ -263,17 +320,18 @@ X_STATUS XStfsDevice::CreateInternal(KernelState& kernel, uint32_t address,
       status = X_STATUS_INVALID_PARAMETER;
       return;
     }
-    device = vfs::XContentContainerDevice::CreateContentDevice(name,
+    auto packed = vfs::XContentContainerDevice::CreateContentDevice(name,
                                                               std::move(checked));
-    if (device) {
-      static_cast<vfs::StfsContainerDevice*>(device.get())->SetReadOnlyView();
+    if (packed) {
+      static_cast<vfs::StfsContainerDevice*>(packed.get())->SetReadOnlyView();
     }
-    if (!device || !device->Initialize()) {
+    if (!packed || !packed->Initialize()) {
       device.reset();
       status = read_error->load() != X_STATUS_SUCCESS ? read_error->load()
                                                : X_STATUS_UNSUCCESSFUL;
       return;
     }
+    device = std::move(packed);
     status = X_STATUS_SUCCESS;
   }, concurrent ? GuestScheduler::BlockingCallClass::kConcurrent
                 : GuestScheduler::BlockingCallClass::kSerial);
@@ -309,10 +367,12 @@ X_STATUS XStfsDevice::CreateInternal(KernelState& kernel, uint32_t address,
   {
     std::lock_guard lock(stfs->state_mutex_);
     stfs->active_device_ = registered;
+    stfs->folder_backend_ = folder;
     stfs->retired_ = false;
   }
-  if (registered->namespace_retiring() || static_cast<const vfs::StfsContainerDevice*>(
-          registered.get())->retired()) {
+  const auto* packed = dynamic_cast<const vfs::StfsContainerDevice*>(registered.get());
+  if (registered->namespace_retiring() || (folder ? folder->retiring()
+      : !packed || packed->retired())) {
     stfs->Dismount();
     return kDisconnected;
   }

@@ -23,6 +23,7 @@
 #include <atomic>
 
 namespace xe::kernel::xam { class ContentManager; class ContentSourceRegistry; }
+namespace xe::kernel { class XStfsDevice; }
 
 namespace xe {
 namespace vfs {
@@ -238,6 +239,7 @@ class Device : public std::enable_shared_from_this<Device> {
     return true;
   }
   friend class xe::kernel::xam::ContentManager;
+  friend class xe::kernel::XStfsDevice;
   bool RetainMountResource(std::shared_ptr<const void> resource) {
     if (!resource || mount_resource_) { return false; }
     mount_resource_ = std::move(resource);

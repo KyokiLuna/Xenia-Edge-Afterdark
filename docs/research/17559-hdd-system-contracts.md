@@ -1,5 +1,10 @@
 # Combined HDD, local profile, avatar and media gate
 
+The [current profile lifecycle comparison](17559-profile-lifecycle-comparison-20261125.md)
+consolidates the 17559 mapped contracts against the active implementation. Use
+its distinctions and dependency boundaries with the historical findings below;
+a component pass is not whole-profile or whole-gate acceptance.
+
 Upstream changes are subject to the
 [project-goal inclusion policy](17559-upstream-integration-policy.md). Changes
 that conflict with the accepted console-level behavior are excluded.
@@ -108,6 +113,65 @@ Use the [checkpoint regression record](17559-checkpoint-guide-regression-2026112
 for current build and native-flow results. In particular, closing while a native
 error modal remains open is not an idle dashboard shutdown comparison. Native
 waits and cancellation still require real lifecycle completion.
+
+### Recovered native container headers, 2026-11-25
+
+The matching 17559 XAM establishes two distinct header extents. `H` is the
+declared size at raw offset `0x340`; `R` is `align_up(H, 0x1000)`. Native
+`8167C628` authenticates exact raw bytes `[0x344, R)`. It then hashes the
+separate signed region `[0x22C, 0x344)`. Existing open paths `81680128` and
+`816808C8` read and preserve the real alignment bytes. An H-only digest or
+fabricated zero padding disagrees with the console contract.
+
+The native context is discontinuous: raw `[0, 0x971A)` starts at context
+`+0x38`, while raw `[0x971A, R)` starts at `+0x98AC`. Control fields between
+these regions are not serialized header bytes. Before-image capture must
+flatten both actual regions; an unrelated sidecar tail is separate data.
+
+Native create `81686DA0`, exposed by `XamContentCreateAndMountPackage` (`27A`,
+`816EF818`), consumes the caller's complete `0x93D6` metadata and optional
+extra header. It preserves unknown caller fields and explicitly writes its
+new alignment zeros. Its initial fields also include first licensee `-1`;
+there is no universal all-zero header template. A producer return or raw
+write does not establish authenticated final bytes, durable close or
+inventory publication.
+
+The profile-specific constructor is now traced: native `230` reaches
+`DC2B0`, `86D78`, `86978` and `857F0`; its concrete object uses vtable
+`815F3A44` to reach `EFC8`, `87A10` and `86DA0`. The actual `0x93D6` allocation
+is initialized through native services, with profile Title ID `FFFE07D1`,
+display/file spelling from the 16-digit XUID, and no extra header bytes.
+Console/device identity, title text, online-creator lookup and imagery retain
+their real service values and errors. The temporary buffer frees after the
+virtual call, so deferred consumers must own the complete captured bytes.
+
+This same object performs directory operations before its final create call.
+Provisional source/transaction ownership must therefore begin before those
+namespace effects. A receipt issued only at the first header write is too
+late. Final kernel descriptor/checkpoint, close and publication duties remain
+separate implementation requirements.
+
+| Before state | Required owner and transaction |
+| --- | --- |
+| Existing authenticated native header | Preserve actual R bytes, source identity and unknown fields; use the issued header participant and real close/I/O/cache joins. |
+| Entire package absent | A distinct provisional native-creation participant owns the initial write set, followed by complete package publication after actual finalization. |
+| Header missing or validated legacy `0x148` descriptor in an existing profile | Preserve the exact before-image and every Account/GPD/picture member. Require a proven native producer and a variable-length repair transaction; never recreate the profile because discovery is busy. |
+| Malformed, foreign or unclassified data | Preserve and report it. Neither size nor failed verification means absence. |
+
+The existing host recipe's `0x148` aggregate is not a native metadata image.
+Its appended license mask and unknown tail are not native padding and cannot
+be discarded during repair. The V129 source integration supplies the
+existing-header foundation and shared preparation progress; it does not
+activate the paused native save chain or cold creation. Its build and runtime
+acceptance are still pending.
+
+Primary image SHA256:
+`f9e44cd6f4b04875ddc5a3b8fd519785ba2b0488b1c4622f818b740ba4064313`.
+The local aligned-header proof is `05dda1c54ddd079f0236d407de15f7e25e8616d47f2e8960ea57b5abd34a08a6`;
+the cold-producer boundary is `2cc3d8e4c7978009cc07a4aa87c644d68dfdfbaf54943260c42320f2fc3bf7de`.
+Its profile-constructor ancestry is closed by
+`9a3a23e901496241a3fb4717414ca517cfa0d217a2a3353e39ef3c0172ea70cb`.
+These are source contracts, not native profile/avatar acceptance.
 
 ## Qualified runtime checkpoint, 2026-11-06
 

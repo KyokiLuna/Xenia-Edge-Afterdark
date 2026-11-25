@@ -158,6 +158,10 @@ class VirtualFileSystem {
       const std::shared_ptr<Device>& expected,
       std::shared_ptr<Device>& registered,std::shared_ptr<Device>& retired);
 
+  // Before an unpublished host Device initializes its entry tree, bind this
+  // SAME existing registry so native package namespace projections can replace
+  // legacy payload collapse. No registration/backing/source authority is issued.
+  bool BindManagedFileRegistryForPreparation(Device&);
   bool RegisterDevice(std::unique_ptr<Device> device);
   bool RegisterManagedFile(std::shared_ptr<ManagedFileService> service) {
     return managed_files_->Register(std::move(service));

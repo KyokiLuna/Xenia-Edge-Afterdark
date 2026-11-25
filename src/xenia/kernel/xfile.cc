@@ -82,6 +82,10 @@ X_STATUS XFile::QueryDirectoryInternal(X_FILE_DIRECTORY_INFORMATION* out_info,
   std::lock_guard<std::mutex> lock(file_lock_);
   assert_not_null(out_info);
 
+  // Child selection, name/metadata capture and cached managed projection use
+  // the same existing namespace interval. No native filesystem operation runs
+  // here. The retained File keeps its complete Device/tree alive.
+  auto namespace_lock = global_critical_region::AcquireDirect();
   vfs::Entry* entry = nullptr;
 
   if (!file_name.empty()) {
@@ -115,6 +119,9 @@ X_STATUS XFile::QueryDirectoryInternal(X_FILE_DIRECTORY_INFORMATION* out_info,
     return X_STATUS_NO_SUCH_FILE;
   }
 
+  // This optional projection is pure cached metadata, never a native
+  // filesystem update() under the directory enumeration lock.
+  entry->RefreshNamespaceMetadata();
   out_info->next_entry_offset = 0;
   out_info->file_index = static_cast<uint32_t>(find_index_);
   out_info->creation_time = entry->create_timestamp();

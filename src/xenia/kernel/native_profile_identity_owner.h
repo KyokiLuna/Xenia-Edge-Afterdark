@@ -2,6 +2,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -283,6 +284,9 @@ class NativeProfileIdentityOwner final
   void ObserveInitialEmptyProfileBaseline(XThread&, NativeInitialEmptyProfileWitness&&) noexcept;
   friend class NativeSystemGraphicsTransport;
   friend class xam::ProfileManager;
+  void RetainPreparationCleanup(const std::shared_ptr<xam::ProfileRosterIntent>&) noexcept;
+  xam::ProfileRosterResult SubmitPreparedUntil(
+      std::shared_ptr<xam::ProfileRosterIntent>,std::chrono::steady_clock::time_point) noexcept;
   struct Config {
     std::shared_ptr<const NativeSystemUiStartupCatalog> catalog;
     std::shared_ptr<NativeImportDomain> domain;
@@ -333,7 +337,8 @@ class NativeProfileIdentityOwner final
       const NativeProfileIdentityRequest*,XThread*,uint32_t input,uint32_t flags,
       uint32_t overlap,bool bootstrap_alignment,std::error_code&,
       bool* retryable_bootstrap = nullptr,
-      const xam::NativeOriginalLogonObservation* observation=nullptr);
+      const xam::NativeOriginalLogonObservation* observation=nullptr,
+      std::chrono::steady_clock::time_point preparation_deadline={});
   GuestRuntime::ExecutionResult ExecutePreparedOn(XThread&);
   GuestRuntime::ExecutionResult RunScheduledBody(XThread&,uint64_t serial,
       const std::function<GuestRuntime::ExecutionResult(XThread&)>&);

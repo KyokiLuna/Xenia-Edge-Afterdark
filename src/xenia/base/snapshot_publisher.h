@@ -137,7 +137,10 @@ class SnapshotPublisher final {
       const std::atomic<bool>*, std::string_view exact_nonce,
       // Test fault may report uncertainty only AFTER the real parent barrier.
       std::error_code post_stage_parent_error = {},
-      PrivateSnapshotPurpose purpose = PrivateSnapshotPurpose::kOrdinary);
+      PrivateSnapshotPurpose purpose = PrivateSnapshotPurpose::kOrdinary,
+      // CM external-header session hands over its ONE already-written native
+      // stage. No second stage or byte write is created for the outer journal.
+      std::unique_ptr<HostStorageSnapshotStage> retained_stage = {});
 };
 }  // namespace xe::filesystem
 #endif

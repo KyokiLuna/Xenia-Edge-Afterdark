@@ -20,6 +20,7 @@ namespace xe {
 namespace vfs {
 
 class HostPathDevice;
+class ManagedFileNamespaceView;
 
 class HostPathEntry : public Entry {
  public:
@@ -40,6 +41,7 @@ class HostPathEntry : public Entry {
                                            size_t offset,
                                            size_t length) override;
   void update() override;
+  void RefreshNamespaceMetadata() override;
   bool has_open_files() const override;
   void RetainFile() override { open_files_.fetch_add(1); }
   void ReleaseFile() override;
@@ -56,6 +58,11 @@ class HostPathEntry : public Entry {
   friend class HostPathDevice;
   friend class HostPathFile;
 
+  // Plain value cache only. The actual managed File owns all source, IO and
+  // transactional duties; this retained physical directory is never replaced
+  // with a payload path or used to bypass the exact managed open policy.
+  std::shared_ptr<const ManagedFileNamespaceView> managed_namespace_view_;
+  void ApplyManagedNamespaceView();
   void SetOverwrittenSize(size_t size);
   void AbortOverwrite();
   std::error_code CompleteOverwrite(filesystem::FileHandle&);

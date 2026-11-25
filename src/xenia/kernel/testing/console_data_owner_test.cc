@@ -1,11 +1,14 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/base/platform.h"
+#include "xenia/base/byte_order.h"
 #include "xenia/kernel/console_data_owner.h"
 #include "xenia/kernel/console_signing_identity.h"
+#include "xenia/kernel/xam/folder_content_header.h"
 #include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xecrypt_rsa.h"
+#include "xenia/kernel/xboxkrnl/xecrypt_sha.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_module.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
 #include "xenia/memory.h"
@@ -275,6 +278,20 @@ TEST_CASE("Console signing identity persists and verifies real digest signatures
  ConsoleScratch foreign;auto foreign_owner=ConsoleDataOwner::Open(foreign.Root());
  REQUIRE_FALSE(foreign_owner->signing_error());REQUIRE(foreign_owner->signing_identity());
  CHECK_FALSE(foreign_owner->signing_identity()->Verify(hash,signature,difference));CHECK(difference!=0);
+ // Retained CON readers need only the already-issued public certificate.
+ // A signature's own certificate must never become its trust anchor.
+ uint32_t public_difference=0x12345678;
+ CHECK(XeCryptVerifyConsoleSignature(certificate,hash,signature,public_difference));
+ CHECK(public_difference==0);
+ auto bad_signature=signature;bad_signature.back()^=1;
+ CHECK_FALSE(XeCryptVerifyConsoleSignature(certificate,hash,bad_signature,public_difference));
+ CHECK_FALSE(XeCryptVerifyConsoleSignature(certificate,wrong_hash,signature,public_difference));
+ CHECK_FALSE(XeCryptVerifyConsoleSignature(foreign_owner->signing_identity()->certificate(),
+                                         hash,signature,public_difference));
+ CHECK(public_difference!=0);
+ auto bad_certificate=signature;bad_certificate[0x28]^=1;
+ CHECK_FALSE(XeCryptVerifyConsoleSignature(certificate,hash,bad_certificate,public_difference));
+ CHECK(public_difference!=0);
  std::error_code error;CHECK_FALSE(HostStorageRoot::AdmitGuestMount(
      std::vector<filesystem::GuestHostBacking>{{scratch.Private(),true}},error));
  CHECK(error==std::errc::permission_denied);
@@ -376,6 +393,176 @@ TEST_CASE("Console signing guest boundaries write the real full envelope and rej
   CHECK(uint32_t(context.r[3])==((ordinal==0x256 || ordinal==0x257)?0u:X_STATUS_UNSUCCESSFUL));
   CHECK(bool(std::equal(unchanged.begin(),unchanged.end(),memory.TranslateVirtual(base))));
  }
+}
+
+TEST_CASE("Folder CON codec signs exact native hash spans and retains padding and opaque sidecar tail",
+          "[console_owner][signing][folder_con]") {
+  namespace con = xam::folder_content_detail;
+  ConsoleScratch scratch; auto owner = ConsoleDataOwner::Open(scratch.Root());
+  REQUIRE_FALSE(owner->error()); REQUIRE_FALSE(owner->signing_error());
+  REQUIRE(owner->signing_identity()); const auto& signer = *owner->signing_identity();
+  vfs::XContentContainerHeader header{};
+  constexpr uint32_t extra = 37, aligned = 0xA000, tail = 11;
+  header.content_header.magic = vfs::XContentPackageType::kCon;
+  header.content_header.header_size = uint32_t(sizeof(header) + extra);
+  header.content_header.licenses[3].licensee_id = 0x0102030405060708ull;
+  header.content_metadata.metadata_version = 2;
+  header.content_metadata.content_type = XContentType::kProfile;
+  header.content_metadata.profile_id = 0x0009000012345678ull;
+  header.content_metadata.execution_info.title_id = 0xFFFE07D1;
+  header.content_metadata.content_size = 0x4321;
+  header.content_metadata.volume_type = vfs::XContentVolumeType::kStfs;
+  header.content_metadata.volume_descriptor.stfs.descriptor_length = 36;
+  const con::PackageIdentity expected{header.content_metadata.profile_id,
+      header.content_metadata.execution_info.title_id, XContentType::kProfile};
+  std::vector<uint8_t> bytes(aligned + tail);
+  std::memcpy(bytes.data(), &header, sizeof(header));
+  std::fill(bytes.begin() + sizeof(header), bytes.begin() + sizeof(header) + extra, 0x7B);
+  // Actual retained old padding is deliberately nonzero. The unknown sidecar
+  // tail starts AFTER R, not at H; only a genuine create producer may zero pad.
+  std::fill(bytes.begin() + sizeof(header) + extra, bytes.begin() + aligned, 0xD3);
+  std::fill(bytes.begin() + aligned, bytes.end(), 0xA9);
+  const auto original = bytes;
+  REQUIRE_FALSE(con::SignNativeHeader(bytes, signer));
+  REQUIRE(std::equal(original.begin() + 0x344, original.end(), bytes.begin() + 0x344));
+  REQUIRE(std::equal(original.begin() + 0x22C, original.begin() + 0x32C, bytes.begin() + 0x22C));
+  std::error_code error;
+  const auto facts = con::ValidateNativeHeader(bytes, expected, 0x8000,
+      signer.certificate(), error);
+  REQUIRE(facts); REQUIRE_FALSE(error); CHECK(facts->signature_class == 1);
+  CHECK(facts->header_size == sizeof(header) + extra); CHECK(facts->data_offset == 0xA000);
+  CHECK(facts->raw_extent == 0x12000); CHECK(facts->context_bytes == 0xA192);
+  CHECK(facts->logical_geometry == 0x100000); CHECK(facts->content_size == 0x4321);
+  // Independently sign a legacy H-only digest while retaining a long opaque
+  // sidecar. Valid signature shape cannot make those unknown bytes native pad.
+  auto wrong_range = bytes;
+  std::array<uint8_t, 20> legacy_body{}, legacy_signed{};
+  REQUIRE(mbedtls_sha1(wrong_range.data() + 0x344,
+      sizeof(header) + extra - 0x344, legacy_body.data()) == 0);
+  std::copy(legacy_body.begin(), legacy_body.end(), wrong_range.begin() + 0x32C);
+  REQUIRE(mbedtls_sha1(wrong_range.data() + 0x22C, 0x118, legacy_signed.data()) == 0);
+  ConsoleSigningIdentity::Signature legacy_signature{};
+  REQUIRE(signer.Sign(legacy_signed, legacy_signature));
+  std::copy(legacy_signature.begin(), legacy_signature.end(), wrong_range.begin() + 4);
+  CHECK_FALSE(con::ValidateNativeHeader(wrong_range, expected, 0x8000,
+      signer.certificate(), error)); CHECK(error == std::errc::bad_message);
+  con::NativeFolderHeaderFormat format(signer.certificate());
+  const std::filesystem::path package = "0009000012345678/FFFE07D1/00010000/0009000012345678";
+  CHECK_FALSE(format.ValidateCurrent(package, bytes));
+  auto native_thumb = bytes;
+  auto* changed_header = reinterpret_cast<vfs::XContentContainerHeader*>(native_thumb.data());
+  changed_header->content_metadata.thumbnail_size = 2;
+  changed_header->content_metadata.thumbnail[0] = 0x51;
+  changed_header->content_metadata.thumbnail[1] = 0x52;
+  REQUIRE_FALSE(con::SignNativeHeader(native_thumb, signer));
+  CHECK_FALSE(format.ValidateNativeChange(package, bytes, native_thumb));
+  auto unowned = native_thumb;
+  reinterpret_cast<vfs::XContentContainerHeader*>(unowned.data())->content_metadata.description_raw.uint[0][0] = u'Q';
+  REQUIRE_FALSE(con::SignNativeHeader(unowned, signer));
+  CHECK_FALSE(format.ValidateCurrent(package, unowned)); // valid crypto is not writer permission
+  CHECK(format.ValidateNativeChange(package, bytes, unowned) == std::errc::operation_not_supported);
+  unowned = native_thumb;
+  reinterpret_cast<vfs::XContentContainerHeader*>(unowned.data())->content_metadata.thumbnail[10] ^= 1;
+  REQUIRE_FALSE(con::SignNativeHeader(unowned, signer));
+  CHECK(format.ValidateNativeChange(package, bytes, unowned) == std::errc::operation_not_supported);
+  unowned = native_thumb; unowned.back() ^= 1; // unknown sidecar tail must be exact
+  CHECK(format.ValidateNativeChange(package, bytes, unowned) == std::errc::operation_not_supported);
+  auto tampered = bytes; tampered[sizeof(header) + extra + 3] ^= 1;
+  CHECK_FALSE(con::ValidateNativeHeader(tampered, expected, 0x8000, signer.certificate(), error));
+  CHECK(error == std::errc::bad_message); // alignment bytes are authenticated
+  tampered = bytes; tampered[sizeof(header) + 3] ^= 1;
+  CHECK_FALSE(con::ValidateNativeHeader(tampered, expected, 0x8000, signer.certificate(), error));
+  CHECK(error == std::errc::bad_message);
+  tampered = bytes; tampered[4 + 0x1A8 + 0x7F] ^= 1;
+  CHECK_FALSE(con::ValidateNativeHeader(tampered, expected, 0x8000, signer.certificate(), error));
+  CHECK(error == std::errc::bad_message);
+  const auto wrong_owner = con::PackageIdentity{expected.xuid ^ 1, expected.title_id, expected.content_type};
+  CHECK_FALSE(con::ValidateNativeHeader(bytes, wrong_owner, 0x8000, signer.certificate(), error));
+  CHECK(error == std::errc::permission_denied);
+  CHECK_FALSE(con::ValidateNativeHeader(bytes, expected, 0x4320, signer.certificate(), error));
+  CHECK(error == std::errc::operation_not_supported);
+  CHECK_FALSE(con::ValidateNativeHeader(bytes, expected, UINT64_MAX, signer.certificate(), error));
+  CHECK(error == std::errc::operation_not_supported);
+  // Native digest excludes the opaque sidecar tail; complete physical before
+  // equality/journal/CAS remains the separate CM storage authority.
+  tampered = bytes; tampered.back() ^= 1;
+  CHECK(con::ValidateNativeHeader(tampered, expected, 0x8000, signer.certificate(), error));
+  CHECK_FALSE(error);
+}
+TEST_CASE("Folder CON codec refuses foreign certificate trust and never changes malformed input on signing failure",
+          "[console_owner][signing][folder_con]") {
+  namespace con = xam::folder_content_detail;
+  ConsoleScratch scratch, other;
+  auto owner = ConsoleDataOwner::Open(scratch.Root());
+  auto foreign = ConsoleDataOwner::Open(other.Root());
+  REQUIRE_FALSE(owner->error()); REQUIRE_FALSE(owner->signing_error()); REQUIRE(owner->signing_identity());
+  REQUIRE_FALSE(foreign->error()); REQUIRE_FALSE(foreign->signing_error()); REQUIRE(foreign->signing_identity());
+  vfs::XContentContainerHeader header{};
+  header.content_header.magic = vfs::XContentPackageType::kCon;
+  header.content_header.header_size = sizeof(header);
+  header.content_metadata.content_type = XContentType::kProfile;
+  header.content_metadata.profile_id = 1;
+  header.content_metadata.execution_info.title_id = 0xFFFE07D1;
+  header.content_metadata.volume_descriptor.stfs.descriptor_length = 36;
+  // Independent native 86DA0 fixture: Header then exactly zero [H,R).
+  // This caller-formed test value is not a production CM create capability.
+  std::vector<uint8_t> bytes(0xA000); std::memcpy(bytes.data(), &header, sizeof(header));
+  REQUIRE_FALSE(con::SignNativeHeader(bytes, *owner->signing_identity()));
+  const con::PackageIdentity expected{1, 0xFFFE07D1, XContentType::kProfile};
+  std::error_code error;
+  const auto own = con::ValidateNativeHeader(bytes, expected, 0,
+      owner->signing_identity()->certificate(), error);
+  REQUIRE(own); REQUIRE_FALSE(error);
+  CHECK(own->raw_extent == 0xA000); CHECK(own->logical_geometry == 0x100000000ull);
+  CHECK_FALSE(con::ValidateNativeHeader(bytes, expected, 0,
+      foreign->signing_identity()->certificate(), error));
+  CHECK(error == std::errc::operation_not_supported);
+  const auto signed_bytes = bytes;
+  bytes[0x340] = bytes[0x341] = bytes[0x342] = bytes[0x343] = 0;
+  const auto malformed = bytes;
+  CHECK(con::SignNativeHeader(bytes, *owner->signing_identity()) == std::errc::bad_message);
+  CHECK(bytes == malformed);
+  CHECK_FALSE(con::ValidateNativeHeader(malformed, expected, 0,
+      owner->signing_identity()->certificate(), error)); CHECK(error == std::errc::bad_message);
+  CHECK_FALSE(con::ValidateNativeHeader(signed_bytes, expected, 0,
+      std::span<const uint8_t>{}, error)); CHECK(error == std::errc::invalid_argument);
+}
+
+TEST_CASE("Folder Header hash agrees with pinned native split buffers and rejects an H-only source",
+          "[console_owner][folder_con][native_header_alignment]") {
+  namespace con = xam::folder_content_detail;
+  // 17559 C628: input1=ctx+0x37C,len=0x93D6, input2=ctx+0x98AC,
+  // len=R-0x971A. Golden SHA1 was derived independently over raw [344,R),
+  // not via SignNativeHeader/ValidateNativeHeader or their shared helper.
+  constexpr uint32_t h = 0x973F, r = 0xA000;
+  const std::array<uint8_t, 20> golden{
+      0xE2, 0x6C, 0x49, 0x60, 0x34, 0x14, 0x80, 0x38, 0xD1, 0xF9, 0x6E, 0xD4, 0x3E, 0x2D, 0x09, 0x8C, 0x8A, 0x51, 0x43, 0x5B};
+  std::vector<uint8_t> raw(r + 11, 0xA9);
+  for (size_t i = 0x344; i < r; ++i) { raw[i] = uint8_t(i * 29 + 7); }
+  xe::store_and_swap<uint32_t>(raw.data() + 0x340, h);
+  std::vector<uint8_t> context(r + 0x192, 0xCE);
+  std::copy_n(raw.begin(), 0x971A, context.begin() + 0x38);
+  std::copy(raw.begin() + 0x971A, raw.begin() + r, context.begin() + 0x98AC);
+  std::array<uint8_t, 20> native{}, actual{}, wrong{};
+  xboxkrnl::XeCryptSha(context.data() + 0x37C, 0x93D6,
+      context.data() + 0x98AC, r - 0x971A, nullptr, 0, native.data(), native.size());
+  REQUIRE(native == golden);
+  REQUIRE(con::HeaderBodyDigest(raw, actual)); CHECK(actual == golden);
+  // Contiguous context includes control fields, not the native remainder.
+  xboxkrnl::XeCryptSha(context.data() + 0x37C, r - 0x344,
+      nullptr, 0, nullptr, 0, wrong.data(), wrong.size());
+  CHECK(wrong != golden);
+  // Unknown bytes after R never acquire raw/header identity.
+  raw.back() ^= 1; REQUIRE(con::HeaderBodyDigest(raw, actual)); CHECK(actual == golden);
+  raw[h + 1] ^= 1; REQUIRE(con::HeaderBodyDigest(raw, actual)); CHECK(actual != golden);
+  raw.resize(h); CHECK_FALSE(con::HeaderBodyDigest(raw, actual));
+  raw.resize(h + 11, 0xA9); CHECK_FALSE(con::HeaderBodyDigest(raw, actual));
+  // Exact aligned H has no padding; the next byte requires a whole new page.
+  raw.resize(r); xe::store_and_swap<uint32_t>(raw.data() + 0x340, r);
+  CHECK(con::NativeHeaderAlignedSize(raw) == r);
+  xe::store_and_swap<uint32_t>(raw.data() + 0x340, r + 1);
+  CHECK(con::NativeHeaderAlignedSize(raw) == 0);
+  raw.resize(0xB000); CHECK(con::NativeHeaderAlignedSize(raw) == 0xB000);
 }
 
 #else

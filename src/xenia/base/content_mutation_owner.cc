@@ -695,6 +695,361 @@ ContentMutationOwner::PrepareProfileThumbnail(const std::filesystem::path& packa
     error = Error(std::errc::not_enough_memory); return {};
   }
 }
+bool ContentMutationOwner::InstallNativeHeaderFormat(
+    std::shared_ptr<const NativeHeaderFormat> format, std::error_code& error) {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread() || !format) {
+    error = Error(std::errc::operation_not_permitted); return false;
+  }
+  std::unique_lock lock(operation_mutex_, std::try_to_lock);
+  if (!lock.owns_lock() || active_.load(std::memory_order_acquire)) {
+    error = Error(std::errc::device_or_resource_busy); return false;
+  }
+  error = CheckCurrent(); if (error) { return false; }
+  if (!ready()) { error = Error(std::errc::operation_canceled); return false; }
+  if (native_header_format_) {
+    if (!native_header_format_->SameBinding(*format)) {
+      error = Error(std::errc::permission_denied); return false;
+    }
+    return true;
+  }
+  native_header_format_ = std::move(format); return true;
+}
+// The external header stays in its ACTUAL Headers directory. It is never
+// projected into a profile-flat token, admitted with ../, or committed by File
+// Write/Flush/Destroy. The PIS is the sole later journal/publication caller.
+struct ContentMutationOwner::ProfileHeaderPublication::Data {
+  std::shared_ptr<ContentMutationOwner> owner;
+  std::weak_ptr<SnapshotPublicationSet> members;
+  std::filesystem::path package, target, artifact;
+  std::shared_ptr<HostStorageRoot> parent, reservation;
+  std::shared_ptr<const HostStorageSnapshotToken> before;
+  std::shared_ptr<const NativeHeaderFormat> format;
+  mutable std::mutex mutex;
+  std::unique_ptr<HostStorageSnapshotStage> stage;
+  std::unique_ptr<PreparedSnapshotPublication> prepared;
+  std::shared_ptr<const std::vector<uint8_t>> sealed;
+  std::optional<RetainedFileMetadata> sealed_metadata;
+  std::error_code initialization_error, seal_error;
+  std::atomic<bool> mutation_open{true};
+  bool active = false, created = false;
+  ~Data() {
+    // Stage destruction never removes its real/uncertain artifact. The outer
+    // owner must retain this duty through native File/IO and journal rundown.
+    prepared.reset(); stage.reset();
+    if (reservation) {
+      reservation->Retire(); reservation->ReleaseRetiredSnapshotReservation();
+    }
+    if (active) { owner->active_.fetch_sub(1, std::memory_order_acq_rel); }
+  }
+  std::error_code Available() const {
+    if (global_critical_region::is_held_by_current_thread()) {
+      return Error(std::errc::operation_would_block);
+    }
+    if (initialization_error) { return initialization_error; }
+    const auto held = members.lock();
+    if (!active || !owner || !reservation || reservation->retiring() ||
+        !held || !held->base() || held->base()->retiring()) {
+      return Error(std::errc::operation_canceled);
+    }
+    const auto error = owner->CheckCurrent();
+    // Validate includes the real WithDependency chain; retiring() is cached
+    // parent/own metadata only. This also governs sealed cached stage reads.
+    return error ? error : reservation->Validate();
+  }
+};
+ContentMutationOwner::ProfileHeaderPublication::ProfileHeaderPublication(
+    std::shared_ptr<Data> data) : data_(std::move(data)) {}
+ContentMutationOwner::ProfileHeaderPublication::~ProfileHeaderPublication() = default;
+const std::filesystem::path& ContentMutationOwner::ProfileHeaderPublication::package() const { return data_->package; }
+const std::filesystem::path& ContentMutationOwner::ProfileHeaderPublication::target() const { return data_->target; }
+const std::filesystem::path& ContentMutationOwner::ProfileHeaderPublication::stage_artifact() const { return data_->artifact; }
+const std::shared_ptr<const HostStorageSnapshotToken>&
+ContentMutationOwner::ProfileHeaderPublication::expected() const { return data_->before; }
+void ContentMutationOwner::ProfileHeaderPublication::CloseMutation() noexcept {
+  data_->mutation_open.store(false, std::memory_order_release);
+}
+FileIoResult ContentMutationOwner::ProfileHeaderPublication::Read(
+    size_t offset, std::span<uint8_t> bytes) {
+  // Check BEFORE locking: no storage mutex wait is permitted under GCRC.
+  if (global_critical_region::is_held_by_current_thread()) {
+    return {Error(std::errc::operation_would_block), 0};
+  }
+  std::lock_guard lock(data_->mutex);
+  if (auto error = data_->Available()) { return {error, 0}; }
+  if (data_->sealed) {
+    if (offset >= data_->sealed->size()) { return {}; }
+    const auto count = std::min(bytes.size(), data_->sealed->size() - offset);
+    std::copy_n(data_->sealed->data() + offset, count, bytes.data());
+    return {{}, count};
+  }
+  if (!data_->stage) { return {Error(std::errc::operation_canceled), 0}; }
+  return data_->stage->ReadResult(offset, bytes);
+}
+FileIoResult ContentMutationOwner::ProfileHeaderPublication::Write(
+    size_t offset, std::span<const uint8_t> bytes) {
+  if (global_critical_region::is_held_by_current_thread()) {
+    return {Error(std::errc::operation_would_block), 0};
+  }
+  std::lock_guard lock(data_->mutex);
+  if (auto error = data_->Available()) { return {error, 0}; }
+  if (!data_->mutation_open.load(std::memory_order_acquire) || !data_->stage) {
+    return {Error(std::errc::device_or_resource_busy), 0};
+  }
+  // The raw package's owned extent is independent of Header size. This
+  // participant supports in-place native metadata writes only; geometry and
+  // unowned/payload ranges cannot be invented by length extension.
+  const auto size = data_->before->bytes().size();
+  if (offset > size || bytes.size() > size - offset) {
+    return {Error(std::errc::operation_not_supported), 0};
+  }
+  return data_->stage->WriteAllResult(offset, bytes);
+}
+std::error_code ContentMutationOwner::ProfileHeaderPublication::Resize(size_t size) {
+  if (global_critical_region::is_held_by_current_thread()) { return Error(std::errc::operation_would_block); }
+  std::lock_guard lock(data_->mutex);
+  if (auto error = data_->Available()) { return error; }
+  if (!data_->mutation_open.load(std::memory_order_acquire) || !data_->stage) {
+    return Error(std::errc::device_or_resource_busy);
+  }
+  return size == data_->before->bytes().size() ? std::error_code{}
+      : Error(std::errc::operation_not_supported);
+}
+std::error_code ContentMutationOwner::ProfileHeaderPublication::Flush() {
+  if (global_critical_region::is_held_by_current_thread()) { return Error(std::errc::operation_would_block); }
+  std::lock_guard lock(data_->mutex);
+  if (auto error = data_->Available()) { return error; }
+  if (data_->seal_error) { return data_->seal_error; }
+  // Sealed data was already fsynced. Neither branch publishes public bytes.
+  return data_->sealed ? std::error_code{} : data_->stage
+      ? data_->stage->FlushResult() : Error(std::errc::operation_canceled);
+}
+std::optional<RetainedFileMetadata> ContentMutationOwner::ProfileHeaderPublication::Query(
+    std::error_code& error) {
+  if (global_critical_region::is_held_by_current_thread()) { error = Error(std::errc::operation_would_block); return {}; }
+  std::lock_guard lock(data_->mutex);
+  error = data_->Available(); if (error) { return {}; }
+  if (data_->sealed_metadata) { return data_->sealed_metadata; }
+  if (!data_->stage) { error = Error(std::errc::operation_canceled); return {}; }
+  return data_->stage->QueryMetadata(error);
+}
+std::unique_ptr<HostStorageContentLayout>
+ContentMutationOwner::ProfileHeaderPublication::CaptureMemberLayout(std::error_code& error) const {
+  if (global_critical_region::is_held_by_current_thread()) {
+    error = Error(std::errc::operation_would_block); return {};
+  }
+  error = data_->Available(); if (error) { return {}; }
+  const auto members = data_->members.lock();
+  if (!members) { error = Error(std::errc::operation_canceled); return {}; }
+  return members->CaptureContentLayoutForCM(*data_->owner->content_, data_->package, error);
+}
+std::shared_ptr<const std::vector<uint8_t>>
+ContentMutationOwner::ProfileHeaderPublication::Seal(std::error_code& error) {
+  if (global_critical_region::is_held_by_current_thread()) { error = Error(std::errc::operation_would_block); return {}; }
+  // Closing future admission precedes waiting for the real current byte IO.
+  CloseMutation();
+  std::lock_guard lock(data_->mutex);
+  error = data_->Available(); if (error) { return {}; }
+  if (data_->sealed) { return data_->sealed; }
+  if (data_->seal_error) { error = data_->seal_error; return {}; }
+  try {
+    const auto before = data_->stage ? data_->stage->QueryInfo(error) : std::nullopt;
+    if (!before || !before->regular || before->links != 1 ||
+        before->size != data_->before->bytes().size()) {
+      if (!error) { error = Error(std::errc::state_not_recoverable); }
+    }
+    std::shared_ptr<std::vector<uint8_t>> bytes;
+    if (!error) {
+      bytes = std::make_shared<std::vector<uint8_t>>(size_t(before->size));
+      for (size_t done = 0; done < bytes->size();) {
+        const auto part = std::span(*bytes).subspan(done,
+            std::min(size_t(1 << 20), bytes->size() - done));
+        const auto actual = data_->stage->ReadResult(done, part);
+        if (actual.bytes > part.size()) { error = Error(std::errc::io_error); break; }
+        done += actual.bytes;
+        if (actual.error || !actual.bytes) { error = actual.error ? actual.error : Error(std::errc::io_error); break; }
+      }
+    }
+    if (!error) {
+      error = data_->format ? data_->format->ValidateNativeChange(
+          data_->package, data_->before->bytes(), *bytes)
+          : Error(std::errc::operation_not_supported);
+    }
+    if (!error) { error = data_->stage->FlushResult(); }
+    if (!error) { error = data_->reservation->FlushDirectory(); }
+    const auto after = error ? std::nullopt : data_->stage->QueryInfo(error);
+    if (!error && (!after || after->filesystem_id != before->filesystem_id ||
+        after->file_id != before->file_id || after->size != before->size ||
+        !after->regular || after->links != 1)) { error = Error(std::errc::state_not_recoverable); }
+    const auto metadata = error ? std::nullopt : data_->stage->QueryMetadata(error);
+    if (!error && !metadata) { error = Error(std::errc::io_error); }
+    if (!error) { data_->sealed_metadata = metadata; data_->sealed = std::move(bytes); }
+  } catch (const std::bad_alloc&) { error = Error(std::errc::not_enough_memory); }
+    catch (...) { error = Error(std::errc::io_error); }
+  data_->seal_error = error;
+  return error ? nullptr : data_->sealed;
+}
+std::error_code ContentMutationOwner::ProfileHeaderPublication::CheckCurrent(
+    const SnapshotPublicationSet& members) const {
+  if (global_critical_region::is_held_by_current_thread()) { return Error(std::errc::operation_would_block); }
+  const auto actual = data_->members.lock();
+  if (!actual || actual.get() != &members) { return Error(std::errc::permission_denied); }
+  return data_->Available();
+}
+std::error_code ContentMutationOwner::ProfileHeaderPublication::CheckWithSnapshotGuard(
+    const SnapshotPublicationSet& members, const HostStorageSnapshotBatch& batch,
+    const std::shared_ptr<const HostStorageSnapshotToken>& token) const {
+  // The caller ALREADY owns the filesystem guard. Do not call the ordinary
+  // CheckCurrent/CheckTarget path here: those would acquire it recursively.
+  if (global_critical_region::is_held_by_current_thread()) { return Error(std::errc::operation_would_block); }
+  const auto held = data_->members.lock();
+  if (!held || held.get() != &members || !data_->active || !data_->owner ||
+      !data_->owner->ready() || !data_->reservation || data_->reservation->retiring() ||
+      members.base()->retiring() || !data_->owner->source_lease_ || !data_->owner->content_->IntentLeaseMatches(*data_->owner->source_lease_)) {
+    return Error(std::errc::operation_canceled);
+  }
+  // Never wait for an IO/session lock while retaining the profile batch.
+  std::unique_lock lock(data_->mutex, std::try_to_lock);
+  if (!lock.owns_lock()) { return Error(std::errc::device_or_resource_busy); }
+  if (data_->initialization_error) { return data_->initialization_error; }
+  // Only our actual before/published token may be joined; external record
+  // text and a token from another root/operation never supply this authority.
+  const bool before = token && token == data_->before;
+  const bool published = token && data_->prepared &&
+      token == data_->prepared->receipt().current;
+  if (!before && !published) { return Error(std::errc::permission_denied); }
+  return data_->reservation->ValidateExternalContentHeaderWithSnapshotGuard(
+      batch, *data_->owner->content_, data_->package, data_->target, *token);
+}
+const PreparedSnapshotPublication*
+ContentMutationOwner::ProfileHeaderPublication::PrepareCanonical(
+    const SnapshotPublicationSet& members, std::error_code& error) {
+  error = CheckCurrent(members); if (error) { return nullptr; }
+  std::lock_guard lock(data_->mutex);
+  if (!data_->sealed) { error = Error(std::errc::operation_in_progress); return nullptr; }
+  if (!data_->prepared) {
+    data_->prepared = SnapshotPublisher::PrepareInternal(*data_->owner->recovery_,
+        data_->before, *data_->sealed, nullptr, {}, {},
+        PrivateSnapshotPurpose::kOrdinary, std::move(data_->stage));
+  }
+  error = data_->prepared->receipt().error;
+  return data_->prepared.get();
+}
+SnapshotPublicationReceipt
+ContentMutationOwner::ProfileHeaderPublication::CommitCanonical(
+    const SnapshotPublicationSet& members) {
+  if (const auto error = CheckCurrent(members)) { SnapshotPublicationReceipt r; r.error = error; return r; }
+  std::lock_guard lock(data_->mutex);
+  if (!data_->prepared) { SnapshotPublicationReceipt r; r.error = Error(std::errc::operation_in_progress); return r; }
+  auto receipt = SnapshotPublisher::Commit(*data_->prepared);
+  if (receipt.published) {
+    // The canonical namespace reservation stays owned through the SAME outer
+    // journal/Done/cache cut. The renamed stage's exclusive File lease must
+    // end now, or durability/final validation would conflict with our own
+    // child lease. Publication is real even when its barrier is uncertain.
+    data_->prepared->stage_.reset();
+  }
+  return receipt;
+}
+std::shared_ptr<ContentMutationOwner::ProfileHeaderPublication>
+ContentMutationOwner::PrepareProfileHeader(const std::filesystem::path& package,
+    std::shared_ptr<const HostStorageSnapshotToken> actual_header,
+    const std::shared_ptr<SnapshotPublicationSet>& members, std::error_code& error) {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread() || !members ||
+      !members->base() || members->base()->read_only() || !actual_header ||
+      actual_header->root() != content_ || !actual_header->ascii_folded_leaf()) {
+    error = Error(std::errc::operation_not_permitted); return {};
+  }
+  std::vector<std::string> parts;
+  for (const auto& p : package) { parts.push_back(p.generic_string()); }
+  const auto fold = [](std::string value) {
+    for (auto& c : value) { if (c >= 'a' && c <= 'z') { c -= 'a' - 'A'; } }
+    return value;
+  };
+  if (!wire::ValidPackage(package) || parts.size() != 4 ||
+      parts[0] == "0000000000000000" || fold(parts[0]) != fold(parts[3]) ||
+      fold(parts[1]) != "FFFE07D1" || parts[2] != "00010000" ||
+      !content_ || !content_->directory_identity() ||
+      !members->base()->directory_identity() ||
+      !content_->directory_identity()->SameEntry(package,
+          *members->base()->directory_identity(), {})) {
+    error = Error(std::errc::permission_denied); return {};
+  }
+  std::unique_lock operation(operation_mutex_, std::try_to_lock);
+  if (!operation.owns_lock()) { error = Error(std::errc::device_or_resource_busy); return {}; }
+  error = CheckCurrent();
+  if (!error && (!ready() || active_.load(std::memory_order_acquire))) {
+    error = Error(std::errc::device_or_resource_busy);
+  }
+  if (!error && !native_header_format_) { error = Error(std::errc::operation_not_supported); }
+  if (!error) { error = native_header_format_->ValidateCurrent(package, actual_header->bytes()); }
+  if (error) { return {}; }
+  std::shared_ptr<ProfileHeaderPublication> result;
+  try {
+    auto data = std::make_shared<ProfileHeaderPublication::Data>();
+    data->owner = shared_from_this(); data->members = members; data->package = package;
+    data->format = native_header_format_;
+    wire::Record slot; slot.kind = Kind::kHeader; slot.package = package;
+    // Preserve the real spelling selected by the SAME source resolver. The
+    // closed grammar must still derive Headers/Type/Package.header from this
+    // canonical package; an arbitrary external token/path cannot join.
+    slot.target = actual_header->relative(); data->target = wire::Target(slot);
+    if (data->target.empty()) { error = Error(std::errc::invalid_argument); return {}; }
+    active_.fetch_add(1, std::memory_order_acq_rel); data->active = true;
+    const auto exact = CaptureMetadata(Kind::kHeader, package, data->target, error);
+    if (!exact) { return {}; }
+    if (exact->exists() != actual_header->exists() || !Equal(exact->bytes(), actual_header->bytes()) ||
+        (exact->exists() && (exact->info().filesystem_id != actual_header->info().filesystem_id ||
+          exact->info().file_id != actual_header->info().file_id || exact->info().size != actual_header->info().size))) {
+      error = Error(std::errc::state_not_recoverable); return {};
+    }
+    // Cold projection/upgrade is a separate real CM producer. An absent or
+    // legacy descriptor cannot become a writable native CON by this issuer.
+    if (!exact->exists() || exact->bytes().size() < 0x971A) {
+      error = Error(std::errc::operation_not_supported); return {};
+    }
+    auto header_parent = content_->Subroot(data->target.parent_path(), false, error);
+    if (!header_parent) { return {}; }
+    // Carry the actual admitted profile/source generation into physical CAS,
+    // not merely a preparatory cached Current check. This existing dependency
+    // also refuses a removed/retired source at the real HostStorage effect.
+    data->parent = header_parent->WithDependency(members->base(), error);
+    if (!data->parent) { return {}; }
+    auto before = data->parent->CaptureSnapshot(data->target.filename(),
+        wire::kMaximumMetadataBytes, error, true);
+    if (!before) { return {}; }
+    if (before->exists() != exact->exists() || !Equal(before->bytes(), exact->bytes()) ||
+        before->info().filesystem_id != exact->info().filesystem_id ||
+        before->info().file_id != exact->info().file_id || before->info().size != exact->info().size) {
+      error = Error(std::errc::state_not_recoverable); return {};
+    }
+    data->reservation = data->parent->ReserveSnapshotFile(before, error);
+    if (!data->reservation) { return {}; }
+    data->before = data->reservation->CaptureSnapshot(data->target.filename(),
+        wire::kMaximumMetadataBytes, error, true);
+    if (!data->before) { return {}; }
+    result = std::shared_ptr<ProfileHeaderPublication>(new ProfileHeaderPublication(data));
+    // Return the actual created/uncertain session on a later IO failure. Its
+    // path is retained; destruction never deletes or reports an abort/commit.
+    for (unsigned n = 0; n < 8; ++n) {
+      data->artifact = ".xenia-stage-" + Nonce() + ".tmp";
+      data->stage = data->reservation->CreateSnapshotStage(data->artifact, data->created, error);
+      if (data->stage || data->created || error != std::errc::file_exists) { break; }
+    }
+    if (!data->stage && !error) { error = Error(std::errc::io_error); }
+    if (!error) {
+      const auto write = data->stage->WriteAllResult(0, data->before->bytes());
+      error = write.error;
+      if (!error && write.bytes != data->before->bytes().size()) { error = Error(std::errc::io_error); }
+    }
+    data->initialization_error = error;
+    return result;
+  } catch (const std::bad_alloc&) { error = Error(std::errc::not_enough_memory); }
+    catch (...) { error = Error(std::errc::io_error); }
+  if (result) { result->data_->initialization_error = error; }
+  return result;
+}
 ContentMutationOwner::Receipt ContentMutationOwner::WriteMetadata(
     Kind kind, const std::filesystem::path& package,
     std::shared_ptr<const HostStorageSnapshotToken> expected,

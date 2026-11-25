@@ -19,6 +19,7 @@ std::error_code ValidateProfileGpdRecords(std::span<const uint8_t>,
                                           bool dashboard);
 class ProfileManager;
 class ProfileRosterIntent;
+class ProfileRosterPublicationCell;
 class ProfileGpdModelAuthority;
 class ProfileGpdTransaction;
 // Genuine immutable flat picture observations, captured before the final
@@ -178,9 +179,13 @@ class ProfileGpdModelAuthority final
     friend class ProfileGpdModelAuthority;
     friend class ProfileManager;
     friend class ProfileRosterIntent;
+    friend class ProfileRosterPublicationCell;
     explicit RosterPause(std::shared_ptr<ProfileGpdModelAuthority> owner)
         : owner_(std::move(owner)) {}
     void SealForNativeEntry() { sealed_ = true; }
+    // Actual requested publication may reopen an unchanged selected model.
+    // Its strong owner remains held until ordinary host settlement.
+    void UnpauseKnownOutcomeFromNative() noexcept;
     void ReleaseKnownOutcome();
     std::shared_ptr<ProfileGpdModelAuthority> owner_;
     uint64_t serial_ = 0;
@@ -220,6 +225,12 @@ class ProfileGpdModelAuthority final
       std::unique_ptr<PreparedCommit>,
       std::shared_ptr<const filesystem::HostStorageSnapshotBatch>,
       std::error_code&);
+  // Failure keeps this exact detached plan. Success transfers it to the
+  // real same-thread CommitGuard; no clone or version rebasing is allowed.
+  std::unique_ptr<CommitGuard> TryCommitPreserving(
+      std::unique_ptr<PreparedCommit>&,
+      std::shared_ptr<const filesystem::HostStorageSnapshotBatch>,
+      std::error_code&);
 
  private:
   friend class ProfileGpdTransaction;
@@ -249,6 +260,7 @@ class ProfileGpdModelAuthority::PreparedCommit final {
   friend class ProfileGpdModelAuthority;
   friend class CommitGuard;
   std::shared_ptr<ProfileGpdPendingMutation> pending;
+  std::weak_ptr<ProfileGpdModelAuthority> issuer;
   uint64_t expected_version = 0;
   std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines;
   std::shared_ptr<const ProfileGpdReadModels> models;
@@ -263,6 +275,9 @@ class ProfileGpdModelAuthority::CommitGuard final {
   // in that case. A retirement racing a successful commit still invalidates
   // notification origin. Caller keeps the namespace cache guard until done.
   bool Apply() noexcept;
+  // Same owning thread only. Never applied: return the SAME plan and drop
+  // model lock plus this guard's batch before any progress callback/wait.
+  std::unique_ptr<PreparedCommit> ReleaseUnapplied() noexcept;
 
  private:
   friend class ProfileGpdModelAuthority;

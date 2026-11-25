@@ -22,6 +22,7 @@
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/devices/host_path_file.h"
 #include "xenia/vfs/host_storage_errors.h"
+#include "xenia/vfs/managed_file_service.h"
 
 namespace xe {
 namespace vfs {
@@ -505,7 +506,20 @@ X_STATUS HostPathEntry::RenameEntryInternal(
   return X_STATUS_SUCCESS;
 }
 
+void HostPathEntry::RefreshNamespaceMetadata() { ApplyManagedNamespaceView(); }
+void HostPathEntry::ApplyManagedNamespaceView() {
+  if (!managed_namespace_view_) return;
+  const auto value=managed_namespace_view_->Snapshot();
+  if (!value || value->end_of_file>SIZE_MAX || value->allocation_size>SIZE_MAX ||
+      (value->attributes&(kFileAttributeDirectory|kFileAttributeDevice))) return;
+  auto lock=global_critical_region::AcquireDirect();
+  attributes_=value->attributes;size_=size_t(value->end_of_file);
+  allocation_size_=size_t(value->allocation_size);
+  create_timestamp_=value->create_timestamp;access_timestamp_=value->access_timestamp;
+  write_timestamp_=value->write_timestamp;
+}
 void HostPathEntry::update() {
+  if (managed_namespace_view_) { ApplyManagedNamespaceView(); return; }
   if (device_->ProtectsManagedFile(host_path_)) { return; }
   auto file_info = xe::filesystem::GetInfo(host_path_);
   if (!file_info) {

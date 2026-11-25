@@ -2,6 +2,7 @@
 #ifndef XENIA_KERNEL_NATIVE_AVATAR_CONTRACT_H_
 #define XENIA_KERNEL_NATIVE_AVATAR_CONTRACT_H_
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -90,28 +91,67 @@ bool MatchesNativeAvatarInitScheduleEdge(uint32_t start_sp,uint32_t schedule_sp,
 bool MatchesNativeAvatarInitAllocationEdge(uint32_t schedule_sp,uint32_t allocation_sp,
     uint32_t allocation_lr,uint32_t parameters,uint32_t output);
 
+// One authenticated native call attempt. A Request attempt uses a nonzero
+// invocation; legacy finite Control/resident pairs keep the original zero.
+// These scalar receipts do not issue Task/read/completion authority.
+template <typename Frame>
+struct NativeAvatarCallPair {
+  Frame frame;
+  bool entered = false, returned = false;
+  uint32_t value = 0;
+  uint64_t invocation = 0;
+  bool Enter(Frame actual, uint32_t input, uint64_t serial = 0) {
+    if (entered || returned) return false;
+    frame = actual; value = input; invocation = serial; entered = true; return true;
+  }
+  bool Finish(Frame actual, uint64_t serial = 0) {
+    if (!entered || returned || frame != actual || invocation != serial) return false;
+    returned = true; return true;
+  }
+};
+// Strong target metadata from the actual successful Request entry. This is
+// independent of the Request registry and physical Frame reuse. The caller
+// still proves native entry/code/Task and performs genuine lifetime joins.
+template <typename Request, typename Kind>
+struct NativeAvatarRequestEntry {
+  std::shared_ptr<Request> request;
+  uint64_t request_serial = 0, invocation = 0;
+  Kind kind{};
+  bool Matches(Kind actual) const noexcept {
+    return request && request_serial && invocation && actual != Kind{} &&
+        kind == actual && request->serial == request_serial;
+  }
+};
 // Pairing metadata for already classified native entries only. A passthrough
 // marker cannot admit Avatar work, finish a Request or change native results.
-// The caller retains the real frame/code/lifetime and serializes this stack.
+// Binding is the exact target retained by successful entry, never reacquired
+// from a recycled physical frame at return. Caller serializes this stack and
+// transfers a returned binding into an EMPTY outer holder before lock release.
 enum class NativeAvatarEntryReturn { kAbsent, kOwned, kPassthrough, kMismatch };
-template <typename Frame>
+template <typename Frame, typename Binding = uint64_t>
 class NativeAvatarEntryStack final {
  public:
   bool empty() const noexcept { return frames_.empty(); }
   const Frame& expected() const noexcept { return frames_.back().frame; }
-  void EnterOwned(const Frame& frame) { frames_.push_back({frame,true}); }
+  void EnterOwned(const Frame& frame, Binding binding = {}) {
+    frames_.push_back({frame, true, std::move(binding)});
+  }
   bool EnterPassthroughIfNested(const Frame& frame) {
     if(frames_.empty())return false;
-    frames_.push_back({frame,false});return true;
+    frames_.push_back({frame,false,{}});return true;
   }
-  NativeAvatarEntryReturn ObserveReturn(const Frame& frame) {
+  NativeAvatarEntryReturn ObserveReturn(const Frame& frame,
+                                       Binding* returned_binding = nullptr) {
     if(frames_.empty())return NativeAvatarEntryReturn::kAbsent;
     if(frames_.back().frame!=frame)return NativeAvatarEntryReturn::kMismatch;
-    const bool owned=frames_.back().owned;frames_.pop_back();
+    const bool owned=frames_.back().owned;
+    if (owned && returned_binding)
+      *returned_binding = std::move(frames_.back().binding);
+    frames_.pop_back();
     return owned?NativeAvatarEntryReturn::kOwned:NativeAvatarEntryReturn::kPassthrough;
   }
  private:
-  struct Entry { Frame frame;bool owned; };
+  struct Entry { Frame frame;bool owned;Binding binding; };
   std::vector<Entry> frames_;
 };
 

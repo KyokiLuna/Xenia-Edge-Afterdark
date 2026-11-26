@@ -16,7 +16,7 @@ bool Leaf(std::string_view actual,uint32_t title) {
 }
 }
 std::shared_ptr<NativeProfileGpdReadView> NativeProfileGpdReadView::Capture(
-    std::shared_ptr<xam::ProfileGpdModelAuthority> model,xam::ProfileGpdReadCapture read,
+    std::shared_ptr<const xam::ProfileGpdModelAuthority> model,xam::ProfileGpdReadCapture read,
     uint32_t title,std::error_code& error,const filesystem::SnapshotPublicationSet* members) {
   error.clear();
   if(global_critical_region::is_held_by_current_thread() || !model || !title ||

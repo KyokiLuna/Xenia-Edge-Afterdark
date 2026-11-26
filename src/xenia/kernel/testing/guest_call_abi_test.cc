@@ -394,6 +394,79 @@ TEST_CASE(
   fixture.CheckRestored();
 }
 
+// Uses the real checked packer/Memory and production output-position metadata.
+// The injected executor is not PPC, a current SYSTEM Task, UI success or a
+// native-cache policy oracle. Normal native errors and execution failure remain
+// distinct, and the original caller frame is restored for a subsequent call.
+TEST_CASE("Original HUD keystrokes retain distinct wire outputs and raw returns",
+          "[kernel][guest_call_abi][native_public][native_hud_keystroke]") {
+  const auto ordinal = GENERATE(0x199u, 0x19Du);
+  const auto call = static_cast<kernel::NativeSystemUiPublicCall>(ordinal);
+  const auto* profile = kernel::NativeSystemUiPublicProfile(call);
+  REQUIRE(profile);
+  REQUIRE(profile->keystroke_output_argument);
+  const auto user = GENERATE(2u, 0xFFu);
+  const auto flags = GENERATE(0u, 0x10000000u, 0x20000000u, 0x30000000u);
+  const uint32_t returned =
+      GENERATE(0u, uint32_t(X_ERROR_EMPTY), uint32_t(X_ERROR_DEVICE_NOT_CONNECTED));
+  AbiFixture fixture;
+  constexpr uint32_t stroke = kStackBase + 0x200;
+  const std::vector<uint64_t> values = ordinal == 0x199
+      ? std::vector<uint64_t>{user, stroke}
+      : std::vector<uint64_t>{user, flags, stroke};
+  REQUIRE(profile->argument_count == values.size());
+  REQUIRE(*profile->keystroke_output_argument < values.size());
+  REQUIRE(kernel::NativeSystemUiPublicArgumentsValid(call, values));
+  std::vector<Argument> arguments;
+  for (const auto value : values) arguments.push_back(Argument::UInt32(uint32_t(value)));
+  const std::array<uint8_t, 8> before{0xA5, 0xA5, 0xA5, 0xA5,
+                                       0xA5, 0xA5, 0xA5, 0xA5};
+  // Different native-selected output user proves the wire does not retarget it
+  // to either the caller's user/ANY value or the host physical controller slot.
+  const std::array<uint8_t, 8> output{0x58, 0x15, 0, 0, 0, 1, 3, 0};
+  const auto result = fixture.Call(arguments, [&](uint32_t) {
+    CHECK(fixture.context.r[3] == user);
+    if (ordinal == 0x199) {
+      CHECK(fixture.context.r[4] == stroke);
+      CHECK(fixture.context.r[5] == fixture.original_gprs[2]);
+    } else {
+      CHECK(fixture.context.r[4] == flags);
+      CHECK(fixture.context.r[5] == stroke);
+    }
+    const auto actual = fixture.context.r[3 + *profile->keystroke_output_argument];
+    REQUIRE(actual == stroke);
+    if (!returned) std::memcpy(fixture.memory.TranslateVirtual(stroke),
+                               output.data(), output.size());
+    fixture.context.r[3] = returned;
+    return true;
+  });
+  CHECK(result.executed);
+  CHECK(result.error == GuestCallError::kNone);
+  CHECK(result.value == returned);
+  const auto& expected = returned ? before : output;
+  CHECK(std::memcmp(fixture.memory.TranslateVirtual(stroke), expected.data(),
+                    expected.size()) == 0);
+  fixture.CheckRestored();
+  // A failed resolution/execute is not a normal0 or EMPTY. It cannot consume
+  // the old output as a new stroke, nor corrupt the caller's next real call.
+  const auto failed = fixture.Call(arguments, [](uint32_t) { return false; });
+  CHECK_FALSE(failed.executed);
+  CHECK(failed.error == GuestCallError::kExecutionFailed);
+  CHECK(std::memcmp(fixture.memory.TranslateVirtual(stroke), expected.data(),
+                    expected.size()) == 0);
+  fixture.CheckRestored();
+  const auto retry = fixture.Call(arguments, [&](uint32_t) {
+    CHECK(fixture.context.r[3] == user);
+    CHECK(fixture.context.r[3 + *profile->keystroke_output_argument] == stroke);
+    fixture.context.r[3] = X_ERROR_EMPTY;
+    return true;
+  });
+  CHECK(retry.executed);
+  CHECK(retry.error == GuestCallError::kNone);
+  CHECK(retry.value == X_ERROR_EMPTY);
+  fixture.CheckRestored();
+}
+
 TEST_CASE("Resolve Float32 logical9 leaves its DWORD home untouched",
           "[kernel][guest_call_abi]") {
   AbiFixture fixture;

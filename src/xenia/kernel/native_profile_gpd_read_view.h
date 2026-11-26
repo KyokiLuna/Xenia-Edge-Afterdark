@@ -23,7 +23,7 @@ class NativeProfileGpdReadView final {
   friend class NativeProfileGpdReadFile;
   friend class xam::test::NativeProfileSavePublicationTestAccess;
   static std::shared_ptr<NativeProfileGpdReadView> Capture(
-      std::shared_ptr<xam::ProfileGpdModelAuthority>,xam::ProfileGpdReadCapture,
+      std::shared_ptr<const xam::ProfileGpdModelAuthority>,xam::ProfileGpdReadCapture,
       uint32_t title,std::error_code&,
       const filesystem::SnapshotPublicationSet* members = nullptr);
   std::error_code Available() const;

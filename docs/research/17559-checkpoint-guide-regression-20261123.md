@@ -1,14 +1,17 @@
 # 17559 checkpoint Guide regression — 2026-11-23
 
-Status: the current V147 Linux source passes all seven direct runs and the
-actual ordinary native frame-refresh observation. Its isolated Doritos run
-closes normally with exit zero and no forced signals. Native sign-in still
-does not settle; the game stays at its splash and a Guide attempt has no
-visible result in that unresolved state. This does not establish whether that
-Guide request was accepted. No replacement AppImage is accepted. See the
+Status: the current V149 Linux source passes all seven direct runs. Its
+isolated Doritos run selects the existing QA profile and renders the native
+sign-in error dialog. Ordinary publication reaches both settlement stages
+7/8; the genuine `0x80151000` error is preserved. A follow-up native profile
+request is refused before entry. An explicit SIGTERM received by the test
+supervisor interrupts the run before the Guide check; its sender is unknown.
+This is not a guest exit 143, normal shutdown or Guide acceptance. V148's
+visible Guide and failed close/cancel-reopen checks remain historical results.
+No replacement AppImage is accepted. See the
 [current lifecycle comparison](17559-profile-lifecycle-comparison-20261125.md)
-for source identities, exact runtime scope and the remaining prepared-paint
-handoff. The results below retain their historical scope.
+for source identities, exact runtime scope and the remaining native input and
+inventory boundaries. The results below retain their historical scope.
 
 Historical V131 Linux ELF displays the unsigned dashboard and native
 Guide/profile picker. All five full direct suites and focused CPU/installed

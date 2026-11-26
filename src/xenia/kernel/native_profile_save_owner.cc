@@ -3590,7 +3590,7 @@ std::optional<X_STATUS> NativeProfileSaveOwner::CaptureWriteCheckpoint(KernelSta
   if(global_critical_region::is_held_by_current_thread())return {};
   const auto copy=CaptureParentPictureCopyWrite(kernel,file,buffer,length,output);if(copy)return copy;
   const auto picture=CaptureParentPictureWrite(kernel,file,buffer,length,output);if(picture)return picture;
-  const auto header=CaptureParentHeaderWrite(kernel,file,buffer,length,output);if(header)return header;
+  const auto parent_header=CaptureParentHeaderWrite(kernel,file,buffer,length,output);if(parent_header)return parent_header;
   const auto owner=Lookup(kernel);if(!owner || !kernel || !XThread::IsInThread())return {};
   auto& s=*owner->state_;State::Observation observation(s);if(!observation)return X_STATUS_CANCELLED;
   auto* thread=XThread::GetCurrentThread();auto& c=*thread->thread_state()->context();

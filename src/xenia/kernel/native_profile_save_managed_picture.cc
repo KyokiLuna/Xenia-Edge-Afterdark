@@ -97,12 +97,12 @@ class NativeProfileSaveManagedPicture::ReadAuthority final : public vfs::Managed
  private:
   friend class NativeProfileSaveManagedPicture;
   ReadAuthority(std::weak_ptr<NativeProfileSaveManagedPicture> service,
-      std::shared_ptr<xam::ProfileGpdModelAuthority> model,xam::ProfileGpdReadCapture read,
+      std::shared_ptr<const xam::ProfileGpdModelAuthority> model,xam::ProfileGpdReadCapture read,
       std::shared_ptr<vfs::Device> device,std::string path)
       :service_(std::move(service)),model_(std::move(model)),read_(std::move(read)),
        requested_(std::move(device)),path_(std::move(path)) {}
   const std::weak_ptr<NativeProfileSaveManagedPicture> service_;
-  const std::shared_ptr<xam::ProfileGpdModelAuthority> model_;
+  const std::shared_ptr<const xam::ProfileGpdModelAuthority> model_;
   const xam::ProfileGpdReadCapture read_;
   const std::shared_ptr<vfs::Device> requested_;const std::string path_;
   mutable std::atomic<bool> consumed_{false};

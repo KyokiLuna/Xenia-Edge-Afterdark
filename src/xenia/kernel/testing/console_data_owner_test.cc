@@ -717,8 +717,16 @@ struct EpochFixture {
 } // namespace
 TEST_CASE("Fresh profile CON epoch atomically retains signed map and exact legacy recovery through restart",
           "[console_owner][folder_con][fresh_con_epoch][persistence]") {
-  EpochFixture f;std::error_code error;
-  auto operation=f.Prepare(error);REQUIRE(operation);REQUIRE_FALSE(error);
+  EpochFixture f;std::error_code error;bool unowned_capacity=false;
+  SECTION("genuine zero declared metadata retains native default geometry") {f.metadata.content_size=0;}
+  SECTION("bounded explicit declaration is preserved independently of member payload sum") {f.metadata.content_size=7;}
+  SECTION("unowned declared raw capacity refuses before publication") {f.metadata.content_size=UINT64_MAX;unowned_capacity=true;}
+  auto operation=f.Prepare(error);
+  if(unowned_capacity) {
+    REQUIRE_FALSE(operation);REQUIRE(error==std::errc::operation_not_supported);
+    CHECK(f.HeaderBytes()==f.legacy);f.CheckMembers();return;
+  }
+  REQUIRE(operation);REQUIRE_FALSE(error);
   REQUIRE(operation->receipt().stage_created);REQUIRE(operation->receipt().recovery_durable);
   CHECK(f.HeaderBytes()==f.legacy);f.CheckMembers();
   auto applied=operation->Commit();REQUIRE_FALSE(applied.error);REQUIRE(applied.published);REQUIRE(applied.durable);
@@ -731,9 +739,10 @@ TEST_CASE("Fresh profile CON epoch atomically retains signed map and exact legac
   constexpr auto descriptor_offset=offsetof(vfs::XContentMetadata,volume_descriptor);
   const auto* original=reinterpret_cast<const uint8_t*>(&f.metadata);
   for(size_t n=0;n<sizeof(f.metadata);++n) {
-    if((n>=content_offset && n<content_offset+8) || (n>=descriptor_offset && n<descriptor_offset+36)) continue;
+    if(n>=descriptor_offset && n<descriptor_offset+36) continue;
     REQUIRE(bytes[0x344+n]==original[n]);
   }
+  CHECK(xe::load_and_swap<uint64_t>(bytes.data()+0x344+content_offset)==uint64_t(f.metadata.content_size));
   const auto published=bytes;operation.reset();applied={};f.Restart();
   auto reopened=f.Load(error);REQUIRE(reopened);REQUIRE_FALSE(error);
   REQUIRE(reopened->original_legacy_header==f.legacy);REQUIRE(reopened->declared_creation==EpochFixture::kDeclared);

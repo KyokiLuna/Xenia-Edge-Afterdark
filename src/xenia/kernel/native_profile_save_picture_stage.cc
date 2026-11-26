@@ -5,6 +5,7 @@
 #include <new>
 #include <random>
 #include "xenia/base/mutex.h"
+#include "xenia/base/clock.h"
 #include "xenia/base/string.h"
 #include "xenia/kernel/native_profile_save_publication.h"
 #include "xenia/kernel/xam/profile_picture_codec.h"
@@ -254,6 +255,15 @@ uint32_t NativeProfileSavePictureStage::OpenManagedView(std::shared_ptr<vfs::Hos
     if(output_revision_==UINT64_MAX)return vfs::HostStorageError(Error(std::errc::state_not_recoverable));
     ++output_revision_;error=stage_->ResizeResult(0);if(error) {return vfs::HostStorageError(error);}
   }
+  if(!existed) {
+    // The original namespace disposition has now performed its real creation
+    // effect. Use the emulated filesystem clock once; the temporary recovery
+    // file's creation/ctime and future opens cannot supply native birth. A
+    // later failed open/publication retains this same staged effect, never a
+    // successful canonical-file or native-completion claim.
+    new_creation_filetime_=Clock::QueryGuestSystemTime();
+    creation_timestamp_=*new_creation_filetime_;
+  }
   logical_exists_=true;
   const auto actual=stage_->QueryMetadata(error);if(!actual) {return vfs::HostStorageError(error);}
   vfs::File::Information info{};info.attributes=vfs::kFileAttributeNormal;info.create_timestamp=creation_timestamp_;
@@ -350,7 +360,7 @@ NativeProfileSavePictureStage::CaptureWriteCheckpoint(std::error_code& error) {
     const auto metadata=stage_->QueryMetadata(error);if(!metadata)return {};
     if(metadata->size!=bytes.size()) {error=Error(std::errc::state_not_recoverable);return {};}
     return std::shared_ptr<const NativeProfilePictureCheckpoint>(new NativeProfilePictureCheckpoint(
-        weak_from_this(),output_revision_,before_,kind_,std::move(bytes),*metadata));
+        weak_from_this(),output_revision_,before_,kind_,std::move(bytes),*metadata,new_creation_filetime_));
   } catch(const std::bad_alloc&) {error=Error(std::errc::not_enough_memory);return {};}
 }
 std::optional<filesystem::RetainedFileMetadata> NativeProfileSavePictureStage::Query(std::error_code& error) {

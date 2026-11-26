@@ -421,6 +421,26 @@ arguments = [0, 0, 0]
 result = "any"
 caller = "original"
 
+# These are distinct original HUD exports, not aliases of193. The real native
+# UI controller selects users, output user bytes and remaps in these bodies.
+[[phase.call]]
+identity = "native-public-input-keystroke-hud"
+rva = 0x104AE0
+code_size = 0x194
+code_sha256 = "f68865dbc1d3e0e8468991204bbe3336ac83c42117fb1f7a62f5da536533520c"
+arguments = [0, 0]
+result = "any"
+caller = "original"
+
+[[phase.call]]
+identity = "native-public-input-keystroke-hud-ex"
+rva = 0x104C78
+code_size = 0xB8
+code_sha256 = "49b5e90fdabc2f60c8d7f763c0bbb9784c51c9c7098d3bf9bdde3a42142b4da4"
+arguments = [0, 0, 0]
+result = "any"
+caller = "original"
+
 # Public UI state is queried on its actual synchronous TITLE/SYSTEM caller.
 # This deferred leaf is metadata only, never a boot initializer or UI policy.
 [[phase]]

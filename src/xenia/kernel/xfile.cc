@@ -382,8 +382,8 @@ XFile::XFile(KernelState* kernel_state, vfs::File* file, bool synchronous,
   assert_not_null(async_event_);
   if (InvokeHostCall([&] { RegisterCheckpointIo(); }) !=
       HostCallOutcome::kReturned) {
-    std::lock_guard lock(kernel_state()->file_io_mutex_);
-    kernel_state()->file_io_overflow_ = true;
+    std::lock_guard lock(this->kernel_state()->file_io_mutex_);
+    this->kernel_state()->file_io_overflow_ = true;
   }
 }
 

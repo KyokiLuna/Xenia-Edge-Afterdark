@@ -32,6 +32,12 @@ class NativeProfilePictureCheckpoint final {
   std::span<const uint8_t> bytes() const { return bytes_; }
   const auto& before() const { return before_; }
   filesystem::ProfileArtifactKind kind() const { return kind_; }
+  // Issued only by this SAME stage's genuine first absent-to-created native
+  // open. Explicit NEW logical creation, never recovered host ctime or an
+  // existing member's historical FAT birth. Final map publication is separate.
+  const std::optional<uint64_t>& new_creation_filetime() const {
+    return new_creation_filetime_;
+  }
   const filesystem::RetainedFileMetadata& metadata() const { return metadata_; }
   // Metadata only: no I/O or path recapture. Actual logical stage/source epoch
   // and byte/time revision must match. The caller separately joins physical
@@ -43,15 +49,18 @@ class NativeProfilePictureCheckpoint final {
       uint64_t revision,
       std::shared_ptr<const filesystem::HostStorageSnapshotToken> before,
       filesystem::ProfileArtifactKind kind, std::vector<uint8_t> bytes,
-      filesystem::RetainedFileMetadata metadata)
+      filesystem::RetainedFileMetadata metadata,
+      std::optional<uint64_t> new_creation_filetime)
       :stage_(std::move(stage)),revision_(revision),before_(std::move(before)),
-       kind_(kind),bytes_(std::move(bytes)),metadata_(metadata) {}
+       kind_(kind),bytes_(std::move(bytes)),metadata_(metadata),
+       new_creation_filetime_(new_creation_filetime) {}
   const std::weak_ptr<NativeProfileSavePictureStage> stage_;
   const uint64_t revision_;
   const std::shared_ptr<const filesystem::HostStorageSnapshotToken> before_;
   const filesystem::ProfileArtifactKind kind_;
   const std::vector<uint8_t> bytes_;
   const filesystem::RetainedFileMetadata metadata_;
+  const std::optional<uint64_t> new_creation_filetime_;
 };
 // One real fixed native PNG output under the SAME original SAVE owner. This
 // is not the CM thumbnail participant, a native request, or writer admission.
@@ -108,6 +117,10 @@ class NativeProfileSavePictureStage final
   std::unique_ptr<filesystem::HostStorageSnapshotStage> stage_;
   std::filesystem::path artifact_;
   uint64_t creation_timestamp_=0;
+  // Actual logical creation is distinct from private temporary-file creation.
+  // Once issued before the first File is exposed, this fact is immutable for
+  // the same stage; reopening/overwrite never remints a member's birth.
+  std::optional<uint64_t> new_creation_filetime_;
   // Advance BEFORE any admitted nonempty write/resize/nonzero time update:
   // a failed entered operation may have partial/unknown effects. Empty writes
   // and all-zero time requests do not invalidate a genuine unchanged epoch.

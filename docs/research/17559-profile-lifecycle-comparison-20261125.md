@@ -1,18 +1,34 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V147's ordinary native frame-refresh and transport-lifetime changes
-build and pass all seven direct test runs. The isolated Doritos run now
-observes completed refresh and all eleven readiness predicates at two cuts,
-and a manual owned WM close returns zero with full OS reaping and no forced
-signals. Sign-in still does not settle: prepared-query retries reach different
-retirement/producer gates, new-paint drain is not observed, and settlement
-stages 7/8 are absent. The game remains at its splash; no Guide is visible
-after a button attempt in that unresolved state. That attempt alone does not
-establish accepted Guide ownership or a rendering cause. The genuine native
-error remains `0x65B` / extended and protocol `0x80151000`. No Live success,
-requested-versus-canceled outcome or networking cause is inferred from it.
-The next review covers source retirement, prepared query and new-paint
-ownership together, including actual readers versus retained immutable data.
+Status: V149 restores the original native HUD keystroke family and passes all
+seven direct runs. Its isolated Doritos test selects the existing QA profile
+and displays the native sign-in error dialog. The genuine ordinary request
+returns `0x80151000`, while Job 4 completes prepared query and both settlement
+stages 7/8, reaching Committed with maps/writers available. This is completed
+error presentation, not successful local or Live sign-in. A later native
+profile request (`20B`, flags `0x63`, null overlap) is refused by the current
+request capture before native entry. Its complete producer/consumer contract
+is the next implementation boundary.
+
+The test supervisor receives an explicit SIGTERM after 218.78 seconds, before
+the Guide check. Root requested no window close or termination. The sender is
+unknown; neither memory/disk guards nor the test deadline explain the recorded
+stop. Its downstream owned cleanup sends TERM/KILL and reports no remaining
+live processes, with `leader_reaped=false` and actual exit status unavailable.
+This is an interrupted run, not a guest exit 143 or normal shutdown. The
+next test needs a sender receipt for any supervisor interruption.
+
+V148's earlier run visibly opened Guide but left its image after B, A and
+Guide attempts; no later accepted hide was captured. Cancel/reopen displayed
+only Create/Download, so ordinary selection was not exercised in that run.
+Its manual WM close exited zero. These observations do not establish current
+Guide close/input return, a permanent worker freeze or every shutdown path.
+
+V147 previously exercised ordinary sign-in and observed genuine error `0x65B`
+with extended/protocol `0x80151000`. Its frame-refresh and transport-lifetime
+changes passed engineering tests and normal Doritos shutdown, but did not
+settle that sign-in. Those observations are historical, not a V148 retest or
+evidence of a Live/networking cause.
 
 V145's earlier loader correction reached real native completion, changed the
 protocol error from `0x80150013` to `0x80151000`, and handed off to the dashboard
@@ -48,10 +64,10 @@ rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The current tested V147 source map is
-`cfabb5f1ec91e30f5d0e8c677b0f101c72f3c8c970bacb3893dc58bf6082bfdb`
+The current tested V149 source map is
+`f21203fd3de45d8af327524c24acc790d5a55951681a79f2f3ff1ca072d51347`
 (2,430 source files). All seven direct runs passed under receipt
-`4f33c732c4638664b1395f5503cebae9d9dc0da548287822163a129326bcf029`.
+`4768e36d65693af8bcdda21f0256ee284728954395431be4309989da5c121beb`.
 They establish component coverage, not successful ordinary sign-in, avatar
 rendering, save persistence or a packaged AppImage. Historical V131 source and
 test identities remain in its labeled section below.
@@ -1168,6 +1184,155 @@ justify forcing Live state.
 | Root controller/visual/OS assessment | `73f5c0de8424d8f590bdead1d3a24fc4ce396c11e9ffa1da3761eda4f115be98` |
 | Final source-bound protocol assessment | `474fae3421410e43a68a8492af2864a483d1cf59004e4f3d76870998a166880b` |
 | DCC exact script/native bindings | `7e838797f1086c6b9b9ade6b0e9180c3030a6874321366fe0b3bcb12cf22a343` |
+
+## V148 exact SUI notification consumer and current runtime
+
+The matching SYSTEM UI function `0x90117740` consumes GetNext at return
+`0x90117798`. Its complete 164-byte body treats event B separately; non-B
+events return synchronously without reading the data output or transferring
+asynchronous ownership. The prepared consumer policy now recognizes this
+exact module/import/body/own-return tuple alongside its two existing consumers.
+All 26 authority predicates remain required. It does not bypass source,
+publication, paint, Task completion or real data-reader duties. The diagnostic
+capacity follows the number of policy entries instead of silently omitting
+the added entry.
+
+One grouped bridge fixture exercises pending delivery, producer finish,
+references, cancellation, errors, replacement, reap, successor and restart.
+It does not execute the private native policy or PowerPC body. Actual runtime
+entry/own-return rows independently satisfy all 26 policy predicates, but do
+not export the event/BOOL/token; they do not independently prove each event-A
+delivery.
+
+The app build and all seven direct runs pass: base 334 cases / 28,711
+assertions; network 125 / 11,212; kernel 1,489 / 96,185; VFS 136 / 9,736;
+UI 124 / 4,863; focused CPU 5 / 130; installed-system focus 220 / 26,330.
+The focused selections overlap the full suites; the complete CPU corpus was
+not run. A shared current-cohort harness also passed ten fixtures, actual
+qualification, preflight and the owned native launch. Current qualification
+facts are data; historical runtime predicate parsers are no longer regenerated
+for each cohort. This research harness is not emulator runtime work.
+
+The actual Doritos test used eight neutral-ended controller batches with
+fresh owned process/window checks. The initial picker displayed existing
+profiles. After cancellation, its reopened list contained only Create Profile
+and Download Profile. It was canceled again without selecting a profile.
+Guide then visibly opened over Doritos, but B, A and Guide attempts left its
+image present. Five native visibility changes were accepted in order
+`1,0,1,0,1`; no later hide is captured. The raw host B edge is recorded, but
+its later native consumption is not. The presenter continues submitting a
+qualified visible epoch successfully. These cuts do not establish a stale
+image after an accepted close, an incorrect controller slot or a permanently
+frozen worker.
+
+Only bootstrap Job 3 ran. It completed source retirement/prepared query,
+published source 3, and reached Committed/Open with no pending manager job.
+There was no ordinary logon attempt, Job 4 or settlement-stage 7/8 exercise.
+No ordinary sign-in regression or success can be inferred from this run.
+The owned manual WM close exited zero after 518.60 seconds, with full OS
+reaping, no forced signals and preserved source/configuration/products/index
+and read-only inputs. Gameplay, Avatar Editor, OSK, Xbox Home, profile save
+and AppImage acceptance remain unestablished.
+
+Separate private HDD work remains unactivated. Its compile-only pass attempted
+all 41 translation units through a private Clang overlay: 35 passed and six
+failed. It produced no objects or links and preserved the checkout and build.
+The failed units require source/API and direct dependency corrections; the
+candidate is not build-ready or accepted as native storage. The combined
+gate still includes both writable devices, mutations/recovery, native selection,
+complete profiles/avatars, media playback and both libraries. The native AAC
+update remains a genuine missing prerequisite. No new AppImage or release is
+created by this source sync.
+
+| V148 record | SHA256 |
+| --- | --- |
+| Tested source map | `be892b99cf631e2fddb2a46138227c8ac2f22c9817c6a464d42fbeb1a6ecd417` |
+| Build | `6bb61d5767e6d31d6a06cfbcda6c6270cacabb44fc1d6e9c231c5f65131b38eb` |
+| All seven direct runs | `03a61b2438f3bec345e8d5acfdc842caf3058aadf6b4be1e2517ec3e3dc0d620` |
+| ELF, preserved compilation base `2418ae0aa3` | `526910e9da27e80a46a7466612b6e4e29bc8b070319dd4760b70e26204ae2d62` |
+| Actual native result | `795c66be53542903954a05829bbdc31bddee25abfe0ae6ba97c8d885b996bebc` |
+| Root controller/visual/OS assessment | `9b1a44658f1e20ecb52361e0e92e872746f5df0e4cfc8ccde7783ba0a6b93bec` |
+| Final source-bound protocol assessment | `4747cbeaf628e7dc64855bfe429d2407bb82a44183bdb915120c27c6b6626448` |
+| Input/cancel/presentation contract audit | `423217d8d0e244eb340e2c099c41adda2f869a080787ad39433d88f75cde7770` |
+| Private HDD compile-only results | `6a1059aa1f619a5e3f41556925d9c74eb1b9e4138451b4460a503d382b6fb79b` |
+
+## V149 original HUD input family and ordinary error settlement
+
+Original `199` and `19D` are distinct native functions. Their controller
+globals, output-user restoration and key translation were lost when the HLE
+wrappers reduced both calls to `193` flags. The active path now executes each
+exact original body through the existing prepared call engine. The inactive
+fallback remains available. Export `199` has two arguments with its output in
+argument 1; `193`, `198` and `19D` use argument 2. The shared profile metadata
+now identifies those outputs so successful TITLE/host-modal suppression uses
+the correct buffer. Native errors, caller context and ownership remain real.
+The source startup plan and actual private runtime plan both contain the two
+new deferred original-caller entries; their exact bytes are
+`500784d11fc289d248f3d89c4e1eaa3d1d7237d7518d5964569e74ee791401ce`.
+
+The coherent six-path change builds and passes all seven direct runs: base
+334 cases / 28,711 assertions; network 125 / 11,212; kernel 1,490 / 100,845;
+VFS 136 / 9,736; UI 124 / 4,863; focused CPU 5 / 130; installed-system
+focus 221 / 30,986. One new checked-packer/Memory case covers both wire layouts,
+outputs, errors, execution failure, frame restoration and re-entry. It does
+not execute native PowerPC or test native policy by itself. The shared harness
+V5 independently passes eleven fixtures, actual qualification and preflight;
+its startup plan is an explicit pinned input rather than an old fixed path.
+
+The actual run used five neutral-ended controller batches. The first picker
+displayed existing profiles. Navigation visibly selected QA62 before A was
+pressed. Acceptance displayed the native Xbox Live error asking whether to
+exit the session and test the connection. Down+A attempted No, but no
+post-attempt screenshot or result was obtained. No Guide action was attempted.
+
+The first real ordinary `224` request preserves native return `0x80151000` and
+CompleteIO `0x65B` / extended `0x80151000`. Job 4 has all eleven readiness bits
+and all fourteen prepared-query bits at two cuts. Actual settlement stages
+7/8 follow, with Committed/error-zero manager state and maps/writers available.
+The error-zero manager state is not a successful sign-in result. A later
+`20B`, flags `0x63`, null-overlap request fails current capture before native
+entry: refusal 21, generic `operation_not_supported` 95 and `0x80004004`.
+That failure does not identify its producer module or prove that it is the
+dialog's No handler; matching virtual addresses alone are insufficient.
+
+After 218.78 seconds the supervisor records an incoming SIGTERM, then its
+owned cleanup sends TERM/KILL. The report's returned 143 encodes that signal;
+the actual guest exit code is unavailable. No normal WM close was requested.
+The RAM low-water mark is 8.19 GB, log size 2.64 MB and working-directory
+growth zero; the recorded reason is an explicit signal, not a resource guard
+or deadline. Cleanup reports no remaining live processes but
+`leader_reaped=false`. The controller helper closed normally after verified
+neutral cleanup. Source, configuration, products, index and read-only inputs
+were preserved. No successful shutdown, crash diagnosis, game continuation,
+current Guide result, Avatar Editor or AppImage acceptance follows.
+
+Separate HDD V11 work passes all 41 artifact-free syntax checks after the
+reviewed API, native declared-size, new-picture birth and direct mbedtls
+dependency corrections. Actual CMake regeneration, linking and native control
+activation remain untested. The whole intermediate-flush/cache/model/Header
+successor and native map metadata consumers are still under implementation.
+
+The read-only upstream refresh checked `edge` at
+[`40bce1707737e47e25b59db003d071e84ca62b03`](https://github.com/has207/xenia-edge/commit/40bce1707737e47e25b59db003d071e84ca62b03),
+three commits beyond the preceding review. The GPU derivative correction is
+goal-compatible and awaits qualified rendering tests. The new memory-statistics
+corpus and free-page correction belong with the previously deferred physical
+partition/window family, which this fork has not adopted. None is included by
+this source sync; end-gate accounting still requires a fresh review.
+
+| V149 record | SHA256 |
+| --- | --- |
+| Tested source map | `f21203fd3de45d8af327524c24acc790d5a55951681a79f2f3ff1ca072d51347` |
+| Build | `ed4f8f372fe38454eb45adfd7c4157aa6fbfe8931bcabdc37e88a4e5052ea245` |
+| All seven direct runs | `4768e36d65693af8bcdda21f0256ee284728954395431be4309989da5c121beb` |
+| ELF, preserved compilation base `2418ae0aa3` | `4addbafebda49927e4c557b66910aca998847ba45ae0aedac39074702b59cd36` |
+| Actual interrupted native result | `d503a5a54ce3f9ed7c00d806b04ff2d9f2c0982aaea52c52428254d2ff0e7a50` |
+| Root controller/visual/OS assessment | `07ffc7385ff4f0f0ef44ef5de9d1875d5a6b65db2e215fee891aa3f8c7e8d6cb` |
+| Final source-bound protocol assessment | `f1dd8a38efdc232446cea0317829d51a40d9abb2399d2ab8f538cbeb83b1b769` |
+| Supervisor signal intake contract | `bde23ffd220fdd66b4dcc348deb3a331e41579531458f2d478761eee2f278013` |
+| Private HDD V11 compile-only results | `b887f06244e3970d3439e78640559fdc300b66f8fa6b85b570279e117e258680` |
+
+No replacement checkpoint or gate closure is claimed.
 
 ## Evidence
 

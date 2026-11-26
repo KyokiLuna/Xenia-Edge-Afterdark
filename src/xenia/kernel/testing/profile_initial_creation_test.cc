@@ -24,10 +24,12 @@
 #include <utility>
 #include "xenia/kernel/xthread.h"
 #include "xenia/kernel/xfile.h"
+#include "xenia/kernel/info/file.h"
 #include "xenia/kernel/xam/host_ui_fallback.h"
 #include "xenia/ui/windowed_app_context.h"
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/base/byte_order.h"
+#include "xenia/base/clock.h"
 #include "xenia/base/mutex.h"
 #include "xenia/base/xdbf_view.h"
 #include "xenia/base/string.h"
@@ -750,7 +752,7 @@ class NativeProfileSavePublicationTestAccess {
       std::error_code& error,std::shared_ptr<const save_detail::SemanticUses::Span> semantic,
       std::vector<filesystem::ProfileArtifactKind> required={},uint64_t domain=1,bool deferred=false) {
     NativeProfileSavePublication::SystemFileIssuer issuer;
-    issuer.requested_device=source->writer().model->storage()->device();
+    issuer.requested_device=NativeProfileSaveWriterTestAccess::Writer(source).model->storage()->device();
     issuer.source=std::move(source);issuer.actual_before_file=std::move(before);
     issuer.domain=domain;issuer.root_generation=2;issuer.invocation=3;issuer.title=title;
     issuer.required_artifacts=std::move(required);issuer.actual_semantic_use=std::move(semantic);
@@ -2022,12 +2024,25 @@ TEST_CASE("Native pending ownership excludes host flush and preserves exact seal
       REQUIRE(avatar_file->SetLength(0)==X_STATUS_ACCESS_DENIED);REQUIRE(CreationRead(package/"avtr_64.png")==avatar_bytes);
       const auto large_context=NativeProfileSavePublicationTestAccess::PictureContext(large_service,pair_owner,device,"pp_64.png",error);
       REQUIRE(large_context.managed_authority);REQUIRE_FALSE(error);
+      const auto before_native_create=Clock::QueryGuestSystemTime();
       REQUIRE(fs->OpenFile(root,"pp_64.png",vfs::FileDisposition::kOverwriteIf,
           vfs::FileAccess::kGenericRead|vfs::FileAccess::kGenericWrite,false,true,&file,&action,large_context)==X_STATUS_SUCCESS);
       REQUIRE(file);REQUIRE(action==vfs::FileAction::kCreated);
       struct Close {vfs::File* file;~Close(){if(file)file->Destroy();}} close{file};
+      const auto after_native_create=Clock::QueryGuestSystemTime();
+      vfs::File::Information created_info{};REQUIRE(file->QueryInformation(&created_info)==X_STATUS_SUCCESS);
+      REQUIRE(created_info.create_timestamp>=before_native_create);
+      REQUIRE(created_info.create_timestamp<=after_native_create);
+      const auto genuine_new_birth=created_info.create_timestamp;
       REQUIRE(file->SetLength(pair->large.size())==X_STATUS_SUCCESS);size_t count=0;
       REQUIRE(file->WriteSync(pair->large,0,&count)==X_STATUS_SUCCESS);REQUIRE(count==pair->large.size());
+      REQUIRE(file->Flush()==X_STATUS_SUCCESS);
+      const auto created_checkpoint=NativeProfileSavePublicationTestAccess::PictureOutputCheckpoint(
+          *file,pair_owner,filesystem::ProfileArtifactKind::kPersonal64,error);
+      REQUIRE(created_checkpoint);REQUIRE_FALSE(error);REQUIRE_FALSE(created_checkpoint->before()->exists());
+      REQUIRE(created_checkpoint->new_creation_filetime().has_value());
+      REQUIRE(*created_checkpoint->new_creation_filetime()==genuine_new_birth);
+      REQUIRE(created_checkpoint->CheckCurrent(error));REQUIRE_FALSE(error);
       vfs::File* reused=nullptr;
       REQUIRE(fs->OpenFile(root,"pp_64.png",vfs::FileDisposition::kOverwriteIf,
           vfs::FileAccess::kGenericWrite,false,true,&reused,&action,large_context)==X_STATUS_ACCESS_DENIED);REQUIRE_FALSE(reused);
@@ -2045,6 +2060,9 @@ TEST_CASE("Native pending ownership excludes host flush and preserves exact seal
           vfs::FileAccess::kGenericRead,false,true,&file,&action,read_back)==X_STATUS_SUCCESS);
       REQUIRE(file);close.file=file;REQUIRE(action==vfs::FileAction::kOpened);
       REQUIRE(file->ReadSync(retained,0,&retained_count)==X_STATUS_SUCCESS);REQUIRE(retained==pair->large);
+      vfs::File::Information reopened_info{};REQUIRE(file->QueryInformation(&reopened_info)==X_STATUS_SUCCESS);
+      REQUIRE(reopened_info.create_timestamp==genuine_new_birth);
+      REQUIRE(created_checkpoint->CheckCurrent(error));REQUIRE_FALSE(error);
       file->Destroy();close.file=nullptr;
       const auto collide=NativeProfileSavePublicationTestAccess::PictureContext(large_service,pair_owner,device,"pp_64.png",error);
       REQUIRE(collide.managed_authority);REQUIRE_FALSE(error);
@@ -2657,6 +2675,7 @@ TEST_CASE("Early parent admission precedes actual PNG open and shares raw Header
         REQUIRE(picture_output->CheckCurrent(error));REQUIRE_FALSE(error);
         REQUIRE(picture_output->before()->relative()=="avtr_64.png");
         REQUIRE(picture_output->kind()==filesystem::ProfileArtifactKind::kAvatar64);
+        REQUIRE_FALSE(picture_output->new_creation_filetime()); // Existing-row birth is never inferred from host ctime.
         REQUIRE(std::equal(picture_output->bytes().begin(),picture_output->bytes().end(),output.begin(),output.end()));
         REQUIRE_FALSE(NativeProfileSavePublicationTestAccess::PictureOutputCheckpoint(*picture->file(),owner,
             filesystem::ProfileArtifactKind::kPublic64,error));REQUIRE(error==std::errc::invalid_argument);
@@ -2838,7 +2857,7 @@ TEST_CASE("Early parent admission precedes actual PNG open and shares raw Header
               no_gpd_write?nullptr:gpd_service,no_gpd_write?std::span<const uint8_t>{}:std::span<const uint8_t>(before));
           REQUIRE(ready==X_STATUS_SUCCESS);
           REQUIRE_FALSE(writer.model->Pending(error));REQUIRE_FALSE(error);
-          CHECK(raw->file()==raw_backend);CHECK(!gpd || gpd->file()==gpd_backend);
+          CHECK(raw->file()==raw_backend);CHECK((!gpd || gpd->file()==gpd_backend));
           actual_header.resize(expected_header.size());
           REQUIRE(raw->file()->ReadSync(actual_header,0,&count)==X_STATUS_SUCCESS);
           REQUIRE(count==expected_header.size());REQUIRE(actual_header==expected_header);

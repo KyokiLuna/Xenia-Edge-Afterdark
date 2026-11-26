@@ -92,10 +92,11 @@ class NativeIdentityListenerBridgeTestAccess final {
     CHECK(bridge.sources_[oa->slot]==a);CHECK(bridge.origins_[oa->slot]==*oa);
     CHECK(bridge.sources_[ob->slot]==b);CHECK(bridge.origins_[ob->slot]==*ob);
   }
-  static void TypedScalarDelivery(uint32_t variant){
+  static void TypedScalarDelivery(uint32_t variant,bool sui_caller=false){
     using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
     const L::Root root{11,13,17};B bridge(root);auto life=std::make_shared<int>(23);
-    const auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life));
+    auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,life));
+    const std::weak_ptr<const NativeIdentityEventSource> source_lifetime=source;
     const auto origin=bridge.AdoptSource(source);REQUIRE(origin);
     const auto registration=ListenerFrame(root,0x816A8498,life);const B::Area area{0x90005000,0xA,0xA};
     const auto listener=bridge.BeforeRegistration(registration,0x81A821FC,0x90004000,std::span(&area,1),life);
@@ -128,8 +129,11 @@ class NativeIdentityListenerBridgeTestAccess final {
     if(variant==4 || variant==21){whole=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(whole_key,source,life));work=bridge.AdoptWholeWork(whole);REQUIRE(work);}
     const auto mode=variant==1?B::ScalarDeliveryMode::kNone:
         variant==15?static_cast<B::ScalarDeliveryMode>(2):B::ScalarDeliveryMode::kSystemDiscardedIdentityHint;
+    // The SUI fixture supplies the proven caller shape only. It does not
+    // execute Owner's module/code/import admission or the native caller body.
+    const uint32_t caller_lr=sui_caller?0x90117798u:0x9124F05Cu;
     const auto next=std::shared_ptr<const B::Frame>(new B::Frame(root,101,103,107,41,0x90002000,
-        0x707DF640,0x9124F05C,0x816A8C00,life,variant==14?1u:2u,mode));
+        0x707DF640,caller_lr,0x816A8C00,life,variant==14?1u:2u,mode));
     std::array<uint8_t,4> selected{0,0,0,0xA},actual_data{0,0,0,uint8_t(data)},public_id{0,0,0,0};
     std::atomic<void*> slot{nullptr};
     const uint32_t id_output=0x707DF690,data_output=variant==12?0u:0x707DF694u;
@@ -159,14 +163,22 @@ class NativeIdentityListenerBridgeTestAccess final {
     if(variant==1 || variant==2 || variant==3 || variant==10 || variant==16)CHECK(before_return.orphaned);
     // Original inverse mapping writes the caller output before inner return.
     public_id=variant==17?std::array<uint8_t,4>{0x8A,0,0,0xA}:
-        (variant==4 || variant==21)?std::array<uint8_t,4>{0,0,0,0xB}:std::array<uint8_t,4>{0,0,0,0xA};
+        (variant==4 || variant==21 || (sui_caller && variant==2))?std::array<uint8_t,4>{0,0,0,0xB}:std::array<uint8_t,4>{0,0,0,0xA};
     regs.lr=0x816A8C94;regs.r[1]+=0xB0;regs.r[3]=0;REQUIRE(B::FastReturn(cell,regs,0x816A8648));
     if(variant!=6){
       REQUIRE(bridge.BeforeReferenceRelease(cell,0x90004000));
       if(variant==8){const auto destroy=ListenerFrame(root,0x816A88E8,life);REQUIRE(bridge.BeforeDestruction(destroy,0x90004000));REQUIRE(bridge.DestructionReturned(0x90004000,*destroy));}
       REQUIRE(bridge.ReferenceReleaseReturned(cell,0x90004000));
     }
-    if(variant==9)REQUIRE(bridge.FinishSourceAfterDescendants(expected_origin));
+    if(variant==9 || (sui_caller && variant==0))REQUIRE(bridge.FinishSourceAfterDescendants(expected_origin));
+    if(sui_caller && variant==0){
+      // A producer's real finish cannot release its already-dequeued scalar
+      // dependency while GetNext's actual own-return is still pending.
+      source.reset();expected_source.reset();
+      CHECK_FALSE(source_lifetime.expired());
+      {auto not_yet=bridge.ReapOnHostOutsideGuestLocks();}
+      CHECK_FALSE(source_lifetime.expired());
+    }
     if(variant==19){
       // After native dequeue, a separate serialized native publication may
       // reuse the empty Event slot before this older API returns.
@@ -177,7 +189,7 @@ class NativeIdentityListenerBridgeTestAccess final {
     }
     auto returned=next;
     if(variant==7)returned=std::shared_ptr<const B::Frame>(new B::Frame(root,101,103,107,41,0x90002000,
-        0x707DF640,0x9124F05C,0x816A8C00,life,2,mode));
+        0x707DF640,caller_lr,0x816A8C00,life,2,mode));
     const bool complete=bridge.OuterReturned(cell,returned,variant==5?0u:1u);
     if(variant==5 || variant==6 || variant==7 || variant==17){CHECK_FALSE(complete);CHECK(bridge.lost());CHECK(slot.load()==cell);CHECK(cell->scalar_delivery_.origin==expected_origin);return;}
     REQUIRE(complete);CHECK(slot.load()==nullptr);CHECK_FALSE(cell->scalar_delivery_.origin.serial);
@@ -206,8 +218,21 @@ class NativeIdentityListenerBridgeTestAccess final {
     if(variant==1 || variant==2 || variant==3 || variant==10 || variant==16){
       B::SourceProducerObservation after;CHECK_FALSE(bridge.SourceProducerQuiescent(expected_origin,&after));CHECK(after.orphaned);
       CHECK_FALSE(bridge.SourceOnlyProducer(expected_origin));CHECK_FALSE(bridge.OldSourceDataQuiescent(expected_origin));
-    }else if(variant==9){
-      auto retired=bridge.ReapOnHostOutsideGuestLocks();CHECK(retired.count>0); // producer+delivery both genuinely ended
+    }else if(variant==9 || (sui_caller && variant==0)){
+      {
+        auto retired=bridge.ReapOnHostOutsideGuestLocks();CHECK(retired.count>0); // producer+delivery both genuinely ended
+        if(sui_caller && variant==0)CHECK_FALSE(source_lifetime.expired());
+      } // actual source holders are dropped outside bridge/native locks
+      if(sui_caller && variant==0){
+        CHECK(source_lifetime.expired());
+        CHECK_FALSE(bridge.SourceProducerQuiescent(expected_origin));
+        const auto successor=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,32,38,life));
+        const auto successor_origin=bridge.AdoptSource(successor);REQUIRE(successor_origin);
+        CHECK(*successor_origin!=expected_origin);CHECK(bridge.SourceOnlyProducer(*successor_origin));
+        // Restart owns a new root generation, never an old scalar/read grant.
+        B restarted({root.kernel,root.domain,root.generation+1});
+        CHECK_FALSE(restarted.SourceProducerQuiescent(*successor_origin));
+      }
     }else{CHECK(bridge.SourceOnlyProducer(expected_origin));CHECK(bridge.OldSourceDataQuiescent(expected_origin));}
     CHECK_FALSE(bridge.lost());
   }
@@ -1108,6 +1133,17 @@ TEST_CASE("Dedicated SYSTEM thread work cannot fabricate or erase a native Task 
 }
 TEST_CASE("Typed discarded identity hints retain real API delivery without fabricating read duty", "[identity_listener][scalar_delivery][lifetime]"){
  NativeIdentityListenerBridgeTestAccess::TypedScalarDelivery(GENERATE(0u,1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,16u,17u,18u,19u,20u,21u));
+}
+TEST_CASE("SUI discarded identity delivery retains genuine API duties through cancel return and restart", "[identity_listener][sui_scalar_delivery][lifetime]"){
+ SECTION("Finished producer is retained through pending delivery then reaped before a new root"){
+  NativeIdentityListenerBridgeTestAccess::TypedScalarDelivery(0,true);
+ }
+ SECTION("Non-A untyped malformed and aborted deliveries cannot settle the source"){
+  NativeIdentityListenerBridgeTestAccess::TypedScalarDelivery(GENERATE(1u,2u,3u,5u,6u,7u,10u,13u,14u,15u,16u,17u,18u),true);
+ }
+ SECTION("Admission close preserves genuine return replacement queue and whole callback duties"){
+  NativeIdentityListenerBridgeTestAccess::TypedScalarDelivery(GENERATE(4u,8u,9u,11u,12u,19u,20u,21u),true);
+ }
 }
 TEST_CASE("Closed healthy listener admission cancels new calls without claiming completion", "[identity_listener][closed_admission]"){
  NativeIdentityListenerBridgeTestAccess::ClosedCellAdmissionIsCancellation(GENERATE(false,true));

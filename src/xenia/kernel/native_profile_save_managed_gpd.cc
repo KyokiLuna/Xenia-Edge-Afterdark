@@ -228,7 +228,7 @@ class NativeProfileSaveManagedGpd::ReadAuthority final : public vfs::ManagedFile
  private:
   friend class NativeProfileSaveManagedGpd;
   ReadAuthority(std::weak_ptr<NativeProfileSaveManagedGpd> service,
-      std::shared_ptr<xam::ProfileGpdModelAuthority> model,xam::ProfileGpdReadCapture read,
+      std::shared_ptr<const xam::ProfileGpdModelAuthority> model,xam::ProfileGpdReadCapture read,
       std::shared_ptr<vfs::Device> device,std::string path,
       std::shared_ptr<void> io_duty,std::shared_ptr<const ReadReceipt> receipt,
       std::shared_ptr<const filesystem::SnapshotPublicationSet> issued_members)
@@ -246,7 +246,7 @@ class NativeProfileSaveManagedGpd::ReadAuthority final : public vfs::ManagedFile
     std::lock_guard lock(duty_mutex_);return std::exchange(host_io_duty_,{});
   }
   const std::weak_ptr<NativeProfileSaveManagedGpd> service_;
-  const std::shared_ptr<xam::ProfileGpdModelAuthority> model_;
+  const std::shared_ptr<const xam::ProfileGpdModelAuthority> model_;
   const xam::ProfileGpdReadCapture read_;
   const std::shared_ptr<vfs::Device> requested_;const std::string path_;
   const std::shared_ptr<const ReadReceipt> receipt_;

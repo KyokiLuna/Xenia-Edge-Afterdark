@@ -351,8 +351,10 @@ std::unique_ptr<FreshProfileConEpoch::Reopened> DecodeCanonical(
   auto facts = con::ValidateNativeHeader(
       bytes, identity, snapshot.layout().statistics().data_extent, trusted,
       error);
-  if (!facts || facts->descriptor != out->logical->descriptor() ||
-      facts->content_size != out->logical->payload_bytes()) {
+  // Native metadata+8 is its actual declared size/geometry input, including
+  // the genuine zero/default lane. Signature/identity/owned-extent checks
+  // above remain mandatory; SUM(member bytes) is not this field's producer.
+  if (!facts || facts->descriptor != out->logical->descriptor()) {
     if (!error) {
       error = Error(std::errc::bad_message);
     }
@@ -531,13 +533,21 @@ std::unique_ptr<FreshProfileConEpoch> FreshProfileConEpoch::Prepare(
     error = Error(std::errc::permission_denied);
     return {};
   }
+  // Preserve the actual complete creation metadata, especially its +8
+  // declared size/geometry (zero selects the native default lane). This
+  // legacy repair owns only its real folder extent, not a hypothetical larger
+  // raw allocation; a larger declared capacity needs that separate producer.
+  if (uint64_t(header.content_metadata.content_size) >
+      data->snapshot->layout().statistics().data_extent) {
+    error = Error(std::errc::operation_not_supported);
+    return {};
+  }
   // Native86DA0's fixed first344/new padding and first licensee defaults.
-  // Only this declared canonical transition assigns its NEW descriptor/size;
-  // complete metadata unknown fields and original member bytes remain intact.
+  // This declared canonical transition assigns only its NEW descriptor;
+  // complete input metadata and original member bytes remain intact.
   header.content_header.magic = vfs::XContentPackageType::kCon;
   header.content_header.header_size = sizeof(header);
   header.content_header.licenses[0].licensee_id = UINT64_MAX;
-  header.content_metadata.content_size = facts.logical->payload_bytes();
   std::memcpy(&header.content_metadata.volume_descriptor.stfs,
               facts.logical->descriptor().data(), 36);
   std::vector<uint8_t> intended(kAligned);

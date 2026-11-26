@@ -148,6 +148,13 @@ class NativeIdentityListenerBridgeTestAccess final {
     if(delivery){CHECK(cell->scalar_delivery_.origin==expected_origin);CHECK(cell->scalar_delivery_.enqueue_sequence!=0);}
     B::SourceProducerObservation before_return;
     CHECK_FALSE(bridge.SourceProducerQuiescent(expected_origin,&before_return)); // actual API cell still active
+    if(variant==0){
+      B::SourceProducerObservation ownership;
+      CHECK_FALSE(bridge.SourceOnlyProducer(expected_origin,&ownership,true));
+      REQUIRE(ownership.ownership);CHECK_FALSE(ownership.ownership->available);
+      CHECK(ownership.ownership->active_cells==1);CHECK(ownership.ownership->first_active_cell!=0);
+      CHECK(ownership.ownership->queued==0);CHECK(ownership.ownership->work_entry_pins==0);
+    }
     if(variant==1 || variant==2 || variant==3 || variant==10 || variant==16)CHECK(before_return.orphaned);
     // Original inverse mapping writes the caller output before inner return.
     public_id=variant==17?std::array<uint8_t,4>{0x8A,0,0,0xA}:
@@ -319,16 +326,22 @@ class NativeIdentityListenerBridgeTestAccess final {
     auto source=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,31,37,resource));
     const auto origin=bridge.AdoptSource(source);REQUIRE(origin);
     const auto listener=bridge.ledger_.RegisterListener(0x90004000);REQUIRE(listener);
-    REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,9,*origin));
+    REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,9,*origin,true));
     B::SourceProducerObservation held,strict;
     REQUIRE(bridge.SourceProducerQuiescent(*origin,&held));CHECK(held.mode==1);
     CHECK(held.evaluated==255);CHECK(held.truth==239);CHECK(held.references_available);CHECK(held.references==2);
-    CHECK_FALSE(bridge.SourceOnlyProducer(*origin,&strict));CHECK(strict.mode==0);
+    CHECK_FALSE(bridge.SourceOnlyProducer(*origin,&strict,true));CHECK(strict.mode==0);
     CHECK(strict.evaluated==31);CHECK(strict.truth==15);CHECK(strict.references==2);
+    REQUIRE(strict.ownership);CHECK(strict.ownership->available);CHECK(strict.ownership->active_cells==0);
+    CHECK(strict.ownership->queued==1);CHECK(strict.ownership->other_queued==0);
+    CHECK(strict.ownership->typed_public_a_queued==1);CHECK(strict.ownership->work_entry_pins==0);
+    CHECK(strict.ownership->work_dequeued_pins==0);CHECK(strict.ownership->first_queue_listener==listener->serial);
     // Genuine native coalescing replaces payload, not a completed consumer.
     REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,17,*origin));
     REQUIRE(bridge.SourceProducerQuiescent(*origin,&held));CHECK(held.references==2);
-    CHECK_FALSE(bridge.SourceOnlyProducer(*origin));
+    CHECK_FALSE(bridge.SourceOnlyProducer(*origin,&strict,true));
+    REQUIRE(strict.ownership);CHECK(strict.ownership->queued==1);
+    CHECK(strict.ownership->typed_public_a_queued==0);CHECK(strict.ownership->other_queued==1);
     const L::WorkKey key{root,41,43,47,0x90001000,0x90002000,0x91000000,0x816CD70C,0x816CD6E8};
     auto whole=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(key,source,resource));
     const auto work=bridge.AdoptWholeWork(whole);REQUIRE(work);
@@ -338,7 +351,12 @@ class NativeIdentityListenerBridgeTestAccess final {
     auto facts=bridge.CaptureDependencies(*work);REQUIRE(facts);CHECK(facts->count==1);CHECK(facts->dequeued[0]==source);
     REQUIRE(bridge.WorkFor(*work));CHECK_FALSE(bridge.WorkFor(*work)->finished);
     CHECK_FALSE(bridge.SourceProducerQuiescent(*origin,&held));CHECK(held.consumer_reason==4);
-    CHECK(held.consumer_work==work->serial);CHECK_FALSE(bridge.SourceOnlyProducer(*origin));
+    CHECK(held.consumer_work==work->serial);CHECK_FALSE(bridge.SourceOnlyProducer(*origin,&strict,true));
+    REQUIRE(strict.ownership);CHECK(strict.ownership->available);CHECK(strict.references==3);
+    CHECK(strict.ownership->queued==0);CHECK(strict.ownership->work_entry_pins==1);
+    CHECK(strict.ownership->work_dequeued_pins==1);CHECK(strict.ownership->first_work==work->serial);
+    CHECK(strict.ownership->first_owner_invocation==key.invocation);
+    CHECK(strict.ownership->first_work_function==key.function);CHECK(strict.ownership->unknown_works==0);
     // Entered consumption remains a separate real whole-work obligation.
     REQUIRE(bridge.FinishWholeWorkNormally(*work,key,whole));REQUIRE(bridge.SourceOnlyProducer(*origin));
     REQUIRE(bridge.FinishSourceAfterDescendants(*origin));CHECK_FALSE(bridge.SourceProducerQuiescent(*origin));

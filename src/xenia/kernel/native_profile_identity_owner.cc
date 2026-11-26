@@ -915,6 +915,9 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
   uint32_t caller_thread=0,caller_pcr=0,caller_process=0,actual_function=0;
   uint64_t job=0,source=0,current_read=0,latest_work=0,latest_source=0,latest_birth=0,latest_birth_source=0;
   WorkBlocker other;
+  uint32_t other_flags=0,other_callback=0,other_title=0;
+  uint64_t other_dispatch=0,other_code_generation=0,other_module_generation=0;
+  uint64_t other_lifetime_birth=0,other_lifetime_source=0;
   void Task(std::optional<uint32_t> actual) noexcept {
    if(enabled){task_available=bool(actual);if(actual)task=*actual;}
   }
@@ -959,7 +962,11 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
     {{"other_evaluated",other_evaluated},{"other_compatible",other_compatible},{"other_conflict",other_conflict},
      {"other_available",other.available},{"other_work",other.serial},{"other_source",other.source},
      {"other_function",other.frame.function},{"other_thread",other.frame.thread},{"other_birth",other.birth.generation},
-     {"other_task",other.birth.task},{"render_evaluated",render_evaluated},{"render_failed",render_failed},
+     {"other_task",other.birth.task},{"other_flags",other_flags},{"other_callback",other_callback},
+     {"other_title",other_title},{"other_dispatch",other_dispatch},
+     {"other_code_generation",other_code_generation},{"other_module_generation",other_module_generation},
+     {"other_lifetime_birth",other_lifetime_birth},{"other_lifetime_source",other_lifetime_source},
+     {"render_evaluated",render_evaluated},{"render_failed",render_failed},
      {"caller_thread",caller_thread},{"caller_pcr",caller_pcr},{"caller_process",caller_process}});
   }
  };
@@ -972,6 +979,7 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
   // Original State-locked, opt-in once-per-Job observations, not readiness.
   bool first_pm_observed=false,first_pm_error_observed=false,pm_armed_observed=false;
   bool actual_initializer_observed=false,first_old_query_observed=false,first_retired_query_observed=false;
+  bool first_old_listener_observed=false;
   std::error_code preentry_error;
   bool retry_initial_after_cancel=false;
   uint64_t serial=0,source=0;
@@ -1503,6 +1511,33 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
     {"source_available",q.source_blocker.available},{"source_closed",q.source_blocker.closed},
     {"source_reason",q.source_blocker.kind},{"source",q.source_blocker.source},
     {"source_generation",q.source_blocker.generation},{"source_task",q.source_blocker.task},{"source_serial",q.source_blocker.serial}});
+ }
+ struct OldListenerObservation {
+  uint64_t job=0,source=0,current_read=0,origin=0;uint32_t phase=0;bool actual_result=false;
+  Listeners::SourceProducerObservation data;
+ };
+ void ReportOldListener(std::optional<OldListenerObservation>& pending) noexcept {
+  if(!pending)return;const auto& q=*pending;const auto& d=q.data;
+  const auto* o=d.ownership?&*d.ownership:nullptr;
+  NativeSystemUiTraceLimiter trace;
+  trace.Emit("identity","initializer_old_listener_cut",
+   {{"job_serial",q.job},{"job_source",q.source},{"current_read",q.current_read},{"origin",q.origin},
+    {"render_phase",q.phase},{"actual_result",q.actual_result},{"available",d.available},{"mode",d.mode},
+    {"evaluated",d.evaluated},{"predicate_true",d.truth},{"references_available",d.references_available},
+    {"references",d.references},{"ownership_captured",bool(o)},{"ownership_available",o&&o->available},
+    {"active_cells",o?o->active_cells:0},{"first_active_cell",o?o->first_active_cell:0},
+    {"queued",o?o->queued:0},{"typed_public_a_queued",o?o->typed_public_a_queued:0},
+    {"other_queued",o?o->other_queued:0},{"orphan_entries",o?o->orphan_entries:0},
+    {"work_entry_pins",o?o->work_entry_pins:0},{"work_dequeued_pins",o?o->work_dequeued_pins:0},
+    {"unknown_works",o?o->unknown_works:0}},
+   {{"first_queue_listener",o?o->first_queue_listener:0},{"first_queue_sequence",o?o->first_queue_sequence:0},
+    {"first_queue_id",o?o->first_queue_id:0},{"first_work",o?o->first_work:0},
+    {"first_owner_invocation",o?o->first_owner_invocation:0},{"first_work_function",o?o->first_work_function:0},
+    {"first_work_thread",o?o->first_work_thread:0},{"first_work_kind",o?o->first_work_kind:0},
+    {"orphan_state",o?o->orphan_state:0},{"orphan_seen",o?o->orphan_seen:0},
+    {"orphan_outer_return",o?o->orphan_outer_return:0},{"orphan_function",o?o->orphan_function:0},
+    {"orphan_thread",o?o->orphan_thread:0},{"orphan_consumer_work",o?o->orphan_consumer_work:0}});
+  pending.reset(); // scalar-only record; no resource is released here
  }
  uint64_t query_observation=0; // original State mutex, advisory correlation only
  std::atomic<uint64_t> bootstrap_handoff{0}; // turn:32, actual cut:32
@@ -2133,6 +2168,20 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
     observed->other_compatible=0;observed->other_conflict=uint32_t(conflict);
     observed->other.available=1;observed->other.serial=other->serial;observed->other.source=other->source;
     observed->other.frame=other->frame;observed->other.birth=other->birth;
+    observed->other_flags=uint32_t(other->execution_only)|(uint32_t(other->physical_work)<<1)|
+        (uint32_t(bool(other->read))<<2)|(uint32_t(bool(other->execution_read_owner))<<3)|
+        (uint32_t(other->execution_read_fallback)<<4)|(uint32_t(bool(other->commit))<<5)|
+        (uint32_t(other->execution_code_proven)<<6)|(uint32_t(other->execution_uncertain)<<7)|
+        (uint32_t(bool(other->execution_target))<<8)|(uint32_t(bool(other->execution_lifetime))<<9)|
+        (uint32_t(other->uncertain)<<12)|(uint32_t(bool(other->domain))<<13);
+    observed->other_title=other->execution_title;observed->other_dispatch=other->execution_dispatch;
+    if(other->execution_target){const auto& target=*other->execution_target;
+      observed->other_callback=target.callback;observed->other_code_generation=target.code.load_generation;
+      observed->other_flags|=(uint32_t(bool(target.code.module))<<14)|(uint32_t(bool(target.code.lease))<<15);
+      if(target.code.module)observed->other_module_generation=target.code.module->load_generation();}
+    if(other->execution_lifetime){const auto& lifetime=*other->execution_lifetime;
+      observed->other_lifetime_birth=lifetime.birth.generation;observed->other_lifetime_source=lifetime.birth.origin;
+      observed->other_flags|=(uint32_t(lifetime.uncertain)<<10)|(uint32_t(lifetime.native_freed)<<11);}
    }
    if(diagnostic)diagnostic->latest_kind=(diagnostic->latest_kind&0xFFFFu) |
        (uint32_t(conflict)<<16) | (OriginalLogonFunctionRole(other->frame.function)<<24);
@@ -7031,10 +7080,12 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
  observation.source_retired=source_retired;
  // Keep disabled diagnostics unconstructed on this recurring Query path.
  std::optional<State::QueryObservation> first_old_query,first_retired_query;
+ std::optional<State::OldListenerObservation> old_listener;
  struct Reporter {State& state;State::QueryObservation& value;
   std::optional<State::QueryObservation>& first;std::optional<State::QueryObservation>& retired;
-  ~Reporter(){state.ReportFirstOldQuery(first);state.ReportFirstOldQuery(retired);
-   state.ReportPreparedQuery(value);state.ReportQuery(value,true);}} reporter{s,observation,first_old_query,first_retired_query};
+  std::optional<State::OldListenerObservation>& listener;
+  ~Reporter(){state.ReportFirstOldQuery(first);state.ReportFirstOldQuery(retired);state.ReportOldListener(listener);
+   state.ReportPreparedQuery(value);state.ReportQuery(value,true);}} reporter{s,observation,first_old_query,first_retired_query,old_listener};
  try{
   if(observation.Failed(1,s.retired.load(std::memory_order_acquire)) ||
      observation.Failed(2,global_critical_region::is_held_by_current_thread()) ||
@@ -7087,11 +7138,23 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
     const auto* node=s.tasks.FindLiveTask(*task);
     if(!node){observation.reason=10;s.Lose(__LINE__);return result;}
     if(observation.enabled)observation.birth=node->birth;
+    const auto old_producer=[&](){
+     Listeners::SourceProducerObservation* detail=nullptr;
+     if(observation.enabled && !s.job->first_old_listener_observed){
+      s.job->first_old_listener_observed=true;old_listener.emplace();auto& d=*old_listener;
+      d.job=s.job->serial;d.source=s.job->source;d.current_read=s.current_read_source;
+      d.origin=s.job->old_event_origin->serial;d.phase=uint32_t(s.render_phase);detail=&d.data;
+     }
+     // SAME original predicate, evaluated only at its original short-circuit
+     // position. Optional census cannot alter its returned refs==1 result.
+     const bool actual=s.listeners->SourceOnlyProducer(*s.job->old_event_origin,detail,bool(detail));
+     if(detail)old_listener->actual_result=actual;return actual;
+    };
     if(observation.Old(0,s.render_phase==State::RenderPhase::kDrainingOld) && observation.Old(1,source_retired) &&
        observation.Old(2,bool(s.job)) && observation.Old(3,bool(s.wake)) && observation.Old(4,bool(s.native_pending)) &&
        observation.Old(5,s.IdentityWorkEmpty(observation.enabled?&observation.work_blocker:nullptr)) &&
        observation.Old(6,s.expected.empty()) && observation.Old(7,s.tasks.SourceDescendantsClosed(s.current_read_source,observation.enabled?&observation.source_blocker:nullptr)) &&
-       observation.Old(8,bool(s.job->old_event_origin)) && observation.Old(9,s.listeners->SourceOnlyProducer(*s.job->old_event_origin)) &&
+       observation.Old(8,bool(s.job->old_event_origin)) && observation.Old(9,old_producer()) &&
        observation.Old(10,s.wake->InvocationsDrained(NativeAtomicWord(s.native_pending)))){
       s.render_phase=State::RenderPhase::kClosingOld;
     }
@@ -7190,7 +7253,7 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
    }
    // A stop request releases this pause without claiming iteration, clear,
    // GPU completion, or restored pixels. Existing admitted work stays owned.
-   s.ReportFirstOldQuery(first_old_query);s.ReportFirstOldQuery(first_retired_query);
+   s.ReportFirstOldQuery(first_old_query);s.ReportFirstOldQuery(first_retired_query);s.ReportOldListener(old_listener);
    s.ReportPreparedQuery(observation);
    s.ReportQuery(observation,false); // independently live while Bootstrap may be blocked
    thread.Delay(0,0,uint64_t(-10000ll));

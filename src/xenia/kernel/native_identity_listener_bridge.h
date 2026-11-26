@@ -284,6 +284,19 @@ class NativeIdentityListenerBridge final {
     uint32_t thread=0,pcr=0,sp=0,lr=0,function=0,process_type=UINT32_MAX;
     uint32_t handle=0,listener=0,area=0,event=0,data=0;bool data_available=false;
   };
+  // Diagnostic census only, never a producer/read/quiescence capability.
+  // It may inspect mutable ledger fields ONLY after the existing bridge mutex
+  // excludes admission and every fast cell is observed inactive. A live cell
+  // makes details unavailable; no extra lock, guest read or predicate is used.
+  struct SourceOwnershipObservation {
+    bool available=false;uint32_t active_cells=0,first_active_cell=0;
+    uint64_t queued=0,typed_public_a_queued=0,other_queued=0,orphan_entries=0;
+    uint64_t work_entry_pins=0,work_dequeued_pins=0,unknown_works=0;
+    uint64_t first_queue_listener=0,first_queue_sequence=0,first_work=0,first_owner_invocation=0;
+    uint32_t first_queue_id=0,first_work_function=0,first_work_thread=0,first_work_kind=0;
+    uint32_t orphan_state=0,orphan_seen=0,orphan_outer_return=0,orphan_function=0,orphan_thread=0;
+    uint64_t orphan_consumer_work=0;
+  };
   struct SourceProducerObservation {
     bool available=false,references_available=false;
     uint32_t mode=0,evaluated=0,truth=0,consumer_reason=0,active_cell=0;
@@ -291,9 +304,49 @@ class NativeIdentityListenerBridge final {
     bool orphan_available=false,orphaned=false,consumers_available=false;
     uint32_t orphan_capture_state=0,orphan_outer_return=0;
     bool orphan_origin_matches=false;OrphanObservation first_orphan;
+    std::optional<SourceOwnershipObservation> ownership; // unconstructed unless explicitly requested
   };
+  void CaptureSourceOwnershipLocked(Origin origin,SourceOwnershipObservation& d,bool orphan_seen) const {
+    // NewCell's sole true publication and both idle/actual-stop withdrawals
+    // hold this SAME bridge mutex. Native fast writers retain active=true.
+    // A zero scan is therefore stable until this original lock leaves scope.
+    for(uint32_t i=0;i<cells_.size();++i)if(cells_[i].active_.load(std::memory_order_acquire)){
+      ++d.active_cells;if(!d.first_active_cell)d.first_active_cell=i+1;
+    }
+    if(d.active_cells)return;
+    d.available=true;
+    for(const auto& listener:ledger_.listeners_)for(const auto& entry:listener.events){
+      if(entry.origin!=origin)continue;
+      if(entry.kind==Ledger::Event::Kind::kQueued){
+        ++d.queued;if(entry.identity_hint)++d.typed_public_a_queued;else ++d.other_queued;
+        if(!d.first_queue_sequence){d.first_queue_listener=listener.serial.load(std::memory_order_acquire);
+          d.first_queue_sequence=entry.sequence;d.first_queue_id=entry.id;}
+      }else if(entry.kind==Ledger::Event::Kind::kOrphan)++d.orphan_entries;
+    }
+    for(const auto& work:ledger_.works_){
+      const auto serial=work.serial.load(std::memory_order_acquire);
+      if(!serial || serial==Ledger::kReserved)continue;
+      const bool entry=work.entry==origin;uint32_t dequeued=0;
+      for(uint32_t i=0;i<work.count;++i)if(work.dequeued[i]==origin)++dequeued;
+      d.work_entry_pins+=uint64_t(entry);d.work_dequeued_pins+=dequeued;
+      if(work.unknown_input)++d.unknown_works;
+      if(!d.first_work && (entry || dequeued || work.unknown_input)){
+        const auto key=work.key.Load();d.first_work=serial;d.first_owner_invocation=key.invocation;
+        d.first_work_function=key.function;d.first_work_thread=key.thread;d.first_work_kind=uint32_t(key.owner_kind);
+      }
+    }
+    d.orphan_seen=orphan_seen;
+    const auto& orphan=first_orphans_[origin.slot];d.orphan_state=orphan.state.load(std::memory_order_acquire);
+    if(d.orphan_state==2 && orphan.data.origin==origin){
+      d.orphan_outer_return=orphan.outer_return.load(std::memory_order_acquire);
+      d.orphan_function=orphan.data.function;d.orphan_thread=orphan.data.thread;
+      d.orphan_consumer_work=orphan.data.consumer_work_hint;
+    }
+    // No notification data/argument, profile identifier or raw payload copied.
+    // Queue/whole origins retain their exact lifetime; no ref is released.
+  }
   bool ObserveSourceProducer(Origin origin,SourceProducerRequirement requirement,
-      SourceProducerObservation* observation) {
+      SourceProducerObservation* observation,bool capture_ownership=false) {
     std::lock_guard lock(mutex_);
     if(observation){*observation={};observation->available=true;observation->mode=uint32_t(requirement);}
     auto* value=ledger_.Find(origin);
@@ -308,6 +361,10 @@ class NativeIdentityListenerBridge final {
     // Bit4 always retains its original factual meaning, refs==1. Current
     // mode separately proves no active/unknown consumer while queues may live.
     const bool only=observed(4,references==1);
+    if(capture_ownership && observation){
+      observation->ownership.emplace();CaptureSourceOwnershipLocked(origin,*observation->ownership,
+          value->orphan_seen.load(std::memory_order_acquire));
+    }
     if(requirement==SourceProducerRequirement::kOnlyReference)return only;
     if(!observed(5,references!=0))return false;
     const bool orphaned=value->orphan_seen.load(std::memory_order_acquire);
@@ -345,8 +402,8 @@ class NativeIdentityListenerBridge final {
   }
   // Strict OLD-source retirement: all queued/coalesced event and actual
   // whole-work dependencies have drained, leaving exactly the producer pin.
-  bool SourceOnlyProducer(Origin origin,SourceProducerObservation* observation=nullptr) {
-    return ObserveSourceProducer(origin,SourceProducerRequirement::kOnlyReference,observation);
+  bool SourceOnlyProducer(Origin origin,SourceProducerObservation* observation=nullptr,bool capture_ownership=false) {
+    return ObserveSourceProducer(origin,SourceProducerRequirement::kOnlyReference,observation,capture_ownership);
   }
   // A NEW source remains current after reveal. Passive queue pins keep
   // their lifetimes; actual/unknown whole consumers, orphaned consumption and

@@ -1,6 +1,6 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V141's opt-in sign-in observations build and pass all seven direct
+Status: V142's opt-in ownership observations build and pass all seven direct
 test runs. They change no guest behavior. V140's actual dashboard/Guide
 regression passed:
 visible first open, B close, dashboard input return, full reopen, Media
@@ -10,16 +10,18 @@ V140. Its Doritos retest rendered, canceled and reopened the native picker,
 then selected the intended existing profile. The test supervisor received
 SIGTERM before the continuation check and terminated Xenia. The signal's
 sender is unknown; this is not a recorded guest crash or native shutdown pass.
-The subsequent V141 Doritos run stayed alive through the continuation check.
-Its native picker rendered, canceled, reopened and selected the existing
-profile, but a further A press left the title prompt unchanged. The selected
-issuer is a genuine readless native Task; another dispatcher classified as
-opaque prevented early initializer admission. After old-source retirement,
-the first remaining old-query condition was the listener producer's reference
-count, while old Work and Task-source descendants had drained. The other
-callback and listener references still need classification. Manual window
-close reached native exit 1 with full reaping and no forced signals; Avatar
-shutdown refused its current-root guard. This is not a clean shutdown pass.
+Both V141 and V142 reproduced the sign-in stall through a follow-up A press.
+The selected issuer is a genuine readless native Task. V142 identifies the
+other dispatcher as a healthy Boot1 service execution with no issued old
+read/borrowed/Commit ownership. Its lifetime already does not block the later,
+more destructive dataful join, yet prevents early initializer admission. The
+old listener's three references are exactly its producer and two authenticated
+passive public-A notification queues, without active/unknown/orphan/whole-work
+consumers. These are lifetime dependencies, not evidence of an old-profile
+read. The shared classification correction is being implemented; it is not
+applied or accepted yet. V141's manual close failed at the Avatar current-root
+guard; V142 exited zero with full reaping and no forced signals. That single
+normal exit does not establish a fix for the earlier Avatar refusal.
 No new AppImage or usable checkpoint is accepted; the combined HDD gate
 remains open. Historical results below keep their own scope.
 This work follows the standing [systems approach and console fidelity
@@ -27,10 +29,10 @@ rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The current tested V141 source map is
-`cdcce15efefb51200174e1dbc0476bad20e8d5b2327a43c1c727c7f84383a86f`
+The current tested V142 source map is
+`6dae151fe6c50efa9d3292448a007438a92c33fe8b696b94643f79a4ca08e68d`
 (2,430 source files). All seven direct runs passed under receipt
-`3f7a24a6c3641c8db37d850b7743bcf993ab4ad8a6d011447bf2ebbcd60e4619`.
+`2eb9bcf7e80a2d6289aafe6fe450b6dc4fe6ed4dca869c4e58bfd4ab3787d261`.
 They establish component coverage, not successful ordinary sign-in, avatar
 rendering, save persistence or a packaged AppImage. Historical V131 source and
 test identities remain in its labeled section below.
@@ -869,6 +871,70 @@ configuration, index, build products and read-only inputs remained unchanged.
 | Actual runtime result | `94d879441d82ac4e8c6d93111f70148f63158a036d54785a6c5fadc3bd7d133e` |
 | Source-validated admission/old-Query projection | `83e2843c8cca6358122dad221f81fbf1e26c8c0e02c0b13e6a5502034753f202` |
 | Root visual/controller/outcome assessment | `c8b9e47f345a2403e5babe2c85af327353f2adb0c227189f3e349fb2cf3efbcd` |
+
+## V142 actual ownership findings
+
+Four paths extend the disabled observations and existing real event-lifetime
+tests. All seven direct runs passed: base 334 / 28,711 assertions; network
+125 / 11,212; kernel 1,481 / 94,836; VFS 136 / 9,736; UI 124 / 4,863;
+focused CPU 5 / 130; installed-system focus 212 / 25,043. The full kernel run
+executes the 30 added assertions; no cases or tags were added or removed.
+The build embeds base `3f06994`. Component coverage does not establish native
+profile acceptance or an AppImage pass.
+
+The actual Doritos run completed the same six controller batches with neutral
+controls and fresh owned-window proofs. Its picker opened, canceled, reopened
+and navigated to the existing profile. Selection and a follow-up A press both
+left Press A visible. Job 4 again has no observed original initializer entry
+or completion. The first incompatible Work is a genuine selected native
+service callback at `0x81709178`, with retained code/module/domain/Task
+lifetime, matching generations and no read, borrowed owner, fallback, Commit
+or uncertainty flags. The matching executable shows an event-driven service
+loop through `0x817090B8`; it waits on an object and exits through genuine
+Task cancellation. Its child virtual effects are not all resolved, so this
+does not justify a callback-name whitelist or a claim that it is read-only.
+The mapped `0x81708E18` extent was truncated; the report pins its actual
+continuation and complete bounded body rather than trusting that extent.
+
+The system inconsistency is independently visible in the actual old-source
+Query: identity Work is empty and source 3 Task descendants are closed while
+that Boot1 execution remains alive. `IdentityWorkEmpty` excludes execution-only
+rows, and source closure tests the actual source, not arbitrary module lifetime.
+Waiting for the whole unrelated callback before initialization therefore does
+not provide the serialization claimed by the earlier conservative check.
+Native Ke critical regions control APC delivery; they are not a global auth
+cache mutex. Task queue locks are released before callbacks. Actual structural
+cache publication and host Account/model writer pauses remain distinct duties.
+
+The first reached old-listener census was stable under the existing bridge
+mutex, with all 64 fast cells inactive. References were exactly producer 1 plus
+two queued authenticated public-A masks; other queues, orphans, Work entry and
+dequeued pins, and unknown consumers were all zero. Queued origins retain
+causal lifetime. A real read ticket is issued separately at an actual consumer
+entry; dequeue does not replace that entry's read source. Producer Finish and
+fully reaped origin lifetime are already separate operations. PM settlement
+explicitly releases Account/GPD pauses and closes old read tickets regardless
+of retained event intents. A corrected old-source rule must account for those
+specific safe pins while continuing to refuse active, unknown, untyped and
+actual whole consumers, and retain every causal pin until real release.
+
+An owned manual WM close at 286.81 seconds reached actual exit zero, complete
+leader reaping and no forced signals. Source, configuration, index, products
+and read-only inputs remained unchanged. No failure-only Avatar root report
+was emitted. This is a normal process-shutdown result, not independent proof
+of every Avatar shutdown branch or a functional fix for V141's refusal.
+
+| V142 record | SHA256 |
+| --- | --- |
+| Four-path source freeze | `7ededbeee75890da5e04bfda30e7e93d5f271a103f22c902551588cc009499de` |
+| Independent source review | `55398d6c6ca780be0432bccb973eb1f13d13b45b544411ff9abb887cf5808939` |
+| Build | `8bd3c4eb9bba1666d73e3915a5b14a0a5cfbe52ba94617d29e10ccfe3a00dc88` |
+| All seven direct runs | `2eb9bcf7e80a2d6289aafe6fe450b6dc4fe6ed4dca869c4e58bfd4ab3787d261` |
+| ELF | `f9e21245063354d91f35523ec49652d8770f7fc981d6e326d279e8cc721f1dd2` |
+| Actual runtime result | `bf1c2b1ed2951c7829d73de10920726393ca345ab6d691013f8287a39623616d` |
+| Native synchronization contract | `f024ec2087a22b0e6d99b2043107dcdb576b2f8a66fff2f0b0a88d2faf809a11` |
+| Actual callback/old-origin/downstream contract | `ad7b45d8972a7634ebe92a5419b699636a702c4d7c7a880562e56372ac7749d3` |
+| Root controller/visual/shutdown assessment | `bd75f584c8064fd10cfcd39b8551195f8b46aa2af70486999821ce191a790975` |
 
 ## Evidence
 

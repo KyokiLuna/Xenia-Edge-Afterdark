@@ -247,28 +247,50 @@ std::optional<uint32_t> Word(Memory& memory, uint32_t at) {
              ? std::optional(xe::load_and_swap<uint32_t>(raw.data()))
              : std::nullopt;
 }
-bool CheckCode(KernelState& kernel, UserModule& module, uint32_t at) {
+// Optional scalar receipt for the EXISTING bootstrap-close RootCurrent cut.
+// No payload exists on ordinary calls/trace-off; no native read or code proof
+// is repeated to explain a refused original conjunct.
+struct AvatarRootCurrentObservation {
+  uint32_t address=0,root_evaluated=0,root_failed=0,first_root_failed=0;
+  uint32_t code_entered=0,code_evaluated=0,code_failed=0,first_code_failed=0,code_offset=0;
+  bool RootRefused(uint32_t bit,bool actual) noexcept {
+    root_evaluated|=1u<<bit;if(actual){root_failed|=1u<<bit;if(!first_root_failed)first_root_failed=bit+1;}return actual;
+  }
+  bool RootPassed(uint32_t bit,bool actual) noexcept {
+    RootRefused(bit,!actual);return actual;
+  }
+  bool CodeRefused(uint32_t bit,bool actual) noexcept {
+    code_evaluated|=1u<<bit;if(actual){code_failed|=1u<<bit;if(!first_code_failed)first_code_failed=bit+1;}return actual;
+  }
+};
+bool CheckCode(KernelState& kernel, UserModule& module, uint32_t at,
+               AvatarRootCurrentObservation* observation=nullptr) {
+  const auto rejected=[&](uint32_t bit,bool actual){return observation?observation->CodeRefused(bit,actual):actual;};
+  if(observation)observation->code_entered=1;
   const auto* p = CodeAt(at);
-  if (!p) return false;
+  if (rejected(0,!p)) return false;
   auto guard = global_critical_region::AcquireDirect();
   auto& memory = *kernel.memory();
-  if (memory.QueryRangeAccess(p->at, p->bytes) == memory::PageAccess::kNoAccess)
+  if (rejected(1,memory.QueryRangeAccess(p->at, p->bytes) == memory::PageAccess::kNoAccess))
     return false;
   for (uint32_t n = 0; n < p->bytes; n += 4) {
+    if(observation)observation->code_offset=n;
     xex2_section_type section;
-    if (kernel.GetUserModuleForAddress(p->at + n).get() != &module ||
-        !module.xex_module()->GetPageSectionType(p->at + n, &section) ||
-        section != XEX_SECTION_CODE ||
-        module.xex_module()->TranslateCode(p->at + n) !=
-            memory.TranslateVirtual<const uint8_t*>(p->at + n)) return false;
+    if (rejected(2,kernel.GetUserModuleForAddress(p->at + n).get() != &module) ||
+        rejected(3,!module.xex_module()->GetPageSectionType(p->at + n, &section)) ||
+        rejected(4,section != XEX_SECTION_CODE) ||
+        rejected(5,module.xex_module()->TranslateCode(p->at + n) !=
+            memory.TranslateVirtual<const uint8_t*>(p->at + n))) return false;
   }
   std::array<uint8_t, 32> sum{};
-  if (mbedtls_sha256(memory.TranslateVirtual<const uint8_t*>(at), p->bytes,
-                     sum.data(), 0)) return false;
+  if (rejected(6,bool(mbedtls_sha256(memory.TranslateVirtual<const uint8_t*>(at), p->bytes,
+                     sum.data(), 0)))) return false;
   constexpr char hex[] = "0123456789abcdef";
-  for (size_t n = 0; n < sum.size(); ++n)
-    if (p->sha[n*2] != hex[sum[n] >> 4] ||
-        p->sha[n*2+1] != hex[sum[n] & 15]) return false;
+  for (size_t n = 0; n < sum.size(); ++n){
+    if(observation)observation->code_offset=uint32_t(n);
+    if (rejected(7,p->sha[n*2] != hex[sum[n] >> 4]) ||
+        rejected(8,p->sha[n*2+1] != hex[sum[n] & 15])) return false;
+  }
   return true;
 }
 const NativeSystemUiPublicCallProfile* PublicAt(uint32_t at) {
@@ -537,6 +559,13 @@ struct NativeAvatarService::State {
   };
   std::array<DiagnosticCell,size_t(DiagnosticPhase::kCount)> diagnostic_phases;
   DiagnosticCell first_negative;
+  struct RootCurrentCell {
+    std::atomic<uint32_t> state{0};AvatarRootCurrentObservation payload;
+    void Publish(const AvatarRootCurrentObservation& value) noexcept {
+      uint32_t empty=0;if(!state.compare_exchange_strong(empty,1,std::memory_order_relaxed))return;
+      payload=value;state.store(2,std::memory_order_release);
+    }
+  } bootstrap_shutdown_root;
   // Stack-only advisory cuts for the already-owned bootstrap Shutdown call.
   // Each original predicate is evaluated once, in its original short-circuit
   // position; no authority or resource is acquired by this receipt.
@@ -644,17 +673,20 @@ struct NativeAvatarService::State {
     }
     return value;
   }
-  bool RootCurrent(uint32_t at) const {
-    if(stopped_retired.load(std::memory_order_acquire) || !config.calls ||
-        !config.kernel || !config.domain || !config.allocation)return false;
+  bool RootCurrent(uint32_t at,AvatarRootCurrentObservation* observation=nullptr) const {
+    const auto rejected=[&](uint32_t bit,bool actual){return observation?observation->RootRefused(bit,actual):actual;};
+    const auto passed=[&](uint32_t bit,bool actual){return observation?observation->RootPassed(bit,actual):actual;};
+    if(observation)observation->address=at;
+    if(rejected(0,stopped_retired.load(std::memory_order_acquire)) || rejected(1,!config.calls) ||
+        rejected(2,!config.kernel) || rejected(3,!config.domain) || rejected(4,!config.allocation))return false;
     auto module = config.calls->module();
-    return module && root_code && module->load_generation() == config.calls->load_generation() &&
-        config.kernel == config.calls->kernel() && module->native_import_ready() &&
-        config.domain->active() && config.allocation->IsAccepting() &&
-        config.allocation->MatchesDomain(config.domain) &&
-        config.domain->root() == NativeImportDomain::Member{module->hmodule_ptr(),module->load_generation()} &&
-        binding && binding->issuer_ == config.calls.get() &&
-        CheckCode(*config.kernel,*module,at);
+    return passed(5,bool(module)) && passed(6,bool(root_code)) && passed(7,module->load_generation() == config.calls->load_generation()) &&
+        passed(8,config.kernel == config.calls->kernel()) && passed(9,module->native_import_ready()) &&
+        passed(10,config.domain->active()) && passed(11,config.allocation->IsAccepting()) &&
+        passed(12,config.allocation->MatchesDomain(config.domain)) &&
+        passed(13,config.domain->root() == NativeImportDomain::Member{module->hmodule_ptr(),module->load_generation()}) &&
+        passed(14,bool(binding)) && passed(15,binding->issuer_ == config.calls.get()) &&
+        passed(16,CheckCode(*config.kernel,*module,at,observation));
   }
   bool RootData(uint32_t at,uint32_t bytes) const {
     const auto module=config.calls->module();
@@ -2164,6 +2196,18 @@ void NativeAvatarService::ReportDiagnosticsOnHost(const char* boundary) const no
            {"uncertainty_site",origin.site}});
     }else shutdown.Emit("avatar","bootstrap_shutdown_admission_unavailable",
           {{"capture_state",captured},{"native_completion",0}});
+    if(cvars::native_system_ui_trace){
+      const auto capture=s.bootstrap_shutdown_root.state.load(std::memory_order_acquire);
+      if(capture==2){const auto& d=s.bootstrap_shutdown_root.payload;
+        static NativeSystemUiTraceLimiter root;
+        root.Emit("avatar","bootstrap_shutdown_root_current",
+          {{"capture_state",capture},{"address",d.address},{"root_evaluated",d.root_evaluated},
+           {"root_failed",d.root_failed},{"first_root_failed",d.first_root_failed},
+           {"code_entered",d.code_entered},{"code_evaluated",d.code_evaluated},
+           {"code_failed",d.code_failed},{"first_code_failed",d.first_code_failed},
+           {"code_offset",d.code_offset},{"native_completion",0}});
+      }
+    }
     return;  // No existing caller/frame/resource payload is republished here.
   }
   const uint32_t boundary_code=boundary && !std::strcmp(boundary,"Bootstrap")?1u:
@@ -2603,10 +2647,13 @@ uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
       }
     }
     State::ShutdownAdmissionCut shutdown_cut;
+    std::optional<AvatarRootCurrentObservation> root_observation;
+    if(shutdown_invocation && cvars::native_system_ui_trace)root_observation.emplace();
     struct ShutdownAdmissionPublication {
       State& state;
       State::ShutdownAdmissionCut& cut;
       bool active;
+      std::optional<AvatarRootCurrentObservation>& root;
       ~ShutdownAdmissionPublication() noexcept {
         if(!active)return;
         State::DiagnosticPayload value;
@@ -2621,8 +2668,9 @@ uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
         // Preallocated scalar publication only. No log, guest read, resource
         // release, lock, allocation or callback even under inherited GCRC.
         state.RecordDiagnostic(value);
+        if(root)state.bootstrap_shutdown_root.Publish(*root);
       }
-    } shutdown_publication{state,shutdown_cut,bool(shutdown_invocation)};
+    } shutdown_publication{state,shutdown_cut,bool(shutdown_invocation),root_observation};
     const auto refused=[&](State::ShutdownAdmissionCut::Stage stage,bool value,uint32_t line) noexcept {
       return shutdown_invocation?shutdown_cut.Refused(stage,value,line):value;
     };
@@ -2634,7 +2682,8 @@ uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
     }
     const auto frame=ActualFrame(*c,c->kernel_state);
     if(refused(State::ShutdownAdmissionCut::kFrame,!frame,__LINE__) ||
-       refused(State::ShutdownAdmissionCut::kGuardRoot,!state.RootCurrent(uint32_t(address)),__LINE__)){
+       refused(State::ShutdownAdmissionCut::kGuardRoot,!state.RootCurrent(uint32_t(address),
+           root_observation?&*root_observation:nullptr),__LINE__)){
       if(!resident_scope && !AvatarOnlyIngress(*c,uint32_t(address)))return 1;
       TraceAvatarIngressDenied(*c,uint32_t(address),kNotReady);
       c->r[3]=address==kAnimationWriter?0:uint64_t(int64_t(int32_t(kNotReady)));return 0;

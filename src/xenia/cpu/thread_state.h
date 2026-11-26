@@ -83,6 +83,9 @@ class ThreadState {
   std::atomic<void*> native_identity_task_reference_cell_{nullptr};
   std::atomic<void*> native_identity_publication_cell_{nullptr};
   std::atomic<void*> native_identity_listener_cell_{nullptr};
+  // Exact native FC service acceptance/tick terminal observations only.
+  // This cell grants no ProfileRead/Commit/source access.
+  std::atomic<void*> native_identity_service_cell_{nullptr};
   std::atomic<void*> native_profile_roster_read_{nullptr};
   Processor* processor_;
   Memory* memory_;

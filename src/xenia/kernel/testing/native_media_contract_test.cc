@@ -754,6 +754,60 @@ class NativeXmsgProvenanceTestAccess final {
     auto no_entry=Request(state,6);no_entry->copy_entered=false;
     CHECK_FALSE(state->BindCopiedPayload(*no_entry,0,true,true,0x90600000,0x9060001C,owned));
   }
+  static void MetadataOnlyCopyIsolation() {
+    auto state=std::make_shared<State>(kRoot);uint64_t capture=1;
+    const auto metadata=[&] {
+      auto record=Request(state,capture++);record->producer.app=0xFC;
+      record->producer.message=0x58001;record->producer.argument_bytes=0x568;
+      record->identity_service_metadata_only=true;return record;
+    };
+    constexpr uint32_t envelope=0x90200000,argument=envelope+0x1C;
+    const auto old=metadata();
+    REQUIRE(state->BindCopiedPayload(*old,0,true,true,envelope,argument,{}));
+    const auto old_copy=old->copy_serial;REQUIRE(old_copy);
+    CHECK(old->copy_returned);CHECK(old->envelope==envelope);
+    CHECK(old->copied_argument==argument);CHECK_FALSE(old->copied_bytes);
+    // Copy metadata is no authenticated service origin or provider callback.
+    CHECK(old->identity_service.expired());CHECK_FALSE(old->callback_entered);
+    CHECK(state->providers.empty());Owner::Capture retained(old);
+    REQUIRE(Owner::FactsAvailable(retained));
+    CHECK_FALSE(Owner::CurrentDispatch(nullptr,retained));
+    state->Revoke(envelope);CHECK_FALSE(state->Live(*old));
+    CHECK_FALSE(Owner::FactsAvailable(retained));
+    const auto fresh=metadata();
+    REQUIRE(state->BindCopiedPayload(*fresh,0,true,true,envelope,argument,{}));
+    CHECK(fresh->copy_serial!=old_copy);CHECK_FALSE(fresh->copied_bytes);
+    CHECK(state->Unique([&](const auto& r){return r.envelope==envelope;})==fresh);
+    CHECK_FALSE(Owner::FactsAvailable(retained));
+    CHECK(fresh->identity_service.expired());CHECK_FALSE(fresh->callback_entered);
+    CHECK_FALSE(Owner::CurrentDispatch(nullptr,Owner::Capture(fresh)));
+    CHECK_FALSE(state->BindCopiedPayload(*fresh,fresh->version,true,true,
+                                        0x90300000,0x9030001C,{}));
+    const auto payload=std::make_shared<const std::vector<uint8_t>>(0x568,0xA5);
+    // Equal extent does not let ordinary data requests omit their owned copy.
+    const auto ordinary=Request(state,capture++);ordinary->producer.argument_bytes=0x568;
+    CHECK_FALSE(state->BindCopiedPayload(*ordinary,0,true,true,0x90400000,0x9040001C,{}));
+    CHECK(ordinary->unavailable);CHECK_FALSE(Owner::FactsAvailable(Owner::Capture(ordinary)));
+    const auto data=Request(state,capture++);data->producer.argument_bytes=0x568;
+    REQUIRE(state->BindCopiedPayload(*data,0,true,true,0x90400000,0x9040001C,payload));
+    CHECK(data->copied_bytes==payload);CHECK_FALSE(data->identity_service_metadata_only);
+    const auto wrong_size=metadata();wrong_size->producer.argument_bytes=0x564;
+    CHECK_FALSE(state->BindCopiedPayload(*wrong_size,0,true,true,0x90500000,0x9050001C,{}));
+    const auto supplied_payload=metadata();
+    CHECK_FALSE(state->BindCopiedPayload(*supplied_payload,0,true,true,0x90600000,0x9060001C,payload));
+    const auto wrong_argument=metadata();
+    CHECK_FALSE(state->BindCopiedPayload(*wrong_argument,0,true,true,0x90700000,0x90700020,{}));
+    for(const auto& rejected:{wrong_size,supplied_payload,wrong_argument}) {
+      CHECK(rejected->unavailable);CHECK(rejected->envelope==0);
+      CHECK(rejected->copy_serial==0);CHECK_FALSE(rejected->copied_bytes);
+      CHECK_FALSE(Owner::FactsAvailable(Owner::Capture(rejected)));
+    }
+    const auto failed=metadata();
+    REQUIRE(state->BindCopiedPayload(*failed,0,false,true,0,0,{}));
+    CHECK(failed->copy_returned);CHECK(failed->envelope==0);
+    CHECK(failed->copy_serial==0);CHECK_FALSE(failed->copied_bytes);
+    CHECK(failed->identity_service.expired());CHECK(state->providers.empty());
+  }
   static void ProviderShadowsAndHistoricalCapture() {
     auto state=std::make_shared<State>(kRoot);const auto record=Request(state);
     int actual_thread=0,other_thread=0;
@@ -797,6 +851,9 @@ TEST_CASE("Original XMsg request and direct Start producer forms retain their di
 }
 TEST_CASE("Observed native XMsg copies revoke on real free and never retarget equal address reuse", "[kernel][xmsg_provenance][copy][lifetime]") {
   NativeXmsgProvenanceTestAccess::CopyFreeAndReuse();
+}
+TEST_CASE("Identity service metadata copies keep lifetime and data-provider authority separate", "[kernel][xmsg_provenance][identity_service][copy][lifetime]") {
+  NativeXmsgProvenanceTestAccess::MetadataOnlyCopyIsolation();
 }
 TEST_CASE("Unadmitted nested XMsg providers and released historical captures cannot lend older facts", "[kernel][xmsg_provenance][provider][lifetime]") {
   NativeXmsgProvenanceTestAccess::ProviderShadowsAndHistoricalCapture();

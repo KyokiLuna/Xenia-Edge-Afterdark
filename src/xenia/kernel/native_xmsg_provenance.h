@@ -2,6 +2,7 @@
 #ifndef XENIA_KERNEL_NATIVE_XMSG_PROVENANCE_H_
 #define XENIA_KERNEL_NATIVE_XMSG_PROVENANCE_H_
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -68,11 +69,16 @@ class NativeXmsgProvenance final {
   class AuthenticatedProducer final {
    private:
     friend class NativeContentResolve;
+    friend class NativeProfileIdentityOwner;
     friend class NativeProfileSaveOwner;
     friend class test::NativeXmsgProvenanceTestAccess;
     friend class NativeXmsgProvenance;
     explicit AuthenticatedProducer(ProducerFields fields)
         : fields_(fields) {}
+    AuthenticatedProducer(ProducerFields fields,
+        std::shared_ptr<NativeProfileIdentityOwner::IdentityServiceOrigin> origin)
+        :fields_(fields),identity_service_(std::move(origin)){}
+    std::shared_ptr<NativeProfileIdentityOwner::IdentityServiceOrigin> identity_service_;
     ProducerFields fields_;
   };
   class Capture final {
@@ -166,6 +172,18 @@ class NativeXmsgProvenance final {
   // One source-neutral original TITLE producer, observed before its real Task
   // call. The common Task owner still issues the sole allocation Birth and
   // independently authenticates code, output and all later native lifecycle.
+  struct IdentityServiceEnvelope {
+    RootFact root;uint64_t capture=0,copy=0;
+    uint32_t envelope=0,argument=0,overlap=0,task=0;
+    uint64_t birth=0,origin=0;
+  };
+  static std::optional<IdentityServiceEnvelope> IdentityServiceRequest(
+      const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
+  static std::shared_ptr<const DispatchFact> IdentityServiceDispatch(
+      void*,const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
+  static void ReleaseIdentityService(const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
+  static std::atomic<bool>* IdentityServiceAvailability(
+      const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
   struct TitleTaskProducerFact {
     RootFact root;
     FrameFact frame;
@@ -187,6 +205,13 @@ class NativeXmsgProvenance final {
   struct State;
   explicit NativeXmsgProvenance(std::shared_ptr<State>);
   std::shared_ptr<State> state_;
+};
+// Strong typed handle for this existing copied-envelope observation only.
+// The Record holds a weak origin, so no Record/capsule ownership cycle exists.
+class NativeXmsgIdentityServiceLink final {
+ private:
+  friend class NativeXmsgProvenance;
+  NativeXmsgProvenance::Capture capture_;
 };
 }  // namespace xe::kernel
 #endif

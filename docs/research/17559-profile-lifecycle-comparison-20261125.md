@@ -1,14 +1,16 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V130 system-contract review followed by the coherent V131 request and
-outcome implementation. All seven V131 test runs passed; native sign-in and
-shutdown still failed. The combined HDD gate remains open. This work follows
+Status: V132 request-owned service progress is applied and its integrated build
+and all seven direct test runs passed. The actual native run reached publication
+and real request completion, but post-selection Guide visibility and final
+settlement failed; manual normal window close ended with exit one and clean
+reaping. The combined HDD gate remains open. This work follows
 the standing [systems approach and
 console fidelity rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-Current V131 source map is
+The last tested V131 source map is
 `484392c97d89ca8e5a5ec72a7d4a9ce6fa74d654471b08255efae951ed5a70dd`
 (2,430 source files). Its seven direct test runs passed under receipt
 `cbe73dba7fac660411547ee2a44184490d5a138df395886dcf0f85f8d133ef0c`.
@@ -123,6 +125,180 @@ MangoHud and GameMode were disabled; original user data was not used.
 | ELF | `e116016a6ff865a4de3a0aa5ba660b52bf92807935c93e5ccb2d3b27606ac378` |
 | Actual runtime result | `bc26d56c7110a0adb40068f0063bc9767b5dd82930da5cd046d2044d284b751d` |
 | Root visual/cleanup assessment | `f660e124ca1a43ca1257c607a3a930223a222bc6248b06a59d47164b612d7eb6` |
+
+## Observed V131 native service-progress dependency
+
+Subsequent runs used the same qualified V131 ELF and all 2,430 tested source
+blobs, now saved in fork commit `7fac23c28f11f8d6bd5a4702205107ab9fb4090b`.
+The latest run proves which request holds up the worker: app `0xFC`, message
+`0x58001`. A bounded, read-only capture verified the actual worker's pending
+single-event wait, original A2898 and A2CF0 stack frames, pending result 997,
+matching event and issuer `0x818309A0`, plus the issuer's complete code bytes.
+This is a source-bound request identity, not an inference from the host toolbar
+or a dump of account/request payloads. No envelope-header fallback was needed.
+
+The native FC handler already retains the request. Its CE270 consumer runs the
+real XNet task and completes through original A2588, including native event,
+Task and packet cleanup. HLE `CompleteOverlapped` or a successful callback return
+cannot substitute for that lifecycle. The matching default C310 producer's four
+zero user rows and flags `0x14` are source-derived facts, not captured request
+arguments. They do not justify adopting a roster, inventing offline success,
+or reporting an authenticated Live connection.
+
+The matching default service graph exposes a dependency cycle:
+
+```mermaid
+flowchart LR
+  A[Native profile worker] -->|waits for FC 58001| B[Native service pump CEE08 / CE270]
+  B -->|host OldPaused gate waits for| C[Profile publication]
+  C -->|requires worker to pass request and reach publisher| A
+```
+
+FC's periodic CEE08 callback invokes the pending-request consumer, but the
+V131 host treats the whole CEE08 body as an ordinary data consumer and
+parks it until publication. CEE08 also has other consumers, so exempting its
+entire body is not established as safe. The coherent unit below preserves
+those data/source duties while allowing the request's real service progress,
+including repeated pending ticks, actual backend results, completion and
+cancellation. Actual pump execution/PC was not sampled; the cycle above is the
+source-defined default path joined to the observed pending FC request.
+
+No missing-CRT claim is made: the current startup plan's heap initialization
+transitively includes the FC constructor, and deferred native service startup
+registers/initializes FC and schedules its pump. A bare static pointer is not
+evidence of runtime readiness. The current plan contains 16 catalog phases and
+62 call entries; older 14/57 counts are historical.
+
+The latest isolated run closed with exit zero after 272.39 seconds, with clean
+owned teardown, no forced signals and checked inputs preserved. Native roster
+publication, CompleteIO and sign-in still have no passing result. Earlier V131
+exit-one runs remain failures. The combined gate and replacement AppImage are
+still open; no new build or packaged acceptance is claimed by these diagnostics.
+
+| Observed V131 record | SHA256 |
+| --- | --- |
+| Exact pending-channel observation | `8dada4c2c564529717d7d0e70cc508613fc91aab895c870477f3fb7fa7305802` |
+| Latest actual runtime result | `634b3b2c624beecf2e54723eb4de13639ef9a5c523e906d709e551fcd64c3286` |
+| Native request/completion lifecycle | `98eb47e379e47fd01e496e6fac52ddd5f86d0ca0d595477fb53b7a739b8f7ee8` |
+| Native FC producer/backend/completer | `c15d799ef6d1f1f4e088cf1d665a772d8171229c42b96cb4c5934f7f760b7a81` |
+
+## V132 implementation and actual validation
+
+The ten-file unit binds the actual C838 operation to its original FC producer,
+copied request, provider acceptance and native periodic Task. It admits the same
+whole CEE08 frame for recurring pending ticks, including a frame already parked
+before acceptance. Service progress carries lifetime ownership; it supplies no
+profile read, writer, listener or descendant authority. A known enclosing read
+is suspended through its actual owner and restored at the correct Task boundary;
+an unknown read cannot be borrowed. Existing signed-in users are not excluded by
+an invented empty-roster prerequisite.
+
+Original native backend results, completion, event/APC behavior, Task close and
+packet free remain responsible for the operation. Exact per-thread scalar
+bindings cover both profile and avatar hooks at entry, own-return and the native
+publication cut. They avoid unrelated host observer locks at those cuts while
+preserving distinct native Task destruction. Request, thread, module and source
+owners remain through real returns or actual CPU stop; escaped holders have the
+same explicit resource retirement. Final service joining occurs after native
+publication, without adding a publication barrier that recreates the cycle.
+
+The composition also skips full common Task code validation at instruction cuts
+where no eligible retained observation can be affected. Participating work still
+receives the original full proof. This changes neither the proof into a cache nor
+native results. No timing, FPS or native sign-in improvement has been measured.
+
+All existing literal test names, tags and bodies are preserved. Eleven added
+cases exercise actual production metadata, Task ledger, copy lifetime and read
+cells. The source-derived selections contain 1,459 default kernel cases and 190
+installed-focus cases, including the same three explicitly selected hidden cases.
+All seven direct runs passed: base 331/28,245 assertions, network 125/11,212,
+kernel 1,459/91,982, VFS 136/9,736, UI 124/4,863, focused CPU 5/130 and
+installed-focus 190/22,219. Focused runs overlap full-suite coverage. Static
+review, compilation and these component tests are not native acceptance.
+The completed build contained 341 steps and 322 compilation units because the
+per-thread binding changes a shared CPU header. All seven targets are requested;
+network and VFS products are checked unchanged when absent from the link plan.
+
+| V132 source/build input | SHA256 |
+| --- | --- |
+| Reviewed composition | `621f666da7d5a02fd9ee8fc9b675b55e441e3410ad12e6a638a28fdd60659a13` |
+| Source map, 2,430 files | `b97ae7ebd68287ec1513d3ec3e91d66e7f488285f4f783220b7ca89c00bfb0c9` |
+| Actual source application | `f60c3ba4d4a3364622f8afd02e2057a2cee173115be54e50aeb4e254e5e8a4f2` |
+| Build/test qualification manifest | `fd5b9d7d64576edfe3315ee868a18375fd6107799e0c05de1a983b332deeff98` |
+| Completed build | `ea9378520430698c8e5adde45d0a583df9262adfab3543c7711f67967785dbb7` |
+| Built ELF | `dba714badc3999a35db27cf3a19c1af4748887e2273d337db05c01eb34c380bf` |
+| Seven direct runs | `c8b78f00691c5ad280e9b64317634524f27e7b7dc5322195bc15a25223163b0d` |
+
+In the isolated native run, Guide was visible before selection. Selecting
+local123 reached a dashboard that displayed that profile's name. Repeated Guide
+requests then produced no visible Guide; Back followed by Right visibly changed
+dashboard focus. The toolbar's unsigned slot zero is not evidence about selected
+slot one. The real initializer returned zero, and the native worker returned
+`0x80150013`. Original CompleteIO entered and returned with Win32 `0x65B`, that
+same extended value and length zero. Native maps and writers became available.
+Settlement stages 7/8 were not captured. These facts establish new native progress,
+not successful sign-in or authenticated Live service.
+
+All eleven initial final-readiness predicates eventually passed. The recorded
+post-request Query still lacked the actual prepared Source-retirement result;
+it did not evaluate later joins. Sampling is bounded, so this does not assert
+that every later Query failed identically. Whole-contract review mapped
+PollOnNativeTask through actual callback/output, GPU, session, Source and native
+invocation retirement, then separate presenter drain and PM final Open. The
+next observation must identify the exact Poll refusal and pending control state.
+No missing receipt may be replaced by an inferred GPU completion.
+
+The process exited one after 546.58 seconds following Root's owned normal window
+close, fully reaped with no forced signals. This stop's first reported refusal is
+the Xmsg retained-stop predicate, which exposes no `stopping/retired/hooks` tuple.
+No hook leak or failing identity conjunct is established by that report. Native
+`0x80150013` branch provenance is mapped, but its actual producer parameter/state
+was not captured; no semantic error name or network cause is assigned.
+
+| V132 native record | SHA256 |
+| --- | --- |
+| Actual runtime result | `a95bce19e94d2ceb37a01d46fce92ed35ef809a54fe74ee11d63284d86be03ac` |
+| Root visual/scalar assessment | `9da7ac7b66ca0086f280deba1e754c7496cb72362831c90183e46a0013569661` |
+| Whole prepared-source contract review | `19643da87322a0e7b78f8b1f612347c6d6520617d4f9fade7b38d51a7a32275f` |
+| Separate Xmsg stop contract review | `dd5d3c7f43d58500c84d73a20bdd3e8f9808da7711389bd4667d217369d1ac1c` |
+
+The dirty index, README, existing user data and previously qualified artifacts
+remain preserved. A replacement checkpoint still requires successful current
+direct tests, actual native dashboard/game checks and packaged AppImage tests.
+
+## Distinct profile deletion operations
+
+The matching native 233 path constructs `Content\\XUID\\` with flags `0x200`;
+it does not stop at the profile's package. Its recursive operation can include
+owned saves. Replacing it with the host profile-only operation would also change
+its default-device handling, callbacks, partial results and sign-out policy.
+
+The dashboard has a separate selected-package branch. Whole function `92300760`
+selects export 270 for profile content type `0x10000`, operation 4 and choice
+field `+0x114 == 1`; its other branch calls 233. The field receives an incoming
+choice and defaults to one, but the visible localized label and caller binding
+have not been proved. These are static primary-code findings, not a tested UI
+operation. A virtual raw profile CON is one non-directory item within the outer
+traversal; its individual removal can later use a shared package/Header owner
+while preserving the original following callback.
+
+The next private unit addresses the existing host path's real defects: raw
+package removal leaves the external Header behind, and a late cache-admission
+failure can follow physical deletion. Its shared owner must retain the exact
+source, package and external Header claims through durable removal, recovery
+and the matching cache handoff. Host sign-out policy remains separate from
+native traversal policy. The candidate and its persistence/contention/export
+cases are not applied or executed. Physical V3 closes the reviewed namespace,
+exception-recovery and completed-before-retirement handoff issues. Production
+270 routing, its exact source/path and synchronous/asynchronous completion are
+being integrated through the same common service; that union still awaits review.
+Native 233 remains unchanged, and this private unit is absent from the tested
+V132 source. Cold creation and complete native SAVE remain mandatory open work.
+
+| Deletion contract record | SHA256 |
+| --- | --- |
+| Corrected native 233 scope | `e702ec438e76731e8b76397717776637c5218b9207ec6518179bb0ec2bcc07a6` |
+| Separate dashboard package-delete branch | `40b0d5c2a5b5ebd6a2fdff2ad6f9eeb29695cea8acb94fd4f5db0a37c47282a1` |
 
 ## Evidence
 

@@ -33,6 +33,7 @@ class NativeAvatarService;
 class NativeProfileIdentityRequest;
 class NativeProfileSaveOwner;
 class NativeXmsgProvenance;
+class NativeXmsgIdentityServiceLink;
 namespace xam {
 class HostRoster;
 class ProfileManager;
@@ -238,6 +239,24 @@ class NativeProfileIdentityOwner final
       const std::array<std::pair<uint32_t,uint32_t>,2>&,uint32_t phase,
       const NativeIdentityTileWork*) noexcept;
   friend class NativeXmsgProvenance;
+  // Exact FC58001 lifetime capsule. Only this owner can issue it from an
+  // entered original C838; it supplies no public/source/read capability.
+  class IdentityServiceOrigin {
+   private:
+    friend class NativeProfileIdentityOwner;
+    struct Data;
+    explicit IdentityServiceOrigin(std::shared_ptr<Data> value):data_(std::move(value)){}
+    std::shared_ptr<Data> data_;
+  };
+  static void ObserveIdentityServiceBoundary(void*,uint32_t,bool) noexcept;
+  static bool ObserveIdentityServiceFastBoundary(void*,uint32_t,bool) noexcept;
+  static bool CoversIdentityServiceBoundary(void*,uint32_t,bool) noexcept;
+  static std::shared_ptr<IdentityServiceOrigin> CaptureIdentityServiceStart(void*) noexcept;
+  static void BindIdentityServiceLink(const std::shared_ptr<IdentityServiceOrigin>&,
+      std::shared_ptr<NativeXmsgIdentityServiceLink>) noexcept;
+  std::optional<uint64_t> TryEnterIdentityServiceTick(void*,uint32_t) noexcept;
+  bool ReturnIdentityServiceTick(void*,uint32_t) noexcept;
+
   static std::optional<TaskAllocationReturnObservation> TakeTaskAllocationReturnAtNativeCut(
       void* actual_context) noexcept;
   // Permission to release exactly our own actual getter reference. This is

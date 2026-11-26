@@ -19,6 +19,8 @@ struct NativeXmsgProvenance::Capture::Record {
  using Frame=NativeXmsgProvenance::FrameFact;
  std::weak_ptr<State> owner;
  ProducerFields producer;
+ std::weak_ptr<NativeProfileIdentityOwner::IdentityServiceOrigin> identity_service;
+ bool identity_service_metadata_only=false;
  const void* producer_thread=nullptr;
  uint64_t capture=0,copy_serial=0,version=0;
  Frame wrapper,inner_wrapper,start,copier,schedule,callback,inprocess,shared,controls;

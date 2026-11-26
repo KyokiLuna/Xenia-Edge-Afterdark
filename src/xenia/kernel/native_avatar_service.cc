@@ -2571,6 +2571,7 @@ bool AvatarOnlyIngress(cpu::ppc::PPCContext& c,uint32_t at) {
 }
 }
 uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
+  if(address<=UINT32_MAX && NativeProfileIdentityOwner::CoversIdentityServiceBoundary(raw,uint32_t(address),false))return 1;
   State::RequestEntry request_entry;
   auto* c=static_cast<cpu::ppc::PPCContext*>(raw);
   if(!c || !c->kernel_state || !HooksFunction(uint32_t(address)))return 1;
@@ -2697,6 +2698,7 @@ uint64_t NativeAvatarService::GuardEntry(void* raw,uint64_t address) noexcept {
     TraceAvatarIngressDenied(*c,uint32_t(address),kFailed);return 0;}
 }
 void NativeAvatarService::BeforeCompletionPublication(void* raw) noexcept{
+  if(NativeProfileIdentityOwner::CoversIdentityServiceBoundary(raw,0x816A2630,false))return;
   auto* c=static_cast<cpu::ppc::PPCContext*>(raw);
   if(!c || !c->kernel_state)return;
   try{
@@ -2738,6 +2740,7 @@ void NativeAvatarService::BeforeCompletionPublication(void* raw) noexcept{
   }catch(...){if(const auto service=Lookup(c->kernel_state))service->state_->Poison(__LINE__,17,{},nullptr,0);}
 }
 void NativeAvatarService::ObserveReturn(void* raw,uint64_t address) noexcept {
+  if(address<=UINT32_MAX && NativeProfileIdentityOwner::CoversIdentityServiceBoundary(raw,uint32_t(address),true))return;
   State::RequestEntry request_entry;
   auto* c=static_cast<cpu::ppc::PPCContext*>(raw);
   if(!c || !c->kernel_state)return;

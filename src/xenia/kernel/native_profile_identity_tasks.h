@@ -374,6 +374,46 @@ class NativeProfileIdentityTasks final {
  private:
   friend class xe::kernel::NativeProfileIdentityOwner;
   friend class xe::kernel::test::NativeProfileIdentityTaskTestAccess;
+  // Existing host observation fields shared with the concrete retained Work.
+  // This metadata is not a Task/code/read capability. Only the owner mutates
+  // it, under State; a skipped observation cannot issue any native fact.
+  struct ExecutionObservation {
+    Frame frame;
+    uint64_t serial=0;
+    bool execution_only=false,execution_uncertain=false,normal_return=false;
+  };
+  // A strong exact-Work memento for deciding whether this instruction can
+  // have a host metadata effect. It never replaces the original code proof.
+  class ExecutionInstructionParticipation final {
+   public:
+    static std::optional<ExecutionInstructionParticipation> Capture(
+        const std::shared_ptr<ExecutionObservation>& current,uint32_t actual_pcr) noexcept {
+      if(!Eligible(current,actual_pcr))return {};
+      ExecutionInstructionParticipation value;
+      value.owner_=current;value.serial_=current->serial;value.frame_=current->frame;
+      return value;
+    }
+    bool Matches(const std::shared_ptr<ExecutionObservation>& current,
+        uint32_t actual_pcr) const noexcept {
+      return current.get()==owner_.get() && Eligible(current,actual_pcr) &&
+          current->serial==serial_ && current->frame==frame_;
+    }
+   private:
+    static bool Eligible(const std::shared_ptr<ExecutionObservation>& current,
+        uint32_t actual_pcr) noexcept {
+      // Exactly the original instruction observer's no-effect return set.
+      // Body operands/SP/LR remain for the full proof and ledger to reject.
+      return current && current->execution_only && !current->normal_return &&
+          !current->execution_uncertain && current->frame.pcr==actual_pcr;
+    }
+    std::shared_ptr<const ExecutionObservation> owner_;
+    uint64_t serial_=0;Frame frame_;
+  };
+  static bool DispatchCodeAuthenticationRequired(Birth birth,const void* actual_read_scope) noexcept {
+    // A generation-zero dispatch cannot issue BeginExecutionDispatch. Its
+    // actual ambient read still needs the original proof for restoration.
+    return birth.generation || actual_read_scope;
+  }
   // Scalar receipt paired with an existing one-shot caller reference. Only
   // the real owner supplies observed generation and native ledger outcomes.
   struct CloseReceipt {
@@ -1013,6 +1053,22 @@ class NativeProfileIdentityTasks final {
       owner_=std::move(owner);scope_=scope;origin_=origin;restoration_=invocation;
       phase_=Phase::kSuspended;return true;
     }
+    // A positively owned, same-thread enclosing scope may also surround an
+    // exact request-owned CEE08 service frame. This only isolates its TLS cell;
+    // it supplies no read to the service and does not change native currentTask.
+    bool SuspendService(Frame origin,Frame invocation,std::shared_ptr<void> owner,
+        const std::shared_ptr<void>& actual_owner,void* scope,std::atomic<void*>& cell) noexcept {
+      if(phase_!=Phase::kEmpty || !origin.valid() || !invocation.valid() ||
+         invocation.function!=0x818CEE08 || origin.root!=invocation.root ||
+         origin.thread!=invocation.thread || origin.pcr!=invocation.pcr ||
+         origin.sp<=invocation.sp || !scope || !owner || !actual_owner ||
+         owner.get()!=actual_owner.get() || owner.owner_before(actual_owner) ||
+         actual_owner.owner_before(owner))return false;
+      void* expected=scope;
+      if(!cell.compare_exchange_strong(expected,nullptr,std::memory_order_acq_rel))return false;
+      owner_=std::move(owner);scope_=scope;origin_=origin;restoration_=invocation;
+      phase_=Phase::kSuspended;return true;
+    }
     // Original BA058's inline dispatch returns BEFORE it restores parent
     // currentTask. Transfer to its exact admitted original own-return instead
     // of exposing the old read scope at callback/dispatcher return.
@@ -1096,6 +1152,148 @@ class NativeProfileIdentityTasks final {
     }
     return {};
   }
+  // One exact identity-owned FC58001 operation. These are retained native
+  // observations only: no method issues a read, writer, Task or completion.
+  class IdentityServiceRequest final {
+   public:
+    struct Origin {
+      Frame worker,producer;Birth worker_birth;
+      uint64_t job=0,source=0,work=0;
+      uint32_t object=0,rows=0,parameters=0,flags=0,overlap=0;
+    };
+    struct Copy {
+      uint64_t capture=0,serial=0;uint32_t envelope=0,argument=0,overlap=0;
+      Birth request_birth;
+      bool operator==(const Copy& b) const {return capture==b.capture && serial==b.serial && envelope==b.envelope && argument==b.argument && overlap==b.overlap && SameBirth(request_birth,b.request_birth);}
+    };
+    struct Pump {
+      Frame schedule;Birth birth;uint32_t object=0;
+      bool operator==(const Pump& b) const {return schedule==b.schedule && object==b.object && SameBirth(birth,b.birth);}
+    };
+    struct Tick {
+      uint64_t serial=0,dispatch=0;Frame frame;Birth birth;
+      bool operator==(const Tick& b) const {return serial==b.serial && dispatch==b.dispatch && frame==b.frame && SameBirth(birth,b.birth);}
+    };
+    bool Begin(Origin value) noexcept {
+      if(begun_ || !value.worker.valid() || !value.producer.valid() ||
+         value.worker.function!=0x8199C838 || value.producer.function!=0x81830878 ||
+         value.worker.root!=value.producer.root || value.worker.thread!=value.producer.thread ||
+         value.worker.pcr!=value.producer.pcr || value.worker.sp<0xBC0 ||
+         value.producer.sp!=value.worker.sp-0xBC0 || value.producer.lr!=0x8199C488 ||
+         !value.job || value.source<=2 || !value.work || !value.worker_birth.generation ||
+         value.worker_birth.origin!=value.source || !Address(value.worker_birth.task) ||
+         value.object!=0x81AEE470 || value.rows || value.flags!=4 || value.overlap ||
+         value.parameters!=value.worker.sp-0x370)return false;
+      origin_=value;begun_=true;return true;
+    }
+    const Origin& origin() const noexcept {return origin_;}
+    const Copy& copy() const noexcept {return copy_;}
+    bool BindCopy(Copy value) noexcept {
+      if(!begun_ || copy_.serial || !value.capture || !value.serial ||
+         !Address(value.envelope) || uint64_t(value.envelope)+0x584>uint64_t(UINT32_MAX)+1 ||
+         value.argument!=value.envelope+0x1C || origin_.producer.sp<0x670 ||
+         value.overlap!=origin_.producer.sp-0x670 || !value.request_birth.generation ||
+         value.request_birth.origin!=1 || !Address(value.request_birth.task))return false;
+      copy_=value;return true;
+    }
+    bool EnterAcceptance(Frame frame,const Copy& copy,uint32_t state,
+        uint32_t request,uint32_t overlap) noexcept {
+      if(!begun_ || accepting_ || acceptance_returned_ || !copy_.serial || copy!=copy_ ||
+         !frame.valid() || frame.root!=origin_.worker.root || frame.function!=0x818CD588 ||
+         frame.lr!=0x818CDD2C || state!=origin_.object+0x10 ||
+         request!=copy_.argument || overlap!=copy_.overlap)return false;
+      acceptance_=frame;accepting_=true;return true;
+    }
+    bool ReturnAcceptance(Frame frame,uint32_t value,uint32_t pending_request,
+        uint32_t pending_overlap) noexcept {
+      if(!accepting_ || acceptance_returned_ || frame!=acceptance_)return false;
+      acceptance_returned_=true;
+      if(int32_t(value)<0)return !accepted_;
+      if(value || terminal_entered_ || pending_request!=copy_.argument || pending_overlap!=copy_.overlap)return false;
+      accepted_=true;return true;
+    }
+    bool accepted() const noexcept {return accepted_ && !terminal_entered_ && !retired_;}
+    static bool PumpMatches(const Pump& pump,const Origin& origin) noexcept {
+      return pump.schedule.valid() && pump.schedule.root==origin.worker.root &&
+          pump.schedule.function==0x816BA440 && pump.schedule.lr==0x818CF164 &&
+          pump.object==origin.object && pump.birth.generation && pump.birth.origin==1 &&
+          Address(pump.birth.task);
+    }
+    std::optional<Tick> EnterTick(Frame frame,const Pump& pump,const CurrentExecution& dispatch) noexcept {
+      if(!accepted() || !PumpMatches(pump,origin_) || !frame.valid() ||
+         frame.root!=origin_.worker.root || frame.function!=0x818CEE08 || frame.lr!=0x818CEFE8 ||
+         !SameBirth(pump.birth,dispatch.birth) || dispatch.root!=origin_.worker.root ||
+         !dispatch.invocation || dispatch.callback!=0x818CEFD8 || dispatch.argument!=origin_.object ||
+         dispatch.dispatcher.thread!=frame.thread || dispatch.dispatcher.pcr!=frame.pcr ||
+         dispatch.body_sp<0x60 || frame.sp!=dispatch.body_sp-0x60 ||
+         !next_tick_ || next_tick_==UINT64_MAX)return {};
+      for(const auto& tick:ticks_)if(tick && tick->frame==frame)return {};
+      for(auto& tick:ticks_)if(!tick){tick=Tick{next_tick_++,dispatch.invocation,frame,pump.birth};return tick;}
+      return {};
+    }
+    bool WithdrawUnenteredTick(Tick tick) noexcept {
+      for(auto& current:ticks_)if(current && *current==tick){current.reset();return true;}
+      return false;
+    }
+    bool ReturnTick(Tick tick,Frame actual,Birth birth) noexcept {
+      for(auto& current:ticks_)if(current && *current==tick){
+        if(actual!=tick.frame || !SameBirth(birth,tick.birth))return false;
+        current.reset();return true;
+      }
+      return false;
+    }
+    bool EnterCompletion(Frame frame,uint32_t overlap,uint32_t context,
+        uint32_t result,uint32_t extended,uint32_t length) noexcept {
+      if(!begun_ || terminal_entered_ || !copy_.serial || !frame.valid() ||
+         frame.root!=origin_.worker.root || frame.function!=0x816A2588 ||
+         overlap!=copy_.overlap || (context&~1u)!=copy_.envelope || length)return false;
+      bool issuer=false;
+      if(accepted_ && frame.lr==0x818CEDA0){
+        for(const auto& tick:ticks_)if(tick && tick->frame.thread==frame.thread &&
+            tick->frame.pcr==frame.pcr && tick->frame.sp>=0x4C0 && frame.sp==tick->frame.sp-0x4C0)issuer=true;
+        if(result!=(int32_t(extended)<0?0x65Bu:0u))return false;
+      }else if(accepting_ && !acceptance_returned_ && frame.lr==0x818CD5F4 &&
+          acceptance_.thread==frame.thread && acceptance_.pcr==frame.pcr &&
+          acceptance_.sp>=0x80 && frame.sp==acceptance_.sp-0x80 &&
+          result==0x65B && extended==0x800700AA)issuer=true;
+      if(!issuer)return false;
+      completion_=frame;terminal_entered_=true;return true;
+    }
+    bool EnterEnvelopeFree(Frame frame,uint32_t envelope) noexcept {
+      if(!terminal_entered_ || free_entered_ || envelope!=copy_.envelope ||
+         !frame.valid() || frame.root!=completion_.root || frame.thread!=completion_.thread ||
+         frame.pcr!=completion_.pcr || completion_.sp<0xA0 || frame.sp!=completion_.sp-0xA0 ||
+         frame.function!=0x816E6AB0 || frame.lr!=0x816A26E8)return false;
+      free_=frame;free_entered_=true;return true;
+    }
+    bool ReturnEnvelopeFree(Frame frame) noexcept {
+      if(!free_entered_ || free_returned_ || frame!=free_)return false;
+      free_returned_=true;return true;
+    }
+    bool ReturnCompletion(Frame frame) noexcept {
+      if(!terminal_entered_ || terminal_returned_ || !free_returned_ || frame!=completion_)return false;
+      terminal_returned_=true;return true;
+    }
+    bool ReturnProducer(Frame frame) noexcept {
+      if(!begun_ || producer_returned_ || frame!=origin_.producer)return false;
+      producer_returned_=true;return true;
+    }
+    void ObserveCancel() noexcept {cancel_requested_=true;}
+    bool cancel_requested() const noexcept {return cancel_requested_;}
+    bool terminal_returned() const noexcept {return terminal_returned_;}
+    bool ready_to_reap() const noexcept {
+      if(!terminal_returned_ || !producer_returned_ || !acceptance_returned_)return false;
+      for(const auto& tick:ticks_)if(tick)return false;
+      return true;
+    }
+    void RetireAtActualStop() noexcept {retired_=true;}
+   private:
+    Origin origin_{};Copy copy_{};Frame acceptance_{},completion_{},free_{};
+    std::array<std::optional<Tick>,16> ticks_{};uint64_t next_tick_=1;
+    bool begun_=false,accepting_=false,acceptance_returned_=false,accepted_=false;
+    bool terminal_entered_=false,terminal_returned_=false,free_entered_=false,free_returned_=false;
+    bool producer_returned_=false,cancel_requested_=false,retired_=false;
+  };
   struct ExecutionControl {
     Frame frame;Birth birth;uint32_t mask=0,callback=0,argument=0;
   };

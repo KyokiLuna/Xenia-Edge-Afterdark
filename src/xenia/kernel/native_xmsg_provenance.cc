@@ -37,12 +37,18 @@ constexpr uint32_t kRequest=0x816A3128, kRequestEx=0x816A31C8,
     kInProcess=0x816A2F88,kInvoke=0x816A29C0,kCallback=0x816A2C80,
     kSchedule=0x816BA440,kInline=0x816B9D68,kAllocate=0x816B9A18,
     kFree=0x816E6AB0,kEnvelopeBytes=0x1C;
+constexpr uint32_t kIdentityServiceProducer=0x81830878,kIdentityServiceAccept=0x818CD588,
+    kIdentityServiceComplete=0x816A2588,kIdentityServiceCancel=0x816A26F8;
 constexpr size_t kCaptureLimit=128,kProviderDepthLimit=256;
 constexpr uint32_t kCopyBudgetLimit=1024*1024;
 struct Code {uint32_t address,bytes;const char* hash;};
 // Complete selected original bodies, not guessed callback allowlists. The
 // eight-byte direct Start leaf is its actual tail wrapper, not a new frame.
 constexpr Code kCode[]={
+ {kIdentityServiceProducer,352,"2d25796d52b308dec369b0f1e2de415d0688950364c1cfc3cbcd042118ab230e"},
+ {kIdentityServiceAccept,252,"c8980e538f08e68fb8a1202e4e3b447d01388d885abb38d83dc3e06ecc096361"},
+ {kIdentityServiceComplete,364,"cb8e83d7817263c223f0ac9719175540bbd78746a39ce1b5a38221550bf953d1"},
+ {kIdentityServiceCancel,352,"b1af64f353766148e34db02ed938743371561d2ff3d694bb5a8209e5c205051a"},
  {kRequest,160,"eff55fae08849d9f77335f79e43d95faf1c060280b9eeecdef31e403661469e0"},
  {kRequestEx,192,"b5050cffde4ee93439285e1ffbd59772e0b93ccb760f6ca08819e76f80d48f9a"},
  {kStartWrapper,8,"63324809f1fc1f0af90fe10acf82eb80b80f5852144749f4a1341a5a4890a292"},
@@ -203,7 +209,9 @@ bool NativeXmsgProvenance::State::BindCopiedPayload(Record& r,uint64_t expected_
     std::shared_ptr<const std::vector<uint8_t>> payload) noexcept {
  if(!Live(r) || !r.copy_entered || r.version!=expected_version || r.copy_returned)return false;
  r.copy_returned=true;
- if(!valid || (success && (!envelope || (envelope&3) || !payload || payload->size()!=r.producer.argument_bytes ||
+ if(!valid || (success && (!envelope || (envelope&3) ||
+     (r.identity_service_metadata_only ? (payload || r.producer.argument_bytes!=0x568) :
+       (!payload || payload->size()!=r.producer.argument_bytes)) ||
      uint64_t(envelope)+kEnvelopeBytes+r.producer.argument_bytes>uint64_t(UINT32_MAX)+1 ||
      copied_argument!=(r.producer.argument?envelope+kEnvelopeBytes:0) ||
      !next_copy || next_copy==UINT64_MAX))){r.unavailable=true;r.facts_available.store(false,std::memory_order_release);return false;}
@@ -240,7 +248,8 @@ bool NativeXmsgProvenance::HooksFunction(uint32_t at) noexcept {
  switch(at){
   case kRequest:case kRequestEx:case kStartWrapper:case kStart:case kCopy:
   case kInProcess:case 0x816A2B90:case 0x816A2C08:case kInvoke:case kCallback:case kSchedule:case kInline:
-  case kAllocate:case kFree:return true;
+  case kAllocate:case kFree:case kIdentityServiceProducer:case kIdentityServiceAccept:
+  case kIdentityServiceComplete:case kIdentityServiceCancel:return true;
   default:return false;
  }
 }
@@ -259,30 +268,35 @@ std::optional<NativeXmsgProvenance::Capture> NativeXmsgProvenance::Begin(
   ++s.hooks;exit.entered=true;
  }
  const auto& p=capsule.fields_;
- if(p.root!=s.root || !p.public_invocation.invocation ||
+ const bool identity_service=bool(capsule.identity_service_);
+ if(identity_service && (p.producer.function!=kIdentityServiceProducer || p.wrapper!=kStartWrapper ||
+    p.form!=Form::kDirectStart || p.app!=0xFC || p.message!=0x58001 ||
+    p.argument_bytes!=0x568 || p.overlap || p.copied_bytes_budget))return {};
+ if(p.root!=s.root || (!identity_service && (!p.public_invocation.invocation ||
     !p.public_invocation.function || !p.public_invocation.module.hmodule ||
     !p.public_invocation.module.generation || !p.public_invocation.caller_module.hmodule ||
-    !p.public_invocation.caller_module.generation || !p.producer_instruction ||
+    !p.public_invocation.caller_module.generation)) || !p.producer_instruction ||
     p.producer_instruction<4 || (p.producer_instruction&3) || !p.producer.function ||
     (p.argument_bytes && !p.argument) ||
-    p.argument_bytes>p.copied_bytes_budget || p.copied_bytes_budget>kCopyBudgetLimit ||
+    (!identity_service && p.argument_bytes>p.copied_bytes_budget) || p.copied_bytes_budget>kCopyBudgetLimit ||
     (p.form==Form::kRequestWrapper && p.wrapper!=kRequest && p.wrapper!=kRequestEx) ||
     (p.form==Form::kDirectStart && p.wrapper!=kStartWrapper) ||
     (p.form!=Form::kRequestWrapper && p.form!=Form::kDirectStart))return {};
  const auto frame=Actual(*s.kernel,c,p.producer.function);
- if(!frame || *frame!=p.producer || !SameThread(p.public_invocation.frame,p.producer) ||
-    p.public_invocation.frame.sp<p.producer.sp || p.public_invocation.frame.lr<4 ||
+ if(!frame || *frame!=p.producer || (!identity_service && (!SameThread(p.public_invocation.frame,p.producer) ||
+    p.public_invocation.frame.sp<p.producer.sp || p.public_invocation.frame.lr<4)) ||
     !s.CodeCurrent(p.wrapper))return {};
  const auto public_module=s.ModuleAt(p.public_invocation.function);
  const auto caller_module=s.ModuleAt(p.public_invocation.frame.lr-4,false);
  const auto producer_module=s.ModuleAt(p.producer_instruction);
- if(public_module!=std::optional(p.public_invocation.module) ||
-    caller_module!=std::optional(p.public_invocation.caller_module) || !producer_module)return {};
+ if((!identity_service && (public_module!=std::optional(p.public_invocation.module) ||
+    caller_module!=std::optional(p.public_invocation.caller_module))) || !producer_module)return {};
  const auto branch=Word(*s.kernel->memory(),p.producer_instruction);
  if(!branch || (*branch&0xFC000003u)!=0x48000001u)return {};
  const int32_t displacement=int32_t((*branch&0x03FFFFFCu)<<6)>>6;
  if(p.producer_instruction+uint32_t(displacement)!=p.wrapper)return {};
  auto record=std::make_shared<Capture::Record>();record->producer=p;
+ record->identity_service=capsule.identity_service_;record->identity_service_metadata_only=identity_service;
  record->producer_thread=XThread::GetCurrentThread();record->owner=owner->state_;
  if(!s.PublicArguments(*record,c,p.form==Form::kDirectStart))return {};
  {
@@ -357,6 +371,11 @@ bool NativeXmsgProvenance::RetireAfterActualKernelStop() noexcept {
 void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
  if(!raw || address>UINT32_MAX || !HooksFunction(uint32_t(address)))return;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ if(uint32_t(address)==kIdentityServiceComplete){
+  (void)NativeProfileIdentityOwner::ObserveIdentityServiceFastBoundary(raw,uint32_t(address),false);return;
+ }
+ if(uint32_t(address)==kFree && NativeProfileIdentityOwner::ObserveIdentityServiceFastBoundary(
+      raw,uint32_t(address),false))return;
  const auto owner=Lookup(c.kernel_state);if(!owner)return;auto& s=*owner->state_;
  struct Exit{State& state;bool entered=false;~Exit(){if(entered){std::lock_guard lock(state.mutex);--state.hooks;}}} exit{s};
  std::shared_ptr<Capture::Record> touched;
@@ -364,7 +383,9 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
  try {
   {
    std::lock_guard lock(s.mutex);s.Prune();
-   if(s.retired || !s.kernel || s.records.empty() || s.hooks==SIZE_MAX)return;
+   const bool identity_boundary=at==kIdentityServiceProducer || at==kIdentityServiceAccept ||
+       at==kIdentityServiceComplete || at==kIdentityServiceCancel || at==kStartWrapper || at==kFree;
+   if(s.retired || !s.kernel || (s.records.empty() && !identity_boundary) || s.hooks==SIZE_MAX)return;
    ++s.hooks;exit.entered=true;
   }
   const auto frame=Actual(*s.kernel,c,at);
@@ -376,7 +397,24 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
   if(!task_function && !s.CodeCurrent(at)){
    if(at==kInvoke){std::lock_guard lock(s.mutex);s.provider_overflow=true;}return;
   }
+  if(at==kIdentityServiceProducer || at==kIdentityServiceAccept ||
+     at==kIdentityServiceComplete || at==kIdentityServiceCancel){
+   NativeProfileIdentityOwner::ObserveIdentityServiceBoundary(raw,at,false);return;
+  }
+  if(at==kStartWrapper){
+   const auto origin=NativeProfileIdentityOwner::CaptureIdentityServiceStart(raw);
+   if(origin){
+    ProducerFields p;p.root=s.root;p.producer={frame->thread,frame->pcr,frame->sp,frame->lr,kIdentityServiceProducer};
+    p.producer_instruction=0x8183099C;p.wrapper=kStartWrapper;p.form=Form::kDirectStart;
+    p.app=0xFC;p.message=0x58001;p.argument=uint32_t(c.r[6]);p.argument_bytes=0x568;
+    if(auto capture=Begin(raw,AuthenticatedProducer(p,origin))){
+     auto link=std::shared_ptr<NativeXmsgIdentityServiceLink>(new NativeXmsgIdentityServiceLink);
+     link->capture_=std::move(*capture);NativeProfileIdentityOwner::BindIdentityServiceLink(origin,std::move(link));
+    }
+   }
+  }
   if(at==kFree){
+   NativeProfileIdentityOwner::ObserveIdentityServiceBoundary(raw,at,false);
    const auto pointer=Dword(c.r[3]);if(!pointer)return;
    std::lock_guard lock(s.mutex);
    s.Revoke(*pointer);
@@ -625,13 +663,20 @@ NativeXmsgProvenance::CurrentDispatch(void* raw,const Capture& capture) noexcept
 void NativeXmsgProvenance::ObserveReturn(void* raw,uint64_t address) noexcept {
  if(!raw || address>UINT32_MAX || !HooksFunction(uint32_t(address)))return;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ if(uint32_t(address)==kIdentityServiceComplete){
+  (void)NativeProfileIdentityOwner::ObserveIdentityServiceFastBoundary(raw,uint32_t(address),true);return;
+ }
+ if(uint32_t(address)==kFree && NativeProfileIdentityOwner::ObserveIdentityServiceFastBoundary(
+      raw,uint32_t(address),true))return;
  const auto owner=Lookup(c.kernel_state);if(!owner)return;auto& s=*owner->state_;
  struct Exit{State& state;bool entered=false;~Exit(){if(entered){std::lock_guard lock(state.mutex);--state.hooks;}}} exit{s};
  std::shared_ptr<Capture::Record> touched;const auto at=uint32_t(address);
  try {
   {
    std::lock_guard lock(s.mutex);
-   if(s.retired || !s.kernel || s.records.empty() || s.hooks==SIZE_MAX)return;
+   const bool identity_boundary=at==kIdentityServiceProducer || at==kIdentityServiceAccept ||
+       at==kIdentityServiceComplete || at==kIdentityServiceCancel || at==kStartWrapper || at==kFree;
+   if(s.retired || !s.kernel || (s.records.empty() && !identity_boundary) || s.hooks==SIZE_MAX)return;
    ++s.hooks;exit.entered=true;
   }
   const auto frame=Actual(*s.kernel,c,at);
@@ -658,6 +703,10 @@ void NativeXmsgProvenance::ObserveReturn(void* raw,uint64_t address) noexcept {
   }
   if(at!=kSchedule && at!=kInline && !s.CodeCurrent(at)){
    if(at==kInvoke){std::lock_guard lock(s.mutex);s.provider_overflow=true;}return;
+  }
+  if(at==kIdentityServiceProducer || at==kIdentityServiceAccept ||
+     at==kIdentityServiceComplete || at==kIdentityServiceCancel || at==kFree){
+   NativeProfileIdentityOwner::ObserveIdentityServiceBoundary(raw,at,true);return;
   }
   const auto* thread=XThread::GetCurrentThread();
   if(at==kInvoke){
@@ -704,8 +753,9 @@ void NativeXmsgProvenance::ObserveReturn(void* raw,uint64_t address) noexcept {
     const auto argument=Word(*s.kernel->memory(),*envelope+12);
     copied_argument=touched->producer.argument?*envelope+kEnvelopeBytes:0;
     if(argument==std::optional(copied_argument)){
-     payload=s.ReadCopiedPayload(*s.kernel->memory(),*envelope+kEnvelopeBytes,
-         touched->producer.argument_bytes);valid=bool(payload);
+     if(touched->identity_service_metadata_only)valid=true;
+     else {payload=s.ReadCopiedPayload(*s.kernel->memory(),*envelope+kEnvelopeBytes,
+         touched->producer.argument_bytes);valid=bool(payload);}
     }
    }
    std::lock_guard lock(s.mutex);
@@ -727,6 +777,29 @@ void NativeXmsgProvenance::ObserveReturn(void* raw,uint64_t address) noexcept {
   if(touched){touched->unavailable=true;touched->facts_available.store(false,std::memory_order_release);++touched->version;}
   if(at==kInvoke)s.provider_overflow=true;
  }
+}
+
+std::optional<NativeXmsgProvenance::IdentityServiceEnvelope>
+NativeXmsgProvenance::IdentityServiceRequest(const std::shared_ptr<NativeXmsgIdentityServiceLink>& link) noexcept try {
+ if(!link || !link->capture_.record_)return {};
+ const auto record=link->capture_.record_;const auto owner=record->owner.lock();if(!owner)return {};
+ std::lock_guard lock(owner->mutex);
+ if(!owner->Live(*record) || !record->identity_service_metadata_only || record->identity_service.expired() ||
+    !record->copy_returned || !record->copy_serial || !record->callback_entered ||
+    !record->task || !record->birth_generation || !record->native_overlap)return {};
+ return IdentityServiceEnvelope{owner->root,record->capture,record->copy_serial,record->envelope,
+     record->copied_argument,record->native_overlap,record->task,record->birth_generation,record->birth_origin};
+}catch(...){return {};}
+std::shared_ptr<const NativeXmsgProvenance::DispatchFact>
+NativeXmsgProvenance::IdentityServiceDispatch(void* raw,const std::shared_ptr<NativeXmsgIdentityServiceLink>& link) noexcept {
+ return link?CurrentDispatch(raw,link->capture_):nullptr;
+}
+void NativeXmsgProvenance::ReleaseIdentityService(const std::shared_ptr<NativeXmsgIdentityServiceLink>& link) noexcept {
+ if(link)Release(link->capture_);
+}
+std::atomic<bool>* NativeXmsgProvenance::IdentityServiceAvailability(
+    const std::shared_ptr<NativeXmsgIdentityServiceLink>& link) noexcept {
+ return link && link->capture_.record_?&link->capture_.record_->facts_available:nullptr;
 }
 
 std::optional<NativeXmsgProvenance::TitleTaskProducerFact>

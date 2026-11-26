@@ -9,6 +9,14 @@ compares the matching mapped producers and consumers with the active implementat
 including request/error/cancellation ownership, storage and avatar dependencies.
 It records the coherent implementation units and their actual consumer results.
 
+The latest same-ELF diagnostic proves a pending native FC/58001 request. The
+default native service pump is parked by the host's OldPaused data-consumer
+gate even though its request completion precedes publication. This source-defined
+cycle needs a coherent service-progress/data-source correction; whole-pump
+exemption, fabricated success and HLE-overlap completion are not established
+solutions. See the full comparison's current dependency section. The latest
+run exited zero with clean teardown, while sign-in/publication remain unaccepted.
+
 ## Current V131 request lifecycle and runtime result
 
 The full lifecycle comparison led to one coherent nine-file change covering

@@ -33,6 +33,17 @@ class NativeProfileIdentityTaskTestAccess final {
   struct ExecutionBorn {Birth birth;uint64_t producer;Frame frame,publication;};
   static ExecutionBorn ExecutionAllocate(Ledger&,uint32_t,uint32_t=1,uint32_t=0x901159C8,bool=false,uint32_t=3);
   static void ExecutionFree(Ledger&,Birth,uint32_t=0x7080F000);
+  struct IdentityServiceFixture;
+  static void IdentityServiceProducerAndCopyAbi();
+  static void IdentityServiceAcceptanceAndPumpAbi();
+  static void IdentityServicePrebodyAdoptionAndPendingTicks();
+  static void IdentityServiceTerminalBeforeTailJoins();
+  static void IdentityServiceFrameAndBirthReuse();
+  static void IdentityServiceBusyCancelAndActualStop();
+  static void ExecutionInstructionNoEffectCuts();
+  static void ExecutionInstructionRetainedIdentity();
+  static void ExecutionInstructionLedgerEffects();
+  static void ExecutionUnknownDispatchReadDuty();
   static void ExecutionBeforeProducerReturn();
   static void ExecutionInlineUsesOriginalChildBirth();
   static void ExecutionOpaqueModifyAndActualOperands();
@@ -2574,5 +2585,436 @@ void NativeProfileIdentityTaskTestAccess::ProfileInitializerErrorCompletionAbi()
 TEST_CASE("Initializer error completion requires its own real overlap and frame ABI",
           "[identity_task][identity_request_lifecycle][overlapped][abi]"){
  NativeProfileIdentityTaskTestAccess::ProfileInitializerErrorCompletionAbi();
+}
+
+// Production IdentityServiceRequest and genuine Task ledger cuts only. These
+// fixtures do not execute PPC, a kernel, code authentication, the finite hook
+// loop, PM views, event signaling or the network backend.
+struct NativeProfileIdentityTaskTestAccess::IdentityServiceFixture {
+ using Service=Ledger::IdentityServiceRequest;
+ struct Dispatch {Frame outer,body,frame;Ledger::CurrentExecution current;uint64_t serial=0;};
+ Ledger ledger{root};Service service;Service::Origin origin{};Service::Copy copy{};Service::Pump pump{};
+ ExecutionBorn request_task{},pump_task{};Frame acceptance{};
+ IdentityServiceFixture(){
+  origin.worker=F(0x8199C838,0x708A0000,0x816B8B64);
+  origin.worker_birth=Allocate(ledger,3,0x414E0000);
+  origin.producer=origin.worker;origin.producer.function=0x81830878;
+  origin.producer.sp-=0xBC0;origin.producer.lr=0x8199C488;
+  origin.job=401;origin.source=3;origin.work=501;origin.object=0x81AEE470;
+  origin.parameters=origin.worker.sp-0x370;origin.flags=4;
+  request_task=Born(0x404E5000,0x816A2C80,0x414E1000,0x816A2EC8);
+  pump_task=Born(0x404E6000,0x818CEFD8,origin.object,0x818CF164);
+  copy={601,701,0x414E1000,0x414E101C,origin.producer.sp-0x670,request_task.birth};
+  pump={pump_task.frame,pump_task.birth,origin.object};
+  acceptance=F(0x818CD588,0x70830000,0x818CDD2C);acceptance.thread=6;acceptance.pcr=0x90004000;
+ }
+ ExecutionBorn Born(uint32_t task,uint32_t callback,uint32_t argument,uint32_t caller){
+  const auto producer=F(0x816BA440,0x7080FA00,caller);const uint32_t output=0x404E0C60;
+  const auto serial=ledger.BeginExecutionSchedule(producer,callback,argument,0,output);REQUIRE(serial);
+  const auto allocation=F(0x816B9A18,producer.sp-0x90,0x816BA46C);
+  REQUIRE(ledger.EnterExecutionAllocation(serial,allocation,0,allocation.sp+0x50));
+  const auto born=ledger.ReturnExecutionAllocation(serial,allocation,0,task);REQUIRE(born);
+  const auto publication=F(0x816B9BB8,producer.sp-0x90,0x816BA4D8);
+  REQUIRE(ledger.BeforeExecutionPublication(serial,publication,task,callback,argument,task|1u));
+  auto body=publication;body.sp-=0x80;body.lr=0x816B9BC0;
+  REQUIRE(ledger.ObserveExecutionPublication(publication,*born,body,task,callback,argument,0x04A00008));
+  REQUIRE(ledger.ReturnExecutionProducer(serial,producer,0));
+  return {*born,serial,producer,publication};
+ }
+ void BeginCopy(){REQUIRE(service.Begin(origin));REQUIRE(service.BindCopy(copy));}
+ void Accept(){
+  REQUIRE(service.EnterAcceptance(acceptance,copy,origin.object+0x10,copy.argument,copy.overlap));
+  REQUIRE(service.ReturnAcceptance(acceptance,0,copy.argument,copy.overlap));REQUIRE(service.accepted());
+ }
+ Dispatch Start(Birth birth={},uint32_t thread=7,uint32_t stack=0x70850000){
+  if(!birth.generation)birth=pump.birth;
+  Dispatch d;d.outer=F(0x816B8B08,stack,0x816B93FC);d.outer.thread=thread;d.outer.pcr=0x90001000+(thread-3)*0x1000;
+  d.serial=ledger.BeginExecutionDispatch(d.outer,birth);REQUIRE(d.serial);
+  d.body=d.outer;d.body.sp-=0x70;d.body.lr=0x816B8B48;
+  REQUIRE(ledger.ExecutionCallbackSelected(d.serial,d.body,birth.task,0x818CEFD8,origin.object));
+  d.frame=d.body;d.frame.function=0x818CEE08;d.frame.sp-=0x60;d.frame.lr=0x818CEFE8;
+  const auto current=ledger.CaptureCurrentExecution(d.serial,d.frame.thread,d.frame.pcr,d.frame.sp,birth.task);REQUIRE(current);
+  d.current=*current;return d;
+ }
+ void End(const Dispatch& d){
+  auto returned=d.body;returned.lr=0x816B8B64;
+  REQUIRE(ledger.ExecutionCallbackReturned(d.serial,returned,d.current.birth.task,0));
+  REQUIRE(ledger.ReturnExecutionDispatch(d.serial,d.outer,d.current.birth));
+ }
+ Frame Completion(const Service::Tick& tick){auto f=tick.frame;f.function=0x816A2588;f.sp-=0x4C0;f.lr=0x818CEDA0;return f;}
+ Frame Free(const Frame& completion){auto f=completion;f.function=0x816E6AB0;f.sp-=0xA0;f.lr=0x816A26E8;return f;}
+ void FinishCompletion(const Frame& completion){
+  const auto freeing=Free(completion);REQUIRE(service.EnterEnvelopeFree(freeing,copy.envelope));
+  REQUIRE(service.ReturnEnvelopeFree(freeing));REQUIRE(service.ReturnCompletion(completion));
+ }
+ void Complete(const Service::Tick& tick,uint32_t extended=0){
+  const auto frame=Completion(tick);
+  REQUIRE(service.EnterCompletion(frame,copy.overlap,copy.envelope,int32_t(extended)<0?0x65Bu:0u,extended,0));
+  FinishCompletion(frame);
+ }
+ void Finish(){
+  ExecutionFree(ledger,request_task.birth);ExecutionFree(ledger,pump_task.birth);
+  ProfileCallbackThenFree(ledger,origin.worker_birth,origin.worker);
+  CHECK(ledger.ExecutionClosed());CHECK_FALSE(ledger.lost());
+ }
+};
+
+void NativeProfileIdentityTaskTestAccess::IdentityServiceProducerAndCopyAbi(){
+ IdentityServiceFixture f;using Service=IdentityServiceFixture::Service;
+ for(unsigned which=0;which<17;++which){
+  auto wrong=f.origin;
+  switch(which){
+   case 0:wrong.worker.root.generation++;break;
+   case 1:wrong.worker.function=0x8199E148;break;
+   case 2:wrong.producer.function=0x816A2F80;break;
+   case 3:wrong.producer.thread++;break;
+   case 4:wrong.producer.pcr+=0x1000;break;
+   case 5:wrong.producer.sp-=0x10;break;
+   case 6:wrong.producer.lr+=4;break;
+   case 7:wrong.job=0;break;
+   case 8:wrong.source=2;break;
+   case 9:wrong.work=0;break;
+   case 10:wrong.worker_birth.generation=0;break;
+   case 11:wrong.worker_birth.origin=1;break;
+   case 12:wrong.object+=4;break;
+   case 13:wrong.rows=0x41000000;break;
+   case 14:wrong.parameters+=4;break;
+   case 15:wrong.flags=0x14;break;
+   default:wrong.overlap=0x41000000;break;
+  }
+  Service rejected;CHECK_FALSE(rejected.Begin(wrong));REQUIRE(rejected.Begin(f.origin));
+ }
+ for(unsigned which=0;which<9;++which){
+  Service request;REQUIRE(request.Begin(f.origin));auto wrong=f.copy;
+  switch(which){
+   case 0:wrong.capture=0;break;
+   case 1:wrong.serial=0;break;
+   case 2:wrong.envelope+=1;break;
+   case 3:wrong.envelope=0xFFFFFE00;break;
+   case 4:wrong.argument+=4;break;
+   case 5:wrong.overlap+=4;break;
+   case 6:wrong.request_birth.generation=0;break;
+   case 7:wrong.request_birth.origin=3;break;
+   default:wrong.request_birth.task+=1;break;
+  }
+  CHECK_FALSE(request.BindCopy(wrong));REQUIRE(request.BindCopy(f.copy));CHECK_FALSE(request.BindCopy(f.copy));
+ }
+ {Service boundary;REQUIRE(boundary.Begin(f.origin));auto last=f.copy;
+  last.envelope=0xFFFFFA7C;last.argument=last.envelope+0x1C;
+  REQUIRE(boundary.BindCopy(last)); // Exact half-open end 2^32 is representable.
+  Service overflow;REQUIRE(overflow.Begin(f.origin));last.envelope+=4;last.argument+=4;
+  CHECK_FALSE(overflow.BindCopy(last));}
+ f.BeginCopy();f.Accept();auto d=f.Start();const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
+ f.Complete(*tick);REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
+ REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK(f.service.ready_to_reap());f.Finish();
+}
+
+void NativeProfileIdentityTaskTestAccess::IdentityServiceAcceptanceAndPumpAbi(){
+ // Exercise the same production read-cell isolation primitive used by Owner.
+ // These are strong ownership/TLS transitions, not an invented ProfileRead.
+ using Cell=Ledger::ExecutionReadCell;
+ const auto enclosing=F(0x8199C838,0x70900000,0x816B8B64);
+ const auto service=F(0x818CEE08,enclosing.sp-0x200,0x818CEFE8);
+ auto owner=std::make_shared<int>(7);int scope=0,foreign=0;
+ std::atomic<void*> cell{&scope};
+ {Cell isolated;
+  CHECK_FALSE(isolated.Suspend(enclosing,service,owner,owner,&scope,cell));
+  REQUIRE(isolated.SuspendService(enclosing,service,owner,owner,&scope,cell));
+  CHECK(cell.load()==nullptr);CHECK(isolated.owner()==owner.get());
+  auto wrong=service;wrong.lr+=4;CHECK_FALSE(isolated.Restore(wrong,&scope,cell));
+  REQUIRE(isolated.Restore(service,&scope,cell));CHECK(cell.load()==&scope);
+  CHECK_FALSE(isolated.Restore(service,&scope,cell));}
+ for(unsigned fault=0;fault<5;++fault){Cell rejected;auto wrong=service;
+  if(fault==0)wrong.root.generation++;if(fault==1)wrong.thread++;
+  if(fault==2)wrong.pcr+=0x1000;if(fault==3)wrong.sp=enclosing.sp;
+  if(fault==4)wrong.function=0x818CEFD8;
+  CHECK_FALSE(rejected.SuspendService(enclosing,wrong,owner,owner,&scope,cell));
+  CHECK(cell.load()==&scope);}
+ {Cell rejected;auto other=std::make_shared<int>(8);
+  CHECK_FALSE(rejected.SuspendService(enclosing,service,owner,other,&scope,cell));
+  cell.store(&foreign);CHECK_FALSE(rejected.SuspendService(enclosing,service,owner,owner,&scope,cell));
+  CHECK(cell.load()==&foreign);cell.store(&scope);}
+ {Cell delegated;REQUIRE(delegated.SuspendService(enclosing,service,owner,owner,&scope,cell));
+  REQUIRE(delegated.DelegateToOrigin(owner.get(),&scope));CHECK(cell.load()==nullptr);
+  bool fallback=true;REQUIRE(Ledger::RestoreReadCellForScopeLeave(fallback,&scope,cell));
+  CHECK_FALSE(fallback);CHECK(cell.load()==&scope);}
+ {Cell stopped;REQUIRE(stopped.SuspendService(enclosing,service,owner,owner,&scope,cell));
+  REQUIRE(stopped.RestoreAtActualStop(&scope,cell));CHECK(cell.load()==&scope);}
+ IdentityServiceFixture f;f.BeginCopy();
+ auto wrong=f.acceptance;wrong.lr+=4;
+ CHECK_FALSE(f.service.EnterAcceptance(wrong,f.copy,f.origin.object+0x10,f.copy.argument,f.copy.overlap));
+ auto copy=f.copy;++copy.serial;
+ CHECK_FALSE(f.service.EnterAcceptance(f.acceptance,copy,f.origin.object+0x10,f.copy.argument,f.copy.overlap));
+ CHECK_FALSE(f.service.EnterAcceptance(f.acceptance,f.copy,f.origin.object+0x14,f.copy.argument,f.copy.overlap));
+ CHECK_FALSE(f.service.EnterAcceptance(f.acceptance,f.copy,f.origin.object+0x10,f.copy.argument+4,f.copy.overlap));
+ CHECK_FALSE(f.service.EnterAcceptance(f.acceptance,f.copy,f.origin.object+0x10,f.copy.argument,f.copy.overlap+4));
+ REQUIRE(f.service.EnterAcceptance(f.acceptance,f.copy,f.origin.object+0x10,f.copy.argument,f.copy.overlap));
+ CHECK_FALSE(f.service.ReturnAcceptance(wrong,0,f.copy.argument,f.copy.overlap));
+ REQUIRE(f.service.ReturnAcceptance(f.acceptance,0,f.copy.argument,f.copy.overlap));
+ auto d=f.Start();
+ for(unsigned which=0;which<6;++which){
+  auto pump=f.pump;
+  switch(which){case 0:pump.schedule.lr+=4;break;case 1:pump.schedule.root.generation++;break;
+   case 2:pump.object+=4;break;case 3:pump.birth.origin=3;break;case 4:pump.birth.generation=0;break;
+   default:pump.birth.task+=4;break;}
+  CHECK_FALSE(f.service.EnterTick(d.frame,pump,d.current));
+ }
+ for(unsigned which=0;which<6;++which){
+  auto execution=d.current;
+  switch(which){case 0:execution.invocation=0;break;case 1:execution.callback=0x8199C838;break;
+   case 2:execution.argument+=4;break;case 3:execution.root.generation++;break;
+   case 4:execution.birth.generation++;break;default:execution.dispatcher.pcr+=0x1000;break;}
+  CHECK_FALSE(f.service.EnterTick(d.frame,f.pump,execution));
+ }
+ wrong=d.frame;wrong.sp-=0x10;CHECK_FALSE(f.service.EnterTick(wrong,f.pump,d.current));
+ wrong=d.frame;wrong.lr+=4;CHECK_FALSE(f.service.EnterTick(wrong,f.pump,d.current));
+ const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
+ CHECK_FALSE(f.service.EnterTick(d.frame,f.pump,d.current));
+ wrong=d.frame;wrong.thread++;CHECK_FALSE(f.service.ReturnTick(*tick,wrong,f.pump.birth));
+ f.Complete(*tick);REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
+ REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK(f.service.ready_to_reap());f.Finish();
+}
+
+void NativeProfileIdentityTaskTestAccess::IdentityServicePrebodyAdoptionAndPendingTicks(){
+ IdentityServiceFixture f;f.BeginCopy();auto parked=f.Start();
+ const auto same_prebody_frame=parked.frame;const auto same_dispatch=parked.current.invocation;
+ CHECK_FALSE(f.service.EnterTick(same_prebody_frame,f.pump,parked.current));
+ f.Accept();auto tick=f.service.EnterTick(same_prebody_frame,f.pump,parked.current);REQUIRE(tick);
+ CHECK(tick->frame==same_prebody_frame);CHECK(tick->dispatch==same_dispatch);
+ CHECK_FALSE(f.service.EnterTick(same_prebody_frame,f.pump,parked.current));
+ const auto first=*tick;
+ REQUIRE(f.service.ReturnTick(*tick,same_prebody_frame,f.pump.birth));f.End(parked);
+ CHECK(f.service.accepted());CHECK_FALSE(f.service.ready_to_reap());
+ for(unsigned index=0;index<4;++index){
+  auto d=f.Start();tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
+  CHECK(tick->serial!=first.serial);CHECK(tick->dispatch!=first.dispatch);
+  CHECK(Ledger::SameBirth(tick->birth,f.pump.birth));
+  CHECK(f.origin.source==3);CHECK(tick->birth.origin==1); // Operation attribution never remints native Task source.
+  CHECK_FALSE(f.service.ready_to_reap());
+  if(index==3)f.Complete(*tick,0x80151010);
+  REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
+  if(index<3)CHECK(f.service.accepted());
+ }
+ REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK(f.service.ready_to_reap());f.Finish();
+ // This proves same-frame receipt adoption, not execution of the Owner's
+ // actual prebody loop or preservation of its State Work object/serial.
+}
+
+void NativeProfileIdentityTaskTestAccess::IdentityServiceTerminalBeforeTailJoins(){
+ IdentityServiceFixture f;f.BeginCopy();f.Accept();auto d=f.Start();
+ const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
+ const auto complete=f.Completion(*tick);const uint32_t extended=0x80151010;
+ CHECK_FALSE(f.service.EnterCompletion(complete,f.copy.overlap,f.copy.envelope,0,extended,0));
+ CHECK_FALSE(f.service.EnterCompletion(complete,f.copy.overlap,f.copy.envelope,0x65B,extended,1));
+ CHECK_FALSE(f.service.EnterCompletion(complete,f.copy.overlap+4,f.copy.envelope,0x65B,extended,0));
+ CHECK_FALSE(f.service.EnterCompletion(complete,f.copy.overlap,f.copy.envelope+4,0x65B,extended,0));
+ auto wrong=complete;wrong.lr+=4;
+ CHECK_FALSE(f.service.EnterCompletion(wrong,f.copy.overlap,f.copy.envelope,0x65B,extended,0));
+ REQUIRE(f.service.EnterCompletion(complete,f.copy.overlap,f.copy.envelope|1u,0x65B,extended,0));
+ CHECK_FALSE(f.service.accepted());CHECK_FALSE(f.service.ready_to_reap());
+ CHECK_FALSE(f.service.ReturnCompletion(complete)); // Native envelope/free join is not a result-bit shortcut.
+ auto freeing=f.Free(complete);wrong=freeing;wrong.sp-=0x10;
+ CHECK_FALSE(f.service.EnterEnvelopeFree(wrong,f.copy.envelope));
+ CHECK_FALSE(f.service.EnterEnvelopeFree(freeing,f.copy.envelope+4));
+ REQUIRE(f.service.EnterEnvelopeFree(freeing,f.copy.envelope));
+ wrong=freeing;wrong.lr+=4;CHECK_FALSE(f.service.ReturnEnvelopeFree(wrong));
+ REQUIRE(f.service.ReturnEnvelopeFree(freeing));
+ wrong=complete;wrong.pcr+=0x1000;CHECK_FALSE(f.service.ReturnCompletion(wrong));
+ REQUIRE(f.service.ReturnCompletion(complete));REQUIRE(f.service.ReturnProducer(f.origin.producer));
+ CHECK_FALSE(f.service.ready_to_reap()); // A genuine mixed-tail frame still owns the receipt.
+ auto stale=*tick;++stale.serial;CHECK_FALSE(f.service.ReturnTick(stale,d.frame,f.pump.birth));
+ REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
+ CHECK(f.service.ready_to_reap());CHECK_FALSE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));
+ CHECK_FALSE(f.service.ReturnCompletion(complete));CHECK_FALSE(f.service.ReturnProducer(f.origin.producer));f.Finish();
+}
+
+void NativeProfileIdentityTaskTestAccess::IdentityServiceFrameAndBirthReuse(){
+ IdentityServiceFixture f;f.BeginCopy();f.Accept();auto old=f.Start();
+ const auto old_tick=f.service.EnterTick(old.frame,f.pump,old.current);REQUIRE(old_tick);
+ auto nested=old.frame;nested.sp-=0x60;CHECK_FALSE(f.service.EnterTick(nested,f.pump,old.current));
+ // Simulate a missing service own-return while the actual common dispatcher
+ // did return and the original native Task was freed. Retained receipt must
+ // not be settled using the replacement allocation at the same Task address.
+ f.End(old);ExecutionFree(f.ledger,f.pump.birth);
+ const auto replacement=f.Born(f.pump.birth.task,0x818CEFD8,f.origin.object,0x818CF164);
+ REQUIRE(replacement.birth.generation!=f.pump.birth.generation);
+ auto current=f.Start(replacement.birth);
+ CHECK_FALSE(f.service.EnterTick(current.frame,f.pump,current.current));
+ CHECK_FALSE(f.service.ReturnTick(*old_tick,current.frame,replacement.birth));
+ CHECK_FALSE(f.service.ready_to_reap());CHECK(f.service.accepted());
+ f.End(current);ExecutionFree(f.ledger,replacement.birth);
+ f.service.RetireAtActualStop();CHECK_FALSE(f.service.accepted());CHECK_FALSE(f.service.ready_to_reap());
+ // No forged old completion/return is supplied to make this failure close.
+ CHECK_FALSE(f.ledger.lost());
+}
+
+void NativeProfileIdentityTaskTestAccess::IdentityServiceBusyCancelAndActualStop(){
+ {
+  IdentityServiceFixture f;f.BeginCopy();
+  REQUIRE(f.service.EnterAcceptance(f.acceptance,f.copy,f.origin.object+0x10,f.copy.argument,f.copy.overlap));
+  auto complete=f.acceptance;complete.function=0x816A2588;complete.sp-=0x80;complete.lr=0x818CD5F4;
+  CHECK_FALSE(f.service.EnterCompletion(complete,f.copy.overlap,f.copy.envelope,0x65B,0x80070005,0));
+  REQUIRE(f.service.EnterCompletion(complete,f.copy.overlap,f.copy.envelope,0x65B,0x800700AA,0));
+  f.FinishCompletion(complete);
+  REQUIRE(f.service.ReturnAcceptance(f.acceptance,0x800700AA,0,0));
+  REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK_FALSE(f.service.accepted());
+  CHECK(f.service.ready_to_reap());f.Finish();
+ }
+ {
+  IdentityServiceFixture f;f.BeginCopy();f.Accept();auto d=f.Start();
+  const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
+  f.service.ObserveCancel();CHECK(f.service.cancel_requested());CHECK(f.service.accepted());
+  CHECK_FALSE(f.service.terminal_returned());CHECK_FALSE(f.service.ready_to_reap());
+  REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
+  auto later=f.Start();const auto last=f.service.EnterTick(later.frame,f.pump,later.current);REQUIRE(last);
+  f.Complete(*last,0x800703E3);REQUIRE(f.service.ReturnTick(*last,later.frame,f.pump.birth));f.End(later);
+  REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK(f.service.ready_to_reap());f.Finish();
+ }
+ {
+  IdentityServiceFixture f;f.BeginCopy();f.Accept();auto d=f.Start();
+  const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
+  f.service.ObserveCancel();f.service.RetireAtActualStop();
+  CHECK_FALSE(f.service.accepted());CHECK_FALSE(f.service.EnterTick(d.frame,f.pump,d.current));
+  CHECK_FALSE(f.service.ready_to_reap());
+  REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
+  CHECK_FALSE(f.service.ready_to_reap()); // Actual-stop marker never manufactures native terminal completion.
+  CHECK_FALSE(f.ledger.lost());
+ }
+}
+
+TEST_CASE("Identity service authenticates original producer and copied native request ABI",
+          "[identity_task][identity_service][abi]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceProducerAndCopyAbi();
+}
+TEST_CASE("Identity service accepts only the exact request and real pump dispatch",
+          "[identity_task][identity_service][abi][race]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceAcceptanceAndPumpAbi();
+}
+TEST_CASE("Identity service adopts an already parked frame and permits recurring pending ticks",
+          "[identity_task][identity_service][lifetime]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServicePrebodyAdoptionAndPendingTicks();
+}
+TEST_CASE("Identity service terminal completion retains its native free and mixed tail joins",
+          "[identity_task][identity_service][lifetime][race]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceTerminalBeforeTailJoins();
+}
+TEST_CASE("Identity service cannot borrow a replaced Task or reused physical frame",
+          "[identity_task][identity_service][lifetime][race]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceFrameAndBirthReuse();
+}
+TEST_CASE("Identity service busy cancel and actual stop preserve true completion duties",
+          "[identity_task][identity_service][lifetime][race]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceBusyCancelAndActualStop();
+}
+
+// Production selector/memento and real Task/read-cell metadata only. These
+// cases do not fabricate a Kernel, code authentication or native PPC return.
+void NativeProfileIdentityTaskTestAccess::ExecutionInstructionNoEffectCuts(){
+ using Record=Ledger::ExecutionObservation;
+ using Cut=Ledger::ExecutionInstructionParticipation;
+ Ledger ledger(root);const auto made=ExecutionAllocate(ledger,0x404E1BF0);
+ const auto dispatcher=F(0x816B8B08,0x70850000,0x816B93FC);
+ const auto invocation=ledger.BeginExecutionDispatch(dispatcher,made.birth);REQUIRE(invocation);
+ CHECK_FALSE(Cut::Capture({},dispatcher.pcr));
+ auto record=std::make_shared<Record>();record->frame=dispatcher;record->serial=61;
+ CHECK_FALSE(Cut::Capture(record,dispatcher.pcr)); // A real non-execution Work shadows.
+ record->execution_only=true;REQUIRE(Cut::Capture(record,dispatcher.pcr));
+ record->normal_return=true;CHECK_FALSE(Cut::Capture(record,dispatcher.pcr));
+ record->normal_return=false;record->execution_uncertain=true;
+ CHECK_FALSE(Cut::Capture(record,dispatcher.pcr));
+ record->execution_uncertain=false;CHECK_FALSE(Cut::Capture(record,dispatcher.pcr+4));
+ // No selector refusal pretends to select/return the native callback.
+ auto body=dispatcher;body.sp-=0x70;body.lr=0x816B8B48;
+ CHECK_FALSE(ledger.CaptureCurrentExecution(invocation,body.thread,body.pcr,body.sp,made.birth.task));
+ REQUIRE(ledger.ExecutionCallbackSelected(invocation,body,made.birth.task,0x901159C8,1));
+ body.lr=0x816B8B64;REQUIRE(ledger.ExecutionCallbackReturned(invocation,body,made.birth.task,0));
+ REQUIRE(ledger.ReturnExecutionDispatch(invocation,dispatcher,made.birth));
+ REQUIRE(ledger.ReturnExecutionProducer(made.producer,made.frame,0));
+ ExecutionFree(ledger,made.birth);CHECK(ledger.ExecutionClosed());CHECK_FALSE(ledger.lost());
+}
+void NativeProfileIdentityTaskTestAccess::ExecutionInstructionRetainedIdentity(){
+ using Record=Ledger::ExecutionObservation;
+ using Cut=Ledger::ExecutionInstructionParticipation;
+ auto record=std::make_shared<Record>();record->frame=F(0x816B8B08);record->serial=71;
+ record->execution_only=true;std::weak_ptr<Record> retained=record;
+ auto cut=Cut::Capture(record,record->frame.pcr);REQUIRE(cut);
+ auto replacement=std::make_shared<Record>(*record);
+ CHECK_FALSE(cut->Matches(replacement,replacement->frame.pcr)); // Scalar/frame reuse is not the old Work.
+ CHECK(cut->Matches(record,record->frame.pcr));
+ ++record->serial;CHECK_FALSE(cut->Matches(record,record->frame.pcr));--record->serial;
+ record->frame.lr+=4;CHECK_FALSE(cut->Matches(record,record->frame.pcr));record->frame.lr-=4;
+ record->execution_uncertain=true;CHECK_FALSE(cut->Matches(record,record->frame.pcr));
+ record->execution_uncertain=false;record->normal_return=true;
+ CHECK_FALSE(cut->Matches(record,record->frame.pcr));
+ record.reset();CHECK_FALSE(retained.expired()); // Slow validation cannot release/reuse the selected record.
+ cut.reset();CHECK(retained.expired());
+}
+void NativeProfileIdentityTaskTestAccess::ExecutionInstructionLedgerEffects(){
+ using Record=Ledger::ExecutionObservation;
+ using Cut=Ledger::ExecutionInstructionParticipation;
+ Ledger ledger(root);const auto made=ExecutionAllocate(ledger,0x404E2BF0,17);
+ const auto dispatcher=F(0x816B8B08,0x70850000,0x816B93FC);
+ const auto invocation=ledger.BeginExecutionDispatch(dispatcher,made.birth);REQUIRE(invocation);
+ auto record=std::make_shared<Record>();record->frame=dispatcher;record->serial=81;record->execution_only=true;
+ const auto cut=Cut::Capture(record,dispatcher.pcr);REQUIRE(cut);
+ auto body=dispatcher;body.sp-=0x70;body.lr=0x816B8B48;
+ // A participating malformed loaded operand still reaches the genuine ledger
+ // refusal; the cheap selector does not silently filter it or issue a fact.
+ REQUIRE(cut->Matches(record,dispatcher.pcr));
+ auto bad=ledger;
+ CHECK_FALSE(bad.ExecutionCallbackSelected(invocation,body,made.birth.task+4,0x901159C8,17));
+ record->execution_uncertain=true;CHECK_FALSE(cut->Matches(record,dispatcher.pcr));
+ CHECK_FALSE(ledger.CaptureCurrentExecution(invocation,body.thread,body.pcr,body.sp,made.birth.task));
+ record->execution_uncertain=false;
+ const auto fresh=Cut::Capture(record,dispatcher.pcr);REQUIRE(fresh);REQUIRE(fresh->Matches(record,dispatcher.pcr));
+ REQUIRE(ledger.ExecutionCallbackSelected(invocation,body,made.birth.task,0x901159C8,17));
+ REQUIRE(ledger.CaptureCurrentExecution(invocation,body.thread,body.pcr,body.sp,made.birth.task));
+ body.lr=0x816B8B64;REQUIRE(ledger.ExecutionCallbackReturned(invocation,body,made.birth.task,0));
+ REQUIRE(ledger.ReturnExecutionDispatch(invocation,dispatcher,made.birth));record->normal_return=true;
+ CHECK_FALSE(fresh->Matches(record,dispatcher.pcr));
+ REQUIRE(ledger.ReturnExecutionProducer(made.producer,made.frame,0));
+ ExecutionFree(ledger,made.birth);CHECK(ledger.ExecutionClosed());CHECK_FALSE(ledger.lost());
+}
+void NativeProfileIdentityTaskTestAccess::ExecutionUnknownDispatchReadDuty(){
+ Ledger ledger(root);const Birth unknown{0,1,0x404E3BF0};
+ auto origin=F(0x8199C838,0x70860000,0x816B8B64);
+ auto dispatcher=F(0x816B8B08,0x70850000,0x816B93FC);
+ CHECK_FALSE(ledger.BeginExecutionDispatch(dispatcher,unknown));
+ std::atomic<void*> actual_cell{nullptr};
+ CHECK_FALSE(Ledger::DispatchCodeAuthenticationRequired(unknown,actual_cell.load()));
+ auto owner=std::make_shared<int>(17);void* scope=owner.get();actual_cell.store(scope);
+ // A read appearing after the provisional null sample needs the original
+ // full proof at admission. It must not degrade to unavailable restoration.
+ REQUIRE(Ledger::DispatchCodeAuthenticationRequired(unknown,actual_cell.load()));
+ Ledger::ExecutionReadCell older;
+ REQUIRE(older.Suspend(origin,dispatcher,owner,owner,scope,actual_cell));
+ REQUIRE(older.pending());CHECK(actual_cell.load()==nullptr);
+ const auto original_owner=older.owner();
+ // An independently suspended older read is still strongly retained even
+ // though another unknown dispatch has no ambient read to authenticate.
+ CHECK_FALSE(Ledger::DispatchCodeAuthenticationRequired(unknown,actual_cell.load()));
+ CHECK(older.pending());CHECK(older.owner()==original_owner);CHECK(older.scope()==scope);
+ REQUIRE(older.Restore(dispatcher,scope,actual_cell));CHECK(actual_cell.load()==scope);
+ CHECK(Ledger::DispatchCodeAuthenticationRequired(unknown,actual_cell.load()));
+ const auto known=ExecutionAllocate(ledger,0x404E4BF0);
+ CHECK(Ledger::DispatchCodeAuthenticationRequired(known.birth,nullptr));
+ REQUIRE(ledger.ReturnExecutionProducer(known.producer,known.frame,0));
+ ExecutionFree(ledger,known.birth);CHECK(ledger.ExecutionClosed());CHECK_FALSE(ledger.lost());
+}
+TEST_CASE("Task instruction participation leaves absent returned and uncertain records effect free",
+          "[identity_task][execution][task_participation]"){
+ NativeProfileIdentityTaskTestAccess::ExecutionInstructionNoEffectCuts();
+}
+TEST_CASE("Task instruction participation retains the exact Work across reuse and state changes",
+          "[identity_task][execution][task_participation][lifetime]"){
+ NativeProfileIdentityTaskTestAccess::ExecutionInstructionRetainedIdentity();
+}
+TEST_CASE("Task instruction participation preserves genuine ledger operand refusal and callback joins",
+          "[identity_task][execution][task_participation][race]"){
+ NativeProfileIdentityTaskTestAccess::ExecutionInstructionLedgerEffects();
+}
+TEST_CASE("Unknown Task dispatch participation preserves actual ambient and older suspended reads",
+          "[identity_task][execution][task_participation][read_scope]"){
+ NativeProfileIdentityTaskTestAccess::ExecutionUnknownDispatchReadDuty();
 }
 } // namespace xe::kernel::test

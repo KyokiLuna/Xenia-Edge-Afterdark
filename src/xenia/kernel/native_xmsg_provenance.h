@@ -186,10 +186,22 @@ class NativeXmsgProvenance final {
   };
   static std::optional<IdentityServiceEnvelope> IdentityServiceRequest(
       const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
+  // The real CD588 successful pending-pair handoff is distinct from the
+  // temporary dispatch Task. These private methods never restore generic
+  // Live/CurrentDispatch or permit a freed Task to execute again.
+  static bool TransferIdentityServiceEnvelope(void*,
+      const std::shared_ptr<NativeXmsgIdentityServiceLink>&,
+      const std::shared_ptr<NativeProfileIdentityOwner::IdentityServiceOrigin>&,
+      const IdentityServiceEnvelope&,FrameFact acceptance,
+      uint32_t pending_request,uint32_t pending_overlap) noexcept;
+  static std::optional<IdentityServiceEnvelope> AcceptedIdentityServiceEnvelope(
+      const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
   static std::shared_ptr<const DispatchFact> IdentityServiceDispatch(
       void*,const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
   static void ReleaseIdentityService(const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
   static std::atomic<bool>* IdentityServiceAvailability(
+      const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
+  static std::atomic<bool>* IdentityServiceDispatchAvailability(
       const std::shared_ptr<NativeXmsgIdentityServiceLink>&) noexcept;
   struct TitleTaskProducerFact {
     RootFact root;

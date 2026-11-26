@@ -601,6 +601,75 @@ No new AppImage was produced. The early Start/error terminal proof,
 intermittent first-Swap failure, actual Guide/profile/avatar/game consumers and
 the rest of the combined HDD gate remain open.
 
+## V138: accepted envelopes and actual consumer results
+
+The accepted FC envelope now has a positive handoff at the real CD588
+successful pending-pair return. Its availability is separate from the
+temporary dispatch Task. Actual Task free still revokes generic dispatch;
+actual envelope free, observation loss, release and verified final retirement
+close the envelope lane. Cancellation and a stop request do not fabricate
+completion. The original CompleteIO, free, producer and pump joins remain
+mandatory. Four regression cases cover the production metadata transition and
+the real Task-ledger lifetime. The separate early-Start terminal draft is not
+included.
+
+The rebuilt ELF passed all seven direct runs: base 334 cases / 28,711
+assertions; network 125 / 11,212; kernel 1,478 / 94,118; VFS 136 / 9,736;
+UI 124 / 4,863; focused CPU 5 / 130; installed-system kernel focus
+209 / 24,355. The focused runs overlap the full suites. These results qualify
+the exact source and binary below, not a packaged AppImage or the full HDD
+gate. The official version generator recorded compilation base
+`510d74fd92fde1aa66551166a26cd965a7109d6d`; a later source-backup commit does
+not change those compiled bytes.
+
+Actual isolated runtime results are deliberately separate:
+
+| Consumer | Result | Scope |
+| --- | --- | --- |
+| Dashboard and native Guide | Passed | Dashboard rendered before virtual-pad attachment. Guide rendered, navigated to Media, closed and reopened; B returned input to the dashboard. Manual normal close exited zero with no forced signals. |
+| Dashboard Profile / Avatar Editor route | Blocked by prerequisite | Settings → Profile opened the host gamer-card dialog. Cancel and shutdown worked, but no native Editor launch occurred. The Social page offered no selectable Me/avatar tile in this local-profile run. |
+| Doritos Crash Course | Failed native sign-in/render handoff | Loading and the animated title rendered. A reached native sign-in, whose visibility notification arrived without UI pixels. The later Guide edge closed that already-open invisible UI. Gameplay, avatar rendering and saves remain unverified. Normal close exited one at native shutdown; OS cleanup completed without signals. |
+
+The game and passing dashboard both reached the real initial packed service
+producer at stage 4 with all 27 ownership predicates passing. Both projected
+only local slot 1 as signed in. The game then stopped at final-readiness
+`evaluated=0x3F`, `truth=0x1F`: `render_refresh_observed` is the first false
+operand. Later readiness operands were not evaluated; their zero fields are
+unavailable observations, not failed predicates or proof of native completion.
+The dashboard reached `0x7FF/0x7FF`. The native unchanged-profile/cache path is
+being compared with the host refresh requirement before another retry. Same
+identity, source or epoch alone cannot justify bypassing that requirement:
+preparation also reloads durable Account data and can replace a profile model.
+
+The game's first Avatar uncertainty was reported in the final stop snapshot
+at line 1961/site 12, function `0x816BD560`, during native UNLOAD reference
+closure. This is a shutdown finding; the evidence does not establish it as
+the cause of the earlier invisible sign-in UI.
+
+Matching dashboard resources establish an offline Editor route:
+Social → Me/avatar → Customize Avatar. Its Me-slot gate checks the selected
+dashboard user's local sign-in state, independently of Live enablement.
+Dashboard app owner, remembered profile slot and Guide input user are distinct
+contracts. An owner mismatch is a hypothesis until observed. Both
+`XamShowGamerCardUI` and `XamShowEditProfileUI` currently use the host dialog, so
+the Settings path cannot be relabelled as a native Editor test.
+
+| V138 record | SHA256 |
+| --- | --- |
+| Tested source map | `97f94cd8d67669f285bb71db18bdff20d42c6a0173beaf8f15df9639771f40bf` |
+| Build | `77430cf94c1363d0aa587fdbf0c4a63f4406ece510848992bdbf44d28fb777c9` |
+| All seven direct runs | `84fc6d573b09c4f62eb5e66c2036ba94954b407cf8dedc531a117ecfc57c0e6e` |
+| ELF | `41346683434e2057f51bcdb5e244950ae143e77b2df42edde062a0a9a740a78b` |
+| Dashboard/Guide assessment | `9c5e68d70fcb8993b139f94d29f99743f4a3da8cf89ae5cc11cdfb3e02a30b50` |
+| Editor-route assessment | `970da043eac079aa31de055910b35dcf0f613ebe0506eafe7a22bda51b59a778` |
+| Game assessment | `deeae035031cc52b1c25b1fa6e7ab69f8853e61fb238cd5294a9e6e1f0feb40f` |
+| Offline Editor owner/route audit | `424ed4953d48b565005b91ad7c9dabe00c8c08af5511eccafd9da24d071fedd5` |
+| Owner-change/sign-in addendum | `ddb40ec163971108343108111b69dd0cce8cabe88875515d0f6fd2012b5d9515` |
+
+No new AppImage was produced. The game sign-in/render and shutdown failures,
+actual Editor launch, early-Start error terminal proof, intermittent first-Swap
+startup variation and the remaining combined HDD scenarios stay open.
+
 ## Evidence
 
 Detailed local evidence is retained under `evidence/hdd-gate` in the research

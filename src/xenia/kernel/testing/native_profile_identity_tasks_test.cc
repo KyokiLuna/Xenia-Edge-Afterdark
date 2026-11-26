@@ -50,6 +50,7 @@ class NativeProfileIdentityTaskTestAccess final {
   static void IdentityServiceNativeProducerVariants();
   static void IdentityServiceSequentialNativeOperations();
   static void IdentityServiceSequentialRefusalsAndUnstarted();
+  static void IdentityServiceTemporaryTaskAndEnvelopeLifetime();
   static void IdentityServiceAcceptanceAndPumpAbi();
   static void IdentityServicePrebodyAdoptionAndPendingTicks();
   static void IdentityServiceTerminalBeforeTailJoins();
@@ -2871,6 +2872,20 @@ void NativeProfileIdentityTaskTestAccess::IdentityServiceSequentialRefusalsAndUn
  CHECK_FALSE(f.service.ready_to_reap());CHECK_FALSE(second.ready_to_reap());
 }
 
+void NativeProfileIdentityTaskTestAccess::IdentityServiceTemporaryTaskAndEnvelopeLifetime(){
+ IdentityServiceFixture f;f.BeginCopy();f.Accept();
+ // An inline dispatch closes its temporary native Task after the acceptance
+ // callback. The accepted FC request and separate periodic pump remain real.
+ ExecutionFree(f.ledger,f.request_task.birth);CHECK(f.service.accepted());CHECK_FALSE(f.service.ready_to_reap());
+ f.service.ObserveCancel();CHECK(f.service.cancel_requested());CHECK(f.service.accepted());CHECK_FALSE(f.service.ready_to_reap());
+ auto d=f.Start();const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
+ f.Complete(*tick,0x800703E3);CHECK_FALSE(f.service.accepted());CHECK_FALSE(f.service.ready_to_reap());
+ REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK_FALSE(f.service.ready_to_reap());
+ REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);CHECK(f.service.ready_to_reap());
+ ExecutionFree(f.ledger,f.pump_task.birth);ProfileCallbackThenFree(f.ledger,f.origin.worker_birth,f.origin.worker);
+ CHECK(f.ledger.ExecutionClosed());CHECK(f.ledger.SourceDescendantsClosed(f.origin.source));CHECK_FALSE(f.ledger.lost());
+}
+
 void NativeProfileIdentityTaskTestAccess::IdentityServiceProfileOutputTransport(){
  using Service=IdentityServiceFixture::Service;
  const auto owner=F(0x8199E3E0,0x707DFCF0,0x90103544);
@@ -3098,6 +3113,10 @@ TEST_CASE("Identity service preserves sequential native requests and older compl
 TEST_CASE("Identity service refuses replay foreign sequencing and unproved early cleanup",
           "[identity_task][identity_service][identity_request_lifecycle][lifetime][race]"){
  NativeProfileIdentityTaskTestAccess::IdentityServiceSequentialRefusalsAndUnstarted();
+}
+TEST_CASE("Accepted identity service survives temporary Task free until true envelope and pump joins",
+          "[identity_task][identity_service][identity_request_lifecycle][lifetime]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceTemporaryTaskAndEnvelopeLifetime();
 }
 TEST_CASE("Identity service accepts only the exact request and real pump dispatch",
           "[identity_task][identity_service][abi][race]"){

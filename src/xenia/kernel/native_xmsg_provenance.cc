@@ -124,7 +124,7 @@ NativeXmsgProvenance::State::State(Config value):config(std::move(value)),
     root{config.allocation->owner().kernel_epoch,config.domain->id(),config.domain->root().generation}{}
 NativeXmsgProvenance::State::~State() {
  for(const auto& weak:records)if(const auto record=weak.lock())
-  record->facts_available.store(false,std::memory_order_release);
+  record->CloseAvailability();
 }
 bool NativeXmsgProvenance::State::CodeCurrent(uint32_t at) const {
   const auto found=std::find_if(std::begin(kCode),std::end(kCode),[&](const Code& c){return c.address==at;});
@@ -201,6 +201,9 @@ void NativeXmsgProvenance::State::Revoke(uint32_t pointer) noexcept {
  if(!pointer)return;
  for(const auto& weak:records)if(const auto r=weak.lock();r && !r->released &&
      (pointer==r->envelope || pointer==r->task)){
+  // Generic dispatch authority always ends, including on temporary Task
+  // free. Only actual envelope free ends an already transferred FC envelope.
+  if(pointer==r->envelope)r->identity_envelope_available.store(false,std::memory_order_release);
   r->revoked=true;r->facts_available.store(false,std::memory_order_release);++r->version;
  }
 }
@@ -214,10 +217,39 @@ bool NativeXmsgProvenance::State::BindCopiedPayload(Record& r,uint64_t expected_
        (!payload || payload->size()!=r.producer.argument_bytes)) ||
      uint64_t(envelope)+kEnvelopeBytes+r.producer.argument_bytes>uint64_t(UINT32_MAX)+1 ||
      copied_argument!=(r.producer.argument?envelope+kEnvelopeBytes:0) ||
-     !next_copy || next_copy==UINT64_MAX))){r.unavailable=true;r.facts_available.store(false,std::memory_order_release);return false;}
+     !next_copy || next_copy==UINT64_MAX))){r.Invalidate();return false;}
  if(success){r.copy_serial=next_copy++;r.envelope=envelope;r.copied_argument=copied_argument;
-  r.copied_bytes=std::move(payload);}
+  r.copied_bytes=std::move(payload);
+  if(r.identity_service_metadata_only)r.identity_envelope_available.store(true,std::memory_order_release);
+ }
  ++r.version;return true;
+}
+
+bool NativeXmsgProvenance::State::TransferIdentityServiceEnvelope(Record& r,
+    const IdentityServiceEnvelope& expected,Frame acceptance,uint32_t pending_request,uint32_t pending_overlap) noexcept {
+ if(retired || !Live(r) || !r.identity_service_metadata_only || r.accepted_identity_service ||
+    r.producer.root!=root || expected.root!=root || !r.capture || expected.capture!=r.capture ||
+    !r.start_entered || r.start_returned || !r.copy_returned || !r.copy_serial || expected.copy!=r.copy_serial ||
+    !r.callback_entered || r.callback_returned || !r.task || !r.birth_generation || !r.native_overlap ||
+    expected.envelope!=r.envelope || expected.argument!=r.copied_argument || expected.overlap!=r.native_overlap ||
+    expected.task!=r.task || expected.birth!=r.birth_generation || expected.origin!=r.birth_origin ||
+    r.producer.app!=0xFC || r.producer.message!=0x58001 || r.producer.argument_bytes!=0x568 ||
+    r.producer.overlap || !r.identity_envelope_available.load(std::memory_order_acquire) ||
+    acceptance.function!=kIdentityServiceAccept || acceptance.lr!=0x818CDD2C ||
+    !SameThread(acceptance,r.callback) || acceptance.sp>=r.callback.sp ||
+    pending_request!=expected.argument || pending_overlap!=expected.overlap)return false;
+ // BeginStop seals NEW ingress. This is the true return of an already entered
+ // native request, whose completion ownership must survive until real free.
+ r.identity_acceptance=acceptance;r.accepted_identity_service=expected;++r.version;return true;
+}
+std::optional<NativeXmsgProvenance::IdentityServiceEnvelope>
+NativeXmsgProvenance::State::AcceptedIdentityServiceEnvelope(const Record& r) const noexcept {
+ if(retired || r.released || r.unavailable || !r.identity_service_metadata_only ||
+    r.owner.lock().get()!=this || !r.accepted_identity_service ||
+    r.accepted_identity_service->root!=root || !r.identity_envelope_available.load(std::memory_order_acquire))return {};
+ // A historical dispatch Task is deliberately not a Live admission source.
+ // Only the earlier exact CD588 pending-pair handoff permits this getter.
+ return r.accepted_identity_service;
 }
 
 NativeXmsgProvenance::NativeXmsgProvenance(std::shared_ptr<State> state)
@@ -324,7 +356,7 @@ NativeXmsgProvenance::Observe(const Capture& capture) noexcept {
 void NativeXmsgProvenance::Release(const Capture& capture) noexcept {
  const auto record=capture.record_;
  if(record)if(const auto state=record->owner.lock()){
-  std::lock_guard lock(state->mutex);record->released=true;record->facts_available.store(false,std::memory_order_release);++record->version;
+  std::lock_guard lock(state->mutex);record->released=true;record->CloseAvailability();++record->version;
  }
  // The handle remains historical metadata. Leaving its shared_ptr unchanged
  // also permits a real concurrent CurrentDispatch/Release without a data race
@@ -369,7 +401,7 @@ bool NativeXmsgProvenance::RetireAfterActualKernelStop() noexcept {
   if(!state_->stopping || state_->hooks)return false;
   if(state_->retired)return true;
   state_->retired=true;kernel=std::exchange(state_->kernel,nullptr);
-  for(const auto& weak:state_->records)if(const auto r=weak.lock()){r->revoked=true;r->facts_available.store(false,std::memory_order_release);r->released=true;++r->version;}
+  for(const auto& weak:state_->records)if(const auto r=weak.lock()){r->revoked=true;r->CloseAvailability();r->released=true;++r->version;}
   state_->providers.clear();state_->records.clear();retired=std::move(state_->config);
  }
  {std::lock_guard lock(registry_mutex);const auto found=registry.find(kernel);
@@ -444,7 +476,7 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
    }
    if(!record)return;touched=record;
    if(!s.PublicArguments(*record,c,record->producer.form==Form::kDirectStart)){
-    record->unavailable=true;record->facts_available.store(false,std::memory_order_release);return;
+    record->Invalidate();return;
    }
    if(inner){record->inner_wrapper=*frame;record->inner_entered=true;}
    else {record->wrapper=*frame;record->wrapper_entered=true;}
@@ -464,7 +496,7 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
    if(!r)return;touched=r;
    const auto options=Dword(c.r[8]);
    const uint32_t expected_options=frame->lr==0x816A3234?frame->sp+0x50:0;
-   if(!s.PublicArguments(*r,c,true) || !options || *options!=expected_options){r->unavailable=true;r->facts_available.store(false,std::memory_order_release);return;}
+   if(!s.PublicArguments(*r,c,true) || !options || *options!=expected_options){r->Invalidate();return;}
    r->start=*frame;r->start_entered=true;r->parameters=*options;++r->version;return;
   }
   if(at==kCopy){
@@ -476,7 +508,7 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
    if(Dword(c.r[3])!=std::optional(r->producer.argument) ||
       Dword(c.r[4])!=std::optional(r->producer.argument_bytes) ||
       frame->sp>UINT32_MAX-0x50 || Dword(c.r[5])!=std::optional(frame->sp+0x50)){
-    r->unavailable=true;r->facts_available.store(false,std::memory_order_release);return;
+    r->Invalidate();return;
    }
    r->copier=*frame;r->copy_output=frame->sp+0x50;r->copy_entered=true;++r->version;return;
   }
@@ -488,7 +520,7 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
    if(!r)return;touched=r;
    if(Dword(c.r[3])!=std::optional(kCallback) || Dword(c.r[4])!=std::optional(r->envelope) ||
       Dword(c.r[5])!=std::optional(r->parameters) ||
-      (at==kSchedule && Dword(c.r[6])!=std::optional(r->envelope+0x18))){r->unavailable=true;r->facts_available.store(false,std::memory_order_release);return;}
+      (at==kSchedule && Dword(c.r[6])!=std::optional(r->envelope+0x18))){r->Invalidate();return;}
    r->schedule=*frame;r->schedule_entered=true;
    r->delivery=at==kSchedule?Delivery::kQueuedTask:Delivery::kInlineTask;++r->version;return;
   }
@@ -510,7 +542,7 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
      Value(header,12)==touched->copied_argument;
    std::lock_guard lock(s.mutex);
    if(!s.Live(*touched))return;
-   if(!valid || touched->callback_entered){touched->unavailable=true;touched->facts_available.store(false,std::memory_order_release);return;}
+   if(!valid || touched->callback_entered){touched->Invalidate();return;}
    touched->execution=*actual;touched->callback=*frame;touched->callback_entered=true;
    touched->native_overlap=Value(header,8);++touched->version;return;
   }
@@ -526,7 +558,7 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
    if(thread->native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM || r->producer.overlap ||
       Dword(c.r[3])!=std::optional(r->producer.app) || Dword(c.r[4])!=std::optional(r->producer.message) ||
       Dword(c.r[5])!=std::optional(r->producer.argument) || Dword(c.r[6])!=std::optional(0u)){
-    r->unavailable=true;r->facts_available.store(false,std::memory_order_release);return;
+    r->Invalidate();return;
    }
    r->inprocess=*frame;r->inprocess_entered=true;r->delivery=Delivery::kDirectInProcess;++r->version;return;
   }
@@ -543,7 +575,7 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
    if(!object || !*object || (*object&3) ||
       (direct && (Dword(c.r[4])!=std::optional(r->producer.message) ||
         Dword(c.r[5])!=std::optional(r->producer.argument) || Dword(c.r[6])!=std::optional(0u))) ||
-      (!direct && Dword(c.r[4])!=std::optional(r->envelope))){r->unavailable=true;r->facts_available.store(false,std::memory_order_release);return;}
+      (!direct && Dword(c.r[4])!=std::optional(r->envelope))){r->Invalidate();return;}
    r->provider_object=*object;
    if(direct){r->shared=*frame;r->shared_entered=true;}
    else {r->controls=*frame;r->controls_entered=true;}
@@ -579,7 +611,7 @@ void NativeXmsgProvenance::ObserveEntry(void* raw,uint64_t address) noexcept {
   }
  }catch(...){
   {std::lock_guard lock(s.mutex);
-   if(touched){touched->unavailable=true;touched->facts_available.store(false,std::memory_order_release);++touched->version;}
+   if(touched){touched->Invalidate();++touched->version;}
    if(at==kInvoke)s.provider_overflow=true; // Lost shadow cannot lend an older fact.
   }
   // Observation failure does not deny/replace original native execution.
@@ -618,7 +650,7 @@ void NativeXmsgProvenance::ObserveInstruction(void* raw,uint32_t address) noexce
     NativeProfileIdentityOwner::CurrentTaskExecution(&c,record->task);
   const bool execution=record->delivery==Delivery::kDirectInProcess ||
     (actual && record->execution && s.Execution(*record,*actual) && SameExecution(*actual,*record->execution));
-  if(!scalar || !execution){std::lock_guard lock(s.mutex);record->unavailable=true;record->facts_available.store(false,std::memory_order_release);++record->version;return;}
+  if(!scalar || !execution){std::lock_guard lock(s.mutex);record->Invalidate();++record->version;return;}
   auto fact=std::make_shared<DispatchFact>();fact->root=s.root;fact->public_invocation=record->producer.public_invocation;
   fact->capture=record->capture;fact->copy=record->copy_serial;fact->provider_invocation=serial;
   fact->delivery=record->delivery;fact->producer=record->producer.producer;fact->wrapper=record->wrapper;
@@ -637,7 +669,7 @@ void NativeXmsgProvenance::ObserveInstruction(void* raw,uint32_t address) noexce
    boundary->fact=std::move(fact);
   }
  }catch(...){
-  if(record){std::lock_guard lock(s.mutex);record->unavailable=true;record->facts_available.store(false,std::memory_order_release);++record->version;}
+  if(record){std::lock_guard lock(s.mutex);record->Invalidate();++record->version;}
  }
 }
 
@@ -708,7 +740,7 @@ void NativeXmsgProvenance::ObserveReturn(void* raw,uint64_t address) noexcept {
    if(!r)return;touched=r;
    if(int32_t(actual->native_status)<0)return; // No failed allocation birth.
    if(!actual->validated_birth || !actual->task || (actual->task&3) ||
-      !actual->birth_generation || !actual->birth_origin){r->unavailable=true;r->facts_available.store(false,std::memory_order_release);return;}
+      !actual->birth_generation || !actual->birth_origin){r->Invalidate();return;}
    r->task=actual->task;r->birth_generation=actual->birth_generation;r->birth_origin=actual->birth_origin;
    ++r->version;return;
   }
@@ -726,13 +758,13 @@ void NativeXmsgProvenance::ObserveReturn(void* raw,uint64_t address) noexcept {
    if(current){
     current->unavailable=true;
     if(const auto r=current->record.lock()){
-     r->unavailable=true;r->facts_available.store(false,std::memory_order_release);
+     r->Invalidate();
     }
    }
    for(auto& earlier:s.providers)if(!earlier.returned && earlier.actual_thread==thread && earlier.frame==*frame){
     earlier.returned=true;earlier.unavailable=true;
     if(const auto r=earlier.record.lock()){
-     r->unavailable=true;r->facts_available.store(false,std::memory_order_release);
+     r->Invalidate();
     }
    }
    return; // Never settle a different provider's completion.
@@ -785,7 +817,7 @@ void NativeXmsgProvenance::ObserveReturn(void* raw,uint64_t address) noexcept {
   ++touched->version;
  }catch(...){
   std::lock_guard lock(s.mutex);
-  if(touched){touched->unavailable=true;touched->facts_available.store(false,std::memory_order_release);++touched->version;}
+  if(touched){touched->Invalidate();++touched->version;}
   if(at==kInvoke)s.provider_overflow=true;
  }
 }
@@ -801,6 +833,35 @@ NativeXmsgProvenance::IdentityServiceRequest(const std::shared_ptr<NativeXmsgIde
  return IdentityServiceEnvelope{owner->root,record->capture,record->copy_serial,record->envelope,
      record->copied_argument,record->native_overlap,record->task,record->birth_generation,record->birth_origin};
 }catch(...){return {};}
+bool NativeXmsgProvenance::TransferIdentityServiceEnvelope(void* raw,
+    const std::shared_ptr<NativeXmsgIdentityServiceLink>& link,
+    const std::shared_ptr<NativeProfileIdentityOwner::IdentityServiceOrigin>& origin,
+    const IdentityServiceEnvelope& expected,Frame acceptance,
+    uint32_t pending_request,uint32_t pending_overlap) noexcept try {
+ if(!raw || !link || !link->capture_.record_ || !origin)return false;
+ const auto record=link->capture_.record_;const auto state=record->owner.lock();if(!state)return false;
+ // The original provider/Task is still genuinely current at CD588 own-return.
+ // This proof is consumed now, never recreated later from a freed Task.
+ const auto dispatch=CurrentDispatch(raw,link->capture_);
+ if(!dispatch || dispatch->app!=0xFC || dispatch->message!=0x58001 ||
+    dispatch->capture!=expected.capture || dispatch->copy!=expected.copy ||
+    dispatch->provider_callback!=0x818C9940 || dispatch->provider_message!=0x80000007 ||
+    dispatch->provider_argument!=expected.envelope || dispatch->copied_argument_bytes!=0x568)return false;
+ auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
+ if(c.thread_id!=acceptance.thread || Dword(c.r[1])!=std::optional(acceptance.sp) || Dword(c.lr)!=std::optional(acceptance.lr) ||
+    Dword(c.r[13])!=std::optional(acceptance.pcr) || Dword(c.r[3])!=std::optional<uint32_t>{0})return false;
+ std::lock_guard lock(state->mutex);
+ if(record->identity_service.lock()!=origin)return false;
+ return state->TransferIdentityServiceEnvelope(*record,expected,acceptance,pending_request,pending_overlap);
+}catch(...){return false;}
+std::optional<NativeXmsgProvenance::IdentityServiceEnvelope>
+NativeXmsgProvenance::AcceptedIdentityServiceEnvelope(const std::shared_ptr<NativeXmsgIdentityServiceLink>& link) noexcept try {
+ if(!link || !link->capture_.record_)return {};
+ const auto record=link->capture_.record_;const auto state=record->owner.lock();if(!state)return {};
+ std::lock_guard lock(state->mutex);
+ if(record->identity_service.expired())return {};
+ return state->AcceptedIdentityServiceEnvelope(*record);
+}catch(...){return {};}
 std::shared_ptr<const NativeXmsgProvenance::DispatchFact>
 NativeXmsgProvenance::IdentityServiceDispatch(void* raw,const std::shared_ptr<NativeXmsgIdentityServiceLink>& link) noexcept {
  return link?CurrentDispatch(raw,link->capture_):nullptr;
@@ -809,6 +870,11 @@ void NativeXmsgProvenance::ReleaseIdentityService(const std::shared_ptr<NativeXm
  if(link)Release(link->capture_);
 }
 std::atomic<bool>* NativeXmsgProvenance::IdentityServiceAvailability(
+    const std::shared_ptr<NativeXmsgIdentityServiceLink>& link) noexcept {
+ return link && link->capture_.record_ && link->capture_.record_->identity_service_metadata_only?
+     &link->capture_.record_->identity_envelope_available:nullptr;
+}
+std::atomic<bool>* NativeXmsgProvenance::IdentityServiceDispatchAvailability(
     const std::shared_ptr<NativeXmsgIdentityServiceLink>& link) noexcept {
  return link && link->capture_.record_?&link->capture_.record_->facts_available:nullptr;
 }

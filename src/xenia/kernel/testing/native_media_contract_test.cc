@@ -808,6 +808,96 @@ class NativeXmsgProvenanceTestAccess final {
     CHECK(failed->copy_serial==0);CHECK_FALSE(failed->copied_bytes);
     CHECK(failed->identity_service.expired());CHECK(state->providers.empty());
   }
+  // Production metadata ownership transitions only. The real runtime adapter
+  // must additionally prove its current provider/Task and NativeProfileOwner
+  // CD588 acceptance/pending pair; these fixtures execute no PPC or Kernel.
+  struct AcceptedEnvelopeFixture {
+    std::shared_ptr<State> state;
+    std::shared_ptr<Record> record;
+    Frame acceptance{6,0x90004000,0x70818000,0x818CDD2C,0x818CD588};
+    explicit AcceptedEnvelopeFixture(std::shared_ptr<State> existing={},uint64_t capture=1)
+        :state(existing?std::move(existing):std::make_shared<State>(kRoot)),record(Request(state,capture)){
+      record->producer.app=0xFC;record->producer.message=0x58001;record->producer.overlap=0;
+      record->producer.argument_bytes=0x568;record->identity_service_metadata_only=true;
+      record->start={3,0x90001000,0x708AFA00,0x818309A0,0x816A2CF0};record->start_entered=true;
+      REQUIRE(state->BindCopiedPayload(*record,record->version,true,true,0x90200000,0x9020001C,{}));
+      record->callback={acceptance.thread,acceptance.pcr,0x70820000,0x816B8B64,0x816A2C80};record->callback_entered=true;
+      record->task=0x90400000;record->birth_generation=1000+capture;record->birth_origin=1;
+      record->native_overlap=record->start.sp-0x70;
+    }
+    Owner::IdentityServiceEnvelope Expected() const {
+      return {kRoot,record->capture,record->copy_serial,record->envelope,record->copied_argument,
+          record->native_overlap,record->task,record->birth_generation,record->birth_origin};
+    }
+    bool Transfer(){const auto expected=Expected();
+      return state->TransferIdentityServiceEnvelope(*record,expected,acceptance,expected.argument,expected.overlap);
+    }
+  };
+  static void AcceptedEnvelopeOutlivesDispatchTask(){
+    AcceptedEnvelopeFixture f;CHECK(f.record->identity_envelope_available.load());
+    CHECK_FALSE(f.state->AcceptedIdentityServiceEnvelope(*f.record));
+    REQUIRE(f.Transfer());const auto expected=f.Expected();
+    f.record->callback_returned=true;f.state->Revoke(f.record->task);
+    CHECK(f.record->revoked);CHECK_FALSE(f.state->Live(*f.record));CHECK_FALSE(Owner::FactsAvailable(Owner::Capture(f.record)));
+    CHECK_FALSE(f.state->Unique([&](const auto& r){return r.capture==expected.capture;}));
+    CHECK_FALSE(Owner::CurrentDispatch(nullptr,Owner::Capture(f.record)));
+    const auto retained=f.state->AcceptedIdentityServiceEnvelope(*f.record);REQUIRE(retained);
+    CHECK(retained->capture==expected.capture);CHECK(retained->copy==expected.copy);
+    CHECK(retained->envelope==expected.envelope);CHECK(retained->task==expected.task); // Historical correlation only.
+    CHECK_FALSE(f.Transfer()); // A freed Task never reissues this handoff.
+    auto owner=std::shared_ptr<Owner>(new Owner(f.state));owner->BeginStop();
+    CHECK(f.state->AcceptedIdentityServiceEnvelope(*f.record));CHECK_FALSE(owner->Drained());
+    f.state->Revoke(f.record->envelope);CHECK_FALSE(f.record->identity_envelope_available.load());
+    CHECK_FALSE(f.state->AcceptedIdentityServiceEnvelope(*f.record));CHECK_FALSE(f.Transfer());
+    CHECK(f.record->accepted_identity_service); // Closing admission never fabricates completion or erases history.
+  }
+  static void AcceptedEnvelopeRequiresExactPositiveHandoff(){
+    for(unsigned fault=0;fault<16;++fault){AcceptedEnvelopeFixture f;
+      auto expected=f.Expected();auto acceptance=f.acceptance;uint32_t request=expected.argument,overlap=expected.overlap;
+      switch(fault){
+        case 0:++expected.root.generation;break;case 1:++expected.capture;break;case 2:++expected.copy;break;
+        case 3:expected.envelope+=4;break;case 4:expected.argument+=4;break;case 5:expected.overlap+=4;break;
+        case 6:expected.task+=4;break;case 7:++expected.birth;break;case 8:++expected.origin;break;
+        case 9:acceptance.function=0x818CEE08;break;case 10:acceptance.lr+=4;break;
+        case 11:++acceptance.thread;break;case 12:acceptance.pcr+=0x1000;break;
+        case 13:acceptance.sp=f.record->callback.sp;break;case 14:request+=4;break;default:overlap+=4;break;
+      }
+      CHECK_FALSE(f.state->TransferIdentityServiceEnvelope(*f.record,expected,acceptance,request,overlap));
+      CHECK_FALSE(f.state->AcceptedIdentityServiceEnvelope(*f.record));REQUIRE(f.Transfer());
+    }
+    {AcceptedEnvelopeFixture f;f.state->Revoke(f.record->task);
+      CHECK_FALSE(f.Transfer());CHECK_FALSE(f.state->AcceptedIdentityServiceEnvelope(*f.record));
+    }
+    {AcceptedEnvelopeFixture f;f.record->callback_returned=true;
+      CHECK_FALSE(f.Transfer());CHECK_FALSE(f.state->AcceptedIdentityServiceEnvelope(*f.record));
+    }
+    {AcceptedEnvelopeFixture f;f.record->identity_service_metadata_only=false;CHECK_FALSE(f.Transfer());}
+    {AcceptedEnvelopeFixture f;f.record->identity_envelope_available.store(false);
+      CHECK_FALSE(f.Transfer());CHECK_FALSE(f.record->identity_envelope_available.load());
+    }
+  }
+  static void AcceptedEnvelopeClosureAndReuse(){
+    for(unsigned loss=0;loss<3;++loss){AcceptedEnvelopeFixture f;REQUIRE(f.Transfer());
+      if(loss==0)f.record->Invalidate();
+      if(loss==1)Owner::Release(Owner::Capture(f.record));
+      if(loss==2){f.state->retired=true;f.record->CloseAvailability();} // Actual-stop metadata withdrawal, no native result.
+      CHECK_FALSE(f.record->identity_envelope_available.load());CHECK_FALSE(Owner::FactsAvailable(Owner::Capture(f.record)));
+      CHECK_FALSE(f.state->AcceptedIdentityServiceEnvelope(*f.record));CHECK_FALSE(f.Transfer());
+    }
+    {std::shared_ptr<Record> escaped;
+      {AcceptedEnvelopeFixture f;REQUIRE(f.Transfer());escaped=f.record;}
+      CHECK(escaped->owner.expired());CHECK_FALSE(escaped->facts_available.load());CHECK_FALSE(escaped->identity_envelope_available.load());
+    }
+    AcceptedEnvelopeFixture old;REQUIRE(old.Transfer());const auto previous=old.Expected();
+    old.state->Revoke(old.record->task);old.state->Revoke(old.record->envelope);
+    AcceptedEnvelopeFixture fresh(old.state,2);const auto current=fresh.Expected();
+    REQUIRE(current.copy!=previous.copy);REQUIRE(current.capture!=previous.capture);
+    CHECK(current.envelope==previous.envelope);CHECK(current.task==previous.task);
+    CHECK_FALSE(fresh.state->TransferIdentityServiceEnvelope(*fresh.record,previous,fresh.acceptance,previous.argument,previous.overlap));
+    REQUIRE(fresh.Transfer());CHECK(fresh.state->AcceptedIdentityServiceEnvelope(*fresh.record));
+    CHECK_FALSE(old.state->AcceptedIdentityServiceEnvelope(*old.record));CHECK_FALSE(old.state->Live(*old.record));
+    CHECK_FALSE(Owner::CurrentDispatch(nullptr,Owner::Capture(old.record)));
+  }
   static void ProviderShadowsAndHistoricalCapture() {
     auto state=std::make_shared<State>(kRoot);const auto record=Request(state);
     int actual_thread=0,other_thread=0;
@@ -846,6 +936,15 @@ class NativeXmsgProvenanceTestAccess final {
     CHECK_FALSE(Owner::CurrentDispatch(nullptr,capture));
   }
 };
+TEST_CASE("Accepted native FC envelopes outlive their temporary dispatch Task", "[kernel][xmsg_provenance][identity_service][lifetime]") {
+  NativeXmsgProvenanceTestAccess::AcceptedEnvelopeOutlivesDispatchTask();
+}
+TEST_CASE("Native FC envelope handoff requires the exact live accepted pending pair", "[kernel][xmsg_provenance][identity_service][abi][lifetime]") {
+  NativeXmsgProvenanceTestAccess::AcceptedEnvelopeRequiresExactPositiveHandoff();
+}
+TEST_CASE("Accepted FC envelope loss release stop and reuse never revive dispatch", "[kernel][xmsg_provenance][identity_service][lifetime][race]") {
+  NativeXmsgProvenanceTestAccess::AcceptedEnvelopeClosureAndReuse();
+}
 TEST_CASE("Original XMsg request and direct Start producer forms retain their distinct ABI", "[kernel][xmsg_provenance][abi]") {
   NativeXmsgProvenanceTestAccess::DistinctProducerForms();
 }

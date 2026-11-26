@@ -30,6 +30,18 @@ struct NativeXmsgProvenance::Capture::Record {
  bool controls_entered=false,controls_returned=false;uint32_t provider_object=0,next_control=0;
  bool schedule_entered=false,schedule_returned=false,callback_entered=false,callback_returned=false;
  std::atomic<bool> facts_available{true};
+ // Initialized only by a genuine successful native metadata-only copy. A
+ // separate positive CD588 handoff is required before any pump getter admits
+ // it. Task free never changes this lane; actual envelope loss closes it and
+ // no handoff can set it true again.
+ std::atomic<bool> identity_envelope_available{false};
+ std::optional<IdentityServiceEnvelope> accepted_identity_service;
+ Frame identity_acceptance;
+ void CloseAvailability() noexcept {
+  facts_available.store(false,std::memory_order_release);
+  identity_envelope_available.store(false,std::memory_order_release);
+ }
+ void Invalidate() noexcept {unavailable=true;CloseAvailability();}
  bool released=false,revoked=false,unavailable=false;
  uint32_t copy_output=0,envelope=0,copied_argument=0,native_overlap=0,parameters=0;
  uint32_t task=0;uint64_t birth_generation=0,birth_origin=0;
@@ -73,13 +85,15 @@ struct NativeXmsgProvenance::State {
  std::shared_ptr<Record> Unique(const auto& predicate) {
   std::shared_ptr<Record> result;
   for(const auto& weak:records)if(const auto r=weak.lock();r && Live(*r) && predicate(*r)){
-   if(result){result->unavailable=true;result->facts_available.store(false,std::memory_order_release);
-    r->unavailable=true;r->facts_available.store(false,std::memory_order_release);return {};}
+   if(result){result->Invalidate();r->Invalidate();return {};}
    result=r;
   }
   return result;
  }
 
+ bool TransferIdentityServiceEnvelope(Record&,const IdentityServiceEnvelope&,Frame,
+     uint32_t pending_request,uint32_t pending_overlap) noexcept;
+ std::optional<IdentityServiceEnvelope> AcceptedIdentityServiceEnvelope(const Record&) const noexcept;
  Provider* Innermost(const Frame&,const void* actual_thread);
  Provider* CurrentProvider(const Record&,const Frame&,const void* actual_thread);
  bool PublicArguments(const Record&,cpu::ppc::PPCContext&,bool start_form) const;

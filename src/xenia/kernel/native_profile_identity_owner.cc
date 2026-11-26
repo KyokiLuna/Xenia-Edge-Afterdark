@@ -2759,6 +2759,12 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
     "9c0dce274b1aeeb0494fe461dca1470eb1b3e5283ddb5e77d549452f776708d3"},
    {0x83B2411DBA4B3FA5ull,0x913E0000,0x49000,0x913F0F00,200,0x913F0F30,0x913FD6D4,
     "1a58ef30b034936f4435078eac3c481a83901dcf64abcf54a89218bb170bc33f"},
+   // Matching 17559 SUI's complete 164-byte caller reads only the event ID.
+   // Public A returns synchronously without loading SP+54; only B enters
+   // virtual+0xC. This grants no B/callback/read/Task ownership. Entry and
+   // own-return still prove this exact prepared module, body and xam binding.
+   {0xE8F048C4CA513E3Full,0x90100000,0x43000,0x90117740,164,0x90117798,0x9011DA4C,
+    "e939f567bf1fa7af3afb492478fa9ac7ef3c7bcb3973824a3d40ae761aaf311e"},
   };
   const auto* profile=std::find_if(std::begin(consumers),std::end(consumers),
       [&](const auto& p){return work.frame.lr==p.return_lr;});
@@ -2777,7 +2783,7 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
    ~Report() {
     // Declared BEFORE the later GCRC guard: reporting follows its unlock.
     if(!value.role || value.stage>1 || !cvars::native_system_ui_trace)return;
-    static std::array<NativeSystemUiTraceLimiter,4> traces;
+    static std::array<NativeSystemUiTraceLimiter,std::size(consumers)*2> traces;
     const uint64_t key=(uint64_t(value.first_failure)<<32)^value.evaluated^value.truth;
     traces[(value.role-1)*2+value.stage].EmitTransition(key,"identity","discarded_hint_caller_policy",
       {{"policy_role",value.role},{"policy_stage",value.stage},{"work",value.work},

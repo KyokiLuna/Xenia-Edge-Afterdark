@@ -1,14 +1,15 @@
 # 17559 checkpoint Guide regression — 2026-11-23
 
-Status: the current V147 Linux source passes all seven direct runs and the
-actual ordinary native frame-refresh observation. Its isolated Doritos run
-closes normally with exit zero and no forced signals. Native sign-in still
-does not settle; the game stays at its splash and a Guide attempt has no
-visible result in that unresolved state. This does not establish whether that
-Guide request was accepted. No replacement AppImage is accepted. See the
+Status: the current V148 Linux source passes all seven direct runs. Its
+isolated Doritos run visibly opens the native Guide and closes normally with
+exit zero and no forced signals. B, A and a later Guide attempt leave the
+Guide image present; no later native visibility hide is captured. The profile
+picker lists existing profiles initially, but only Create/Download after
+cancel/reopen. No existing profile was selected, so this run does not exercise
+ordinary sign-in or its later settlement. No replacement AppImage is accepted. See the
 [current lifecycle comparison](17559-profile-lifecycle-comparison-20261125.md)
-for source identities, exact runtime scope and the remaining prepared-paint
-handoff. The results below retain their historical scope.
+for source identities, exact runtime scope and the remaining native input and
+inventory boundaries. The results below retain their historical scope.
 
 Historical V131 Linux ELF displays the unsigned dashboard and native
 Guide/profile picker. All five full direct suites and focused CPU/installed

@@ -1,18 +1,24 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V147's ordinary native frame-refresh and transport-lifetime changes
-build and pass all seven direct test runs. The isolated Doritos run now
-observes completed refresh and all eleven readiness predicates at two cuts,
-and a manual owned WM close returns zero with full OS reaping and no forced
-signals. Sign-in still does not settle: prepared-query retries reach different
-retirement/producer gates, new-paint drain is not observed, and settlement
-stages 7/8 are absent. The game remains at its splash; no Guide is visible
-after a button attempt in that unresolved state. That attempt alone does not
-establish accepted Guide ownership or a rendering cause. The genuine native
-error remains `0x65B` / extended and protocol `0x80151000`. No Live success,
-requested-versus-canceled outcome or networking cause is inferred from it.
-The next review covers source retirement, prepared query and new-paint
-ownership together, including actual readers versus retained immutable data.
+Status: V148's native notification-consumer correction builds and passes all
+seven direct test runs. Its isolated Doritos run visibly opens the native
+Guide and a manual owned WM close returns zero, with full OS reaping and no
+forced signals. Guide close/input return does not pass: its image remains
+after B, A and Guide attempts, and no subsequent native visibility hide is
+captured. The picker lists existing profiles initially but only Create/Download
+after cancel/reopen. No existing profile was selected in this run; ordinary
+logon, game continuation and settlement stages 7/8 were not exercised. Bootstrap
+Job 3 does complete prepared-source publication and reaches Committed/Open
+with no pending manager job. This cannot establish ordinary sign-in success.
+The next shared boundary is the native input consumer and request-worker
+progress, alongside completed picker inventory enumeration; the visible image
+alone does not establish stale presentation or a permanently frozen worker.
+
+V147 previously exercised ordinary sign-in and observed genuine error `0x65B`
+with extended/protocol `0x80151000`. Its frame-refresh and transport-lifetime
+changes passed engineering tests and normal Doritos shutdown, but did not
+settle that sign-in. Those observations are historical, not a V148 retest or
+evidence of a Live/networking cause.
 
 V145's earlier loader correction reached real native completion, changed the
 protocol error from `0x80150013` to `0x80151000`, and handed off to the dashboard
@@ -48,10 +54,10 @@ rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The current tested V147 source map is
-`cfabb5f1ec91e30f5d0e8c677b0f101c72f3c8c970bacb3893dc58bf6082bfdb`
+The current tested V148 source map is
+`be892b99cf631e2fddb2a46138227c8ac2f22c9817c6a464d42fbeb1a6ecd417`
 (2,430 source files). All seven direct runs passed under receipt
-`4f33c732c4638664b1395f5503cebae9d9dc0da548287822163a129326bcf029`.
+`03a61b2438f3bec345e8d5acfdc842caf3058aadf6b4be1e2517ec3e3dc0d620`.
 They establish component coverage, not successful ordinary sign-in, avatar
 rendering, save persistence or a packaged AppImage. Historical V131 source and
 test identities remain in its labeled section below.
@@ -1168,6 +1174,77 @@ justify forcing Live state.
 | Root controller/visual/OS assessment | `73f5c0de8424d8f590bdead1d3a24fc4ce396c11e9ffa1da3761eda4f115be98` |
 | Final source-bound protocol assessment | `474fae3421410e43a68a8492af2864a483d1cf59004e4f3d76870998a166880b` |
 | DCC exact script/native bindings | `7e838797f1086c6b9b9ade6b0e9180c3030a6874321366fe0b3bcb12cf22a343` |
+
+## V148 exact SUI notification consumer and current runtime
+
+The matching SYSTEM UI function `0x90117740` consumes GetNext at return
+`0x90117798`. Its complete 164-byte body treats event B separately; non-B
+events return synchronously without reading the data output or transferring
+asynchronous ownership. The prepared consumer policy now recognizes this
+exact module/import/body/own-return tuple alongside its two existing consumers.
+All 26 authority predicates remain required. It does not bypass source,
+publication, paint, Task completion or real data-reader duties. The diagnostic
+capacity follows the number of policy entries instead of silently omitting
+the added entry.
+
+One grouped bridge fixture exercises pending delivery, producer finish,
+references, cancellation, errors, replacement, reap, successor and restart.
+It does not execute the private native policy or PowerPC body. Actual runtime
+entry/own-return rows independently satisfy all 26 policy predicates, but do
+not export the event/BOOL/token; they do not independently prove each event-A
+delivery.
+
+The app build and all seven direct runs pass: base 334 cases / 28,711
+assertions; network 125 / 11,212; kernel 1,489 / 96,185; VFS 136 / 9,736;
+UI 124 / 4,863; focused CPU 5 / 130; installed-system focus 220 / 26,330.
+The focused selections overlap the full suites; the complete CPU corpus was
+not run. A shared current-cohort harness also passed ten fixtures, actual
+qualification, preflight and the owned native launch. Current qualification
+facts are data; historical runtime predicate parsers are no longer regenerated
+for each cohort. This research harness is not emulator runtime work.
+
+The actual Doritos test used eight neutral-ended controller batches with
+fresh owned process/window checks. The initial picker displayed existing
+profiles. After cancellation, its reopened list contained only Create Profile
+and Download Profile. It was canceled again without selecting a profile.
+Guide then visibly opened over Doritos, but B, A and Guide attempts left its
+image present. Five native visibility changes were accepted in order
+`1,0,1,0,1`; no later hide is captured. The raw host B edge is recorded, but
+its later native consumption is not. The presenter continues submitting a
+qualified visible epoch successfully. These cuts do not establish a stale
+image after an accepted close, an incorrect controller slot or a permanently
+frozen worker.
+
+Only bootstrap Job 3 ran. It completed source retirement/prepared query,
+published source 3, and reached Committed/Open with no pending manager job.
+There was no ordinary logon attempt, Job 4 or settlement-stage 7/8 exercise.
+No ordinary sign-in regression or success can be inferred from this run.
+The owned manual WM close exited zero after 518.60 seconds, with full OS
+reaping, no forced signals and preserved source/configuration/products/index
+and read-only inputs. Gameplay, Avatar Editor, OSK, Xbox Home, profile save
+and AppImage acceptance remain unestablished.
+
+Separate private HDD work remains unactivated. Its compile-only pass attempted
+all 41 translation units through a private Clang overlay: 35 passed and six
+failed. It produced no objects or links and preserved the checkout and build.
+The failed units require source/API and direct dependency corrections; the
+candidate is not build-ready or accepted as native storage. The combined
+gate still includes both writable devices, mutations/recovery, native selection,
+complete profiles/avatars, media playback and both libraries. The native AAC
+update remains a genuine missing prerequisite. No new AppImage or release is
+created by this source sync.
+
+| V148 record | SHA256 |
+| --- | --- |
+| Tested source map | `be892b99cf631e2fddb2a46138227c8ac2f22c9817c6a464d42fbeb1a6ecd417` |
+| Build | `6bb61d5767e6d31d6a06cfbcda6c6270cacabb44fc1d6e9c231c5f65131b38eb` |
+| All seven direct runs | `03a61b2438f3bec345e8d5acfdc842caf3058aadf6b4be1e2517ec3e3dc0d620` |
+| ELF, preserved compilation base `2418ae0aa3` | `526910e9da27e80a46a7466612b6e4e29bc8b070319dd4760b70e26204ae2d62` |
+| Actual native result | `795c66be53542903954a05829bbdc31bddee25abfe0ae6ba97c8d885b996bebc` |
+| Root controller/visual/OS assessment | `9b1a44658f1e20ecb52361e0e92e872746f5df0e4cfc8ccde7783ba0a6b93bec` |
+| Final source-bound protocol assessment | `4747cbeaf628e7dc64855bfe429d2407bb82a44183bdb915120c27c6b6626448` |
+| Input/cancel/presentation contract audit | `423217d8d0e244eb340e2c099c41adda2f869a080787ad39433d88f75cde7770` |
+| Private HDD compile-only results | `6a1059aa1f619a5e3f41556925d9c74eb1b9e4138451b4460a503d382b6fb79b` |
 
 ## Evidence
 

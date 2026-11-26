@@ -558,7 +558,54 @@ void VdSwap_entry(
     lpunknown_t unk4,           // from VdGetSystemCommandBuffer (0xBEEF0001)
     lpdword_t frontbuffer_ptr,  // ptr to frontbuffer address
     lpdword_t texture_format_ptr, lpdword_t color_space_ptr, lpdword_t width,
-    lpdword_t height) {
+    lpdword_t height, const ppc_context_t& context) {
+  // Guarded observation of this existing producer boundary. The shim already
+  // owns context; no guest reads or thread/module lookups are added. Predicate
+  // arguments keep their original order and short circuit, including trace-off.
+  const bool trace_swap = cvars::native_system_ui_trace;
+  uint32_t trace_evaluated = 0, trace_true = 0;
+  bool trace_stage_called = false;
+  uint64_t trace_foreground = 0, trace_title_generation = 0;
+  uint32_t trace_title_hmodule = 0;
+  const auto observed = [&](uint32_t bit, bool value) {
+    if (trace_swap) {
+      trace_evaluated |= uint32_t(1) << bit;
+      if (value) {
+        trace_true |= uint32_t(1) << bit;
+      }
+    }
+    return value;
+  };
+  const auto report = [&](uint32_t stage, bool ticket_present) {
+    if (!trace_swap) {
+      return;  // Capture and formatting stay disabled with the diagnostic.
+    }
+    // Entry sampling has its own existing limiter: normal entry/result pairs
+    // must not masquerade as a changed preStage condition on every Swap.
+    static xe::NativeSystemUiTraceLimiter entry_trace, result_trace;
+    auto& trace = stage ? result_trace : entry_trace;
+    const uint64_t key = uint64_t(stage) | (uint64_t(trace_evaluated) << 4) |
+                         (uint64_t(trace_true) << 12) |
+                         (uint64_t(trace_stage_called) << 20) |
+                         (uint64_t(ticket_present) << 21);
+    trace.EmitTransition(key, "gpu", "vd_swap_producer",
+                         {{"stage", stage},
+                          {"thread_id", context->thread_id},
+                          {"return_address", uint32_t(context->lr)},
+                          {"evaluated", trace_evaluated},
+                          {"predicate_true", trace_true},
+                          {"stage_called", trace_stage_called},
+                          {"ticket_present", ticket_present},
+                          {"foreground_generation", trace_foreground},
+                          {"title_hmodule", trace_title_hmodule},
+                          {"title_load_generation", trace_title_generation}});
+  };
+  // The entry survives a later assert/fault before preStage. Other zero fields
+  // are unavailable until their evaluated bit/original Stage call is observed.
+  if (trace_swap) {
+    report(0, false);
+  }
+
   // All of these parameters are REQUIRED.
   assert(buffer_ptr);
   assert(fetch_ptr);
@@ -585,7 +632,10 @@ void VdSwap_entry(
   uint32_t frontbuffer_physical_address =
       kernel_memory()->GetPhysicalAddress(frontbuffer_virtual_address);
   assert_true(frontbuffer_physical_address != UINT32_MAX);
-  if (frontbuffer_physical_address == UINT32_MAX) {
+  if (observed(0, frontbuffer_physical_address == UINT32_MAX)) {
+    if (trace_swap) {
+      report(1, false);
+    }
     // Xenia-specific safety check.
     XELOGE("VdSwap: Invalid front buffer virtual address 0x{:08X}",
            frontbuffer_virtual_address);
@@ -615,15 +665,17 @@ void VdSwap_entry(
       native_graphics ? native_graphics->command_processor() : nullptr;
   // Inactive is the original four-word XE_SWAP path: no new module, process,
   // foreground or provider work is done without explicit service activation.
-  if (native_cp && native_cp->NativeSystemTitleInputEnabled() &&
-      xeKeGetCurrentProcessType(
-          XThread::GetCurrentThread()->thread_state()->context()) ==
-          X_PROCTYPE_TITLE) {
+  if (observed(1, bool(native_cp)) &&
+      observed(2, native_cp->NativeSystemTitleInputEnabled()) &&
+      observed(3, xeKeGetCurrentProcessType(
+                      XThread::GetCurrentThread()->thread_state()->context()) ==
+                      X_PROCTYPE_TITLE)) {
     auto* emulator = kernel_state()->emulator();
     const auto foreground = emulator->title_execution_state().snapshot();
     const auto title = kernel_state()->GetExecutableModule();
-    if (title && emulator->OwnsTitleExecution(kernel_state()) &&
-        foreground.phase == TitleExecutionState::Phase::kRunning) {
+    if (observed(4, bool(title)) &&
+        observed(5, emulator->OwnsTitleExecution(kernel_state())) &&
+        observed(6, foreground.phase == TitleExecutionState::Phase::kRunning)) {
       gpu::NativeSystemTitleInput::Swap swap;
       swap.foreground_generation = foreground.generation;
       swap.title_hmodule = title->hmodule_ptr();
@@ -631,8 +683,19 @@ void VdSwap_entry(
       std::memcpy(swap.fetch.data(), &gpu_fetch, sizeof(gpu_fetch));
       swap.width = uint32_t(gpu_fetch.size_2d.width) + 1;
       swap.height = uint32_t(gpu_fetch.size_2d.height) + 1;
+      if (trace_swap) {
+        // Copy only the scalars just filled by the original producer. Missing
+        // earlier predicates never trigger speculative module/foreground reads.
+        trace_stage_called = true;
+        trace_foreground = swap.foreground_generation;
+        trace_title_hmodule = swap.title_hmodule;
+        trace_title_generation = swap.title_load_generation;
+      }
       native_title_ticket = native_cp->StageNativeSystemTitleSwap(swap);
     }
+  }
+  if (trace_swap) {
+    report(2, bool(native_title_ticket));
   }
 
   uint32_t offset = 0;

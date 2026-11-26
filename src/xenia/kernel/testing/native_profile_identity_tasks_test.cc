@@ -47,6 +47,9 @@ class NativeProfileIdentityTaskTestAccess final {
   struct IdentityServiceFixture;
   static void IdentityServiceProducerAndCopyAbi();
   static void IdentityServiceProfileOutputTransport();
+  static void IdentityServiceNativeProducerVariants();
+  static void IdentityServiceSequentialNativeOperations();
+  static void IdentityServiceSequentialRefusalsAndUnstarted();
   static void IdentityServiceAcceptanceAndPumpAbi();
   static void IdentityServicePrebodyAdoptionAndPendingTicks();
   static void IdentityServiceTerminalBeforeTailJoins();
@@ -2617,6 +2620,7 @@ struct NativeProfileIdentityTaskTestAccess::IdentityServiceFixture {
   origin.producer.sp-=0xBC0;origin.producer.lr=0x8199C488;
   origin.job=401;origin.source=origin.worker_birth.origin;origin.work=501;origin.object=0x81AEE470;
   origin.parameters=origin.worker.sp-0x370;origin.flags=4;
+  origin.worker_argument=output?0x40170B40:0x92002000;
   request_task=Born(0x404E5000,0x816A2C80,0x414E1000,0x816A2EC8);
   pump_task=Born(0x404E6000,0x818CEFD8,origin.object,0x818CF164);
   copy={601,701,0x414E1000,0x414E101C,origin.producer.sp-0x670,request_task.birth};
@@ -2726,6 +2730,145 @@ void NativeProfileIdentityTaskTestAccess::IdentityServiceProducerAndCopyAbi(){
  f.BeginCopy();f.Accept();auto d=f.Start();const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
  f.Complete(*tick);REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
  REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK(f.service.ready_to_reap());f.Finish();
+}
+
+void NativeProfileIdentityTaskTestAccess::IdentityServiceNativeProducerVariants(){
+ using Service=IdentityServiceFixture::Service;using Lane=Service::ProducerLane;
+ for(const auto lane:{Lane::kCleanup,Lane::kInitial,Lane::kRetry,Lane::kRecovery}){
+  for(const bool packed:{false,true})for(const uint32_t initial_flags:{4u,5u}){
+   if((lane==Lane::kCleanup || lane==Lane::kRecovery) && packed)continue;
+   if((lane==Lane::kInitial || lane==Lane::kRetry) && !packed)continue;
+   if(lane!=Lane::kInitial && initial_flags==5)continue;
+   IdentityServiceFixture f;
+   f.origin.producer.sp=f.origin.worker.sp-(lane==Lane::kCleanup?0xBC0:0x510);
+   f.origin.producer.lr=lane==Lane::kCleanup?0x8199C488:lane==Lane::kInitial?0x8199D52C:
+       lane==Lane::kRetry?0x8199D5AC:0x8199D6A4;
+   f.origin.flags=lane==Lane::kCleanup?4:lane==Lane::kInitial?initial_flags:lane==Lane::kRetry?0:2;
+   f.origin.rows=packed?f.origin.worker_argument+0xA68:0;
+   f.copy.overlap=f.origin.producer.sp-0x670;
+   CHECK(Service::ClassifyProducer(f.origin)==lane);
+   for(unsigned fault=0;fault<9;++fault){auto wrong=f.origin;
+    switch(fault){
+     case 0:wrong.rows=wrong.worker_argument+0xA6C;break;
+     case 1:wrong.worker_argument+=4;break;
+     case 2:wrong.worker_argument=0xFFFFF3F0;break;
+     case 3:wrong.parameters+=4;break;
+     case 4:wrong.producer.sp-=0x10;break;
+     case 5:wrong.producer.lr+=4;break;
+     case 6:wrong.flags=3;break;
+     case 7:wrong.overlap=0x414E2000;break;
+     default:wrong.rows=packed?0:wrong.worker_argument+0xA68;break;
+    }
+    Service refused;CHECK_FALSE(refused.Begin(wrong));CHECK_FALSE(Service::ClassifyProducer(wrong));
+   }
+   f.BeginCopy();CHECK(f.service.lane()==lane);f.Accept();auto d=f.Start();
+   const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
+   f.Complete(*tick);REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
+   REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK(f.service.ready_to_reap());f.Finish();
+  }
+ }
+}
+
+void NativeProfileIdentityTaskTestAccess::IdentityServiceSequentialNativeOperations(){
+ using Service=IdentityServiceFixture::Service;
+ // One actual worker/Task, one native periodic pump, four forward native
+ // requests. A successful cleanup may continue to initial; only negative
+ // cleanup skips it. The newer accepted pair cannot settle an older tail.
+ IdentityServiceFixture f;Service cleanup;
+ REQUIRE(cleanup.Begin(f.origin));REQUIRE(cleanup.BindCopy(f.copy));
+ REQUIRE(cleanup.EnterAcceptance(f.acceptance,f.copy,f.origin.object+0x10,f.copy.argument,f.copy.overlap));
+ REQUIRE(cleanup.ReturnAcceptance(f.acceptance,0,f.copy.argument,f.copy.overlap));
+ auto clean=f.Start();const auto clean_tick=cleanup.EnterTick(clean.frame,f.pump,clean.current);REQUIRE(clean_tick);
+ const auto clean_completion=f.Completion(*clean_tick),clean_free=f.Free(clean_completion);
+ REQUIRE(cleanup.EnterCompletion(clean_completion,f.copy.overlap,f.copy.envelope,0,0,0));
+ REQUIRE(cleanup.EnterEnvelopeFree(clean_free,f.copy.envelope));
+ REQUIRE(cleanup.ReturnEnvelopeFree(clean_free));REQUIRE(cleanup.ReturnCompletion(clean_completion));
+ REQUIRE(cleanup.ReturnProducer(f.origin.producer));
+ REQUIRE(cleanup.ReturnTick(*clean_tick,clean.frame,f.pump.birth));f.End(clean);CHECK(cleanup.ready_to_reap());
+ const auto initial_task=f.Born(0x404E9000,0x816A2C80,0x414E4000,0x816A2EC8);
+ ++f.copy.capture;++f.copy.serial;f.copy.envelope=0x414E4000;f.copy.argument=f.copy.envelope+0x1C;
+ f.copy.request_birth=initial_task.birth;
+ f.origin.producer.sp=f.origin.worker.sp-0x510;f.origin.producer.lr=0x8199D52C;
+ f.origin.rows=f.origin.worker_argument+0xA68;f.origin.flags=5;
+ f.copy.overlap=f.origin.producer.sp-0x670;
+ REQUIRE(cleanup.CanPrecede(f.origin));
+ f.BeginCopy();f.Accept();auto first=f.Start();
+ const auto old=f.service.EnterTick(first.frame,f.pump,first.current);REQUIRE(old);
+ f.Complete(*old,0x80152005);REQUIRE(f.service.ReturnProducer(f.origin.producer));
+ CHECK_FALSE(f.service.ready_to_reap()); // Real tick own-return is still due.
+ auto retry_origin=f.origin;retry_origin.producer.lr=0x8199D5AC;retry_origin.flags=0;
+ REQUIRE(f.service.CanPrecede(retry_origin));
+ const auto retry_task=f.Born(0x404E7000,0x816A2C80,0x414E2000,0x816A2EC8);
+ auto retry_copy=f.copy;++retry_copy.capture;++retry_copy.serial;retry_copy.envelope=0x414E2000;
+ retry_copy.argument=retry_copy.envelope+0x1C;retry_copy.request_birth=retry_task.birth;
+ Service retry;REQUIRE(retry.Begin(retry_origin));REQUIRE(retry.BindCopy(retry_copy));
+ REQUIRE(retry.EnterAcceptance(f.acceptance,retry_copy,f.origin.object+0x10,retry_copy.argument,retry_copy.overlap));
+ REQUIRE(retry.ReturnAcceptance(f.acceptance,0,retry_copy.argument,retry_copy.overlap));
+ CHECK(retry.accepted());CHECK_FALSE(f.service.ready_to_reap());
+ CHECK_FALSE(retry.ReturnTick(*old,first.frame,f.pump.birth)); // It belongs to the older operation.
+ REQUIRE(f.service.ReturnTick(*old,first.frame,f.pump.birth));f.End(first);CHECK(f.service.ready_to_reap());
+ auto second=f.Start();const auto retry_tick=retry.EnterTick(second.frame,f.pump,second.current);REQUIRE(retry_tick);
+ const auto completion=f.Completion(*retry_tick);const auto freeing=f.Free(completion);
+ REQUIRE(retry.EnterCompletion(completion,retry_copy.overlap,retry_copy.envelope,0x65B,0x80151923,0));
+ REQUIRE(retry.ReturnProducer(retry_origin.producer));CHECK_FALSE(retry.ready_to_reap());
+ auto recovery_origin=f.origin;recovery_origin.producer.lr=0x8199D6A4;
+ recovery_origin.rows=0;recovery_origin.flags=2;REQUIRE(retry.CanPrecede(recovery_origin));
+ // Native producer return alone cannot free the copied envelope or its Task.
+ CHECK_FALSE(retry.ReturnCompletion(completion));
+ REQUIRE(retry.EnterEnvelopeFree(freeing,retry_copy.envelope));
+ REQUIRE(retry.ReturnEnvelopeFree(freeing));REQUIRE(retry.ReturnCompletion(completion));
+ CHECK_FALSE(retry.ready_to_reap());
+ const auto recovery_task=f.Born(0x404E8000,0x816A2C80,0x414E3000,0x816A2EC8);
+ auto recovery_copy=retry_copy;++recovery_copy.capture;++recovery_copy.serial;recovery_copy.envelope=0x414E3000;
+ recovery_copy.argument=recovery_copy.envelope+0x1C;recovery_copy.request_birth=recovery_task.birth;
+ Service recovery;REQUIRE(recovery.Begin(recovery_origin));REQUIRE(recovery.BindCopy(recovery_copy));
+ REQUIRE(recovery.EnterAcceptance(f.acceptance,recovery_copy,f.origin.object+0x10,recovery_copy.argument,recovery_copy.overlap));
+ REQUIRE(recovery.ReturnAcceptance(f.acceptance,0,recovery_copy.argument,recovery_copy.overlap));
+ CHECK(recovery.accepted());CHECK_FALSE(retry.ready_to_reap());
+ REQUIRE(retry.ReturnTick(*retry_tick,second.frame,f.pump.birth));f.End(second);CHECK(retry.ready_to_reap());
+ auto third=f.Start();const auto final_tick=recovery.EnterTick(third.frame,f.pump,third.current);REQUIRE(final_tick);
+ const auto last=f.Completion(*final_tick),last_free=f.Free(last);
+ REQUIRE(recovery.EnterCompletion(last,recovery_copy.overlap,recovery_copy.envelope,0,0,0));
+ REQUIRE(recovery.EnterEnvelopeFree(last_free,recovery_copy.envelope));
+ REQUIRE(recovery.ReturnEnvelopeFree(last_free));REQUIRE(recovery.ReturnCompletion(last));
+ REQUIRE(recovery.ReturnProducer(recovery_origin.producer));CHECK_FALSE(recovery.ready_to_reap());
+ REQUIRE(recovery.ReturnTick(*final_tick,third.frame,f.pump.birth));f.End(third);CHECK(recovery.ready_to_reap());
+ CHECK_FALSE(f.service.CanPrecede(f.origin));CHECK_FALSE(retry.CanPrecede(retry_origin));
+ CHECK_FALSE(recovery.CanPrecede(retry_origin)); // No replay or backwards error loop.
+ CHECK_FALSE(f.ledger.SourceDescendantsClosed(f.origin.source));
+ ExecutionFree(f.ledger,initial_task.birth);ExecutionFree(f.ledger,retry_task.birth);
+ ExecutionFree(f.ledger,recovery_task.birth);f.Finish();
+ CHECK(f.ledger.SourceDescendantsClosed(f.origin.source));
+}
+
+void NativeProfileIdentityTaskTestAccess::IdentityServiceSequentialRefusalsAndUnstarted(){
+ using Service=IdentityServiceFixture::Service;
+ IdentityServiceFixture f;REQUIRE(f.service.Begin(f.origin));
+ auto retry=f.origin;retry.producer.sp=f.origin.worker.sp-0x510;
+ retry.producer.lr=0x8199D5AC;retry.flags=0;retry.rows=retry.worker_argument+0xA68;
+ CHECK_FALSE(f.service.CanPrecede(retry)); // No actual producer return yet.
+ REQUIRE(f.service.ReturnProducer(f.origin.producer));REQUIRE(f.service.CanPrecede(retry));
+ for(unsigned fault=0;fault<6;++fault){auto wrong=retry;
+  if(fault==0)++wrong.work;if(fault==1)++wrong.job;if(fault==2)++wrong.worker_birth.generation;
+  if(fault==3){++wrong.source;++wrong.worker_birth.origin;}if(fault==4)wrong.worker_argument+=8;
+  if(fault==5)wrong.worker.sp-=0x10;
+  CHECK_FALSE(f.service.CanPrecede(wrong));
+ }
+ auto initial=retry;initial.producer.lr=0x8199D52C;initial.flags=4;
+ REQUIRE(f.service.CanPrecede(initial)); // Successful cleanup can continue through direct initial.
+ Service second;REQUIRE(second.Begin(retry));REQUIRE(second.ReturnProducer(retry.producer));
+ CHECK_FALSE(second.CanPrecede(f.origin));
+ auto recovery=retry;recovery.producer.lr=0x8199D6A4;recovery.rows=0;recovery.flags=2;
+ REQUIRE(f.service.CanPrecede(recovery)); // Native negative cleanup can skip initial/retry.
+ REQUIRE(second.CanPrecede(recovery));CHECK_FALSE(second.CanPrecede(retry));
+ // Existing observation cannot prove a native early Start/no-copy refusal's
+ // terminal cleanup. Its real producer return/cancel/CPU-stop stay unjoined.
+ CHECK_FALSE(f.service.ready_to_reap());f.service.ObserveCancel();
+ CHECK(f.service.cancel_requested());CHECK_FALSE(f.service.ready_to_reap());
+ f.service.RetireAtActualStop();CHECK_FALSE(f.service.CanPrecede(retry));CHECK_FALSE(f.service.ready_to_reap());
+ CHECK_FALSE(second.ready_to_reap());second.RetireAtActualStop();CHECK_FALSE(second.ready_to_reap());
+ f.Finish(); // Independent genuine Task ledger returns/frees do not create service receipts.
+ CHECK_FALSE(f.service.ready_to_reap());CHECK_FALSE(second.ready_to_reap());
 }
 
 void NativeProfileIdentityTaskTestAccess::IdentityServiceProfileOutputTransport(){
@@ -2943,6 +3086,18 @@ TEST_CASE("Identity service authenticates original producer and copied native re
 TEST_CASE("Identity service preserves native ownership across stack and asynchronous logon outputs",
           "[identity_task][identity_service][identity_request_lifecycle][abi][lifetime]"){
  NativeProfileIdentityTaskTestAccess::IdentityServiceProfileOutputTransport();
+}
+TEST_CASE("Identity service binds all native producer lanes to the retained worker request",
+          "[identity_task][identity_service][identity_request_lifecycle][abi]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceNativeProducerVariants();
+}
+TEST_CASE("Identity service preserves sequential native requests and older completion tails",
+          "[identity_task][identity_service][identity_request_lifecycle][lifetime][race]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceSequentialNativeOperations();
+}
+TEST_CASE("Identity service refuses replay foreign sequencing and unproved early cleanup",
+          "[identity_task][identity_service][identity_request_lifecycle][lifetime][race]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceSequentialRefusalsAndUnstarted();
 }
 TEST_CASE("Identity service accepts only the exact request and real pump dispatch",
           "[identity_task][identity_service][abi][race]"){

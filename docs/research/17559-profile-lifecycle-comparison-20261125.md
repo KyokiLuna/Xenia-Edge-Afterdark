@@ -528,6 +528,79 @@ substantial repeated validation work, but its contribution to lag has not been
 measured. Existing unload leases and code-sweep counters do not establish byte
 immutability; no checks were removed on that basis.
 
+## V137 native variants and accepted-envelope lifetime
+
+The implementation now recognizes all four recovered producer lanes, including
+the exact packed request rows for initial/retry and the null cleanup/recovery
+inputs. Successful cleanup can proceed to initial, then optional retry and
+recovery: the native CFG permits four distinct calls in one C838 worker. Each
+operation retains its own completion/free/tick tail; the actual accepted-pending
+selector is separate. Reaping also waits for the genuine worker return so an
+asynchronous caller cannot lose its native callsite history. Source review
+closed a new collection-link publication race before application by copying
+bound Origin/Link pairs under the existing mutex. Generic error outcomes and
+the missing early-Start/no-copy terminal proof are not treated as success.
+
+The disjoint VdSwap diagnostic records actual entry, the original pre-staging
+predicates and the real Stage/ticket result. It preserves rendering, packet
+contents, all ten guest arguments and fallback policy; capture/formatting are
+disabled with the existing diagnostic cvar. Both components were reviewed,
+built and tested together. All seven runs passed: full suites contain 2,193
+cases/148,441 assertions, focused CPU 5/130 and installed focus 205/24,156.
+Compilation base is `9b54e224`.
+
+Both native runs rendered the dashboard before controller attachment. The
+actual initial packed request now reaches retained Origin stage 4 with no
+ownership refusal. Guide visibility is notified but the overlay is still
+invisible; B/Right do not establish input return. Normal window close fully
+reaps processes without forced signals but still exits one after Bootstrap join
+failure. Checked source, configuration, products, index and system inputs remain
+unchanged. These runs are not Guide, shutdown, game or Avatar Editor acceptance.
+
+A single bounded debugger capture on the same tested ELF established the next
+shared ownership mismatch. A fresh positive producer observation selected
+worker 13; no historical thread ID was reused. The native wait/control header
+proves FC message `0x58001`, pending result 997 and the exact matching event.
+All typed host-state sections were available with their metadata mutexes
+unlocked. The capture shows:
+
+- CD588 acceptance has returned successfully and selected the exact copied
+  request/overlap as native pending; no completion/free/producer return exists.
+- The temporary dispatch Task has genuinely freed and its generic XMsg Record
+  is revoked, with generic facts unavailable. Callback/copy own-returns exist.
+- The native periodic pump exists, but this operation has no admitted pump or
+  tick. The pump getter requires the generic Record's revoked Live state.
+
+Matching native code distinguishes those lifetimes. Callback `0x816A2C80`
+retains the envelope when its saved overlap is nonzero, as in this synchronous
+Start. CD588 stores that request/overlap pair; later periodic processing clears
+it and performs real CompleteIO and envelope free. Temporary Task cleanup is
+therefore not the accepted envelope's terminal boundary. The next correction
+must positively bind that native acceptance handoff and retain separate
+envelope ownership/availability, preserving revoked Task/dispatch authority and
+the actual completion/free/tick/cancel/stop requirements. No blanket Live
+exception, payload copy or fabricated completion follows from this result.
+
+The debugger completed in 13.97 seconds, detached and reaped normally, and the
+owned emulator resumed with no debugger/payload signals. It read the verified
+CONTROL header and source-typed host metadata only; no Account, XUID, key, row
+payload or Job data was inspected. As with any all-stop capture, an individual
+snapshot can be mid-transition; the native code and deterministic consumer
+gating establish the actionable lifetime contradiction.
+
+| V137 record | SHA256 |
+| --- | --- |
+| Tested source map | `df4787587889400b0ccd77f4bb445d9a42d170425f15e82f88a5420f81a5b0d5` |
+| Build | `801464afd9e73c8144418689c1ca97e10ce59add55a5e625f68f922556ba9d82` |
+| All seven direct runs | `41a9c2d57cb109d026ce2e5403ad850cd39b81aaa0b0e45bcf5f3c6f3e43f089` |
+| ELF | `249af0dcf4d5606b81a2ece94e4d11f9bea47eed4db476207fb0507d7890b71b` |
+| First native assessment | `69f29233a3e80d545c8375fbe4db2d782ae722ca3a7bf86e78c7c26eb9be7ecf` |
+| Source-typed debug assessment | `8343cd00dee1d199b011386b2bebb23a4e06780c15b5374407dc5c0422c1a959` |
+
+No new AppImage was produced. The early Start/error terminal proof,
+intermittent first-Swap failure, actual Guide/profile/avatar/game consumers and
+the rest of the combined HDD gate remain open.
+
 ## Evidence
 
 Detailed local evidence is retained under `evidence/hdd-gate` in the research

@@ -1267,6 +1267,7 @@ class NativeProfileIdentityTasks final {
       Frame worker,producer;Birth worker_birth;
       uint64_t job=0,source=0,work=0;
       uint32_t object=0,rows=0,parameters=0,flags=0,overlap=0;
+      uint32_t worker_argument=0; // Retained C838 request, already validated by its real Work.
     };
     struct Copy {
       uint64_t capture=0,serial=0;uint32_t envelope=0,argument=0,overlap=0;
@@ -1281,18 +1282,54 @@ class NativeProfileIdentityTasks final {
       uint64_t serial=0,dispatch=0;Frame frame;Birth birth;
       bool operator==(const Tick& b) const {return serial==b.serial && dispatch==b.dispatch && frame==b.frame && SameBirth(birth,b.birth);}
     };
-    bool Begin(Origin value) noexcept {
-      if(begun_ || !value.worker.valid() || !value.producer.valid() ||
+    // These are the four actual callsites in the matching C838/C310 bodies,
+    // not four interchangeable service requests. No path repeats a callsite:
+    // successful cleanup can precede initial; retry and recovery are forward
+    // error branches. Keep older completion/free/tick tails independently.
+    enum class ProducerLane : uint32_t {kCleanup=1,kInitial=2,kRetry=3,kRecovery=4};
+    static std::optional<ProducerLane> ClassifyProducer(const Origin& value) noexcept {
+      if(!value.worker.valid() || !value.producer.valid() ||
          value.worker.function!=0x8199C838 || value.producer.function!=0x81830878 ||
          value.worker.root!=value.producer.root || value.worker.thread!=value.producer.thread ||
          value.worker.pcr!=value.producer.pcr || value.worker.sp<0xBC0 ||
-         value.producer.sp!=value.worker.sp-0xBC0 || value.producer.lr!=0x8199C488 ||
          !value.job || value.source<=2 || !value.work || !value.worker_birth.generation ||
          value.worker_birth.origin!=value.source || !Address(value.worker_birth.task) ||
-         value.object!=0x81AEE470 || value.rows || value.flags!=4 || value.overlap ||
-         value.parameters!=value.worker.sp-0x370)return false;
-      origin_=value;begun_=true;return true;
+         value.object!=0x81AEE470 || value.overlap ||
+         !Address(value.worker_argument) || (value.worker_argument&7) ||
+         uint64_t(value.worker_argument)+0xC18>uint64_t(UINT32_MAX)+1 ||
+         value.parameters!=value.worker.sp-0x370)return {};
+      const bool packed_rows=value.rows==value.worker_argument+0xA68;
+      if(value.producer.sp==value.worker.sp-0xBC0 && value.producer.lr==0x8199C488 &&
+         !value.rows && value.flags==4)return ProducerLane::kCleanup;
+      if(value.producer.sp!=value.worker.sp-0x510)return {};
+      if(value.producer.lr==0x8199D52C && packed_rows &&
+         (value.flags==4 || value.flags==5))return ProducerLane::kInitial;
+      if(value.producer.lr==0x8199D5AC && packed_rows &&
+         !value.flags)return ProducerLane::kRetry;
+      if(value.producer.lr==0x8199D6A4 && !value.rows && value.flags==2)return ProducerLane::kRecovery;
+      return {};
     }
+    bool Begin(Origin value) noexcept {
+      const auto lane=ClassifyProducer(value);if(begun_ || !lane)return false;
+      origin_=value;lane_=*lane;begun_=true;return true;
+    }
+    // A later native call may start while this operation's genuine provider
+    // or Task-free tail is still retained. Its own synchronous producer must
+    // have returned, and the native forward-only callsite order must match.
+    bool CanPrecede(const Origin& next) const noexcept {
+      const auto lane=ClassifyProducer(next);
+      if(!begun_ || retired_ || !producer_returned_ || !lane ||
+         next.worker!=origin_.worker || !SameBirth(next.worker_birth,origin_.worker_birth) ||
+         next.job!=origin_.job || next.source!=origin_.source || next.work!=origin_.work ||
+         next.object!=origin_.object || next.parameters!=origin_.parameters ||
+         next.worker_argument!=origin_.worker_argument)return false;
+      return (lane_==ProducerLane::kCleanup && *lane==ProducerLane::kInitial) ||
+          ((lane_==ProducerLane::kCleanup || lane_==ProducerLane::kInitial) &&
+              (*lane==ProducerLane::kRetry || *lane==ProducerLane::kRecovery)) ||
+          (lane_==ProducerLane::kRetry && *lane==ProducerLane::kRecovery);
+    }
+    ProducerLane lane() const noexcept {return lane_;}
+    bool producer_returned() const noexcept {return producer_returned_;}
     const Origin& origin() const noexcept {return origin_;}
     const Copy& copy() const noexcept {return copy_;}
     bool BindCopy(Copy value) noexcept {
@@ -1320,6 +1357,7 @@ class NativeProfileIdentityTasks final {
       accepted_=true;return true;
     }
     bool accepted() const noexcept {return accepted_ && !terminal_entered_ && !retired_;}
+    bool awaiting_acceptance_return() const noexcept {return accepting_ && !acceptance_returned_;}
     static bool PumpMatches(const Pump& pump,const Origin& origin) noexcept {
       return pump.schedule.valid() && pump.schedule.root==origin.worker.root &&
           pump.schedule.function==0x816BA440 && pump.schedule.lr==0x818CF164 &&
@@ -1395,7 +1433,8 @@ class NativeProfileIdentityTasks final {
     }
     void RetireAtActualStop() noexcept {retired_=true;}
    private:
-    Origin origin_{};Copy copy_{};Frame acceptance_{},completion_{},free_{};
+    Origin origin_{};ProducerLane lane_=ProducerLane::kCleanup;
+    Copy copy_{};Frame acceptance_{},completion_{},free_{};
     std::array<std::optional<Tick>,16> ticks_{};uint64_t next_tick_=1;
     bool begun_=false,accepting_=false,acceptance_returned_=false,accepted_=false;
     bool terminal_entered_=false,terminal_returned_=false,free_entered_=false,free_returned_=false;

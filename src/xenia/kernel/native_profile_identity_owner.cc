@@ -6584,6 +6584,13 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
      else observation.observation=++s.query_observation;
     }
     if(observation.enabled){
+     // Advisory copy at this already protected actual Query cut. It does
+     // not evaluate/reorder any original admission predicate or guest read.
+     result.observation_available=true;
+     result.observation_phase=uint32_t(s.render_phase);
+     result.observation_job=s.job?s.job->serial:0;
+     result.observation_source=s.job?s.job->source:0;
+     result.observation_want_final=s.job&&s.job->want_final_barrier.load();
      if(observation.loops!=UINT32_MAX)++observation.loops;
      observation.phase=uint32_t(s.render_phase);observation.active=uint32_t(s.active.size());
      observation.expected=uint32_t(s.expected.size());observation.current_read=s.current_read_source;

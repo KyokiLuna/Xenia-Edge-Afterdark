@@ -1433,8 +1433,107 @@ bool NativeSystemGraphicsTransport::ObserveSharedDevicePublication(
   return metadata.published && metadata.addref_owned;
 }
 
+// Diagnostic metadata only. The verified CD70C manager Query occurs before
+// its local native locks; the clear helpers have unproved inherited locks and
+// are intentionally excluded. Query owns this FIRST local, so emission follows
+// all original Query/Poll owners, invocations, operations and mutex guards.
+// The actual later Owner cut associates want_final without another lookup.
+struct NativeSystemGraphicsTransport::FramePollObservation final {
+  explicit FramePollObservation(uint32_t lr) noexcept
+      : enabled(cvars::native_system_ui_trace && lr == 0x816CD70C) {}
+  bool enabled = false, state_available = false, returned_available = false;
+  bool returned = false, request_present = false, source_present = false;
+  bool delegation_present = false, callback_pending = false, result_returned = false;
+  bool attached = false, output_capture_present = false, output_done_available = false;
+  bool output_done = false, result_available = false, title_state_restored = false;
+  bool stopping = false, poisoned = false, scope_entered = false;
+  bool scope_return_available = false, scope_return = false;
+  bool completion_available = false, resubmit_available = false, resubmit_return = false;
+  bool submission_available = false, request_identity_available = false;
+  uint32_t reason = 0, mode = 0, blocker = 0, result_status = 0, completion = 0;
+  uint32_t identity_evaluated = 0, identity_failed = 0, calls_evaluated = 0, calls_succeeded = 0;
+  uint64_t source_serial = 0, request_source = 0, backend = 0, request_backend = 0, submission = 0;
+  uint64_t owner_kernel = 0, owner_module = 0, owner_session = 0;
+  // Last actual Owner cut in THIS Query. Availability does not imply that
+  // Poll and Owner were simultaneous, or that a parked true-Poll returned.
+  bool owner_available = false, owner_want_final = false;
+  uint32_t owner_phase = 0;
+  uint64_t owner_job = 0, owner_source = 0;
+  void OwnerCut(const NativeProfileIdentityOwner::FrameQueryAdmission& value) noexcept {
+    if (!enabled) { return; }
+    owner_available = value.observation_available;
+    owner_want_final = value.observation_want_final;
+    owner_phase = value.observation_phase;
+    owner_job = value.observation_job; owner_source = value.observation_source;
+  }
+  bool Return(uint32_t why, bool value) noexcept {
+    if (enabled) { reason = why; returned_available = true; returned = value; }
+    return value;
+  }
+  bool OutputDone(bool value) noexcept {
+    if (enabled) { output_done_available = true; output_done = value; }
+    return value;
+  }
+  bool Scope(bool value) noexcept {
+    if (enabled) { scope_return_available = true; scope_return = value; }
+    return value;
+  }
+  bool Failure(uint32_t bit, bool value) noexcept {
+    if (enabled) { identity_evaluated |= 1u << bit; if (value) identity_failed |= 1u << bit; }
+    return value;
+  }
+  bool Call(uint32_t bit, bool value) noexcept {
+    if (enabled) { calls_evaluated |= 1u << bit; if (value) calls_succeeded |= 1u << bit; }
+    return value;
+  }
+  void NoteCompletion(uint32_t value) noexcept {
+    if (enabled) { completion_available = true; completion = value; }
+  }
+  void Resubmit(bool value) noexcept {
+    if (enabled) { resubmit_available = true; resubmit_return = value; }
+  }
+  ~FramePollObservation() noexcept {
+    if (!enabled || !owner_available || !owner_want_final ||
+        global_critical_region::is_held_by_current_thread()) { return; }
+    static xe::NativeSystemUiTraceLimiter trace;
+    // This independent limiter is untouched by every pre-want Query. The
+    // first actual returned post-want cut therefore receives its own budget.
+    // Serial identities stay in payload; none grants readiness authority.
+    const uint64_t key = uint64_t(reason) | (uint64_t(identity_evaluated) << 8) |
+        (uint64_t(identity_failed) << 16) | (uint64_t(calls_evaluated) << 24) |
+        (uint64_t(calls_succeeded) << 32) | (uint64_t(completion) << 40) |
+        (uint64_t(callback_pending) << 48) | (uint64_t(result_returned) << 49);
+    trace.EmitTransition(key, "transport", "frame_poll_retirement",
+        {{"poll_owner_available", owner_available}, {"poll_owner_want_final", owner_want_final},
+         {"poll_owner_phase", owner_phase}, {"poll_owner_job", owner_job},
+         {"poll_owner_source", owner_source}, {"poll_owner_cut_after_poll", 1},
+         {"poll_reason", reason}, {"poll_return_available", returned_available},
+         {"poll_return", returned}, {"poll_state_available", state_available},
+         {"poll_request_present", request_present}, {"poll_source_present", source_present},
+         {"poll_delegation_present", delegation_present}, {"poll_callback_pending", callback_pending},
+         {"poll_result_returned", result_returned}, {"poll_attached", attached},
+         {"poll_output_capture_present", output_capture_present},
+         {"poll_output_done_available", output_done_available}, {"poll_output_done", output_done},
+         {"poll_result_available", result_available}, {"poll_result_status", result_status},
+         {"poll_title_state_restored", title_state_restored}, {"poll_mode", mode},
+         {"poll_blocker", blocker}, {"poll_stopping", stopping}, {"poll_poisoned", poisoned},
+         {"poll_source_serial", source_serial}, {"poll_request_source", request_source},
+         {"poll_backend_epoch", backend}, {"poll_request_backend_epoch", request_backend},
+         {"poll_submission_available", submission_available}, {"poll_submission", submission},
+         {"poll_request_identity_available", request_identity_available},
+         {"poll_owner_kernel_epoch", owner_kernel}, {"poll_owner_module_generation", owner_module},
+         {"poll_owner_session", owner_session}, {"poll_identity_evaluated", identity_evaluated},
+         {"poll_identity_failed", identity_failed}, {"poll_scope_entered", scope_entered},
+         {"poll_scope_return_available", scope_return_available}, {"poll_scope_return", scope_return},
+         {"poll_calls_evaluated", calls_evaluated}, {"poll_calls_succeeded", calls_succeeded},
+         {"poll_completion_available", completion_available}, {"poll_completion_status", completion},
+         {"poll_resubmit_available", resubmit_available}, {"poll_resubmit_return", resubmit_return}});
+  }
+};
+
 NativeSystemGraphicsTransport::QueryResult NativeSystemGraphicsTransport::Query(
     uint32_t mode, uint32_t lr) try {
+  FramePollObservation observation(lr); // FIRST: emits after every original Query/Poll holder.
   RecordDiagnosticCounter(Counter::kQueryTransport);
   auto op = state_->Acquire(state_);
   if (!op) {
@@ -1466,10 +1565,11 @@ NativeSystemGraphicsTransport::QueryResult NativeSystemGraphicsTransport::Query(
                                                                           : 1u);
     }
   }
-  if (!PollOnNativeTask(*thread, lr)) {
+  if (!PollOnNativeTask(*thread, lr, observation)) {
     TRACE_TRANSPORT(op->context, "query_retirement_busy",
                     {"return_address", lr}, {"thread_id", thread->thread_id()});
     const auto iteration=NativeProfileIdentityOwner::AdmitNativeFrameIteration(*thread,lr,false);
+    observation.OwnerCut(iteration);
     if(iteration.managed && !iteration.admitted)return reject(Counter::kQueryContext);
     return HandledQuery(0);
   }
@@ -1576,6 +1676,7 @@ NativeSystemGraphicsTransport::QueryResult NativeSystemGraphicsTransport::Query(
   const auto nonmodal = state_->nonmodal;
   lock.unlock();
   const auto iteration=NativeProfileIdentityOwner::AdmitNativeFrameIteration(*thread,lr,true);
+  observation.OwnerCut(iteration);
   if(iteration.managed && !iteration.admitted)return reject(Counter::kQueryContext);
   if (available && nonmodal) {
     nonmodal->ObserveSuccessfulNativeFrameQuery(
@@ -2350,7 +2451,7 @@ bool NativeSystemGraphicsTransport::SubmitPrepared() {
 }
 
 bool NativeSystemGraphicsTransport::PollOnNativeTask(XThread& thread,
-                                                     uint32_t lr) {
+    uint32_t lr, FramePollObservation& observation) {
   std::shared_ptr<NativeSystemFrameDelegation> delegation;
   std::shared_ptr<const gpu::NativeFrameExecutionRequest> request;
   std::shared_ptr<const NativeFrameSource> source;
@@ -2360,14 +2461,46 @@ bool NativeSystemGraphicsTransport::PollOnNativeTask(XThread& thread,
   bool attached = false, returned = false;
   {
     std::lock_guard lock(state_->mutex);
+    if (observation.enabled) {
+      observation.state_available = true;
+      observation.request_present = bool(state_->request);
+      observation.source_present = bool(state_->source);
+      observation.delegation_present = bool(state_->delegation);
+      observation.callback_pending = state_->status.callback_pending;
+      observation.result_returned = state_->result_returned;
+      observation.attached = state_->attached;
+      observation.output_capture_present = bool(state_->output_capture);
+      observation.mode = uint32_t(state_->status.mode);
+      observation.blocker = uint32_t(state_->status.blocker);
+      observation.stopping = state_->status.stopping;
+      observation.poisoned = state_->poisoned;
+      observation.backend = state_->status.backend_epoch;
+      observation.submission_available = state_->result_returned;
+      if (observation.submission_available) { observation.submission = state_->status.native_submission; }
+      observation.source_serial = state_->source ? state_->source->serial() : 0;
+      if (state_->request) {
+        const auto& identity = state_->request->identity();
+        observation.request_identity_available = true;
+        observation.request_source = identity.source_serial;
+        observation.request_backend = state_->request->backend_epoch();
+        observation.owner_kernel = identity.owner.kernel_epoch;
+        observation.owner_module = identity.owner.module_generation;
+        observation.owner_session = identity.owner.session_id;
+      }
+      if (state_->result_returned) {
+        observation.result_available = true;
+        observation.result_status = uint32_t(state_->result.status);
+        observation.title_state_restored = state_->result.title_state_restored;
+      }
+    }
     if (!state_->request) {
       if (state_->status.reset_pending) {
         state_->status.reset_pending = false;
       }
-      return true;
+      return observation.Return(1, true);
     }
     if (state_->status.callback_pending) {
-      return false;
+      return observation.Return(2, false);
     }
     delegation = state_->delegation;
     request = state_->request;
@@ -2379,64 +2512,66 @@ bool NativeSystemGraphicsTransport::PollOnNativeTask(XThread& thread,
     nonmodal = state_->source_nonmodal;
   }
   if (!returned || !delegation || !source) {
-    return false;
+    return observation.Return(3, false);
   }
   // Readback owns a legitimate cross-thread Session operation. While either
   // control closure is alive, Query is busy and must not open/complete another
   // native Task scope whose completion requires no active Session operation.
-  if (output_capture && !output_capture->Done()) {
-    return false;
+  if (output_capture && !observation.OutputDone(output_capture->Done())) {
+    return observation.Return(4, false);
   }
   auto invocation = delegation->EnterCurrentTask(thread, lr);
   if (!invocation) {
     state_->Reject(Blocker::kInvalidCaller, true);
-    return false;
+    return observation.Return(5, false);
   }
+  observation.scope_entered = observation.enabled;
   if (result.status == gpu::NativeFrameExecutionResult::Status::kBusy) {
     // Exact frozen Request is unconsumed; no CPU/PPC replay or new Source.
-    if (!invocation.Complete(true)) {
-      return false;
+    if (!observation.Scope(invocation.Complete(true))) {
+      return observation.Return(6, false);
     }
     auto* graphics = thread.kernel_state()->emulator()->graphics_system();
     auto* cp = graphics ? graphics->command_processor() : nullptr;
     if (cp && cp->GetNativeSystemFrameCapacity().can_queue()) {
-      SubmitPrepared();
+      observation.Resubmit(SubmitPrepared());
     }
-    return false;
+    return observation.Return(7, false);
   }
   auto session = delegation->session();
   const auto identity = result.completion.native_frame_identity();
-  if (result.status != gpu::NativeFrameExecutionResult::Status::kSubmitted ||
-      !result.title_state_restored || !identity ||
-      *identity != request->identity() || !result.completion.submission() ||
-      result.completion.backend_epoch() != request->backend_epoch() ||
-      result.completion.backend_stop_proof().backend_epoch() !=
-          request->backend_epoch()) {
+  if (observation.Failure(0, result.status != gpu::NativeFrameExecutionResult::Status::kSubmitted) ||
+      observation.Failure(1, !result.title_state_restored) || observation.Failure(2, !identity) ||
+      observation.Failure(3, *identity != request->identity()) || observation.Failure(4, !result.completion.submission()) ||
+      observation.Failure(5, result.completion.backend_epoch() != request->backend_epoch()) ||
+      observation.Failure(6, result.completion.backend_stop_proof().backend_epoch() !=
+          request->backend_epoch())) {
     session->Revoke();
-    invocation.Complete(false);
+    observation.Scope(invocation.Complete(false));
     state_->Reject(Blocker::kBackendFailure, true);
-    return false;
+    return observation.Return(8, false);
   }
   const auto current = thread.native_frame_thread_identity();
   if (!attached) {
-    if (!session->AttachGpu(current, source, result.completion) ||
-        !session->BeginRetire(current, source)) {
-      invocation.Complete(false);
+    if (!observation.Call(0, session->AttachGpu(current, source, result.completion)) ||
+        !observation.Call(1, session->BeginRetire(current, source))) {
+      observation.Scope(invocation.Complete(false));
       state_->Reject(Blocker::kBackendFailure, true);
-      return false;
+      return observation.Return(9, false);
     }
     std::lock_guard lock(state_->mutex);
     state_->attached = true;
   }
   const auto completion = result.completion.status();
+  observation.NoteCompletion(uint32_t(completion));
   TRACE_TRANSPORT(state_->context, "source_fence_observed",
                   {"source_serial", source->serial()},
                   {"backend_epoch", result.completion.backend_epoch()},
                   {"submission", result.completion.submission()},
                   {"completion_status", uint32_t(completion)}, {"attached", 1});
   if (completion == gpu::GpuCompletionStatus::kPending) {
-    invocation.Complete(true);
-    return false;
+    observation.Scope(invocation.Complete(true));
+    return observation.Return(10, false);
   }
   bool start_output_capture = false;
   bool capture_scope_consumed = false;
@@ -2551,14 +2686,14 @@ bool NativeSystemGraphicsTransport::PollOnNativeTask(XThread& thread,
           // No CP readback may reserve its Session operation until this exact
           // native Task scope has closed successfully.
           capture_scope_consumed = true;
-          const bool scope_completed = invocation.Complete(true);
+          const bool scope_completed = observation.Scope(invocation.Complete(true));
           TRACE_TRANSPORT(state_->context, "output_capture_scope_completed",
                           {"source_serial", source->serial()},
                           {"backend_epoch", request->backend_epoch()},
                           {"submission", result.completion.submission()},
                           {"completed", scope_completed});
           if (!scope_completed) {
-            return false;
+            return observation.Return(11, false);
           }
           try {
             cp->ReadCompletedNativeFrameAsync(
@@ -2615,17 +2750,17 @@ bool NativeSystemGraphicsTransport::PollOnNativeTask(XThread& thread,
   if (capture_scope_consumed) {
     // Even inline controls or enqueue failures cannot reuse the closed scope.
     // A later genuine native poll re-enters only after both closures are gone.
-    return false;
+    return observation.Return(12, false);
   }
   if (completion != gpu::GpuCompletionStatus::kComplete ||
-      !session->RetireComplete(current, source)) {
-    invocation.Complete(false);
+      !observation.Call(2, session->RetireComplete(current, source))) {
+    observation.Scope(invocation.Complete(false));
     state_->Reject(Blocker::kBackendFailure, true);
-    return false;
+    return observation.Return(13, false);
   }
-  if (!invocation.Complete(true)) {
+  if (!observation.Scope(invocation.Complete(true))) {
     state_->Reject(Blocker::kBackendFailure, true);
-    return false;
+    return observation.Return(14, false);
   }
   NativeProfileIdentityOwner::ObserveNativeImageFrameCompleted(*request,result);
   if(request->presentation_guard() && request->output_layout() &&
@@ -2791,7 +2926,7 @@ bool NativeSystemGraphicsTransport::PollOnNativeTask(XThread& thread,
     } catch (...) {
     }
   }
-  return true;
+  return observation.Return(15, true);
 }
 
 NativeSystemGraphicsTransport::HookResult NativeSystemGraphicsTransport::Get(

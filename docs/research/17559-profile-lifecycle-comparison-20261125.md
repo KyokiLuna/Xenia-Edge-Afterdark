@@ -1,10 +1,13 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V132 request-owned service progress is applied and its integrated build
-and all seven direct test runs passed. The actual native run reached publication
-and real request completion, but post-selection Guide visibility and final
-settlement failed; manual normal window close ended with exit one and clean
-reaping. The combined HDD gate remains open. This work follows
+Status: V133 adds the shared profile package/Header/cache deletion transaction
+and precise frame/stop observations. Its corrected build and all seven direct
+test runs passed. The actual native run still failed: the dashboard booted with
+the disposable local profile already selected, Guide remained invisible, and
+an earlier startup handoff entered uncertainty. Memory growth triggered the
+resource guard. No usable checkpoint or native shutdown pass is claimed.
+Historical V130–V132 findings remain labeled below. The combined HDD gate is
+open. This work follows
 the standing [systems approach and
 console fidelity rule](17559-console-fidelity-policy.md).
 
@@ -40,13 +43,13 @@ profile implementation.
 | Initial pictures/appearance | MiniCreator chooses actual appearance and later commits it through the profile services. | Installed stock tiles, preset previews and a 1,000-byte INFO1 default exist. A preview or gamer picture is not evidence of an attached, animated avatar model; native default timing/equivalence still needs acceptance. |
 | Sign-in/out ingress | 20B at 0x8199C630 and 224 at 0x8199E3E0 retain original caller, flags, user slots and sync/async result policy. | PM preparation, exact Account/source comparison, original-call execution and old/new roster ownership exist. Actual V130 failed at native Schedule producer binding, after preparation. Entering or returning from the generic executor does not alone authenticate native completion. |
 | Request to Task | Null-overlap 224 uses stack output bodySP+0x5C; nonnull-overlap 224 uses the genuine native request packet+0x18. E148 has its own stack producer. Tail adapter 0x81671C18 preserves SP/LR. | V131 binds the actual typed producer, retains its scalar birth receipt through native close/free/reuse and avoids later packet dereferences. Its real asynchronous initializer returned zero; later worker/protocol/publication completion remains unobserved. |
-| Native publication and errors | Actual worker, native cache publication, protocol result and caller completion are distinct. Native initializer errors and canceled workers have their own paths. | V131 keeps requested inputs immutable and separately prebinds the real canceled-empty outcome, its native title context and selected read/map/retirement effects. Genuine initializer error completion does not invent a child Task. Unproved partial outcomes and initializer-error source recovery remain uncertain. The live run has not proved publication or completion. |
+| Native publication and errors | Actual worker, native cache publication, protocol result and caller completion are distinct. Native initializer errors and canceled workers have their own paths. | Requested inputs and proven terminal outcomes remain separate. V132 observed real publication and completion without final settlement. V133 encountered an earlier startup handoff failure. Neither run establishes complete native sign-in, Guide or shutdown acceptance. |
 | Complete and release | CompleteIO 0x816A2588 atomically claims the native context, closes its actual tagged Task and frees the packet at 0x816A26E4 before returning. | The original overlap, callback, Task and source owners must remain distinct. A new host packet pin extending to Schedule/224/CompleteIO return could obstruct native free. No later packet dereference or fabricated Task birth may be justified by an earlier pointer alone. |
 | MiniCreator and foreground Editor | Mapped wizard phases invoke Mini UI 6A4 or Editor launch 7DB. Mini requires an owned request/visibility/cancel/teardown lifecycle; its FE21018 queue-copy proof remains unclosed. Editor is a genuine foreground TITLE. | The paired SYSTEM 7DB handoff and TITLE-aware avatar owner now exist. Mini execution, actual title handoff, return/home and real attachment remain unaccepted; older claims that 7DB and LoadAnimation are absent are superseded. |
 | Persist appearance and tiles | Mini and Editor SetManifest calls are followed by actual ProfileSync 21F; tile workers also use 2F1/2FB with their own buffer semantics. ProfileSync is a user mask. | Shared INFO1/GPD and picture transactions exist, but external 21F/2F1/2FB routing is incomplete. SAVE49/Header/PIS05/real IO-close/cache promotion is inactive. A successful SetManifest helper does not prove native save/restart. |
 | Native container creation/save | Native metadata, aligned Header bytes, real descriptor/checkpoint controls, file writes/close and cache promotion are one producer/consumer chain. | Existing authenticated native CON/aligned-Header support is active. Cold creation and complete native save remain separate missing participants. Preserve actual padding, unknown fields and source identity; do not manufacture formatted state or control success. |
 | Render and consume avatars | F2/F3 native engines serve initialization, appearance, assets, geometry and animation for dashboard, Editor and games. | Ten native engine/profile/animation routes exist, including actual TITLE callbacks. Remaining custom/mipmap/icon/binary/enumeration/WearNow paths still contain incomplete behavior. Actual stock models, editing, animation and Doritos consumption remain mandatory runtime checks. |
-| Rename/delete | Native APIs must coordinate Account, Header, catalog, roster and storage outcomes. Profile-only deletion preserves owned game saves. | Shared host helpers exist, but external native rename/delete/save/load coverage and complete ABIs remain gaps. Host profile deletion also lacks the common package-plus-external-Header handoff and can report failure after physical removal if its cache cut is busy. These are source findings, not V130 causes. |
+| Rename/delete | Native APIs must coordinate Account, Header, catalog, roster and storage outcomes. Profile-only deletion preserves owned game saves. | Host deletion and registered selected-package export 270 now share source-bound package/Header removal, recovery and matching cache handoff. Seven added cases passed, including actual export completion, reader/writer conflicts, two sources, restart and save preservation. Native 233 whole-user traversal and external rename/save/load remain separate open work; dashboard UI deletion has not been accepted. |
 | Restart and recovery | Durable completion must survive restart and fresh enumeration with the same identity, settings and appearance. | Component journal replay, exact source binding and cache validation are tested. Current native save/restart and full profile lifecycle acceptance remain open. A flush, cached row or clean exit is insufficient by itself. |
 
 Three native terminal outcomes need separate treatment. An initializer error can
@@ -282,23 +285,86 @@ operation. A virtual raw profile CON is one non-directory item within the outer
 traversal; its individual removal can later use a shared package/Header owner
 while preserving the original following callback.
 
-The next private unit addresses the existing host path's real defects: raw
-package removal leaves the external Header behind, and a late cache-admission
-failure can follow physical deletion. Its shared owner must retain the exact
-source, package and external Header claims through durable removal, recovery
-and the matching cache handoff. Host sign-out policy remains separate from
-native traversal policy. The candidate and its persistence/contention/export
-cases are not applied or executed. Physical V3 closes the reviewed namespace,
-exception-recovery and completed-before-retirement handoff issues. Production
-270 routing, its exact source/path and synchronous/asynchronous completion are
-being integrated through the same common service; that union still awaits review.
-Native 233 remains unchanged, and this private unit is absent from the tested
-V132 source. Cold creation and complete native SAVE remain mandatory open work.
+V133 replaces the host path's raw removal and late cache-admission failure with
+one retained source-issued operation. It owns the exact package and external
+Header through durable removal, recovery and matching cache handoff. Existing
+host deletion retains its requested sign-out policy; production export 270 uses
+the same service without implicitly signing a player out. Native 233 remains
+unchanged. Cold creation and complete native SAVE remain mandatory open work.
+
+Physical case variants retain their resolved spelling. A cached same-source
+canonical variant without proof of the same physical origin is refused before
+effects, preserving case-only siblings. Active and retired holders match the
+actual managed authority, guest generation, device/source generation and exact
+profile view; those are distinct roles. Actual Done seals the original removal
+before device retirement, and a pending journal retains its namespace claims
+even when the caller drops its receipt.
+
+The direct tests distinguish observation from mutation. An absent-file snapshot
+can be valid while a deletion handoff owns the namespace; that observation
+grants no write permission. The corrected tests exercise actual mkdir and
+Header writes returning Busy without changing bytes, followed by real success
+after release or recovery. A signed-in profile's Account reservation causes an
+earlier structural source-resolution refusal with ACCESS_DENIED. The unchanged
+export completion correctly preserves that error as `0x80070005`; it must not be
+rewritten as a later sharing violation just to satisfy a fixture.
 
 | Deletion contract record | SHA256 |
 | --- | --- |
 | Corrected native 233 scope | `e702ec438e76731e8b76397717776637c5218b9207ec6518179bb0ec2bcc07a6` |
 | Separate dashboard package-delete branch | `40b0d5c2a5b5ebd6a2fdff2ad6f9eeb29695cea8acb94fd4f5db0a37c47282a1` |
+
+## V133 tested source and failed native startup
+
+The coherent sixteen-path source map is
+`97184d8d94b32b39e71655dfd12802d40ad0c037d56a598df691123730d0a2c8`.
+All seven direct runs passed: base 334/28,711 assertions, network 125/11,212,
+kernel 1,463/92,881, VFS 136/9,736, UI 124/4,863, focused CPU 5/130 and
+installed-focus 194/23,118, including three explicitly selected hidden cases.
+The full five suites contain 2,182 cases and 147,403 assertions; focused runs
+overlap that coverage. Earlier compile and fixture failures remain recorded.
+The corrective source changes affected only two test files, so the successful
+four-step rebuild relinked the base/kernel tests and verified the other five
+products unchanged. The embedded version retains compilation base `0d28167d`.
+
+The isolated dashboard booted displaying disposable local123 in both dashboard
+and host toolbar. Guide visibility was notified, but no overlay appeared. This
+differs from V132's unsigned-start/explicit-sign-in scenario. The actual owner
+was already uncertain at `RunScheduledBody` line 5717, in OldPaused with read
+source 2, job/source 3 and one Expected owner. That line combines body failure,
+Task return and read-scope leave; the trace does not distinguish its conjuncts.
+Pre-entry admission repeatedly recorded retryable Busy at line 7094. No original
+logon, publication, final-readiness or post-want Poll record was observed.
+
+Owned RSS rose from roughly 0.71 GiB to about 6.7 GiB. The memory guard stopped
+the run after 190.81 seconds with TERM/KILL cleanup. It was not a normal window
+close or a shutdown pass. The record has no remaining live/unverified group
+members, but does not prove leader reaping; source, configuration, products,
+index and checked read-only inputs remained unchanged. The controller actor was
+closed. A later input batch attempted after retirement provides no owned UI
+evidence and is excluded from acceptance.
+
+Source review identifies two related boundaries for the next coherent unit:
+the callback conflates a failed operation result with its own return duties,
+and the host reaper refuses terminal queues after uncertainty while observer
+paths can still append to them. Offline ELF debug metadata reports a Work object
+size of 22,000 bytes. The recorded next-work serial exceeds 305,000, consistent
+with the order of memory growth; this is not a measured retained-object count.
+Known pre-entry failures, actual uncertain native execution and already terminal
+resource retirement must remain distinct. No guard is relaxed from this finding.
+
+| V133 record | SHA256 |
+| --- | --- |
+| Corrected coherent source freeze | `48478bcc3e0ff16756f8c13f8b14149374a0eb8e6f69f018165d93a0f3d29ac1` |
+| Corrective build | `40ba9b3bfcc918522a3e579061cb8c1350564609dc55d070f6fa4e7fce4ae239` |
+| All seven direct runs | `0d486af5e0d8a2d4b308fab0bfb6df8c6de1189b4fb365a547113b6edf36a509` |
+| ELF | `e6f527a1bee2cf4ba04e545fd9cc266061151f5df633b068dea912984bd361cc` |
+| Actual native result | `ffa51eace54b59e41684394b1c3c19972a13993b2cad8c2cdf9a196534b8d190` |
+| Root native assessment | `b3c625d941e9ed4c3e6c02f5ed85e0882f66b6fb9a5f66691a0aef40f24e01f2` |
+
+The separate closed-file IO checkpoint and logical STFS producer remain private
+work. Their candidate reviews do not establish native controls, formatting,
+profile save, avatars or media acceptance. No new AppImage has been produced.
 
 ## Evidence
 

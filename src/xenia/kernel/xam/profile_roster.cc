@@ -974,7 +974,8 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
       const auto known = account_metadata_.find(deletion->xuid);
       const auto& source = *deletion->source;
       deleting = retiring_profiles_.size() == 1 && entry != retiring_profiles_.end() &&
-          std::addressof(*entry) == deletion->retirement &&
+          std::addressof(entry->first) == deletion->retirement &&
+          entry->second.get() == deletion &&
           known != account_metadata_.end() && known->second == deletion->metadata &&
           accounts_.contains(deletion->xuid) &&
           !profile_discovery_conflicts_.contains(deletion->xuid) &&

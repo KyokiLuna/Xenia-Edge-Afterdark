@@ -14,7 +14,7 @@
 #include "xenia/base/content_package_mutation_wire.h"
 #include "xenia/base/managed_device_identity.h"
 #include "xenia/base/snapshot_publisher.h"
-namespace xe::kernel::xam { class ContentManager; class NativeFolderContent; class NativeFolderContentTestAccess; }
+namespace xe::kernel::xam { class ContentManager; class ProfilePackageDeletion; class NativeFolderContent; class NativeFolderContentTestAccess; }
 namespace xe::filesystem {
 class ManagedVolumeAuthority;
 class ManagedStorageBootstrap;
@@ -26,6 +26,7 @@ class ProfilePublicationIntentTestAccess;
 // before catalog/guest publication. This is a separate journal purpose from
 // profile intents, format phases and single-file backup storage.
 class ContentMutationOwner final : public std::enable_shared_from_this<ContentMutationOwner> {
+  struct PackageDeletionRecord;
  public:
   using Kind = content_mutation_wire::Kind;
   struct Receipt {
@@ -53,6 +54,13 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
     bool prepared_durable = false, quarantined = false;
     bool header_removed = false, retirement_durable = false;
     bool space_retired = false, observed = false, complete = false;
+   private:
+    friend class ContentMutationOwner;
+    friend class xe::kernel::xam::ContentManager;
+    friend class xe::kernel::xam::ProfilePackageDeletion;
+    // Only the actual Delete producer can mint this exact owner/record. Public
+    // booleans, a nonce or current absence alone are not completion authority.
+    std::shared_ptr<PackageDeletionRecord> deletion_;
   };
   // Consumes the genuine retained-tree proof. No guest path/ID or ordinary
   // absent token can authorize retirement; all member leases must be drained.
@@ -215,6 +223,7 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
 
  private:
   friend class xe::kernel::xam::ContentManager;
+  friend class xe::kernel::xam::ProfilePackageDeletion;
   friend class xe::kernel::xam::NativeFolderContent;
   friend class ProfilePublicationIntentTestAccess;
   bool InstallNativeHeaderFormat(std::shared_ptr<const NativeHeaderFormat>, std::error_code&);
@@ -268,10 +277,26 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
       bool stop_after_prepared, bool stop_after_retire = false,
       content_package_mutation_wire::Kind kind = content_package_mutation_wire::Kind::kDelete,
       PackageBoundary boundary = PackageBoundary::kNone);
+  // Retains the SAME original tree on a pre-preparation refusal. The ordinary
+  // consuming API above remains unchanged; the issued profile capsule must
+  // never recapture a new expected tree/Header merely because a retry is busy.
+  PackageReceipt DeleteRetainedInternal(std::unique_ptr<HostStorageContentTree>&,
+      std::shared_ptr<const HostStorageSnapshotToken>, const std::atomic<bool>*,
+      bool stop_after_prepared, bool stop_after_retire = false,
+      content_package_mutation_wire::Kind kind = content_package_mutation_wire::Kind::kDelete,
+      PackageBoundary boundary = PackageBoundary::kNone, bool retain_outcome = true,
+      PackageReceipt* retained_progress = nullptr);
+  PackageReceipt ObservePackageDeletion(const PackageReceipt&);
+  // Metadata-only terminal evidence for the SAME retired operation. This is
+  // neither current path absence nor permission to touch a replacement source.
+  bool IsSealedPackageDeletion(const PackageReceipt&) const;
+  PackageReceipt CaptureAbsentPackageDeletion(const std::filesystem::path&,
+      std::shared_ptr<const HostStorageSnapshotToken>);
   PackageReceipt AdvancePackage(const content_package_mutation_wire::Record&,
       std::span<const uint8_t>, std::shared_ptr<HostStorageRoot> package_reserved,
       std::shared_ptr<HostStorageRoot> header_reserved, bool recovering,
-      bool stop_after_retire = false, PackageBoundary boundary = PackageBoundary::kNone);
+      bool stop_after_retire = false, PackageBoundary boundary = PackageBoundary::kNone,
+      std::shared_ptr<PackageDeletionRecord> retained_delete = {});
   std::error_code RecoverPackageIntent(
       const content_package_mutation_wire::Record&, std::span<const uint8_t>,
       const std::set<std::filesystem::path>& present,
@@ -317,6 +342,7 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
   struct PendingReservation {
     std::string nonce;
     std::shared_ptr<HostStorageRoot> view;
+    std::weak_ptr<PackageDeletionRecord> deletion;
   };
   std::map<std::filesystem::path, PendingReservation> pending_reservations_;
   // Production bound reserves canonical/temporary/abort phases together

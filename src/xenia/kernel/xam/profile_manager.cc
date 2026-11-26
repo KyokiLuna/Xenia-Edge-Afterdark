@@ -245,6 +245,7 @@ ProfileManager::~ProfileManager() {
   }
   account_commit_gate_->CloseAndDrain();
   CloseRosterAuthority();
+  CloseProfileDeletions();
   CloseAccountEdits();
   // All observing/copy/publish operations have drained. Release native owners
   // from the SAME existing mount nodes outside all metadata/GCRC locks; closed
@@ -1188,6 +1189,7 @@ void ProfileManager::ReapReleasedProfileReads() {
   // Exact generation/node checks happen again in the real dismount. A busy
   // native owner remains in the existing record and is retried later.
   for (auto& [key, read] : expired) { DismountProfileInternal(key, std::move(read)); }
+  RetryProfileDeletions();
 }
 
 std::shared_ptr<ProfileStorageLease> ProfileManager::AcquireProfileStorageLease(
@@ -2905,55 +2907,358 @@ void ProfileManager::UpdateConfig(const uint64_t xuid, const uint8_t slot) {
   config::SaveConfig();
 }
 
-bool ProfileManager::DeleteProfile(const uint64_t xuid) {
-  if (xe::global_critical_region::is_held_by_current_thread()) {
+bool ProfileManager::CanonicalProfileRelative(const std::filesystem::path& relative, uint64_t xuid) {
+  if (!xuid || relative.empty() || relative.is_absolute() || relative.has_root_name()) { return false; }
+  const auto expected = ProfileStorageLease::ProfileRelative(xuid);
+  auto actual = relative.begin();
+  const auto fold = [](auto unit) { const auto value = uint32_t(unit); return value >= 'A' && value <= 'Z' ? value + ('a' - 'A') : value; };
+  for (const auto& part : expected) {
+    if (actual == relative.end()) { return false; }
+    const auto& a = actual->native(); const auto& b = part.native();
+    if (a.size() != b.size() || !std::equal(a.begin(), a.end(), b.begin(),
+        [&](auto x, auto y) { return fold(x) == fold(y); })) { return false; }
+    ++actual;
+  }
+  return actual == relative.end();
+}
+
+bool ProfileManager::AdvanceProfileDeletion(
+    const std::shared_ptr<ProfileDeletionReservation>& deletion, std::error_code* error) {
+  if (error) { error->clear(); }
+  const auto fail = [error](std::errc value) { if (error) { *error = std::make_error_code(value); } return false; };
+  if (!deletion || xe::global_critical_region::is_held_by_current_thread()) { return fail(std::errc::device_or_resource_busy); }
+  auto use = account_commit_gate_->Acquire();
+  if (!use) { return fail(std::errc::operation_canceled); }
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { return fail(std::errc::device_or_resource_busy); }
+    if (deletion->owner != this) { return fail(std::errc::operation_not_permitted); }
+    if (deletion->finished) { return true; }
+    const auto found = retiring_profiles_.find(deletion->xuid);
+    if (found == retiring_profiles_.end() || found->second != deletion ||
+        std::addressof(found->first) != deletion->retirement || deletion->in_flight ||
+        !deletion->package || !deletion->source) { return fail(std::errc::device_or_resource_busy); }
+    deletion->in_flight = true;
+  }
+  auto release = [this, deletion](void*) {
+    std::lock_guard lock(profile_mount_mutex_); deletion->in_flight = false;
+  };
+  std::unique_ptr<void, decltype(release)> active(reinterpret_cast<void*>(1), release);
+  // No PM/GCRC/native/model/FS guard spans CM IO or recovery. The SAME
+  // capsule owns the original source, exact path, before-state and journal.
+  const auto outcome = deletion->package->Advance();
+  if (!outcome.complete) {
+    // Retained original facade diagnostic (disabled; shared recovery now owns
+    // typed errors, and this path must not add logging below caller guards):
+    // XELOGW("Profile-only deletion failed/incomplete ({})", error.message());
+    if (error) { *error = outcome.error ? outcome.error : std::make_error_code(std::errc::device_or_resource_busy); }
+    if (!outcome.durable_pending) {
+      decltype(retiring_profiles_)::node_type released;
+      {
+        std::lock_guard lock(profile_mount_mutex_);
+        const auto found = retiring_profiles_.find(deletion->xuid);
+        if (found != retiring_profiles_.end() && found->second == deletion) { released = retiring_profiles_.extract(found); }
+      }
+    }
     return false;
   }
+  // Only metadata is erased here: no device IO or namespace mutation. A real
+  // sealed old Done can therefore finish its matching cache cut after retire.
+  decltype(accounts_)::node_type account;
+  decltype(account_snapshots_)::node_type snapshot;
+  decltype(account_metadata_)::node_type metadata;
+  decltype(retiring_profiles_)::node_type retirement;
+  {
+    std::lock_guard lock(profile_mount_mutex_);
+    const auto found = retiring_profiles_.find(deletion->xuid);
+    const auto known = account_metadata_.find(deletion->xuid);
+    const auto& source = *deletion->source;
+    if (found == retiring_profiles_.end() || found->second != deletion ||
+        std::addressof(found->first) != deletion->retirement ||
+        deletion->package->xuid() != deletion->xuid ||
+        deletion->package->source().source.id != source.source.id ||
+        deletion->package->source().generation != source.generation ||
+        deletion->package->source().storage != source.storage) { return fail(std::errc::state_not_recoverable); }
+    if (deletion->metadata) {
+      if (known == account_metadata_.end() || known->second != deletion->metadata) { return fail(std::errc::state_not_recoverable); }
+      account = accounts_.extract(deletion->xuid);
+      snapshot = account_snapshots_.extract(deletion->xuid);
+      metadata = account_metadata_.extract(known);
+      account_publication_->Advance();
+    } else if (known != account_metadata_.end() &&
+        deletion->canonical_profile &&
+        known->second->source_id() == source.source.id &&
+        known->second->source_generation() == source.generation &&
+        known->second->source_root() == source.storage->path()) {
+      // Never erase a newly published replacement metadata object. A foreign
+      // source's same-XUID cache, on the other hand, is deliberately untouched.
+      return fail(std::errc::state_not_recoverable);
+    }
+    const auto exact_storage = [&](const auto& storage) {
+      return storage->source() == source.managed_identity->source() &&
+          storage->guest_generation() == source.storage &&
+          storage->managed_identity() == source.managed_identity &&
+          storage->source_id() == source.source.id &&
+          storage->source_generation() == source.generation &&
+          storage->device_id() == source.source.device_id &&
+          storage->view()->path() == deletion->physical;
+    };
+    std::erase_if(retired_account_identities_, [&](const auto& identity) {
+      return identity->storage()->xuid() == deletion->xuid && exact_storage(identity->storage()) && identity->writes_drained();
+    });
+    std::erase_if(retired_gpd_models_, [&](const auto& model) {
+      return model->xuid() == deletion->xuid && exact_storage(model->storage());
+    });
+    if (profile_discovery_revision_ != UINT64_MAX) { ++profile_discovery_revision_; }
+    deletion->genuinely_absent = outcome.genuinely_absent;
+    deletion->finished = true;
+    retirement = retiring_profiles_.extract(found); deletion->retirement = nullptr;
+  }
+  // Resource-bearing nodes and retained CM claims release below all guards.
+  return true;
+}
+
+bool ProfileManager::PrepareProfileDeletionPackage(
+    const std::shared_ptr<ProfileDeletionReservation>& deletion, std::error_code& error) {
+  error.clear();
+  const auto& source = *deletion->source;
+  const auto exact_storage = [&](const auto& storage) {
+    return storage->source() == source.managed_identity->source() &&
+        storage->guest_generation() == source.storage &&
+        storage->managed_identity() == source.managed_identity &&
+        storage->source_id() == source.source.id &&
+        storage->source_generation() == source.generation &&
+        storage->device_id() == source.source.device_id &&
+        storage->view()->path() == deletion->physical;
+  };
+  {
+    std::lock_guard lock(profile_mount_mutex_);
+    const auto entry = retiring_profiles_.find(deletion->xuid);
+    const auto metadata = account_metadata_.find(deletion->xuid);
+    if (entry == retiring_profiles_.end() || entry->second != deletion ||
+        (deletion->metadata && (metadata == account_metadata_.end() || metadata->second != deletion->metadata))) {
+      error = std::make_error_code(std::errc::state_not_recoverable); return false;
+    }
+    // Native/content policy never signs a player out. Inspect the actual
+    // roster's source, not just its XUID: another device may own that row.
+    if (deletion->no_signout && deletion->canonical_profile) {
+      const auto roster = CaptureRosterExpected(error);
+      if (error || !roster.roster) { if (!error) { error = std::make_error_code(std::errc::device_or_resource_busy); } return false; }
+      for (const auto& row : roster.roster->slots()) {
+        if (row.xuid == deletion->xuid && row.source_id == source.source.id &&
+            row.source_generation == source.generation && row.device_id == source.source.device_id) {
+          error = std::make_error_code(std::errc::device_or_resource_busy); return false;
+        }
+      }
+    } else if (!deletion->no_signout && deletion->metadata &&
+               GetUserIndexAssignedToProfile(deletion->xuid) < XUserMaxUserCount) {
+      error = std::make_error_code(std::errc::device_or_resource_busy); return false;
+    }
+    for (const auto& [name, mount] : profile_mounts_) {
+      if (mount.xuid == deletion->xuid &&
+          mount.source == source.managed_identity->source() && mount.guest_generation == source.storage &&
+          mount.managed_identity == source.managed_identity && mount.source_id == source.source.id &&
+          mount.source_generation == source.generation && mount.device_id == source.source.device_id && mount.view &&
+          mount.view->path() == deletion->physical) {
+        error = std::make_error_code(std::errc::device_or_resource_busy); return false;
+      }
+    }
+    for (const auto& identity : retired_account_identities_) {
+      if (identity->storage()->xuid() == deletion->xuid && exact_storage(identity->storage())) {
+        if (!identity->writes_drained()) { error = std::make_error_code(std::errc::device_or_resource_busy); return false; }
+        deletion->retained_identities.push_back(identity);
+      }
+    }
+    for (const auto& model : retired_gpd_models_) {
+      if (model->xuid() == deletion->xuid && exact_storage(model->storage())) { deletion->retained_models.push_back(model); }
+    }
+  }
+  for (const auto& model : deletion->retained_models) {
+    if (model->ReleaseRetiredPublication()) { error = std::make_error_code(std::errc::device_or_resource_busy); return false; }
+  }
+  const auto owner = content_manager_.ProfileIntents(source.source.id);
+  if (!owner) { error = std::make_error_code(std::errc::device_or_resource_busy); return false; }
+  const auto rows = GpdDurableIntentStore::Scan(*owner, error);
+  if (error) { return false; }
+  for (const auto& row : rows) {
+    if (row.binding.profile_relative == deletion->relative && !row.done_record_valid) {
+      error = std::make_error_code(std::errc::device_or_resource_busy); return false;
+    }
+  }
+  auto package = content_manager_.PrepareProfilePackageDeletion(
+      source, deletion->xuid, deletion->relative, error);
+  if (!package) { return false; }
+  {
+    std::lock_guard lock(profile_mount_mutex_);
+    const auto found = retiring_profiles_.find(deletion->xuid);
+    if (found == retiring_profiles_.end() || found->second != deletion) {
+      error = std::make_error_code(std::errc::state_not_recoverable); return false;
+    }
+    deletion->package = std::move(package);
+  }
+  return true;
+}
+
+std::error_code ProfileManager::DeleteProfileContent(const ContentSourceState& source,
+    const std::filesystem::path& relative, uint64_t xuid) {
+  try {
+  if (xe::global_critical_region::is_held_by_current_thread()) { return std::make_error_code(std::errc::device_or_resource_busy); }
+  auto use = account_commit_gate_->Acquire();
+  if (!use) { return std::make_error_code(std::errc::operation_canceled); }
+  ReapReleasedProfileReads();
+  auto deletion = std::make_shared<ProfileDeletionReservation>();
+  deletion->owner = this; deletion->xuid = xuid; deletion->relative = relative;
+  deletion->source = std::make_shared<const ContentSourceState>(source);
+  deletion->physical = source.storage->path() / relative;
+  deletion->canonical_profile = CanonicalProfileRelative(relative, xuid);
+  deletion->no_signout = true;
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock() || preparing_profiles_.contains(xuid)) { return std::make_error_code(std::errc::device_or_resource_busy); }
+    const auto existing = retiring_profiles_.find(xuid);
+    if (existing != retiring_profiles_.end()) {
+      const auto& old = existing->second;
+      if (!old || !old->no_signout || !old->package || !old->source ||
+          old->source->storage != source.storage || old->source->generation != source.generation ||
+          old->source->source.id != source.source.id || old->relative != relative) {
+        return std::make_error_code(std::errc::device_or_resource_busy);
+      }
+      deletion = old;
+    } else {
+      const auto known = account_metadata_.find(xuid);
+      if (deletion->canonical_profile && known != account_metadata_.end() &&
+          known->second->source_id() == source.source.id && known->second->source_generation() == source.generation &&
+          known->second->source_root() == source.storage->path()) {
+        // Cached metadata was issued by PM's exact canonical mount path.
+        // Case-folding classifies FATX identity but cannot prove that a
+        // different physical spelling names that same captured directory.
+        // Preserve case-only siblings/renames rather than erase another cache.
+        if (relative != ProfileStorageLease::ProfileRelative(xuid)) {
+          return std::make_error_code(std::errc::permission_denied);
+        }
+        deletion->metadata = known->second;
+      }
+      const auto [entry, inserted] = retiring_profiles_.emplace(xuid, deletion);
+      if (!inserted) { return std::make_error_code(std::errc::device_or_resource_busy); }
+      deletion->retirement = std::addressof(entry->first);
+    }
+  }
+  auto release = [this, deletion](void*) {
+    decltype(retiring_profiles_)::node_type retired;
+    { std::lock_guard lock(profile_mount_mutex_);
+      const auto found = retiring_profiles_.find(deletion->xuid);
+      if (!deletion->package && found != retiring_profiles_.end() && found->second == deletion) { retired = retiring_profiles_.extract(found); }
+    }
+  };
+  std::unique_ptr<void, decltype(release)> reservation(reinterpret_cast<void*>(1), release);
+  std::error_code error;
+  if (!deletion->package && !PrepareProfileDeletionPackage(deletion, error)) {
+    return error ? error : std::make_error_code(std::errc::io_error);
+  }
+  if (!AdvanceProfileDeletion(deletion, &error)) { return error ? error : std::make_error_code(std::errc::io_error); }
+  // Preserve the content-delete facade's missing-package error. Host cleanup
+  // can still erase matching stale metadata after genuinely observed absence.
+  return deletion->genuinely_absent ? std::make_error_code(std::errc::no_such_file_or_directory) : std::error_code{};
+  } catch (const std::bad_alloc&) { return std::make_error_code(std::errc::not_enough_memory); }
+  catch (...) { return std::make_error_code(std::errc::io_error); }
+}
+
+void ProfileManager::RetryProfileDeletions() {
+  if (xe::global_critical_region::is_held_by_current_thread()) { return; }
+  std::vector<std::shared_ptr<ProfileDeletionReservation>> pending;
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { return; }
+    for (const auto& [xuid, deletion] : retiring_profiles_) {
+      if (deletion && deletion->package && !deletion->in_flight && !deletion->finished) {
+        pending.push_back(deletion);
+      }
+    }
+  }
+  for (const auto& deletion : pending) { AdvanceProfileDeletion(deletion); }
+}
+void ProfileManager::CloseProfileDeletions() {
+  // Gate CloseAndDrain already joined every active facade. Dropping a stopped
+  // pending capsule only releases host resources; CM's durable record/recovery
+  // ownership persists. Never infer cancellation, completion or physical undo.
+  decltype(retiring_profiles_) retired;
+  { std::lock_guard lock(profile_mount_mutex_); retired.swap(retiring_profiles_); }
+  for (const auto& [xuid, deletion] : retired) if (deletion) {
+    deletion->owner = nullptr; deletion->retirement = nullptr;
+    deletion->package.reset(); deletion->source.reset(); deletion->metadata.reset();
+    deletion->retained_identities.clear(); deletion->retained_models.clear();
+  }
+}
+
+bool ProfileManager::DeleteProfile(const uint64_t xuid) {
+  if (xe::global_critical_region::is_held_by_current_thread()) { return false; }
+  auto use = account_commit_gate_->Acquire();
+  if (!use) { return false; }
+  const auto deletion = PrepareHostProfileDeletion(xuid);
+  return deletion && AdvanceProfileDeletion(deletion);
+}
+
+std::shared_ptr<ProfileManager::ProfileDeletionReservation>
+ProfileManager::PrepareHostProfileDeletion(uint64_t xuid) {
+  if (xe::global_critical_region::is_held_by_current_thread()) { return {}; }
+  auto use = account_commit_gate_->Acquire();
+  if (!use) { return {}; }
+  std::shared_ptr<ProfileDeletionReservation> retained;
+  {
+    std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { return {}; }
+    const auto found = retiring_profiles_.find(xuid);
+    if (found != retiring_profiles_.end()) { retained = found->second; }
+  }
+  // A content-delete operation may target another device/package for this
+  // same XUID. Host deletion must never adopt that different policy/origin.
+  if (retained) { return retained->no_signout ? nullptr : retained; }
   ReapReleasedProfileReads();
   RetryRosterSettlement();
   std::error_code roster_error;
   const auto expected = CaptureRosterExpected(roster_error);
-  if (roster_error || !expected.roster) { return false; }
+  if (roster_error || !expected.roster) { return {}; }
 
-  ProfileDeletionReservation deletion;
+  auto deletion = std::make_shared<ProfileDeletionReservation>();
   {
     std::unique_lock lock(profile_mount_mutex_, std::try_to_lock);
     if (!lock.owns_lock() || !accounts_.contains(xuid) ||
         profile_discovery_conflicts_.contains(xuid) ||
         preparing_profiles_.contains(xuid) || retiring_profiles_.contains(xuid)) {
-      return false;
+      return {};
     }
     const auto metadata = account_metadata_.find(xuid);
     if (metadata == account_metadata_.end() || !metadata->second ||
-        metadata->second->source_id().empty()) { return false; }
-    const auto [entry, inserted] = retiring_profiles_.insert(xuid);
-    if (!inserted) { return false; }
-    deletion.owner = this;
-    deletion.xuid = xuid;
-    deletion.retirement = std::addressof(*entry);
-    deletion.metadata = metadata->second;
+        metadata->second->source_id().empty()) { return {}; }
+    const auto [entry, inserted] = retiring_profiles_.emplace(xuid, deletion);
+    if (!inserted) { return {}; }
+    deletion->owner = this; deletion->xuid = xuid;
+    deletion->retirement = std::addressof(entry->first);
+    deletion->metadata = metadata->second;
   }
-  auto release = [this, &deletion](void*) {
-    std::lock_guard lock(profile_mount_mutex_);
-    const auto found = retiring_profiles_.find(deletion.xuid);
-    if (found != retiring_profiles_.end() &&
-        std::addressof(*found) == deletion.retirement) {
-      retiring_profiles_.erase(found);
+  auto release = [this, deletion](void*) {
+    // Before the real CM capsule exists this is still the original one-call
+    // roster/admission scope. Native roster uncertainty is retained by its
+    // existing intent/Owner; no physical profile deletion has run here.
+    decltype(retiring_profiles_)::node_type retired;
+    {
+      std::lock_guard lock(profile_mount_mutex_);
+      const auto found = retiring_profiles_.find(deletion->xuid);
+      if (!deletion->package && found != retiring_profiles_.end() && found->second == deletion) {
+        retired = retiring_profiles_.extract(found);
+      }
     }
   };
-  std::unique_ptr<void, decltype(release)> reservation(
-      reinterpret_cast<void*>(1), release);
-  const auto selected_metadata = deletion.metadata;
+  std::unique_ptr<void, decltype(release)> reservation(reinterpret_cast<void*>(1), release);
+  const auto selected_metadata = deletion->metadata;
   const auto source = content_manager_.sources().Source(selected_metadata->source_id());
   const auto owner = content_manager_.ProfileIntents(selected_metadata->source_id());
   if (!source || !source->available || !source->profile_writable ||
       !source->storage || !source->managed_identity || !owner ||
       source->generation != selected_metadata->source_generation() ||
       source->source.device_id != selected_metadata->device_id() ||
-      source->managed_identity->source()->path() != selected_metadata->source_root()) {
-    return false;
-  }
-  deletion.source = std::make_shared<const ContentSourceState>(*source);
+      source->managed_identity->source()->path() != selected_metadata->source_root()) { return {}; }
+  deletion->source = std::make_shared<const ContentSourceState>(*source);
 
   ProfileRosterDesired desired;
   bool signed_in = false;
@@ -2962,78 +3267,17 @@ bool ProfileManager::DeleteProfile(const uint64_t xuid) {
     if (desired.xuids[slot] == xuid) { desired.xuids[slot] = 0; signed_in = true; }
   }
   if (signed_in) {
-    // Only this admitted exact-origin deletion may remove its own reserved
-    // row. Public/native roster changes still refuse every retirement.
-    const auto outcome = AdoptRosterInternal(desired, expected, &deletion);
-    if (outcome.error || outcome.phase != ProfileRosterPhase::kCommitted) { return false; }
+    // Host UI policy only: preserve every other row and genuinely join this
+    // exact requested sign-out. Native233 has distinct policy/callback duties.
+    const auto outcome = AdoptRosterInternal(desired, expected, deletion.get());
+    if (outcome.error || outcome.phase != ProfileRosterPhase::kCommitted) { return {}; }
   }
-  const auto relative = ProfileStorageLease::ProfileRelative(xuid);
-  uint8_t slot;
-  std::vector<std::shared_ptr<ProfileGpdModelAuthority>> retired;
-  {
-    std::lock_guard lock(profile_mount_mutex_);
-    const auto entry = retiring_profiles_.find(xuid);
-    const auto metadata = account_metadata_.find(xuid);
-    if (entry == retiring_profiles_.end() ||
-        std::addressof(*entry) != deletion.retirement ||
-        metadata == account_metadata_.end() || metadata->second != selected_metadata) {
-      return false;
-    }
-    slot = GetUserIndexAssignedToProfile(xuid);
-  }
-  if (slot < XUserMaxUserCount) { return false; }
-  {
-    std::lock_guard lock(profile_mount_mutex_);
-    for (const auto& [name, mount] : profile_mounts_) {
-      if (mount.xuid == xuid) {
-        return false;
-      }
-    }
-    for (const auto& identity : retired_account_identities_) {
-      if (identity->storage()->xuid() == xuid && !identity->writes_drained()) {
-        return false;
-      }
-    }
-    retired = retired_gpd_models_;
-  }
-  for (const auto& model : retired) {
-    if (model->xuid() == xuid && model->ReleaseRetiredPublication()) {
-      return false;
-    }
-  }
+  deletion->relative = ProfileStorageLease::ProfileRelative(xuid);
+  deletion->physical = source->storage->path() / deletion->relative;
+  deletion->canonical_profile = true;
   std::error_code error;
-  const auto rows = GpdDurableIntentStore::Scan(*owner, error);
-  if (error) {
-    return false;
-  }
-  for (const auto& row : rows) {
-    if (row.binding.profile_relative == relative && !row.done_record_valid) {
-      return false;
-    }
-  }
-  // Profile-only deletion: NEVER remove Content/XUID (it owns game saves).
-  // Shared no-follow/preflight/conflict admission handles the exact managed
-  // profile package; pending redo must be completed before this operation.
-  error = source->storage->Remove(relative, true);
-  if (error) {
-    XELOGW("Profile-only deletion failed/incomplete ({})", error.message());
-    return false;
-  }
-  {
-    std::lock_guard lock(profile_mount_mutex_);
-    auto namespace_lock = xe::global_critical_region::TryAcquire();
-    if (!namespace_lock.owns_lock()) { return false; }
-    accounts_.erase(xuid);
-    account_snapshots_.erase(xuid);
-    account_metadata_.erase(xuid);
-    account_publication_->Advance();
-    std::erase_if(retired_account_identities_, [xuid](const auto& identity) {
-      return identity->storage()->xuid() == xuid && identity->writes_drained();
-    });
-    std::erase_if(retired_gpd_models_,
-                  [xuid](const auto& model) { return model->xuid() == xuid; });
-  }
-  return true;
+  if (!PrepareProfileDeletionPackage(deletion, error)) { return {}; }
+  return deletion;
 }
 
 std::vector<ScannedTitleInfo> ProfileManager::ScanAllProfilesForTitles() const {

@@ -340,8 +340,19 @@ bool NativeXmsgProvenance::Drained() const noexcept {
  return true;
 }
 bool NativeXmsgProvenance::RetainedForActualKernelStop() const noexcept {
+ return RetainedForActualKernelStop(nullptr);
+}
+bool NativeXmsgProvenance::RetainedForActualKernelStop(
+    RetainedStopObservation* observation) const noexcept {
  std::lock_guard lock(state_->mutex);
- return state_->stopping && !state_->retired && !state_->hooks;
+ if(!observation)return state_->stopping && !state_->retired && !state_->hooks;
+ // The original inputs are sampled once under the SAME original mutex.
+ // Computing the original bool from these plain scalar values is unchanged.
+ const bool stopping=state_->stopping,retired=state_->retired;
+ const auto hooks=state_->hooks;
+ const bool retained=stopping && !retired && !hooks;
+ *observation={true,stopping,retired,retained,uint64_t(hooks)};
+ return retained;
 }
 bool NativeXmsgProvenance::RetireAfterActualKernelStop() noexcept {
  if(XThread::IsInThread() || global_critical_region::is_held_by_current_thread())return false;

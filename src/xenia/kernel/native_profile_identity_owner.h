@@ -364,6 +364,11 @@ class NativeProfileIdentityOwner final
   bool CancelQueued(const std::shared_ptr<xam::ProfileRosterIntent>&);
   struct FrameQueryAdmission {
     bool managed=false,admitted=false;
+    // Pure diagnostics from the last original State cut. No admission or
+    // readiness consumer reads these; unavailable stays unavailable.
+    bool observation_available=false,observation_want_final=false;
+    uint32_t observation_phase=0;
+    uint64_t observation_job=0,observation_source=0;
     std::shared_ptr<const gpu::NativeFramePresentationGuard> guard;
   };
   static FrameQueryAdmission AdmitNativeFrameIteration(

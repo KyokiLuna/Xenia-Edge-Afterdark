@@ -193,6 +193,28 @@ class ContentMutationOwnerTestAccess final {
     return owner.Mutate(ContentMutationOwner::Kind::kCreate,package,
         std::move(header),bytes,nullptr,{},members,0,uint64_t(0));
   }
+  static ContentMutationOwner::PackageReceipt RetainedPackageDelete(
+      ContentMutationOwner& owner, std::unique_ptr<HostStorageContentTree>& tree,
+      std::shared_ptr<const HostStorageSnapshotToken> header, unsigned stop = 0) {
+    return owner.DeleteRetainedInternal(tree, std::move(header), nullptr, stop == 1,
+        stop == 4, content_package_mutation_wire::Kind::kDelete,
+        stop == 2 ? ContentMutationOwner::PackageBoundary::kQuarantined :
+        stop == 3 ? ContentMutationOwner::PackageBoundary::kHeaderCommitted :
+                    ContentMutationOwner::PackageBoundary::kNone);
+  }
+  static ContentMutationOwner::PackageReceipt ObservePackageDelete(
+      ContentMutationOwner& owner, const ContentMutationOwner::PackageReceipt& receipt) {
+    return owner.ObservePackageDeletion(receipt);
+  }
+  static bool SealedPackageDelete(ContentMutationOwner& owner,
+      const ContentMutationOwner::PackageReceipt& receipt) {
+    return owner.IsSealedPackageDeletion(receipt);
+  }
+  static ContentMutationOwner::PackageReceipt AbsentPackageDelete(
+      ContentMutationOwner& owner, const std::filesystem::path& package,
+      std::shared_ptr<const HostStorageSnapshotToken> header) {
+    return owner.CaptureAbsentPackageDeletion(package, std::move(header));
+  }
   static ContentMutationOwner::PackageReceipt PreparePackageDelete(
       ContentMutationOwner& owner, std::unique_ptr<HostStorageContentTree> tree,
       std::shared_ptr<const HostStorageSnapshotToken> header) {
@@ -4498,6 +4520,194 @@ TEST_CASE("Header member census uses the actual profile admission without retain
       FileAccess::kGenericWrite, error);
   REQUIRE(gpd); REQUIRE_FALSE(error);
   REQUIRE(f.HeaderBytes() == f.original);
+}
+TEST_CASE("Issued profile deletion retains package and Header through exact cache handoff",
+          "[base][storage][content_package][profile_delete]") {
+  VolumeScratch scratch; auto volume = scratch.Open(); auto owner = volume->mutations();
+  const std::filesystem::path package = "E000000000000123/FFFE07D1/00010000/E000000000000123";
+  const std::filesystem::path header = "E000000000000123/FFFE07D1/Headers/00010000/E000000000000123.header";
+  std::error_code error; const std::array<uint8_t, 4> bytes{1, 0, 3, 4};
+  auto token = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, package, header, error);
+  REQUIRE(token); REQUIRE_FALSE(error); REQUIRE(owner->Create(package, token, bytes).complete);
+  auto tree = owner->CapturePackage(package, error); REQUIRE(tree); REQUIRE_FALSE(error);
+  token = owner->CaptureMetadata(ContentMutationOwner::Kind::kHeader, package, header, error);
+  REQUIRE(token); REQUIRE_FALSE(error);
+  auto deleted = ContentMutationOwnerTestAccess::RetainedPackageDelete(*owner, tree, token);
+  REQUIRE_FALSE(deleted.error); REQUIRE(deleted.complete); REQUIRE_FALSE(tree);
+  REQUIRE(ContentMutationOwnerTestAccess::SealedPackageDelete(*owner, deleted));
+  bool retire_before_observe = false;
+  SECTION("Actual Done survives retirement before the caller's following Observe") {
+    retire_before_observe = true;
+  }
+  SECTION("A live source still reobserves replacements and retains handoff claims") {}
+  if (retire_before_observe) {
+    volume->identity()->Retire();
+    // No later filesystem observation mints this result: the real Done
+    // transition already sealed it before Retire, with both claims retained.
+    REQUIRE(ContentMutationOwnerTestAccess::SealedPackageDelete(*owner, deleted));
+    REQUIRE(ContentMutationOwnerTestAccess::ObservePackageDelete(*owner, deleted).error);
+    auto wrong = deleted; wrong.nonce[0] = wrong.nonce[0] == '0' ? '1' : '0';
+    REQUIRE_FALSE(ContentMutationOwnerTestAccess::SealedPackageDelete(*owner, wrong));
+    ContentMutationOwner::PackageReceipt forged;
+    forged.nonce = deleted.nonce; forged.complete = true;
+    REQUIRE_FALSE(ContentMutationOwnerTestAccess::SealedPackageDelete(*owner, forged));
+    return;
+  }
+  REQUIRE(ContentMutationOwnerTestAccess::ObservePackageDelete(*owner, deleted).complete);
+  // A public success flag or a copied nonce cannot mint the private receipt.
+  ContentMutationOwner::PackageReceipt forged; forged.nonce = deleted.nonce; forged.complete = true;
+  REQUIRE(ContentMutationOwnerTestAccess::ObservePackageDelete(*owner, forged).error == std::errc::permission_denied);
+  auto wrong = deleted; wrong.nonce[0] = wrong.nonce[0] == '0' ? '1' : '0';
+  REQUIRE(ContentMutationOwnerTestAccess::ObservePackageDelete(*owner, wrong).error == std::errc::permission_denied);
+  wrong = {};
+  VolumeScratch foreign; auto other = foreign.Open();
+  REQUIRE(ContentMutationOwnerTestAccess::ObservePackageDelete(*other->mutations(), deleted).error == std::errc::permission_denied);
+  const auto rebound = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, package, header, error);
+  // A truthful absent metadata read is not mutation authority. The actual
+  // package and Header mutations still need these SAME held namespace claims.
+  REQUIRE(rebound); REQUIRE_FALSE(error); REQUIRE_FALSE(rebound->exists());
+  REQUIRE(volume->content()->Create(package, true) == std::errc::device_or_resource_busy);
+  const auto denied_header = volume->content()->WriteNewFile(header, bytes);
+  REQUIRE(denied_header.error == std::errc::device_or_resource_busy);
+  REQUIRE(denied_header.bytes == 0);
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / package));
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / header));
+  // An external host replacement is not protected by emulator namespace
+  // claims. Re-observation must detect it without rebasing the old receipt.
+  REQUIRE(std::filesystem::create_directory(scratch.path / package));
+  {
+    const auto replaced = ContentMutationOwnerTestAccess::ObservePackageDelete(*owner, deleted);
+    REQUIRE(replaced.error); REQUIRE_FALSE(replaced.complete);
+  }
+  REQUIRE(std::filesystem::remove(scratch.path / package));
+  REQUIRE(ContentMutationOwnerTestAccess::ObservePackageDelete(*owner, deleted).complete);
+  auto retained = deleted; deleted = {};
+  const auto retained_absence = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, package, header, error);
+  REQUIRE(retained_absence); REQUIRE_FALSE(error); REQUIRE_FALSE(retained_absence->exists());
+  REQUIRE(volume->content()->Create(package, true) == std::errc::device_or_resource_busy);
+  const auto retained_header = volume->content()->WriteNewFile(header, bytes);
+  REQUIRE(retained_header.error == std::errc::device_or_resource_busy);
+  REQUIRE(retained_header.bytes == 0);
+  retained = {}; token.reset();
+  const auto absent = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, package, header, error);
+  REQUIRE(absent); REQUIRE_FALSE(error); REQUIRE_FALSE(absent->exists());
+  REQUIRE(owner->Create(package, absent, bytes).complete);
+}
+TEST_CASE("Issued profile deletion recovers its own durable record without releasing Header handoff",
+          "[base][storage][content_package][profile_delete][recovery]") {
+  VolumeScratch scratch; auto volume = scratch.Open(); auto owner = volume->mutations();
+  const std::filesystem::path package = "E000000000000124/FFFE07D1/00010000/E000000000000124";
+  const std::filesystem::path header = "E000000000000124/FFFE07D1/Headers/00010000/E000000000000124.header";
+  std::error_code error; const std::array<uint8_t, 4> bytes{9, 8, 0, 6};
+  auto token = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, package, header, error);
+  REQUIRE(token); REQUIRE_FALSE(error); REQUIRE(owner->Create(package, token, bytes).complete);
+  auto members = volume->content()->Subroot(package, false, error);
+  REQUIRE(members); REQUIRE_FALSE(error); REQUIRE_FALSE(members->WriteNewFile("Account", bytes).error); members.reset();
+  auto tree = owner->CapturePackage(package, error); REQUIRE(tree); REQUIRE_FALSE(error);
+  token = owner->CaptureMetadata(ContentMutationOwner::Kind::kHeader, package, header, error); REQUIRE(token); REQUIRE_FALSE(error);
+  unsigned stop = 1; bool drop_pending_receipt = false;
+  SECTION("Prepared before quarantine") { stop = 1; }
+  SECTION("Actual quarantine before Header") { stop = 2; }
+  SECTION("Actual Header commit before Retire") { stop = 3; }
+  SECTION("Actual Retire before final storage observation") { stop = 4; }
+  SECTION("Dropped Prepared receipt leaves both pending namespace claims") {
+    stop = 1; drop_pending_receipt = true;
+  }
+  SECTION("Dropped Retire receipt leaves both pending namespace claims") {
+    stop = 4; drop_pending_receipt = true;
+  }
+  auto pending = ContentMutationOwnerTestAccess::RetainedPackageDelete(*owner, tree, token, stop);
+  REQUIRE(pending.error == std::errc::operation_in_progress); REQUIRE(pending.prepared_durable); REQUIRE_FALSE(pending.complete);
+  REQUIRE_FALSE(ContentMutationOwnerTestAccess::SealedPackageDelete(*owner, pending));
+  const auto original = ContentMutationOwnerTestAccess::PackageRecord(*owner, pending.nonce);
+  REQUIRE_FALSE(ContentMutationOwnerTestAccess::ObservePackageDelete(*owner, pending).complete);
+  if (drop_pending_receipt) {
+    const auto nonce = pending.nonce;
+    pending = {}; token.reset();
+    // These ordinary root operations do not consult owner.ready(). They
+    // verify that pending rows still own both real permits after the LAST
+    // caller proof is gone, including after the Header was already removed.
+    REQUIRE(volume->content()->Create(package, true) == std::errc::device_or_resource_busy);
+    const auto pending_header = volume->content()->CaptureSnapshot(header, 64, error, true);
+    if (stop == 4) {
+      // Retire already removed the Header. Its absence can be read, while
+      // the pending rows still exclusively own the actual mutation duty.
+      REQUIRE(pending_header); REQUIRE_FALSE(error); REQUIRE_FALSE(pending_header->exists());
+    } else {
+      REQUIRE_FALSE(pending_header); REQUIRE(error == std::errc::device_or_resource_busy);
+    }
+    const auto denied_header = volume->content()->WriteNewFile(header, bytes);
+    REQUIRE(denied_header.error == std::errc::device_or_resource_busy);
+    REQUIRE(denied_header.bytes == 0);
+    REQUIRE_FALSE(owner->Recover()); REQUIRE(owner->ready());
+    REQUIRE(ContentMutationOwnerTestAccess::PackageRecord(*owner, nonce) == original);
+    REQUIRE_FALSE(std::filesystem::exists(scratch.path / package));
+    REQUIRE_FALSE(std::filesystem::exists(scratch.path / header));
+    // With no live issued proof, actual Done recovery has the original
+    // release duty. Both ordinary namespaces become accessible afterward.
+    const auto absent_header = volume->content()->CaptureSnapshot(header, 64, error, true);
+    REQUIRE(absent_header); REQUIRE_FALSE(error); REQUIRE_FALSE(absent_header->exists());
+    const auto released_header = volume->content()->WriteNewFile(header, bytes);
+    REQUIRE_FALSE(released_header.error); REQUIRE(released_header.bytes == bytes.size());
+    REQUIRE_FALSE(volume->content()->Create(package, true));
+    return;
+  }
+  REQUIRE_FALSE(owner->Recover()); REQUIRE(owner->ready());
+  auto observed = ContentMutationOwnerTestAccess::ObservePackageDelete(*owner, pending);
+  REQUIRE_FALSE(observed.error); REQUIRE(observed.complete); REQUIRE(observed.observed);
+  REQUIRE(ContentMutationOwnerTestAccess::PackageRecord(*owner, pending.nonce) == original);
+  REQUIRE_FALSE(std::filesystem::exists(scratch.path / package)); REQUIRE_FALSE(std::filesystem::exists(scratch.path / header));
+  const auto observed_absence = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, package, header, error);
+  REQUIRE(observed_absence); REQUIRE_FALSE(error); REQUIRE_FALSE(observed_absence->exists());
+  REQUIRE(volume->content()->Create(package, true) == std::errc::device_or_resource_busy);
+  const auto denied_header = volume->content()->WriteNewFile(header, bytes);
+  REQUIRE(denied_header.error == std::errc::device_or_resource_busy);
+  REQUIRE(denied_header.bytes == 0);
+  // The real observed receipt is another holder of the same namespace pair.
+  const auto nonce = pending.nonce;
+  pending = {}; token.reset();
+  REQUIRE(volume->content()->Create(package, true) == std::errc::device_or_resource_busy);
+  observed = {}; owner.reset(); volume.reset();
+  volume = scratch.Open(); owner = volume->mutations();
+  REQUIRE(owner->ready()); REQUIRE_FALSE(owner->Recover());
+  REQUIRE(ContentMutationOwnerTestAccess::PackageRecord(*owner, nonce) == original);
+  const auto absent = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, package, header, error);
+  REQUIRE(absent); REQUIRE_FALSE(error); REQUIRE_FALSE(absent->exists());
+  REQUIRE(owner->Create(package, absent, bytes).complete);
+}
+TEST_CASE("Profile deletion genuine absence is source issued and orphan Headers stay intact",
+          "[base][storage][content_package][profile_delete]") {
+  VolumeScratch scratch; auto volume = scratch.Open(); auto owner = volume->mutations();
+  const std::filesystem::path package = "E000000000000125/FFFE07D1/00010000/E000000000000125";
+  const std::filesystem::path header = "E000000000000125/FFFE07D1/Headers/00010000/E000000000000125.header";
+  std::error_code error; const std::array<uint8_t, 4> bytes{7, 0, 5, 4};
+  auto token = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, package, header, error);
+  REQUIRE(token); REQUIRE_FALSE(error); REQUIRE(owner->Create(package, token, bytes).complete);
+  auto tree = owner->CapturePackage(package, error); REQUIRE(tree); REQUIRE_FALSE(error);
+  token = owner->CaptureMetadata(ContentMutationOwner::Kind::kHeader, package, header, error); REQUIRE(token); REQUIRE_FALSE(error);
+  REQUIRE(owner->Delete(std::move(tree), token).complete); token.reset();
+  token = owner->CaptureMetadata(ContentMutationOwner::Kind::kHeader, package, header, error); REQUIRE(token); REQUIRE_FALSE(error); REQUIRE_FALSE(token->exists());
+  auto absent = ContentMutationOwnerTestAccess::AbsentPackageDelete(*owner, package, token);
+  REQUIRE_FALSE(absent.error); REQUIRE(absent.nonce.empty());
+  REQUIRE(ContentMutationOwnerTestAccess::ObservePackageDelete(*owner, absent).complete);
+  // Genuine absence is not a sealed durable Delete/Done operation.
+  REQUIRE_FALSE(ContentMutationOwnerTestAccess::SealedPackageDelete(*owner, absent));
+  const auto readable_absence = owner->CaptureMetadata(ContentMutationOwner::Kind::kCreate, package, header, error);
+  REQUIRE(readable_absence); REQUIRE_FALSE(error); REQUIRE_FALSE(readable_absence->exists());
+  REQUIRE(volume->content()->Create(package, true) == std::errc::device_or_resource_busy);
+  const auto denied_header = volume->content()->WriteNewFile(header, bytes);
+  REQUIRE(denied_header.error == std::errc::device_or_resource_busy);
+  REQUIRE(denied_header.bytes == 0);
+  absent = {};
+  // The same real mutating API succeeds only after the issued absent proof
+  // releases both claims; the resulting orphan Header must remain untouched.
+  const auto released_header = volume->content()->WriteNewFile(header, bytes);
+  REQUIRE_FALSE(released_header.error); REQUIRE(released_header.bytes == bytes.size());
+  token = owner->CaptureMetadata(ContentMutationOwner::Kind::kHeader, package, header, error); REQUIRE(token); REQUIRE_FALSE(error); REQUIRE(token->exists());
+  const auto orphan = ContentMutationOwnerTestAccess::AbsentPackageDelete(*owner, package, token);
+  REQUIRE(orphan.error); REQUIRE_FALSE(orphan.complete);
+  std::vector<uint8_t> actual; REQUIRE_FALSE(volume->content()->ReadFile(header, 64, actual));
+  REQUIRE(actual == std::vector<uint8_t>(bytes.begin(), bytes.end()));
 }
 }  // namespace xe::filesystem::test
 #endif

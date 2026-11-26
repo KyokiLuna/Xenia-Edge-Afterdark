@@ -357,6 +357,20 @@ struct NativeIdentityStopDiagnostic {
  struct Payload {uint32_t phase=0,line=0;Observation drained,retained;};
  struct Cell {std::atomic<uint32_t> state{0};Payload payload;};
  std::array<Cell,2> first;
+ struct XmsgPayload {
+  uint32_t phase=0,line=0;
+  bool available=false,stopping=false,retired=false,result=false;
+  uint64_t hooks=0;
+ };
+ struct XmsgCell {std::atomic<uint32_t> state{0};XmsgPayload payload;} xmsg;
+ void CaptureXmsg(uint32_t phase,uint32_t line,bool available,bool stopping,
+                  bool retired,bool result,uint64_t hooks) noexcept {
+  if(!cvars::native_system_ui_trace)return;
+  uint32_t empty=0;
+  if(!xmsg.state.compare_exchange_strong(empty,1,std::memory_order_relaxed))return;
+  xmsg.payload={phase,line,available,stopping,retired,result,hooks};
+  xmsg.state.store(2,std::memory_order_release);
+ }
  void Capture(uint32_t phase,uint32_t line,const Observation& drained,
               const Observation& retained) noexcept {
   if(!cvars::native_system_ui_trace || !phase || phase>first.size())return;
@@ -378,6 +392,14 @@ void ReportIdentityStopDiagnosticOnHost(
   static NativeSystemUiTraceLimiter trace;
   if(!diagnostic){
    trace.Emit("identity","stop_conjuncts_unavailable",{{"sink_available",0}});return;
+  }
+  if(diagnostic->xmsg.state.load(std::memory_order_acquire)==2){
+   const auto d=diagnostic->xmsg.payload;
+   static NativeSystemUiTraceLimiter xmsg_trace;
+   xmsg_trace.Emit("xmsg","stop_retained_predicate",
+       {{"phase",d.phase},{"source_line",d.line},{"result_available",d.available},
+        {"result",d.result},{"stopping",d.stopping},{"retired",d.retired},
+        {"hooks",d.hooks},{"advisory_only",1},{"native_completion",0}});
   }
   for(size_t phase=0;phase<diagnostic->first.size();++phase){
    const auto& cell=diagnostic->first[phase];
@@ -3778,8 +3800,16 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
     if(media && !media->Drained())return stop_observation.Result(__LINE__, false);
     const bool resolve_drained=!content_resolve || content_resolve->Drained();
     if(!resolve_drained && !content_resolve->RetainedForActualKernelStop())return stop_observation.Result(__LINE__, false);
+    NativeXmsgProvenance::RetainedStopObservation xmsg_stop_observation;
     const bool xmsg_drained=!xmsg_provenance || xmsg_provenance->Drained();
-    if(!xmsg_drained && !xmsg_provenance->RetainedForActualKernelStop())return stop_observation.Result(__LINE__, false);
+    if(!xmsg_drained && !xmsg_provenance->RetainedForActualKernelStop(
+        observe_identity?&xmsg_stop_observation:nullptr)){
+      const uint32_t line=__LINE__;
+      if(identity_stop_diagnostic)identity_stop_diagnostic->CaptureXmsg(1,line,
+          xmsg_stop_observation.available,xmsg_stop_observation.stopping,
+          xmsg_stop_observation.retired,xmsg_stop_observation.result,xmsg_stop_observation.hooks);
+      return stop_observation.Result(line, false);
+    }
     if (format_frontdoor && !format_frontdoor->Drain()) return stop_observation.Result(__LINE__, false);
     bool continuation_drained = true;
     if (continuation) {
@@ -3824,7 +3854,14 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
       return stop_observation.Result(__LINE__, false);
     }
     if(!resolve_drained && !content_resolve->RetainedForActualKernelStop())return stop_observation.Result(__LINE__, false);
-    if(!xmsg_drained && !xmsg_provenance->RetainedForActualKernelStop())return stop_observation.Result(__LINE__, false);
+    if(!xmsg_drained && !xmsg_provenance->RetainedForActualKernelStop(
+        observe_identity?&xmsg_stop_observation:nullptr)){
+      const uint32_t line=__LINE__;
+      if(identity_stop_diagnostic)identity_stop_diagnostic->CaptureXmsg(2,line,
+          xmsg_stop_observation.available,xmsg_stop_observation.stopping,
+          xmsg_stop_observation.retired,xmsg_stop_observation.result,xmsg_stop_observation.hooks);
+      return stop_observation.Result(line, false);
+    }
     std::lock_guard lock(state_->mutex);
     if (state_->config.kernel == nullptr || state_->task_execution != identity ||
         state_->continuation != continuation || state_->content_resolve!=content_resolve ||

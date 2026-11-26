@@ -435,6 +435,26 @@ std::shared_ptr<ContentManager::PackageAdmission> ContentManager::ClaimPackagePa
   return result;
 }
 
+struct ProfilePackageDeletion::Data final {
+  // First member releases LAST, after every tree/Header/source/IO holder.
+  std::shared_ptr<ContentManager::PackageAdmission> admission;
+  ContentSourceState source;
+  uint64_t xuid = 0;
+  std::filesystem::path package, header_path;
+  std::shared_ptr<filesystem::ContentMutationOwner> owner;
+  std::unique_ptr<filesystem::HostStorageContentTree> tree;
+  std::shared_ptr<const filesystem::HostStorageSnapshotToken> header;
+  filesystem::ContentMutationOwner::PackageReceipt receipt;
+  bool absent = false, attempted = false;
+  std::error_code terminal_error;
+  std::mutex mutex;
+};
+ProfilePackageDeletion::ProfilePackageDeletion(std::shared_ptr<Data> data)
+    : data_(std::move(data)) {}
+ProfilePackageDeletion::~ProfilePackageDeletion() = default;
+const ContentSourceState& ProfilePackageDeletion::source() const noexcept { return data_->source; }
+uint64_t ProfilePackageDeletion::xuid() const noexcept { return data_->xuid; }
+
 ContentManager::ContentManager(ReadOnlyCatalogTag,
                                const std::filesystem::path& root_path)
     : root_path_(root_path),
@@ -4506,6 +4526,39 @@ X_RESULT ContentManager::TruncateContent(uint64_t xuid, const XCONTENT_AGGREGATE
   return MutateContentPackage(xuid, data, true);
 }
 X_RESULT ContentManager::DeleteContent(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data) {
+  // Runtime profile deletion shares the PM retirement/cache handoff. Catalog-
+  // only instances have no PM cache; their ordinary mutation facade remains.
+  if (data.content_type == XContentType::kProfile && kernel_state_ &&
+      kernel_state_->xam_state() && kernel_state_->xam_state()->profile_manager()) {
+    if (global_critical_region::is_held_by_current_thread()) { return X_ERROR_BUSY; }
+    PackageMutationTarget target;
+    if (const auto result = ResolvePackageMutation(xuid, data, target, true)) { return result; }
+    std::string name; uint64_t stored_xuid = 0;
+    if (const auto result = ResolveStoredPackageName(xuid, data, name, stored_xuid)) { return result; }
+    uint32_t title = data.title_id;
+    if (!ResolveTitleId(title)) { return X_ERROR_NOT_SUPPORTED; }
+    auto canonical_name = name;
+    std::transform(canonical_name.begin(), canonical_name.end(), canonical_name.begin(),
+        [](unsigned char value) { return char(std::toupper(value)); });
+    if (title == kDashboardID && stored_xuid &&
+        canonical_name == fmt::format("{:016X}", stored_xuid) &&
+        !ProfileManager::CanonicalProfileRelative(target.relative, stored_xuid)) {
+      // Native FATX profiles need no host symlink alias. Cached Account
+      // metadata cannot authenticate an alias-to-another-package relationship.
+      return X_ERROR_ACCESS_DENIED;
+    }
+    if (!target.relative.empty()) {
+      const auto owner_name = target.relative.begin()->string(); uint64_t physical_xuid = 0;
+      const auto parsed = std::from_chars(owner_name.data(), owner_name.data()+owner_name.size(), physical_xuid, 16);
+      if (owner_name.size() == 16 && parsed.ec == std::errc{} && parsed.ptr == owner_name.data()+owner_name.size() &&
+          physical_xuid && ProfileManager::CanonicalProfileRelative(target.relative, physical_xuid) && physical_xuid != stored_xuid) {
+        return X_ERROR_ACCESS_DENIED; // Do not erase another canonical profile through a host alias.
+      }
+    }
+    const auto error = kernel_state_->xam_state()->profile_manager()->DeleteProfileContent(
+        target.source, target.relative, stored_xuid);
+    return error ? ContentMutationError(error) : X_ERROR_SUCCESS;
+  }
   return MutateContentPackage(xuid, data, false);
 }
 X_RESULT ContentManager::MutateContentPackage(const uint64_t xuid,
@@ -4534,6 +4587,171 @@ X_RESULT ContentManager::MutateContentPackage(const uint64_t xuid,
                                : owner->Delete(std::move(tree), std::move(header));
   return result.complete ? X_ERROR_SUCCESS : ContentMutationError(result.error ? result.error :
       std::make_error_code(std::errc::io_error));
+}
+
+std::shared_ptr<ProfilePackageDeletion> ContentManager::PrepareProfilePackageDeletion(
+    const ContentSourceState& source, uint64_t xuid, std::error_code& error) {
+  if (!xuid) { error = std::make_error_code(std::errc::invalid_argument); return {}; }
+  return PrepareProfilePackageDeletion(source, xuid, ProfileStorageLease::ProfileRelative(xuid), error);
+}
+std::shared_ptr<ProfilePackageDeletion> ContentManager::PrepareProfilePackageDeletion(
+    const ContentSourceState& source, uint64_t xuid,
+    const std::filesystem::path& relative, std::error_code& error) {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread()) {
+    error = std::make_error_code(std::errc::operation_not_permitted); return {};
+  }
+  if (relative.empty() || relative.is_absolute() || relative.has_root_name() ||
+      std::any_of(relative.begin(), relative.end(), [](const auto& part) { return part == ".."; }) ||
+      !source.generation || !source.available || !source.profile_writable ||
+      source.source.kind != ContentSourceKind::kManaged || source.source.read_only ||
+      !source.storage || source.storage->read_only() || source.storage->retiring() ||
+      !source.managed_identity || !source.volume ||
+      source.volume->identity() != source.managed_identity) {
+    error = std::make_error_code(std::errc::permission_denied); return {};
+  }
+  const auto current = sources_.Source(source.source.id);
+  if (!current || current->generation != source.generation ||
+      current->storage != source.storage || current->managed_identity != source.managed_identity ||
+      current->volume != source.volume || current->source.device_id != source.source.device_id ||
+      !current->available || !current->profile_writable) {
+    error = std::make_error_code(std::errc::no_such_device); return {};
+  }
+  error = source.managed_identity->CheckCurrent();
+  if (error) { return {}; }
+  auto data = std::make_shared<ProfilePackageDeletion::Data>();
+  data->source = source; data->xuid = xuid;
+  // Exact resolver-selected spelling/source, never a regenerated package path.
+  data->package = relative;
+  const auto physical = source.storage->path() / data->package;
+  if (IsContentOpen(physical)) {
+    error = std::make_error_code(std::errc::device_or_resource_busy); return {};
+  }
+  data->admission = ClaimPackagePath(physical, true);
+  if (!data->admission) {
+    error = std::make_error_code(std::errc::device_or_resource_busy); return {};
+  }
+  data->owner = source.volume->mutations();
+  if (!data->owner || !data->owner->ready()) {
+    error = std::make_error_code(std::errc::device_or_resource_busy); return {};
+  }
+  const auto header = sources_.Resolve(source,
+      PackageHeaderPath(physical).lexically_relative(source.storage->path()), true);
+  if (!header) { error = std::make_error_code(std::errc::permission_denied); return {}; }
+  data->header_path = header->lexically_relative(source.storage->path());
+  data->tree = data->owner->CapturePackage(data->package, error, source.storage);
+  if (!data->tree) {
+    if (error != std::errc::no_such_file_or_directory) { return {}; }
+    error.clear();
+    data->absent = true;
+  }
+  data->header = data->owner->CaptureMetadata(filesystem::ContentMutationOwner::Kind::kHeader,
+      data->package, data->header_path, error);
+  if (!data->header) { return {}; }
+  if (data->absent && data->header->exists()) {
+    // An orphan Header is not a fabricated missing package or a fresh Delete
+    // proof. Preserve it for a separately admitted cleanup operation.
+    error = std::make_error_code(std::errc::state_not_recoverable); return {};
+  }
+  if (data->absent) {
+    data->receipt = data->owner->CaptureAbsentPackageDeletion(data->package, data->header);
+    if (data->receipt.error || !data->receipt.deletion_) {
+      error = data->receipt.error ? data->receipt.error : std::make_error_code(std::errc::io_error); return {};
+    }
+  }
+  return std::shared_ptr<ProfilePackageDeletion>(new ProfilePackageDeletion(std::move(data)));
+}
+ProfilePackageDeletion::Outcome ProfilePackageDeletion::Advance() noexcept {
+  Outcome outcome;
+  if (global_critical_region::is_held_by_current_thread()) {
+    outcome.error = std::make_error_code(std::errc::operation_not_permitted); return outcome;
+  }
+  try {
+    auto& data = *data_;
+    std::unique_lock serial(data.mutex, std::try_to_lock);
+    if (!serial.owns_lock()) {
+      outcome.error = std::make_error_code(std::errc::device_or_resource_busy); return outcome;
+    }
+    outcome.durable_pending = data.attempted && bool(data.receipt.deletion_);
+    {
+      std::lock_guard admission(data.admission->state->mutex);
+      if (!data.admission->active || data.admission->state->closed) {
+        outcome.error = std::make_error_code(std::errc::operation_canceled); return outcome;
+      }
+    }
+    if (data.source.storage->retiring() || data.source.managed_identity->retiring()) {
+      // This is only the SAME old package's sealed terminal outcome. No IO,
+      // new absence observation, or permission on a replacement device.
+      if (data.owner->IsSealedPackageDeletion(data.receipt)) {
+        outcome.complete = true; outcome.durable_pending = false;
+      } else { outcome.error = std::make_error_code(std::errc::no_such_device); }
+      return outcome;
+    }
+    outcome.error = data.source.managed_identity->CheckCurrent();
+    if (outcome.error) {
+      if ((data.source.storage->retiring() || data.source.managed_identity->retiring()) &&
+          data.owner->IsSealedPackageDeletion(data.receipt)) {
+        outcome.error.clear(); outcome.complete = true; outcome.durable_pending = false;
+      }
+      return outcome;
+    }
+    if (data.absent) {
+      const auto observed = data.owner->ObservePackageDeletion(data.receipt);
+      outcome.error = observed.error;
+      outcome.complete = outcome.genuinely_absent = observed.complete;
+      return outcome;
+    }
+    if (data.terminal_error) { outcome.error = data.terminal_error; return outcome; }
+    if (!data.receipt.deletion_) {
+      // Only an unstarted refusal may retry the same owned tree/Header.
+      // A published progress proof takes precedence even if an exception
+      // left that original capture alive; it must never start another Delete.
+      data.attempted = true; outcome.durable_pending = true;
+      auto receipt = data.owner->DeleteRetainedInternal(data.tree, data.header, nullptr, false,
+          false, filesystem::content_package_mutation_wire::Kind::kDelete,
+          filesystem::ContentMutationOwner::PackageBoundary::kNone, true, &data.receipt);
+      if (receipt.deletion_) { data.receipt = std::move(receipt); }
+      else {
+        data.receipt = {};
+        outcome.durable_pending = false;
+        outcome.error = receipt.error ? receipt.error : std::make_error_code(std::errc::io_error);
+        if (!data.tree) { data.terminal_error = outcome.error; }
+        return outcome;
+      }
+    } else {
+      // An exceptional setup tail may retain the original capture's FDs.
+      // Drop those before retirement, but keep its issued proof and claims.
+      data.tree.reset();
+      // Recovery drives the SAME real journal forward. It is not another
+      // Delete and cannot adopt a replacement expected tree/Header.
+      outcome.error = data.owner->Recover();
+      if (outcome.error) {
+        outcome.durable_pending = true;
+        if ((data.source.storage->retiring() || data.source.managed_identity->retiring()) &&
+            data.owner->IsSealedPackageDeletion(data.receipt)) {
+          outcome.error.clear(); outcome.complete = true; outcome.durable_pending = false;
+        }
+        return outcome;
+      }
+    }
+    const auto observed = data.owner->ObservePackageDeletion(data.receipt);
+    outcome.error = observed.error;
+    outcome.complete = observed.complete;
+    outcome.durable_pending = !observed.complete;
+    // Retirement can win after actual Done but before the following Observe.
+    // The terminal seal was published at Done, not fabricated by this error.
+    if (!outcome.complete &&
+        (data.source.storage->retiring() || data.source.managed_identity->retiring()) &&
+        data.owner->IsSealedPackageDeletion(data.receipt)) {
+      outcome.error.clear(); outcome.complete = true; outcome.durable_pending = false;
+    }
+    return outcome;
+  } catch (const std::bad_alloc&) {
+    outcome.error = std::make_error_code(std::errc::not_enough_memory);
+  } catch (...) { outcome.error = std::make_error_code(std::errc::io_error); }
+  // The original receipt/namespace owner remains inside this capsule. Never
+  // report completion merely because a failed observation sees absence.
+  return outcome;
 }
 
 std::filesystem::path ContentManager::ResolveGameUserContentPath(

@@ -108,6 +108,25 @@ std::vector<uint8_t> ContentMutationOwner::BootstrapMarker(
   marker.insert(marker.end(), digest.begin(), digest.end());
   return marker;
 }
+struct ContentMutationOwner::PackageDeletionRecord final {
+  std::weak_ptr<const ContentMutationOwner> owner;
+  const std::string nonce;
+  const std::filesystem::path package, header_target;
+  uint64_t op_directory = 0, encoded_bytes = 0;
+  std::array<uint8_t, 32> encoded_digest{};
+  bool bound = false, absent = false, terminal_durable = false;
+  // The SAME namespace views transfer at Done, before pending rows are erased.
+  // No raw CM/PM pointer, callback or strong backlink to the issuing owner.
+  std::shared_ptr<HostStorageRoot> package_view, header_view;
+  PackageDeletionRecord(std::shared_ptr<const ContentMutationOwner> issuing,
+      std::string value, std::filesystem::path path, std::filesystem::path header)
+      : owner(std::move(issuing)), nonce(std::move(value)), package(std::move(path)),
+        header_target(std::move(header)) {}
+  ~PackageDeletionRecord() {
+    if (header_view) { header_view->ReleaseContentNamespace(); }
+    if (package_view) { package_view->ReleaseContentNamespace(); }
+  }
+};
 std::error_code ContentMutationOwner::CheckCurrent() const {
   if (xe::global_critical_region::is_held_by_current_thread()) {
     return Error(std::errc::operation_not_permitted);
@@ -1926,6 +1945,15 @@ ContentMutationOwner::PackageReceipt ContentMutationOwner::DeleteInternal(
     std::shared_ptr<const HostStorageSnapshotToken> header,
     const std::atomic<bool>* canceled, bool stop_after_prepared,
     bool stop_after_retire, package_wire::Kind kind, PackageBoundary boundary) {
+  return DeleteRetainedInternal(expected, std::move(header), canceled,
+      stop_after_prepared, stop_after_retire, kind, boundary, false);
+}
+ContentMutationOwner::PackageReceipt ContentMutationOwner::DeleteRetainedInternal(
+    std::unique_ptr<HostStorageContentTree>& expected,
+    std::shared_ptr<const HostStorageSnapshotToken> header,
+    const std::atomic<bool>* canceled, bool stop_after_prepared,
+    bool stop_after_retire, package_wire::Kind kind, PackageBoundary boundary, bool retain_outcome,
+    PackageReceipt* retained_progress) {
   PackageReceipt receipt;
   if (xe::global_critical_region::is_held_by_current_thread()) {
     receipt.error = Error(std::errc::operation_not_permitted); return receipt;
@@ -2018,7 +2046,49 @@ ContentMutationOwner::PackageReceipt ContentMutationOwner::DeleteInternal(
   if (!wire::ValidNonce(record.nonce)) {
     error = Error(std::errc::io_error); release(); return receipt;
   }
+  if (kind == package_wire::Kind::kDelete && retain_outcome) {
+    receipt.deletion_ = std::make_shared<PackageDeletionRecord>(
+        shared_from_this(), record.nonce, record.package, record.header_target);
+  }
   const auto operation_leaf = "package-" + record.nonce + ".tmp";
+  // Publishing the progress holder may allocate; do it before private setup.
+  if (retained_progress) { *retained_progress = receipt; }
+  if (receipt.deletion_) {
+    // Until real Done, only the pending rows own namespace release duty.
+    // A dropped caller proof must not withdraw a partial operation's claims.
+    // Allocate both existing pending-row slots before the first setup IO.
+    // Failure here has no physical effects and cannot lose a later duty.
+    try {
+      const auto package_row = pending_reservations_.emplace(record.package,
+          PendingReservation{record.nonce, package_view, receipt.deletion_});
+      if (!package_row.second) { error = Error(std::errc::device_or_resource_busy); }
+      if (!error) {
+        const auto header_row = pending_reservations_.emplace(record.header_target,
+            PendingReservation{record.nonce, header_view, receipt.deletion_});
+        if (!header_row.second) { error = Error(std::errc::device_or_resource_busy); }
+      }
+    } catch (...) {
+      for (const auto& slot : {record.package, record.header_target}) {
+        const auto row = pending_reservations_.find(slot);
+        if (row != pending_reservations_.end() && row->second.nonce == record.nonce) { pending_reservations_.erase(row); }
+      }
+      release();
+      if (retained_progress) { *retained_progress = {}; }
+      receipt.deletion_.reset();
+      throw;
+    }
+    if (error) {
+      for (const auto& slot : {record.package, record.header_target}) {
+        const auto row = pending_reservations_.find(slot);
+        if (row != pending_reservations_.end() && row->second.nonce == record.nonce) { pending_reservations_.erase(row); }
+      }
+      release();
+      if (retained_progress) { *retained_progress = {}; }
+      receipt.deletion_.reset(); return receipt;
+    }
+  }
+  // Existing pending rows retain both claims before the first setup IO;
+  // the progress holder binds their record, including exceptional tails.
   error = staging_->Create(operation_leaf, true);
   const bool created = !error;
   auto operation = !error ? staging_->Subroot(operation_leaf, false, error) : nullptr;
@@ -2028,11 +2098,22 @@ ContentMutationOwner::PackageReceipt ContentMutationOwner::DeleteInternal(
   }
   std::vector<uint8_t> encoded;
   if (!error) { encoded = package_wire::Encode(record, error); }
+  if (!error && receipt.deletion_) {
+    const auto digest = wire::Digest(encoded, error);
+    if (!error) {
+      receipt.deletion_->op_directory = record.op_directory;
+      receipt.deletion_->encoded_bytes = encoded.size();
+      receipt.deletion_->encoded_digest = digest;
+      receipt.deletion_->bound = true;
+    }
+  }
   // Cached original guest-generation cancellation is the final pre-Prepared
   // admission boundary. Afterwards the durable obligation owns forward drain;
   // it never recaptures a replacement device by numeric/string ID.
   if (!error && expected->admission_retired()) { error = Error(std::errc::no_such_device); }
-  expected.reset();  // Drop all captured payload FDs before actual retirement.
+  if (!retain_outcome || !error || created) {
+    expected.reset(); // Drop all captured payload FDs before actual retirement.
+  }
   if (!error) {
     error = AppendRecord(Journal(record.nonce), encoded);
   }
@@ -2041,25 +2122,35 @@ ContentMutationOwner::PackageReceipt ContentMutationOwner::DeleteInternal(
       // Retain incomplete private setup/intent and close public admission.
       // A restart must validate the actual typed journal, never adopt by name.
       blocked_.store(true, std::memory_order_release);
-      pending_reservations_[record.package] = {record.nonce, package_view};
-      pending_reservations_[record.header_target] = {record.nonce, header_view};
-    } else { release(); }
+      pending_reservations_[record.package] = {record.nonce, package_view, receipt.deletion_};
+      pending_reservations_[record.header_target] = {record.nonce, header_view, receipt.deletion_};
+    } else {
+      for (const auto& slot : {record.package, record.header_target}) {
+        const auto row = pending_reservations_.find(slot);
+        if (row != pending_reservations_.end() && row->second.nonce == record.nonce) { pending_reservations_.erase(row); }
+      }
+      release(); receipt.deletion_.reset();
+    }
     receipt.prepared_durable = !error;
     if (!error) { error = Error(std::errc::operation_in_progress); }
     return receipt;
   }
   // Prepared is irrevocable. Cancellation now joins actual retirement; it
   // cannot manufacture rollback while files may already be quarantined.
-  return AdvancePackage(record, encoded, std::move(package_view),
-                       std::move(header_view), false, stop_after_retire, boundary);
+  auto advanced = AdvancePackage(record, encoded, std::move(package_view),
+                       std::move(header_view), false, stop_after_retire, boundary, receipt.deletion_);
+  advanced.deletion_ = std::move(receipt.deletion_);
+  return advanced;
 }
 ContentMutationOwner::PackageReceipt ContentMutationOwner::AdvancePackage(
     const package_wire::Record& record, std::span<const uint8_t> encoded,
     std::shared_ptr<HostStorageRoot> package_view,
     std::shared_ptr<HostStorageRoot> header_view, bool recovering,
-    bool stop_after_retire, PackageBoundary boundary) {
+    bool stop_after_retire, PackageBoundary boundary,
+    std::shared_ptr<PackageDeletionRecord> retained_delete) {
   PackageReceipt receipt;
   receipt.nonce = record.nonce; receipt.prepared_durable = true;
+  receipt.deletion_ = retained_delete;
   auto& error = receipt.error;
   const auto retire_leaf = "content-" + record.nonce + ".retire";
   auto retire = records_->CaptureSnapshot(retire_leaf, 256, error);
@@ -2172,15 +2263,126 @@ ContentMutationOwner::PackageReceipt ContentMutationOwner::AdvancePackage(
   receipt.observed = receipt.observed || recovering;
   receipt.complete = !error;
   if (receipt.complete) {
-    package_view->ReleaseContentNamespace(); header_view->ReleaseContentNamespace();
+    if (retained_delete) {
+      retained_delete->package_view = std::move(package_view);
+      retained_delete->header_view = std::move(header_view);
+      // Seal under the actual Done transition, before returning complete.
+      // Source retirement may precede a caller's following observation.
+      retained_delete->terminal_durable = true;
+    } else {
+      package_view->ReleaseContentNamespace(); header_view->ReleaseContentNamespace();
+    }
     pending_reservations_.erase(record.package);
     pending_reservations_.erase(record.header_target);
   } else {
     blocked_.store(true, std::memory_order_release);
-    pending_reservations_[record.package] = {record.nonce, std::move(package_view)};
-    pending_reservations_[record.header_target] = {record.nonce, std::move(header_view)};
+    pending_reservations_[record.package] = {record.nonce, std::move(package_view), retained_delete};
+    pending_reservations_[record.header_target] = {record.nonce, std::move(header_view), retained_delete};
   }
   return receipt;
+}
+
+ContentMutationOwner::PackageReceipt ContentMutationOwner::CaptureAbsentPackageDeletion(
+    const std::filesystem::path& package, std::shared_ptr<const HostStorageSnapshotToken> header) {
+  PackageReceipt result;
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    result.error = Error(std::errc::operation_not_permitted); return result;
+  }
+  std::lock_guard lock(operation_mutex_); Active active(active_);
+  auto& error = result.error; error = CheckCurrent();
+  wire::Record semantic; semantic.kind = Kind::kHeader; semantic.package = package;
+  if (header) { semantic.target = header->relative(); }
+  if (!error && (!ready() || active_.load(std::memory_order_acquire) != 1 || !header ||
+      header->root().get() != content_.get() || header->exists() || wire::Target(semantic).empty())) {
+    error = Error(std::errc::permission_denied);
+  }
+  if (error) { return result; }
+  auto proof = std::make_shared<PackageDeletionRecord>(shared_from_this(), "", package, header->relative());
+  proof->package_view = content_->ReserveContentNamespace(package, {}, true, error);
+  if (!proof->package_view) { return result; }
+  proof->header_view = proof->package_view->ReserveContentNamespace(header->relative(), {}, false, error);
+  if (!proof->header_view) { return result; }
+  const auto tree = proof->package_view->CaptureContentTree(package, error);
+  if (tree) { error = Error(std::errc::state_not_recoverable); }
+  else if (error == std::errc::no_such_file_or_directory) { error.clear(); }
+  else if (!error) { error = Error(std::errc::io_error); }
+  const auto current = !error ? proof->header_view->CaptureSnapshot(header->relative(),
+      wire::kMaximumMetadataBytes, error, true) : nullptr;
+  if (!error && (!current || current->exists())) { error = Error(std::errc::state_not_recoverable); }
+  if (!error) { error = CheckCurrent(); }
+  if (!error) { proof->bound = proof->absent = true; result.deletion_ = std::move(proof); }
+  return result;
+}
+ContentMutationOwner::PackageReceipt ContentMutationOwner::ObservePackageDeletion(
+    const PackageReceipt& original) {
+  PackageReceipt result;
+  if (xe::global_critical_region::is_held_by_current_thread()) {
+    result.error = Error(std::errc::operation_not_permitted); return result;
+  }
+  const auto proof = original.deletion_;
+  if (!proof || proof->owner.lock().get() != this || original.nonce != proof->nonce) {
+    result.error = Error(std::errc::permission_denied); return result;
+  }
+  result.nonce = original.nonce; result.deletion_ = proof;
+  std::lock_guard lock(operation_mutex_); Active active(active_);
+  auto& error = result.error; error = CheckCurrent();
+  if (!error && (!ready() || active_.load(std::memory_order_acquire) != 1 ||
+      !proof->bound || !proof->package_view || !proof->header_view)) {
+    error = Error(std::errc::operation_in_progress);
+  }
+  if (!error && !proof->absent) {
+    const auto intent = records_->CaptureSnapshot(Journal(proof->nonce), package_wire::kMaximumRecordBytes, error);
+    if (!error && (!intent || !intent->exists() || intent->bytes().size() != proof->encoded_bytes ||
+        wire::Digest(intent->bytes(), error) != proof->encoded_digest)) {
+      error = Error(std::errc::state_not_recoverable);
+    }
+    const auto retire = !error ? records_->CaptureSnapshot("content-" + proof->nonce + ".retire", 256, error) : nullptr;
+    const auto done = !error ? records_->CaptureSnapshot(Journal(proof->nonce, true), 256, error) : nullptr;
+    if (!error && (!retire || !done || !retire->exists() || !done->exists() ||
+        !package_wire::CheckRetire(retire->bytes(), intent->bytes(), error) ||
+        !package_wire::CheckDone(done->bytes(), intent->bytes(), retire->bytes(), error))) {
+      if (!error) { error = Error(std::errc::operation_in_progress); }
+    }
+    if (!error) {
+      for (const auto& token : {intent, retire, done}) {
+        const auto observed = records_->ObserveIntentSnapshot(*token);
+        if (observed.error || !observed.durable) {
+          error = observed.error ? observed.error : Error(std::errc::io_error); break;
+        }
+      }
+    }
+    if (!error) {
+      const auto stage = staging_->ObserveContentDirectory("package-" + proof->nonce + ".tmp", proof->op_directory);
+      error = stage.error;
+      if (!error && !stage.durable) { error = Error(std::errc::io_error); }
+    }
+  }
+  if (!error) {
+    const auto tree = proof->package_view->CaptureContentTree(proof->package, error);
+    if (tree) { error = Error(std::errc::state_not_recoverable); }
+    else if (error == std::errc::no_such_file_or_directory) { error.clear(); }
+    else if (!error) { error = Error(std::errc::io_error); }
+  }
+  if (!error) {
+    const auto header = proof->header_view->CaptureSnapshot(proof->header_target, wire::kMaximumMetadataBytes, error, true);
+    if (!error && (!header || header->exists())) { error = Error(std::errc::state_not_recoverable); }
+  }
+  if (!error) { error = CheckCurrent(); }
+  result.observed = result.complete = !error;
+  result.prepared_durable = result.retirement_durable = result.space_retired = result.header_removed = !error && !proof->absent;
+  if (!error && !proof->absent) { proof->terminal_durable = true; }
+  return result;
+}
+bool ContentMutationOwner::IsSealedPackageDeletion(const PackageReceipt& original) const {
+  if (xe::global_critical_region::is_held_by_current_thread()) { return false; }
+  const auto& proof = original.deletion_;
+  if (!proof || proof->owner.lock().get() != this || original.nonce != proof->nonce) { return false; }
+  std::lock_guard lock(operation_mutex_);
+  // A private completed record and its SAME still-owned namespace pair prove
+  // the old operation's terminal outcome without IO against a retired source.
+  // Public receipt flags, a bare absent path, or an uncompleted intent cannot.
+  return proof->bound && !proof->absent && proof->terminal_durable &&
+      !proof->nonce.empty() && proof->package_view && proof->header_view;
 }
 std::error_code ContentMutationOwner::RecoverPackageIntent(
     const package_wire::Record& record, std::span<const uint8_t> encoded,
@@ -2197,6 +2399,23 @@ std::error_code ContentMutationOwner::RecoverPackageIntent(
     return Error(std::errc::state_not_recoverable);
   }
   known_directories.emplace("package-" + record.nonce + ".tmp", record.op_directory);
+  std::shared_ptr<PackageDeletionRecord> retained_delete;
+  if (const auto pending = pending_reservations_.find(record.package);
+      pending != pending_reservations_.end() && pending->second.nonce == record.nonce) {
+    retained_delete = pending->second.deletion.lock();
+    if (retained_delete && (!retained_delete->bound || retained_delete->owner.lock().get() != this ||
+        retained_delete->nonce != record.nonce || retained_delete->encoded_bytes != encoded.size() ||
+        retained_delete->package != record.package || retained_delete->header_target != record.header_target ||
+        retained_delete->op_directory != record.op_directory)) {
+      return Error(std::errc::state_not_recoverable);
+    }
+  }
+  if (retained_delete) {
+    std::error_code digest_error;
+    if (wire::Digest(encoded, digest_error) != retained_delete->encoded_digest || digest_error) {
+      return digest_error ? digest_error : Error(std::errc::state_not_recoverable);
+    }
+  }
   const auto retire_name = "content-" + record.nonce + ".retire";
   if (present.contains(Journal(record.nonce, true))) {
     if (!present.contains(retire_name)) { return Error(std::errc::bad_message); }
@@ -2216,7 +2435,11 @@ std::error_code ContentMutationOwner::RecoverPackageIntent(
     for (const auto& slot : {record.package, record.header_target}) {
       auto pending = pending_reservations_.find(slot);
       if (pending != pending_reservations_.end() && pending->second.nonce == record.nonce) {
-        pending->second.view->ReleaseContentNamespace(); pending_reservations_.erase(pending);
+        if (retained_delete) {
+          if (slot == record.package) { retained_delete->package_view = pending->second.view; }
+          else { retained_delete->header_view = pending->second.view; }
+        } else { pending->second.view->ReleaseContentNamespace(); }
+        pending_reservations_.erase(pending);
       }
     }
     return {};
@@ -2249,7 +2472,8 @@ std::error_code ContentMutationOwner::RecoverPackageIntent(
       pending_reservations_[record.package] = {record.nonce, package_view}; return error;
     }
   }
-  return AdvancePackage(record, encoded, std::move(package_view), std::move(header_view), true).error;
+  return AdvancePackage(record, encoded, std::move(package_view), std::move(header_view), true,
+      false, PackageBoundary::kNone, std::move(retained_delete)).error;
 }
 
 }  // namespace xe::filesystem

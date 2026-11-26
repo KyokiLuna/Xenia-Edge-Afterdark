@@ -50,6 +50,7 @@ namespace kernel {
 namespace xam {
 class UserTracker;
 class ContentManager;
+class ProfilePackageDeletion;
 struct ContentSourceState;
 }  // namespace xam
 }  // namespace kernel
@@ -402,6 +403,7 @@ class ProfileManager {
  private:
   friend class ::xe::kernel::NativeProfileIdentityOwner;
   friend class ::xe::kernel::NativeSystemUiService;
+  friend class ContentManager;
   friend class ProfileRosterIntent;
   friend class ProfileRosterPublicationCell;
   friend class ProfileRosterNativeReadScope;
@@ -409,9 +411,9 @@ class ProfileManager {
   void BeginRosterStop();
   void CloseRosterAuthority();
   void RetryRosterSettlement();
-  // One originating DeleteProfile call owns this noncopyable proof. The
-  // existing retirement-set node and immutable authenticated origin are held
-  // before any requested roster removal; no proof escapes the C++ call.
+  // One exact profile deletion owns its immutable authenticated origin and CM
+  // capsule. The existing retirement map retains a partially durable attempt;
+  // a later retry never reselects a source or repeats physical deletion.
   struct ProfileDeletionReservation {
     ProfileDeletionReservation() = default;
     ProfileDeletionReservation(const ProfileDeletionReservation&) = delete;
@@ -421,7 +423,24 @@ class ProfileManager {
     const uint64_t* retirement = nullptr;
     std::shared_ptr<const ProfileAccountMetadata> metadata;
     std::shared_ptr<const ContentSourceState> source;
+    std::filesystem::path relative, physical;
+    std::shared_ptr<ProfilePackageDeletion> package;
+    std::vector<std::shared_ptr<ProfileAccountIdentity>> retained_identities;
+    std::vector<std::shared_ptr<ProfileGpdModelAuthority>> retained_models;
+    bool in_flight = false, finished = false;
+    bool no_signout = false, genuinely_absent = false, canonical_profile = false;
   };
+  // Metadata classification only. All IO retains the resolver's exact spelling.
+  static bool CanonicalProfileRelative(const std::filesystem::path&, uint64_t);
+  std::shared_ptr<ProfileDeletionReservation> PrepareHostProfileDeletion(uint64_t);
+  bool AdvanceProfileDeletion(const std::shared_ptr<ProfileDeletionReservation>&,
+                              std::error_code* = nullptr);
+  std::error_code DeleteProfileContent(const ContentSourceState&,
+      const std::filesystem::path&, uint64_t);
+  bool PrepareProfileDeletionPackage(const std::shared_ptr<ProfileDeletionReservation>&,
+                                    std::error_code&);
+  void RetryProfileDeletions();
+  void CloseProfileDeletions();
   ProfileRosterResult AdoptRosterInternal(const ProfileRosterDesired&,
       const ProfileRosterExpected&, const ProfileDeletionReservation*);
   // Retain the exact unpublished attempt across real busy cancellation.
@@ -533,7 +552,8 @@ class ProfileManager {
       const ProfilePreparationProgress* progress=nullptr);
   std::bitset<XUserMaxUserCount> preparing_slots_;
   std::array<uint64_t, XUserMaxUserCount> preparing_generations_{};
-  std::set<uint64_t> preparing_profiles_, retiring_profiles_;
+  std::set<uint64_t> preparing_profiles_;
+  std::map<uint64_t, std::shared_ptr<ProfileDeletionReservation>> retiring_profiles_;
   void UpdateConfig(const uint64_t xuid, const uint8_t slot);
   bool CreateAccount(const uint64_t xuid, const std::string gamertag);
   bool CreateAccount(const uint64_t xuid, const X_XAMACCOUNTINFO* account);

@@ -169,6 +169,13 @@ class NativeXmsgProvenance final {
   friend class NativeSystemUiService;
   friend class NativeProfileIdentityOwner;
   friend class test::NativeXmsgProvenanceTestAccess;
+  // Optional diagnostic values from ONE existing retained-stop predicate.
+  // Scalar-only, caller-owned; no native/Kernel/config lifetime or authority.
+  struct RetainedStopObservation {
+    bool available=false,stopping=false,retired=false,result=false;
+    uint64_t hooks=0;
+  };
+  bool RetainedForActualKernelStop(RetainedStopObservation*) const noexcept;
   // One source-neutral original TITLE producer, observed before its real Task
   // call. The common Task owner still issues the sole allocation Birth and
   // independently authenticates code, output and all later native lifecycle.

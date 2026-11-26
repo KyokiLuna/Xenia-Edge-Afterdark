@@ -215,11 +215,12 @@ class NativeSystemGraphicsTransport final
       const std::shared_ptr<const gpu::NativeFramePresentationGuard>&,
       gpu::NativeFramePaintDrainObservation* = nullptr) noexcept;
   struct State;
+  struct FramePollObservation; // Query-owned scalar diagnostics only.
   class Prepared;
   explicit NativeSystemGraphicsTransport(std::shared_ptr<State>);
   bool Install(const NativeSystemUiServiceContext&, XThread&, Mode);
   bool SubmitPrepared();
-  bool PollOnNativeTask(XThread&, uint32_t return_address);
+  bool PollOnNativeTask(XThread&, uint32_t return_address, FramePollObservation&);
   void PublishPlaneVisibility() noexcept;
   void OnNativeNonmodalFrame(
       const NativeNonmodalFrameWitness&,

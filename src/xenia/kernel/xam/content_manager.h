@@ -52,6 +52,27 @@ namespace xe {
 namespace kernel {
 namespace xam {
 
+class ProfileManager;
+// Issued only by the actual CM/source selection. Retains the package admission
+// through the caller's cache handoff. Destruction only releases owned claims;
+// it never retries, publishes, cancels or invokes a callback.
+class ProfilePackageDeletion final {
+ public:
+  struct Outcome {
+    std::error_code error;
+    bool complete = false, genuinely_absent = false, durable_pending = false;
+  };
+  ~ProfilePackageDeletion();
+  Outcome Advance() noexcept;
+  const ContentSourceState& source() const noexcept;
+  uint64_t xuid() const noexcept;
+ private:
+  friend class ContentManager;
+  struct Data;
+  explicit ProfilePackageDeletion(std::shared_ptr<Data>);
+  std::shared_ptr<Data> data_;
+};
+
 // If set in XCONTENT_AGGREGATE_DATA, will be substituted with the running
 // titles ID
 // TODO: check if actual x360 kernel/xam has a value similar to this
@@ -558,6 +579,13 @@ class ContentManager {
 
  private:
   friend class ContentPackage;
+  friend class ProfileManager;
+  friend class ProfilePackageDeletion;
+  std::shared_ptr<ProfilePackageDeletion> PrepareProfilePackageDeletion(
+      const ContentSourceState&, uint64_t xuid, std::error_code&);
+  std::shared_ptr<ProfilePackageDeletion> PrepareProfilePackageDeletion(
+      const ContentSourceState&, uint64_t xuid, const std::filesystem::path&,
+      std::error_code&);
   X_RESULT PreparePackageMount(ContentPackage&, std::unique_ptr<vfs::Device>);
   std::unique_ptr<ManagedFormat> BeginIdleManagedFormatExpected(
       const std::string&, std::shared_ptr<const ManagedFormatSourceProof>,

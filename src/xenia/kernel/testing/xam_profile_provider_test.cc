@@ -1328,6 +1328,16 @@ TEST_CASE("An equal PUBLIC namespace remains an exclusion rather than an ancesto
 #if XE_PLATFORM_LINUX
 class ProfileSettingsReadTestAccess final {
  public:
+  static auto PrepareDeletion(ProfileManager& pm, uint64_t xuid) {
+    return pm.PrepareHostProfileDeletion(xuid);
+  }
+  static auto DeletionPackage(const std::shared_ptr<ProfileManager::ProfileDeletionReservation>& deletion) {
+    return deletion ? deletion->package : nullptr;
+  }
+  static bool AdvanceDeletion(ProfileManager& pm,
+      const std::shared_ptr<ProfileManager::ProfileDeletionReservation>& deletion) {
+    return pm.AdvanceProfileDeletion(deletion);
+  }
   static std::unique_lock<std::recursive_mutex> HoldMetadata(ProfileManager& pm) {
     return std::unique_lock<std::recursive_mutex>(pm.profile_mount_mutex_);
   }
@@ -4686,6 +4696,366 @@ TEST_CASE("Canceled-capable preparation drains a genuine pending model even for 
   CHECK(pm.CancelRoster(intent).phase==ProfileRosterPhase::kCanceled);
   REQUIRE(writer.model->AllocateRequestId(error));REQUIRE_FALSE(error);
 }
+namespace {
+std::filesystem::path DeletionHeader(const ReadFixtureProfile& profile) {
+  return profile.path.parent_path().parent_path() / "Headers" / "00010000" /
+      (fmt::format("{:016X}", profile.xuid) + ".header");
+}
+std::vector<uint8_t> SeedDeletionHeader(const ReadFixtureProfile& profile) {
+  // The genuine host aggregate format, including a separate license/unknown
+  // suffix. This is deliberately NOT a manufactured native CON Header.
+  XCONTENT_AGGREGATE_DATA data{};
+  data.device_id = 1; data.content_type = XContentType::kProfile;
+  data.title_id = kDashboardID; data.xuid = profile.xuid;
+  data.set_file_name(fmt::format("{:016X}", profile.xuid));
+  data.set_display_name(u"Exact profile deletion fixture");
+  std::vector<uint8_t> header(sizeof(data) + 13, 0xB6);
+  std::memcpy(header.data(), &data, sizeof(data));
+  xe::store_and_swap<uint32_t>(header.data() + sizeof(data), 0x5A39C87D);
+  std::error_code error;
+  std::filesystem::create_directories(DeletionHeader(profile).parent_path(), error);
+  REQUIRE_FALSE(error);
+  ReadFixtureWrite(DeletionHeader(profile), header);
+  return header;
+}
+}
+TEST_CASE("Profile deletion joins package Header cache and restart while preserving game saves",
+          "[kernel][profile][profile_deletion][persistence][restart]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile target(runtime, 0xE000000000000611ull, 63);
+  ReadFixtureProfile other(runtime, 0xE000000000000612ull, 64);
+  const auto header = SeedDeletionHeader(target);
+  const auto other_header = SeedDeletionHeader(other);
+  const std::vector<uint8_t> unknown{0x45,0xA3,0x00,0x77,0xF0,0x29};
+  const std::vector<uint8_t> save{0xE1,0x00,0xA8,0x3C,0x47,0x2B,0x91};
+  ReadFixtureWrite(target.path / "unknown.member", unknown);
+  const auto save_path = runtime.root.path / "content" /
+      fmt::format("{:016X}", target.xuid) / "1234ABCD" / "00000001" / "slot" / "save.bin";
+  REQUIRE(std::filesystem::create_directories(save_path.parent_path()));
+  ReadFixtureWrite(save_path, save);
+  {
+    auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+    std::error_code error;
+    const auto expected = pm.CaptureRosterExpected(error); REQUIRE_FALSE(error);
+    REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({other.xuid,target.xuid,0,0}),expected).error);
+    REQUIRE(pm.DeleteProfile(target.xuid));
+    CheckRoster(pm,{other.xuid,0,0,0});
+    CHECK_FALSE(pm.CaptureCachedAccount(target.xuid,error));
+    CHECK(error==std::errc::no_such_file_or_directory);
+    CHECK_FALSE(std::filesystem::exists(target.path));
+    CHECK_FALSE(std::filesystem::exists(DeletionHeader(target)));
+    CHECK(ReadFixtureDisk(save_path)==save);
+    CHECK(ReadFixtureDisk(DeletionHeader(other))==other_header);
+    other.Unchanged();
+  }
+  RestartHostAccountRuntime(runtime);
+  auto& restarted = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  restarted.ReloadProfiles();
+  std::error_code error;
+  CHECK_FALSE(restarted.CaptureCachedAccount(target.xuid,error));
+  CHECK(error==std::errc::no_such_file_or_directory);
+  REQUIRE(restarted.CaptureCachedAccount(other.xuid,error)); REQUIRE_FALSE(error);
+  CHECK_FALSE(std::filesystem::exists(target.path));
+  CHECK_FALSE(std::filesystem::exists(DeletionHeader(target)));
+  CHECK(ReadFixtureDisk(save_path)==save);
+  CHECK(ReadFixtureDisk(DeletionHeader(other))==other_header);
+  other.Unchanged();
+}
+TEST_CASE("Profile deletion preserves real Header readers and exact source retirement",
+          "[kernel][profile][profile_deletion][namespace][source]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile target(runtime, 0xE000000000000613ull, 65);
+  const auto header = SeedDeletionHeader(target);
+  auto& manager = *runtime.emulator->kernel_state()->content_manager();
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  auto source = manager.sources().Source("hdd"); REQUIRE(source);
+  std::error_code error;
+  SECTION("A real independent Header lease denies deletion before any physical change") {
+    const auto relative = DeletionHeader(target).lexically_relative(source->storage->path());
+    auto reader = source->storage->OpenFile(relative,filesystem::FileAccess::kGenericRead,error);
+    REQUIRE(reader); REQUIRE_FALSE(error);
+    CHECK_FALSE(pm.DeleteProfile(target.xuid));
+    target.Unchanged(); CHECK(ReadFixtureDisk(DeletionHeader(target))==header);
+    REQUIRE(pm.CaptureCachedAccount(target.xuid,error)); REQUIRE_FALSE(error);
+    reader.reset();
+    REQUIRE(pm.DeleteProfile(target.xuid));
+    CHECK_FALSE(std::filesystem::exists(target.path));
+    CHECK_FALSE(std::filesystem::exists(DeletionHeader(target)));
+  }
+  SECTION("A prepared old generation never deletes through a replacement or retired root") {
+    auto deletion = ProfileSettingsReadTestAccess::PrepareDeletion(pm,target.xuid);
+    REQUIRE(deletion);
+    auto package = ProfileSettingsReadTestAccess::DeletionPackage(deletion); REQUIRE(package);
+    source->storage->Retire();
+    CHECK_FALSE(ProfileSettingsReadTestAccess::AdvanceDeletion(pm,deletion));
+    target.Unchanged(); CHECK(ReadFixtureDisk(DeletionHeader(target))==header);
+    REQUIRE(pm.CaptureCachedAccount(target.xuid,error)); REQUIRE_FALSE(error);
+  }
+}
+TEST_CASE("Durable profile removal retains its exact PM handoff across namespace and metadata contention",
+          "[kernel][profile][profile_deletion][cache][contention][persistence]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile target(runtime, 0xE000000000000614ull, 66);
+  SeedDeletionHeader(target);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::weak_ptr<ProfileGpdModelAuthority> retired_model;
+  bool verify_retired_model=false;
+  SECTION("Real signed-in writers drain and retired model ownership reaches the exact deletion handoff") {
+    std::error_code error;
+    auto expected=pm.CaptureRosterExpected(error);REQUIRE_FALSE(error);
+    REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({target.xuid,0,0,0}),expected).error);
+    {
+      auto model=pm.AcquireProfileGpdModel(uint8_t(0),error);REQUIRE(model);REQUIRE_FALSE(error);
+      auto source=runtime.emulator->kernel_state()->content_manager()->sources().Source("hdd");REQUIRE(source);
+      const auto& storage=model->storage();
+      CHECK(storage->source()==source->managed_identity->source());
+      CHECK(storage->guest_generation()==source->storage);
+      CHECK(storage->source()!=storage->guest_generation());
+      CHECK(storage->view()->path()==target.path);
+      auto account=pm.CaptureDurableAccount(target.xuid,error);REQUIRE(account);REQUIRE_FALSE(error);
+      auto writer=account->identity()->EnterWrite(error);REQUIRE(writer);REQUIRE_FALSE(error);
+      CHECK(account->identity()->storage()->source()==source->managed_identity->source());
+      CHECK(account->identity()->storage()->guest_generation()==source->storage);
+      XCONTENT_AGGREGATE_DATA requested{};requested.device_id=1;requested.title_id=kDashboardID;
+      requested.content_type=XContentType::kProfile;requested.xuid=target.xuid;
+      requested.set_file_name(fmt::format("{:016X}",target.xuid));
+      // Exact source write resolution first sees the live Account namespace
+      // claim. Its existing public refusal is ACCESS_DENIED, before the PM's
+      // later signed-in/writer drain checks; this is not a PM inner-guard test.
+      CHECK(runtime.emulator->kernel_state()->content_manager()->DeleteContent(0,requested)==X_ERROR_ACCESS_DENIED);
+      CHECK_FALSE(account->identity()->writes_drained());
+      CheckRoster(pm,{target.xuid,0,0,0});target.Unchanged();
+      writer.reset();CHECK(account->identity()->writes_drained());
+      expected=pm.CaptureRosterExpected(error);REQUIRE_FALSE(error);
+      const auto signed_out=pm.AdoptRoster(RosterDesired({}),expected);
+      REQUIRE_FALSE(signed_out.error);REQUIRE(signed_out.phase==ProfileRosterPhase::kCommitted);
+      CHECK(account->identity()->retired());
+      retired_model=model;verify_retired_model=true;
+    }
+    // A real subsequent empty roster operation reaps the old envelope. The
+    // PM's genuine retired-model owner must still retain it until deletion.
+    expected=pm.CaptureRosterExpected(error);REQUIRE_FALSE(error);
+    REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({}),expected).error);
+    REQUIRE_FALSE(retired_model.expired());
+  }
+  auto deletion = ProfileSettingsReadTestAccess::PrepareDeletion(pm,target.xuid);
+  REQUIRE(deletion);
+  auto package = ProfileSettingsReadTestAccess::DeletionPackage(deletion); REQUIRE(package);
+  const auto durable = package->Advance();
+  REQUIRE_FALSE(durable.error); REQUIRE(durable.complete);
+  CHECK_FALSE(std::filesystem::exists(target.path));
+  CHECK_FALSE(std::filesystem::exists(DeletionHeader(target)));
+  std::error_code error;
+  REQUIRE(pm.CaptureCachedAccount(target.xuid,error)); REQUIRE_FALSE(error);
+  SECTION("The completed physical outcome does not need a VFS namespace lock for PM cache publication") {
+    auto held = global_critical_region::AcquireDirect();
+    auto publish = std::async(std::launch::async,[&] {
+      return ProfileSettingsReadTestAccess::AdvanceDeletion(pm,deletion);
+    });
+    const auto ready = publish.wait_for(std::chrono::seconds(2));
+    held.unlock(); // Independent bounded release, even if a hidden lock blocks.
+    const bool result = publish.get();
+    CHECK(ready==std::future_status::ready); REQUIRE(result);
+  }
+  SECTION("A genuinely observed completed removal can erase only its old cache after device retirement") {
+    auto source = runtime.emulator->kernel_state()->content_manager()->sources().Source("hdd");
+    REQUIRE(source); REQUIRE(source->storage);
+    // Physical removal and its actual durable observation already completed
+    // above. This does not authorize any new IO through the retired source.
+    source->storage->Retire();
+    REQUIRE(ProfileSettingsReadTestAccess::AdvanceDeletion(pm,deletion));
+  }
+  SECTION("A busy metadata cut keeps the same completed capsule for the existing host reaper") {
+    auto held = ProfileSettingsReadTestAccess::HoldMetadata(pm);
+    auto publish = std::async(std::launch::async,[&] {
+      return ProfileSettingsReadTestAccess::AdvanceDeletion(pm,deletion);
+    });
+    const auto ready = publish.wait_for(std::chrono::seconds(2));
+    held.unlock();
+    const bool result = publish.get();
+    CHECK(ready==std::future_status::ready); CHECK_FALSE(result);
+    REQUIRE(pm.CaptureCachedAccount(target.xuid,error)); REQUIRE_FALSE(error);
+    pm.ReapReleasedProfileReads();
+  }
+  REQUIRE(ProfileSettingsReadTestAccess::AdvanceDeletion(pm,deletion));
+  CHECK_FALSE(pm.CaptureCachedAccount(target.xuid,error));
+  CHECK(error==std::errc::no_such_file_or_directory);
+  REQUIRE(ProfileSettingsReadTestAccess::AdvanceDeletion(pm,deletion));
+  const auto same_outcome = package->Advance();
+  CHECK_FALSE(same_outcome.error); CHECK(same_outcome.complete);
+  CHECK_FALSE(std::filesystem::exists(target.path));
+  CHECK_FALSE(std::filesystem::exists(DeletionHeader(target)));
+  if(verify_retired_model){
+    CHECK_FALSE(retired_model.expired()); // The actual capsule/cache operation still owns the old holder.
+    deletion.reset(); // Drop that last owner HERE, outside every production guard.
+    CHECK(retired_model.expired()); // A missed retired-vector match would leak the genuine old model.
+  }
+}
+
+namespace {
+struct ProfileDeleteExportOutcome {
+  uint32_t returned = 0, result = 0, extended = 0, length = 0, context = 0, event_state = 0;
+};
+ProfileDeleteExportOutcome CallProfileDelete270(ProfileAbiRuntime& runtime,
+    const XCONTENT_AGGREGATE_DATA& data, bool asynchronous) {
+  auto* kernel = runtime.emulator->kernel_state(); auto& memory = *runtime.emulator->memory();
+  struct Page { Memory& memory; uint32_t address; ~Page() { if(address)memory.SystemHeapFree(address); } } page{memory,memory.SystemHeapAlloc(0x1000,0x1000)};
+  REQUIRE(page.address); memory.Zero(page.address,0x1000);
+  std::memcpy(memory.TranslateVirtual(page.address),&data,sizeof(data));
+  const uint32_t overlap_address=page.address+0x400;
+  auto* overlap=memory.TranslateVirtual<XAM_OVERLAPPED*>(overlap_address);
+  object_ref<XEvent> event(new XEvent(kernel)); event->Initialize(true,false);
+  overlap->result=X_ERROR_IO_PENDING;overlap->context=0x12345678;overlap->event=event->handle();
+  const auto* entry=runtime.emulator->export_resolver()->GetExportByOrdinal("xam.xex",0x270);
+  REQUIRE(entry);REQUIRE(entry->function_data.trampoline);
+  ProfileDeleteExportOutcome result;
+  object_ref<XHostThread> thread;OverlappedThreadJoin join{thread,{}};
+  thread=object_ref<XHostThread>(new XHostThread(kernel,128*1024,0,[&]{
+    auto* context=XThread::GetCurrentThread()->thread_state()->context();
+    context->r[3]=page.address;context->r[4]=asynchronous?overlap_address:0;
+    entry->function_data.trampoline(context);result.returned=uint32_t(context->r[3]);return 0;
+  },kernel->GetSystemProcess()));
+  join.created=thread->Create()==X_STATUS_SUCCESS;REQUIRE(join.created);
+  REQUIRE(xe::threading::Wait(thread->thread(),false,std::chrono::seconds(10))==xe::threading::WaitResult::kSuccess);
+  result.result=overlap->result;result.extended=overlap->extended_error;
+  result.length=overlap->length;result.context=overlap->context;
+  uint32_t event_type=0;event->Query(&event_type,&result.event_state);
+  return result;
+}
+void CheckProfileDeleteCompletion(const ProfileDeleteExportOutcome& out,bool asynchronous,uint32_t actual) {
+  if(!asynchronous){CHECK(out.returned==actual);return;}
+  CHECK(out.returned==X_ERROR_IO_PENDING);
+  CHECK(out.result==(actual?X_ERROR_FUNCTION_FAILED:X_ERROR_SUCCESS));
+  CHECK(out.extended==X_HRESULT_FROM_WIN32(actual));CHECK(out.length==0);
+  CHECK(out.context==0);CHECK(out.event_state==1);
+}
+}
+TEST_CASE("Registered profile-only content deletion joins exact storage and cache without signing out",
+          "[kernel][profile][profile_deletion][content_delete][abi][persistence]") {
+  ProfileAbiRuntime runtime;
+  constexpr uint64_t uid=0xE000000000000621ull;
+  X_XAMACCOUNTINFO account{};const auto original=SeedOwnedAccount(runtime,uid,account);
+  auto* manager=runtime.emulator->kernel_state()->content_manager();
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  const auto path=runtime.root.path/"content"/ProfileStorageLease::ProfileRelative(uid);
+  GpdInfoProfile dashboard; UserSetting scalar(static_cast<UserSettingId>(kReadScalar),int32_t(73));
+  dashboard.UpsertSetting(&scalar);ReadFixtureWrite(path/"FFFE07D1.gpd",ReadFixtureSerialize(dashboard));
+  GpdInfoTitle title(kReadTitle);title.UpsertSetting(&scalar);ReadFixtureWrite(path/"1234ABCD.gpd",ReadFixtureSerialize(title));
+  XCONTENT_AGGREGATE_DATA data{};data.device_id=1;data.title_id=kDashboardID;
+  data.content_type=XContentType::kProfile;data.xuid=uid;data.set_file_name(fmt::format("{:016X}",uid));
+  const auto header=path.parent_path().parent_path()/"Headers"/"00010000"/(fmt::format("{:016X}",uid)+".header");
+  REQUIRE(std::filesystem::create_directories(header.parent_path()));
+  std::vector<uint8_t> header_bytes(sizeof(data)+17,0x5B);std::memcpy(header_bytes.data(),&data,sizeof(data));ReadFixtureWrite(header,header_bytes);
+  auto save_path=runtime.root.path/"content"/fmt::format("{:016X}",uid)/"1234ABCD"/"00000001"/"slot"/"save.bin";
+  REQUIRE(std::filesystem::create_directories(save_path.parent_path()));
+  const std::vector<uint8_t> save{0x91,0,0xF5,0xA8};ReadFixtureWrite(save_path,save);
+  std::error_code error;
+  SECTION("Synchronous cached deletion removes only its exact package and Header") {
+    REQUIRE(pm.LoadAccount(uid));REQUIRE(pm.CaptureCachedAccount(uid,error));
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,false),false,X_ERROR_SUCCESS);
+    CHECK_FALSE(pm.CaptureCachedAccount(uid,error));CHECK(error==std::errc::no_such_file_or_directory);
+    CHECK_FALSE(std::filesystem::exists(path));CHECK_FALSE(std::filesystem::exists(header));
+    // A repeated actual missing package preserves the old content ABI error.
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,false),false,X_ERROR_FILE_NOT_FOUND);
+  }
+  SECTION("Asynchronous deletion needs no cached Account and publishes its real event and result tuple") {
+    REQUIRE_FALSE(pm.CaptureCachedAccount(uid,error));
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,true),true,X_ERROR_SUCCESS);
+    CHECK_FALSE(std::filesystem::exists(path));CHECK_FALSE(std::filesystem::exists(header));
+  }
+  SECTION("A signed-in cached profile refuses without an implicit host signout") {
+    REQUIRE(pm.LoadAccount(uid));pm.Login(uid,1,false);CheckRoster(pm,{0,uid,0,0});
+    // The retained Account namespace denies source write resolution first;
+    // CompleteRequest must preserve that exact public error in its HRESULT.
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,true),true,X_ERROR_ACCESS_DENIED);
+    CheckRoster(pm,{0,uid,0,0});REQUIRE(pm.CaptureCachedAccount(uid,error));
+    CHECK(ReadFixtureDisk(path/"Account")==original);CHECK(ReadFixtureDisk(header)==header_bytes);
+  }
+  SECTION("A genuine independent Header reader refuses before effects then permits real retry") {
+    REQUIRE(pm.LoadAccount(uid));auto source=manager->sources().Source("hdd");REQUIRE(source);
+    auto reader=source->storage->OpenFile(header.lexically_relative(source->storage->path()),filesystem::FileAccess::kGenericRead,error);
+    REQUIRE(reader);REQUIRE_FALSE(error);
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,false),false,X_ERROR_SHARING_VIOLATION);
+    REQUIRE(pm.CaptureCachedAccount(uid,error));CHECK(ReadFixtureDisk(path/"Account")==original);
+    reader.reset();CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,false),false,X_ERROR_SUCCESS);
+    CHECK_FALSE(pm.CaptureCachedAccount(uid,error));
+  }
+  SECTION("The selected device does not erase another source's same-XUID cache or signed-in row") {
+    REQUIRE(pm.LoadAccount(uid));pm.Login(uid,1,false);
+    const auto usb=runtime.root.path/"delete-usb";const auto usb_path=usb/"Content"/ProfileStorageLease::ProfileRelative(uid);
+    REQUIRE(std::filesystem::create_directories(usb_path));ReadFixtureWrite(usb_path/"Account",original);
+    const auto usb_header=usb_path.parent_path().parent_path()/"Headers"/"00010000"/(fmt::format("{:016X}",uid)+".header");
+    REQUIRE(std::filesystem::create_directories(usb_header.parent_path()));ReadFixtureWrite(usb_header,header_bytes);
+    ContentSource selected;selected.id="delete-usb";selected.device_id=0x57;selected.device_type=DeviceType::USBMASS;
+    selected.read_only=false;selected.root=usb/"Content";selected.host_volume_root=usb;selected.private_state_parent=runtime.root.path;
+    selected.guest_volume_root="\\Device\\Mass57PartitionFile\\Storage";selected.guest_root=selected.guest_volume_root+"\\Content";selected.name=u"Delete source";
+    REQUIRE(manager->RegisterManagedSource(selected));data.device_id=selected.device_id;
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,false),false,X_ERROR_SUCCESS);
+    CHECK_FALSE(std::filesystem::exists(usb_path));CHECK_FALSE(std::filesystem::exists(usb_header));
+    auto cached=pm.CaptureCachedAccount(uid,error);REQUIRE(cached);CHECK(cached->source_id()=="hdd");
+    CheckRoster(pm,{0,uid,0,0});CHECK(ReadFixtureDisk(path/"Account")==original);CHECK(ReadFixtureDisk(header)==header_bytes);
+  }
+  SECTION("Physically case-varied canonical FATX components retain their exact deletion path") {
+    auto lower=[](std::string value){std::transform(value.begin(),value.end(),value.begin(),
+        [](unsigned char c){return char(c>='A'&&c<='Z'?c+('a'-'A'):c);});return value;};
+    const auto varied_owner=runtime.root.path/"content"/lower(fmt::format("{:016X}",uid));
+    std::filesystem::rename(path.parent_path().parent_path().parent_path(),varied_owner);
+    const auto varied_title=varied_owner/"fFfE07d1";
+    std::filesystem::rename(varied_owner/"FFFE07D1",varied_title);
+    const auto varied_path=varied_title/"00010000"/lower(fmt::format("{:016X}",uid));
+    std::filesystem::rename(varied_title/"00010000"/fmt::format("{:016X}",uid),varied_path);
+    const auto varied_headers=varied_title/"hEaDeRs";
+    std::filesystem::rename(varied_title/"Headers",varied_headers);
+    const auto varied_header=varied_headers/"00010000"/(lower(fmt::format("{:016X}",uid))+".HeAdEr");
+    std::filesystem::rename(varied_headers/"00010000"/(fmt::format("{:016X}",uid)+".header"),varied_header);
+    save_path=varied_owner/"1234ABCD"/"00000001"/"slot"/"save.bin";
+    auto source=manager->sources().Source("hdd");REQUIRE(source);
+    const auto resolved=manager->sources().Resolve(*source,ProfileStorageLease::ProfileRelative(uid),false);
+    REQUIRE(resolved);CHECK(*resolved==varied_path);
+    REQUIRE_FALSE(pm.CaptureCachedAccount(uid,error));
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,false),false,X_ERROR_SUCCESS);
+    CHECK_FALSE(std::filesystem::exists(varied_path));CHECK_FALSE(std::filesystem::exists(varied_header));
+    CHECK_FALSE(pm.CaptureCachedAccount(uid,error));
+  }
+  SECTION("Case-only physical siblings do not erase or wait on another cached profile") {
+    REQUIRE(pm.LoadAccount(uid));const auto cached=pm.CaptureCachedAccount(uid,error);REQUIRE(cached);
+    auto lower_name=fmt::format("{:016X}",uid);
+    std::transform(lower_name.begin(),lower_name.end(),lower_name.begin(),
+        [](unsigned char c){return char(c>='A'&&c<='Z'?c+('a'-'A'):c);});
+    const auto sibling=path.parent_path()/lower_name;REQUIRE(std::filesystem::create_directory(sibling));
+    ReadFixtureWrite(sibling/"Account",original);
+    const auto sibling_header=header.parent_path()/(lower_name+".header");ReadFixtureWrite(sibling_header,header_bytes);
+    data.set_file_name(lower_name);
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,false),false,X_ERROR_ACCESS_DENIED);
+    CHECK(pm.CaptureCachedAccount(uid,error)==cached);REQUIRE_FALSE(error);
+    CHECK(ReadFixtureDisk(path/"Account")==original);CHECK(ReadFixtureDisk(header)==header_bytes);
+    CHECK(ReadFixtureDisk(sibling/"Account")==original);CHECK(ReadFixtureDisk(sibling_header)==header_bytes);
+  }
+  SECTION("A canonical-profile host symlink cannot retarget deletion or cached identity") {
+    REQUIRE(pm.LoadAccount(uid));
+    constexpr uint64_t alias_uid=0xE000000000000622ull;
+    const auto alias=runtime.root.path/"content"/ProfileStorageLease::ProfileRelative(alias_uid);
+    REQUIRE(std::filesystem::create_directories(alias.parent_path()));
+    std::filesystem::create_directory_symlink(path,alias,error);REQUIRE_FALSE(error);
+    const auto alias_header=alias.parent_path().parent_path()/"Headers"/"00010000"/(fmt::format("{:016X}",alias_uid)+".header");
+    REQUIRE(std::filesystem::create_directories(alias_header.parent_path()));ReadFixtureWrite(alias_header,header_bytes);
+    data.xuid=alias_uid;data.set_file_name(fmt::format("{:016X}",alias_uid));
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,false),false,X_ERROR_ACCESS_DENIED);
+    CHECK(std::filesystem::is_symlink(alias));CHECK(ReadFixtureDisk(alias_header)==header_bytes);
+    REQUIRE(pm.CaptureCachedAccount(uid,error));CHECK(ReadFixtureDisk(path/"Account")==original);CHECK(ReadFixtureDisk(header)==header_bytes);
+  }
+  SECTION("A noncanonical profile container retains exact spelling without deleting the cached canonical profile") {
+    REQUIRE(pm.LoadAccount(uid));
+    const auto other=path.parent_path()/"MiXeD-Profile";REQUIRE(std::filesystem::create_directory(other));
+    ReadFixtureWrite(other/"opaque.member",save);const auto other_header=header.parent_path()/"MiXeD-Profile.header";ReadFixtureWrite(other_header,header_bytes);
+    data.set_file_name("mixed-profile");
+    CheckProfileDeleteCompletion(CallProfileDelete270(runtime,data,false),false,X_ERROR_SUCCESS);
+    CHECK_FALSE(std::filesystem::exists(other));CHECK_FALSE(std::filesystem::exists(other_header));
+    REQUIRE(pm.CaptureCachedAccount(uid,error));CHECK(ReadFixtureDisk(path/"Account")==original);CHECK(ReadFixtureDisk(header)==header_bytes);
+  }
+  CHECK(ReadFixtureDisk(save_path)==save);
+}
+
 #endif
 
 } // namespace xe::kernel::xam::test

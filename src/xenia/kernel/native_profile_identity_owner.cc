@@ -898,12 +898,80 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
   uint32_t argument=0;
   bool admitted=false,refused=false;
  };
+ // Opt-in scalar receipt at existing admission/PM cuts only. This record
+ // retains no native/host owner and grants no Task, read or entry authority.
+ // Each concrete cut emits at most once per reservation/Job; a fresh local
+ // limiter prevents bootstrap activity from exhausting a later Job's receipt.
+ struct InitializerObservation {
+  bool enabled=false,visited=false,admission_cut=false;
+  uint32_t stage=0,admitted=0,evaluated=0,failed=0,task_available=0,task=0;
+  uint32_t ordinal=0,flags=0,overlap_present=0,request_phase=0,initializer_phase=0;
+  uint32_t initializer_ready=0,data_worker_ready=0,render_phase=0,normal_available=0;
+  uint32_t normal_refusal=0,normal_function=0,latest_available=0,latest_present=0;
+  uint32_t latest_kind=0,latest_function=0,latest_task=0,latest_thread=0;
+  uint32_t other_evaluated=0,other_compatible=0,other_conflict=0;
+  uint32_t render_evaluated=0,render_failed=0,error_available=0,error_value=0,error_category=0;
+  uint32_t publication=0,retryable=0,expected_entered=0,expected_returned=0,expected_count=0;
+  uint32_t caller_thread=0,caller_pcr=0,caller_process=0,actual_function=0;
+  uint64_t job=0,source=0,current_read=0,latest_work=0,latest_source=0,latest_birth=0,latest_birth_source=0;
+  WorkBlocker other;
+  void Task(std::optional<uint32_t> actual) noexcept {
+   if(enabled){task_available=bool(actual);if(actual)task=*actual;}
+  }
+  void LatestWork(const std::shared_ptr<Work>& work) noexcept {
+   if(!enabled)return;latest_available=1;latest_present=bool(work);
+   if(!work)return;
+   latest_work=work->serial;latest_source=work->source;latest_function=work->frame.function;
+   latest_birth=work->birth.generation;latest_birth_source=work->birth.origin;
+   latest_task=work->birth.task;latest_thread=work->frame.thread;
+   latest_kind=uint32_t(work->execution_only)|(uint32_t(work->physical_work)<<1)|
+       (uint32_t(work->render_iteration)<<2)|(uint32_t(bool(work->read))<<3)|
+       (uint32_t(bool(work->execution_read_owner))<<4)|(uint32_t(work->execution_read_fallback)<<5)|
+       (uint32_t(bool(work->commit))<<6)|(uint32_t(work->transport_only)<<7)|
+       (uint32_t(work->normal_return)<<8)|(uint32_t(work->execution_uncertain)<<9);
+  }
+  void Emit(const char* event) noexcept {
+   if(!enabled || !visited)return;visited=false;
+   // Callers place this after their existing State/GCRC guards unwind. No
+   // new lock or native access is needed by capture or JSON formatting.
+   NativeSystemUiTraceLimiter exact_cut;
+   static NativeSystemUiTraceLimiter unassigned_attempts;
+   auto& trace=job?exact_cut:unassigned_attempts;
+   if(!admission_cut){
+    trace.Emit("identity",event,
+     {{"stage",stage},{"job_serial",job},{"job_source",source},{"current_read",current_read},
+      {"initializer_phase",initializer_phase},{"initializer_ready",initializer_ready},{"data_worker_ready",data_worker_ready},
+      {"render_phase",render_phase},{"publication",publication},{"expected_count",expected_count},
+      {"expected_entered",expected_entered},{"expected_returned",expected_returned},{"actual_function",actual_function},
+      {"error_available",error_available},{"error_value",error_value},{"error_category",error_category},{"retryable",retryable}});
+    return;
+   }
+   trace.Emit("identity",event,
+    {{"stage",stage},{"job_serial",job},{"job_source",source},{"current_read",current_read},
+     {"admitted",admitted},{"evaluated",evaluated},{"failed",failed},{"ordinal",ordinal},{"flags",flags},
+     {"overlap_present",overlap_present},{"task_available",task_available},{"actual_task",task},
+     {"request_phase",request_phase},{"initializer_phase",initializer_phase},
+     {"initializer_ready",initializer_ready},{"data_worker_ready",data_worker_ready},{"render_phase",render_phase},
+     {"normal_available",normal_available},{"normal_refusal",normal_refusal},{"normal_function",normal_function},
+     {"latest_available",latest_available},{"latest_present",latest_present},{"latest_kind",latest_kind},
+     {"latest_function",latest_function},{"latest_work",latest_work},{"latest_source",latest_source},
+     {"latest_birth",latest_birth},{"latest_birth_source",latest_birth_source},{"latest_task",latest_task},{"latest_thread",latest_thread}},
+    {{"other_evaluated",other_evaluated},{"other_compatible",other_compatible},{"other_conflict",other_conflict},
+     {"other_available",other.available},{"other_work",other.serial},{"other_source",other.source},
+     {"other_function",other.frame.function},{"other_thread",other.frame.thread},{"other_birth",other.birth.generation},
+     {"other_task",other.birth.task},{"render_evaluated",render_evaluated},{"render_failed",render_failed},
+     {"caller_thread",caller_thread},{"caller_pcr",caller_pcr},{"caller_process",caller_process}});
+  }
+ };
  struct Job {
   // Explicit host facade deadlines are retained. Original guest logon and
   // bootstrap alignment do not expire because JIT/render dispatch is slow;
   // actual cancellation, stop and source failure still end preparation.
   std::chrono::steady_clock::time_point preparation_deadline{};
   Tasks::PreparedIngress ingress;
+  // Original State-locked, opt-in once-per-Job observations, not readiness.
+  bool first_pm_observed=false,first_pm_error_observed=false,pm_armed_observed=false;
+  bool actual_initializer_observed=false,first_old_query_observed=false,first_retired_query_observed=false;
   std::error_code preentry_error;
   bool retry_initial_after_cancel=false;
   uint64_t serial=0,source=0;
@@ -1390,6 +1458,7 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  // dereferenced by the reporter, and no reporter acquires the owner mutex.
  struct QueryObservation {
   bool enabled=false,source_retired=false,parked=false;
+  uint32_t first_old_kind=0,initializer_phase=0,initializer_ready=0,data_worker_ready=0;
   uint32_t reason=0,loops=0,phase=0,active=0,expected=0,attempt=0,flags=0;
   uint32_t old_evaluated=0,old_truth=0,task=0,first_loss=0;
   uint32_t prepared_evaluated=0,prepared_truth=0,prepared_pending=0;
@@ -1414,6 +1483,27 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
    if(enabled)actual_thread=reinterpret_cast<uintptr_t>(value);return value;
   }
  };
+ void ReportFirstOldQuery(std::optional<QueryObservation>& pending) noexcept {
+  if(!pending)return;auto& q=*pending;
+  if(!q.enabled || !q.first_old_kind)return;
+  const uint32_t kind=q.first_old_kind;q.first_old_kind=0;
+  NativeSystemUiTraceLimiter trace;
+  trace.Emit("identity","initializer_first_old_query",
+   {{"kind",kind},{"observation",q.observation},{"job_serial",q.job},{"job_source",q.source},
+    {"current_read",q.current_read},{"source_retired",q.source_retired},{"render_phase",q.phase},
+    {"evaluated",q.old_evaluated},{"predicate_true",q.old_truth},{"expected",q.expected},
+    {"initializer_phase",q.initializer_phase},{"initializer_ready",q.initializer_ready},{"data_worker_ready",q.data_worker_ready},
+    {"frame_thread",q.frame.thread},{"frame_function",q.frame.function},{"birth",q.birth.generation},
+    {"birth_task",q.birth.task},{"birth_origin",q.birth.origin}},
+   {{"work_available",q.work_blocker.available},{"work_closed",q.work_blocker.closed},
+    {"work_reason",q.work_blocker.reason},{"work",q.work_blocker.serial},{"work_source",q.work_blocker.source},
+    {"work_function",q.work_blocker.frame.function},{"work_thread",q.work_blocker.frame.thread},
+    {"work_birth",q.work_blocker.birth.generation},{"work_task",q.work_blocker.birth.task},
+    {"work_origin",q.work_blocker.birth.origin},{"work_state",q.work_blocker.state},
+    {"source_available",q.source_blocker.available},{"source_closed",q.source_blocker.closed},
+    {"source_reason",q.source_blocker.kind},{"source",q.source_blocker.source},
+    {"source_generation",q.source_blocker.generation},{"source_task",q.source_blocker.task},{"source_serial",q.source_blocker.serial}});
+ }
  uint64_t query_observation=0; // original State mutex, advisory correlation only
  std::atomic<uint64_t> bootstrap_handoff{0}; // turn:32, actual cut:32
  struct QueryExitCell {std::atomic<uint32_t> state{0};QueryObservation payload;};
@@ -2033,11 +2123,17 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  // keeps the existing native access/lifetime classification; a dispatcher name
  // alone never exempts an opaque callback or an old-data writer.
  bool InitializerOtherWorkCompatible(const std::shared_ptr<Work>& issuer,
-     OriginalLogonDiagnostic* diagnostic=nullptr) const {
+     OriginalLogonDiagnostic* diagnostic=nullptr,InitializerObservation* observed=nullptr) const {
+  if(observed && observed->enabled){observed->other_evaluated=1;observed->other_compatible=1;}
   for(const auto& other:active){
    if(!other || other==issuer || other->normal_return)continue;
    const auto conflict=ReentrantOldWorkConflict(*other);
    if(conflict==ReentrantWorkConflict::kNone)continue;
+   if(observed && observed->enabled){
+    observed->other_compatible=0;observed->other_conflict=uint32_t(conflict);
+    observed->other.available=1;observed->other.serial=other->serial;observed->other.source=other->source;
+    observed->other.frame=other->frame;observed->other.birth=other->birth;
+   }
    if(diagnostic)diagnostic->latest_kind=(diagnostic->latest_kind&0xFFFFu) |
        (uint32_t(conflict)<<16) | (OriginalLogonFunctionRole(other->frame.function)<<24);
    return false;
@@ -2048,7 +2144,8 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  // Keeping the exact read/frame is essential: the outer native scene still
  // owns resources after its callback returns, through the actual CD920 cut.
  std::shared_ptr<Work> ReentrantOriginalFrame(XThread* caller,uint16_t ordinal,
-     uint32_t flags,uint32_t overlap,OriginalLogonDiagnostic* diagnostic=nullptr) const {
+     uint32_t flags,uint32_t overlap,OriginalLogonDiagnostic* diagnostic=nullptr,
+     InitializerObservation* observed=nullptr) const {
   const auto rejected=[&](uint32_t bit,bool condition){
    if(diagnostic){diagnostic->evaluated|=1u<<bit;if(condition)diagnostic->failed|=1u<<bit;}
    return condition;
@@ -2082,7 +2179,7 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
   // A retained fixed-old consumer or pure transport is not a destructive
   // publisher. Its full read/source/listener/paint lifetime still joins before
   // data_worker_ready; no scope, native result or callback is shortened here.
-  if(rejected(10,!InitializerOtherWorkCompatible(work,diagnostic)))return {};
+  if(rejected(10,!InitializerOtherWorkCompatible(work,diagnostic,observed)))return {};
   return work;
  }
  bool AwaitPreparedWorker(cpu::ppc::PPCContext&,uint32_t) noexcept;
@@ -5159,14 +5256,31 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
   }
   job->input=scratch.address;job->owned_input=true;
  }
+ std::array<std::optional<State::InitializerObservation>,2> admission;
+ for(uint32_t i=0;i<admission.size();++i){
+  if(!cvars::native_system_ui_trace)continue;
+  auto& observed=admission[i];observed.emplace();observed->enabled=true;observed->admission_cut=true;
+  {observed->stage=i+1;observed->ordinal=original?original->ordinal():0;
+   observed->flags=flags;observed->overlap_present=bool(overlap);
+   if(caller){observed->caller_thread=caller->thread_id();observed->caller_pcr=caller->pcr_ptr();
+    observed->caller_process=caller->native_frame_thread_identity().process_type;}}
+ }
+ struct AdmissionReporter {std::array<std::optional<State::InitializerObservation>,2>& observed;
+  ~AdmissionReporter(){for(auto& cut:observed)if(cut)cut->Emit("initializer_admission_cut");}} admission_reporter{admission};
  const auto caller_task=s.OriginalCallerTask(caller,original?original->ordinal():0);
+ if(admission[0])admission[0]->Task(caller_task);
  std::shared_ptr<State::Work> early_normal_issuer;
  const auto request_phase=original?original->initializer_phase(bool(overlap)):
      NativeProfileIdentityRequest::InitializerPhase::kAfterOldDrain;
  {
   std::lock_guard lock(s.mutex);
+  auto& observed=admission[0];
+  if(observed){observed->visited=true;observed->job=job->serial;observed->source=job->source;
+   observed->current_read=s.current_read_source;observed->render_phase=uint32_t(s.render_phase);
+   observed->request_phase=uint32_t(request_phase);}
   uint32_t evaluated=0,failed=0;
-  const auto rejected=[&](uint32_t bit,bool value){evaluated|=1u<<bit;if(value)failed|=1u<<bit;return value;};
+  const auto rejected=[&](uint32_t bit,bool value){evaluated|=1u<<bit;if(value)failed|=1u<<bit;
+   if(observed){observed->evaluated=evaluated;observed->failed=failed;}return value;};
   if(rejected(0,bool(s.job)) || rejected(1,s.stopping.load()) || rejected(2,s.retired.load()) ||
      rejected(3,s.uncertain.load()) || rejected(4,!bootstrap_alignment && !s.aligned) ||
      rejected(5,intent->old_roster()!=s.current_roster) ||
@@ -5175,17 +5289,27 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
    return fail(__LINE__,11,std::errc::device_or_resource_busy,failed==(1u<<6) || failed==(1u<<10),evaluated,failed);
   }
   std::shared_ptr<State::Work> issuer;
-  const bool normal=caller && s.NormalOriginalCaller(caller,caller_task,nullptr,&issuer)==
-      State::ReentrantWorkConflict::kNone;
+  auto normal_reason=State::ReentrantWorkConflict::kNone;uint32_t normal_function=0;
+  const bool normal=caller && (normal_reason=s.NormalOriginalCaller(caller,caller_task,
+      observed?&normal_function:nullptr,&issuer))==State::ReentrantWorkConflict::kNone;
+  if(observed){observed->normal_available=bool(caller);observed->normal_refusal=uint32_t(normal_reason);
+   observed->normal_function=normal_function;}
   if(normal && request_phase==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync &&
-      s.InitializerOtherWorkCompatible(issuer))early_normal_issuer=issuer;
-  if(caller && s.Latest(caller->thread_id()) && !normal &&
-     !s.ReentrantOriginalFrame(caller,original?original->ordinal():0,flags,overlap))
+      s.InitializerOtherWorkCompatible(issuer,nullptr,observed?&*observed:nullptr))early_normal_issuer=issuer;
+  const auto latest=[&]{const auto work=s.Latest(caller->thread_id());if(observed)observed->LatestWork(work);return work;};
+  std::optional<OriginalLogonDiagnostic> render_diagnostic;if(observed)render_diagnostic.emplace();
+  const auto reentrant=[&]{const auto frame=s.ReentrantOriginalFrame(caller,original?original->ordinal():0,flags,overlap,
+      render_diagnostic?&*render_diagnostic:nullptr,observed?&*observed:nullptr);
+   if(observed){observed->render_evaluated=render_diagnostic->evaluated;observed->render_failed=render_diagnostic->failed;}
+   return frame;};
+  if(caller && latest() && !normal && !reentrant())
    return fail(__LINE__,11,std::errc::device_or_resource_busy,false,1u<<9,1u<<9);
   job->serial=job->source=s.next_source++;
   if(!job->ingress.Bind(job->serial,job->source))
    return fail(__LINE__,11,std::errc::operation_canceled);
+  if(observed){observed->job=job->serial;observed->source=job->source;observed->admitted=1;}
  }
+ if(admission[0])admission[0]->Emit("initializer_admission_cut");
  auto lifetime=std::make_shared<State::EventLifetime>();
  lifetime->code=s.root_code;lifetime->domain=s.config.domain->Acquire();
  lifetime->thread=job->original_caller;lifetime->intent=intent;
@@ -5208,29 +5332,44 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
   }
  } unpublished{s,job,error,retryable_bootstrap};
  const auto reserved_caller_task=s.OriginalCallerTask(caller,original?original->ordinal():0);
+ if(admission[1])admission[1]->Task(reserved_caller_task);
  {
   std::lock_guard lock(s.mutex);
+  auto& observed=admission[1];
+  if(observed){observed->visited=true;observed->job=job->serial;observed->source=job->source;
+   observed->current_read=s.current_read_source;observed->render_phase=uint32_t(s.render_phase);
+   observed->request_phase=uint32_t(request_phase);}
   uint32_t evaluated=0,failed=0;
-  const auto rejected=[&](uint32_t bit,bool value){evaluated|=1u<<bit;if(value)failed|=1u<<bit;return value;};
+  const auto rejected=[&](uint32_t bit,bool value){evaluated|=1u<<bit;if(value)failed|=1u<<bit;
+   if(observed){observed->evaluated=evaluated;observed->failed=failed;}return value;};
   if(rejected(0,bool(s.job)) || rejected(1,s.stopping.load()) || rejected(2,s.retired.load()) ||
      rejected(3,s.uncertain.load()) || rejected(6,!s.tasks.SourceDescendantsClosed(s.current_read_source)) ||
      rejected(10,bool(s.bootstrap_cleanup))){
    return fail(__LINE__,14,std::errc::device_or_resource_busy,failed==(1u<<6) || failed==(1u<<10),evaluated,failed);
   }
   std::shared_ptr<State::Work> issuer;
-  const bool normal_caller=caller &&
-      s.NormalOriginalCaller(caller,reserved_caller_task,nullptr,&issuer)==State::ReentrantWorkConflict::kNone;
-  if(!normal_caller)job->original_render_frame=s.ReentrantOriginalFrame(caller,original?original->ordinal():0,flags,overlap);
+  auto normal_reason=State::ReentrantWorkConflict::kNone;uint32_t normal_function=0;
+  const bool normal_caller=caller && (normal_reason=s.NormalOriginalCaller(caller,reserved_caller_task,
+      observed?&normal_function:nullptr,&issuer))==State::ReentrantWorkConflict::kNone;
+  if(observed){observed->normal_available=bool(caller);observed->normal_refusal=uint32_t(normal_reason);
+   observed->normal_function=normal_function;}
+  std::optional<OriginalLogonDiagnostic> render_diagnostic;if(observed)render_diagnostic.emplace();
+  if(!normal_caller)job->original_render_frame=s.ReentrantOriginalFrame(caller,original?original->ordinal():0,flags,overlap,
+      render_diagnostic?&*render_diagnostic:nullptr,observed?&*observed:nullptr);
+  if(observed){observed->render_evaluated=render_diagnostic->evaluated;observed->render_failed=render_diagnostic->failed;}
   const bool early_normal=normal_caller && issuer==early_normal_issuer &&
       request_phase==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync &&
-      s.InitializerOtherWorkCompatible(issuer);
+      s.InitializerOtherWorkCompatible(issuer,nullptr,observed?&*observed:nullptr);
   if(job->original_render_frame || early_normal)job->initializer_phase=request_phase;
   // A proved readless issuer keeps its real Boot1 execution/Task lifetime and
   // waits for native overlap completion after first return. It has no old read,
   // Expected/listener/wake duty by NormalOriginalCaller. No render frame is
   // invented; BOTH E148/C838 gates use this same immutable phase.
   job->initializer_ready=job->initializer_phase==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync;
-  if(caller && s.Latest(caller->thread_id()) && !normal_caller && !job->original_render_frame)
+  if(observed){observed->initializer_phase=uint32_t(job->initializer_phase);
+   observed->initializer_ready=job->initializer_ready.load();observed->data_worker_ready=job->data_worker_ready.load();}
+  const auto latest=[&]{const auto work=s.Latest(caller->thread_id());if(observed)observed->LatestWork(work);return work;};
+  if(caller && latest() && !normal_caller && !job->original_render_frame)
    return fail(__LINE__,14,std::errc::device_or_resource_busy,false,1u<<9,1u<<9);
   job->old_pixels=s.pixels;
   job->old_event_source=s.current_event_source;job->old_event_origin=s.current_event_origin;
@@ -5244,8 +5383,10 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
   if(job->old_pixels)job->old_pixels->Revoke();
   s.render_phase=State::RenderPhase::kDrainingOld;s.render_query_parked=false;
   s.old_ingress_closed=true;
+  if(observed)observed->admitted=1;
   s.job=std::move(job);scratch.address=0;
  }
+ if(admission[1])admission[1]->Emit("initializer_admission_cut");
  s.changed.notify_all();return true;
 }
 
@@ -5299,6 +5440,7 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
  std::shared_ptr<xam::ProfileRosterPublicationCell> publication;
  for(;;){
   expected=std::make_shared<State::Expected>();
+  std::optional<State::InitializerObservation> pm;
   {
    std::lock_guard lock(s.mutex);
    if(job && Tasks::PreparationDeadline::Expired(job->preparation_deadline,std::chrono::steady_clock::now()))
@@ -5317,14 +5459,36 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
    // Every reservation precedes its actual PM arm. No original PPC or newly
    // introduced Delay executes while a never-entered Expected is registered.
    s.expected.push_back(expected);job->entering=true;
+   if(cvars::native_system_ui_trace && !job->first_pm_observed){
+    job->first_pm_observed=true;pm.emplace();pm->enabled=pm->visited=true;pm->stage=0;
+    pm->job=job->serial;pm->source=job->source;pm->current_read=s.current_read_source;
+    pm->initializer_phase=uint32_t(job->initializer_phase);pm->initializer_ready=job->initializer_ready.load();
+    pm->data_worker_ready=job->data_worker_ready.load();pm->render_phase=uint32_t(s.render_phase);
+    pm->expected_count=uint32_t(s.expected.size());pm->expected_entered=expected->entered;
+    pm->caller_thread=thread.thread_id();pm->caller_pcr=thread.pcr_ptr();pm->actual_function=expected->function;
+   }
   }
+  if(pm)pm->Emit("initializer_pm_cut");
   std::error_code error;
   publication=s.kernel->xam_state()->profile_manager()->EnterNativeRoster(
       job->intent,s.config.factory_binding,error);
   if(publication)break;
   bool retryable=false;
+  // Emission is after this attempt's original State lock, even on refusal.
+  struct PmReporter {std::optional<State::InitializerObservation>& observed;
+   ~PmReporter(){if(observed)observed->Emit("initializer_pm_cut");}} pm_reporter{pm};
   {
    std::lock_guard lock(s.mutex);job->entering=false;
+   if(cvars::native_system_ui_trace && !job->first_pm_error_observed){
+    job->first_pm_error_observed=true;pm.emplace();pm->enabled=pm->visited=true;pm->stage=1;
+    pm->job=job->serial;pm->source=job->source;pm->current_read=s.current_read_source;
+    pm->initializer_phase=uint32_t(job->initializer_phase);pm->initializer_ready=job->initializer_ready.load();
+    pm->data_worker_ready=job->data_worker_ready.load();pm->render_phase=uint32_t(s.render_phase);
+    pm->error_available=1;pm->error_value=uint32_t(error.value());
+    pm->error_category=error.category()==std::generic_category()?1:error.category()==std::system_category()?2:0;
+    pm->expected_count=uint32_t(s.expected.size());pm->expected_entered=expected->entered;
+    pm->expected_returned=expected->returned;pm->actual_function=expected->function;
+   }
    const auto i=std::find(s.expected.begin(),s.expected.end(),expected);
    if(i==s.expected.end() || expected->entered){s.Lose(__LINE__);return {false,kAbort,"Pre-entry observer ownership changed"};}
    s.retired_expected.push_back(*i);s.expected.erase(i);
@@ -5337,6 +5501,7 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
        (job->preparation_deadline==std::chrono::steady_clock::time_point{} ||
         std::chrono::steady_clock::now()<job->preparation_deadline) &&
        !global_critical_region::is_held_by_current_thread();
+   if(pm && pm->visited)pm->retryable=retryable;
    if(!retryable)return refuse(error?error:std::make_error_code(std::errc::operation_canceled),
                                "Common native entry validation refused");
    if(!job->ingress.RetryEntry(job->serial,job->source)){
@@ -5344,9 +5509,11 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
   }
   // Explicit host facade preparation retains its finite deadline. An
   // inherited GCRC is a self dependency and never reaches this Delay.
+  if(pm)pm->Emit("initializer_pm_cut");
   s.changed.notify_all();
   thread.Delay(0,0,uint64_t(-160000ll)); // no Expected, PM/model/cache/namespace guard
  }
+ std::optional<State::InitializerObservation> armed;
  {
   std::lock_guard lock(s.mutex);
   if(s.job!=job || !job->entering || job->canceled ||
@@ -5354,7 +5521,17 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
    s.Lose(__LINE__);job->execution_uncertain=true;
    return {false,kAbort,"Common/native entry owner changed"};}
   job->publication=std::move(publication);job->entering=false;job->native_entered=true;
+  if(cvars::native_system_ui_trace && !job->pm_armed_observed){
+   job->pm_armed_observed=true;armed.emplace();armed->enabled=armed->visited=true;armed->stage=2;
+   armed->job=job->serial;armed->source=job->source;armed->current_read=s.current_read_source;
+   armed->initializer_phase=uint32_t(job->initializer_phase);armed->initializer_ready=job->initializer_ready.load();
+   armed->data_worker_ready=job->data_worker_ready.load();armed->render_phase=uint32_t(s.render_phase);
+   armed->publication=bool(job->publication);armed->expected_count=uint32_t(s.expected.size());
+   armed->expected_entered=expected->entered;armed->expected_returned=expected->returned;
+   armed->actual_function=expected->function;
+  }
  }
+ if(armed)armed->Emit("initializer_pm_cut");
  const std::array<uint32_t,3> args{job->input,job->flags,job->overlap};
  const auto result=s.config.catalog->calls()->ExecuteOwnedIdentityIngressOnOriginalCaller(
      thread,job->original?job->original->ordinal():0x224,args);
@@ -6852,8 +7029,12 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
  result.managed=true;auto& s=*owner->state_;
  State::QueryObservation observation;observation.enabled=cvars::native_system_ui_trace;
  observation.source_retired=source_retired;
+ // Keep disabled diagnostics unconstructed on this recurring Query path.
+ std::optional<State::QueryObservation> first_old_query,first_retired_query;
  struct Reporter {State& state;State::QueryObservation& value;
-  ~Reporter(){state.ReportPreparedQuery(value);state.ReportQuery(value,true);}} reporter{s,observation};
+  std::optional<State::QueryObservation>& first;std::optional<State::QueryObservation>& retired;
+  ~Reporter(){state.ReportFirstOldQuery(first);state.ReportFirstOldQuery(retired);
+   state.ReportPreparedQuery(value);state.ReportQuery(value,true);}} reporter{s,observation,first_old_query,first_retired_query};
  try{
   if(observation.Failed(1,s.retired.load(std::memory_order_acquire)) ||
      observation.Failed(2,global_critical_region::is_held_by_current_thread()) ||
@@ -6913,6 +7094,20 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
        observation.Old(8,bool(s.job->old_event_origin)) && observation.Old(9,s.listeners->SourceOnlyProducer(*s.job->old_event_origin)) &&
        observation.Old(10,s.wake->InvocationsDrained(NativeAtomicWord(s.native_pending)))){
       s.render_phase=State::RenderPhase::kClosingOld;
+    }
+    if(observation.enabled && s.job && (observation.old_truth&1u)){
+     // Copy only the ORIGINAL evaluated old-condition cut. A stop refusal
+     // above never consumes this Job's observation. Keep a second bounded
+     // first source-retired cut when the first Query had not retired yet.
+     observation.initializer_phase=uint32_t(s.job->initializer_phase);
+     observation.initializer_ready=s.job->initializer_ready.load();
+     observation.data_worker_ready=s.job->data_worker_ready.load();
+     if(!s.job->first_old_query_observed){
+      s.job->first_old_query_observed=true;first_old_query.emplace(observation);first_old_query->first_old_kind=1;
+     }
+     if(source_retired && !s.job->first_retired_query_observed){
+      s.job->first_retired_query_observed=true;first_retired_query.emplace(observation);first_retired_query->first_old_kind=2;
+     }
     }
     const auto prepared_drained=[&](){
      // No added guest read: retain the single original last-cut pending load.
@@ -6995,6 +7190,7 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
    }
    // A stop request releases this pause without claiming iteration, clear,
    // GPU completion, or restored pixels. Existing admitted work stays owned.
+   s.ReportFirstOldQuery(first_old_query);s.ReportFirstOldQuery(first_retired_query);
    s.ReportPreparedQuery(observation);
    s.ReportQuery(observation,false); // independently live while Bootstrap may be blocked
    thread.Delay(0,0,uint64_t(-10000ll));
@@ -8523,6 +8719,11 @@ uint64_t NativeProfileIdentityOwner::GuardEntryCore(void* raw,uint64_t address) 
   if(!owner && CommonTaskFunction(at))owner=NativeSystemUiService::CaptureTaskExecutionOwner(c.kernel_state);
   if(!owner)return 1;
   auto& s=*owner->state_;
+  // Most hooks never enter an initializer. Do not construct/zero this
+  // diagnostic record on every operation while tracing is disabled.
+  std::optional<State::InitializerObservation> actual_entry;
+  struct ActualEntryReporter {std::optional<State::InitializerObservation>& observed;
+   ~ActualEntryReporter(){if(observed)observed->Emit("initializer_pm_cut");}} actual_entry_reporter{actual_entry};
   if(s.retired.load(std::memory_order_acquire))return s.Deny(c,at,__LINE__);
   if(at==0x818CEE08)if(const auto service=owner->TryEnterIdentityServiceTick(raw,at))return *service;
   const bool parkable=at==0x816F4088 || at==0x816F3A40 || bool(FindNativeFiniteSystemConsumer(at));
@@ -8736,6 +8937,19 @@ uint64_t NativeProfileIdentityOwner::GuardEntryCore(void* raw,uint64_t address) 
     work->source=kBootUnjoinedSource;
    }else{
     (*expected)->actual=*frame;(*expected)->entered=true;work->source=(*expected)->source;
+    if(cvars::native_system_ui_trace && s.job && (*expected)->serial==s.job->serial &&
+       (*expected)->source==s.job->source && (at==0x8199C630 || at==0x8199E3E0) &&
+       !s.job->actual_initializer_observed){
+     s.job->actual_initializer_observed=true;actual_entry.emplace();auto& observed=*actual_entry;
+     observed.enabled=observed.visited=true;observed.stage=3;
+     observed.job=s.job->serial;observed.source=s.job->source;observed.current_read=s.current_read_source;
+     observed.initializer_phase=uint32_t(s.job->initializer_phase);
+     observed.initializer_ready=s.job->initializer_ready.load();observed.data_worker_ready=s.job->data_worker_ready.load();
+     observed.render_phase=uint32_t(s.render_phase);observed.publication=bool(s.job->publication);
+     observed.expected_count=uint32_t(s.expected.size());observed.expected_entered=(*expected)->entered;
+     observed.expected_returned=(*expected)->returned;observed.actual_function=at;
+     observed.caller_thread=frame->thread;observed.caller_pcr=frame->pcr;
+    }
     work->transport_only=(*expected)->transport_only;
     work->identity_continuation=(*expected)->identity_continuation;
     work->reference_release=(*expected)->reference_release;

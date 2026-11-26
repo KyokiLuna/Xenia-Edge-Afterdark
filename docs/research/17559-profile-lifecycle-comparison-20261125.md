@@ -1,7 +1,8 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V140's shared asynchronous initializer change builds and passes all
-seven direct test runs. Its actual dashboard/Guide regression now passes:
+Status: V141's opt-in sign-in observations build and pass all seven direct
+test runs. They change no guest behavior. V140's actual dashboard/Guide
+regression passed:
 visible first open, B close, dashboard input return, full reopen, Media
 navigation, second close and manual normal shutdown. Ordinary profile
 selection, game continuation, avatars, Editor and OSK remain unaccepted in
@@ -9,17 +10,27 @@ V140. Its Doritos retest rendered, canceled and reopened the native picker,
 then selected the intended existing profile. The test supervisor received
 SIGTERM before the continuation check and terminated Xenia. The signal's
 sender is unknown; this is not a recorded guest crash or native shutdown pass.
-No new AppImage or usable checkpoint is accepted; the combined HDD gate remains
-open. Historical results below keep their own scope.
+The subsequent V141 Doritos run stayed alive through the continuation check.
+Its native picker rendered, canceled, reopened and selected the existing
+profile, but a further A press left the title prompt unchanged. The selected
+issuer is a genuine readless native Task; another dispatcher classified as
+opaque prevented early initializer admission. After old-source retirement,
+the first remaining old-query condition was the listener producer's reference
+count, while old Work and Task-source descendants had drained. The other
+callback and listener references still need classification. Manual window
+close reached native exit 1 with full reaping and no forced signals; Avatar
+shutdown refused its current-root guard. This is not a clean shutdown pass.
+No new AppImage or usable checkpoint is accepted; the combined HDD gate
+remains open. Historical results below keep their own scope.
 This work follows the standing [systems approach and console fidelity
 rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The current tested V140 source map is
-`7f8ab81ca6f2b5b1f99b843ca3c3226e8a68006181d0234e85c4eac2e8cfbab5`
+The current tested V141 source map is
+`cdcce15efefb51200174e1dbc0476bad20e8d5b2327a43c1c727c7f84383a86f`
 (2,430 source files). All seven direct runs passed under receipt
-`891f26b3fa5f1acca6b22641379428483161c276f70e82bb84691b89905c13c0`.
+`3f7a24a6c3641c8db37d850b7743bcf993ab4ad8a6d011447bf2ebbcd60e4619`.
 They establish component coverage, not successful ordinary sign-in, avatar
 rendering, save persistence or a packaged AppImage. Historical V131 source and
 test identities remain in its labeled section below.
@@ -810,6 +821,54 @@ separate from that native acceptance question.
 | DCC lifecycle projection | `98b14121c15a27c8e233b3e5056ad5c5277db4e4364b6deb4e074f7567803bdb` |
 | Supervisor termination audit | `e720953917e42706b203b5174fcfb658694a03d0cd2850b113c5caeddf35ba6d` |
 | Root DCC scope assessment | `a1c5ba29d406688a32afa759186402d7b795ec010a3e887c9f62422821b2ee01` |
+
+## V141 diagnostic result and remaining ownership contracts
+
+The Owner-only change records first/final admission, actual PM call/entry and
+the first old-source Query cuts. Diagnostic payloads are disengaged when
+tracing is disabled. It adds no readiness grant, guest read, completion,
+thread, polling loop or functional fix. All seven direct runs passed with the
+same case/assertion counts as V140. The build embeds base `9fc9310`.
+
+The actual Doritos run used the existing isolated QA state and a virtual
+controller attached after a guest frame. Six completed neutral-ended input
+batches opened, canceled and reopened the native picker, navigated to the
+existing profile, accepted it, then tried to continue. The last two screenshots
+both showed Press A. An initial malformed controller command was rejected
+before dispatch; its helper exited and neutralized controls. The six valid
+batches used a new helper and completed before their screenshots.
+
+Both admission cuts authenticated the selected native dispatcher and actual
+Task, with `NormalOriginalCaller` refusal zero and Boot1 execution provenance.
+The first other-work census found Work 1404, another Boot1 dispatcher on
+thread 18, classified `kOpaqueExecution`. Its callback was not recorded, so
+neither an old-data conflict nor a lifetime-only exemption is established.
+The final immutable phase remained after-old-drain, with initializer readiness
+false; job 4 has no observed PM entry. The first source-retired Query evaluated
+bits `0x3FF`, with true bits `0x1FF`: old identity Work was empty and source 3
+Task descendants had closed, but `SourceOnlyProducer(old_event_origin)` was
+false. The exact retained queue/consumer references still need classification.
+These are observed boundaries, not proof that either check can be removed.
+
+The run did not reproduce the prior supervisor SIGTERM. An owned manual WM
+close at about 275 seconds reached actual exit 1, full leader reaping and no
+forced signals. Avatar shutdown passed its actual-frame check, then refused
+`RootCurrent(0x81674940)`. Its first failed *stage ordinal* is 2; the recorded
+value is not a predicate bit mask. Which root-current conjunct failed remains
+unrecorded. The later uncertainty records the unsuccessful shutdown result;
+it does not establish the cause of the earlier sign-in stall. Source,
+configuration, index, build products and read-only inputs remained unchanged.
+
+| V141 record | SHA256 |
+| --- | --- |
+| Source freeze | `1d7cae72830f267eafeadce45f8bf1d34b93ced46aff4b5ae2cead748c93432f` |
+| Independent source review | `f356dbfa51831c42f97961792f4ed0f715d05a12689507e5221b7e0749912f1f` |
+| Build | `bd66b42db84c5ff53879452f5eaac3c0353a15fa3ee8517679d1e6a08e8b8b32` |
+| All seven direct runs | `3f7a24a6c3641c8db37d850b7743bcf993ab4ad8a6d011447bf2ebbcd60e4619` |
+| ELF | `b1c892159dce328f36be327b1b6d5419188d7da9dd524ebc73c96894f1924807` |
+| Actual runtime result | `94d879441d82ac4e8c6d93111f70148f63158a036d54785a6c5fadc3bd7d133e` |
+| Source-validated admission/old-Query projection | `83e2843c8cca6358122dad221f81fbf1e26c8c0e02c0b13e6a5502034753f202` |
+| Root visual/controller/outcome assessment | `c8b9e47f345a2403e5babe2c85af327353f2adb0c227189f3e349fb2cf3efbcd` |
 
 ## Evidence
 

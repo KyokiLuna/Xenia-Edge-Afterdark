@@ -1259,6 +1259,26 @@ class NativeProfileIdentityTasks final {
     }
     return {};
   }
+  // Exact selected, still-entered generic dispatch metadata. This supplies
+  // execution identity/lifetime only, never a profile read or dataful grant.
+  // The concrete owner separately proves its actual code/module holders and
+  // any independently entered profile/read/Commit obligations.
+  std::optional<CurrentExecution> CaptureEnteredExecution(uint64_t serial,
+      Frame dispatcher,Birth birth) const noexcept {
+    const auto* node=FindBirthConst(birth.generation);
+    if(lost_ || !Match(dispatcher) || !node || !SameBirth(node->birth,birth) ||
+       !node->execution_only || birth.origin!=1 || node->freed || node->delete_entered ||
+       node->free_entered || node->execution_active!=serial)return {};
+    for(const auto& call:execution_dispatches_)if(call && call->serial==serial){
+      const uint32_t depth=dispatcher.function==0x816B8B08?0x70u:0x80u;
+      if(call->frame!=dispatcher || !SameBirth(call->birth,birth) || !call->selected ||
+         call->callback_returned || dispatcher.sp<depth)return {};
+      return CurrentExecution{root_,birth,serial,dispatcher,dispatcher.sp-depth,
+          call->callback,call->argument,
+          dispatcher.function==0x816B8B08?0x816B8B64u:0x816B7EA4u};
+    }
+    return {};
+  }
   // One exact identity-owned FC58001 operation. These are retained native
   // observations only: no method issues a read, writer, Task or completion.
   class IdentityServiceRequest final {

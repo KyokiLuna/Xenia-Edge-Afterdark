@@ -2356,6 +2356,10 @@ TEST_CASE("Committed roster metadata and canceled intents cannot retain an old r
   auto canceled = pm->PrepareRoster(RosterDesired({a.xuid, 0, 0, 0}), expected, error);
   REQUIRE(canceled);
   REQUIRE(pm->CancelRoster(canceled).phase == ProfileRosterPhase::kCanceled);
+  {const auto selected=ProfileSettingsReadTestAccess::SelectedAccount(*pm,a.xuid);REQUIRE(selected);
+   auto account_write=selected->identity()->EnterWrite(error);REQUIRE(account_write);REQUIRE_FALSE(error);account_write.reset();
+   const auto model=pm->AcquireProfileGpdModel(uint8_t(2),error);REQUIRE(model);
+   CHECK(model->AllocateRequestId(error));REQUIRE_FALSE(error);}
   auto display = pm->CaptureProfile(uint8_t(2)); REQUIRE(display);
   REQUIRE(pm->GetProfile(uint8_t(2)) == display.get()); // actual legacy TLS projection
   std::weak_ptr<const filesystem::ManagedVolumeAuthority> volume;
@@ -3636,7 +3640,35 @@ TEST_CASE("Native protocol commits selected maps without claiming image joins or
   CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(old_ticket, binding));
   CHECK_FALSE(ProfileSettingsReadTestAccess::Protocol(intent, binding));
   CHECK(ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol).error);
-  CheckRoster(pm, {b.xuid, 0, 0, 0}); a.Unchanged(); b.Unchanged();
+  // The actual notification EventLifetime may retain this intent after
+  // producer Finish. It owns metadata only, not Operation's write pauses.
+  const std::shared_ptr<const void> passive_event_intent=intent;
+  REQUIRE(passive_event_intent);REQUIRE(cell);REQUIRE(protocol);REQUIRE(joined);
+  const auto selected_account=ProfileSettingsReadTestAccess::SelectedAccount(pm,b.xuid);REQUIRE(selected_account);
+  auto account_write=selected_account->identity()->EnterWrite(error);
+  REQUIRE(account_write);REQUIRE_FALSE(error);account_write.reset();
+  auto selected_writer=pm.CaptureGpdWriter(b.xuid,error);REQUIRE(selected_writer.model==new_model);
+  ProfileGpdMutation ordinary;ordinary.kind=ProfileGpdMutationKind::kSetSetting;
+  ordinary.title_id=kDashboardID;ordinary.request_id=new_model->AllocateRequestId(error);
+  REQUIRE(ordinary.request_id);REQUIRE_FALSE(error);
+  ordinary.setting.emplace(static_cast<UserSettingId>(kReadScalar),int32_t(101));
+  const auto written=selected_writer.Submit(ordinary);
+  REQUIRE_FALSE(written.error);CHECK(written.state==ProfileGpdTransactionAttempt::State::kCommitted);
+  const auto selected_read=pm.CaptureGpdRead(uint8_t(0),error);REQUIRE(selected_read);
+  const auto setting=selected_read->Setting(kDashboardID,kReadScalar,error);REQUIRE(setting);REQUIRE_FALSE(error);
+  CHECK(std::get<int32_t>(setting->get_host_data())==101);
+  // A subsequent genuine preparation/cancellation releases its own pauses
+  // even while the earlier committed intent and old closed ticket remain held.
+  auto after=pm.CaptureRosterExpected(error);REQUIRE(after.roster);REQUIRE_FALSE(error);
+  const auto canceled=pm.PrepareRoster(RosterDesired({b.xuid,0,0,0}),after,error);REQUIRE(canceled);
+  REQUIRE(pm.CancelRoster(canceled).phase==ProfileRosterPhase::kCanceled);
+  account_write=selected_account->identity()->EnterWrite(error);REQUIRE(account_write);REQUIRE_FALSE(error);account_write.reset();
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(old_ticket,binding));
+  CHECK_FALSE(old_model->AllocateRequestId(error));REQUIRE(error);
+  CheckRoster(pm, {b.xuid, 0, 0, 0});a.Unchanged();
+  CHECK(ReadFixtureDisk(b.path/"Account")==b.account);
+  CHECK(ReadFixtureDisk(b.path/"1234ABCD.gpd")==b.title);
+  CHECK(ReadFixtureDisk(b.path/"FFFE07D1.gpd")!=b.dashboard);
 }
 TEST_CASE("Empty native alignment requires actual unchanged row owners and protocol map writer commitment",
           "[kernel][profile][roster][native][empty_initial_frame]") {

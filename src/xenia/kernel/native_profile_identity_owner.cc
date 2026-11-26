@@ -2036,10 +2036,25 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
     return ReentrantWorkConflict::kBorrowedRead;
    return ReentrantWorkConflict::kNone;
   }
-  // Task metadata never certifies its callback. The actual dispatch/callback
-  // has a distinct whole record and remains incompatible while it is opaque.
-  if(work.frame.function==0x816B8B08 || work.frame.function==0x816B7DE8 ||
-     (work.execution_only && (!work.execution_code_proven || !CommonTaskFunction(work.frame.function))))
+  // A generic Task/module holder is not an OLD profile read or an immutable
+  // guest-cache transaction. The native queued initializer only copies NEW
+  // request storage and provisional scalars; real nested readers/writers keep
+  // their separate Work/scopes and the later E148/C838 dataful drain. Waiting
+  // for an unrelated event-loop callback to return would not serialize those
+  // native accesses (and the actual dataful drain already excludes this lane).
+  if(work.frame.function==0x816B8B08 || work.frame.function==0x816B7DE8){
+   const auto selected=tasks.CaptureEnteredExecution(work.execution_dispatch,work.frame,work.birth);
+   const auto& target=work.execution_target;const auto& lifetime=work.execution_lifetime;
+   if(!work.execution_only || work.source!=kBootUnjoinedSource || !work.execution_code_proven ||
+      work.execution_read.owner() || work.execution_read.scope() || !selected ||
+      !target || !lifetime || lifetime->uncertain || lifetime->native_freed ||
+      !Tasks::SameBirth(lifetime->birth,work.birth) || selected->callback!=target->callback ||
+      !target->code.module || !target->code.lease || !target->code.load_generation ||
+      target->code.module->load_generation()!=target->code.load_generation)
+    return ReentrantWorkConflict::kOpaqueExecution;
+   return ReentrantWorkConflict::kNone;
+  }
+  if(work.execution_only && (!work.execution_code_proven || !CommonTaskFunction(work.frame.function)))
    return ReentrantWorkConflict::kOpaqueExecution;
   if(CommonTaskFunction(work.frame.function))return ReentrantWorkConflict::kNone;
   if(work.transport_unclaimed){
@@ -2155,8 +2170,8 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  }
  // The selected readless issuer is compatible only after NormalOriginalCaller
  // proves its actual execution and complete ancestry. Every OTHER operation
- // keeps the existing native access/lifetime classification; a dispatcher name
- // alone never exempts an opaque callback or an old-data writer.
+ // keeps the native effect/read ownership classification; a dispatcher name
+ // alone never certifies execution identity or exempts an old-data writer.
  bool InitializerOtherWorkCompatible(const std::shared_ptr<Work>& issuer,
      OriginalLogonDiagnostic* diagnostic=nullptr,InitializerObservation* observed=nullptr) const {
   if(observed && observed->enabled){observed->other_evaluated=1;observed->other_compatible=1;}
@@ -7145,9 +7160,10 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
       d.job=s.job->serial;d.source=s.job->source;d.current_read=s.current_read_source;
       d.origin=s.job->old_event_origin->serial;d.phase=uint32_t(s.render_phase);detail=&d.data;
      }
-     // SAME original predicate, evaluated only at its original short-circuit
-     // position. Optional census cannot alter its returned refs==1 result.
-     const bool actual=s.listeners->SourceOnlyProducer(*s.job->old_event_origin,detail,bool(detail));
+     // Same OLD data-quiescence policy at Query and pre-dataful grant.
+     // Passive authenticated public-A pins keep their exact lifetime; the
+     // optional census does not alter this real ownership predicate.
+     const bool actual=s.listeners->OldSourceDataQuiescent(*s.job->old_event_origin,detail,bool(detail));
      if(detail)old_listener->actual_result=actual;return actual;
     };
     if(observation.Old(0,s.render_phase==State::RenderPhase::kDrainingOld) && observation.Old(1,source_retired) &&
@@ -7798,7 +7814,7 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   observation.Begin(PaintStage::kWakeSourceListener);job->preentry_source_blockers[1]={};
   if(observed(PaintStage::kWakeSourceListener,0,!s.wake->InvocationsDrained(pending)) || observed(PaintStage::kWakeSourceListener,1,!s.tasks.SourceDescendantsClosed(s.current_read_source,&job->preentry_source_blockers[1])) ||
      observed(PaintStage::kWakeSourceListener,2,!job->old_event_origin) ||
-     observed(PaintStage::kWakeSourceListener,3,!s.listeners->SourceOnlyProducer(*job->old_event_origin))){
+     observed(PaintStage::kWakeSourceListener,3,!s.listeners->OldSourceDataQuiescent(*job->old_event_origin))){
    observation.Finish(PaintStage::kWakeSourceListener,false);return true;
   }
   observation.Finish(PaintStage::kWakeSourceListener,true);

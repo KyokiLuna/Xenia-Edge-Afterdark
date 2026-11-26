@@ -1,8 +1,13 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V142's opt-in ownership observations build and pass all seven direct
-test runs. They change no guest behavior. V140's actual dashboard/Guide
-regression passed:
+Status: V144's shared ownership correction builds and passes all seven direct
+test runs. Its actual Doritos retest reaches the original initializer, PM,
+protocol return and CompleteIO instead of stalling before those operations.
+Sign-in still returns native extended error `0x80150013`; subsequent input
+reaches the dashboard's Available Networks screen, then dashboard Home.
+Game continuation has not passed. The real error producer, loader metadata
+handoff and UI/refresh lifecycle are the next system boundary under review.
+V140's historical actual dashboard/Guide regression passed:
 visible first open, B close, dashboard input return, full reopen, Media
 navigation, second close and manual normal shutdown. Ordinary profile
 selection, game continuation, avatars, Editor and OSK remain unaccepted in
@@ -18,10 +23,11 @@ more destructive dataful join, yet prevents early initializer admission. The
 old listener's three references are exactly its producer and two authenticated
 passive public-A notification queues, without active/unknown/orphan/whole-work
 consumers. These are lifetime dependencies, not evidence of an old-profile
-read. The shared classification correction is being implemented; it is not
-applied or accepted yet. V141's manual close failed at the Avatar current-root
-guard; V142 exited zero with full reaping and no forced signals. That single
-normal exit does not establish a fix for the earlier Avatar refusal.
+read. V144 corrects both shared predicates while retaining actual readers,
+writers, causal pins and dataful completion duties. V141's manual close failed
+at the Avatar current-root guard; V142 and V144 exited zero with full reaping
+and no forced signals. Normal exits do not establish a fix for the earlier
+Avatar refusal or every shutdown branch.
 No new AppImage or usable checkpoint is accepted; the combined HDD gate
 remains open. Historical results below keep their own scope.
 This work follows the standing [systems approach and console fidelity
@@ -29,10 +35,10 @@ rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The current tested V142 source map is
-`6dae151fe6c50efa9d3292448a007438a92c33fe8b696b94643f79a4ca08e68d`
+The current tested V144 source map is
+`7e98afb83be13bbb714af605d1bae4bd6f63f63314d2a5dc7356d2a82c06acdb`
 (2,430 source files). All seven direct runs passed under receipt
-`2eb9bcf7e80a2d6289aafe6fe450b6dc4fe6ed4dca869c4e58bfd4ab3787d261`.
+`837c79fafd426eb2be7d578530fd52e41569d59a4d834ff0b002d37d026b0bbb`.
 They establish component coverage, not successful ordinary sign-in, avatar
 rendering, save persistence or a packaged AppImage. Historical V131 source and
 test identities remain in its labeled section below.
@@ -935,6 +941,65 @@ of every Avatar shutdown branch or a functional fix for V141's refusal.
 | Native synchronization contract | `f024ec2087a22b0e6d99b2043107dcdb576b2f8a66fff2f0b0a88d2faf809a11` |
 | Actual callback/old-origin/downstream contract | `ad7b45d8972a7634ebe92a5419b699636a702c4d7c7a880562e56372ac7749d3` |
 | Root controller/visual/shutdown assessment | `bd75f584c8064fd10cfcd39b8551195f8b46aa2af70486999821ce191a790975` |
+
+## V144 shared ownership correction and actual completion error
+
+The initializer now distinguishes an exactly identified, still-entered Boot1
+generic dispatch lifetime from an actual old-profile read or cache writer.
+The existing Task birth, dispatch, callback, module generation and retained
+code lease must agree. This is a shared execution contract, not a whitelist
+for the observed callback. Independently entered read, Commit, structural and
+host writer duties continue to block the corresponding phases.
+
+Both OLD listener cuts now accept the exact quiescent producer plus typed
+public-A scalar queue pins under the existing bridge mutex. Active fast
+cells, untyped queues, orphaned delivery, real whole consumers and unaccounted
+references still refuse. No queue, causal pin or native completion is
+discarded. Producer Finish and actual final reaping remain separate.
+
+The first build caught a private-access error in the new listener test. A
+test-only correction exercises the existing real delivery/reap path without
+expanding production visibility. The corrected build passed every direct
+run: base 334 cases / 28,711 assertions; network 125 / 11,212; kernel 1,483 /
+95,064; VFS 136 / 9,736; UI 124 / 4,863; focused CPU 5 / 130; installed-system
+focus 214 / 25,209. The installed-system focus overlaps the full kernel suite;
+these are not summed as independent coverage. The complete CPU corpus was
+not run.
+
+The actual Doritos run opened, canceled, reopened and navigated the native
+picker with the default late-attached virtual pad. Selecting the existing
+profile and pressing A again advanced beyond the previous ownership barriers.
+The saved protocol projection proves both corrected predicates passed: OLD
+Query evaluates and satisfies all 11 predicates, its three refs remain the
+producer plus two typed queues, and the other execution is compatible. The
+real initializer enters and returns zero; PM and the expected PPC entry are
+reached. Actual CompleteIO enters and returns with error `0x65B`, extended
+error `0x80150013`, length zero. The protocol also returns `0x80150013`.
+This is a genuine guest failure, not successful sign-in. The saved readiness
+window first fails at render-refresh observation. Final immutable event
+analysis and the producer/consumer review remain distinct follow-up work.
+
+Screenshots show Available Networks, followed by Home after B. Owned window
+metadata confirms an actual title change from Doritos `58410A71` to dashboard
+`FFFE07D1` in the same process/window. This does not prove successful game
+continuation or identify the precise HRESULT-producing branch. The original
+600-second test timer requested an owned normal WM close; actual exit was zero
+at 604.89 seconds, with full leader reaping and no forced signals. The actor's
+record confirms neutral cleanup and close; its PTY terminal status was not
+available and is not invented. Inputs, source and build products remained
+preserved. No new AppImage was produced.
+
+| V144 record | SHA256 |
+| --- | --- |
+| Functional ownership source freeze | `20177199e7c4df8ba5456253f8296153f136a3c80fae19b4186da45edd59809f` |
+| Functional source review | `065b6624ae2e3eb0c14189aeda2422768bece8b8f7e7088720e5b3d970327b9e` |
+| Test-only correction source freeze | `a1e1ad899d46b88c7d1ae1179bf3982759d80df9abebf51d9e77e6d4a6911459` |
+| Test-only correction review | `a386d1308b6f898fd4d9ac4fabbb3ed832e4f4b16be84d6628316f648cc8c9d8` |
+| Build | `0b7aafb3b937cf1b5e18e1f848d018af338e42fca18ef0b7d6269694574f8cdc` |
+| All seven direct runs | `837c79fafd426eb2be7d578530fd52e41569d59a4d834ff0b002d37d026b0bbb` |
+| ELF, compiled base `a8201d7f0d` | `2890f67e932b8dd6053bea40518467695e512f39915479d3a7471bcdeff59ee3` |
+| Saved bounded live protocol projection | `29dad313a3c00fb1fe05ad10317a010d993b95bfb798f037b8c81b97b44759fe` |
+| Root controller/visual/shutdown assessment | `da3f2ac1ef4c65568fb41119cdbdd4f2477880ab3b58206819183dbfab3908ba` |
 
 ## Evidence
 

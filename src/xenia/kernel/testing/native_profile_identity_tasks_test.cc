@@ -63,6 +63,7 @@ class NativeProfileIdentityTaskTestAccess final {
   static void ExecutionBeforeProducerReturn();
   static void ExecutionInlineUsesOriginalChildBirth();
   static void ExecutionOpaqueModifyAndActualOperands();
+  static void EnteredExecutionLifetimeNotProfileData();
   static void ExecutionFreeReuseRetainsOldFrames();
   static void ExecutionRefusalsStayLocal();
   static void ExecutionCanceledSkipAndMissingReturn();
@@ -1796,6 +1797,46 @@ void NativeProfileIdentityTaskTestAccess::ExecutionInlineUsesOriginalChildBirth(
   ExecutionFree(ledger,*born);CHECK(ledger.ExecutionClosed());CHECK_FALSE(ledger.lost());
  }
 }
+void NativeProfileIdentityTaskTestAccess::EnteredExecutionLifetimeNotProfileData(){
+ for(const auto dispatcher_fn:{0x816B8B08u,0x816B7DE8u}){CAPTURE(dispatcher_fn);
+  Ledger ledger(root);const auto made=ExecutionAllocate(ledger,0x404E0BF0);
+  REQUIRE(ledger.ReturnExecutionProducer(made.producer,made.frame,0));
+  const auto dispatcher=F(dispatcher_fn,0x7080F000,0x816B93FC);
+  const auto invocation=ledger.BeginExecutionDispatch(dispatcher,made.birth);REQUIRE(invocation);
+  CHECK_FALSE(ledger.CaptureEnteredExecution(invocation,dispatcher,made.birth));
+  auto body=dispatcher;body.sp-=dispatcher_fn==0x816B8B08?0x70u:0x80u;
+  body.lr=dispatcher_fn==0x816B8B08?0x816B8B48u:0x816B7E90u;
+  REQUIRE(ledger.ExecutionCallbackSelected(invocation,body,made.birth.task,0x81709178,0xDEADBEEF));
+  auto selected=ledger.CaptureEnteredExecution(invocation,dispatcher,made.birth);REQUIRE(selected);
+  CHECK(selected->callback==0x81709178);CHECK(selected->argument==0xDEADBEEF);
+  CHECK(selected->dispatcher==dispatcher);CHECK(selected->invocation==invocation);
+  CHECK(ledger.IsExecutionSubject(made.birth.generation));
+  // This real generic execution retains Boot1 lifetime, not an unrelated
+  // published profile source or a typed profile callback/read capability.
+  CHECK(made.birth.origin==1);CHECK(ledger.SourceDescendantsClosed(3));
+  CHECK_FALSE(ledger.IsProfileTransportSubject(made.birth.generation));
+  for(uint32_t fault=0;fault<7;++fault){CAPTURE(fault);auto wrong=dispatcher;auto birth=made.birth;
+   if(fault==0)++wrong.root.generation;if(fault==1)++wrong.thread;if(fault==2)wrong.pcr+=4;
+   if(fault==3)wrong.sp-=0x10;if(fault==4)++birth.generation;
+   if(fault==5)birth.task+=0x50;if(fault==6)birth.origin=3;
+   CHECK_FALSE(ledger.CaptureEnteredExecution(invocation,wrong,birth));
+  }
+  const auto cancel=F(0x816B9F08,0x7080E000,0x90117810);
+  REQUIRE(ledger.BeginExecutionControl(cancel,made.birth));REQUIRE(ledger.ReturnExecutionControl(cancel,made.birth));
+  CHECK(ledger.CaptureEnteredExecution(invocation,dispatcher,made.birth));
+  CHECK_FALSE(ledger.ReturnExecutionDispatch(invocation,dispatcher,made.birth));
+  body.lr=dispatcher_fn==0x816B8B08?0x816B8B64u:0x816B7EA4u;
+  REQUIRE(ledger.ExecutionCallbackReturned(invocation,body,made.birth.task,9));
+  CHECK_FALSE(ledger.CaptureEnteredExecution(invocation,dispatcher,made.birth));
+  REQUIRE(ledger.ReturnExecutionDispatch(invocation,dispatcher,made.birth));
+  ExecutionFree(ledger,made.birth);
+  const auto replacement=ExecutionAllocate(ledger,made.birth.task);
+  CHECK(replacement.birth.generation!=made.birth.generation);
+  CHECK_FALSE(ledger.CaptureEnteredExecution(invocation,dispatcher,made.birth));
+  REQUIRE(ledger.ReturnExecutionProducer(replacement.producer,replacement.frame,0));
+  ExecutionFree(ledger,replacement.birth);CHECK(ledger.ExecutionClosed());CHECK_FALSE(ledger.lost());
+ }
+}
 void NativeProfileIdentityTaskTestAccess::ExecutionOpaqueModifyAndActualOperands(){
  Ledger ledger(root);const auto made=ExecutionAllocate(ledger,0x404E0BF0,0,0,true);
  REQUIRE(ledger.ReturnExecutionProducer(made.producer,made.frame,0,made.birth.task|1u));
@@ -2033,6 +2074,9 @@ TEST_CASE("Common native Task metadata records opaque callback execution before 
 }
 TEST_CASE("Common inline Task execution observes its real child birth and native loaded operands", "[identity_task][execution][inline]"){
  NativeProfileIdentityTaskTestAccess::ExecutionInlineUsesOriginalChildBirth();
+}
+TEST_CASE("Entered generic dispatch lifetime preserves exact identity without pinning profile data", "[identity_task][execution][phase_ownership]"){
+ NativeProfileIdentityTaskTestAccess::EnteredExecutionLifetimeNotProfileData();
 }
 TEST_CASE("Common Task Modify preserves independent fields and actual loaded callback operands", "[identity_task][execution][modify]"){
  NativeProfileIdentityTaskTestAccess::ExecutionOpaqueModifyAndActualOperands();

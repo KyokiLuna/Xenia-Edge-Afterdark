@@ -277,7 +277,7 @@ class NativeIdentityListenerBridge final {
     for (const auto& source:sources_) if (source && source->source_serial_==serial) return source;
     return {};
   }
-  enum class SourceProducerRequirement:uint32_t {kOnlyReference=0,kCurrentQuiescent=1};
+  enum class SourceProducerRequirement:uint32_t {kOnlyReference=0,kCurrentQuiescent=1,kOldDataQuiescent=2};
   struct OrphanObservation {
     Origin origin;uint64_t enqueue_sequence=0,consumer_work_hint=0;
     uintptr_t context=0,thread_state=0,kernel=0;
@@ -377,7 +377,24 @@ class NativeIdentityListenerBridge final {
         observation->orphan_outer_return=orphan.outer_return.load(std::memory_order_acquire);
       }
     }
-    return observed(6,!orphaned) && observed(7,SourceConsumersQuiescent(origin,observation));
+    if(!(observed(6,!orphaned) && observed(7,SourceConsumersQuiescent(origin,observation))))return false;
+    if(requirement!=SourceProducerRequirement::kOldDataQuiescent)return true;
+    // SourceConsumersQuiescent excluded EVERY active fast cell under this
+    // existing mutex; native queue mutation/Work admission cannot now race.
+    // A public A carries only a four-slot scalar hint, not a frozen read view.
+    // Keep every pin: a later real dequeue gains its own causal dependency,
+    // never an old ticket. Untyped/coalesced replacements remain unresolved.
+    uint64_t queued=0;
+    const auto typed_queues=[&](){
+      for(const auto& listener:ledger_.listeners_)for(const auto& entry:listener.events){
+        if(entry.origin!=origin)continue;
+        if(entry.kind!=Ledger::Event::Kind::kQueued || !entry.identity_hint ||
+           entry.id!=0xA || entry.data>0xFu)return false;
+        ++queued;
+      }
+      return true;
+    };
+    return observed(8,typed_queues()) && observed(9,references==1+queued);
   }
   // Caller owns mutex_. Fast dependency writers must own an active cell;
   // registration/withdrawal and all host Work mutations also own mutex_.
@@ -405,6 +422,14 @@ class NativeIdentityListenerBridge final {
   bool SourceOnlyProducer(Origin origin,SourceProducerObservation* observation=nullptr,bool capture_ownership=false) {
     return ObserveSourceProducer(origin,SourceProducerRequirement::kOnlyReference,observation,capture_ownership);
   }
+  // OLD source data access has drained, while authenticated scalar public-A
+  // queues may still retain causal metadata/code. Exact reference accounting
+  // excludes every other pin; actual/unknown whole readers, orphaned delivery,
+  // active native fast calls and untyped queued events still refuse. This is
+  // not producer completion, a read ticket, a new source or a pixel grant.
+  bool OldSourceDataQuiescent(Origin origin,SourceProducerObservation* observation=nullptr,bool capture_ownership=false) {
+    return ObserveSourceProducer(origin,SourceProducerRequirement::kOldDataQuiescent,observation,capture_ownership);
+  }
   // A NEW source remains current after reveal. Passive queue pins keep
   // their lifetimes; actual/unknown whole consumers, orphaned consumption and
   // active fast calls still refuse this factual quiescence check. It supplies
@@ -412,6 +437,10 @@ class NativeIdentityListenerBridge final {
   bool SourceProducerQuiescent(Origin origin,SourceProducerObservation* observation=nullptr) {
     return ObserveSourceProducer(origin,SourceProducerRequirement::kCurrentQuiescent,observation);
   }
+  // The owner independently joined the genuine producer Task/wake/dataful
+  // operation. Finish only its producer pin; passive queues and any separately
+  // entered consumers keep exact origin resources until real transfer/reap.
+  // Do not require intent destruction or discard queued events here.
   bool FinishSourceAfterDescendants(Origin origin) {
     std::lock_guard lock(mutex_);
     if (!SourceFor(origin)) { Lose(__LINE__,2);return false; }

@@ -46,6 +46,7 @@ class NativeProfileIdentityTaskTestAccess final {
   static void ExecutionFree(Ledger&,Birth,uint32_t=0x7080F000);
   struct IdentityServiceFixture;
   static void IdentityServiceProducerAndCopyAbi();
+  static void IdentityServiceProfileOutputTransport();
   static void IdentityServiceAcceptanceAndPumpAbi();
   static void IdentityServicePrebodyAdoptionAndPendingTicks();
   static void IdentityServiceTerminalBeforeTailJoins();
@@ -2606,12 +2607,15 @@ struct NativeProfileIdentityTaskTestAccess::IdentityServiceFixture {
  struct Dispatch {Frame outer,body,frame;Ledger::CurrentExecution current;uint64_t serial=0;};
  Ledger ledger{root};Service service;Service::Origin origin{};Service::Copy copy{};Service::Pump pump{};
  ExecutionBorn request_task{},pump_task{};Frame acceptance{};
- IdentityServiceFixture(){
+ explicit IdentityServiceFixture(std::optional<Ledger::ProfileOutput> output={}){
   origin.worker=F(0x8199C838,0x708A0000,0x816B8B64);
-  origin.worker_birth=Allocate(ledger,3,0x414E0000);
+  if(output){
+   const auto owner=F(0x8199E3E0,0x707DFCF0,0x90103544);
+   origin.worker_birth=ProfileAllocateWithOutput(ledger,owner,401,0x8199C838,0x414E0000,*output,true,nullptr);
+  }else origin.worker_birth=Allocate(ledger,3,0x414E0000);
   origin.producer=origin.worker;origin.producer.function=0x81830878;
   origin.producer.sp-=0xBC0;origin.producer.lr=0x8199C488;
-  origin.job=401;origin.source=3;origin.work=501;origin.object=0x81AEE470;
+  origin.job=401;origin.source=origin.worker_birth.origin;origin.work=501;origin.object=0x81AEE470;
   origin.parameters=origin.worker.sp-0x370;origin.flags=4;
   request_task=Born(0x404E5000,0x816A2C80,0x414E1000,0x816A2EC8);
   pump_task=Born(0x404E6000,0x818CEFD8,origin.object,0x818CF164);
@@ -2672,7 +2676,7 @@ struct NativeProfileIdentityTaskTestAccess::IdentityServiceFixture {
 
 void NativeProfileIdentityTaskTestAccess::IdentityServiceProducerAndCopyAbi(){
  IdentityServiceFixture f;using Service=IdentityServiceFixture::Service;
- for(unsigned which=0;which<17;++which){
+ for(unsigned which=0;which<21;++which){
   auto wrong=f.origin;
   switch(which){
    case 0:wrong.worker.root.generation++;break;
@@ -2691,7 +2695,11 @@ void NativeProfileIdentityTaskTestAccess::IdentityServiceProducerAndCopyAbi(){
    case 13:wrong.rows=0x41000000;break;
    case 14:wrong.parameters+=4;break;
    case 15:wrong.flags=0x14;break;
-   default:wrong.overlap=0x41000000;break;
+   case 16:wrong.overlap=0x41000000;break;
+   case 17:wrong.worker_birth.task=0;break;
+   case 18:wrong.worker_birth.task+=1;break;
+   case 19:wrong.worker.thread=0;break;
+   default:wrong.worker.sp=0xB80;break;
   }
   Service rejected;CHECK_FALSE(rejected.Begin(wrong));REQUIRE(rejected.Begin(f.origin));
  }
@@ -2718,6 +2726,41 @@ void NativeProfileIdentityTaskTestAccess::IdentityServiceProducerAndCopyAbi(){
  f.BeginCopy();f.Accept();auto d=f.Start();const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
  f.Complete(*tick);REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
  REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK(f.service.ready_to_reap());f.Finish();
+}
+
+void NativeProfileIdentityTaskTestAccess::IdentityServiceProfileOutputTransport(){
+ using Service=IdentityServiceFixture::Service;
+ const auto owner=F(0x8199E3E0,0x707DFCF0,0x90103544);
+ const auto schedule=F(0x816BA440,owner.sp-0x190,0x8199F01C);
+ // Canonical bootstrap and public synchronous 224 have this same native stack
+ // output ABI. Public asynchronous 224 instead owns an FE packet. Neither
+ // public overlap is the later FC service's private native overlap.
+ for(const bool asynchronous:{false,true}){
+  const uint32_t packet=asynchronous?0x40172000:0;
+  const uint32_t overlap=asynchronous?0x40173000:0;
+  const uint32_t output=asynchronous?packet+0x18:schedule.sp+0x5C;
+  const std::array<uint32_t,3> linkage=asynchronous?
+      std::array<uint32_t,3>{0xFE,overlap,packet}:std::array<uint32_t,3>{};
+  const auto proof=Ledger::CaptureProfileOutput(owner,schedule,output,overlap,packet,linkage);REQUIRE(proof);
+  IdentityServiceFixture f(*proof);
+  const auto* produced=f.ledger.ProfileProducerFor(f.origin.worker_birth);REQUIRE(produced);
+  CHECK(produced->owner==owner);CHECK(produced->schedule==schedule);
+  CHECK(produced->callback==0x8199C838);CHECK(produced->output_proof==*proof);
+  CHECK(produced->schedule_returned);CHECK(f.origin.source==f.origin.worker_birth.origin);
+  CHECK(f.copy.overlap!=overlap);CHECK(f.copy.overlap==f.origin.producer.sp-0x670);
+  Service rejected;auto foreign=f.origin;foreign.worker_birth.origin++;
+  CHECK_FALSE(rejected.Begin(foreign));CHECK_FALSE(f.service.ready_to_reap());
+  CHECK_FALSE(f.ledger.SourceDescendantsClosed(f.origin.source));
+  f.BeginCopy();f.Accept();auto d=f.Start();
+  const auto tick=f.service.EnterTick(d.frame,f.pump,d.current);REQUIRE(tick);
+  CHECK_FALSE(f.service.ready_to_reap());f.Complete(*tick);
+  CHECK_FALSE(f.service.ready_to_reap());
+  REQUIRE(f.service.ReturnTick(*tick,d.frame,f.pump.birth));f.End(d);
+  CHECK_FALSE(f.service.ready_to_reap());
+  REQUIRE(f.service.ReturnProducer(f.origin.producer));CHECK(f.service.ready_to_reap());
+  CHECK_FALSE(f.ledger.SourceDescendantsClosed(f.origin.source));
+  f.Finish();CHECK(f.ledger.SourceDescendantsClosed(f.origin.source));
+ }
 }
 
 void NativeProfileIdentityTaskTestAccess::IdentityServiceAcceptanceAndPumpAbi(){
@@ -2896,6 +2939,10 @@ void NativeProfileIdentityTaskTestAccess::IdentityServiceBusyCancelAndActualStop
 TEST_CASE("Identity service authenticates original producer and copied native request ABI",
           "[identity_task][identity_service][abi]"){
  NativeProfileIdentityTaskTestAccess::IdentityServiceProducerAndCopyAbi();
+}
+TEST_CASE("Identity service preserves native ownership across stack and asynchronous logon outputs",
+          "[identity_task][identity_service][identity_request_lifecycle][abi][lifetime]"){
+ NativeProfileIdentityTaskTestAccess::IdentityServiceProfileOutputTransport();
 }
 TEST_CASE("Identity service accepts only the exact request and real pump dispatch",
           "[identity_task][identity_service][abi][race]"){

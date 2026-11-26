@@ -433,6 +433,45 @@ The separate closed-file IO checkpoint and logical STFS producer remain private
 work. Their candidate reviews do not establish native controls, formatting,
 profile save, avatars or media acceptance. No new AppImage has been produced.
 
+## V135 canonical service ownership and actual retest
+
+Canonical bootstrap and public synchronous/asynchronous logon reach the same
+native service producer. An optional public request observation is transport
+metadata, not the authority for that producer. V135 removes that additional
+requirement while retaining the actual live Task, source, writer read, Commit,
+publication, roster and argument checks. Focused lifecycle coverage also
+distinguishes native stack output from the asynchronous Task allocation output.
+
+The build and all seven direct runs passed. The full suites contain 2,190 cases
+and 147,822 assertions; the overlapping focused CPU and installed runs contain
+5/130 and 202/23,537 respectively. The actual compilation base is `cf3846a9`.
+These results do not establish native Guide, profile save or avatar acceptance.
+
+The isolated dashboard rendered with its remembered test user. Opening Guide
+produced a visibility notification but no visible overlay. B followed by Right
+did not establish input return. The new bounded probe positively reached
+`0x81830878` with an available Task and domain and canonical Job/source 3, but
+stopped at stage 2: an existing ownership predicate refused the service Origin.
+The exact failed conjunct is not recorded. This is not evidence of an accepted
+FC request or a pending FC wait, and does not justify weakening the remaining
+checks. Mapped producer arguments and stack offsets agree with those checks.
+
+RSS remained between 686.7 and 700.2 MiB after warm-up during the 148.56-second
+run. Root closed the owned window normally. All processes were reaped without
+forced signals, but native Bootstrap join timed out and the process exited one;
+native shutdown therefore still fails. Source, configuration, products, index
+and checked installed-system inputs remained unchanged. Game, Avatar Editor and
+packaged AppImage acceptance remain untested for this candidate. No checkpoint
+AppImage has been produced.
+
+| V135 record | SHA256 |
+| --- | --- |
+| Tested source map | `856c0747ef4ad1824590c935c8377739aae0b22ef87b8ce79b86587a0af08d2b` |
+| Build | `c67e898ef7f1404d5d88d754ce5b599ba019ce2478404fa44e6877d31ebfb53a` |
+| All seven direct runs | `ca3a4acafff1d4b783866224b57ec0a7c17b870beb9b75afb4c850362fec3ebb` |
+| ELF | `e15655eff5310b53dfc96e50e81517936d46f20e540ad8e2daaaac20ddef73a6` |
+| Root native assessment | `e4c234a1a4cd20658f3b5c496439ae7d7804a6ecfd2b710974779f7a07abc502` |
+
 ## Evidence
 
 Detailed local evidence is retained under `evidence/hdd-gate` in the research

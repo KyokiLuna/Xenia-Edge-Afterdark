@@ -2869,13 +2869,35 @@ void NativeProfileIdentityOwner::ObserveIdentityServiceBoundary(void* raw,uint32
  if(global_critical_region::is_held_by_current_thread())return;
  const auto frame=s.ReadFrame(c,at,false,nullptr,true);if(!frame || !CheckIdentityServiceCode(*s.config.catalog->calls()))return;
  if(at==0x81830878 && !returned){
+  // Trace only this existing producer cut. Declared before State's lock so
+  // emission happens after it unwinds, including on an admission refusal.
+  // No additional native reads, scans, locks or service authority.
+  struct ProducerTrace {
+   bool enabled;uint32_t stage=1,task_available=0,domain_available=0,public_original=0;
+   uint64_t job=0,source=0;
+   ~ProducerTrace() noexcept {
+    if(!enabled)return;
+    static NativeSystemUiTraceLimiter trace;
+    trace.EmitTransition((job<<3)^stage,"identity","service_producer_cut",
+      {{"producer",0x81830878},{"stage",stage},{"task_available",task_available},
+       {"domain_available",domain_available},{"job_serial",job},{"job_source",source},
+       {"public_original",public_original}});
+   }
+  } observed{cvars::native_system_ui_trace};
   const auto task=NativeProfileIdentityTaskContext::Read(*s.config.catalog->calls(),*s.config.domain,at,c);
+  if(observed.enabled)observed.task_available=bool(task);
   auto data=std::make_shared<IdentityServiceOrigin::Data>();data->state=owner->state_;
   data->code=s.root_code;data->domain=s.config.domain->Acquire();
+  if(observed.enabled)observed.domain_available=bool(data->domain);
   if(!data->domain || !task)return;
   std::shared_ptr<IdentityServiceOrigin> origin(new IdentityServiceOrigin(data));
   std::lock_guard lock(s.mutex);const auto worker=s.Latest(frame->thread,0x8199C838);const auto job=s.job;
-  if(s.stopping.load() || s.retired.load() || s.uncertain.load() || s.identity_service || !job || !job->original ||
+  if(observed.enabled){observed.stage=2;if(job){observed.job=job->serial;
+   observed.source=job->source;observed.public_original=bool(job->original);}}
+  // Canonical bootstrap and public sync/async logon share this native C838
+  // producer. The retained Task/source, writer read and Commit below prove
+  // ownership; the optional public input observation is not that authority.
+  if(s.stopping.load() || s.retired.load() || s.uncertain.load() || s.identity_service || !job ||
      !job->native_entered || !job->data_worker_ready || job->execution_uncertain || !worker ||
      worker->normal_return || worker->uncertain || worker->source!=job->source || !worker->read || !worker->commit ||
      worker->read_pool!=&job->writer_reads || worker->commit->intent!=job->intent ||
@@ -2884,10 +2906,13 @@ void NativeProfileIdentityOwner::ObserveIdentityServiceBoundary(void* raw,uint32
      !job->intent->old_roster() || job->intent->old_roster()!=s.current_roster ||
      !DwordIs(c.r[3],0) || !DwordIs(c.r[4],worker->frame.sp-0x370) ||
      !DwordIs(c.r[5],4) || !DwordIs(c.r[6],0))return;
+  if(observed.enabled)observed.stage=3;
   Tasks::IdentityServiceRequest::Origin facts{worker->frame,*frame,worker->birth,job->serial,job->source,
       worker->serial,0x81AEE470,0,uint32_t(c.r[4]),4,0};
   if(!data->request.Begin(facts))return;
-  data->job=job;data->worker=worker;s.identity_service=std::move(origin);return;
+  data->job=job;data->worker=worker;s.identity_service=std::move(origin);
+  if(observed.enabled)observed.stage=4;
+  return;
  }
  std::shared_ptr<IdentityServiceOrigin> origin;
  {std::lock_guard lock(s.mutex);origin=s.identity_service;}

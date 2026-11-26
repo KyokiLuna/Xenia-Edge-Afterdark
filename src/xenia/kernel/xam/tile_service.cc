@@ -480,7 +480,15 @@ TileService::OwnedPng CaptureTilePng(KernelState& kernel,
   state.origin = captured->origin;
   std::vector<uint8_t> bytes;
   const auto fixed = kTileFileNames.find(XTileType(args.type));
-  if (captured->pictures && fixed != kTileFileNames.end() &&
+  const auto type=XTileType(args.type);
+  auto gpd=type==XTileType::kAchievement?std::optional<std::vector<uint8_t>>{}:
+      captured->models?CaptureProfileGpdImage(*captured->models,type,
+          args.title?args.title:kernel.title_id(),args.item):std::optional<std::vector<uint8_t>>{};
+  if(gpd) {
+    // Same immutable capture as origin; never split native8000/8003/8007
+    // data from a fresh profile/model lookup while publication is in flight.
+    bytes=std::move(*gpd);
+  } else if (captured->pictures && fixed != kTileFileNames.end() &&
       captured->pictures->contains(fixed->second)) {
     bytes = CaptureProfilePicture(*captured, XTileType(args.type));
   } else {

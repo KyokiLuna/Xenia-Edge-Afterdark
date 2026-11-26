@@ -13,10 +13,14 @@
 #include <vector>
 
 #include "xenia/base/mutex.h"
+#include "xenia/cpu/processor.h"
+#include "xenia/cpu/thread_state.h"
+#include "xenia/kernel/xthread.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xfile.h"
+#include "xenia/kernel/native_profile_save_owner.h"
 #include "xenia/vfs/devices/xcontent_container_device.h"
 #include "xenia/vfs/devices/xcontent_devices/stfs_container_device.h"
 #include "xenia/vfs/host_storage_errors.h"
@@ -140,6 +144,31 @@ bool XStfsDevice::retired() const {
   }
   return retired || !active || active->namespace_retiring();
 }
+bool XStfsDevice::MatchesFolderBacking(const XFile& actual,
+    const vfs::FolderContentPackage& package) const {
+  std::shared_ptr<vfs::Device> active;
+  std::shared_ptr<vfs::File> backing;
+  std::shared_ptr<vfs::FolderContentPackage> folder;
+  {
+    std::lock_guard lock(state_mutex_);
+    if (retired_ || dismounting_) { return false; }
+    active = active_device_.lock(); backing = folder_backing_file_.lock();
+    folder = folder_backend_.lock();
+  }
+  // Each retained value leaves outside the object metadata lock. Existing
+  // active mount ownership prevents pointer ABA; paths and device numbers
+  // alone cannot substitute for the original Create backing.
+  return active && !active->namespace_retiring() && backing &&
+      backing.get() == actual.file() && folder.get() == &package &&
+      !package.retiring() && backing->folder_content_package() == folder &&
+      backing->retained_device() && !backing->retained_device()->namespace_retiring();
+}
+std::shared_ptr<vfs::Device> XStfsDevice::CaptureMemberForOriginalUse(const XFile& file,
+    const vfs::FolderContentPackage& package) const {
+  if(!MatchesFolderBacking(file,package))return {};
+  std::lock_guard held(state_mutex_);
+  return !retired_ && !dismounting_?active_device_.lock():nullptr;
+}
 X_STATUS XStfsDevice::Control(uint32_t code, uint32_t output_address) const {
   if (global_critical_region::is_held_by_current_thread()) {
     return X_STATUS_INVALID_DEVICE_REQUEST;
@@ -168,16 +197,70 @@ X_STATUS XStfsDevice::Control(uint32_t code, uint32_t output_address) const {
   std::array<uint8_t, 36> owned{};
   uint32_t transferred = 0;
   X_STATUS status = X_STATUS_UNSUCCESSFUL;
+  NativeProfileSaveOwner::ObserveControlEntry(kernel_state(),*this,code);
+  const auto checkpoint=NativeProfileSaveOwner::CaptureControlCheckpoint(kernel_state(),*this,code);
   const auto invoked = kernel_state()->RunBlockingIo([&] {
     status = folder->Control(code, std::span(owned).first(size), &transferred);
+    // Only the authenticated original family may join its staged transaction
+    // on this SAME real carrier. Failed/unsupported controls stay failures;
+    // unrelated StfsControlDevice calls have no participant or extra work.
+    if(checkpoint) {
+      const auto actual=(status==X_STATUS_SUCCESS && transferred!=size)?
+          vfs::HostStorageError(std::make_error_code(std::errc::io_error)):status;
+      status=checkpoint->AfterOriginalControl(actual);
+    }
   }, active->supports_concurrent_io() ? GuestScheduler::BlockingCallClass::kConcurrent
                                      : GuestScheduler::BlockingCallClass::kSerial);
-  if (invoked != HostCallOutcome::kReturned) { return HostCallFailureStatus(invoked); }
-  if (status != X_STATUS_SUCCESS) { return status; }
-  if (transferred != size) { return vfs::HostStorageError(std::make_error_code(std::errc::io_error)); }
-  // This host copy owns detached bytes; no guest pointer survived the wait.
-  return size ? util::WriteGuestIoBuffer(*memory(), output_address,
-      std::span<const uint8_t>(owned).first(size)) : status;
+  if (invoked != HostCallOutcome::kReturned) {
+    status=HostCallFailureStatus(invoked);
+    if(checkpoint)checkpoint->OriginalCarrierDidNotReturn(status);
+  } else if (status==X_STATUS_SUCCESS) {
+    if(transferred!=size)status=vfs::HostStorageError(std::make_error_code(std::errc::io_error));
+    // This host copy owns detached bytes; no guest pointer survived the wait.
+    else if(size)status=util::WriteGuestIoBuffer(*memory(),output_address,
+        std::span<const uint8_t>(owned).first(size));
+  }
+  // Observe the ACTUAL returned kernel outcome, including short backend
+  // control output, failed caller copy and unreturned IO. A backend-success
+  // scalar before those duties is not a successful native descriptor receipt.
+  NativeProfileSaveOwner::ObserveControlReturn(kernel_state(),*this,code,status);
+  return status;
+}
+
+X_STATUS XStfsDevice::SynchronousDeviceControl(uint32_t code,
+    std::span<const uint8_t> input) const {
+  if (global_critical_region::is_held_by_current_thread() ||
+      !XThread::IsInThread()) { return X_STATUS_INVALID_DEVICE_REQUEST; }
+  // Matching17559 PEC BEF8 supplies this original driver request. Other
+  // device protocols are not known STFS callbacks and stay unsupported.
+  if (code != 0x00092000) { return X_STATUS_INVALID_DEVICE_REQUEST; }
+  if (input.size() != 8) { return X_STATUS_INVALID_PARAMETER; }
+  const uint32_t callback = xe::load_and_swap<uint32_t>(input.data());
+  const uint32_t callback_context = xe::load_and_swap<uint32_t>(input.data() + 4);
+  if (!callback || (callback & 3) ||
+      !util::GuestIoRangeValid(*memory(), callback, 4, false)) {
+    return X_STATUS_ACCESS_VIOLATION;
+  }
+  auto* thread = XThread::GetCurrentThread();
+  if (!thread || thread->kernel_state() != kernel_state() ||
+      !thread->thread_state()) { return X_STATUS_INVALID_DEVICE_REQUEST; }
+  std::shared_ptr<vfs::Device> active;
+  {
+    std::lock_guard held(state_mutex_);
+    if (retired_ || dismounting_) { return kDisconnected; }
+    active = active_device_.lock();
+  }
+  if (!active || active->namespace_retiring()) { return kDisconnected; }
+  // The exact active mount owns the original backing/source for the entire
+  // entered callback. No device/namespace mutex or GCRC spans guest code.
+  // The existing same-thread Execute boundary supplies its real transport
+  // return; inner Stfs controls and WriteFile still execute their own native
+  // code and existing host IO carriers, with their actual statuses/counts.
+  auto* context = thread->thread_state()->context();
+  context->r[3] = callback_context;
+  const bool returned = kernel_state()->processor()->Execute(
+      thread->thread_state(), callback);
+  return returned ? X_STATUS(uint32_t(context->r[3])) : X_STATUS_UNSUCCESSFUL;
 }
 
 X_STATUS XStfsDevice::Dismount() {
@@ -341,6 +424,7 @@ X_STATUS XStfsDevice::CreateInternal(KernelState& kernel, uint32_t address,
   auto stfs = object_ref<XStfsDevice>(new XStfsDevice(
       kernel, packet.context_bytes, name, packet.descriptor));
   stfs->backing_lifetime_ = owner;
+  if (folder) { stfs->folder_backing_file_ = shared; }
   if (!stfs->AllocateBodyAndContext()) { return X_STATUS_NO_MEMORY; }
   if (!kernel.KeepNativeStfsDevice(stfs)) {
     return X_STATUS_INSUFFICIENT_RESOURCES;

@@ -107,6 +107,26 @@ class ProfileGpdTransaction final {
       std::shared_ptr<filesystem::ContentMutationOwner> metadata = {});
 
  private:
+  friend class ProfileGpdModelAuthority;
+  friend class ::xe::kernel::NativeProfileSavePublication;
+  static std::shared_ptr<ProfileGpdTransaction> CreateImpl(
+      std::shared_ptr<ProfileGpdModelAuthority>,
+      std::shared_ptr<ProfileGpdPendingMutation>,
+      std::shared_ptr<const filesystem::ProfileIntentOwner>,
+      std::shared_ptr<const filesystem::SnapshotRecoveryOwner>, std::error_code&,
+      std::shared_ptr<filesystem::ContentMutationOwner>,
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>);
+  ProfileGpdTransactionAttempt AttemptNative(
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>);
+  // Same retained native transaction only. A definitely unstarted failure
+  // cannot be turned into a later write after original caller failure/cancel.
+  ProfileGpdTransactionAttempt AttemptNativeRecovery(
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>);
+  ProfileGpdTransactionAttempt AttemptImpl(
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>,
+      bool attempted_recovery_only = false);
+  std::error_code CancelNativeUnpublished(
+      const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>&);
   ProfileGpdTransaction() = default;
   static GpdIntentBinding Binding(const ProfileStorageLease&,
                                   const filesystem::ProfileIntentOwner&);

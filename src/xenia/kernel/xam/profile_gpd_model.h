@@ -14,6 +14,7 @@ namespace xe::filesystem {
 class ProfileIntentOwner;
 class SnapshotPublicationSet;
 }
+namespace xe::kernel { class NativeProfileSavePublication; }
 namespace xe::kernel::xam {
 std::error_code ValidateProfileGpdRecords(std::span<const uint8_t>,
                                           bool dashboard);
@@ -102,6 +103,11 @@ struct ProfileGpdPlannedFile {
 struct ProfileGpdModelPlan {
   std::map<uint32_t, ProfileGpdPlannedFile> files;
   std::vector<filesystem::ProfileArtifactMutation> pictures;
+  // Native only: the SAME real admission issued before raw Header/PNG/GPD
+  // staging. It owns reservations, not a reconstructed path or a completion
+  // flag. Retain through the native request/cache rundown as well as commit.
+  std::shared_ptr<filesystem::ProfileArtifactAdmission> native_artifacts;
+  std::optional<filesystem::ProfileArtifactMutation> package_header;
   bool already_unlocked = false;
   // Derived unlock-plan shape only. Real load tokens and the typed journal
   // authorize writes; other mutators use explicit Create/Delete, never an
@@ -118,6 +124,9 @@ struct ProfileGpdMutationOrigin {
 };
 struct ProfileGpdReadCapture {
   ProfileGpdMutationOrigin origin;
+  // Filesystem census only: real pending admission changes this even when a
+  // canceled operation never changes model_version. No serialized authority.
+  uint64_t file_read_epoch=0;
   std::shared_ptr<const ProfileGpdReadModels> models;
   // Same exact model-version publication tuple as models/origin. An owned old
   // read keeps these immutable bytes through later ordinary model versions.
@@ -135,19 +144,31 @@ class ProfileGpdPendingMutation final {
   bool Matches(const ProfileGpdMutation &) const;
   std::shared_ptr<const ProfileGpdModelPlan> BuildPlan(std::error_code&);
   const auto& pictures_before() const { return pictures_before_; }
+  // An expired native owner is NOT permission for host fallback/publication.
+  bool native_issued() const { return native_issued_; }
 
  private:
   friend class ProfileGpdModelAuthority;
+  friend class ProfileGpdTransaction;
+  friend class ::xe::kernel::NativeProfileSavePublication;
+  bool NativeOwnedBy(const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>&) const;
   ProfileGpdPendingMutation(
       ProfileGpdMutationOrigin, ProfileGpdMutation,
       std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>>,
-      std::shared_ptr<const ProfileGpdPictureSnapshots>);
+      std::shared_ptr<const ProfileGpdPictureSnapshots>,
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> = {},
+      std::shared_ptr<const ProfileGpdModelPlan> native_base_plan = {});
   const ProfileGpdMutationOrigin origin_;
   const ProfileGpdMutation command_;
   const std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines_;
   const std::shared_ptr<const ProfileGpdPictureSnapshots> pictures_before_;
+  const bool native_issued_;
+  const std::weak_ptr<const ::xe::kernel::NativeProfileSavePublication> native_owner_;
   std::mutex mutex_;
   std::shared_ptr<const ProfileGpdModelPlan> plan_;
+  // Retains exact ORIGINAL native serialization only after its complete
+  // header/index and typed delta have been authenticated by the native owner.
+  std::shared_ptr<const ProfileGpdModelPlan> native_plan_;
 };
 // This is the actual proposed per-profile metadata owner. ProfileManager mints
 // its sign-in generation and retains old owners with pending work on sign-out.
@@ -163,6 +184,8 @@ class ProfileGpdModelAuthority final
   uint64_t xuid() const { return xuid_; }
   uint64_t AllocateRequestId(std::error_code&);
   const auto& storage() const { return storage_; }
+  // Metadata-only source lifetime, independent of ordinary model versions.
+  bool retiring() const { return retired_.load(std::memory_order_acquire) || storage_->retiring(); }
   std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> CaptureLoads(
       std::error_code&) const;
   std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> Dependencies(
@@ -210,6 +233,11 @@ class ProfileGpdModelAuthority final
   bool IsCurrent(const ProfileGpdMutationOrigin&) const;
   std::shared_ptr<const ProfileGpdReadModels> Read(std::error_code&) const;
   std::optional<ProfileGpdReadCapture> CaptureRead(std::error_code&) const;
+  // Filesystem reads need one real committed physical tuple, independently of
+  // selected-user/Task/native-object authority. Pending publication is busy;
+  // callers still validate the captured tokens under the common read fence.
+  std::optional<ProfileGpdReadCapture> CaptureCommittedFileRead(std::error_code&) const;
+  bool IsCommittedFileReadCurrent(const ProfileGpdReadCapture&) const;
   std::shared_ptr<ProfileGpdTransaction> AcquireTransaction(
       std::shared_ptr<const filesystem::ProfileIntentOwner>,
       std::shared_ptr<const filesystem::SnapshotRecoveryOwner>,
@@ -234,10 +262,67 @@ class ProfileGpdModelAuthority final
 
  private:
   friend class ProfileGpdTransaction;
+  friend class ::xe::kernel::NativeProfileSavePublication;
+  std::shared_ptr<ProfileGpdPendingMutation> BeginNative(
+      ProfileGpdMutation, bool&, std::error_code&, ProfileGpdModelStamp,
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>,
+      std::shared_ptr<const ProfileGpdModelPlan> native_base_plan = {});
+  std::shared_ptr<ProfileGpdPendingMutation> BeginImpl(
+      ProfileGpdMutation, bool&, std::error_code&,
+      std::optional<ProfileGpdModelStamp>,
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>,
+      std::shared_ptr<const ProfileGpdModelPlan> native_base_plan = {});
+  std::error_code AdoptNativePlan(
+      const std::shared_ptr<ProfileGpdPendingMutation>&,
+      const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>&,
+      std::shared_ptr<const ProfileGpdModelPlan>);
+  std::shared_ptr<ProfileGpdTransaction> AcquireNativeTransaction(
+      std::shared_ptr<const filesystem::ProfileIntentOwner>,
+      std::shared_ptr<const filesystem::SnapshotRecoveryOwner>,
+      std::error_code&, std::shared_ptr<filesystem::ContentMutationOwner>,
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>);
+  std::shared_ptr<ProfileGpdTransaction> AcquireTransactionImpl(
+      std::shared_ptr<const filesystem::ProfileIntentOwner>,
+      std::shared_ptr<const filesystem::SnapshotRecoveryOwner>,
+      std::error_code&, std::shared_ptr<filesystem::ContentMutationOwner>,
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>);
+  std::unique_ptr<PreparedCommit> PrepareCommitImpl(
+      std::shared_ptr<ProfileGpdPendingMutation>,
+      std::map<uint32_t, GpdSnapshotLoad>, std::error_code&,
+      std::shared_ptr<const ProfileGpdPictureSnapshots>,
+      std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>);
+  std::error_code CancelUnpublishedNative(
+      const std::shared_ptr<ProfileGpdPendingMutation>&,
+      const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>&,
+      const ProfileGpdTransaction* exact_unpublished_transaction = nullptr);
+  std::error_code RequireNativeCacheCheckpoint(
+      const std::shared_ptr<ProfileGpdPendingMutation>&,
+      const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>&);
+  class NativeCacheCheckpointGuard final {
+   public:
+    void Apply() noexcept;
+   private:
+    friend class ProfileGpdModelAuthority;
+    NativeCacheCheckpointGuard(std::shared_ptr<ProfileGpdModelAuthority> owner,
+        std::unique_lock<std::mutex> lock) : owner_(std::move(owner)),lock_(std::move(lock)) {}
+    // Lock leaves before retained holders; the caller destroys this guard only
+    // outside its real publication/File/stage locks.
+    std::shared_ptr<ProfileGpdPendingMutation> dropped_pending_;
+    std::shared_ptr<ProfileGpdTransaction> dropped_transaction_;
+    std::shared_ptr<ProfileGpdModelAuthority> owner_;
+    std::unique_lock<std::mutex> lock_;
+    bool applied_=false;
+  };
+  std::unique_ptr<NativeCacheCheckpointGuard> PrepareNativeCacheCheckpoint(
+      const std::shared_ptr<ProfileGpdPendingMutation>&,
+      const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>&,
+      const ProfileGpdTransaction* exact_committed_transaction,std::error_code&);
   void DiscardUnpublished(const std::shared_ptr<ProfileGpdPendingMutation>&,
                           const ProfileGpdTransaction*);
   ProfileGpdModelAuthority(uint64_t, uint32_t, uint64_t,
                            std::shared_ptr<ProfileStorageLease>);
+  bool IsCurrentLocked(const ProfileGpdMutationOrigin&) const;
+  std::optional<ProfileGpdReadCapture> CaptureReadImpl(std::error_code&,bool committed_file) const;
   const uint64_t xuid_, sign_in_generation_;
   const uint32_t slot_;
   const std::shared_ptr<ProfileStorageLease> storage_;
@@ -246,6 +331,11 @@ class ProfileGpdModelAuthority final
   std::atomic<uint64_t> roster_pause_{0};
   uint64_t next_roster_pause_ = 1;
   uint64_t version_ = 0, next_request_id_ = 1;
+  uint64_t file_read_epoch_=1;
+  // Only a real stable cached File adoption may join this milestone. Native
+  // durable/model publication then retains its SAME pending owner until that
+  // actual File has joined the committed native layout; host commits unchanged.
+  bool native_cache_checkpoint_=false;
   std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines_;
   std::shared_ptr<const ProfileGpdReadModels> models_;
   std::shared_ptr<const ProfileGpdPictureSnapshots> pictures_;
@@ -261,6 +351,7 @@ class ProfileGpdModelAuthority::PreparedCommit final {
   friend class CommitGuard;
   std::shared_ptr<ProfileGpdPendingMutation> pending;
   std::weak_ptr<ProfileGpdModelAuthority> issuer;
+  std::weak_ptr<const ::xe::kernel::NativeProfileSavePublication> native_owner;
   uint64_t expected_version = 0;
   std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines;
   std::shared_ptr<const ProfileGpdReadModels> models;

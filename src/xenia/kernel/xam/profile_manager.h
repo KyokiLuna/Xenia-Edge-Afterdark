@@ -407,6 +407,8 @@ class ProfileManager {
   friend class ProfileRosterIntent;
   friend class ProfileRosterPublicationCell;
   friend class ProfileRosterNativeReadScope;
+  friend class ProfileRosterNativeWriter;
+  friend class test::NativeProfileSaveWriterTestAccess;
   void InitializeRosterAuthority();
   void BeginRosterStop();
   void CloseRosterAuthority();

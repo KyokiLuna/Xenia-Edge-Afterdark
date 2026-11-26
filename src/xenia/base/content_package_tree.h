@@ -14,6 +14,9 @@
 #include "xenia/base/filesystem.h"
 namespace xe::filesystem {
 class HostStorageRoot;
+class HostStorageSnapshotBatch;
+class HostStorageSnapshotToken;
+class SnapshotPublicationSet;
 class ContentMutationOwner;
 class ManagedDeviceIdentity;
 class HostStorageIntentLease;
@@ -91,6 +94,46 @@ class HostStorageContentLayout final {
   explicit HostStorageContentLayout(std::unique_ptr<State>);
   std::unique_ptr<State> state_;
 };
+// Immutable complete flat-member bytes issued only by the SAME native
+// profile publication admission. This retains its real scoped source until
+// released. It grants no native IO-drain, account/GPD semantic quiescence,
+// cold-format, timestamp, Header-signature or descriptor-ACK authority.
+// Last destruction releases real scoped reservations/native pins: release it
+// outside GCRC/model/cache locks after the genuine native consumers are done.
+class HostStorageContentSnapshot final : public ContentPackageStreamSource {
+public:
+  ~HostStorageContentSnapshot() override;
+  HostStorageContentSnapshot(const HostStorageContentSnapshot &) = delete;
+  std::span<const ContentPackageStreamMember> members() const override;
+  FileIoResult Read(size_t member, uint64_t offset,
+                    std::span<uint8_t> output) override;
+  // Joins exact bytes and complete membership under ONE genuine snapshot
+  // batch guard. Does no guest callbacks and must run outside GCRC.
+  std::error_code CheckCurrent() const override;
+  // Its generic batch FileInfo creation field retains the existing POSIX
+  // ctime convention; it is NOT native FAT birth metadata and must never feed
+  // FromFileInfo/native profile creation. Actual native FAT words stay
+  // required.
+  std::unique_ptr<HostStorageSnapshotBatch> Validate(std::error_code &) const;
+  // Final SAME-source full-set proof after this snapshot's own transaction
+  // published selected members. Only exact tokens from its publication set's
+  // actual durable receipts may replace baseline dependencies. Unchanged
+  // members remain byte/identity checked and unexpected names still refuse.
+  // Does not publish, import a native map, sign a Header or complete guest IO.
+  std::unique_ptr<HostStorageSnapshotBatch> ValidateAfterOwnPublications(
+      std::span<const std::shared_ptr<const HostStorageSnapshotToken>>,
+      std::error_code&) const;
+  // Metadata census only. POSIX write time here is not native FAT birth time;
+  // the STFS producer's exact-index creation metadata must come separately.
+  const HostStorageContentLayout &layout() const;
+
+private:
+  friend class SnapshotPublicationSet;
+  struct State;
+  explicit HostStorageContentSnapshot(std::unique_ptr<State>);
+  std::unique_ptr<State> state_;
+};
+
 // Minted only by the native-FD/common-lease producer. Guest record paths or
 // caller-filled entry arrays cannot construct a live mutation authority.
 // Destroy outside GCRC/metadata locks: it releases actual native descriptors.

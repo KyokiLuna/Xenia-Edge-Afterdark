@@ -783,16 +783,11 @@ std::vector<uint8_t> UserTracker::GetIcon(uint64_t xuid, uint32_t title_id,
       title_id == spa->title_id()) {
         return Owned(spa->GetIcon(uint32_t(tile_id)));
       }
-  if (tile_type == XTileType::kAchievement ||
-      tile_type == XTileType::kGameIcon) {
-    auto models = Models(xuid);
-        if (!models) {
-          return {};
-        }
-    auto found = models->titles.find(title_id);
-    return found == models->titles.end()
-               ? std::vector<uint8_t>{}
-               : Owned(found->second.GetImage(tile_id));
+  if(tile_type==XTileType::kAchievement || tile_type==XTileType::kGameIcon ||
+      tile_type==XTileType::kBkgnd || tile_type==XTileType::kAvatarFullBody) {
+    const auto models=Models(xuid);if(!models)return {};
+    auto image=CaptureProfileGpdImage(*models,tile_type,title_id,tile_id);
+    return image?std::move(*image):std::vector<uint8_t>{};
   }
 
   return kernel_state()->xam_state()->profile_manager()->CaptureProfileIcon(

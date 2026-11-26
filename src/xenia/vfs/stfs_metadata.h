@@ -10,18 +10,80 @@
 #ifndef XENIA_VFS_STFS_METADATA_H_
 #define XENIA_VFS_STFS_METADATA_H_
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "third_party/tomlplusplus/toml.hpp"
+#include "xenia/base/content_package_tree.h"
 #include "xenia/vfs/title_metadata.h"
 #include "xenia/xbox.h"
 
 namespace xe {
 namespace vfs {
+
+// Exact format metadata accompanying the source owner's complete member
+// snapshot. These detached values grant no File/source/publication authority.
+// A caller supplies captured native FAT words, including explicit native
+// unknown-zero words. FromFileInfo converts a real nonzero UTC timestamp;
+// missing host timestamps refuse rather than inventing native metadata.
+struct StfsSnapshotMetadata {
+  std::filesystem::path relative;
+  uint16_t create_date, create_time, modified_date, modified_time;
+  // UTC FILETIME conversion with a caller-proven actual creation timestamp.
+  // Generic HostStorageSnapshotBatch FileInfo creation follows POSIX ctime;
+  // it is NOT native FAT creation metadata and must never be supplied here.
+  // Captured native FAT words may instead be supplied directly in this row.
+  // Out-of-range dates refuse, never clamp.
+  static std::optional<StfsSnapshotMetadata> FromFileInfo(
+      std::filesystem::path, const filesystem::FileInfo&, std::error_code&);
+};
+
+struct StfsSnapshotMemberLayout {
+  std::filesystem::path relative;
+  uint32_t entry_index = 0, start_block = 0, block_count = 0;
+  bool operator==(const StfsSnapshotMemberLayout&) const = default;
+};
+// Immutable canonical STFS directory/data/hash image, starting at the actual
+// Header's aligned data offset. It contains no Header, signature, Account
+// parser, source permission, IO checkpoint or native control acknowledgement.
+// Existing packed/native noncanonical layouts are NOT adopted from a Header
+// descriptor. Their owner must preserve a real mapping or transition only
+// through the genuine checkpoint/Header-persistence protocol.
+class StfsLogicalSnapshot final {
+ public:
+  static constexpr uint32_t kLayoutVersion = 1;
+  static constexpr size_t kMaximumMembers = 4096;
+  static constexpr uint64_t kMaximumPayloadBytes = 128ull * 1024 * 1024;
+  // Reads exactly the caller-owned complete immutable member source, joining
+  // CheckCurrent before/after capture (not per row/chunk). A complete-source
+  // validation can read every physical byte; immutable Read needs no repeated
+  // census. Actual native publication must separately retain its final guarded
+  // source/semantic cut. No raw HostStorage fallback for protected members.
+  static std::shared_ptr<const StfsLogicalSnapshot> Build(
+      filesystem::ContentPackageStreamSource&,
+      std::span<const StfsSnapshotMetadata>, std::error_code&);
+  const std::array<uint8_t, 36>& descriptor() const { return descriptor_; }
+  std::span<const uint8_t> block_image() const { return blocks_; }
+  uint64_t payload_bytes() const { return payload_bytes_; }
+  size_t member_count() const { return member_count_; }
+  // Exact assignments from THIS serializer, not another allocation algorithm.
+  const auto& member_layout() const { return member_layout_; }
+
+ private:
+  StfsLogicalSnapshot() = default;
+  std::array<uint8_t, 36> descriptor_{};
+  std::vector<uint8_t> blocks_;
+  uint64_t payload_bytes_ = 0;
+  size_t member_count_ = 0;
+  std::vector<StfsSnapshotMemberLayout> member_layout_;
+};
 
 struct StfsMetadata {
   uint32_t title_id = 0;

@@ -14,7 +14,8 @@
 #include "xenia/base/content_package_mutation_wire.h"
 #include "xenia/base/managed_device_identity.h"
 #include "xenia/base/snapshot_publisher.h"
-namespace xe::kernel::xam { class ContentManager; class ProfilePackageDeletion; class NativeFolderContent; class NativeFolderContentTestAccess; }
+namespace xe::kernel { class NativeProfileSavePublication; }
+namespace xe::kernel::xam { class ContentManager; class ProfilePackageDeletion; class NativeFolderContent; class NativeFolderContentTestAccess; class FreshProfileConEpoch; }
 namespace xe::filesystem {
 class ManagedVolumeAuthority;
 class ManagedStorageBootstrap;
@@ -189,6 +190,11 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
     // Metadata only through this SAME actual member admission. Returned
     // layout keeps independent native pins, not the member reservation scope.
     std::unique_ptr<HostStorageContentLayout> CaptureMemberLayout(std::error_code&) const;
+    // Complete flat bytes through this same source/member admission. The
+    // caller must separately join actual native IO/session quiescence and
+    // native FAT metadata before deriving/persisting an STFS descriptor.
+    std::unique_ptr<HostStorageContentSnapshot>
+    CaptureMemberSnapshot(std::error_code &) const;
     // Deny future writes without taking a lock, waiting or implying native
     // cancellation/completion. A real already-entered IO owner may drain.
     void CloseMutation() noexcept;
@@ -199,6 +205,10 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
    private:
     friend class ContentMutationOwner;
     friend class ProfilePublicationIntentStore;
+    friend class xe::kernel::NativeProfileSavePublication;
+    // The existing canonical-epoch producer may join this exact issued
+    // Header with its complete member batch; it gains no raw write policy.
+    friend class xe::kernel::xam::FreshProfileConEpoch;
     friend class ContentMutationOwnerTestAccess;
     friend class xe::kernel::xam::NativeFolderContentTestAccess;
     struct Data;
@@ -218,10 +228,17 @@ class ContentMutationOwner final : public std::enable_shared_from_this<ContentMu
     const PreparedSnapshotPublication* PrepareCanonical(
         const SnapshotPublicationSet&, std::error_code&);
     SnapshotPublicationReceipt CommitCanonical(const SnapshotPublicationSet&);
+    // Metadata-only actual retained publication receipt. No new path capture,
+    // source/writer/cache authority or durable native completion. The caller
+    // must already own the SAME committed whole transaction and validate this
+    // token in its real prepared cache participant before a stable swap.
+    std::shared_ptr<const HostStorageSnapshotToken> RetainedPublishedCacheToken(
+        std::error_code&) const;
     std::shared_ptr<Data> data_;
   };
 
  private:
+  friend class xe::kernel::xam::FreshProfileConEpoch;
   friend class xe::kernel::xam::ContentManager;
   friend class xe::kernel::xam::ProfilePackageDeletion;
   friend class xe::kernel::xam::NativeFolderContent;

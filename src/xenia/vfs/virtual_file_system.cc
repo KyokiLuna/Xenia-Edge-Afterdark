@@ -899,15 +899,16 @@ Entry* VirtualFileSystem::ResolvePath(const std::string_view path) {
   return device->ResolvePath(relative_path);
 }
 
-X_STATUS VirtualFileSystem::RenameEntry(Entry* entry,
-                                        const std::string_view target_path,
-                                        bool replace_existing,
-    std::shared_ptr<const filesystem::HostStorageFileLease> permitted) {
+X_STATUS VirtualFileSystem::RenameEntry(
+    Entry *entry, const std::string_view target_path, bool replace_existing,
+    std::shared_ptr<const filesystem::HostStorageFileLease> permitted,
+    bool *mutation_entered) {
   // One lock, so the new folder can't go away before the entry moves into it.
   auto global_lock = global_critical_region_.Acquire();
   return entry->Rename(ResolvePath(xe::utf8::find_base_guest_path(target_path)),
                        xe::utf8::find_name_from_guest_path(target_path),
-                       replace_existing, std::move(permitted));
+                       replace_existing, std::move(permitted),
+                       mutation_entered);
 }
 
 Entry* VirtualFileSystem::ResolveMountRoot(const std::string_view path) {

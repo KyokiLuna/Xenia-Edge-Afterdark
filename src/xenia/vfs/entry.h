@@ -84,6 +84,13 @@ struct InPlaceOverwriteResult {
 class Entry {
  public:
   virtual ~Entry();
+  struct CheckpointCoordinate {std::filesystem::path path;};
+  // Existing package-IO membership only, never File/source/mutation rights.
+  // HostPath entries update their coordinate at actual rename. Source-owned
+  // managed Entries may provide their already-validated canonical member;
+  // entries without that real source relation deliberately provide none.
+  virtual std::shared_ptr<const CheckpointCoordinate> RetainCheckpointCoordinate() {return {};}
+
 
   void Dump(xe::StringBuffer* string_buffer, int indent);
 
@@ -137,12 +144,14 @@ class Entry {
   void Touch();
 
   // |file_path| starts with the name of this entry's device root.
-  X_STATUS Rename(const std::filesystem::path file_path,
-                  bool replace_existing = false,
-      std::shared_ptr<const filesystem::HostStorageFileLease> permitted = {});
-  X_STATUS Rename(
-      Entry* new_parent, std::string_view name, bool replace_existing,
-      std::shared_ptr<const filesystem::HostStorageFileLease> permitted = {});
+  X_STATUS
+  Rename(const std::filesystem::path file_path, bool replace_existing = false,
+         std::shared_ptr<const filesystem::HostStorageFileLease> permitted = {},
+         bool *mutation_entered = nullptr);
+  X_STATUS
+  Rename(Entry *new_parent, std::string_view name, bool replace_existing,
+         std::shared_ptr<const filesystem::HostStorageFileLease> permitted = {},
+         bool *mutation_entered = nullptr);
   // If successful, out_file points to a new file. When finished, call
   // file->Destroy()
   virtual X_STATUS Open(uint32_t desired_access, File** out_file) = 0;
@@ -168,8 +177,9 @@ class Entry {
   }
   virtual bool DeleteEntryInternal(Entry* entry) = 0;
   virtual X_STATUS RenameEntryInternal(
-      Entry* new_parent, const std::string_view name,
-      std::shared_ptr<const filesystem::HostStorageFileLease> permitted) {
+      Entry *new_parent, const std::string_view name,
+      std::shared_ptr<const filesystem::HostStorageFileLease> permitted,
+      bool *mutation_entered) {
     return X_STATUS_SUCCESS;
   }
 

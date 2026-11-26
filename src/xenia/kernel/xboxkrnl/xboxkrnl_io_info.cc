@@ -382,34 +382,15 @@ dword_result_t NtSetInformationFile_entry(
         result = X_STATUS_ACCESS_DENIED;
         break;
       }
-      // The allocation rounds up to whole allocation units. A larger one
-      // leaves the file size alone. A smaller one cuts the file to it.
-      auto device = file->device();
-      uint64_t allocation_size =
-          xe::round_up(uint64_t(info->allocation_size),
-                       uint64_t(file->entry()->sectors_per_allocation_unit()) *
-                           device->bytes_per_sector(),
-                       false);
-      uint64_t file_size = 0;
-      const auto size_query = kernel_state()->RunBlockingIo(
-          [&]() {
-            file->entry()->update();
-            file_size = file->entry()->size();
-          },
-          GuestScheduler::BlockingCallClass::kConcurrent);
-      if(size_query!=HostCallOutcome::kReturned){result=HostCallFailureStatus(size_query);break;}
-      if (allocation_size < file_size) {
-        result = file->SetLength(allocation_size);
-        const auto refreshed = kernel_state()->RunBlockingIo(
-            [&]() { file->entry()->update(); },
-            GuestScheduler::BlockingCallClass::kConcurrent);
-        if(refreshed!=HostCallOutcome::kReturned && XSUCCEEDED(result)){
-          // SetLength really returned success; no rollback/cancellation is
-          // claimed when its later metadata refresh fails.
-          (void)InvokeHostCall([] { XELOGE("SetAllocation metadata refresh failed after successful SetLength"); });
-          result=X_STATUS_UNSUCCESSFUL;
-        }
-      }
+      // Preserve the guest allocation-unit policy but send EVERY request to
+      // the actual retained backend. RW intent cannot bypass an immutable
+      // managed view simply because the requested allocation is >= cached EOF.
+      const auto device=file->file()->retained_device();
+      if(!device){result=X_STATUS_INVALID_HANDLE;break;}
+      const uint64_t unit=uint64_t(file->entry()->sectors_per_allocation_unit())*device->bytes_per_sector();
+      uint64_t allocation_size=0;
+      result=vfs::RoundFileAllocationSize(uint64_t(info->allocation_size),unit,&allocation_size);
+      if(XSUCCEEDED(result))result=file->SetAllocationSize(allocation_size);
       break;
     }
     case XFileEndOfFileInformation: {

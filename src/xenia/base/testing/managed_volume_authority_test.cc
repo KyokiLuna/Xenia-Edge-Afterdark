@@ -4711,3 +4711,418 @@ TEST_CASE("Profile deletion genuine absence is source issued and orphan Headers 
 }
 }  // namespace xe::filesystem::test
 #endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+TEST_CASE(
+    "Issued complete member snapshot reads immutable bytes through the actual "
+    "profile admission",
+    "[base][storage][content_mutation][profile_header][member_snapshot]") {
+  ExternalHeaderFixture f;
+  auto header = f.Open();
+  std::error_code error;
+  auto snapshot = header->CaptureMemberSnapshot(error);
+  REQUIRE(snapshot);
+  REQUIRE_FALSE(error);
+  REQUIRE(snapshot->members().size() == 1);
+  CHECK(snapshot->members()[0].relative == "FFFE07D1.gpd");
+  CHECK(snapshot->members()[0].size == 3);
+  CHECK_FALSE(snapshot->members()[0].directory);
+  std::array<uint8_t, 5> output{0xA5, 0xA5, 0xA5, 0xA5, 0xA5};
+  auto read = snapshot->Read(0, 1, output);
+  REQUIRE_FALSE(read.error);
+  CHECK(read.bytes == 2);
+  CHECK(output == std::array<uint8_t, 5>{0x22, 0x33, 0xA5, 0xA5, 0xA5});
+  CHECK(snapshot->Read(0, 3, output).bytes == 0);
+  CHECK(snapshot->Read(0, 4, output).error == std::errc::invalid_argument);
+  CHECK(snapshot->Read(1, 0, output).error == std::errc::invalid_argument);
+  auto batch = snapshot->Validate(error);
+  REQUIRE(batch);
+  REQUIRE_FALSE(error);
+  REQUIRE(batch->tokens().size() == 1);
+  CHECK(batch->tokens()[0]->bytes().size() == 3);
+  CHECK(batch->tokens()[0]->root() == f.members->base());
+  batch.reset();
+  SECTION("repeated read snapshots release their own bytes while the same "
+          "Header stays live") {
+    // Weak ownership observes real projected byte tokens, not an RSS estimate
+    // or a mirror counter. Publication retry caches must not retain them after
+    // each full read snapshot/batch dies; the unchanged owner remains usable.
+    for (unsigned iteration = 0; iteration < 64; ++iteration) {
+      auto repeated = header->CaptureMemberSnapshot(error);
+      REQUIRE(repeated);
+      REQUIRE_FALSE(error);
+      auto verified = repeated->Validate(error);
+      REQUIRE(verified);
+      REQUIRE_FALSE(error);
+      std::vector<std::weak_ptr<const HostStorageSnapshotToken>> released;
+      for (const auto &token : verified->tokens()) {
+        released.push_back(token);
+      }
+      std::array<uint8_t, 3> bytes{};
+      REQUIRE_FALSE(repeated->Read(0, 0, bytes).error);
+      REQUIRE(bytes == std::array<uint8_t, 3>{0x11, 0x22, 0x33});
+      verified.reset();
+      repeated.reset();
+      REQUIRE(std::all_of(released.begin(), released.end(),
+                          [](const auto &token) { return token.expired(); }));
+    }
+    REQUIRE_FALSE(snapshot->CheckCurrent());
+  }
+
+  CHECK_FALSE(snapshot->CheckCurrent());
+  // The real native owner still must provide IO/session/FAT metadata; this
+  // source snapshot does not create a signed Header or native control ACK.
+  REQUIRE(f.HeaderBytes() == f.original);
+}
+TEST_CASE(
+    "Complete member snapshot rejects added members and same-size changed "
+    "bytes at its final guarded cut",
+    "[base][storage][content_mutation][profile_header][member_snapshot]") {
+  ExternalHeaderFixture f;
+  auto header = f.Open();
+  std::error_code error;
+  auto snapshot = header->CaptureMemberSnapshot(error);
+  REQUIRE(snapshot);
+  SECTION("unlisted host member cannot pass token-only validation") {
+    // Synthetic external-host mutation: bypassing the cooperating namespace
+    // is deliberate. A full-set proof must detect this additional file even
+    // though every previously captured GPD token is unchanged.
+    std::ofstream file(f.profile->path() / "unexpected.bin", std::ios::binary);
+    REQUIRE(file);
+    file.write("extra", 5);
+    file.close();
+    REQUIRE(file);
+    CHECK(snapshot->CheckCurrent() == std::errc::state_not_recoverable);
+  }
+  SECTION("equal-size same-inode tamper with original mtime restored") {
+    const auto path = f.profile->path() / "FFFE07D1.gpd";
+    struct stat before{};
+    REQUIRE(stat(path.c_str(), &before) == 0);
+    const int fd = open(path.c_str(), O_WRONLY | O_NOFOLLOW | O_CLOEXEC);
+    REQUIRE(fd >= 0);
+    const std::array<uint8_t, 3> changed{0x91, 0x92, 0x93};
+    REQUIRE(pwrite(fd, changed.data(), changed.size(), 0) ==
+            ssize_t(changed.size()));
+#if XE_PLATFORM_MAC
+    const timespec times[2]{before.st_atimespec, before.st_mtimespec};
+#else
+    const timespec times[2]{before.st_atim, before.st_mtim};
+#endif
+    REQUIRE(futimens(fd, times) == 0);
+    REQUIRE(close(fd) == 0);
+    CHECK(snapshot->CheckCurrent() == std::errc::state_not_recoverable);
+    // Already captured bytes stay immutable, but may not authorize a current
+    // native descriptor: CheckCurrent/Validate refused the changed source.
+    std::array<uint8_t, 3> owned{};
+    REQUIRE_FALSE(snapshot->Read(0, 0, owned).error);
+    CHECK(owned == std::array<uint8_t, 3>{0x11, 0x22, 0x33});
+  }
+  SECTION("missing physical member") {
+    REQUIRE(unlink((f.profile->path() / "FFFE07D1.gpd").c_str()) == 0);
+    CHECK_FALSE(snapshot->Validate(error));
+    CHECK(error);
+  }
+  REQUIRE(f.HeaderBytes() == f.original);
+}
+TEST_CASE(
+    "Complete member snapshot retains only its genuine source scope and "
+    "refuses source retirement",
+    "[base][storage][content_mutation][profile_header][member_snapshot]") {
+  ExternalHeaderFixture f;
+  auto header = f.Open();
+  std::error_code error;
+  auto snapshot = header->CaptureMemberSnapshot(error);
+  REQUIRE(snapshot);
+  SECTION(
+      "owner teardown releases the real publication fence after the snapshot") {
+    header.reset();
+    f.members.reset();
+    auto blocked =
+        f.profile->OpenFile("FFFE07D1.gpd", FileAccess::kGenericWrite, error);
+    CHECK_FALSE(blocked);
+    CHECK(error == std::errc::device_or_resource_busy);
+    CHECK_FALSE(snapshot->CheckCurrent());
+    snapshot.reset();
+    auto admitted =
+        f.profile->OpenFile("FFFE07D1.gpd", FileAccess::kGenericWrite, error);
+    REQUIRE(admitted);
+    REQUIRE_FALSE(error);
+    REQUIRE(f.HeaderBytes() == f.original);
+  }
+  SECTION(
+      "source withdrawal revokes currentness without fabricating completion") {
+    f.profile->Retire();
+    CHECK_FALSE(snapshot->Validate(error));
+    CHECK(error);
+    std::array<uint8_t, 3> bytes{};
+    REQUIRE_FALSE(snapshot->Read(0, 0, bytes).error);
+    CHECK(bytes == std::array<uint8_t, 3>{0x11, 0x22, 0x33});
+    REQUIRE(f.HeaderBytes() == f.original);
+  }
+}
+} // namespace xe::filesystem::test
+#endif
+
+#if XE_PLATFORM_LINUX || XE_PLATFORM_MAC
+namespace xe::filesystem::test {
+TEST_CASE(
+    "Complete member snapshot represents a genuinely empty admitted directory "
+    "without fake tokens",
+    "[base][storage][content_mutation][profile_header][member_snapshot]") {
+  ExternalHeaderFixture f;
+  std::error_code error;
+  f.members.reset();
+  f.gpd.reset();
+  REQUIRE_FALSE(f.profile->Remove("FFFE07D1.gpd", false));
+  const auto absent = f.profile->CaptureSnapshot("Account", 4096, error);
+  REQUIRE(absent);
+  REQUIRE_FALSE(absent->exists());
+  f.members = SnapshotPublicationSet::Reserve(f.profile, {absent}, error);
+  REQUIRE(f.members);
+  auto header = f.Open();
+  auto snapshot = header->CaptureMemberSnapshot(error);
+  REQUIRE(snapshot);
+  REQUIRE_FALSE(error);
+  CHECK(snapshot->members().empty());
+  auto batch = snapshot->Validate(error);
+  REQUIRE(batch);
+  REQUIRE_FALSE(error);
+  CHECK(batch->tokens().empty());
+  batch.reset();
+  CHECK_FALSE(snapshot->CheckCurrent());
+  // This is a real filesystem empty-set fixture, not a usable empty profile:
+  // Account/GPD semantic creation and native hash/Header ACK remain separate.
+  REQUIRE(f.HeaderBytes() == f.original);
+}
+TEST_CASE("Complete member after-publication guard joins only its own real replacements and creates with unchanged dependencies",
+          "[base][storage][content_mutation][profile_header][member_snapshot][published_member_guard]") {
+  ExternalHeaderFixture f;std::error_code error;
+  f.members.reset();
+  const std::array<uint8_t,4> account{0x41,0,0x63,0x7F};
+  REQUIRE_FALSE(f.profile->WriteNewFile("Account",account).error);
+  auto absent=f.profile->CaptureSnapshot("new.png",4096,error,true);REQUIRE(absent);REQUIRE_FALSE(error);REQUIRE_FALSE(absent->exists());
+  f.members=SnapshotPublicationSet::Reserve(f.profile,{f.gpd,absent},error);REQUIRE(f.members);REQUIRE_FALSE(error);
+  auto header=f.Open();auto snapshot=header->CaptureMemberSnapshot(error);REQUIRE(snapshot);REQUIRE_FALSE(error);
+  REQUIRE(snapshot->members().size()==2);
+  const std::array<uint8_t,5> changed{0x91,0,0x93,0x94,0x95};
+  const std::atomic<bool> canceled{true};
+  const auto stopped=f.members->Publish(*f.volume->recovery(),f.gpd,changed,&canceled);
+  REQUIRE(stopped.error==std::errc::operation_canceled);REQUIRE_FALSE(stopped.published);
+  const std::array only_before{f.gpd};
+  REQUIRE_FALSE(snapshot->ValidateAfterOwnPublications(only_before,error));REQUIRE(error==std::errc::invalid_argument);
+  REQUIRE(snapshot->Validate(error));REQUIRE_FALSE(error);
+  auto replacement=f.members->Publish(*f.volume->recovery(),f.gpd,changed);
+  REQUIRE_FALSE(replacement.error);REQUIRE(replacement.published);REQUIRE(replacement.durable);REQUIRE(replacement.current);
+  // The original immutable before set is truthfully stale after its own CAS.
+  REQUIRE_FALSE(snapshot->Validate(error));REQUIRE(error);
+  std::array updated{replacement.current};
+  auto batch=snapshot->ValidateAfterOwnPublications(updated,error);REQUIRE(batch);REQUIRE_FALSE(error);
+  REQUIRE(batch->tokens().size()==2);batch.reset();
+  // A freshly recaptured equal current file is not the actual CAS receipt.
+  auto equal=f.members->Capture("FFFE07D1.gpd",4096,error,true);REQUIRE(equal);REQUIRE_FALSE(error);
+  REQUIRE(std::equal(equal->bytes().begin(),equal->bytes().end(),changed.begin(),changed.end()));
+  const std::array recaptured{equal};
+  REQUIRE_FALSE(snapshot->ValidateAfterOwnPublications(recaptured,error));REQUIRE(error==std::errc::invalid_argument);
+  const std::array duplicate{replacement.current,replacement.current};
+  REQUIRE_FALSE(snapshot->ValidateAfterOwnPublications(duplicate,error));REQUIRE(error==std::errc::invalid_argument);
+  REQUIRE(snapshot->ValidateAfterOwnPublications(updated,error));REQUIRE_FALSE(error);
+  const std::array<uint8_t,3> created_bytes{0x50,0,0x47};
+  auto created=f.members->Publish(*f.volume->recovery(),absent,created_bytes);
+  REQUIRE_FALSE(created.error);REQUIRE(created.published);REQUIRE(created.durable);REQUIRE(created.current);
+  // Omitting a genuine new own output cannot conceal an unlisted member.
+  REQUIRE_FALSE(snapshot->ValidateAfterOwnPublications(updated,error));REQUIRE(error==std::errc::state_not_recoverable);
+  const std::array complete{replacement.current,created.current};
+  batch=snapshot->ValidateAfterOwnPublications(complete,error);REQUIRE(batch);REQUIRE_FALSE(error);
+  REQUIRE(batch->tokens().size()==3);
+  const auto kept=std::find_if(batch->tokens().begin(),batch->tokens().end(),[](const auto& token){return token->relative()=="Account";});
+  REQUIRE(kept!=batch->tokens().end());
+  REQUIRE(std::equal((*kept)->bytes().begin(),(*kept)->bytes().end(),account.begin(),account.end()));
+  batch.reset();
+  REQUIRE(BootstrapFile(f.profile->path()/"FFFE07D1.gpd")==std::vector<uint8_t>(changed.begin(),changed.end()));
+  REQUIRE(BootstrapFile(f.profile->path()/"new.png")==std::vector<uint8_t>(created_bytes.begin(),created_bytes.end()));
+  REQUIRE(f.HeaderBytes()==f.original); // No map/Header or guest completion grant.
+}
+TEST_CASE("Complete member after-publication guard retains real deletion absence and refuses foreign or changed source facts",
+          "[base][storage][content_mutation][profile_header][member_snapshot][published_member_guard]") {
+  ExternalHeaderFixture f;std::error_code error;
+  f.members.reset();const std::array<uint8_t,4> unknown{0x61,0x62,0,0x64};
+  REQUIRE_FALSE(f.profile->WriteNewFile("unknown.bin",unknown).error);
+  f.members=SnapshotPublicationSet::Reserve(f.profile,{f.gpd},error);REQUIRE(f.members);REQUIRE_FALSE(error);
+  auto header=f.Open();auto snapshot=header->CaptureMemberSnapshot(error);REQUIRE(snapshot);REQUIRE_FALSE(error);
+  const auto mode=GENERATE(0u,1u,2u,3u,4u);
+  const bool erased=mode==0;
+  auto own=erased?f.members->Delete(*f.volume->recovery(),f.gpd)
+                 :f.members->Publish(*f.volume->recovery(),f.gpd,std::array<uint8_t,3>{0x71,0,0x73});
+  REQUIRE_FALSE(own.error);REQUIRE(own.published);REQUIRE(own.durable);REQUIRE(own.current);
+  const std::array updated{own.current};
+  auto batch=snapshot->ValidateAfterOwnPublications(updated,error);REQUIRE(batch);REQUIRE_FALSE(error);batch.reset();
+  if(erased) {
+    REQUIRE_FALSE(own.current->exists());REQUIRE_FALSE(std::filesystem::exists(f.profile->path()/"FFFE07D1.gpd"));
+    REQUIRE(BootstrapFile(f.profile->path()/"unknown.bin")==std::vector<uint8_t>(unknown.begin(),unknown.end()));
+  } else {
+    if(mode==1) {
+      std::ofstream file(f.profile->path()/"unknown.bin",std::ios::binary|std::ios::trunc);REQUIRE(file);file.write("evil",4);file.close();REQUIRE(file);
+      REQUIRE_FALSE(snapshot->ValidateAfterOwnPublications(updated,error));REQUIRE(error);
+    }
+    if(mode==2) {
+      std::ofstream file(f.profile->path()/"foreign.bin",std::ios::binary);REQUIRE(file);file.write("extra",5);file.close();REQUIRE(file);
+      REQUIRE_FALSE(snapshot->ValidateAfterOwnPublications(updated,error));REQUIRE(error);
+    }
+    if(mode==3) {
+      f.profile->Retire();REQUIRE_FALSE(snapshot->ValidateAfterOwnPublications(updated,error));REQUIRE(error);
+    }
+    if(mode==4) {
+      ExternalHeaderFixture foreign;
+      const auto other=foreign.members->Publish(*foreign.volume->recovery(),foreign.gpd,
+          std::array<uint8_t,3>{0x71,0,0x73});
+      REQUIRE_FALSE(other.error);REQUIRE(other.published);REQUIRE(other.durable);REQUIRE(other.current);
+      const std::array wrong_source{other.current};
+      REQUIRE_FALSE(snapshot->ValidateAfterOwnPublications(wrong_source,error));REQUIRE(error==std::errc::invalid_argument);
+      REQUIRE(snapshot->ValidateAfterOwnPublications(updated,error));REQUIRE_FALSE(error);
+    }
+  }
+  REQUIRE(f.HeaderBytes()==f.original);
+}
+TEST_CASE("A durable member checkpoint transfers the same reservation into a distinct mutable epoch without retaining old writer authority",
+          "[base][storage][content_mutation][profile_header][member_snapshot][publication_continuation]") {
+  ExternalHeaderFixture f; std::error_code error;
+  f.members.reset();
+  const std::array<uint8_t,4> account{0x41,0,0x63,0x7F};
+  REQUIRE_FALSE(f.profile->WriteNewFile("Account",account).error);
+  auto future=f.profile->CaptureSnapshot("personal.png",4096,error,true);
+  REQUIRE(future);REQUIRE_FALSE(error);REQUIRE_FALSE(future->exists());
+  f.members=SnapshotPublicationSet::Reserve(f.profile,{f.gpd,future},error);
+  REQUIRE(f.members);REQUIRE_FALSE(error);
+  auto header=f.Open();auto snapshot=header->CaptureMemberSnapshot(error);
+  REQUIRE(snapshot);REQUIRE_FALSE(error);
+  const std::vector<uint8_t> original(f.gpd->bytes().begin(),f.gpd->bytes().end());
+  const std::array<uint8_t,5> first{0x91,0,0x93,0x94,0x95};
+  auto published=f.members->Publish(*f.volume->recovery(),f.gpd,first);
+  REQUIRE_FALSE(published.error);REQUIRE(published.published);REQUIRE(published.durable);
+  const std::array own{published.current};
+  auto abandoned=f.members->PrepareContinuation(*snapshot,own,error);
+  REQUIRE(abandoned);REQUIRE_FALSE(error);
+  auto inactive=abandoned->successor();
+  REQUIRE_FALSE(inactive->Capture("FFFE07D1.gpd",4096,error,true));
+  REQUIRE(error==std::errc::device_or_resource_busy);
+  abandoned.reset();
+  REQUIRE_FALSE(inactive->Capture("FFFE07D1.gpd",4096,error,true));
+  REQUIRE(error==std::errc::operation_canceled);
+  inactive.reset();
+  REQUIRE(snapshot->ValidateAfterOwnPublications(own,error));REQUIRE_FALSE(error);
+  auto prepared=f.members->PrepareContinuation(*snapshot,own,error);
+  REQUIRE(prepared);REQUIRE_FALSE(error);
+  auto next=prepared->successor();const auto next_before=prepared->before();
+  const auto find=[&](std::string_view name) {
+    const auto found=std::find_if(next_before.begin(),next_before.end(),
+        [&](const auto& token){return token->relative().generic_string()==name;});
+    REQUIRE(found!=next_before.end());return *found;
+  };
+  const auto next_gpd=find("FFFE07D1.gpd"),next_picture=find("personal.png");
+  REQUIRE(next_gpd!=published.current);
+  REQUIRE(std::equal(next_gpd->bytes().begin(),next_gpd->bytes().end(),first.begin(),first.end()));
+  REQUIRE_FALSE(next_picture->exists());
+  REQUIRE(prepared->Apply());REQUIRE_FALSE(prepared->Apply());
+  prepared.reset();
+  auto old=f.members;f.members=next;
+  REQUIRE_FALSE(old->Capture("FFFE07D1.gpd",4096,error,true));REQUIRE(error==std::errc::operation_canceled);
+  REQUIRE_FALSE(old->ObserveRetainedMetadata(f.gpd,error));REQUIRE(error==std::errc::operation_canceled);
+  REQUIRE(old->Publish(*f.volume->recovery(),f.gpd,first).error==std::errc::operation_canceled);
+  REQUIRE(old->Delete(*f.volume->recovery(),f.gpd).error==std::errc::operation_canceled);
+  REQUIRE(old->RetryDurability(published.current).error==std::errc::operation_canceled);
+  REQUIRE(old->ObserveDurability(published.current).error==std::errc::operation_canceled);
+  REQUIRE_FALSE(old->Validate({published.current},error));REQUIRE(error==std::errc::operation_canceled);
+  REQUIRE_FALSE(old->PrepareContinuation(*snapshot,own,error));REQUIRE(error==std::errc::operation_canceled);
+  REQUIRE_FALSE(header->CaptureMemberLayout(error));REQUIRE(error==std::errc::operation_canceled);
+  REQUIRE_FALSE(header->CaptureMemberSnapshot(error));REQUIRE(error==std::errc::operation_canceled);
+  REQUIRE_FALSE(snapshot->Validate(error));REQUIRE(error==std::errc::operation_canceled);
+  REQUIRE_FALSE(snapshot->ValidateAfterOwnPublications(own,error));REQUIRE(error==std::errc::operation_canceled);
+  std::vector<uint8_t> retained(original.size());
+  const auto row=std::find_if(snapshot->members().begin(),snapshot->members().end(),
+      [](const auto& member){return member.relative=="FFFE07D1.gpd";});
+  REQUIRE(row!=snapshot->members().end());
+  const auto read=snapshot->Read(size_t(row-snapshot->members().begin()),0,retained);
+  REQUIRE_FALSE(read.error);REQUIRE(read.bytes==retained.size());REQUIRE(retained==original);
+  // Ordinary opens stay fenced across the handoff; destroying the old set
+  // cannot retire the successor's continuously held native namespace leases.
+  REQUIRE_FALSE(f.profile->CaptureSnapshot("FFFE07D1.gpd",4096,error,true));
+  REQUIRE(error==std::errc::device_or_resource_busy);
+  old.reset();
+  REQUIRE(next->Validate({next_gpd,next_picture},error));REQUIRE_FALSE(error);
+  const bool cancel_later=GENERATE(false,true);
+  const std::array<uint8_t,3> picture{0x50,0,0x47};
+  const std::atomic<bool> canceled{cancel_later};
+  const auto personal=next->Publish(*f.volume->recovery(),next_picture,picture,&canceled);
+  if(cancel_later) {
+    REQUIRE(personal.error==std::errc::operation_canceled);REQUIRE_FALSE(personal.published);
+    REQUIRE_FALSE(std::filesystem::exists(f.profile->path()/"personal.png"));
+    REQUIRE(BootstrapFile(f.profile->path()/"FFFE07D1.gpd")==std::vector<uint8_t>(first.begin(),first.end()));
+  } else {
+    REQUIRE_FALSE(personal.error);REQUIRE(personal.published);REQUIRE(personal.durable);
+    const std::array<uint8_t,4> second{0xA1,0xA2,0,0xA4};
+    const auto later=next->Publish(*f.volume->recovery(),next_gpd,second);
+    REQUIRE_FALSE(later.error);REQUIRE(later.published);REQUIRE(later.durable);
+    REQUIRE(BootstrapFile(f.profile->path()/"FFFE07D1.gpd")==std::vector<uint8_t>(second.begin(),second.end()));
+    REQUIRE(BootstrapFile(f.profile->path()/"personal.png")==std::vector<uint8_t>(picture.begin(),picture.end()));
+  }
+  REQUIRE(BootstrapFile(f.profile->path()/"Account")==std::vector<uint8_t>(account.begin(),account.end()));
+  REQUIRE(f.HeaderBytes()==f.original); // No descriptor/signature/native completion authority.
+  // Retained OLD read snapshots do not prolong the successor's namespace
+  // ownership. Actual final-source/member/model/cache joins remain separate.
+  f.members.reset();next.reset();
+  auto reopened=f.profile->CaptureSnapshot("FFFE07D1.gpd",4096,error,true);
+  REQUIRE(reopened);REQUIRE_FALSE(error);
+  REQUIRE(snapshot->Read(size_t(row-snapshot->members().begin()),0,retained).bytes==original.size());
+  REQUIRE(retained==original);
+}
+TEST_CASE("Member checkpoint continuation refuses unproved receipts pending effects changed dependencies and retired sources",
+          "[base][storage][content_mutation][profile_header][member_snapshot][publication_continuation]") {
+  ExternalHeaderFixture f;std::error_code error;f.members.reset();
+  const std::array<uint8_t,3> kept{0x61,0,0x63};
+  REQUIRE_FALSE(f.profile->WriteNewFile("unknown.bin",kept).error);
+  auto future=f.profile->CaptureSnapshot("personal.png",4096,error,true);REQUIRE(future);REQUIRE_FALSE(error);
+  f.members=SnapshotPublicationSet::Reserve(f.profile,{f.gpd,future},error);REQUIRE(f.members);REQUIRE_FALSE(error);
+  auto header=f.Open();auto snapshot=header->CaptureMemberSnapshot(error);REQUIRE(snapshot);REQUIRE_FALSE(error);
+  const std::array<uint8_t,4> output{0x71,0,0x73,0x74};
+  REQUIRE_FALSE(f.members->PrepareContinuation(*snapshot,{},error));REQUIRE(error==std::errc::invalid_argument);
+  const std::array before{f.gpd};
+  REQUIRE_FALSE(f.members->PrepareContinuation(*snapshot,before,error));REQUIRE(error==std::errc::invalid_argument);
+  auto own=f.members->Publish(*f.volume->recovery(),f.gpd,output);
+  REQUIRE_FALSE(own.error);REQUIRE(own.published);REQUIRE(own.durable);const std::array current{own.current};
+  SECTION("equal recapture is not the genuine publication receipt") {
+    const auto equal=f.members->Capture("FFFE07D1.gpd",4096,error,true);REQUIRE(equal);REQUIRE_FALSE(error);
+    const std::array recaptured{equal};REQUIRE_FALSE(f.members->PrepareContinuation(*snapshot,recaptured,error));
+    REQUIRE(error==std::errc::invalid_argument);
+    REQUIRE(f.members->PrepareContinuation(*snapshot,current,error));REQUIRE_FALSE(error);
+  }
+  SECTION("a genuine canceled later slot cannot be discarded into a new epoch") {
+    const std::array<uint8_t,3> png{0x50,0,0x47};const std::atomic<bool> canceled{true};
+    const auto stopped=f.members->Publish(*f.volume->recovery(),future,png,&canceled);
+    REQUIRE(stopped.error==std::errc::operation_canceled);REQUIRE_FALSE(stopped.published);
+    REQUIRE(snapshot->ValidateAfterOwnPublications(current,error));REQUIRE_FALSE(error);
+    REQUIRE_FALSE(f.members->PrepareContinuation(*snapshot,current,error));REQUIRE(error==std::errc::operation_in_progress);
+    const auto retried=f.members->Publish(*f.volume->recovery(),future,png);
+    REQUIRE_FALSE(retried.error);REQUIRE(retried.published);REQUIRE(retried.durable);
+    const std::array complete{own.current,retried.current};
+    REQUIRE(f.members->PrepareContinuation(*snapshot,complete,error));REQUIRE_FALSE(error);
+  }
+  SECTION("unknown member change cannot be hidden by an own CAS") {
+    std::ofstream file(f.profile->path()/"unknown.bin",std::ios::binary|std::ios::trunc);REQUIRE(file);
+    file.write("bad",3);file.close();REQUIRE(file);
+    REQUIRE_FALSE(f.members->PrepareContinuation(*snapshot,current,error));REQUIRE(error);
+  }
+  SECTION("a new unowned member cannot enter a continuation") {
+    std::ofstream file(f.profile->path()/"foreign.bin",std::ios::binary);REQUIRE(file);
+    file.write("extra",5);file.close();REQUIRE(file);
+    REQUIRE_FALSE(f.members->PrepareContinuation(*snapshot,current,error));REQUIRE(error);
+  }
+  SECTION("retirement after preparation refuses activation without losing the real first publication") {
+    auto prepared=f.members->PrepareContinuation(*snapshot,current,error);REQUIRE(prepared);REQUIRE_FALSE(error);
+    f.profile->Retire();REQUIRE_FALSE(prepared->Apply());
+  }
+  REQUIRE(BootstrapFile(f.profile->path()/"FFFE07D1.gpd")==std::vector<uint8_t>(output.begin(),output.end()));
+  REQUIRE(f.HeaderBytes()==f.original);
+}
+} // namespace xe::filesystem::test
+#endif

@@ -185,6 +185,7 @@ struct ProfilePublicationIntentRecord {
 };
 namespace {
 constexpr std::string_view kArtifactMagic = "XPGDI04\n", kArtifactDoneMagic = "XPGDD04\n";
+constexpr std::string_view kHeaderArtifactMagic = "XPGDI05\n", kHeaderArtifactDoneMagic = "XPGDD05\n";
 constexpr uint64_t kMaximumArtifactPayload = 256ull << 20;
 std::string Fold(std::string value) {
   for (auto& c : value) { if (c >= 'A' && c <= 'Z') { c += 'a' - 'A'; } }
@@ -219,12 +220,33 @@ bool ArtifactLeafMatches(ProfileArtifactKind kind, uint32_t title,
   return !expected.empty() && !actual.has_parent_path() &&
       Fold(actual.generic_string()) == Fold(expected.generic_string());
 }
+bool HeaderTargetMatches(const GpdIntentBinding& binding,
+                         const std::filesystem::path& target) {
+  if (!CanonicalBinding(binding)) return false;
+  content_mutation_wire::Record slot;
+  slot.kind = content_mutation_wire::Kind::kHeader;
+  slot.package = binding.profile_relative;
+  slot.target = target;
+  // Existing CM grammar independently derives Headers/type/package.header
+  // from the exact canonical profile package. Text alone grants no source.
+  return !target.empty() && content_mutation_wire::Target(slot) == target;
+}
+bool ArtifactTargetMatches(ProfileArtifactKind kind, uint32_t title,
+    const std::filesystem::path& target, uint32_t version,
+    const GpdIntentBinding& binding) {
+  return kind == ProfileArtifactKind::kPackageHeader
+      ? version == 5 && !title && HeaderTargetMatches(binding, target)
+      : ArtifactLeafMatches(kind, title, target);
+}
 uint64_t ArtifactMaximum(ProfileArtifactKind kind) {
-  return kind == ProfileArtifactKind::kThumbnail
+  return kind == ProfileArtifactKind::kThumbnail || kind == ProfileArtifactKind::kPackageHeader
       ? content_mutation_wire::kMaximumMetadataBytes : ProfileGpdSnapshotStore::kMaximumBytes;
 }
 std::error_code ArtifactBytes(ProfileArtifactKind kind, std::span<const uint8_t> bytes) {
   if (bytes.size() > ArtifactMaximum(kind)) { return std::make_error_code(std::errc::file_too_large); }
+  // Format-neutral storage never fabricates signing/parse success. Actual
+  // CM/native producer validates complete signed metadata before submission.
+  if (kind == ProfileArtifactKind::kPackageHeader && bytes.size() < 0x971A) return Bad();
   return kind == ProfileArtifactKind::kGpd ? ValidateProfileGpdSnapshot(bytes) : std::error_code{};
 }
 bool HasMagic(std::span<const uint8_t> bytes, std::string_view magic) {
@@ -232,6 +254,7 @@ bool HasMagic(std::span<const uint8_t> bytes, std::string_view magic) {
       {reinterpret_cast<const uint8_t*>(magic.data()), magic.size()});
 }
 struct ArtifactRecord {
+  uint32_t version = 4;
   std::array<uint8_t, 16> id{};
   GpdIntentBinding binding;
   HostStorageRootIdentity root;
@@ -248,7 +271,8 @@ struct ArtifactRecord {
   Digest journal_hash{};
 };
 std::vector<uint8_t> EncodeArtifact(const ArtifactRecord& r, std::error_code& error) {
-  Writer w; w.Raw({reinterpret_cast<const uint8_t*>(kArtifactMagic.data()), 8}); w.Raw(r.id);
+  const auto magic = r.version == 5 ? kHeaderArtifactMagic : kArtifactMagic;
+  Writer w; w.Raw({reinterpret_cast<const uint8_t*>(magic.data()), 8}); w.Raw(r.id);
   w.Text(r.binding.source_id); w.U64(r.binding.device_id); w.U64(r.binding.xuid);
   w.U64(r.binding.source_generation); w.Text(r.binding.profile_relative.generic_string());
   w.Raw(r.binding.managed_source.uuid); w.U64(r.binding.managed_source.content_epoch);
@@ -271,13 +295,16 @@ std::vector<uint8_t> ReadArtifactBlob(Reader& in, uint64_t maximum) {
 }
 std::unique_ptr<ArtifactRecord> DecodeArtifact(std::span<const uint8_t> bytes,
     const std::filesystem::path& journal, std::error_code& error) {
-  if (bytes.size() < 56 || bytes.size() > kMaximumJournal || !HasMagic(bytes, kArtifactMagic)) {
+  const bool header_format = HasMagic(bytes, kHeaderArtifactMagic);
+  if (bytes.size() < 56 || bytes.size() > kMaximumJournal ||
+      (!header_format && !HasMagic(bytes, kArtifactMagic))) {
     error = Bad(); return {};
   }
   const auto body = bytes.first(bytes.size() - 32);
   const auto hash = Hash(body, error);
   if (error || !Equal(hash, bytes.last(32))) { error = Bad(); return {}; }
   Reader in{body, {}}; in.Take(8); auto r = std::make_unique<ArtifactRecord>();
+  r->version = header_format ? 5 : 4;
   const auto id = in.Take(16); std::copy(id.begin(), id.end(), r->id.begin());
   r->binding.source_id = in.Text(256); const auto device = in.U64();
   r->binding.device_id = uint32_t(device); r->binding.xuid = in.U64();
@@ -288,24 +315,33 @@ std::unique_ptr<ArtifactRecord> DecodeArtifact(std::span<const uint8_t> bytes,
   const auto count = in.U64();
   if (in.error || count < 1 || count > 16) { error = Bad(); return {}; }
   r->root = {in.U64(), in.U64(), in.U64()}; r->files.resize(size_t(count));
-  std::set<std::string> leaves; uint64_t total = 0; size_t main_members = 0;
+  std::set<std::string> leaves; uint64_t total = 0; size_t main_members = 0, gpd_members = 0, headers = 0, thumbnails = 0;
   for (auto& f : r->files) {
     const auto kind = in.U64(), action = in.U64(), title = in.U64();
     f.kind = ProfileArtifactKind(kind); f.action = ProfileArtifactAction(action);
-    f.title = uint32_t(title); f.leaf = in.Text(32); const auto exists = in.U64();
+    f.title = uint32_t(title);
+    f.leaf = in.Text(header_format && f.kind == ProfileArtifactKind::kPackageHeader ? 4096 : 32);
+    const auto exists = in.U64();
     f.before_exists = exists == 1; f.before_info.filesystem_id = in.U64();
     f.before_info.file_id = in.U64(); f.before_info.size = in.U64();
     f.before_info.regular = f.before_exists; f.before_info.links = f.before_exists ? 1 : 0;
     f.before = ReadArtifactBlob(in, ArtifactMaximum(f.kind));
     f.intended = ReadArtifactBlob(in, ArtifactMaximum(f.kind));
-    if (kind < 1 || kind > 8 || action < 1 || action > 4 || title > UINT32_MAX || exists > 1 ||
-        !ArtifactLeafMatches(f.kind, f.title, f.leaf) || !leaves.insert(Fold(f.leaf.generic_string())).second ||
+    if (kind < 1 || kind > (header_format ? 9u : 8u) || action < 1 || action > 4 || title > UINT32_MAX || exists > 1 ||
+        !ArtifactTargetMatches(f.kind, f.title, f.leaf, r->version, r->binding) ||
+        !leaves.insert(Fold(f.leaf.generic_string())).second ||
         f.before_info.size != f.before.size() ||
         (f.before_exists ? !f.before_info.file_id :
           (!f.before.empty() || f.before_info.file_id || f.before_info.filesystem_id || f.before_info.size))) {
       in.error = Bad();
     }
-    if (f.kind != ProfileArtifactKind::kThumbnail) { ++main_members; }
+    if (f.kind == ProfileArtifactKind::kPackageHeader) {
+      ++headers;
+      if (!f.before_exists || (f.action != ProfileArtifactAction::kReplace &&
+          f.action != ProfileArtifactAction::kObserve) ||
+          (f.action == ProfileArtifactAction::kReplace && f.before.size() != f.intended.size())) in.error = Bad();
+    } else if (f.kind == ProfileArtifactKind::kThumbnail) { ++thumbnails; }
+    else { ++main_members; if (f.kind == ProfileArtifactKind::kGpd) ++gpd_members; }
     if (f.before_exists && ArtifactBytes(f.kind, f.before)) { in.error = Bad(); }
     if (f.action == ProfileArtifactAction::kObserve) {
       if (!f.intended.empty()) { in.error = Bad(); }
@@ -320,13 +356,15 @@ std::unique_ptr<ArtifactRecord> DecodeArtifact(std::span<const uint8_t> bytes,
     if (f.intended.size() > kMaximumArtifactPayload - total) { in.error = Bad(); }
     else { total += f.intended.size(); }
   }
-  if (in.error || !in.bytes.empty() || !main_members || device > UINT32_MAX ||
+  if (in.error || !in.bytes.empty() || !main_members ||
+      (header_format ? headers != 1 || thumbnails != 0 || !gpd_members : headers != 0) || device > UINT32_MAX ||
       !CanonicalBinding(r->binding) || !r->root.directory || !r->root.mount ||
       journal != "intent-" + Hex(r->id) + ".bin") { error = Bad(); return {}; }
   r->journal_hash = Hash(bytes, error); return error ? nullptr : std::move(r);
 }
 std::vector<uint8_t> ArtifactDone(const ArtifactRecord& r) {
-  Writer w; w.Raw({reinterpret_cast<const uint8_t*>(kArtifactDoneMagic.data()), 8});
+  const auto magic = r.version == 5 ? kHeaderArtifactDoneMagic : kArtifactDoneMagic;
+  Writer w; w.Raw({reinterpret_cast<const uint8_t*>(magic.data()), 8});
   w.Raw(r.id); w.Raw(r.journal_hash); return std::move(w.bytes);
 }
 std::filesystem::path ArtifactDoneLeaf(const ArtifactRecord& r) {
@@ -479,15 +517,28 @@ struct ProfileArtifactAdmission::Data {
   std::shared_ptr<const HostStorageIntentLease> target;
   std::shared_ptr<SnapshotPublicationSet> members;
   std::shared_ptr<ContentMutationOwner::ProfileThumbnailParticipant> thumbnail;
+  std::shared_ptr<ContentMutationOwner::ProfileHeaderPublication> header;
+  std::error_code initialization_error;
   std::vector<ProfileArtifactExpected> expected;
 };
 ProfileArtifactAdmission::ProfileArtifactAdmission(std::shared_ptr<Data> data) : data_(std::move(data)) {}
 ProfileArtifactAdmission::~ProfileArtifactAdmission() = default;
 const std::vector<ProfileArtifactExpected>& ProfileArtifactAdmission::expected() const { return data_->expected; }
 const std::shared_ptr<SnapshotPublicationSet>& ProfileArtifactAdmission::members() const { return data_->members; }
+bool ProfileArtifactAdmission::Matches(
+    const std::shared_ptr<const ProfileIntentOwner>& owner,
+    const std::shared_ptr<const SnapshotRecoveryOwner>& recovery,
+    const GpdIntentBinding& binding) const {
+  return data_ && data_->owner == owner && data_->recovery == recovery &&
+      SameBinding(data_->binding, binding);
+}
+const std::shared_ptr<ContentMutationOwner::ProfileHeaderPublication>& ProfileArtifactAdmission::header() const { return data_->header; }
 struct ProfilePublicationIntentStore::ArtifactState {
   std::unique_ptr<ArtifactRecord> record;
   std::shared_ptr<ProfileArtifactAdmission> admission;
+  // Issued stage is owned by admission.header(); never borrowed from native
+  // memory. PIS/CM serial ownership keeps this prepared object stable.
+  const PreparedSnapshotPublication* header_prepared = nullptr;
 };
 std::filesystem::path ProfilePublicationIntentStore::ProfileRelative(uint64_t xuid) {
   return CanonicalProfile(xuid);
@@ -530,10 +581,10 @@ std::vector<GpdIntentSummary> ProfilePublicationIntentStore::ScanLocked(
     row.journal = leaf;
     const auto token = Capture(owner, leaf, kMaximumJournal, row.error);
     bool decoded = false; std::filesystem::path done_leaf; std::vector<uint8_t> expected_done;
-    if (token && !row.error && HasMagic(token->bytes(), kArtifactMagic)) {
+    if (token && !row.error && (HasMagic(token->bytes(), kArtifactMagic) || HasMagic(token->bytes(), kHeaderArtifactMagic))) {
       auto record = DecodeArtifact(token->bytes(), leaf, row.error);
       if (record) {
-        decoded = true; row.format_version = 4; row.binding = record->binding;
+        decoded = true; row.format_version = record->version; row.binding = record->binding;
         done_leaf = ArtifactDoneLeaf(*record); expected_done = ArtifactDone(*record);
       }
     } else {
@@ -781,12 +832,24 @@ std::shared_ptr<ProfileArtifactAdmission> ProfilePublicationIntentStore::Acquire
   return AcquireArtifactsInternal(std::move(owner), std::move(recovery), std::move(metadata),
       std::move(binding), std::move(main), thumbnail, error);
 }
+std::shared_ptr<ProfileArtifactAdmission> ProfilePublicationIntentStore::AcquireHeaderArtifacts(
+    std::shared_ptr<const ProfileIntentOwner> owner,
+    std::shared_ptr<const SnapshotRecoveryOwner> recovery,
+    std::shared_ptr<ContentMutationOwner> metadata, GpdIntentBinding binding,
+    std::vector<ProfileArtifactExpected> main,
+    std::shared_ptr<const HostStorageSnapshotToken> actual_header,
+    std::error_code& error) {
+  if (!actual_header) { error = Bad(); return {}; }
+  return AcquireArtifactsInternal(std::move(owner), std::move(recovery), std::move(metadata),
+      std::move(binding), std::move(main), false, error, {}, std::move(actual_header));
+}
 std::shared_ptr<ProfileArtifactAdmission> ProfilePublicationIntentStore::AcquireArtifactsInternal(
     std::shared_ptr<const ProfileIntentOwner> owner,
     std::shared_ptr<const SnapshotRecoveryOwner> recovery,
     std::shared_ptr<ContentMutationOwner> metadata, GpdIntentBinding binding,
     std::vector<ProfileArtifactExpected> main, bool thumbnail, std::error_code& error,
-    const std::filesystem::path& recovering) {
+    const std::filesystem::path& recovering,
+    std::shared_ptr<const HostStorageSnapshotToken> actual_header) {
   error.clear();
   if (!owner || !recovery || owner->error() || recovery->error()) {
     error = owner && owner->error() ? owner->error() : recovery && recovery->error()
@@ -794,9 +857,12 @@ std::shared_ptr<ProfileArtifactAdmission> ProfilePublicationIntentStore::Acquire
   }
   if (!CanonicalBinding(binding) || !owner->managed_identity() ||
       !BindingOwnedBy(binding, *owner->managed_identity()) || main.empty() ||
-      main.size() > (thumbnail ? 15u : 16u)) { error = Bad(); return {}; }
+      main.size() > (thumbnail || actual_header ? 15u : 16u) || (thumbnail && actual_header) ||
+      (actual_header && std::none_of(main.begin(),main.end(),[](const auto& member) {
+        return member.kind==ProfileArtifactKind::kGpd;
+      }))) { error = Bad(); return {}; }
   error = owner->managed_identity()->CheckCurrent(); if (error) { return {}; }
-  if (thumbnail && (!metadata || metadata->identity_ != owner->managed_identity() ||
+  if ((thumbnail || actual_header) && (!metadata || metadata->identity_ != owner->managed_identity() ||
       metadata->content_ != owner->source() || metadata->source_lease_ != owner->source_lease_)) {
     error = std::make_error_code(std::errc::permission_denied); return {};
   }
@@ -811,7 +877,8 @@ std::shared_ptr<ProfileArtifactAdmission> ProfilePublicationIntentStore::Acquire
   std::set<std::string> leaves; uint64_t bytes = 0;
   for (const auto& expected : main) {
     const auto& token = expected.token;
-    if (expected.kind == ProfileArtifactKind::kThumbnail || !token || token->root() != view ||
+    if (expected.kind == ProfileArtifactKind::kThumbnail || expected.kind == ProfileArtifactKind::kPackageHeader ||
+        !token || token->root() != view ||
         !token->ascii_folded_leaf() || !ArtifactLeafMatches(expected.kind, expected.title_id, token->relative()) ||
         !leaves.insert(Fold(token->relative().generic_string())).second ||
         (token->exists() && ArtifactBytes(expected.kind, token->bytes()))) { error = Bad(); return {}; }
@@ -837,13 +904,38 @@ std::shared_ptr<ProfileArtifactAdmission> ProfilePublicationIntentStore::Acquire
   data->members = SnapshotPublicationSet::Reserve(view, std::move(tokens), error);
   if (!data->members) { return {}; }
   data->expected = std::move(main);
+  // All output/control-block/vector allocation precedes a Header factory that
+  // can create a real uncertain artifact. A returned session+error must have
+  // this already-owned exact retention slot; no post-IO allocation can lose it.
+  data->expected.reserve(data->expected.size() + (thumbnail || actual_header ? 1u : 0u));
+  auto issued = std::shared_ptr<ProfileArtifactAdmission>(new ProfileArtifactAdmission(data));
   if (thumbnail) {
     data->thumbnail = data->metadata_owner->PrepareProfileThumbnail(data->binding.profile_relative,
                                                                    data->members, error);
     if (!data->thumbnail) { return {}; }
     data->expected.push_back({ProfileArtifactKind::kThumbnail, 0, data->thumbnail->expected()});
   }
-  return std::shared_ptr<ProfileArtifactAdmission>(new ProfileArtifactAdmission(std::move(data)));
+  if (actual_header) {
+    if (actual_header->root() != data->owner->source() ||
+        !HeaderTargetMatches(data->binding, actual_header->relative())) { error = Bad(); return {}; }
+    data->header = data->metadata_owner->PrepareProfileHeader(data->binding.profile_relative,
+        std::move(actual_header), data->members, error);
+    if (!data->header) return {};
+    data->initialization_error = error;
+    data->expected.push_back({ProfileArtifactKind::kPackageHeader, 0, data->header->expected()});
+  }
+  return issued;
+}
+std::shared_ptr<const std::vector<uint8_t>> ProfilePublicationIntentStore::SealAdmittedHeader(
+    const std::shared_ptr<ProfileArtifactAdmission>& admission, std::error_code& error) {
+  error.clear();
+  if (!admission || !admission->data_ || !admission->data_->header || !admission->data_->members) {
+    error=Bad(); return {};
+  }
+  auto& data=*admission->data_;
+  error=data.initialization_error;
+  if (!error) error=data.header->CheckCurrent(*data.members);
+  return error ? nullptr : data.header->Seal(error);
 }
 std::unique_ptr<ProfilePublicationIntentStore> ProfilePublicationIntentStore::PrepareArtifacts(
     std::shared_ptr<ProfileArtifactAdmission> admission,
@@ -857,9 +949,16 @@ std::unique_ptr<ProfilePublicationIntentStore> ProfilePublicationIntentStore::Pr
   if (!data.owner || !data.members || !data.target || mutations.size() != data.expected.size()) {
     error = Bad(); return {};
   }
-  error = data.owner->managed_identity()->CheckCurrent();
+  error = data.initialization_error;
+  if (!error) error = data.owner->managed_identity()->CheckCurrent();
   if (!error && data.thumbnail) { error = data.thumbnail->CheckCurrent(*data.members); }
+  if (!error && data.header) { error = data.header->CheckCurrent(*data.members); }
   if (error) { return {}; }
+  // This call is the real outer producer's IO-quiescent submission boundary.
+  // Closing/serializing the ONE retained Header stage does not imply native
+  // request/DB completion; those duties remain with the authenticated caller.
+  const auto header_bytes = data.header ? SealAdmittedHeader(admission,error) : nullptr;
+  if (data.header && (!header_bytes || error)) return {};
   std::unique_lock lock(data.owner->mutex_, std::try_to_lock);
   if (!lock.owns_lock()) { error = std::make_error_code(std::errc::device_or_resource_busy); return {}; }
   const auto rows = ScanLocked(*data.owner, error); if (error) { return {}; }
@@ -877,6 +976,7 @@ std::unique_ptr<ProfilePublicationIntentStore> ProfilePublicationIntentStore::Pr
   result->target_lease_ = data.target; result->artifacts_ = std::make_unique<ArtifactState>();
   result->artifacts_->admission = std::move(admission);
   result->artifacts_->record = std::make_unique<ArtifactRecord>(); auto& record = *result->artifacts_->record;
+  record.version = data.header ? 5 : 4;
   record.binding = data.binding; record.root = data.owner->Identity(*result->view_, error);
   if (error) { return {}; }
   std::set<std::pair<uint64_t, uint32_t>> seen; uint64_t total = 0;
@@ -887,14 +987,26 @@ std::unique_ptr<ProfilePublicationIntentStore> ProfilePublicationIntentStore::Pr
     });
     if (before == data.expected.end() || !seen.insert(key).second) { error = Bad(); return {}; }
     ArtifactRecord::File file; file.kind = mutation.kind; file.title = mutation.title_id;
-    file.action = mutation.action; file.leaf = before->token->relative();
+    file.action = mutation.action;
+    file.leaf = mutation.kind == ProfileArtifactKind::kPackageHeader && data.header
+        ? data.header->target() : before->token->relative();
     file.before_exists = before->token->exists();
     if (file.before_exists) { file.before_info = before->token->info(); }
     file.before.assign(before->token->bytes().begin(), before->token->bytes().end());
     file.intended = std::move(mutation.intended);
     const auto action = uint64_t(file.action);
-    if (action < 1 || action > 4 || !ArtifactLeafMatches(file.kind, file.title, file.leaf) ||
+    if (action < 1 || action > 4 ||
+        !ArtifactTargetMatches(file.kind, file.title, file.leaf, record.version, record.binding) ||
         (file.before_exists && ArtifactBytes(file.kind, file.before))) { error = Bad(); return {}; }
+    if (file.kind == ProfileArtifactKind::kPackageHeader) {
+      if (!data.header || !header_bytes || !file.before_exists ||
+          (file.action != ProfileArtifactAction::kObserve && file.action != ProfileArtifactAction::kReplace) ||
+          !Equal(*header_bytes, file.action == ProfileArtifactAction::kObserve
+              ? std::span<const uint8_t>(file.before) : std::span<const uint8_t>(file.intended)) ||
+          (file.action == ProfileArtifactAction::kReplace && file.intended.size() != file.before.size())) {
+        error = Bad(); return {};
+      }
+    }
     if (file.action == ProfileArtifactAction::kObserve || file.action == ProfileArtifactAction::kDelete) {
       if (!file.intended.empty() || (file.action == ProfileArtifactAction::kDelete && !file.before_exists)) {
         error = Bad(); return {};
@@ -906,6 +1018,17 @@ std::unique_ptr<ProfilePublicationIntentStore> ProfilePublicationIntentStore::Pr
     if (file.intended.size() > kMaximumArtifactPayload - total) { error = Bad(); return {}; }
     total += file.intended.size(); record.files.push_back(std::move(file));
   }
+  if (data.header) {
+    const auto header = std::find_if(record.files.begin(), record.files.end(), [](const auto& file) {
+      return file.kind == ProfileArtifactKind::kPackageHeader;
+    });
+    if (header == record.files.end()) { error = Bad(); return {}; }
+    if (header->action == ProfileArtifactAction::kReplace) {
+      // Transfer the actual native stage; never create a second image of it.
+      result->artifacts_->header_prepared = data.header->PrepareCanonical(*data.members, error);
+      if (!result->artifacts_->header_prepared || error) return {};
+    }
+  }
   std::random_device random; for (auto& byte : record.id) { byte = uint8_t(random()); }
   result->journal_ = "intent-" + Hex(record.id) + ".bin";
   auto encoded = EncodeArtifact(record, error); if (error) { return {}; }
@@ -916,6 +1039,9 @@ std::unique_ptr<ProfilePublicationIntentStore> ProfilePublicationIntentStore::Pr
   result->published_.resize(record.files.size());
   std::vector<std::shared_ptr<const HostStorageSnapshotToken>> checked(dependencies.begin(), dependencies.end());
   for (const auto& item : data.expected) {
+    // External Header owns its separate reservation and joins this same guard
+    // explicitly; main SnapshotPublicationSet remains one profile directory.
+    if (item.kind == ProfileArtifactKind::kPackageHeader) continue;
     const auto previous = std::find_if(checked.begin(), checked.end(), [&](const auto& token) {
       return token && token->root() == item.token->root() &&
           Fold(token->relative().generic_string()) == Fold(item.token->relative().generic_string());
@@ -936,6 +1062,7 @@ std::unique_ptr<ProfilePublicationIntentStore> ProfilePublicationIntentStore::Pr
   }
   {
     auto batch = data.members->Validate(std::move(checked), error); if (!batch) { return {}; }
+    if (data.header && (error = data.header->CheckWithSnapshotGuard(*data.members, *batch, data.header->expected()))) return {};
     attempted = result->journal_;
     const auto write = data.owner->root()->WriteNewIntentWithSnapshotGuard(*batch, result->journal_, encoded);
     error = write.error; if (!write.created) { attempted.clear(); }
@@ -956,7 +1083,7 @@ std::unique_ptr<ProfilePublicationIntentStore> ProfilePublicationIntentStore::Re
   if (owner && !owner->error()) {
     const auto probe = Capture(*owner, journal, kMaximumJournal, error);
     if (!probe) { return {}; }
-    if (HasMagic(probe->bytes(), kArtifactMagic)) {
+    if (HasMagic(probe->bytes(), kArtifactMagic) || HasMagic(probe->bytes(), kHeaderArtifactMagic)) {
       return RecoverArtifacts(std::move(owner), std::move(recovery), std::move(metadata_owner),
                               journal, std::move(binding), std::move(view), error);
     }
@@ -1076,17 +1203,65 @@ std::unique_ptr<ProfilePublicationIntentStore> ProfilePublicationIntentStore::Re
     return result;
   }
   std::vector<ProfileArtifactExpected> main; bool thumbnail = false;
+  std::shared_ptr<const HostStorageSnapshotToken> source_header;
+  const ArtifactRecord::File* header_record = nullptr;
+  bool header_was_before = false;
   for (const auto& file : saved.files) {
     if (file.kind == ProfileArtifactKind::kThumbnail) { thumbnail = true; continue; }
+    if (file.kind == ProfileArtifactKind::kPackageHeader) {
+      // The closed role/managed binding was decoded first. Actual CM source
+      // resolution and issued token, never journal text, owns this access.
+      if (!metadata || !HeaderTargetMatches(binding, file.leaf)) { error = Bad(); return {}; }
+      // Read through actual registered filesystem authority; do not invoke a
+      // metadata producer that creates missing Header parents on a conflict.
+      // The actual CM issuer below still independently validates this token.
+      source_header = owner->source()->CaptureSnapshot(file.leaf,
+          ArtifactMaximum(file.kind), error, true);
+      if (!source_header || error || source_header->root() != owner->source() ||
+          !source_header->exists() || (error = ArtifactBytes(file.kind, source_header->bytes()))) return {};
+      header_record = &file;
+      header_was_before = Equal(source_header->bytes(), file.before) &&
+          source_header->info().file_id == file.before_info.file_id;
+      if (!header_was_before && (file.action == ProfileArtifactAction::kObserve ||
+          !Equal(source_header->bytes(), file.intended))) { error = Conflict(); return {}; }
+      continue;
+    }
     auto current = view->CaptureSnapshot(file.leaf, ArtifactMaximum(file.kind), error, true);
     if (!current || (current->exists() && (error = ArtifactBytes(file.kind, current->bytes())))) { return {}; }
     main.push_back({file.kind, file.title, std::move(current)});
   }
   auto admission = AcquireArtifactsInternal(owner, recovery, std::move(metadata), std::move(binding),
-      std::move(main), thumbnail, error, journal);
-  if (!admission) { return {}; }
+      std::move(main), thumbnail, error, journal, std::move(source_header));
+  if (!admission || error) { return {}; }
   result->target_lease_ = admission->data_->target;
   result->artifacts_->admission = std::move(admission); result->published_.resize(saved.files.size());
+  if (header_record) {
+    auto& held = *result->artifacts_->admission->data_;
+    if (!held.header) { error = Bad(); return {}; }
+    if (header_record->action == ProfileArtifactAction::kReplace && header_was_before) {
+      // Recovery has no live native producer. Recreate only the SAME journal's
+      // intended image in the ONE CM-issued stage; no standalone publication.
+      for (size_t done = 0; done < header_record->intended.size();) {
+        const auto part = std::span<const uint8_t>(header_record->intended).subspan(done,
+            std::min(size_t(1 << 20), header_record->intended.size() - done));
+        const auto wrote = held.header->Write(done, part);
+        if (wrote.bytes > part.size() || wrote.error || wrote.bytes != part.size()) {
+          error = wrote.error ? wrote.error : Conflict(); return {};
+        }
+        done += wrote.bytes;
+      }
+    }
+    const auto sealed = held.header->Seal(error);
+    const auto& required = header_record->action == ProfileArtifactAction::kObserve
+        ? header_record->before : header_record->intended;
+    if (!sealed || error || !Equal(*sealed, required)) {
+      if (!error) error = Conflict(); return {};
+    }
+    if (header_record->action == ProfileArtifactAction::kReplace && header_was_before) {
+      result->artifacts_->header_prepared = held.header->PrepareCanonical(*held.members, error);
+      if (!result->artifacts_->header_prepared || error) return {};
+    }
+  }
   return result;
 }
 GpdIntentAttempt ProfilePublicationIntentStore::AdvanceArtifacts() {
@@ -1118,7 +1293,10 @@ GpdIntentAttempt ProfilePublicationIntentStore::AdvanceArtifacts() {
   if (data.owner != owner_ || data.members->base() != view_ || !SameBinding(data.binding, record.binding)) {
     attempt.error = Conflict(); return attempt;
   }
+  if (data.initialization_error) { attempt.error = data.initialization_error; return attempt; }
   if (data.thumbnail && (attempt.error = data.thumbnail->CheckCurrent(*data.members))) { return attempt; }
+  if (data.header && (attempt.error = data.header->CheckCurrent(*data.members))) { return attempt; }
+  if ((record.version == 5) != bool(data.header)) { attempt.error = Conflict(); return attempt; }
   std::vector<std::shared_ptr<const HostStorageSnapshotToken>> current(record.files.size());
   std::vector<std::shared_ptr<const HostStorageSnapshotToken>> expected(record.files.size());
   for (size_t i = 0; i != record.files.size(); ++i) {
@@ -1128,9 +1306,23 @@ GpdIntentAttempt ProfilePublicationIntentStore::AdvanceArtifacts() {
     });
     if (before == data.expected.end()) { out.error = Bad(); }
     else { expected[i] = before->token; }
-    if (!out.error) { current[i] = data.members->Capture(file.leaf, ArtifactMaximum(file.kind), out.error, true); }
-    if (!out.error && current[i]->exists()) { out.error = ArtifactBytes(file.kind, current[i]->bytes()); }
-    if (!out.error && !ArtifactLeafMatches(file.kind, file.title, current[i]->relative())) { out.error = Conflict(); }
+    if (!out.error) {
+      if (file.kind == ProfileArtifactKind::kPackageHeader) {
+        if (!data.header || file.leaf != data.header->target() ||
+            !HeaderTargetMatches(record.binding, file.leaf)) out.error = Conflict();
+        else {
+          const auto* prepared = artifacts_->header_prepared;
+          current[i] = prepared && prepared->receipt().current
+              ? prepared->receipt().current : data.header->expected();
+        }
+      } else current[i] = data.members->Capture(file.leaf, ArtifactMaximum(file.kind), out.error, true);
+    }
+    if (!out.error && (!current[i] || (current[i]->exists() &&
+        (out.error = ArtifactBytes(file.kind, current[i]->bytes()))))) {
+      if (!out.error) out.error = Conflict();
+    }
+    if (!out.error && file.kind != ProfileArtifactKind::kPackageHeader &&
+        !ArtifactLeafMatches(file.kind, file.title, current[i]->relative())) { out.error = Conflict(); }
     if (!out.error) {
       const auto& token = current[i];
       const bool before_matches = token->exists() == file.before_exists &&
@@ -1155,18 +1347,26 @@ GpdIntentAttempt ProfilePublicationIntentStore::AdvanceArtifacts() {
   for (size_t i = 0; i != record.files.size(); ++i) {
     const auto& file = record.files[i]; auto& out = attempt.files[i];
     if (out.state == GpdIntentFileReceipt::State::kBefore) {
-      out.publication = file.action == ProfileArtifactAction::kDelete
-          ? data.members->Delete(*recovery_, expected[i])
-          : data.members->Publish(*recovery_, expected[i], file.intended);
+      out.publication = file.kind == ProfileArtifactKind::kPackageHeader
+          ? data.header->CommitCanonical(*data.members)
+          : file.action == ProfileArtifactAction::kDelete
+              ? data.members->Delete(*recovery_, expected[i])
+              : data.members->Publish(*recovery_, expected[i], file.intended);
       if (out.publication.published && out.publication.current) { published_[i] = out.publication.current; }
       out.error = out.publication.error;
       if (!out.error && !out.publication.durable) { out.error = Conflict(); }
       if (out.publication.current) { current[i] = out.publication.current; }
     } else if (published_[i]) {
-      out.retry = data.members->RetryDurability(published_[i]); out.error = out.retry.error;
+      out.retry = file.kind == ProfileArtifactKind::kPackageHeader
+          ? published_[i]->root()->RetrySnapshotDurability(published_[i])
+          : data.members->RetryDurability(published_[i]);
+      out.error = out.retry.error;
       if (out.retry.current) { current[i] = out.retry.current; }
     } else {
-      out.observation = data.members->ObserveDurability(current[i]); out.error = out.observation.error;
+      out.observation = file.kind == ProfileArtifactKind::kPackageHeader
+          ? current[i]->root()->ObserveSnapshotDurability(*current[i])
+          : data.members->ObserveDurability(current[i]);
+      out.error = out.observation.error;
       if (!out.error && (!out.observation.matched || !out.observation.durable)) { out.error = Conflict(); }
     }
     if (out.error) { attempt.error = out.error; return attempt; }
@@ -1175,7 +1375,13 @@ GpdIntentAttempt ProfilePublicationIntentStore::AdvanceArtifacts() {
   // The typed CM member and all main members are rechecked under the SAME
   // genuine guard through Done publication, not only sequentially observed.
   {
-    auto batch = data.members->Validate(current, attempt.error); if (!batch) { return attempt; }
+    std::vector<std::shared_ptr<const HostStorageSnapshotToken>> main_current;
+    main_current.reserve(current.size());
+    for (size_t i = 0; i != current.size(); ++i) {
+      if (record.files[i].kind != ProfileArtifactKind::kPackageHeader) main_current.push_back(current[i]);
+    }
+    auto batch = data.members->Validate(std::move(main_current), attempt.error); if (!batch) { return attempt; }
+    if ((attempt.error = CheckPublishedArtifactsWithSnapshotGuard(*batch))) return attempt;
     const auto bytes = ArtifactDone(record);
     const auto written = owner_->root()->WriteNewProfileDoneWithSnapshotGuard(*batch, attempt.done, bytes);
     attempt.error = written.error;
@@ -1187,6 +1393,30 @@ GpdIntentAttempt ProfilePublicationIntentStore::AdvanceArtifacts() {
   const auto verified = Capture(*owner_, attempt.done, 56, attempt.error);
   if (!attempt.error && !Equal(verified->bytes(), ArtifactDone(record))) { attempt.error = Conflict(); }
   attempt.done_durable = !attempt.error; return attempt;
+}
+std::error_code ProfilePublicationIntentStore::CheckPublishedArtifactsWithSnapshotGuard(
+    const HostStorageSnapshotBatch& batch) const {
+  if (!artifacts_) return {}; // Exact03 has no external artifact participant.
+  if (!artifacts_->record || !artifacts_->admission || !artifacts_->admission->data_) return Bad();
+  const auto& data = *artifacts_->admission->data_;
+  const auto& record = *artifacts_->record;
+  if (!data.owner || data.owner != owner_ || !data.members ||
+      data.members->base() != view_ || !SameBinding(data.binding, record.binding) ||
+      data.initialization_error) return data.initialization_error ? data.initialization_error : Bad();
+  if (!data.header) return record.version == 4 ? std::error_code{} : Bad();
+  if (record.version != 5) return Bad();
+  const auto found = std::find_if(record.files.begin(), record.files.end(), [](const auto& file) {
+    return file.kind == ProfileArtifactKind::kPackageHeader;
+  });
+  if (found == record.files.end() || found->leaf != data.header->target()) return Bad();
+  const auto* prepared = artifacts_->header_prepared;
+  const auto current = prepared && prepared->receipt().current
+      ? prepared->receipt().current : data.header->expected();
+  const auto required = found->action == ProfileArtifactAction::kObserve
+      ? std::span<const uint8_t>(found->before) : std::span<const uint8_t>(found->intended);
+  if (!current || !current->exists() || !Equal(current->bytes(), required))
+    return std::make_error_code(std::errc::operation_in_progress);
+  return data.header->CheckWithSnapshotGuard(*data.members, batch, current);
 }
 std::error_code ProfilePublicationIntentStore::ReplayBeforeGuestAdmission(
     std::shared_ptr<const ProfileIntentOwner> owner,

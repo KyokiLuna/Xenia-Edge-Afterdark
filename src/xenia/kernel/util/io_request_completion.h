@@ -22,6 +22,10 @@ enum class InlineIoFailurePolicy {
 struct IoTransferReceipt {
   HostCallOutcome invocation = HostCallOutcome::kUnstarted;
   bool backend_entered = false;
+  // Typed filesystem producer facts, independent of virtual method entry.
+  // Known access/validation rejection has no persistent effect; entered but
+  // unreturned/partial mutations remain uncertain. No guest result is altered.
+  bool persistent_effect_known = false, persistent_effect_entered = false;
   bool backend_returned = false;
   bool count_known = false;
   uint32_t bytes = 0;
@@ -109,6 +113,21 @@ struct IoRequestCompletion {
   X_STATUS publication_status = X_STATUS_PENDING;
   X_STATUS final_status = X_STATUS_PENDING;
   bool completed = false;
+  // Storage-checkpoint effect only; NEVER the guest request/IOSB result.
+  // Known completed reads and genuine pre-backend rejection/cancellation
+  // have no persistent-byte effect. Entered failed/partial mutations stay.
+  X_STATUS CheckpointEffectStatus(bool may_mutate) const {
+    if (!completed) {
+      return X_STATUS_UNSUCCESSFUL;
+    }
+    if (!may_mutate || !transfer.backend_entered ||
+        (transfer.persistent_effect_known &&
+         !transfer.persistent_effect_entered)) {
+      return X_STATUS_SUCCESS;
+    }
+    return transfer.backend_returned ? transfer.backend_status
+                                     : X_STATUS_UNSUCCESSFUL;
+  }
 };
 
 template <typename Transfer, typename Publish, typename Notify>

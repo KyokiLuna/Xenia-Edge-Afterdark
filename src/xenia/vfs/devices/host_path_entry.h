@@ -11,11 +11,13 @@
 #define XENIA_VFS_DEVICES_HOST_PATH_ENTRY_H_
 
 #include <atomic>
+#include <memory>
 #include <string>
 
 #include "xenia/base/filesystem.h"
 #include "xenia/vfs/entry.h"
 
+namespace xe::filesystem {struct RetainedFileMetadata;}
 namespace xe {
 namespace vfs {
 
@@ -33,6 +35,10 @@ class HostPathEntry : public Entry {
                                xe::filesystem::FileInfo file_info);
 
   const std::filesystem::path& host_path() const { return host_path_; }
+  using CheckpointCoordinate=Entry::CheckpointCoordinate;
+  // Metadata only, protected by the existing GCRC. Retained closed IO follows
+  // real Entry/directory renames; this grants no File or native read authority.
+  std::shared_ptr<const CheckpointCoordinate> RetainCheckpointCoordinate() override;
 
   X_STATUS Open(uint32_t desired_access, File** out_file) override;
 
@@ -63,9 +69,13 @@ class HostPathEntry : public Entry {
   // with a payload path or used to bypass the exact managed open policy.
   std::shared_ptr<const ManagedFileNamespaceView> managed_namespace_view_;
   void ApplyManagedNamespaceView();
+  // Metadata comes from this still-owned FileHandle, not a replaced name.
+  // Called outside GCRC; publication itself acquires the normal namespace guard.
+  X_STATUS PublishRetainedFileMetadata(const filesystem::RetainedFileMetadata&);
   void SetOverwrittenSize(size_t size);
   void AbortOverwrite();
-  std::error_code CompleteOverwrite(filesystem::FileHandle&);
+  std::error_code CompleteOverwrite(filesystem::FileHandle &,
+                                    bool *mutation_entered = nullptr);
   std::error_code ReconcileOverwriteEof(filesystem::FileHandle&);
   std::error_code RetryRetainedOverwrite();
   void ReleaseOverwriteOwnership();
@@ -75,11 +85,13 @@ class HostPathEntry : public Entry {
                                              uint32_t attributes) override;
   bool DeleteEntryInternal(Entry* entry) override;
   X_STATUS
-  RenameEntryInternal(Entry* new_parent, const std::string_view name,
-                      std::shared_ptr<const filesystem::HostStorageFileLease>
-                          permitted) override;
+  RenameEntryInternal(
+      Entry *new_parent, const std::string_view name,
+      std::shared_ptr<const filesystem::HostStorageFileLease> permitted,
+      bool *mutation_entered) override;
 
   std::filesystem::path host_path_;
+  std::shared_ptr<CheckpointCoordinate> checkpoint_coordinate_;
   std::atomic<size_t> open_files_{0};
   // When set, size_ is a synthesized value (e.g. an STFS container size for a
   // collapsed content package) and update() must not overwrite it with the

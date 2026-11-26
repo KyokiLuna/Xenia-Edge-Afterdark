@@ -9,12 +9,14 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 
 #include "xenia/kernel/xobject.h"
 
-namespace xe::vfs { class Device; class FolderContentPackage; }
+namespace xe::vfs { class Device; class File; class FolderContentPackage; }
 namespace xe::kernel {
+class XFile;
 
 // Native PIRS reader or CM-issued folder-CON member mount. The body and caller context are retained
 // conservatively through Kernel stop: the recovered callers do not establish
@@ -34,6 +36,9 @@ class XStfsDevice final : public XObject {
   void DereferencePointer();
   X_STATUS Dismount();
   X_STATUS Control(uint32_t code, uint32_t output = 0) const;
+  // Real STFS driver92000 callback, on the requesting guest thread. This is
+  // neither a host-worker PPC carrier nor success for any inner control/IO.
+  X_STATUS SynchronousDeviceControl(uint32_t code, std::span<const uint8_t> input) const;
   uint32_t context_address() const { return context_; }
   uint32_t context_size() const { return context_size_; }
   uint64_t pointer_references() const;
@@ -43,6 +48,12 @@ class XStfsDevice final : public XObject {
 
  private:
   friend class NativeStfsDeviceTestAccess;
+  friend class NativeProfileSaveOwner;
+  // Exact already-created mount/raw-XFile relation only. This observer does
+  // not grant a Header/SAVE operation, native mutation or control success.
+  bool MatchesFolderBacking(const XFile&, const vfs::FolderContentPackage&) const;
+  std::shared_ptr<vfs::Device> CaptureMemberForOriginalUse(
+      const XFile&,const vfs::FolderContentPackage&) const;
   // Deny-only test boundary after genuine native parsing/admission. It can
   // withdraw/replace the original parent, never fabricate child success.
   static X_STATUS CreateInternal(KernelState&, uint32_t, uint32_t,
@@ -66,6 +77,9 @@ class XStfsDevice final : public XObject {
   // No owning reference in a tombstone. Kernel stop checks this after its
   // XFiles drain, before destroying the Kernel an escaped alias would use.
   std::weak_ptr<void> backing_lifetime_;
+  // Alias of the SAME existing backing owner installed by Create. Weak only;
+  // an operation must retain its independently looked-up actual XFile.
+  std::weak_ptr<vfs::File> folder_backing_file_;
 };
 }  // namespace xe::kernel
 #endif

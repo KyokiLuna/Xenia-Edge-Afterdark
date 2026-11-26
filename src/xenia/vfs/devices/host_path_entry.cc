@@ -8,6 +8,9 @@
  */
 
 #include "xenia/vfs/devices/host_path_entry.h"
+#include "xenia/base/retained_file_metadata.h"
+#include "xenia/vfs/file.h"
+#include <limits>
 
 #include <algorithm>
 #include <utility>
@@ -42,6 +45,16 @@ HostPathEntry::HostPathEntry(Device* device, Entry* parent,
                              const std::string_view path,
                              const std::filesystem::path& host_path)
     : Entry(device, parent, path), host_path_(host_path) {}
+
+std::shared_ptr<const HostPathEntry::CheckpointCoordinate>
+HostPathEntry::RetainCheckpointCoordinate() {
+  auto lock = global_critical_region::AcquireDirect();
+  if (!checkpoint_coordinate_) {
+    checkpoint_coordinate_ = std::make_shared<CheckpointCoordinate>(
+        CheckpointCoordinate{host_path_});
+  }
+  return checkpoint_coordinate_;
+}
 
 HostPathEntry::~HostPathEntry() {
   if (overwrite_handle_ && !overwrite_opened_) {
@@ -201,7 +214,8 @@ std::error_code HostPathEntry::ReconcileOverwriteEof(
   }
   return overwrite_metadata_error_;
 }
-std::error_code HostPathEntry::CompleteOverwrite(filesystem::FileHandle& file) {
+std::error_code HostPathEntry::CompleteOverwrite(filesystem::FileHandle &file,
+                                                 bool *mutation_entered) {
   if (!overwrite_opened_ || !overwrite_lease_ ||
       file.storage_lease() != overwrite_lease_) {
     return std::make_error_code(std::errc::operation_not_supported);
@@ -215,6 +229,9 @@ std::error_code HostPathEntry::CompleteOverwrite(filesystem::FileHandle& file) {
   std::error_code error;
   if (overwrite_tail_retained_) {
     const size_t logical_length = size_;
+    if (mutation_entered) {
+      *mutation_entered = true;
+    }
     const auto result = file.FlushLengthResult(logical_length);
     if (result.published_length &&
         *result.published_length == logical_length) {
@@ -229,6 +246,9 @@ std::error_code HostPathEntry::CompleteOverwrite(filesystem::FileHandle& file) {
   } else {
     // Physical EOF already follows the owned logical EOF. Retry durability
     // without trimming to any prior committed length.
+    if (mutation_entered) {
+      *mutation_entered = true;
+    }
     error = file.FlushResult();
   }
   overwrite_durability_pending_ = bool(error);
@@ -451,8 +471,9 @@ bool HostPathEntry::DeleteEntryInternal(Entry* entry) {
 }
 
 X_STATUS HostPathEntry::RenameEntryInternal(
-    Entry* new_parent, const std::string_view name,
-    std::shared_ptr<const filesystem::HostStorageFileLease> permitted) {
+    Entry *new_parent, const std::string_view name,
+    std::shared_ptr<const filesystem::HostStorageFileLease> permitted,
+    bool *mutation_entered) {
   const std::filesystem::path new_host_path =
       static_cast<HostPathEntry*>(new_parent)->host_path_ / xe::to_path(name);
   if (device_->ProtectsManagedFile(host_path_, true) ||
@@ -481,18 +502,29 @@ X_STATUS HostPathEntry::RenameEntryInternal(
   if (!prepare(prepare, this)) {
     return X_STATUS_INVALID_PARAMETER;
   }
+  // Allocate/copy every retained coordinate BEFORE the actual host rename.
+  // The post-effect metadata publication below is nonthrowing path swaps.
+  std::vector<std::filesystem::path> checkpoint_paths;
+  checkpoint_paths.reserve(host_paths.size());
+  for (const auto& [entry, path] : host_paths) {
+    checkpoint_paths.push_back(
+        entry->checkpoint_coordinate_ ? path : std::filesystem::path{});
+  }
 
   std::error_code ec;
 #if XE_PLATFORM_WIN32
   if (is_read_only() || new_parent->is_read_only()) {
     return X_STATUS_ACCESS_DENIED;
   }
+  if (mutation_entered) {
+    *mutation_entered = true;
+  }
   std::filesystem::rename(host_path_, new_host_path, ec);
 #else
   const auto& storage = static_cast<HostPathDevice*>(device_)->storage();
   ec = storage->Rename(host_path_.lexically_relative(storage->path()),
                        new_host_path.lexically_relative(storage->path()), true,
-                       std::move(permitted));
+                       std::move(permitted), mutation_entered);
 #endif
   if (ec) {
     XELOGE("RenameEntryInternal: Failed to rename '{}' to '{}': {}",
@@ -500,8 +532,12 @@ X_STATUS HostPathEntry::RenameEntryInternal(
            xe::strip_pii(xe::path_to_utf8(new_host_path)), ec.message());
     return HostStorageError(ec);
   }
-  for (auto& [entry, path] : host_paths) {
+  for (size_t i = 0; i < host_paths.size(); ++i) {
+    auto& [entry, path] = host_paths[i];
     entry->host_path_.swap(path);
+    if (entry->checkpoint_coordinate_) {
+      entry->checkpoint_coordinate_->path.swap(checkpoint_paths[i]);
+    }
   }
   return X_STATUS_SUCCESS;
 }
@@ -517,6 +553,22 @@ void HostPathEntry::ApplyManagedNamespaceView() {
   allocation_size_=size_t(value->allocation_size);
   create_timestamp_=value->create_timestamp;access_timestamp_=value->access_timestamp;
   write_timestamp_=value->write_timestamp;
+}
+X_STATUS HostPathEntry::PublishRetainedFileMetadata(const filesystem::RetainedFileMetadata& actual) {
+  if(actual.size>std::numeric_limits<size_t>::max())return X_STATUS(0xC0000095);
+  uint64_t allocation=0;
+  const auto status=RoundFileAllocationSize(actual.allocated_bytes,
+      uint64_t(sectors_per_allocation_unit())*device()->bytes_per_sector(),&allocation);
+  if(XFAILED(status))return status;
+  if(allocation>std::numeric_limits<size_t>::max())return X_STATUS(0xC0000095);
+  auto global_lock=global_critical_region_.Acquire();
+  access_timestamp_=actual.access_timestamp;write_timestamp_=actual.write_timestamp;
+  // This exact retained Entry, its logical overwrite and fixed-package view
+  // survive rename/open lifetime. Never stat its possibly replaced pathname.
+  if(!(attributes_&kFileAttributeDirectory) && !reported_size_fixed_ && !overwritten_) {
+    size_=size_t(actual.size);allocation_size_=size_t(allocation);
+  }
+  return X_STATUS_SUCCESS;
 }
 void HostPathEntry::update() {
   if (managed_namespace_view_) { ApplyManagedNamespaceView(); return; }

@@ -143,9 +143,10 @@ void Entry::Touch() {
   // TODO(benvanik): update timestamps.
 }
 
-X_STATUS Entry::Rename(
-    const std::filesystem::path file_path, bool replace_existing,
-    std::shared_ptr<const filesystem::HostStorageFileLease> permitted) {
+X_STATUS
+Entry::Rename(const std::filesystem::path file_path, bool replace_existing,
+              std::shared_ptr<const filesystem::HostStorageFileLease> permitted,
+              bool *mutation_entered) {
   auto global_lock = global_critical_region_.Acquire();
   // Store the string to ensure string_views from split_path remain valid
   const std::string path_str = xe::path_to_utf8(file_path);
@@ -160,12 +161,14 @@ X_STATUS Entry::Rename(
   const std::string guest_path = xe::utf8::join_guest_paths(path_parts);
   return Rename(
       device_->ResolvePath(xe::utf8::find_base_guest_path(guest_path)),
-      path_parts.back(), replace_existing, std::move(permitted));
+      path_parts.back(), replace_existing, std::move(permitted),
+      mutation_entered);
 }
 
-X_STATUS Entry::Rename(
-    Entry* new_parent, std::string_view name, bool replace_existing,
-    std::shared_ptr<const filesystem::HostStorageFileLease> permitted) {
+X_STATUS
+Entry::Rename(Entry *new_parent, std::string_view name, bool replace_existing,
+              std::shared_ptr<const filesystem::HostStorageFileLease> permitted,
+              bool *mutation_entered) {
   auto global_lock = global_critical_region_.Acquire();
   if (!allows_namespace_mutation() || is_read_only() ||
       (new_parent && new_parent->is_read_only())) {
@@ -226,8 +229,8 @@ X_STATUS Entry::Rename(
     new_parent->children_.reserve(new_parent->children_.size() + 1);
   }
 
-  const auto result =
-      RenameEntryInternal(new_parent, new_name, std::move(permitted));
+  const auto result = RenameEntryInternal(
+      new_parent, new_name, std::move(permitted), mutation_entered);
   if (XFAILED(result)) {
     return result;
   }

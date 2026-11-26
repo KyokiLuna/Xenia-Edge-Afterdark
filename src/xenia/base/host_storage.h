@@ -21,6 +21,7 @@
 #include "xenia/base/filesystem.h"
 #include "xenia/base/retained_file_metadata.h"
 #include "xenia/base/mapped_memory.h"
+namespace xe::kernel::xam { class FreshProfileConEpoch; }
 namespace xe::filesystem {
 namespace content_package_mutation_wire { struct Record; }
 inline constexpr uint64_t kHostStorageReserve = 20ull << 30;
@@ -396,10 +397,11 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   std::error_code ResetDirectory(
       const std::filesystem::path&,
       const std::filesystem::path& preserved_leaf = {}) const;
-  std::error_code Rename(
-      const std::filesystem::path& from, const std::filesystem::path& to,
-      bool replace_existing,
-      std::shared_ptr<const HostStorageFileLease> permitted = {}) const;
+  std::error_code
+  Rename(const std::filesystem::path &from, const std::filesystem::path &to,
+         bool replace_existing,
+         std::shared_ptr<const HostStorageFileLease> permitted = {},
+         bool *mutation_entered = nullptr) const;
   // Publish a staged regular file within one parent. Replacing an existing
   // target requires a new backup name; its original inode is retained before
   // the atomic replacement. A flush error
@@ -504,6 +506,7 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   friend class SnapshotRecoveryOwner;
   friend class SnapshotPublisher;
   friend class ContentMutationOwner;
+  friend class xe::kernel::xam::FreshProfileConEpoch;
   // Closed CM external-header join only. This reservation is over the real
   // Header parent, separate from the profile-root batch. Never projects its
   // token into that profile root or grants ../ / arbitrary multi-root IO.
@@ -542,7 +545,8 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
       std::shared_ptr<const HostStorageRoot> exact_profile_scope,
       std::error_code&) const;
   std::unique_ptr<HostStorageContentLayout> CaptureContentLayoutInternal(
-      const std::filesystem::path&, bool exact_current_root, std::error_code&) const;
+      const std::filesystem::path &, bool exact_current_root, std::error_code &,
+      HostStorageSpace::MutationGuard *borrowed_guard = nullptr) const;
   friend class ProfilePublicationIntentStore;
   IntentWriteResult WriteNewProfileDoneWithSnapshotGuard(
       const HostStorageSnapshotBatch&, const std::filesystem::path&,
@@ -680,7 +684,8 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
   ReplaceResult CompareAndPublishSnapshotInternal(
       const HostStorageSnapshotToken&, HostStorageSnapshotStage&,
       std::span<const uint8_t>,
-      std::shared_ptr<const HostStorageSnapshotToken>, PrivateSnapshotPurpose purpose) const;
+      std::shared_ptr<const HostStorageSnapshotToken>, PrivateSnapshotPurpose purpose,
+      const HostStorageSnapshotBatch* borrowed = nullptr) const;
   ReplaceResult CompareAndDeleteSnapshotInternal(
       const HostStorageSnapshotToken& expected,
       std::shared_ptr<const HostStorageSnapshotToken> recovery,
@@ -771,7 +776,8 @@ class HostStorageRoot : public std::enable_shared_from_this<HostStorageRoot> {
                             const HostStorageRoot& backup_root,
                             const std::filesystem::path& backup,
                             bool reuse_original,
-                            const SnapshotReplacement* checked = nullptr) const;
+                            const SnapshotReplacement* checked = nullptr,
+                            const HostStorageSnapshotBatch* borrowed = nullptr) const;
   std::unique_ptr<FileHandle> OpenFileInternal(
       const std::filesystem::path&, uint32_t, std::error_code&,
       bool create_exclusive, bool overwrite,
@@ -896,6 +902,9 @@ class HostStorageSnapshotStage final {
   FileIoResult ReadResult(size_t, std::span<uint8_t>);
   FileIoResult WriteAllResult(size_t, std::span<const uint8_t>);
   std::error_code ResizeResult(size_t);
+  // Existing retained stage handle only. This supplies real access/write
+  // metadata; it deliberately has no native creation-time producer.
+  std::error_code SetTimesResult(uint64_t access,uint64_t write);
   std::optional<RetainedFileMetadata> QueryMetadata(std::error_code&);
   FileIoResult WriteResult(size_t, std::span<const uint8_t>);
   // Verification happens again under the common CAS mutation guard. No raw

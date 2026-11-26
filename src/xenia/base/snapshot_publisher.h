@@ -5,6 +5,7 @@
 #include <memory>
 #include <span>
 #include "xenia/base/host_storage.h"
+namespace xe::kernel::xam { class FreshProfileConEpoch; }
 namespace xe::filesystem {
 // Open at explicit Emulator bootstrap, before any guest-backed mount. No
 // global owner, console-settings payload, profile alias discovery or adoption.
@@ -109,6 +110,16 @@ class SnapshotPublisher final {
       std::shared_ptr<const HostStorageSnapshotToken> expected,
       const std::atomic<bool>* canceled = nullptr);
  private:
+  friend class xe::kernel::xam::FreshProfileConEpoch;
+  // Only a genuine whole-source final batch may cross this boundary. This
+  // borrows its existing filesystem guard through the actual Header rename;
+  // ordinary Commit retains its original independently acquired admission.
+  static SnapshotPublicationReceipt CommitWithSnapshotGuard(
+      PreparedSnapshotPublication&, const HostStorageSnapshotBatch&,
+      const std::atomic<bool>* canceled = nullptr);
+  static SnapshotPublicationReceipt CommitInternal(
+      PreparedSnapshotPublication&, const std::atomic<bool>*,
+      const HostStorageSnapshotBatch*);
   friend class ContentMutationOwner;
   friend class CacheStorageOwner;
   friend class MediaReferenceStore;

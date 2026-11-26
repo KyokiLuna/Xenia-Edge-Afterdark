@@ -1,4 +1,6 @@
 <p align="center">
+
+> **Unfinished source backup:** this branch adds an uncompiled 79-path HDD draft. Native controls remain inactive. It is not a checkpoint or release; test results below apply only to the tested parent. See [draft scope](docs/research/17559-hdd-foundation-wip-20261126.md).
   <img src="assets/icon/afterdark/generated/256.png" width="220" alt="Xenia Edge Afterdark logo — a luminous green X on a dark machined processor" />
 </p>
 <h1 align="center">Xenia Edge Afterdark</h1>

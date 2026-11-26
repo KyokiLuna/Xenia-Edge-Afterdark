@@ -19,6 +19,7 @@
 #include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/kernel/xam/content_manager.h"
 #include "xenia/kernel/xam/profile_manager.h"
+#include "xenia/kernel/xam/profile_gpd_transaction.h"
 #include "xenia/kernel/xam/user_tracker.h"
 #include "xenia/kernel/xthread.h"
 
@@ -98,6 +99,9 @@ struct ProfileRosterAuthority {
   std::shared_ptr<ProfileAccountCommitGate> gate;
   std::atomic<bool> open{true}, ordinary{true}, selected_read{true};
   std::atomic<uint64_t> scopes{0};
+  // Bounded actual request lifetime, independent of protocol/read/pixel gates.
+  // Included in scopes so real old cleanup outlives its actual resources.
+  std::atomic<uint32_t> native_save_writers{0};
   std::atomic<bool> diagnostic_enabled{false};
   std::array<NativeProfileDiagnosticCell<NativeProfileProjection>,4> first_projection;
   // Valid slots0..3 plus one invalid-slot bucket, independently per ordinal.
@@ -259,6 +263,190 @@ struct ProfileRosterAuthority::Operation {
   std::array<ProfileGpdWriter,4> title_writers;
   std::array<std::optional<ProfileGpdMutation>,4> title_effects;
 };
+struct ProfileRosterNativeWriter::State {
+  struct CountedUse {
+    std::shared_ptr<ProfileRosterAuthority> authority;
+    bool admitted = false;
+    ~CountedUse() {
+      if (admitted) {
+        authority->native_save_writers.fetch_sub(1, std::memory_order_acq_rel);
+        authority->LeaveScope();
+      }
+    }
+  } use;  // FIRST: actual row/writer/model/source owners drop before count.
+  std::shared_ptr<ProfileRosterAuthority::Envelope> envelope;
+  std::shared_ptr<ProfileRosterAuthority::Operation> operation;
+  std::shared_ptr<ProfileRosterIntent> settled_job;
+  uint8_t slot = 0;
+  uint64_t profile_xuid = 0;
+  ProfileGpdWriter writer;
+  ProfileGpdMutationOrigin origin;
+  std::optional<ProfileGpdReadCapture> before;
+  // The actual PM mount metadata lock must be held. No lookup by XUID/path,
+  // read-scope/TLS interpretation, native DB lock, allocation or IO occurs.
+  bool SelectionCurrent() const {
+    const auto& a = use.authority;
+    if (!a || !a->open.load(std::memory_order_acquire) || !envelope ||
+        slot >= 4 || a->selected.load(std::memory_order_acquire) != envelope.get()) { return false; }
+    if (operation) {
+      if (a->pending != operation || !operation->intent ||
+          operation->settling.load(std::memory_order_acquire) ||
+          (envelope != operation->before && envelope != operation->after)) { return false; }
+      const auto phase = operation->intent->result().phase;
+      if (phase != ProfileRosterPhase::kNativeEntered && phase != ProfileRosterPhase::kPublished) { return false; }
+    } else {
+      if (a->pending || a->current != envelope ||
+          !a->ordinary.load(std::memory_order_acquire)) { return false; }
+      // The native owner may still retain the exact completed job during its
+      // own cleanup. It remains the same selected envelope, never an old
+      // same-XUID intent reattached to a newer roster.
+      if (settled_job && (settled_job->result().phase != ProfileRosterPhase::kCommitted ||
+          settled_job->prepared_roster() != envelope->roster)) { return false; }
+    }
+    const auto& row = envelope->rows[slot];
+    const auto& meta = envelope->roster->slots()[slot];
+    return row.profile && row.model && row.storage && row.identity && row.account &&
+        row.profile->xuid() == profile_xuid && meta.xuid == profile_xuid &&
+        row.model == writer.model && row.model->storage() == row.storage &&
+        row.model->xuid() == profile_xuid && row.model->user_slot() == slot &&
+        row.model->sign_in_generation() == meta.sign_in_generation &&
+        row.storage == origin.storage && row.account->identity() == row.identity &&
+        row.identity->storage() == row.storage && !row.identity->retired() &&
+        !row.storage->retiring() && row.storage->source_id() == meta.source_id &&
+        row.storage->source_generation() == meta.source_generation &&
+        row.storage->device_id() == meta.device_id;
+  }
+};
+ProfileRosterNativeWriter::ProfileRosterNativeWriter(std::shared_ptr<State> s)
+    : state_(std::move(s)) {}
+ProfileRosterNativeWriter::~ProfileRosterNativeWriter() = default;
+const ProfileGpdWriter& ProfileRosterNativeWriter::writer() const { return state_->writer; }
+const ProfileGpdMutationOrigin& ProfileRosterNativeWriter::origin() const { return state_->origin; }
+const ProfileGpdReadCapture& ProfileRosterNativeWriter::before() const { return *state_->before; }
+std::shared_ptr<ProfileRosterNativeWriter>
+ProfileRosterNativeWriter::CaptureFromActualGetter(ProfileManager& manager,
+    const std::shared_ptr<const HostRoster>& candidate_current,
+    const std::shared_ptr<ProfileRosterIntent>& exact_active_intent, uint8_t slot,
+    uint64_t profile_xuid, std::error_code& error) {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread() || slot >= 4 || !profile_xuid ||
+      (!candidate_current && !exact_active_intent)) {
+    error = std::make_error_code(std::errc::invalid_argument); return {};
+  }
+  std::shared_ptr<const HostRoster> actual;
+  {
+    auto gate = manager.account_commit_gate_->Acquire();
+    if (!gate) { error = Stale(); return {}; }
+    std::unique_lock lock(manager.profile_mount_mutex_, std::try_to_lock);
+    const auto& a = manager.roster_authority_;
+    if (!lock.owns_lock()) { error = Busy(); return {}; }
+    if (!a || !a->open.load(std::memory_order_acquire)) { error = Stale(); return {}; }
+    const auto* selected = a->selected.load(std::memory_order_acquire);
+    // Compare only genuinely retained envelope addresses; never dereference an
+    // unknown selected pointer or infer it from Task source/ReadTicket/timeline.
+    if (a->pending) {
+      if (!exact_active_intent || a->pending->intent != exact_active_intent) { error = Stale(); return {}; }
+      if (selected == a->pending->before.get() &&
+          a->pending->before->roster == exact_active_intent->old_roster()) {
+        actual = a->pending->before->roster;
+      } else if (selected == a->pending->after.get() &&
+          a->pending->after->roster == exact_active_intent->prepared_roster()) {
+        actual = a->pending->after->roster;
+      }
+    } else if (a->current && selected == a->current.get()) {
+      const auto& current = a->current->roster;
+      const bool retained_completed = exact_active_intent &&
+          exact_active_intent->result().phase == ProfileRosterPhase::kCommitted &&
+          exact_active_intent->prepared_roster() == current;
+      if ((!exact_active_intent && current == candidate_current) || retained_completed) { actual = current; }
+    }
+    if (!actual) { error = Stale(); return {}; }
+  }
+  // The real publication cell may select another retained envelope after the
+  // short lock; the counted factory rechecks actual selection/job/model twice.
+  return CaptureFromActualSelectedRow(manager,actual,exact_active_intent,slot,profile_xuid,error);
+}
+std::shared_ptr<ProfileRosterNativeWriter>
+ProfileRosterNativeWriter::CaptureFromActualSelectedRow(ProfileManager& manager,
+    const std::shared_ptr<const HostRoster>& selected,
+    const std::shared_ptr<ProfileRosterIntent>& actual_job, uint8_t slot,
+    uint64_t profile_xuid, std::error_code& error) {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread() || !selected || slot >= 4 || !profile_xuid) {
+    error = std::make_error_code(std::errc::invalid_argument); return {};
+  }
+  // Only the concrete original native request/getter owner calls this private
+  // method. Passing a slot/XUID or a generic Task record is not such proof.
+  auto gate = manager.account_commit_gate_->Acquire();
+  if (!gate) { error = Stale(); return {}; }
+  auto data = std::make_shared<State>();
+  auto issued = std::shared_ptr<ProfileRosterNativeWriter>(new ProfileRosterNativeWriter(data));
+  data->use.authority = manager.roster_authority_;
+  data->slot = slot; data->profile_xuid = profile_xuid;
+  {
+    std::unique_lock lock(manager.profile_mount_mutex_, std::try_to_lock);
+    const auto& a = data->use.authority;
+    if (!lock.owns_lock()) { error = Busy(); return {}; }
+    if (!a || !a->open.load(std::memory_order_acquire)) { error = Stale(); return {}; }
+    if (a->pending) {
+      if (!actual_job || a->pending->intent != actual_job) { error = Stale(); return {}; }
+      data->operation = a->pending;
+      if (a->pending->after->roster == selected) { data->envelope = a->pending->after; }
+      else if (a->pending->before->roster == selected) { data->envelope = a->pending->before; }
+    } else if (a->current && a->current->roster == selected &&
+        (!actual_job || (actual_job->result().phase == ProfileRosterPhase::kCommitted &&
+                        actual_job->prepared_roster() == selected))) {
+      data->envelope = a->current; data->settled_job = actual_job;
+    }
+    if (!data->envelope || a->selected.load(std::memory_order_acquire) != data->envelope.get()) {
+      error = Stale(); return {};
+    }
+    const auto& row = data->envelope->rows[slot];
+    if (!row.model || !row.storage || row.model->storage() != row.storage) { error = Stale(); return {}; }
+    data->writer.model = row.model;
+    data->before = row.model->CaptureRead(error);
+    if (!data->before) { return {}; }
+    data->origin = data->before->origin;
+    if (!data->SelectionCurrent()) { error = Stale(); return {}; }
+  }
+  // Common actual service owners are captured from the EXACT retained source;
+  // never AcquireProfileStorageLease(XUID) or whichever live slot is current.
+  const auto& storage = data->origin.storage;
+  data->writer.owner = manager.content_manager_.ProfileIntents(storage->source_id());
+  const auto volume = manager.content_manager_.Volume(storage->source_id());
+  data->writer.recovery = volume && volume->profile_writable() ? volume->recovery() : nullptr;
+  data->writer.metadata = volume ? volume->mutations() : nullptr;
+  if (!data->writer.owner || !data->writer.recovery || !data->writer.metadata ||
+      data->writer.owner->source() != storage->source() ||
+      data->writer.owner->managed_identity() != storage->managed_identity()) {
+    error = std::make_error_code(std::errc::no_such_device); return {};
+  }
+  {
+    std::unique_lock lock(manager.profile_mount_mutex_, std::try_to_lock);
+    const auto& a = data->use.authority;
+    if (!lock.owns_lock()) { error = Busy(); return {}; }
+    if (!data->SelectionCurrent() || !data->writer.model->IsCurrent(data->origin)) { error = Stale(); return {}; }
+    if (a->native_save_writers.load(std::memory_order_acquire) >= 64) { error = Busy(); return {}; }
+    if (!a->EnterScope()) { error = Stale(); return {}; }
+    a->native_save_writers.fetch_add(1, std::memory_order_acq_rel);
+    data->use.admitted = true;
+  }
+  return issued;
+}
+bool ProfileRosterNativeWriter::Current(std::error_code& error) const {
+  error.clear(); const auto data = state_;
+  if (!data || !data->use.admitted || !data->use.authority ||
+      global_critical_region::is_held_by_current_thread()) { error = Stale(); return false; }
+  auto entered = data->use.authority->gate->Acquire();
+  if (!entered) { error = Stale(); return false; }
+  {
+    std::unique_lock lock(entered->owner().profile_mount_mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) { error = Busy(); return false; }
+    if (!data->SelectionCurrent()) { error = Stale(); return false; }
+  }
+  if (!data->writer.model->IsCurrent(data->origin)) { error = Stale(); return false; }
+  return true;
+}
 namespace {
 bool BeforeCurrent(const ProfileRosterAuthority::Operation& op) {
   for (uint8_t slot = 0; slot != 4; ++slot) {
@@ -1714,6 +1902,12 @@ ProfileRosterResult ProfileManager::SettleRoster(const std::shared_ptr<ProfileRo
       auto r = intent->result(); r.error = Stale(); return r;
     }
     op = a->pending;
+    // Both map/effect commitment and old-owner retirement wait for the actual
+    // request writer. New admission also refuses op->settling, under this same
+    // PM lock, so no new source writer can slip through this serialized cut.
+    if (a->native_save_writers.load(std::memory_order_acquire)) {
+      auto result = intent->result(); result.error = Busy(); return result;
+    }
     selected=intent->publication_outcome()==ProfileRosterPublicationOutcome::kCanceledEmpty
         ?op->canceled_empty:op->after;
     if(!selected){auto result=intent->result();result.error=Stale();return result;}

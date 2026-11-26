@@ -13,6 +13,27 @@ namespace xe::filesystem {
 // Test-only negative-I/O seam. Real CAS admission, unlink, and parent fsync
 // always run. The injected post-effect error cannot manufacture a token or
 // success from an ordinary read. No Kernel, provider callback, or fake fd.
+class ProfilePublicationIntentTestAccess final {
+ public:
+  class OpaqueFixtureHeaderFormat final : public ContentMutationOwner::NativeHeaderFormat {
+   public:
+    bool SameBinding(const ContentMutationOwner::NativeHeaderFormat& other) const noexcept override {
+      return dynamic_cast<const OpaqueFixtureHeaderFormat*>(&other)!=nullptr;
+    }
+    std::error_code ValidateCurrent(const std::filesystem::path& package,
+        std::span<const uint8_t> bytes) const override {
+      // Deliberate NON-NATIVE format. This covers real storage/journal/replay
+      // and never accepts these bytes as signed CON or native metadata.
+      return content_mutation_wire::ValidPackage(package) && bytes.size()==0x971A
+          ? std::error_code{} : std::make_error_code(std::errc::bad_message);
+    }
+    std::error_code ValidateNativeChange(const std::filesystem::path& package,
+        std::span<const uint8_t> before,std::span<const uint8_t> after) const override {
+      if(auto error=ValidateCurrent(package,before))return error;
+      return ValidateCurrent(package,after);
+    }
+  };
+};
 class HostStorageSnapshotTestAccess final {
  public:
   static HostStorageRoot::ReplaceResult DeleteWithReportedFlushError(
@@ -1006,6 +1027,7 @@ struct ArtifactFixture {
   std::shared_ptr<filesystem::HostStorageRoot> parent, source, profile;
   std::shared_ptr<const filesystem::ManagedVolumeAuthority> volume;
   GpdIntentBinding binding;
+  std::shared_ptr<const filesystem::ContentMutationOwner::NativeHeaderFormat> header_format;
   std::vector<uint8_t> old_dash = Wire(kDashboard, u"artifact old dashboard");
   std::vector<uint8_t> next_dash = Wire(kDashboard, u"artifact next dashboard");
   // These format-neutral bytes deliberately include zeros and arbitrary tails.
@@ -1017,7 +1039,8 @@ struct ArtifactFixture {
   static constexpr std::array<ArtifactKind, 6> kinds{
       ArtifactKind::kPublic64, ArtifactKind::kPublic32, ArtifactKind::kPersonal64,
       ArtifactKind::kPersonal32, ArtifactKind::kAvatar64, ArtifactKind::kAvatar32};
-  ArtifactFixture() {
+  explicit ArtifactFixture(std::shared_ptr<const filesystem::ContentMutationOwner::NativeHeaderFormat> format = {})
+      : header_format(std::move(format)) {
     parent = scratch.Root();
     REQUIRE_FALSE(parent->Create("content", true));
     OpenVolume();
@@ -1040,6 +1063,7 @@ struct ArtifactFixture {
     options.content = parent->Subroot("content", false, error); REQUIRE(options.content); REQUIRE_FALSE(error);
     options.state_parent_override = parent;
     options.source_id = "managed-artifact-A"; options.device_id = 1;
+    options.native_header_format = header_format; // Actual pre-replay Options producer.
     volume = filesystem::ManagedVolumeAuthority::Open(std::move(options));
     REQUIRE(volume); REQUIRE_FALSE(volume->error()); REQUIRE(volume->profile_writable());
     source = volume->content();
@@ -1297,5 +1321,198 @@ TEST_CASE("New CM projection never replaces a conflicting old thumbnail dependen
   held.reset(); REQUIRE(f.volume->mutations()->idle());
   REQUIRE(f.Bytes("FFFE07D1.gpd")==f.old_dash); REQUIRE(f.Bytes("__thumbnail.png")==changed);
 }
+namespace {
+// Actual common stage/journal/replay fixture. Opaque metadata deliberately is
+// not claimed to be signed native CON; that codec/producer contract is separate.
+struct HeaderArtifactFixture : ArtifactFixture {
+  std::filesystem::path target;
+  std::vector<uint8_t> old_header = std::vector<uint8_t>(0x971A, 0x59);
+  std::vector<uint8_t> next_header = old_header;
+  HeaderArtifactFixture() : ArtifactFixture(std::make_shared<const
+      filesystem::ProfilePublicationIntentTestAccess::OpaqueFixtureHeaderFormat>()) {
+    target = binding.profile_relative.parent_path().parent_path() / "Headers" /
+        "00010000" / (binding.profile_relative.filename().string() + ".header");
+    std::error_code error;
+    auto absent = volume->mutations()->CaptureMetadata(filesystem::ContentMutationOwner::Kind::kHeader,
+        binding.profile_relative, target, error);
+    REQUIRE(absent); REQUIRE_FALSE(error); REQUIRE_FALSE(absent->exists());
+    const auto made = volume->mutations()->WriteMetadata(filesystem::ContentMutationOwner::Kind::kHeader,
+        binding.profile_relative, absent, old_header);
+    REQUIRE_FALSE(made.error); REQUIRE(made.complete);
+    next_header[0x174A] = 0x81; next_header[0x1752] = 0x42;
+    next_header.back() = 0xE3; // Preserve every other opaque byte/tail exactly.
+  }
+  auto SourceHeader() {
+    std::error_code error;
+    auto token = volume->mutations()->CaptureMetadata(filesystem::ContentMutationOwner::Kind::kHeader,
+        binding.profile_relative, target, error);
+    REQUIRE(token); REQUIRE_FALSE(error); REQUIRE(token->exists()); return token;
+  }
+  auto AcquireHeader() {
+    std::error_code error;
+    auto issued = GpdDurableIntentStore::AcquireHeaderArtifacts(volume->intents(), volume->recovery(),
+        volume->mutations(), binding, Main(false), SourceHeader(), error);
+    REQUIRE(issued); REQUIRE_FALSE(error); REQUIRE(issued->header()); return issued;
+  }
+  auto HeaderEdits(const ArtifactAdmission& held) {
+    auto edits = Mutations(held);
+    for (auto& edit : edits) if (edit.kind == ArtifactKind::kPackageHeader) edit.intended = next_header;
+    return edits;
+  }
+  void WriteHeader(const std::shared_ptr<ArtifactAdmission>& held) {
+    const auto wrote = held->header()->Write(0, next_header);
+    REQUIRE_FALSE(wrote.error); REQUIRE(wrote.bytes == next_header.size());
+    REQUIRE_FALSE(held->header()->Flush());
+  }
+  auto HeaderBytes(const std::shared_ptr<ArtifactAdmission>& held = {}) {
+    std::vector<uint8_t> bytes;
+    if (held) {
+      // The genuine issued reservation observes the public target, not its
+      // private staged bytes. No raw descriptor/host mutation bypass is used.
+      const auto token = held->header()->expected();
+      REQUIRE_FALSE(token->root()->ReadFile(token->relative(), 1 << 20, bytes));
+    } else REQUIRE_FALSE(source->ReadFile(target, 1 << 20, bytes));
+    return bytes;
+  }
+};
+}
+TEST_CASE("Typed05 joins one external Header and a profile pair through the same durable intent",
+          "[gpd_durable_intent][profile_header][namespace][persistence]") {
+  HeaderArtifactFixture f;
+  const auto account = f.Bytes("Account"), legacy_thumbnail = f.Bytes("__thumbnail.png");
+  auto held = f.AcquireHeader(); REQUIRE(held->expected().size() == 4);
+  REQUIRE(held->Matches(f.volume->intents(), f.volume->recovery(), f.binding));
+  auto wrong_binding = f.binding; ++wrong_binding.source_generation;
+  REQUIRE_FALSE(held->Matches(f.volume->intents(), f.volume->recovery(), wrong_binding));
+  auto header = held->header();
+  {
+    std::error_code observed_error;
+    auto refused=f.profile->OpenFile("FFFE07D1.gpd",filesystem::FileAccess::kGenericRead,observed_error);
+    REQUIRE_FALSE(refused); REQUIRE(observed_error);
+    const auto metadata=held->members()->ObserveRetainedMetadata(held->expected().front().token,observed_error);
+    REQUIRE(metadata); REQUIRE_FALSE(observed_error); REQUIRE(metadata->size==f.old_dash.size());
+    // The metadata FD has really closed, so this same physical fence succeeds.
+    const auto guard=held->members()->Validate({held->expected().front().token},observed_error);
+    REQUIRE(guard); REQUIRE_FALSE(observed_error);
+  }
+  const auto stage = f.source->path() / f.target.parent_path() / header->stage_artifact();
+  struct stat initial{}; REQUIRE(stat(stage.c_str(), &initial) == 0);
+  f.WriteHeader(held); REQUIRE(f.HeaderBytes(held) == f.old_header);
+  std::error_code error; std::filesystem::path journal;
+  auto store = GpdDurableIntentStore::PrepareArtifacts(held, f.HeaderEdits(*held), error, journal);
+  REQUIRE(store); REQUIRE_FALSE(error); REQUIRE_FALSE(journal.empty());
+  struct stat prepared{}; REQUIRE(stat(stage.c_str(), &prepared) == 0);
+  REQUIRE(prepared.st_dev == initial.st_dev); REQUIRE(prepared.st_ino == initial.st_ino);
+  REQUIRE(header->Write(0, f.next_header).error == std::errc::device_or_resource_busy);
+  std::vector<uint8_t> raw;
+  REQUIRE_FALSE(f.volume->intents()->root()->ReadFile(journal, 1 << 20, raw));
+  REQUIRE(std::string(raw.begin(), raw.begin() + 8) == "XPGDI05\n");
+  auto rows = GpdDurableIntentStore::Scan(*f.volume->intents(), error);
+  REQUIRE_FALSE(error); REQUIRE(rows.size() == 1); REQUIRE(rows.front().format_version == 5);
+  REQUIRE_FALSE(rows.front().done_record_valid); REQUIRE(f.HeaderBytes(held) == f.old_header);
+  {
+    std::vector<std::shared_ptr<const filesystem::HostStorageSnapshotToken>> tokens;
+    for (const auto& member : held->expected()) if (member.kind != ArtifactKind::kPackageHeader) tokens.push_back(member.token);
+    const auto guard = held->members()->Validate(std::move(tokens), error); REQUIRE(guard); REQUIRE_FALSE(error);
+    // A prepared native stage is not an already-published external tuple.
+    REQUIRE(store->CheckPublishedArtifactsWithSnapshotGuard(*guard) == std::errc::operation_in_progress);
+  }
+  const auto done = store->Advance();
+  REQUIRE_FALSE(done.error); REQUIRE(done.intent_durable); REQUIRE(done.done_durable);
+  REQUIRE(done.all_durable_sequentially_observed); REQUIRE(done.files.size() == 4);
+  struct stat canonical{}; REQUIRE(stat((f.source->path() / f.target).c_str(), &canonical) == 0);
+  REQUIRE(canonical.st_dev == initial.st_dev); REQUIRE(canonical.st_ino == initial.st_ino);
+  REQUIRE(f.HeaderBytes(held) == f.next_header);
+  {
+    std::vector<std::shared_ptr<const filesystem::HostStorageSnapshotToken>> tokens;
+    for (const auto& member : held->expected()) if (member.kind != ArtifactKind::kPackageHeader) {
+      auto current = held->members()->Capture(member.token->relative(), 1 << 20, error, true);
+      REQUIRE(current); REQUIRE_FALSE(error);
+      const auto metadata=held->members()->ObserveRetainedMetadata(current,error);
+      REQUIRE(metadata); REQUIRE_FALSE(error); REQUIRE(metadata->size==current->bytes().size());
+      tokens.push_back(std::move(current));
+    }
+    const auto guard = held->members()->Validate(std::move(tokens), error); REQUIRE(guard); REQUIRE_FALSE(error);
+    // The same method joins the real Header under the eventual model/VFS cut.
+    REQUIRE_FALSE(store->CheckPublishedArtifactsWithSnapshotGuard(*guard));
+  }
+  REQUIRE(store->Advance().historically_complete);
+  store.reset(); held.reset(); header.reset(); REQUIRE(f.volume->mutations()->idle());
+  REQUIRE(f.Bytes("FFFE07D1.gpd") == f.next_dash);
+  REQUIRE(f.Bytes("tile_64.png") == f.next_image); REQUIRE(f.Bytes("tile_32.png") == f.next_image);
+  REQUIRE(f.HeaderBytes() == f.next_header);
+  REQUIRE(f.Bytes("__thumbnail.png") == legacy_thumbnail); REQUIRE(f.Bytes("Account") == account);
+}
+TEST_CASE("Actual MVA reopen replays05 across before and partially published Header tuples",
+          "[gpd_durable_intent][profile_header][restart][persistence]") {
+  HeaderArtifactFixture f;
+  const auto account = f.Bytes("Account"), legacy_thumbnail = f.Bytes("__thumbnail.png");
+  auto before_gpd = f.Token("FFFE07D1.gpd"), before_header = f.SourceHeader();
+  auto held = f.AcquireHeader(); f.WriteHeader(held);
+  std::error_code error; std::filesystem::path journal;
+  auto store = GpdDurableIntentStore::PrepareArtifacts(held, f.HeaderEdits(*held), error, journal);
+  REQUIRE(store); REQUIRE_FALSE(error);
+  bool gpd_partial = false, header_partial = false;
+  SECTION("all canonical members still match before") {}
+  SECTION("a genuine first GPD publication completed") { gpd_partial = true; }
+  SECTION("a genuine first Header publication completed") { header_partial = true; }
+  store.reset(); held.reset(); REQUIRE(f.volume->mutations()->idle());
+  if (gpd_partial || header_partial) {
+    const auto partial = filesystem::SnapshotPublisher::Publish(*f.volume->recovery(),
+        header_partial ? before_header : before_gpd, header_partial ? f.next_header : f.next_dash);
+    REQUIRE_FALSE(partial.error); REQUIRE(partial.published); REQUIRE(partial.durable);
+  }
+  before_gpd.reset(); before_header.reset();
+  f.Restart(); f.Restart();
+  REQUIRE(f.HeaderBytes() == f.next_header); REQUIRE(f.Bytes("FFFE07D1.gpd") == f.next_dash);
+  REQUIRE(f.Bytes("tile_64.png") == f.next_image); REQUIRE(f.Bytes("tile_32.png") == f.next_image);
+  REQUIRE(f.Bytes("Account") == account); REQUIRE(f.Bytes("__thumbnail.png") == legacy_thumbnail);
+  auto rows = GpdDurableIntentStore::Scan(*f.volume->intents(), error);
+  REQUIRE_FALSE(error); REQUIRE(rows.size() == 1); REQUIRE(rows.front().format_version == 5);
+  REQUIRE(rows.front().done_record_valid);
+  // Done is historical. Reopening it may not overwrite a later legitimate
+  // Header mutation, including bytes outside the interpreted native fields.
+  auto later = f.next_header; later.back() ^= 0x71;
+  const auto changed = filesystem::SnapshotPublisher::Publish(*f.volume->recovery(), f.SourceHeader(), later);
+  REQUIRE_FALSE(changed.error); REQUIRE(changed.durable);
+  f.Restart(); REQUIRE(f.HeaderBytes() == later); REQUIRE(f.Bytes("Account") == account);
+}
+TEST_CASE("Issued05 source and exact sealed Header reject unjoined or changed intent before journal",
+          "[gpd_durable_intent][profile_header][source][failure]") {
+  HeaderArtifactFixture f, other;
+  std::error_code error;
+  auto no_gpd=f.Main(false); no_gpd.erase(no_gpd.begin());
+  REQUIRE_FALSE(GpdDurableIntentStore::AcquireHeaderArtifacts(f.volume->intents(),f.volume->recovery(),
+      f.volume->mutations(),f.binding,std::move(no_gpd),f.SourceHeader(),error));
+  REQUIRE(error==std::errc::bad_message); REQUIRE(f.volume->mutations()->idle());
+  REQUIRE_FALSE(GpdDurableIntentStore::AcquireHeaderArtifacts(f.volume->intents(), f.volume->recovery(),
+      f.volume->mutations(), f.binding, f.Main(false), other.SourceHeader(), error));
+  REQUIRE(error == std::errc::bad_message); REQUIRE(f.volume->mutations()->idle());
+  REQUIRE_FALSE(GpdDurableIntentStore::AcquireHeaderArtifacts(f.volume->intents(), f.volume->recovery(),
+      other.volume->mutations(), f.binding, f.Main(false), f.SourceHeader(), error));
+  REQUIRE(error == std::errc::permission_denied); REQUIRE(f.volume->mutations()->idle());
+  auto held = f.AcquireHeader(); f.WriteHeader(held); auto edits = f.HeaderEdits(*held);
+  REQUIRE_FALSE(held->members()->ObserveRetainedMetadata(other.Token("FFFE07D1.gpd"),error));
+  REQUIRE(error); // A same-named foreign tuple grants no scoped metadata access.
+  auto header = std::find_if(edits.begin(), edits.end(), [](const auto& edit) {
+    return edit.kind == ArtifactKind::kPackageHeader;
+  }); REQUIRE(header != edits.end());
+  SECTION("different staged bytes") { header->intended.back() ^= 0x19; }
+  SECTION("missing Header role") { edits.erase(header); }
+  SECTION("short Header image") { header->intended.resize(100); }
+  SECTION("Header deletion is not native metadata publication") {
+    header->action = ArtifactAction::kDelete; header->intended.clear();
+  }
+  SECTION("changed stage cannot be declared observed unchanged") {
+    header->action = ArtifactAction::kObserve; header->intended.clear();
+  }
+  std::filesystem::path journal;
+  REQUIRE_FALSE(GpdDurableIntentStore::PrepareArtifacts(held, std::move(edits), error, journal));
+  REQUIRE(error); REQUIRE(journal.empty()); REQUIRE(f.HeaderBytes(held) == f.old_header);
+  REQUIRE(GpdDurableIntentStore::Scan(*f.volume->intents(), error).empty()); REQUIRE_FALSE(error);
+  held.reset(); REQUIRE(f.volume->mutations()->idle());
+  REQUIRE(f.HeaderBytes() == f.old_header); REQUIRE(f.Bytes("FFFE07D1.gpd") == f.old_dash);
+}
+
 }  // namespace xe::kernel::xam::test
 #endif

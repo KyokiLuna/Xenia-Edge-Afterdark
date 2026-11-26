@@ -54,6 +54,21 @@ class FolderContentPackage {
   // the kernel only at its real guest-copy boundary; no retained guest pointer.
   virtual X_STATUS Control(uint32_t code, std::span<uint8_t> output,
                             uint32_t* transferred) = 0;
+  // One prepared stable raw-File cache swap. All source/format/IO checks and
+  // allocations precede Apply. The whole owner must retain this alongside the
+  // genuine cached GPD and model guards, then destroy every holder outside
+  // those locks. This supplies no native caller, cache or control authority.
+  class HeaderCacheCheckpoint {
+   public:
+    virtual ~HeaderCacheCheckpoint() = default;
+    virtual void Apply() noexcept = 0;
+   private:
+    friend class xe::kernel::NativeProfileSaveOwner;
+    virtual void ReleaseLocksAfterApply() noexcept = 0;
+    friend class xe::kernel::NativeProfileSavePublication;
+    virtual bool MatchesPublication(
+        const std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication>&) const noexcept = 0;
+  };
  private:
   friend class xe::kernel::NativeProfileSaveOwner;
   friend class xe::kernel::NativeProfileSavePublication;
@@ -68,6 +83,13 @@ class FolderContentPackage {
   virtual std::shared_ptr<const filesystem::HostStorageSnapshotToken> CaptureHeaderBefore(
       std::span<const uint8_t> actual_native_before_header, std::error_code& error) {
     error = std::make_error_code(std::errc::operation_not_supported); return {};
+  }
+  // Read observation for an already independently issued parent admission.
+  // Metadata-only/try-only: no IO, stage creation, write permission or cache
+  // commit. Actual reads still validate the same scope on their owned IO lane.
+  virtual X_STATUS ObserveHeaderPublication(
+      const std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication>&) {
+    return X_STATUS_NOT_SUPPORTED;
   }
   // Only the actual native family owner may make this cache transition after
   // authenticating the exact cached backing XFile/context and real IO/DB
@@ -84,6 +106,12 @@ class FolderContentPackage {
       const std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication>&,
       std::shared_ptr<const filesystem::HostStorageSnapshotToken>) {
     return X_STATUS_NOT_SUPPORTED;
+  }
+  virtual std::unique_ptr<HeaderCacheCheckpoint> PrepareCommittedHeader(
+      const std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication>&,
+      std::shared_ptr<const filesystem::HostStorageSnapshotToken>,X_STATUS& status,
+      bool original_nonjoined_wait=false) {
+    status=X_STATUS_NOT_SUPPORTED;return {};
   }
  protected:
   FolderContentPackage() = default;

@@ -6,18 +6,21 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <type_traits>
 #include <utility>
 #include "xenia/base/content_package_tree.h"
 #include "xenia/base/managed_volume_authority.h"
 #include "xenia/base/retained_file_metadata.h"
 #include "xenia/base/string.h"
 #include "xenia/kernel/xam/folder_content_header.h"
+#include "xenia/kernel/xam/profile_gpd_publication.h"
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/folder_content_package.h"
 #include "xenia/vfs/host_storage_errors.h"
 #include "xenia/vfs/managed_file_service.h"
 namespace xe::kernel::xam {
 class ContentManager;
+class ProfileStorageLease;
 class NativeFolderContentTestAccess;
 // One existing CM source/package policy in the SAME ManagedFileRegistry.
 // Ordinary Open exposes a complete verified owned native Header and genuinely
@@ -45,7 +48,30 @@ class NativeFolderContent final : public vfs::ManagedFileService,
       vfs::File** output, vfs::FileAction* action) override;
  private:
   friend class ContentManager;
+  friend class xe::kernel::NativeProfileSaveOwner;
+  friend class xe::kernel::NativeProfileSavePublication;
   friend class NativeFolderContentTestAccess;
+  struct Capture;
+  using HeaderSession=filesystem::ContentMutationOwner::ProfileHeaderPublication;
+  class ParentReadAuthority final:public vfs::ManagedFileOpenAuthority {
+   private:
+    friend class NativeFolderContent;
+    ParentReadAuthority(std::weak_ptr<NativeFolderContent> policy,std::shared_ptr<HeaderSession> issued,
+        std::shared_ptr<vfs::Device> requested,std::string path,std::shared_ptr<void> duty)
+        :policy_(std::move(policy)),issued_(std::move(issued)),requested_(std::move(requested)),
+         path_(std::move(path)),duty_(std::move(duty)) {}
+    const std::weak_ptr<NativeFolderContent> policy_;
+    const std::shared_ptr<HeaderSession> issued_;
+    const std::shared_ptr<vfs::Device> requested_;const std::string path_;
+    const std::shared_ptr<void> duty_;
+    mutable std::atomic<bool> consumed_{false};
+  };
+  std::shared_ptr<const vfs::ManagedFileOpenAuthority> IssueParentReadForActualOpen(
+      std::shared_ptr<HeaderSession>,std::shared_ptr<vfs::Device>,std::string,
+      std::shared_ptr<void>,std::error_code&);
+  X_STATUS OpenWithContext(std::shared_ptr<vfs::Device>,std::string,vfs::FileDisposition,
+      uint32_t,bool,vfs::File**,vfs::FileAction*,const vfs::FileOpenContext&) override;
+  std::optional<Capture> CaptureIssued(const std::shared_ptr<HeaderSession>&,std::error_code&) const;
   struct Source {
     std::shared_ptr<filesystem::HostStorageRoot> root;
     std::shared_ptr<const filesystem::ManagedVolumeAuthority> managed;
@@ -75,7 +101,10 @@ class NativeFolderContent final : public vfs::ManagedFileService,
       std::filesystem::path exact_package,
       std::shared_ptr<const filesystem::HostStorageSnapshotToken> actual_source_header,
       folder_content_detail::PackageIdentity expected, std::error_code& error);
-  std::optional<Capture> CaptureCurrent(std::error_code&) const;
+  std::optional<Capture> CaptureCurrent(std::error_code&,
+      std::shared_ptr<const filesystem::HostStorageSnapshotToken>* = nullptr) const;
+  std::shared_ptr<const filesystem::HostStorageSnapshotToken> CaptureForParentAdmission(
+      const ProfileStorageLease&,std::error_code&) const;
   bool SameSource(const Source& source, const std::filesystem::path& package) const {
     return !retiring() && source_.root == source.root && source_.managed == source.managed &&
         source_.volume == source.volume && source_.certificate == source.certificate && package_ == package;
@@ -95,24 +124,29 @@ class NativeFolderContent final : public vfs::ManagedFileService,
 };
 class NativeFolderContent::RawEntry final : public vfs::Entry {
  public:
-  RawEntry(vfs::Device* device, std::string path, const vfs::File::Information& info)
+  RawEntry(vfs::Device* device, std::string path, const vfs::File::Information& info,std::filesystem::path actual_package)
       : Entry(device, nullptr, path) {
+    coordinate_=std::make_shared<CheckpointCoordinate>(CheckpointCoordinate{std::move(actual_package)});
     attributes_ = info.attributes; size_ = size_t(info.end_of_file);
     allocation_size_ = size_t(info.allocation_size);
     create_timestamp_ = info.create_timestamp; access_timestamp_ = info.access_timestamp;
     write_timestamp_ = info.write_timestamp;
   }
+  std::shared_ptr<const CheckpointCoordinate> RetainCheckpointCoordinate() override {return coordinate_;}
   bool allows_namespace_mutation() const override { return false; }
   X_STATUS Open(uint32_t, vfs::File**) override { return X_STATUS_ACCESS_DENIED; }
  private:
+  std::shared_ptr<const CheckpointCoordinate> coordinate_;
   bool DeleteEntryInternal(vfs::Entry*) override { return false; }
 };
-struct NativeFolderContent::State final : public vfs::FolderContentPackage {
+struct NativeFolderContent::State final : public vfs::FolderContentPackage,
+    public std::enable_shared_from_this<NativeFolderContent::State> {
   std::shared_ptr<NativeFolderContent> policy;
   std::shared_ptr<vfs::Device> requested;
   Capture current;
   std::mutex mutex;
   std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication> publication;
+  bool mutation_adopted=false;
   bool retiring() const noexcept override {
     return !policy || policy->retiring() || !requested || requested->namespace_retiring();
   }
@@ -150,34 +184,36 @@ struct NativeFolderContent::State final : public vfs::FolderContentPackage {
     // old owned Header after canonical replacement. Hold one actual read
     // lease ONLY through kernel publication, then release before native resume.
     // Existing cached native context updates use their separate issued session.
-    if (publication) { return vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy)); }
+    if (publication && mutation_adopted) { return vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy)); }
     struct HeaderAdmission final : MountAdmission {
       std::unique_ptr<filesystem::FileHandle> retained;
+      std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication> issued;
     };
-    std::error_code error;
-    auto source_header = policy->source_.managed->mutations()->CaptureMetadata(
-        filesystem::ContentMutationOwner::Kind::kHeader, policy->package_, policy->target_, error);
-    if (!source_header) { return vfs::HostStorageError(error); }
-    if (source_header->info().file_id != current.header_info.file_id ||
-        source_header->info().filesystem_id != current.header_info.filesystem_id ||
-        source_header->bytes().size() != std::span<const uint8_t>(*current.header).size() ||
-        !std::equal(source_header->bytes().begin(), source_header->bytes().end(), std::span<const uint8_t>(*current.header).begin())) {
-      return vfs::HostStorageError(std::make_error_code(std::errc::state_not_recoverable));
-    }
-    auto held = std::make_unique<HeaderAdmission>();
-    held->retained = source_header->root()->OpenFile(source_header->relative(),
-        filesystem::FileAccess::kFileReadData, error);
-    if (!held->retained) { return vfs::HostStorageError(error); }
-    const auto identity = held->retained->QueryInfo(error);
-    const auto observed = source_header->root()->CaptureSnapshot(source_header->relative(),
-        filesystem::content_mutation_wire::kMaximumMetadataBytes, error, true);
-    if (!identity || !observed || identity->file_id != source_header->info().file_id ||
-        identity->filesystem_id != source_header->info().filesystem_id ||
-        identity->size != source_header->info().size || observed->info().file_id != identity->file_id ||
-        observed->info().filesystem_id != identity->filesystem_id ||
-        observed->bytes().size() != source_header->bytes().size() ||
-        !std::equal(observed->bytes().begin(), observed->bytes().end(), source_header->bytes().begin())) {
-      return error ? vfs::HostStorageError(error) : X_STATUS_UNSUCCESSFUL;
+    std::error_code error;auto held=std::make_unique<HeaderAdmission>();
+    if(publication) {
+      if(!publication->Query(error))return vfs::HostStorageError(error);
+      held->issued=publication; // SAME reservation, never a public recapture.
+    }else {
+      auto source_header = policy->source_.managed->mutations()->CaptureMetadata(
+          filesystem::ContentMutationOwner::Kind::kHeader, policy->package_, policy->target_, error);
+      if (!source_header) { return vfs::HostStorageError(error); }
+      if (source_header->info().file_id != current.header_info.file_id ||
+          source_header->info().filesystem_id != current.header_info.filesystem_id ||
+          source_header->bytes().size() != current.header->size() ||
+          !std::equal(source_header->bytes().begin(),source_header->bytes().end(),current.header->begin()))
+        return vfs::HostStorageError(std::make_error_code(std::errc::state_not_recoverable));
+      held->retained=source_header->root()->OpenFile(source_header->relative(),
+          filesystem::FileAccess::kFileReadData,error);
+      if(!held->retained)return vfs::HostStorageError(error);
+      const auto identity=held->retained->QueryInfo(error);
+      const auto observed=source_header->root()->CaptureSnapshot(source_header->relative(),
+          filesystem::content_mutation_wire::kMaximumMetadataBytes,error,true);
+      if(!identity || !observed || identity->file_id!=source_header->info().file_id ||
+          identity->filesystem_id!=source_header->info().filesystem_id || identity->size!=source_header->info().size ||
+          observed->info().file_id!=identity->file_id || observed->info().filesystem_id!=identity->filesystem_id ||
+          observed->bytes().size()!=source_header->bytes().size() ||
+          !std::equal(observed->bytes().begin(),observed->bytes().end(),source_header->bytes().begin()))
+        return error?vfs::HostStorageError(error):X_STATUS_UNSUCCESSFUL;
     }
     auto package = policy->source_.root->Subroot(policy->package_, false, error);
     if (!package) { return vfs::HostStorageError(error); }
@@ -213,7 +249,17 @@ struct NativeFolderContent::State final : public vfs::FolderContentPackage {
       error = std::make_error_code(std::errc::operation_would_block); return {};
     }
     std::lock_guard lock(mutex);
-    if (publication) { error = std::make_error_code(std::errc::device_or_resource_busy); return {}; }
+    if (publication) {
+      if(mutation_adopted || actual_before.size()!=current.facts.data_offset ||
+          !std::equal(actual_before.begin(),actual_before.end(),current.header->begin())) {
+        error=std::make_error_code(std::errc::permission_denied);return {};
+      }
+      if(const auto status=Current();XFAILED(status)) {
+        error=std::make_error_code(std::errc::operation_canceled);return {};
+      }
+      if(!publication->Query(error))return {};
+      return publication->expected();
+    }
     if (retiring()) { error = std::make_error_code(std::errc::no_such_device); return {}; }
     if (actual_before.size() != current.facts.data_offset ||
         actual_before.size() > current.header->size() ||
@@ -240,13 +286,30 @@ struct NativeFolderContent::State final : public vfs::FolderContentPackage {
     // before effects; same-guard checks still own actual publication.
     return actual;
   }
+  X_STATUS ObserveHeaderPublication(
+      const std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication>& issued) override {
+    if(global_critical_region::is_held_by_current_thread())return X_STATUS_INVALID_DEVICE_REQUEST;
+    std::unique_lock held(mutex,std::try_to_lock);
+    if(!held.owns_lock())return vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy));
+    if(retiring() || !issued || issued->package()!=policy->package_ || issued->target()!=policy->target_ ||
+        !issued->expected() || (publication && publication!=issued))return X_STATUS_ACCESS_DENIED;
+    const auto& before=issued->expected();
+    if(!before->root()->directory_identity() || !policy->source_.root->directory_identity() ||
+        !before->root()->directory_identity()->SameEntry(before->relative(),
+          *policy->source_.root->directory_identity(),policy->target_,true) ||
+        before->info().file_id!=current.header_info.file_id ||
+        before->info().filesystem_id!=current.header_info.filesystem_id ||
+        before->bytes().size()!=current.header->size() ||
+        !std::equal(before->bytes().begin(),before->bytes().end(),current.header->begin()))return X_STATUS_ACCESS_DENIED;
+    publication=issued;return X_STATUS_SUCCESS; // Read observation only.
+  }
   X_STATUS AdoptHeaderPublication(
       std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication> issued,
       std::span<const uint8_t> actual_before) override {
     if (global_critical_region::is_held_by_current_thread()) { return vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy)); }
     std::lock_guard lock(mutex);
     if (retiring()) { return X_STATUS(0xC000009D); }
-    if (current.facts.read_only_format || !issued || publication || issued->package() != policy->package_ ||
+    if (current.facts.read_only_format || !issued || (publication && publication!=issued) || issued->package() != policy->package_ ||
         issued->target() != policy->target_ || !issued->expected() ||
         actual_before.size() != current.facts.data_offset ||
         !std::equal(actual_before.begin(), actual_before.end(), std::span<const uint8_t>(*current.header).begin())) {
@@ -275,66 +338,113 @@ struct NativeFolderContent::State final : public vfs::FolderContentPackage {
       return vfs::HostStorageError(std::make_error_code(std::errc::state_not_recoverable));
     }
     if (!issued->Query(error)) { return vfs::HostStorageError(error); }
-    publication = std::move(issued); return X_STATUS_SUCCESS;
+    publication = std::move(issued);mutation_adopted=true;return X_STATUS_SUCCESS;
   }
+  class PreparedHeaderCacheCheckpoint final:public HeaderCacheCheckpoint {
+   public:
+    PreparedHeaderCacheCheckpoint(std::shared_ptr<State> owner,std::unique_lock<std::mutex> lock,
+        Capture next,std::shared_ptr<const vfs::File::Information> information,
+        std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication> exact)
+        :owner_(std::move(owner)),next_(std::move(next)),information_(std::move(information)),
+         exact_(std::move(exact)),lock_(std::move(lock)) {}
+    void Apply() noexcept override {
+      if(applied_)return;
+      // Every allocation, retained read and source/format admission completed
+      // before the joint cut. Swap only owned values; retain old resources for
+      // destruction AFTER the aggregate model/publication/File/stage locks.
+      static_assert(std::is_nothrow_swappable_v<Capture>);
+      using std::swap;swap(owner_->current,next_);
+      dropped_publication_=std::move(owner_->publication);
+      owner_->mutation_adopted=false;
+      owner_->policy->namespace_->PublishPrepared(std::move(information_));
+      applied_=true;
+    }
+   private:
+    void ReleaseLocksAfterApply() noexcept override {
+      if(applied_ && lock_.owns_lock())lock_.unlock();
+    }
+    bool MatchesPublication(const std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication>& exact) const noexcept override {
+      return !applied_ && lock_.owns_lock() && exact && exact_==exact && owner_->publication==exact;
+    }
+    std::shared_ptr<State> owner_;
+    Capture next_;
+    std::shared_ptr<const vfs::File::Information> information_;
+    std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication> exact_,dropped_publication_;
+    bool applied_=false;
+    // Destroyed FIRST. No old source/stage/session holder drops under its lock.
+    std::unique_lock<std::mutex> lock_;
+  };
   X_STATUS PromoteCommittedHeader(
       const std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication>& exact,
       std::shared_ptr<const filesystem::HostStorageSnapshotToken> committed) override {
-    if (global_critical_region::is_held_by_current_thread()) { return vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy)); }
-    std::lock_guard lock(mutex);
+    X_STATUS status;auto prepared=PrepareCommittedHeader(exact,std::move(committed),status,true);
+    if(prepared)prepared->Apply();return status;
+  }
+  std::unique_ptr<HeaderCacheCheckpoint> PrepareCommittedHeader(
+      const std::shared_ptr<filesystem::ContentMutationOwner::ProfileHeaderPublication>& exact,
+      std::shared_ptr<const filesystem::HostStorageSnapshotToken> committed,X_STATUS& status,
+      bool original_nonjoined_wait=false) override {
+    status=X_STATUS_UNSUCCESSFUL;
+    if(global_critical_region::is_held_by_current_thread()) {
+      status=vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy));return {};
+    }
+    std::unique_lock lock(mutex,std::defer_lock);
+    if(original_nonjoined_wait)lock.lock();
+    else if(!lock.try_lock()){status=vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy));return {};}
+
     if (!exact || exact != publication || !committed || !committed->exists() ||
         committed->root() != exact->expected()->root() || committed->relative() != exact->expected()->relative() ||
-        retiring()) { return X_STATUS_ACCESS_DENIED; }
+        retiring()) { status=X_STATUS_ACCESS_DENIED;return {}; }
     std::error_code error;
     // This is invoked only by the authenticated whole native cache-checkpoint
     // owner, outside its model/GCRC interval. Validate the actual committed
     // Header token and actual NEW member identities before the stable switch.
     {
       const auto batch = committed->root()->ValidateSnapshotBatch({committed}, error);
-      if (!batch) { return vfs::HostStorageError(error); }
+      if (!batch) { status=vfs::HostStorageError(error);return {}; }
     }
     auto layout = exact->CaptureMemberLayout(error);
-    if (!layout) { return vfs::HostStorageError(error); }
+    if (!layout) { status=vfs::HostStorageError(error);return {}; }
     const auto virtual_extent = folder_content_detail::CaptureFolderVirtualExtent(*layout, committed->bytes(), error);
-    if (!virtual_extent) { return vfs::HostStorageError(error); }
+    if (!virtual_extent) { status=vfs::HostStorageError(error);return {}; }
     const auto facts = folder_content_detail::ValidateNativeHeader(committed->bytes(), policy->expected_,
         virtual_extent->bytes, policy->source_.certificate, error);
-    if (!facts) { return vfs::HostStorageError(error); }
+    if (!facts) { status=vfs::HostStorageError(error);return {}; }
     // Commit released the renamed stage handle; this current token's OWN
     // namespace may now open its exact canonical retained File for metadata.
     auto header_file = committed->root()->OpenFile(committed->relative(),
         filesystem::FileAccess::kFileReadData, error);
-    if (!header_file) { return vfs::HostStorageError(error); }
+    if (!header_file) { status=vfs::HostStorageError(error);return {}; }
     const auto actual = header_file->QueryInfo(error);
     if (!actual || actual->file_id != committed->info().file_id ||
         actual->filesystem_id != committed->info().filesystem_id ||
         actual->size != committed->info().size) {
-      return error ? vfs::HostStorageError(error) : X_STATUS_UNSUCCESSFUL;
+      status=error?vfs::HostStorageError(error):X_STATUS_UNSUCCESSFUL;return {};
     }
     const auto header_metadata = filesystem::QueryRetainedFileMetadata(*header_file, error);
-    if (!header_metadata) { return vfs::HostStorageError(error); }
+    if (!header_metadata) { status=vfs::HostStorageError(error);return {}; }
     header_file.reset();
     auto info = current.information;
     info.end_of_file = facts->raw_extent;
     if (header_metadata->allocated_bytes > UINT64_MAX - layout->statistics().allocated_bytes) {
-      return X_STATUS_INVALID_PARAMETER;
+      status=X_STATUS_INVALID_PARAMETER;return {};
     }
-    const auto status = vfs::RoundFileAllocationSize(header_metadata->allocated_bytes +
+    const auto allocation_status = vfs::RoundFileAllocationSize(header_metadata->allocated_bytes +
         layout->statistics().allocated_bytes, uint64_t(requested->bytes_per_sector()) *
         requested->sectors_per_allocation_unit(), &info.allocation_size);
-    if (XFAILED(status)) { return status; }
+    if (XFAILED(allocation_status)) { status=allocation_status;return {}; }
     info.access_timestamp = header_metadata->access_timestamp;
     info.write_timestamp = header_metadata->write_timestamp;
     info.change_timestamp = header_metadata->change_timestamp;
     auto value = std::make_shared<const vfs::File::Information>(info);
     auto bytes = std::make_shared<const std::vector<uint8_t>>(committed->bytes().begin(), committed->bytes().end());
-    current.header = std::move(bytes); current.header_info = committed->info();
-    current.layout = std::move(layout); current.facts = *facts;
-    current.virtual_extent = *virtual_extent; current.information = info;
-    // Whole native owner still retains exact here. Drop only this duplicate;
-    // last stage/source ownership retires outside GCRC at its actual rundown.
-    publication.reset(); policy->namespace_->PublishPrepared(std::move(value));
-    return X_STATUS_SUCCESS;
+    auto next=current;
+    next.header=std::move(bytes);next.header_info=committed->info();
+    next.layout=std::move(layout);next.facts=*facts;
+    next.virtual_extent=*virtual_extent;next.information=info;
+    auto prepared=std::unique_ptr<HeaderCacheCheckpoint>(new PreparedHeaderCacheCheckpoint(
+        shared_from_this(),std::move(lock),std::move(next),std::move(value),exact));
+    status=X_STATUS_SUCCESS;return prepared;
   }
 };
 class NativeFolderContent::RawFile final : public vfs::File {
@@ -343,7 +453,11 @@ class NativeFolderContent::RawFile final : public vfs::File {
       : File(access, entry.get()), entry_(std::move(entry)), state_(std::move(state)) {
     device_owner_->RetainManagedFile();
   }
-  ~RawFile() override { device_owner_->ReleaseManagedFile(); }
+  ~RawFile() override {
+    device_owner_->ReleaseManagedFile();
+    if(checkpoint_close_)checkpoint_close_->data_status.store(X_STATUS_SUCCESS,std::memory_order_release);
+  }
+  void ObserveCheckpointClose(std::shared_ptr<CheckpointCloseObservation> receipt) override {checkpoint_close_=std::move(receipt);}
   void Destroy() override { delete this; }
   std::shared_ptr<vfs::FolderContentPackage> folder_content_package() const override { return state_; }
   X_STATUS ReadSync(std::span<uint8_t> output, size_t offset, size_t* count) override {
@@ -386,7 +500,7 @@ class NativeFolderContent::RawFile final : public vfs::File {
     if (global_critical_region::is_held_by_current_thread()) { return vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy)); }
     std::lock_guard lock(state_->mutex);
     if (const auto status = state_->Current(); XFAILED(status)) { return status; }
-    if (state_->current.facts.read_only_format || !state_->publication) { return X_STATUS_ACCESS_DENIED; }
+    if (state_->current.facts.read_only_format || !state_->publication || !state_->mutation_adopted) { return X_STATUS_ACCESS_DENIED; }
     // C628 may issue its full second write [0x971A,data_offset), including
     // actual alignment bytes. Unwritten remainder/tail stays in the one stage;
     // its format validator still rejects any unauthorized byte change at seal.
@@ -436,9 +550,11 @@ class NativeFolderContent::RawFile final : public vfs::File {
     if (global_critical_region::is_held_by_current_thread()) { return vfs::HostStorageError(std::make_error_code(std::errc::device_or_resource_busy)); }
     std::lock_guard lock(state_->mutex);
     if (const auto status = state_->Current(); XFAILED(status)) { return status; }
-    return state_->publication ? vfs::HostStorageError(state_->publication->Flush()) : X_STATUS_NOT_SUPPORTED;
+    return state_->publication && state_->mutation_adopted
+        ? vfs::HostStorageError(state_->publication->Flush()) : X_STATUS_NOT_SUPPORTED;
   }
  private:
+  std::shared_ptr<CheckpointCloseObservation> checkpoint_close_;
   std::unique_ptr<RawEntry> entry_;
   std::shared_ptr<State> state_;
 };
@@ -453,7 +569,8 @@ inline bool NativeFolderContent::MatchesDevice(const vfs::Device& device,
   return parent_pin_->SameEntry(physical_package_.filename(), *device.ManagedDirectoryIdentity(), relative, true);
 }
 inline std::optional<NativeFolderContent::Capture>
-NativeFolderContent::CaptureCurrent(std::error_code& error) const {
+NativeFolderContent::CaptureCurrent(std::error_code& error,
+    std::shared_ptr<const filesystem::HostStorageSnapshotToken>* exact_before) const {
   if (global_critical_region::is_held_by_current_thread() || retiring()) {
     error = std::make_error_code(std::errc::operation_canceled); return {};
   }
@@ -515,7 +632,90 @@ NativeFolderContent::CaptureCurrent(std::error_code& error) const {
   result.header = std::make_shared<const std::vector<uint8_t>>(
       source_header->bytes().begin(), source_header->bytes().end());
   result.header_info = source_header->info();
-  result.layout = std::move(layout); error.clear(); return result;
+  result.layout = std::move(layout);
+  if(exact_before)*exact_before=source_header;
+  error.clear(); return result;
+}
+inline std::shared_ptr<const filesystem::HostStorageSnapshotToken>
+NativeFolderContent::CaptureForParentAdmission(const ProfileStorageLease& storage,std::error_code& error) const {
+  error.clear();
+  const auto actual=storage.source()->directory_identity();
+  const auto ours=source_.root->directory_identity();
+  if(retiring() || storage.retiring() || !actual || !ours ||
+      !actual->SameEntry({},*ours,{}) ||
+      package_!=ProfileStorageLease::ProfileRelative(storage.xuid()) ||
+      expected_.xuid!=storage.xuid() || expected_.title_id!=0xFFFE07D1 ||
+      expected_.content_type!=XContentType::kProfile) {
+    error=std::make_error_code(std::errc::permission_denied);return {};
+  }
+  std::shared_ptr<const filesystem::HostStorageSnapshotToken> before;
+  if(!CaptureCurrent(error,&before))return {};
+  return before;
+}
+inline std::shared_ptr<const vfs::ManagedFileOpenAuthority>
+NativeFolderContent::IssueParentReadForActualOpen(std::shared_ptr<HeaderSession> issued,
+    std::shared_ptr<vfs::Device> requested,std::string path,std::shared_ptr<void> duty,std::error_code& error) {
+  error.clear();
+  if(global_critical_region::is_held_by_current_thread() || retiring() || !issued || !duty || !requested ||
+      issued->package()!=package_ || issued->target()!=target_ || !issued->expected() ||
+      !MatchesDevice(*requested,path)) {
+    error=std::make_error_code(std::errc::permission_denied);return {};
+  }
+  const auto& before=issued->expected();
+  if(!before->root()->directory_identity() || !source_.root->directory_identity() ||
+      !before->root()->directory_identity()->SameEntry(before->relative(),*source_.root->directory_identity(),target_,true)) {
+    error=std::make_error_code(std::errc::permission_denied);return {};
+  }
+  return std::shared_ptr<const vfs::ManagedFileOpenAuthority>(new ParentReadAuthority(
+      weak_from_this(),std::move(issued),std::move(requested),std::move(path),std::move(duty)));
+}
+inline std::optional<NativeFolderContent::Capture> NativeFolderContent::CaptureIssued(
+    const std::shared_ptr<HeaderSession>& issued,std::error_code& error) const {
+  error.clear();
+  if(global_critical_region::is_held_by_current_thread() || retiring() || !issued ||
+      issued->package()!=package_ || issued->target()!=target_ || !issued->expected()) {
+    error=std::make_error_code(std::errc::permission_denied);return {};
+  }
+  const auto before=issued->expected();auto layout=issued->CaptureMemberLayout(error);
+  if(!layout)return {};
+  const auto extent=folder_content_detail::CaptureFolderVirtualExtent(*layout,before->bytes(),error);
+  if(!extent)return {};
+  const auto facts=folder_content_detail::ValidateNativeHeader(before->bytes(),expected_,extent->bytes,source_.certificate,error);
+  if(!facts)return {};
+  const auto metadata=issued->Query(error);if(!metadata)return {};
+  Capture captured;captured.facts=*facts;captured.virtual_extent=*extent;
+  captured.header=std::make_shared<const std::vector<uint8_t>>(before->bytes().begin(),before->bytes().end());
+  captured.header_info=before->info();captured.layout=std::move(layout);
+  captured.information.attributes=vfs::kFileAttributeNormal;
+  captured.information.end_of_file=facts->raw_extent;
+  captured.information.create_timestamp=0;
+  captured.information.access_timestamp=metadata->access_timestamp;
+  captured.information.write_timestamp=metadata->write_timestamp;
+  captured.information.change_timestamp=metadata->change_timestamp;
+  if(metadata->allocated_bytes>UINT64_MAX-captured.layout->statistics().allocated_bytes ||
+      XFAILED(vfs::RoundFileAllocationSize(metadata->allocated_bytes+captured.layout->statistics().allocated_bytes,
+        512,&captured.information.allocation_size))) {
+    error=std::make_error_code(std::errc::value_too_large);return {};
+  }
+  return captured;
+}
+inline X_STATUS NativeFolderContent::OpenWithContext(std::shared_ptr<vfs::Device> requested,
+    std::string path,vfs::FileDisposition disposition,uint32_t access,bool directory,
+    vfs::File** output,vfs::FileAction* action,const vfs::FileOpenContext& context) {
+  if(!context.managed_authority)return Open(std::move(requested),std::move(path),disposition,access,directory,output,action);
+  if(output)*output=nullptr;if(action)*action=vfs::FileAction::kDoesNotExist;
+  const auto authority=std::dynamic_pointer_cast<const ParentReadAuthority>(context.managed_authority);
+  if(!output || !action || directory || !authority || authority->policy_.lock().get()!=this ||
+      requested!=authority->requested_ || context.expected_device!=requested || path!=authority->path_ ||
+      !MatchesDevice(*requested,path) || (disposition!=vfs::FileDisposition::kOpen && disposition!=vfs::FileDisposition::kOpenIf) ||
+      authority->consumed_.exchange(true,std::memory_order_acq_rel))return X_STATUS_ACCESS_DENIED;
+  std::error_code error;auto captured=CaptureIssued(authority->issued_,error);
+  if(!captured)return vfs::HostStorageError(error);
+  auto state=std::make_shared<State>();state->policy=shared_from_this();state->requested=requested;
+  state->current=std::move(*captured);state->publication=authority->issued_;
+  auto entry=std::make_unique<RawEntry>(requested.get(),std::move(path),state->current.information,physical_package_);
+  auto file=std::make_unique<RawFile>(access,std::move(entry),std::move(state));
+  *output=file.release();*action=vfs::FileAction::kOpened;return X_STATUS_SUCCESS;
 }
 inline std::shared_ptr<NativeFolderContent> NativeFolderContent::Prepare(Source source,
     std::filesystem::path package, std::shared_ptr<const filesystem::HostStorageSnapshotToken> actual,
@@ -593,7 +793,7 @@ inline X_STATUS NativeFolderContent::Open(std::shared_ptr<vfs::Device> requested
   auto info = std::make_shared<const vfs::File::Information>(captured->information);
   auto state = std::make_shared<State>(); state->policy = shared_from_this();
   state->requested = requested; state->current = std::move(*captured);
-  auto entry = std::make_unique<RawEntry>(requested.get(), std::move(path), state->current.information);
+  auto entry = std::make_unique<RawEntry>(requested.get(), std::move(path), state->current.information,physical_package_);
   auto file = std::make_unique<RawFile>(access, std::move(entry), std::move(state));
   namespace_->PublishPrepared(std::move(info));
   *output = file.release(); *action = vfs::FileAction::kOpened; return X_STATUS_SUCCESS;

@@ -10,6 +10,7 @@
 #include "xenia/vfs/devices/host_path_file.h"
 
 #include <algorithm>
+#include <limits>
 
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/devices/host_path_entry.h"
@@ -31,6 +32,13 @@ HostPathFile::HostPathFile(
 
 HostPathFile::~HostPathFile() {
   static_cast<HostPathEntry*>(entry_)->FinishOverwrite(file_handle_);
+  // Capture the real pending-close scalar BEFORE ReleaseFile can remove this
+  // child Entry. XFile consumes it only after this genuine destructor returns.
+  if (checkpoint_close_) {
+    checkpoint_close_->data_status.store(
+        HasPendingCheckpointClose() ? X_STATUS_UNSUCCESSFUL : X_STATUS_SUCCESS,
+        std::memory_order_release);
+  }
   // Closed first, or a delete on Windows can leave the name in place until
   // this handle closes.
   file_handle_.reset();
@@ -117,6 +125,15 @@ X_STATUS HostPathFile::QueryAllocationSize(uint64_t* output) const {
   return RoundFileAllocationSize(*bytes, unit, output);
 }
 
+bool HostPathFile::HasPendingCheckpointClose() const {
+  auto lock = global_critical_region::AcquireDirect();
+  const auto* entry = static_cast<const HostPathEntry*>(entry_);
+  return entry->delete_on_close() || entry->overwrite_handle_ ||
+         entry->overwrite_tail_retained_ ||
+         entry->overwrite_durability_pending_ ||
+         bool(entry->overwrite_metadata_error_);
+}
+
 bool HostPathFile::HasMutatingClose() const {
   return EntryHasMutatingClose(entry_);
 }
@@ -162,6 +179,7 @@ X_STATUS HostPathFile::ReadSync(std::span<uint8_t> buffer, size_t byte_offset,
 X_STATUS HostPathFile::WriteSync(std::span<const uint8_t> buffer,
                                  size_t byte_offset,
                                  size_t* out_bytes_written) {
+  CheckpointEffectKnown();
   *out_bytes_written = 0;
   if (!(file_access_ & (FileAccess::kGenericWrite | FileAccess::kFileWriteData |
                         FileAccess::kFileAppendData))) {
@@ -178,6 +196,7 @@ X_STATUS HostPathFile::WriteSync(std::span<const uint8_t> buffer,
     // append offset from the last-known metadata before this backend call.
     return HostStorageError(entry->overwrite_metadata_error_);
   }
+  CheckpointEffectEntered();
   const auto result = file_handle_->WriteAllResult(byte_offset, buffer);
   *out_bytes_written = result.bytes;
   if (entry->overwritten_ && result.bytes &&
@@ -191,7 +210,24 @@ X_STATUS HostPathFile::WriteSync(std::span<const uint8_t> buffer,
   return HostStorageError(result.error);
 }
 
+X_STATUS HostPathFile::SetAllocationSize(uint64_t length) {
+  if(!(file_access_&(FileAccess::kGenericWrite|FileAccess::kFileWriteData)))return X_STATUS_ACCESS_DENIED;
+  if(length>std::numeric_limits<size_t>::max())return X_STATUS(0xC0000095);
+  Information before{};const auto observed=QueryInformation(&before);
+  if(XFAILED(observed))return observed;
+  // Preserve the legacy no-reservation no-op, but still reconcile metadata
+  // from this actual descriptor after a prior failed observation.
+  const auto resized=length<before.end_of_file ? SetLength(size_t(length)) : X_STATUS_SUCCESS;
+  // A failing resize may have changed backing EOF. Reobserve the actual owned
+  // descriptor in either case; preserve the original mutation error if present.
+  // A later metadata failure does not claim rollback of successful shrink.
+  std::error_code error;const auto actual=filesystem::QueryRetainedFileMetadata(*file_handle_,error);
+  const auto refreshed=actual ? static_cast<HostPathEntry*>(entry_)->PublishRetainedFileMetadata(*actual)
+                              : HostStorageError(error ? error : std::make_error_code(std::errc::io_error));
+  return XFAILED(resized) ? resized : refreshed;
+}
 X_STATUS HostPathFile::SetLength(size_t length) {
+  CheckpointEffectKnown();
   if (!(file_access_ &
         (FileAccess::kGenericWrite | FileAccess::kFileWriteData))) {
     return X_STATUS_ACCESS_DENIED;
@@ -214,6 +250,7 @@ X_STATUS HostPathFile::SetLength(size_t length) {
     // reclaim those retained bytes too; only growth beyond the physical high
     // water mark needs a real guarded allocation. The exclusive reservation
     // keeps aliases from observing the difference until exact final trim.
+    CheckpointEffectEntered();
     if (length > info->size) {
       error = file_handle_->ResizeResult(length);
     }
@@ -222,6 +259,7 @@ X_STATUS HostPathFile::SetLength(size_t length) {
       entry->overwrite_durability_pending_ = true;
     }
   } else {
+    CheckpointEffectEntered();
     error = file_handle_->ResizeResult(length);
     if (entry->overwritten_) {
       // The active exclusive owner keeps metadata coherent for the real
@@ -241,6 +279,7 @@ X_STATUS HostPathFile::SetLength(size_t length) {
 }
 
 X_STATUS HostPathFile::Flush() {
+  CheckpointEffectKnown();
   if (!(file_access_ &
         (FileAccess::kFileWriteData | FileAccess::kFileAppendData |
          FileAccess::kGenericWrite | FileAccess::kGenericAll))) {
@@ -248,10 +287,12 @@ X_STATUS HostPathFile::Flush() {
   }
   auto* entry = static_cast<HostPathEntry*>(entry_);
   if (entry->overwritten_ || entry->overwrite_lease_) {
-    // Explicit Flush commits current logical contents: retaining discarded
-    // FATX tail bytes after this point would contradict durable host EOF.
-    return HostStorageError(entry->CompleteOverwrite(*file_handle_));
+    // The exact overwrite owner marks the actual trim/fsync effect only
+    // after its retained-identity/EOF observation has succeeded.
+    return HostStorageError(
+        entry->CompleteOverwrite(*file_handle_, effect_entered_));
   }
+  CheckpointEffectEntered();
   return HostStorageError(file_handle_->FlushResult());
 }
 
@@ -269,6 +310,9 @@ X_STATUS HostPathFile::DeviceControl(uint32_t code,
                                      std::span<const uint8_t> input,
                                      std::span<uint8_t> output,
                                      uint32_t* transferred) {
+  // These fixed folder-volume controls only encode retained metadata. The
+  // actual supported implementation has no persistence/namespace effect.
+  CheckpointEffectKnown();
   *transferred = 0;
   if (!DescribeDeviceControl(code)) {
     return X_STATUS_INVALID_DEVICE_REQUEST;
@@ -287,11 +331,13 @@ X_STATUS HostPathFile::DeviceControl(uint32_t code,
 X_STATUS HostPathFile::SetTimes(uint64_t create_timestamp,
                                 uint64_t access_timestamp,
                                 uint64_t write_timestamp) {
+  CheckpointEffectKnown();
   if (entry_->is_read_only()) {
     return X_STATUS_ACCESS_DENIED;
   }
   // Set through this handle, since a host file system can restamp a file when
   // a handle that wrote it closes, unless the times were set through it.
+  CheckpointEffectEntered();
   if (static_cast<HostPathEntry*>(entry_)->SetTimes(
           *file_handle_, create_timestamp, access_timestamp, write_timestamp)) {
     return X_STATUS_SUCCESS;

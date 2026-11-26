@@ -4809,9 +4809,11 @@ std::error_code HostStorageRoot::ResetDirectory(
 #endif
 }
 
-std::error_code HostStorageRoot::Rename(
-    const std::filesystem::path& from, const std::filesystem::path& to,
-    bool replace, std::shared_ptr<const HostStorageFileLease> permitted) const {
+std::error_code
+HostStorageRoot::Rename(const std::filesystem::path &from,
+                        const std::filesystem::path &to, bool replace,
+                        std::shared_ptr<const HostStorageFileLease> permitted,
+                        bool *mutation_entered) const {
   if (HostStorageProtection::Guest(*this)) {
     if (auto denied = CheckGuestAccess(from, true)) { return denied; }
     if (auto denied = CheckGuestAccess(to, true)) { return denied; }
@@ -4873,6 +4875,9 @@ std::error_code HostStorageRoot::Rename(
     }
   } else if (errno != ENOENT) {
     return NativeError();
+  }
+  if (mutation_entered) {
+    *mutation_entered = true;
   }
   if (renameat(a.value, first.c_str(), b.value, second.c_str())) {
     return NativeError();
@@ -5096,6 +5101,12 @@ std::error_code HostStorageSnapshotStage::ResizeResult(size_t length) {
   return sealed_ ? Error(std::errc::operation_not_permitted)
                  : file_->ResizeResult(length);
 }
+std::error_code HostStorageSnapshotStage::SetTimesResult(uint64_t access,uint64_t write) {
+  std::lock_guard lock(mutex_);
+  if(sealed_)return Error(std::errc::operation_not_permitted);
+  if(file_->SetTimes(0,access,write))return {};
+  const auto error=file_->LastError();return error?error:Error(std::errc::io_error);
+}
 std::optional<RetainedFileMetadata> HostStorageSnapshotStage::QueryMetadata(
     std::error_code& error) {
   std::lock_guard lock(mutex_);
@@ -5262,12 +5273,17 @@ HostStorageRoot::ReplaceResult HostStorageRoot::CompareAndPublishSnapshotInterna
     const HostStorageSnapshotToken& expected, HostStorageSnapshotStage& stage,
     std::span<const uint8_t> intended,
     std::shared_ptr<const HostStorageSnapshotToken> recovery,
-    PrivateSnapshotPurpose purpose) const {
+    PrivateSnapshotPurpose purpose, const HostStorageSnapshotBatch* borrowed) const {
   if (purpose!=PrivateSnapshotPurpose::kOrdinary &&
       !IsPrivateSnapshotTarget(expected.relative(), purpose)) {
     return {Error(std::errc::permission_denied)};
   }
-  std::lock_guard stage_lock(stage.mutex_);
+  // A prepared stage is exclusively retained by its publisher. Even so, do
+  // not wait for a stage lock while borrowing a complete-source batch guard.
+  std::unique_lock stage_lock(stage.mutex_, std::defer_lock);
+  if (borrowed) {
+    if (!stage_lock.try_lock()) { return {Error(std::errc::device_or_resource_busy)}; }
+  } else { stage_lock.lock(); }
   if (stage.sealed_ || expected.root_.get() != this ||
       stage.root_.get() != this ||
       (expected.exists() && (!recovery || !recovery->exists() ||
@@ -5284,7 +5300,7 @@ HostStorageRoot::ReplaceResult HostStorageRoot::CompareAndPublishSnapshotInterna
   const auto& backup_root = recovery ? *recovery->root() : *this;
   return ReplaceFile(stage.relative_, expected.relative_, backup_root,
                      recovery ? recovery->relative() : std::filesystem::path{},
-                     false, &checked);
+                     false, &checked, borrowed);
 }
 // Only the managed identity producer can acquire this file authority. Its
 // marker is protected by an actual exclusive common lease and nonblocking
@@ -7302,7 +7318,8 @@ std::error_code HostStorageRoot::CheckContentPathCase(
 HostStorageRoot::ReplaceResult HostStorageRoot::ReplaceFile(
     const std::filesystem::path& staged, const std::filesystem::path& target,
     const HostStorageRoot& backup_root, const std::filesystem::path& backup,
-    bool reuse_original, const SnapshotReplacement* checked) const {
+    bool reuse_original, const SnapshotReplacement* checked,
+    const HostStorageSnapshotBatch* borrowed) const {
   if (HostStorageProtection::Guest(*this)) {
     auto error = CheckGuestAccess(staged);
     if (!error) { error = CheckGuestAccess(target); }
@@ -7331,9 +7348,27 @@ HostStorageRoot::ReplaceResult HostStorageRoot::ReplaceFile(
   }
 #endif
   std::error_code error;
-  auto guard = Mutation(error);
-  if (!guard) {
-    return {error, false};
+  std::unique_ptr<HostStorageSpace::MutationGuard> owned_guard;
+  HostStorageSpace::MutationGuard* guard = nullptr;
+  if (borrowed) {
+    // A batch is minted only by the actual filesystem owner. Sharing a path
+    // or caller-filled receipt is insufficient. Keep its native guard alive
+    // through all existing CAS/conflict checks and the real rename/barrier.
+    if (!borrowed->guard_ || !borrowed->guard_->IsOwnedByCurrentThread() ||
+        !borrowed->root_ || borrowed->root_->state_->space != state_->space) {
+      return {Error(std::errc::permission_denied)};
+    }
+    error = Validate();
+    if (!error && state_->read_only) { error = Error(std::errc::read_only_file_system); }
+    if (!error && is_guest_private()) {
+      error = HostStorageProtection::PrivateContents(*this, nullptr, true);
+    }
+    if (error) { return {error}; }
+    guard = borrowed->guard_.get();
+  } else {
+    owned_guard = Mutation(error);
+    if (!owned_guard) { return {error, false}; }
+    guard = owned_guard.get();
   }
   if (!ContentNamespaceReady(target)) {
     return {Error(std::errc::device_or_resource_busy)};
@@ -8785,8 +8820,10 @@ HostStorageRoot::CaptureContentLayout(const std::filesystem::path& relative,
   return CaptureContentLayoutInternal(relative, false, error);
 }
 std::unique_ptr<HostStorageContentLayout>
-HostStorageRoot::CaptureContentLayoutInternal(const std::filesystem::path& relative,
-    bool exact_current_root, std::error_code& error) const {
+HostStorageRoot::CaptureContentLayoutInternal(
+    const std::filesystem::path &relative, bool exact_current_root,
+    std::error_code &error,
+    HostStorageSpace::MutationGuard *borrowed_guard) const {
   error.clear();
   if (xe::global_critical_region::is_held_by_current_thread() ||
       !(exact_current_root && relative.empty() ? Relative(relative, true) : Relative(relative)) ||
@@ -8799,8 +8836,17 @@ HostStorageRoot::CaptureContentLayoutInternal(const std::filesystem::path& relat
   // Metadata observation only. Unlike Mutation(), this does not reject a
   // read-only source or acquire a mutation permission. The same filesystem
   // guard excludes cooperating namespace effects during the complete census.
-  auto guard = state_->space->Begin(state_->path, error, state_->directory_identity);
-  if (!guard) { return {}; }
+  // A complete member snapshot borrows ONLY its already-issued batch guard
+  // from the same source/space. Ordinary metadata callers retain this original
+  // guard acquisition; no nested lock or second traversal registry is added.
+  std::unique_ptr<HostStorageSpace::MutationGuard> own_guard;
+  if (!borrowed_guard) {
+    own_guard =
+        state_->space->Begin(state_->path, error, state_->directory_identity);
+    if (!own_guard) {
+      return {};
+    }
+  }
   error = Validate();
   if (!error) { error = CheckGuestAccess(relative, true); }
   if (error) { return {}; }
@@ -9960,6 +10006,7 @@ struct SnapshotPublicationSet::State {
            std::shared_ptr<const HostStorageSnapshotToken>,
            std::owner_less<std::shared_ptr<const HostStorageSnapshotToken>>> projected;
   mutable std::mutex mutex;
+  bool accepting = true; // Closed only by the genuine no-fail checkpoint handoff.
   ~State() {
     // Only our newly acquired descendants retire. The Account/base parent is
     // untouched. A projected batch keeps State until AFTER its guard drops.
@@ -9988,7 +10035,7 @@ struct SnapshotPublicationSet::State {
   }
   std::shared_ptr<const HostStorageSnapshotToken> Project(
       const std::shared_ptr<const HostStorageSnapshotToken>& actual) {
-    if (!actual || !actual->root()) { return {}; }
+    if (!accepting || !actual || !actual->root()) { return {}; }
     const auto slot = slots.find(FlatKey(actual->relative()));
     if (actual->root() != latest &&
         (slot == slots.end() || slot->second.authority != actual->root())) { return {}; }
@@ -10009,6 +10056,7 @@ struct SnapshotPublicationSet::State {
   std::shared_ptr<const HostStorageSnapshotToken> Actual(
       const std::shared_ptr<const HostStorageSnapshotToken>& token,
       std::error_code& error) {
+    if (!accepting) { error = Error(std::errc::operation_canceled); return {}; }
     if (!token || token->root() != base || FlatKey(token->relative()).empty()) {
       error = Error(std::errc::invalid_argument); return {};
     }
@@ -10065,6 +10113,58 @@ struct SnapshotPublicationSet::State {
     }
   }
 };
+struct HostStorageContentSnapshot::State {
+  std::shared_ptr<const SnapshotPublicationSet> owner;
+  std::unique_ptr<HostStorageContentLayout> layout;
+  std::vector<ContentPackageStreamMember> members;
+  // Read snapshots own these exact actual/projected tokens themselves. They
+  // never insert complete read payloads into publication retry's persistent
+  // pairs/projected maps. Releasing this snapshot releases all its byte copies.
+  std::vector<std::shared_ptr<const HostStorageSnapshotToken>> actual;
+  std::vector<std::shared_ptr<const HostStorageSnapshotToken>> tokens;
+};
+HostStorageContentSnapshot::HostStorageContentSnapshot(
+    std::unique_ptr<State> state)
+    : state_(std::move(state)) {}
+HostStorageContentSnapshot::~HostStorageContentSnapshot() = default;
+std::span<const ContentPackageStreamMember>
+HostStorageContentSnapshot::members() const {
+  return state_->members;
+}
+const HostStorageContentLayout &HostStorageContentSnapshot::layout() const {
+  return *state_->layout;
+}
+FileIoResult HostStorageContentSnapshot::Read(size_t index, uint64_t offset,
+                                              std::span<uint8_t> output) {
+  if (index >= state_->tokens.size()) {
+    return {Error(std::errc::invalid_argument), 0};
+  }
+  const auto bytes = state_->tokens[index]->bytes();
+  if (offset > bytes.size()) {
+    return {Error(std::errc::invalid_argument), 0};
+  }
+  const auto count = std::min(output.size(), bytes.size() - size_t(offset));
+  if (count) {
+    std::copy_n(bytes.data() + size_t(offset), count, output.data());
+  }
+  return {{}, count};
+}
+std::unique_ptr<HostStorageSnapshotBatch>
+HostStorageContentSnapshot::Validate(std::error_code &error) const {
+  return state_->owner->ValidateContentSnapshot(*this, error);
+}
+std::unique_ptr<HostStorageSnapshotBatch>
+HostStorageContentSnapshot::ValidateAfterOwnPublications(
+    std::span<const std::shared_ptr<const HostStorageSnapshotToken>> current,
+    std::error_code& error) const {
+  return state_->owner->ValidateContentSnapshotAfterOwnPublications(*this,current,error);
+}
+std::error_code HostStorageContentSnapshot::CheckCurrent() const {
+  std::error_code error;
+  const auto batch = Validate(error);
+  return batch ? std::error_code{} : error ? error : Error(std::errc::io_error);
+}
+
 SnapshotPublicationSet::SnapshotPublicationSet(std::shared_ptr<State> value)
     : state_(std::move(value)) {}
 SnapshotPublicationSet::~SnapshotPublicationSet() = default;
@@ -10129,6 +10229,173 @@ std::shared_ptr<SnapshotPublicationSet> SnapshotPublicationSet::Reserve(
     error = Error(std::errc::not_enough_memory); return {};
   }
 }
+// One already-validated checkpoint continuation, not another namespace owner.
+// Both metadata locks and the SAME actual member batch survive until the whole
+// caller has prepared its genuine native/cache/model transition. All fallible
+// allocation happens before Apply. Old byte/receipt records die after unlock.
+struct SnapshotPublicationSet::PreparedContinuation::Data {
+  std::shared_ptr<SnapshotPublicationSet::State> old;
+  std::shared_ptr<SnapshotPublicationSet> next;
+  std::unique_ptr<SnapshotPublicationSet::State> retired_records;
+  std::vector<std::shared_ptr<const HostStorageSnapshotToken>> before;
+  std::unique_ptr<HostStorageSnapshotBatch> batch;
+  // Reverse destruction drops locks, then native guard, then owned records.
+  std::unique_lock<std::mutex> old_lock, next_lock;
+  bool applied = false, released = false;
+};
+SnapshotPublicationSet::PreparedContinuation::PreparedContinuation(
+    std::unique_ptr<Data> data) : data_(std::move(data)) {}
+SnapshotPublicationSet::PreparedContinuation::~PreparedContinuation() {
+  ReleaseLocksAfterApply();
+}
+const std::shared_ptr<SnapshotPublicationSet>&
+SnapshotPublicationSet::PreparedContinuation::successor() const {
+  return data_->next;
+}
+const std::vector<std::shared_ptr<const HostStorageSnapshotToken>>&
+SnapshotPublicationSet::PreparedContinuation::before() const {
+  return data_->before;
+}
+bool SnapshotPublicationSet::PreparedContinuation::Apply() noexcept {
+  if (data_->applied || data_->released || !data_->old_lock.owns_lock() ||
+      !data_->next_lock.owns_lock() || !data_->batch ||
+      !data_->old->accepting || data_->next->state_->accepting ||
+      data_->old->base->retiring() || data_->old->latest->retiring()) return false;
+  auto& old = *data_->old;
+  auto& next = *data_->next->state_;
+  // No reservation is released or reacquired. Existing flat leases remain
+  // continuously owned; only the new immutable operation may use them next.
+  old.accepting = false;
+  next.members.swap(old.members);
+  next.joined_owners.swap(old.joined_owners);
+  data_->retired_records->slots.swap(old.slots);
+  data_->retired_records->pairs.swap(old.pairs);
+  data_->retired_records->projected.swap(old.projected);
+  old.latest.reset();
+  next.accepting = true;
+  data_->applied = true;
+  return true;
+}
+void SnapshotPublicationSet::PreparedContinuation::ReleaseLocksAfterApply() noexcept {
+  if (data_->released) return;
+  // No token/publication/admission destructor runs beneath these locks or the
+  // native filesystem guard. In particular, closed old read snapshots may
+  // outlive this cut without retaining the successor's mutation ownership.
+  if (data_->next_lock.owns_lock()) data_->next_lock.unlock();
+  if (data_->old_lock.owns_lock()) data_->old_lock.unlock();
+  data_->batch.reset();
+  data_->released = true;
+}
+std::unique_ptr<SnapshotPublicationSet::PreparedContinuation>
+SnapshotPublicationSet::PrepareContinuation(
+    const HostStorageContentSnapshot& captured,
+    std::span<const std::shared_ptr<const HostStorageSnapshotToken>> own_current,
+    std::error_code& error) const {
+  error.clear();
+  if (own_current.empty()) { error = Error(std::errc::invalid_argument); return {}; }
+  // The real after-set producer proves exact durable own receipts, all
+  // unchanged byte tuples, the complete member census and original source.
+  auto batch = ValidateContentSnapshotAfterOwnPublications(captured, own_current, error);
+  if (!batch) return {};
+  auto old = state_;
+  // Do not wait for the set lock while holding the native guard: another
+  // legitimate operation may already own this mutex and await that guard.
+  std::unique_lock old_lock(old->mutex, std::try_to_lock);
+  if (!old_lock.owns_lock()) { error = Error(std::errc::device_or_resource_busy); return {}; }
+  if (!old->accepting || !old->latest || old->base->retiring() || old->latest->retiring() ||
+      batch->access_owner_.get() != old.get() || batch->root_ != old->base ||
+      !batch->guard_ || !batch->guard_->IsOwnedByCurrentThread()) {
+    error = Error(std::errc::operation_canceled); return {};
+  }
+  try {
+    auto data = std::make_unique<PreparedContinuation::Data>();
+    data->old = old;
+    data->retired_records = std::make_unique<State>();
+    auto next = std::make_shared<State>();
+    next->accepting = false;
+    next->base = old->base;
+    next->latest = old->latest;
+    data->before.reserve(old->slots.size());
+    std::map<std::string, std::shared_ptr<const HostStorageSnapshotToken>> after;
+    for (const auto& token : own_current) {
+      if (!token || !after.emplace(State::FlatKey(token->relative()), token).second) {
+        error = Error(std::errc::invalid_argument); return {};
+      }
+    }
+    size_t changed = 0;
+    for (const auto& [leaf, slot] : old->slots) {
+      const auto original = old->pairs.find(slot.before);
+      if (original == old->pairs.end() || original->first.get() != slot.before.get() ||
+          !slot.prior_artifacts.empty() || slot.prepared) {
+        // A failed/unknown/entered old stage cannot be dropped at a new epoch.
+        error = Error(std::errc::operation_in_progress); return {};
+      }
+      auto actual = original->second;
+      if (slot.last || slot.submitted_expected || slot.submitted_kind ||
+          slot.submitted_recovery || !slot.submitted_bytes.empty()) {
+        const auto issued = after.find(leaf);
+        if (!slot.last || !slot.last->published || !slot.last->durable ||
+            slot.last->error || slot.last->phase != SnapshotPublicationPhase::kComplete ||
+            !slot.last->current || issued == after.end()) {
+          error = Error(std::errc::operation_in_progress); return {};
+        }
+        const auto pair = old->pairs.find(issued->second);
+        if (pair == old->pairs.end() || pair->first.get() != issued->second.get() ||
+            pair->second != slot.last->current) {
+          error = Error(std::errc::invalid_argument); return {};
+        }
+        actual = pair->second;
+        ++changed;
+      } else if (after.contains(leaf)) {
+        error = Error(std::errc::invalid_argument); return {};
+      }
+      if (!actual || actual->root() != slot.authority || slot.authority->retiring() ||
+          !RootDescendsFrom(slot.authority, old->base)) {
+        // A separately joined external Header is not a flat member. Its typed
+        // producer/next-session transition must be composed separately.
+        error = Error(std::errc::operation_not_supported); return {};
+      }
+      // An unchanged reservation may predate the complete byte census. Join
+      // its exact original tuple/bytes too; a host-side edit before that census
+      // cannot silently become a new before epoch. ASCII observation policy is
+      // retained independently, not inferred from the census token's flag.
+      const auto joined = std::find_if(batch->tokens().begin(), batch->tokens().end(),
+          [&](const auto& token) { return token->relative() == actual->relative(); });
+      if (joined == batch->tokens().end()) {
+        if (actual->exists()) { error = Error(std::errc::state_not_recoverable); return {}; }
+      } else {
+        const auto& token = **joined;
+        const auto& a = actual->info(); const auto& b = token.info();
+        if (actual->exists() != token.exists() ||
+            (actual->exists() && (a.filesystem_id != b.filesystem_id || a.file_id != b.file_id ||
+             a.size != b.size || a.regular != b.regular || a.links != b.links)) ||
+            actual->bytes().size() != token.bytes().size() ||
+            !std::equal(actual->bytes().begin(), actual->bytes().end(), token.bytes().begin())) {
+          error = Error(std::errc::state_not_recoverable); return {};
+        }
+      }
+      auto token = std::shared_ptr<const HostStorageSnapshotToken>(
+          new HostStorageSnapshotToken(old->base, actual->relative(), actual->exists(),
+              actual->info(), {actual->bytes().begin(), actual->bytes().end()},
+              actual->ascii_folded_leaf()));
+      State::Slot fresh;
+      fresh.before = token;
+      fresh.authority = slot.authority;
+      next->slots.emplace(leaf, std::move(fresh));
+      next->pairs.emplace(token, actual);
+      next->projected.emplace(actual, token);
+      data->before.push_back(std::move(token));
+    }
+    if (changed != after.size()) { error = Error(std::errc::invalid_argument); return {}; }
+    data->next = std::shared_ptr<SnapshotPublicationSet>(new SnapshotPublicationSet(std::move(next)));
+    data->batch = std::move(batch);
+    data->old_lock = std::move(old_lock);
+    data->next_lock = std::unique_lock(data->next->state_->mutex);
+    return std::unique_ptr<PreparedContinuation>(new PreparedContinuation(std::move(data)));
+  } catch (const std::bad_alloc&) {
+    error = Error(std::errc::not_enough_memory); return {};
+  }
+}
 std::unique_ptr<HostStorageContentLayout> SnapshotPublicationSet::CaptureContentLayoutForCM(
     const HostStorageRoot& source, const std::filesystem::path& package,
     std::error_code& error) const {
@@ -10137,9 +10404,325 @@ std::unique_ptr<HostStorageContentLayout> SnapshotPublicationSet::CaptureContent
     error = Error(std::errc::operation_not_permitted); return {};
   }
   std::shared_ptr<const HostStorageRoot> scope;
-  { std::lock_guard lock(state_->mutex); scope = state_->latest; }
-  return source.CaptureAdmittedContentLayout(package, std::move(scope), error);
+  { std::lock_guard lock(state_->mutex);
+    if (!state_->accepting) { error = Error(std::errc::operation_canceled); return {}; }
+    scope = state_->latest;
+  }
+  auto layout = source.CaptureAdmittedContentLayout(package, scope, error);
+  if (!layout) return {};
+  // Physical metadata IO intentionally runs outside the set mutex. Join its
+  // original scope again so a concurrent checkpoint handoff cannot return a
+  // newly issued old-epoch layout after the old admission has closed.
+  std::unique_lock lock(state_->mutex, std::try_to_lock);
+  if (!lock.owns_lock()) { error = Error(std::errc::device_or_resource_busy); return {}; }
+  if (!state_->accepting || state_->latest != scope) {
+    error = Error(std::errc::operation_canceled); return {};
+  }
+  return layout;
 }
+std::unique_ptr<HostStorageContentSnapshot>
+SnapshotPublicationSet::CaptureContentSnapshotForCM(
+    const HostStorageRoot &source, const std::filesystem::path &package,
+    std::error_code &error) const {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread()) {
+    error = Error(std::errc::operation_not_permitted);
+    return {};
+  }
+  try {
+    auto captured = std::make_unique<HostStorageContentSnapshot::State>();
+    captured->owner = shared_from_this();
+    captured->layout = CaptureContentLayoutForCM(source, package, error);
+    if (!captured->layout) {
+      return {};
+    }
+    uint64_t total = 0;
+    for (const auto &entry : captured->layout->entries()) {
+      if (entry.relative.empty()) {
+        continue;
+      } // genuine implicit directory
+      if (entry.directory || entry.relative.has_parent_path()) {
+        error = Error(std::errc::operation_not_supported);
+        return {};
+      }
+      if (captured->members.size() ==
+              HostStorageRoot::kMaximumSnapshotBatchTokens ||
+          entry.bytes > HostStorageRoot::kMaximumSnapshotBatchBytes - total) {
+        error = Error(std::errc::file_too_large);
+        return {};
+      }
+      std::shared_ptr<const HostStorageSnapshotToken> token;
+      {
+        // Select only the genuine issued member/latest authority, under the
+        // existing set lock. No raw-root fallback or publication-cache entry.
+        auto state = state_;
+        std::unique_lock lock(state->mutex, std::try_to_lock);
+        if (!lock.owns_lock()) {
+          error = Error(std::errc::device_or_resource_busy);
+          return {};
+        }
+        if (!state->accepting) { error = Error(std::errc::operation_canceled); return {}; }
+        const auto slot = state->slots.find(State::FlatKey(entry.relative));
+        const auto &authority =
+            slot != state->slots.end() && slot->second.authority
+                ? slot->second.authority
+                : state->latest;
+        auto actual =
+            authority->CaptureSnapshot(entry.relative, entry.bytes, error);
+        if (!actual) {
+          return {};
+        }
+        if (!actual->exists() || actual->relative() != entry.relative ||
+            actual->info().file_id != entry.file ||
+            actual->info().size != entry.bytes) {
+          error = Error(std::errc::state_not_recoverable);
+          return {};
+        }
+        token = std::shared_ptr<const HostStorageSnapshotToken>(
+            new HostStorageSnapshotToken(
+                state->base, actual->relative(), true, actual->info(),
+                {actual->bytes().begin(), actual->bytes().end()}, false));
+        captured->actual.push_back(std::move(actual));
+      }
+      total += entry.bytes;
+      captured->members.push_back({entry.relative, entry.bytes, false});
+      captured->tokens.push_back(std::move(token));
+    }
+    auto result = std::unique_ptr<HostStorageContentSnapshot>(
+        new HostStorageContentSnapshot(std::move(captured)));
+    // The last validation joins complete membership with every real immutable
+    // member byte/token under the SAME native source guard, including empty.
+    if (!result->Validate(error)) {
+      return {};
+    }
+    return result;
+  } catch (const std::bad_alloc &) {
+    error = Error(std::errc::not_enough_memory);
+    return {};
+  }
+}
+std::unique_ptr<HostStorageSnapshotBatch>
+SnapshotPublicationSet::ValidateContentSnapshot(
+    const HostStorageContentSnapshot &captured, std::error_code &error) const {
+  error.clear();
+  if (global_critical_region::is_held_by_current_thread() || !captured.state_ ||
+      captured.state_->owner.get() != this) {
+    error = Error(std::errc::operation_not_permitted);
+    return {};
+  }
+  auto state = state_;
+  std::unique_lock lock(state->mutex, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    error = Error(std::errc::device_or_resource_busy);
+    return {};
+  }
+  if (!state->accepting) { error = Error(std::errc::operation_canceled); return {}; }
+  try {
+    // Both views came from this same private producer. Validate the current
+    // admission root but do NOT route a read through State::Actual/Project:
+    // those caches retain immutable publisher/retry facts for the set lifetime.
+    const auto &actual = captured.state_->actual;
+    if (actual.size() != captured.state_->tokens.size()) {
+      error = Error(std::errc::state_not_recoverable);
+      return {};
+    }
+    for (const auto &token : actual) {
+      const auto slot = state->slots.find(State::FlatKey(token->relative()));
+      const auto &authority =
+          slot != state->slots.end() && slot->second.authority
+              ? slot->second.authority
+              : state->latest;
+      if (token->root() != authority) {
+        error = Error(std::errc::operation_canceled);
+        return {};
+      }
+    }
+    std::unique_ptr<HostStorageSnapshotBatch> batch;
+    if (actual.empty()) {
+      // An empty directory is real membership, not a fabricated zero token.
+      auto guard = state->base->Mutation(error);
+      if (!guard) {
+        return {};
+      }
+      batch.reset(
+          new HostStorageSnapshotBatch(state->base, {}, {}, std::move(guard)));
+    } else {
+      batch = HostStorageRoot::ValidateJoinedSnapshotBatch(
+          state->base, actual, captured.state_->tokens, error);
+      if (!batch) {
+        return {};
+      }
+    }
+    // Use the actual latest admitted scope and borrow ONLY this batch's exact
+    // source guard. CaptureContentLayoutInternal performs its original full
+    // bounded traversal and checks, including any newly added/removed member.
+    if (!state->latest ||
+        state->latest->state_->space != batch->root()->state_->space ||
+        !state->latest->directory_identity()->SameEntry(
+            {}, *batch->root()->directory_identity(), {})) {
+      error = Error(std::errc::permission_denied);
+      return {};
+    }
+    const auto observed = state->latest->CaptureContentLayoutInternal(
+        {}, true, error, batch->guard_.get());
+    if (!observed) {
+      return {};
+    }
+    const auto &before = captured.state_->layout->top_info();
+    const auto &after = observed->top_info();
+    if (before.filesystem_id != after.filesystem_id ||
+        before.file_id != after.file_id || before.regular != after.regular ||
+        before.directory != after.directory || before.links != after.links ||
+        before.size != after.size ||
+        captured.state_->layout->entries() != observed->entries() ||
+        captured.state_->layout->statistics() != observed->statistics()) {
+      error = Error(std::errc::state_not_recoverable);
+      return {};
+    }
+    batch->access_owner_ = state;
+    return batch;
+  } catch (const std::bad_alloc &) {
+    error = Error(std::errc::not_enough_memory);
+    return {};
+  }
+}
+
+std::unique_ptr<HostStorageSnapshotBatch>
+SnapshotPublicationSet::ValidateContentSnapshotAfterOwnPublications(
+    const HostStorageContentSnapshot& captured,
+    std::span<const std::shared_ptr<const HostStorageSnapshotToken>> current,
+    std::error_code& error) const {
+  // No-own-publication retains the original stricter layout/statistics proof.
+  if(current.empty())return ValidateContentSnapshot(captured,error);
+  error.clear();
+  if(global_critical_region::is_held_by_current_thread() || !captured.state_ ||
+      captured.state_->owner.get()!=this) {
+    error=Error(std::errc::operation_not_permitted);return {};
+  }
+  auto state=state_;std::unique_lock lock(state->mutex,std::try_to_lock);
+  if(!lock.owns_lock()) {error=Error(std::errc::device_or_resource_busy);return {};}
+  if(!state->accepting) {error=Error(std::errc::operation_canceled);return {};}
+  if(current.size()>HostStorageRoot::kMaximumSnapshotBatchTokens ||
+      captured.state_->actual.size()!=captured.state_->tokens.size()) {
+    error=Error(std::errc::invalid_argument);return {};
+  }
+  try {
+    std::map<std::string,size_t> baseline;
+    for(size_t i=0;i<captured.state_->tokens.size();++i) {
+      const auto& token=captured.state_->tokens[i];
+      const auto key=State::FlatKey(token->relative());
+      if(key.empty() || !baseline.emplace(key,i).second) {
+        error=Error(std::errc::state_not_recoverable);return {};
+      }
+    }
+    std::map<std::string,std::shared_ptr<const HostStorageSnapshotToken>> updates;
+    std::map<std::string,std::shared_ptr<const HostStorageSnapshotToken>> physical;
+    for(const auto& token:current) {
+      const auto key=token?State::FlatKey(token->relative()):std::string{};
+      const auto slot=state->slots.find(key);
+      const auto pair=state->pairs.find(token);
+      if(key.empty() || token->root()!=state->base ||
+          slot==state->slots.end() || pair==state->pairs.end() ||
+          pair->first.get()!=token.get() || !slot->second.last ||
+          !slot->second.last->published || !slot->second.last->durable ||
+          slot->second.last->error || slot->second.last->current!=pair->second ||
+          !updates.emplace(key,token).second) {
+        error=Error(std::errc::invalid_argument);return {};
+      }
+      const auto original=state->pairs.find(slot->second.before);
+      if(original==state->pairs.end() ||
+          original->first.get()!=slot->second.before.get()) {
+        error=Error(std::errc::state_not_recoverable);return {};
+      }
+      const auto found=baseline.find(key);
+      if(found==baseline.end()) {
+        if(original->second->exists()) {
+          error=Error(std::errc::state_not_recoverable);return {};
+        }
+      } else {
+        const auto& before=captured.state_->actual[found->second];
+        // Both tokens are genuinely issued; differing ASCII-fold flags do not
+        // change their exact original physical tuple and complete byte facts.
+        const auto& expected=*original->second;
+        const auto& a=before->info();const auto& b=expected.info();
+        if(!expected.exists() || before->relative()!=expected.relative() ||
+            a.filesystem_id!=b.filesystem_id || a.file_id!=b.file_id ||
+            a.size!=b.size || a.regular!=b.regular || a.links!=b.links ||
+            before->bytes().size()!=expected.bytes().size() ||
+            !std::equal(before->bytes().begin(),before->bytes().end(),expected.bytes().begin())) {
+          error=Error(std::errc::state_not_recoverable);return {};
+        }
+      }
+      physical.emplace(key,pair->second);
+    }
+    std::vector<std::shared_ptr<const HostStorageSnapshotToken>> actual,tokens;
+    std::map<std::filesystem::path,const ContentPackageTreeEntry*> unchanged;
+    for(const auto& entry:captured.state_->layout->entries()) {
+      if(entry.relative.empty())continue;
+      const auto key=State::FlatKey(entry.relative);
+      if(!updates.contains(key))unchanged.emplace(entry.relative,&entry);
+    }
+    uint64_t total=0;
+    const auto append=[&](const auto& native,const auto& projected) {
+      if(tokens.size()==HostStorageRoot::kMaximumSnapshotBatchTokens ||
+          native->bytes().size()>HostStorageRoot::kMaximumSnapshotBatchBytes-total) {
+        error=Error(std::errc::file_too_large);return false;
+      }
+      const auto slot=state->slots.find(State::FlatKey(native->relative()));
+      const auto& authority=slot!=state->slots.end() && slot->second.authority
+          ?slot->second.authority:state->latest;
+      if(native->root()!=authority || !RootDescendsFrom(authority,state->base)) {
+        error=Error(std::errc::operation_canceled);return false;
+      }
+      total+=native->bytes().size();actual.push_back(native);tokens.push_back(projected);return true;
+    };
+    for(size_t i=0;i<captured.state_->actual.size();++i) {
+      if(!updates.contains(State::FlatKey(captured.state_->tokens[i]->relative())) &&
+          !append(captured.state_->actual[i],captured.state_->tokens[i]))return {};
+    }
+    for(const auto& [key,token]:updates)if(!append(physical.at(key),token))return {};
+    auto batch=HostStorageRoot::ValidateJoinedSnapshotBatch(state->base,actual,tokens,error);
+    if(!batch)return {};
+    if(!state->latest || state->latest->state_->space!=batch->root()->state_->space ||
+        !state->latest->directory_identity()->SameEntry({},*batch->root()->directory_identity(),{})) {
+      error=Error(std::errc::permission_denied);return {};
+    }
+    const auto observed=state->latest->CaptureContentLayoutInternal({},true,error,batch->guard_.get());
+    if(!observed)return {};
+    const auto& before=captured.state_->layout->top_info();const auto& after=observed->top_info();
+    if(before.filesystem_id!=after.filesystem_id || before.file_id!=after.file_id ||
+        before.regular!=after.regular || before.directory!=after.directory || before.links!=after.links) {
+      error=Error(std::errc::state_not_recoverable);return {};
+    }
+    std::map<std::filesystem::path,const HostStorageSnapshotToken*> expected;
+    for(const auto& token:tokens)if(token->exists())expected.emplace(token->relative(),token.get());
+    size_t regular=0;
+    for(const auto& entry:observed->entries()) {
+      if(entry.relative.empty()) {
+        // Own rename may change directory size/time, never its mode/type.
+        const auto& entries=captured.state_->layout->entries();
+        const auto original=std::find_if(entries.begin(),entries.end(),[](const auto& row){return row.relative.empty();});
+        if(original==entries.end() || entry.mode!=original->mode || entry.directory!=original->directory) {
+          error=Error(std::errc::state_not_recoverable);return {};
+        }
+        continue;
+      }
+      const auto found=expected.find(entry.relative);
+      if(entry.directory || found==expected.end() || entry.file!=found->second->info().file_id ||
+          entry.bytes!=found->second->info().size) {
+        error=Error(std::errc::state_not_recoverable);return {};
+      }
+      if(const auto old=unchanged.find(entry.relative);old!=unchanged.end() && entry!=*old->second) {
+        error=Error(std::errc::state_not_recoverable);return {};
+      }
+      ++regular;
+    }
+    if(regular!=expected.size()) {error=Error(std::errc::state_not_recoverable);return {};}
+    batch->access_owner_=state;
+    return batch;
+  } catch(const std::bad_alloc&) {error=Error(std::errc::not_enough_memory);return {};}
+}
+
 bool SnapshotPublicationSet::RootDescendsFrom(std::shared_ptr<const HostStorageRoot> root,
     const std::shared_ptr<const HostStorageRoot>& source) {
   for (size_t depth = 0; root && depth != 128; ++depth) {
@@ -10174,6 +10757,7 @@ std::shared_ptr<const HostStorageSnapshotToken> SnapshotPublicationSet::AttachTh
   }
   std::unique_lock lock(state->mutex, std::try_to_lock);
   if (!lock.owns_lock()) { error = Error(std::errc::device_or_resource_busy); return {}; }
+  if (!state->accepting) { error = Error(std::errc::operation_canceled); return {}; }
   const auto leaf = State::FlatKey(actual->relative());
   if (state->slots.contains(leaf)) { error = Error(std::errc::file_exists); return {}; }
   try {
@@ -10204,6 +10788,7 @@ std::shared_ptr<const HostStorageSnapshotToken> SnapshotPublicationSet::Capture(
   }
   std::unique_lock lock(state->mutex, std::try_to_lock);
   if (!lock.owns_lock()) { error = Error(std::errc::device_or_resource_busy); return {}; }
+  if (!state->accepting) { error = Error(std::errc::operation_canceled); return {}; }
   try {
     const auto slot = state->slots.find(State::FlatKey(leaf));
     const auto& authority = slot != state->slots.end() && slot->second.authority
@@ -10222,6 +10807,7 @@ std::optional<RetainedFileMetadata> SnapshotPublicationSet::ObserveRetainedMetad
   }
   std::unique_lock lock(state->mutex,std::try_to_lock);
   if (!lock.owns_lock()) { error=Error(std::errc::device_or_resource_busy); return {}; }
+  if (!state->accepting) { error=Error(std::errc::operation_canceled); return {}; }
   auto actual=state->Actual(token,error); if (!actual) return {};
   if (!actual->exists()) { error=Error(std::errc::no_such_file_or_directory); return {}; }
   auto file=actual->root()->OpenFile(actual->relative(),FileAccess::kGenericRead,error);
@@ -10245,6 +10831,7 @@ SnapshotPublicationReceipt SnapshotPublicationSet::Publish(
   }
   std::unique_lock lock(state->mutex, std::try_to_lock);
   if (!lock.owns_lock()) { result.error = Error(std::errc::device_or_resource_busy); return result; }
+  if (!state->accepting) { result.error = Error(std::errc::operation_canceled); return result; }
   const auto i = expected ? state->slots.find(State::FlatKey(expected->relative())) : state->slots.end();
   if (i == state->slots.end()) { result.error = Error(std::errc::invalid_argument); return result; }
   auto& slot = i->second;
@@ -10303,6 +10890,7 @@ SnapshotPublicationReceipt SnapshotPublicationSet::Delete(
   }
   std::unique_lock lock(state->mutex, std::try_to_lock);
   if (!lock.owns_lock()) { result.error = Error(std::errc::device_or_resource_busy); return result; }
+  if (!state->accepting) { result.error = Error(std::errc::operation_canceled); return result; }
   const auto i = expected ? state->slots.find(State::FlatKey(expected->relative())) : state->slots.end();
   if (i == state->slots.end()) { result.error = Error(std::errc::invalid_argument); return result; }
   auto& slot = i->second;
@@ -10339,6 +10927,7 @@ HostStorageRoot::ReplaceResult SnapshotPublicationSet::RetryDurability(
   }
   std::unique_lock lock(state->mutex, std::try_to_lock);
   if (!lock.owns_lock()) { result.error = Error(std::errc::device_or_resource_busy); return result; }
+  if (!state->accepting) { result.error = Error(std::errc::operation_canceled); return result; }
   try {
     auto actual = state->Actual(current, result.error);
     if (!actual) { return result; }
@@ -10381,6 +10970,7 @@ HostStorageDurableObservation SnapshotPublicationSet::ObserveDurability(
   }
   std::unique_lock lock(state->mutex, std::try_to_lock);
   if (!lock.owns_lock()) { result.error = Error(std::errc::device_or_resource_busy); return result; }
+  if (!state->accepting) { result.error = Error(std::errc::operation_canceled); return result; }
   try {
     auto actual = state->Actual(token, result.error);
     return actual ? actual->root()->ObserveSnapshotDurability(*actual) : result;
@@ -10397,6 +10987,7 @@ std::unique_ptr<HostStorageSnapshotBatch> SnapshotPublicationSet::Validate(
   }
   std::unique_lock lock(state->mutex, std::try_to_lock);
   if (!lock.owns_lock()) { error = Error(std::errc::device_or_resource_busy); return {}; }
+  if (!state->accepting) { error = Error(std::errc::operation_canceled); return {}; }
   try {
     std::vector<std::shared_ptr<const HostStorageSnapshotToken>> actual;
     actual.reserve(tokens.size());

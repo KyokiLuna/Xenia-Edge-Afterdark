@@ -61,7 +61,9 @@ struct GpdIntentAttempt {
 };
 enum class ProfileArtifactKind : uint64_t {
   kGpd = 1, kPublic64 = 2, kPublic32 = 3, kPersonal64 = 4,
-  kPersonal32 = 5, kAvatar64 = 6, kAvatar32 = 7, kThumbnail = 8
+  kPersonal32 = 5, kAvatar64 = 6, kAvatar32 = 7, kThumbnail = 8,
+  // External signed package Header; admitted only by the explicit05 path.
+  kPackageHeader = 9
 };
 enum class ProfileArtifactAction : uint64_t {
   kReplace = 1, kCreate = 2, kDelete = 3, kObserve = 4
@@ -86,6 +88,14 @@ class ProfileArtifactAdmission final {
   // Composition capability issued by actual admission, not a caller-filled
   // before/done flag. Retain through exact model/VFS publication or recovery.
   const std::shared_ptr<SnapshotPublicationSet>& members() const;
+  // Metadata-only identity intersection for a retained early admission. It
+  // grants no new source or IO rights and never reacquires reservations.
+  bool Matches(const std::shared_ptr<const ProfileIntentOwner>&,
+      const std::shared_ptr<const SnapshotRecoveryOwner>&,
+      const GpdIntentBinding&) const;
+  // Issued by the SAME admission before genuine raw-header staging. Empty
+  // for legacy03/04 and ordinary PNG requests; never reconstructed from paths.
+  const std::shared_ptr<ContentMutationOwner::ProfileHeaderPublication>& header() const;
  private:
   friend class ProfilePublicationIntentStore;
   struct Data;
@@ -99,7 +109,9 @@ struct ProfilePublicationIntentRecord;
 // No manager/device callback, native completion or model/cache publication.
 // Legacy03 remains GPD-only. Explicit04 adds the closed fixed-PNG/thumbnail
 // family and same-guard Done; neither format is physical cross-file atomicity.
-// Both envelopes hold1..16 typed actions, aggregate raw payload<=256MiB.
+// Explicit05 joins one existing external package Header through the actual
+// CM-issued session and SAME guard;03/04 bytes/grammar remain unchanged.
+// All envelopes hold1..16 typed actions, aggregate raw payload<=256MiB.
 // Replace, explicit observed-absent Create, and existing validated Delete are
 // distinct typed actions. Delete retains raw before bytes in the durable intent
 // and a protected recovery copy; empty intended bytes never authorize a write.
@@ -122,6 +134,21 @@ class ProfilePublicationIntentStore final {
       std::shared_ptr<ContentMutationOwner>, GpdIntentBinding,
       std::vector<ProfileArtifactExpected> main_members, bool include_thumbnail,
       std::error_code&);
+  // A non-null admission may accompany a later Header-stage initialization
+  // error. Caller MUST retain it for exact artifact/rundown; no use/commit is
+  // admitted until initialization succeeds. It never deletes that artifact.
+  static std::shared_ptr<ProfileArtifactAdmission> AcquireHeaderArtifacts(
+      std::shared_ptr<const ProfileIntentOwner>,
+      std::shared_ptr<const SnapshotRecoveryOwner>,
+      std::shared_ptr<ContentMutationOwner>, GpdIntentBinding,
+      std::vector<ProfileArtifactExpected> main_members,
+      std::shared_ptr<const HostStorageSnapshotToken> actual_source_header,
+      std::error_code&);
+  // The genuine whole producer supplies IO quiescence; only the SAME issued
+  // admission can seal its CM-owned Header. This neither writes a journal nor
+  // claims native/cache completion, and never exposes CM canonical commit.
+  static std::shared_ptr<const std::vector<uint8_t>> SealAdmittedHeader(
+      const std::shared_ptr<ProfileArtifactAdmission>&, std::error_code&);
   static std::unique_ptr<ProfilePublicationIntentStore> PrepareArtifacts(
       std::shared_ptr<ProfileArtifactAdmission>,
       std::vector<ProfileArtifactMutation>, std::error_code&,
@@ -148,6 +175,13 @@ class ProfilePublicationIntentStore final {
       std::shared_ptr<const HostStorageRoot> exact_profile,
       std::error_code&, std::shared_ptr<ContentMutationOwner> metadata_owner = {});
   GpdIntentAttempt Advance();
+  // Join external artifacts to the caller's actual final model/VFS guard.
+  // Call only after the SAME store's successful durable attempt; this is not
+  // a replacement Done, completion flag, native cache or source authority.
+  // The retained session/receipt checks its real committed Header under the
+  // ALREADY-owned guard, without recursively acquiring the filesystem lock.
+  std::error_code CheckPublishedArtifactsWithSnapshotGuard(
+      const HostStorageSnapshotBatch&) const;
   const std::filesystem::path& journal() const { return journal_; }
 
  private:
@@ -158,7 +192,8 @@ class ProfilePublicationIntentStore final {
       std::shared_ptr<const SnapshotRecoveryOwner>,
       std::shared_ptr<ContentMutationOwner>, GpdIntentBinding,
       std::vector<ProfileArtifactExpected>, bool, std::error_code&,
-      const std::filesystem::path& recovering_journal = {});
+      const std::filesystem::path& recovering_journal = {},
+      std::shared_ptr<const HostStorageSnapshotToken> actual_source_header = {});
   static std::unique_ptr<ProfilePublicationIntentStore> RecoverArtifacts(
       std::shared_ptr<const ProfileIntentOwner>,
       std::shared_ptr<const SnapshotRecoveryOwner>, std::shared_ptr<ContentMutationOwner>,

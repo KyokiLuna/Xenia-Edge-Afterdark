@@ -2,9 +2,13 @@
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/base/platform.h"
 #include "xenia/base/byte_order.h"
+#include "xenia/base/profile_publication_intent.h"
+#include "xenia/base/mutex.h"
 #include "xenia/kernel/console_data_owner.h"
 #include "xenia/kernel/console_signing_identity.h"
 #include "xenia/kernel/xam/folder_content_header.h"
+#include "xenia/kernel/xam/fresh_profile_con_epoch.h"
+#include "xenia/kernel/xam/content_manager.h"
 #include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xecrypt_rsa.h"
@@ -14,14 +18,45 @@
 #include "xenia/memory.h"
 #include "xenia/vfs/devices/host_path_device.h"
 #include "xenia/vfs/virtual_file_system.h"
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <string>
 #include <vector>
+
+namespace xe::kernel::xam {
+class FreshProfileConEpochTestAccess {
+ public:
+  static std::unique_ptr<FreshProfileConEpoch> Prepare(
+      std::shared_ptr<const filesystem::ManagedVolumeAuthority> volume,
+      std::shared_ptr<filesystem::SnapshotPublicationSet> members,
+      std::filesystem::path package,std::span<const uint8_t> metadata,
+      uint64_t birth,const ConsoleSigningIdentity& signer,std::error_code& error) {
+    return FreshProfileConEpoch::Prepare({std::move(volume),std::move(members),std::move(package)},metadata,birth,signer,error);
+  }
+  static std::unique_ptr<FreshProfileConEpoch::Reopened> Open(
+      std::shared_ptr<const filesystem::ManagedVolumeAuthority> volume,
+      std::shared_ptr<filesystem::SnapshotPublicationSet> members,
+      std::filesystem::path package,std::span<const uint8_t> certificate,std::error_code& error) {
+    return FreshProfileConEpoch::Open({std::move(volume),std::move(members),std::move(package)},certificate,error);
+  }
+  static std::unique_ptr<FreshProfileConEpoch::Live> Bind(
+      std::shared_ptr<const filesystem::ManagedVolumeAuthority> volume,
+      std::shared_ptr<filesystem::SnapshotPublicationSet> members,
+      std::filesystem::path package,
+      std::shared_ptr<filesystem::ProfileArtifactAdmission> admission,
+      std::span<const uint8_t> certificate,std::error_code& error) {
+    return FreshProfileConEpoch::BindCurrent(
+        {std::move(volume),std::move(members),std::move(package)},
+        std::move(admission),certificate,error);
+  }
+};
+} // namespace xe::kernel::xam
 
 namespace xe::kernel::test {
 #if XE_PLATFORM_LINUX
@@ -563,6 +598,327 @@ TEST_CASE("Folder Header hash agrees with pinned native split buffers and reject
   xe::store_and_swap<uint32_t>(raw.data() + 0x340, r + 1);
   CHECK(con::NativeHeaderAlignedSize(raw) == 0);
   raw.resize(0xB000); CHECK(con::NativeHeaderAlignedSize(raw) == 0xB000);
+}
+
+namespace {
+struct EpochFixture {
+  ConsoleScratch scratch;
+  std::shared_ptr<HostStorageRoot> parent;
+  std::shared_ptr<ConsoleDataOwner> console;
+  std::shared_ptr<const filesystem::ManagedVolumeAuthority> volume;
+  std::shared_ptr<filesystem::SnapshotPublicationSet> members;
+  const std::filesystem::path package=
+      "0009000000000017/FFFE07D1/00010000/0009000000000017";
+  std::filesystem::path target,content_path;
+  std::vector<uint8_t> legacy;
+  std::vector<filesystem::ContentPackageInitialMember> originals;
+  std::map<std::filesystem::path,uint64_t> original_ids;
+  vfs::XContentMetadata metadata{};
+  static constexpr uint64_t kDeclared=133485408000000000ull; // Declared guest-clock fixture, not host ctime.
+  const bool native_gpd_fixture;
+  explicit EpochFixture(bool native_gpd=false) : native_gpd_fixture(native_gpd) {
+    parent=scratch.Root();console=ConsoleDataOwner::Open(parent);
+    REQUIRE_FALSE(console->error());REQUIRE(console->signing_identity());
+    REQUIRE_FALSE(parent->Create("content",true));OpenVolume();
+    xam::XCONTENT_AGGREGATE_DATA aggregate{};
+    aggregate.device_id=1;aggregate.content_type=XContentType::kProfile;
+    aggregate.xuid=0x0009000000000017ull;aggregate.title_id=0xFFFE07D1;
+    aggregate.set_file_name(package.filename().generic_string());aggregate.set_display_name(u"Synthetic epoch fixture");
+    legacy.resize(sizeof(aggregate)+23,0xAD);std::memcpy(legacy.data(),&aggregate,sizeof(aggregate));
+    // Includes opaque Account/GPD/custom members. This test never claims a
+    // synthetic payload is a valid native profile/model or avatar consumer.
+    originals={{{"Account"},{1,4,9,16,25},false},
+               {{"FFFE07D1.gpd"},{2,3,5,7,11,13},false},
+               {{"unknown.member"},{0,0xFF,0x7B,0x18},false}};
+    if (native_gpd_fixture) {
+      // Actual empty XDBF geometry for the genuine PIS GPD admission. Account
+      // and unknown member bytes remain opaque synthetic fixture payloads.
+      auto& bytes=originals[1].bytes;bytes.assign(32,0);
+      xe::store_and_swap<uint32_t>(bytes.data(),0x58444246);
+      xe::store_and_swap<uint32_t>(bytes.data()+4,0x00010000);
+      xe::store_and_swap<uint32_t>(bytes.data()+16,1);
+      xe::store_and_swap<uint32_t>(bytes.data()+20,1);
+      xe::store_and_swap<uint32_t>(bytes.data()+28,UINT32_MAX);
+      REQUIRE_FALSE(filesystem::ValidateProfileGpdSnapshot(bytes));
+    }
+    filesystem::content_mutation_wire::Record slot;slot.kind=filesystem::content_mutation_wire::Kind::kHeader;
+    slot.package=package;target=filesystem::content_mutation_wire::Target(slot);
+    std::error_code error;
+    auto before=volume->mutations()->CaptureMetadata(filesystem::ContentMutationOwner::Kind::kCreate,package,target,error);
+    REQUIRE(before);REQUIRE_FALSE(error);REQUIRE_FALSE(before->exists());
+    auto created=volume->mutations()->CreateInitial(package,before,legacy,originals);
+    REQUIRE_FALSE(created.error);REQUIRE(created.complete);
+    metadata.content_type=XContentType::kProfile;metadata.metadata_version=2;
+    metadata.profile_id=aggregate.xuid;metadata.execution_info.title_id=0xFFFE07D1;
+    metadata.volume_type=vfs::XContentVolumeType::kStfs;
+    const auto id=console->signing_identity()->console_id();std::copy(id.begin(),id.end(),metadata.console_id);
+    std::fill(std::begin(metadata.reserved2),std::end(metadata.reserved2),0xD7);
+    Reserve();
+  }
+  void OpenVolume() {
+    std::error_code error;
+    filesystem::ManagedVolumeAuthority::Options options;
+    options.content=parent->Subroot("content",false,error);REQUIRE(options.content);REQUIRE_FALSE(error);
+    options.source_id="fixture-hdd";options.device_id=1;options.state_parent_override=parent;
+    if(native_gpd_fixture) options.native_header_format=std::make_shared<const
+        xam::folder_content_detail::NativeFolderHeaderFormat>(console->signing_identity()->certificate());
+    volume=filesystem::ManagedVolumeAuthority::Open(std::move(options));
+    REQUIRE(volume);REQUIRE_FALSE(volume->error());content_path=volume->content()->path();
+  }
+  void Reserve() {
+    std::error_code error;
+    auto profile=volume->content()->Subroot(package,false,error);REQUIRE(profile);REQUIRE_FALSE(error);
+    std::vector<std::shared_ptr<const filesystem::HostStorageSnapshotToken>> tokens;
+    for(const auto& member:originals) {
+      auto token=profile->CaptureSnapshot(member.relative,4096,error);REQUIRE(token);REQUIRE_FALSE(error);
+      auto inserted=original_ids.emplace(member.relative,token->info().file_id);
+      REQUIRE(inserted.first->second==token->info().file_id);
+      tokens.push_back(std::move(token));
+    }
+    members=filesystem::SnapshotPublicationSet::Reserve(profile,std::move(tokens),error);
+    REQUIRE(members);REQUIRE_FALSE(error);
+  }
+  std::unique_ptr<xam::FreshProfileConEpoch> Prepare(std::error_code& error) {
+    return xam::FreshProfileConEpochTestAccess::Prepare(volume,members,package,
+        {reinterpret_cast<const uint8_t*>(&metadata),sizeof(metadata)},kDeclared,*console->signing_identity(),error);
+  }
+  auto Load(std::error_code& error) {
+    return xam::FreshProfileConEpochTestAccess::Open(volume,members,package,
+        console->signing_identity()->certificate(),error);
+  }
+  std::shared_ptr<filesystem::ProfileArtifactAdmission> AdmitHeader(std::error_code& error) {
+    members.reset();
+    auto profile=volume->content()->Subroot(package,false,error);REQUIRE(profile);REQUIRE_FALSE(error);
+    auto gpd=profile->CaptureSnapshot("FFFE07D1.gpd",4096,error,true);REQUIRE(gpd);REQUIRE_FALSE(error);
+    auto header=volume->mutations()->CaptureMetadata(
+        filesystem::ContentMutationOwner::Kind::kHeader,package,target,error);
+    REQUIRE(header);REQUIRE_FALSE(error);
+    const auto identity=volume->identity();
+    filesystem::GpdIntentBinding binding{identity->source_id(),identity->device_id(),
+      0x0009000000000017ull,1,package,
+      {identity->uuid(),identity->content_epoch(),identity->directory_file_id()}};
+    auto admission=filesystem::ProfilePublicationIntentStore::AcquireHeaderArtifacts(
+        volume->intents(),volume->recovery(),volume->mutations(),binding,
+        {{filesystem::ProfileArtifactKind::kGpd,0xFFFE07D1,gpd}},header,error);
+    if(admission) members=admission->members();
+    return admission;
+  }
+  auto Bind(const std::shared_ptr<filesystem::ProfileArtifactAdmission>& admission,
+      std::error_code& error) {
+    return xam::FreshProfileConEpochTestAccess::Bind(volume,members,package,admission,
+        console->signing_identity()->certificate(),error);
+  }
+  void Restart() { members.reset();volume.reset();OpenVolume();Reserve(); }
+  auto HeaderBytes() {return Read(content_path/target);}
+  void CheckMembers() {
+    for(const auto& member:originals) CHECK(Read(content_path/package/member.relative)==member.bytes);
+  }
+};
+} // namespace
+TEST_CASE("Fresh profile CON epoch atomically retains signed map and exact legacy recovery through restart",
+          "[console_owner][folder_con][fresh_con_epoch][persistence]") {
+  EpochFixture f;std::error_code error;
+  auto operation=f.Prepare(error);REQUIRE(operation);REQUIRE_FALSE(error);
+  REQUIRE(operation->receipt().stage_created);REQUIRE(operation->receipt().recovery_durable);
+  CHECK(f.HeaderBytes()==f.legacy);f.CheckMembers();
+  auto applied=operation->Commit();REQUIRE_FALSE(applied.error);REQUIRE(applied.published);REQUIRE(applied.durable);
+  REQUIRE(applied.recovery_durable);CHECK(Read(f.volume->recovery()->root()->path()/applied.recovery)==f.legacy);
+  auto bytes=f.HeaderBytes();REQUIRE(bytes.size()>0xA000);
+  CHECK(std::memcmp(bytes.data(),"CON ",4)==0);
+  for(size_t n=0x22C;n<0x234;++n) CHECK(bytes[n]==0xFF);
+  for(size_t n=sizeof(vfs::XContentContainerHeader);n<0xA000;++n) CHECK(bytes[n]==0);
+  constexpr auto content_offset=offsetof(vfs::XContentMetadata,content_size);
+  constexpr auto descriptor_offset=offsetof(vfs::XContentMetadata,volume_descriptor);
+  const auto* original=reinterpret_cast<const uint8_t*>(&f.metadata);
+  for(size_t n=0;n<sizeof(f.metadata);++n) {
+    if((n>=content_offset && n<content_offset+8) || (n>=descriptor_offset && n<descriptor_offset+36)) continue;
+    REQUIRE(bytes[0x344+n]==original[n]);
+  }
+  const auto published=bytes;operation.reset();applied={};f.Restart();
+  auto reopened=f.Load(error);REQUIRE(reopened);REQUIRE_FALSE(error);
+  REQUIRE(reopened->original_legacy_header==f.legacy);REQUIRE(reopened->declared_creation==EpochFixture::kDeclared);
+  REQUIRE(reopened->metadata.size()==f.originals.size());
+  for(const auto& row:reopened->metadata) {CHECK(row.create_date==0x5821);CHECK(row.create_time==0);}
+  CHECK(reopened->logical->payload_bytes()==15);f.CheckMembers();
+  auto repeated=f.Prepare(error);CHECK_FALSE(repeated);CHECK(error==std::errc::operation_not_supported);
+  CHECK(f.HeaderBytes()==published);
+}
+TEST_CASE("Fresh profile CON epoch refuses changed complete membership and canceled prepared publication",
+          "[console_owner][folder_con][fresh_con_epoch][recovery]") {
+  EpochFixture f;std::error_code error;
+  auto operation=f.Prepare(error);REQUIRE(operation);REQUIRE_FALSE(error);
+  SECTION("a newly added member cannot disappear from its signed allocation epoch") {
+    auto profile=f.volume->content()->Subroot(f.package,false,error);REQUIRE(profile);REQUIRE_FALSE(error);
+    const std::array<uint8_t,3> extra{8,6,7};auto write=profile->WriteNewFile("new.member",extra);
+    REQUIRE_FALSE(write.error);REQUIRE(write.bytes==extra.size());
+    auto refused=operation->Commit();CHECK_FALSE(refused.published);
+    CHECK(refused.error==std::errc::state_not_recoverable);
+    CHECK(Read(f.content_path/f.package/"new.member")==std::vector<uint8_t>(extra.begin(),extra.end()));
+  }
+  SECTION("cancellation retains the actual old Header and prepared recovery artifacts") {
+    std::atomic<bool> canceled{true};auto refused=operation->Commit(&canceled);
+    CHECK(refused.error==std::errc::operation_canceled);CHECK_FALSE(refused.published);
+    REQUIRE(refused.recovery_durable);CHECK(Read(f.volume->recovery()->root()->path()/refused.recovery)==f.legacy);
+  }
+  SECTION("a removed exact source cannot publish prepared Header or borrow another epoch") {
+    f.volume->content()->Retire();auto refused=operation->Commit();
+    CHECK_FALSE(refused.published);CHECK((refused.error==std::errc::no_such_device || refused.error==std::errc::operation_canceled));
+  }
+  SECTION("unpublished prepared bytes never become a recovered canonical epoch") {
+    operation.reset();f.Restart();auto unavailable=f.Load(error);CHECK_FALSE(unavailable);
+    CHECK(error==std::errc::bad_message);
+  }
+  CHECK(f.HeaderBytes()==f.legacy);f.CheckMembers();
+}
+TEST_CASE("Fresh profile CON epoch refuses foreign metadata unknown birth and corrupt persisted map without member loss",
+          "[console_owner][folder_con][fresh_con_epoch][validation]") {
+  EpochFixture f;std::error_code error;
+  SECTION("complete metadata belongs to the exact existing profile and console") {
+    f.metadata.profile_id=0x0009000000000018ull;
+    auto refused=f.Prepare(error);CHECK_FALSE(refused);CHECK(error==std::errc::permission_denied);
+    CHECK(f.HeaderBytes()==f.legacy);
+  }
+  SECTION("another registered source cannot borrow this profile member admission") {
+    REQUIRE_FALSE(f.parent->Create("other-content",true));
+    filesystem::ManagedVolumeAuthority::Options options;
+    options.content=f.parent->Subroot("other-content",false,error);REQUIRE(options.content);REQUIRE_FALSE(error);
+    options.source_id="fixture-other";options.device_id=2;options.state_parent_override=f.parent;
+    auto other=filesystem::ManagedVolumeAuthority::Open(std::move(options));REQUIRE(other);REQUIRE_FALSE(other->error());
+    auto refused=xam::FreshProfileConEpochTestAccess::Prepare(other,f.members,f.package,
+      {reinterpret_cast<const uint8_t*>(&f.metadata),sizeof(f.metadata)},EpochFixture::kDeclared,*f.console->signing_identity(),error);
+    CHECK_FALSE(refused);CHECK(error==std::errc::permission_denied);CHECK(f.HeaderBytes()==f.legacy);
+  }
+  SECTION("no historical host timestamp substitutes for an explicit valid creation declaration") {
+    auto refused=xam::FreshProfileConEpochTestAccess::Prepare(f.volume,f.members,f.package,
+      {reinterpret_cast<const uint8_t*>(&f.metadata),sizeof(f.metadata)},0,*f.console->signing_identity(),error);
+    CHECK_FALSE(refused);CHECK(error==std::errc::operation_not_supported);CHECK(f.HeaderBytes()==f.legacy);
+  }
+  SECTION("restart rejects corrupted compact map and does not repair it with new defaults") {
+    auto operation=f.Prepare(error);REQUIRE(operation);REQUIRE_FALSE(error);
+    auto applied=operation->Commit();REQUIRE_FALSE(applied.error);REQUIRE(applied.durable);
+    operation.reset();applied={};f.members.reset();f.volume.reset();
+    auto corrupt=f.HeaderBytes();corrupt.back()^=0x80;
+    {std::ofstream out(f.content_path/f.target,std::ios::binary|std::ios::trunc);
+     out.write(reinterpret_cast<const char*>(corrupt.data()),corrupt.size());REQUIRE(out.good());}
+    f.OpenVolume();f.Reserve();auto refused=f.Load(error);
+    CHECK_FALSE(refused);CHECK(error==std::errc::bad_message);CHECK(f.HeaderBytes()==corrupt);
+  }
+  f.CheckMembers();
+}
+
+
+TEST_CASE("A live canonical profile epoch reuses its exact issued Header and keeps old immutable bytes through source loss",
+          "[console_owner][folder_con][canonical_live_epoch][persistence]") {
+  EpochFixture f(true);std::error_code error;
+  auto operation=f.Prepare(error);REQUIRE(operation);REQUIRE_FALSE(error);
+  auto committed=operation->Commit();REQUIRE_FALSE(committed.error);REQUIRE(committed.durable);
+  operation.reset();committed={};
+  const auto canonical=f.HeaderBytes();
+  auto admission=f.AdmitHeader(error);REQUIRE(admission);REQUIRE_FALSE(error);
+  const auto* expected=admission->header()->expected().get();
+  auto live=f.Bind(admission,error);REQUIRE(live);REQUIRE_FALSE(error);
+  CHECK(live->header_before().get()==expected);
+  CHECK(live->facts().original_legacy_header==f.legacy);
+  CHECK(live->facts().declared_creation==EpochFixture::kDeclared);
+  const auto immutable=live->facts().logical;REQUIRE(immutable);
+  const std::vector<uint8_t> old_blocks(immutable->block_image().begin(),immutable->block_image().end());
+  for(const auto& row:live->facts().metadata) {CHECK(row.create_date==0x5821);CHECK(row.create_time==0);}
+  {auto batch=live->Validate(error);REQUIRE(batch);REQUIRE_FALSE(error);}
+  // The handle retains the actual outer PIS/CM admission, not only raw bytes.
+  std::weak_ptr<filesystem::ProfileArtifactAdmission> lifetime=admission;
+  admission.reset();CHECK_FALSE(lifetime.expired());
+  SECTION("the real joined batch retains Header and PIS until after guard release") {
+    auto batch=live->Validate(error);REQUIRE(batch);REQUIRE_FALSE(error);
+    CHECK(batch->batch().root()==f.members->base());
+    live.reset();CHECK_FALSE(lifetime.expired());
+    batch.reset();CHECK(lifetime.expired());
+    CHECK(std::vector<uint8_t>(immutable->block_image().begin(),immutable->block_image().end())==old_blocks);
+  }
+  SECTION("a real global critical region cannot enter physical currentness IO") {
+    const auto global=global_critical_region::AcquireDirect();
+    CHECK_FALSE(live->Validate(error));CHECK(error==std::errc::operation_would_block);
+  }
+  SECTION("source loss closes currentness without invalidating owned logical reads") {
+    f.volume->content()->Retire();CHECK_FALSE(live->Validate(error));REQUIRE(error);
+    CHECK(std::vector<uint8_t>(immutable->block_image().begin(),immutable->block_image().end())==old_blocks);
+  }
+  SECTION("an additional unrecorded member cannot be omitted from currentness") {
+    const auto path=f.content_path/f.package/"later.member";
+    {std::ofstream out(path,std::ios::binary);out.put('x');REQUIRE(out.good());}
+    CHECK_FALSE(live->Validate(error));CHECK(error==std::errc::state_not_recoverable);
+    CHECK(std::vector<uint8_t>(immutable->block_image().begin(),immutable->block_image().end())==old_blocks);
+  }
+  SECTION("actual member continuation closes the old epoch without killing retained bytes") {
+    const auto held=lifetime.lock();REQUIRE(held);
+    auto before=held->header()->CaptureMemberSnapshot(error);REQUIRE(before);REQUIRE_FALSE(error);
+    const auto& expected=held->expected();
+    const auto gpd=std::find_if(expected.begin(),expected.end(),[](const auto& row) {
+      return row.kind==filesystem::ProfileArtifactKind::kGpd;
+    });
+    REQUIRE(gpd!=expected.end());REQUIRE(gpd->token);
+    // A genuine same-set, same-byte CAS still owns an actual backup, rename,
+    // durability barrier and current token. An empty/equal recapture cannot
+    // authorize continuation. This storage fixture grants no native success.
+    const auto publication=held->members()->Publish(*f.volume->recovery(),
+        gpd->token,gpd->token->bytes());
+    REQUIRE_FALSE(publication.error);REQUIRE(publication.published);
+    REQUIRE(publication.durable);REQUIRE(publication.current);
+    const std::array<std::shared_ptr<const filesystem::HostStorageSnapshotToken>,1>
+        current{publication.current};
+    auto continuation=held->members()->PrepareContinuation(*before,current,error);
+    REQUIRE(continuation);REQUIRE_FALSE(error);
+    f.members=continuation->successor();
+    REQUIRE(continuation->Apply());continuation->ReleaseLocksAfterApply();
+    CHECK_FALSE(live->Validate(error));CHECK(error==std::errc::operation_canceled);
+    CHECK(std::vector<uint8_t>(immutable->block_image().begin(),immutable->block_image().end())==old_blocks);
+    // This is the real member-set primitive only. The still-old Header/PIS
+    // owner is NOT retargeted and no whole native flush is completed here.
+  }
+  SECTION("restart rebuilds from the same signed persisted FAT provenance") {
+    live.reset();CHECK(lifetime.expired());f.Restart();
+    auto next=f.AdmitHeader(error);REQUIRE(next);REQUIRE_FALSE(error);
+    auto rebound=f.Bind(next,error);REQUIRE(rebound);REQUIRE_FALSE(error);
+    CHECK(rebound->facts().logical->descriptor()==immutable->descriptor());
+    CHECK(rebound->facts().metadata.size()==f.originals.size());
+    CHECK(rebound->facts().declared_creation==EpochFixture::kDeclared);
+  }
+  CHECK(f.HeaderBytes()==canonical);f.CheckMembers();
+}
+TEST_CASE("A live canonical epoch refuses a foreign admission and real changed Header or member before issuing authority",
+          "[console_owner][folder_con][canonical_live_epoch][validation]") {
+  EpochFixture f(true);std::error_code error;
+  auto operation=f.Prepare(error);REQUIRE(operation);REQUIRE_FALSE(error);
+  auto committed=operation->Commit();REQUIRE_FALSE(committed.error);REQUIRE(committed.durable);
+  operation.reset();committed={};auto admission=f.AdmitHeader(error);REQUIRE(admission);REQUIRE_FALSE(error);
+  const auto canonical=f.HeaderBytes();
+  SECTION("another publication set cannot be substituted for this Header") {
+    auto other=f.volume->content()->Subroot(f.package,false,error);REQUIRE(other);REQUIRE_FALSE(error);
+    auto token=other->CaptureSnapshot("unknown.member",4096,error);REQUIRE(token);REQUIRE_FALSE(error);
+    auto other_set=filesystem::SnapshotPublicationSet::Reserve(other,{token},error);
+    REQUIRE(other_set);REQUIRE_FALSE(error);
+    auto refused=xam::FreshProfileConEpochTestAccess::Bind(f.volume,other_set,f.package,admission,
+        f.console->signing_identity()->certificate(),error);
+    CHECK_FALSE(refused);CHECK(error==std::errc::permission_denied);
+    other_set.reset();token.reset();other.reset();
+    REQUIRE(f.Bind(admission,error));REQUIRE_FALSE(error);
+  }
+  SECTION("a real Header replacement invalidates the exact retained token") {
+    auto live=f.Bind(admission,error);REQUIRE(live);REQUIRE_FALSE(error);
+    // Deliberately external uncooperative replacement simulates source damage;
+    // equality of bytes cannot replace the already-issued file identity.
+    const auto alternate=f.content_path/f.target.parent_path()/"foreign.header";
+    {std::ofstream out(alternate,std::ios::binary);out.write(reinterpret_cast<const char*>(canonical.data()),canonical.size());REQUIRE(out.good());}
+    std::filesystem::rename(alternate,f.content_path/f.target);
+    CHECK_FALSE(live->Validate(error));REQUIRE(error);
+    CHECK_FALSE(f.Bind(admission,error));REQUIRE(error);
+  }
+  SECTION("a real member edit is not normalized into a fresh map") {
+    auto bytes=f.originals[2].bytes;bytes.back()^=0x80;
+    {std::ofstream out(f.content_path/f.package/"unknown.member",std::ios::binary|std::ios::trunc);
+     out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());REQUIRE(out.good());}
+    CHECK_FALSE(f.Bind(admission,error));REQUIRE(error);
+    CHECK(f.HeaderBytes()==canonical);
+  }
 }
 
 #else

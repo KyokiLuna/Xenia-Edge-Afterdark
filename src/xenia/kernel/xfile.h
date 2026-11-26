@@ -26,8 +26,13 @@
 #include "xenia/vfs/file.h"
 #include "xenia/xbox.h"
 
+namespace xe::vfs {class FileWriteCheckpointAuthority;class FileWriteCheckpointUse;}
 namespace xe {
 namespace kernel {
+struct XFileIoState;
+struct XFileIoOperation;
+class XFileIoCheckpoint;
+class NativeProfileSaveOwner;
 
 // https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_io_status_block
 struct X_IO_STATUS_BLOCK {
@@ -153,6 +158,11 @@ class XFile : public XObject {
   const std::string& path() const { return file_->entry()->path(); }
   const std::string& name() const { return file_->entry()->name(); }
 
+  // Host-only package IO cut. It grants no File, native STFS or source
+  // authority: the caller still owns its exact source/CM reservation.
+  static std::shared_ptr<XFileIoCheckpoint> CaptureIoCheckpoint(
+      KernelState&, const filesystem::HostStorageRoot& package, X_STATUS&);
+
   uint64_t position() const;
   void set_position(uint64_t value);
 
@@ -181,9 +191,11 @@ class XFile : public XObject {
   // destruction: legacy fn may hold an expired raw guest IOSB. After-stop
   // admission executes default fn(false) inline as before. CancelPostedIo
   // still invokes fn(true), including for callers supplying on_drop.
-  void PostIo(XThread* thread, std::function<void(bool cancelled)> fn,
+  void PostIo(XThread *thread, std::function<void(bool cancelled)> fn,
               std::function<void()> on_drop = {},
-              std::function<void()> on_resource_failure = {});
+              std::function<void()> on_resource_failure = {},
+              std::function<X_STATUS()> observed_result = {},
+              bool may_mutate = true);
   // Cancels the requests |thread| posted that have yet to start.
   void CancelPostedIo(XThread* thread);
   // True while a request |thread| posted has yet to complete.
@@ -199,10 +211,12 @@ class XFile : public XObject {
   X_STATUS Write(uint32_t buffer_guess_address, uint32_t buffer_length,
                  uint64_t byte_offset, uint32_t* out_bytes_written,
                  uint32_t apc_context, bool notify_completion = true,
-                util::IoTransferReceipt* receipt = nullptr);
+                util::IoTransferReceipt* receipt = nullptr,
+                std::shared_ptr<const vfs::FileWriteCheckpointAuthority> write_checkpoint = {});
 
   X_STATUS QueryInformation(vfs::File::Information* output);
   X_STATUS SetLength(size_t length);
+  X_STATUS SetAllocationSize(uint64_t length);
   X_STATUS Flush(util::IoTransferReceipt* receipt = nullptr);
   // Async HostPath queue barrier. Failure rejects WITHOUT completion. After
   // SUCCESS, completion runs exactly once (possibly inline): genuine backend
@@ -246,6 +260,7 @@ class XFile : public XObject {
   }
 
  private:
+  friend class NativeProfileSaveOwner;
   XFile();
 
   // Concurrency class this file's device allows for its offloaded calls.
@@ -265,11 +280,17 @@ class XFile : public XObject {
   [[nodiscard]] HostCallOutcome RunSynchronousIoOwned(std::function<void()> fn);
 
   // Runs the requests PostIo queued until none are left.
-  void RunPostedIo(bool admission_shutdown = false);
+  struct PostedIoRelease {
+    std::function<void()> complete;
+    std::shared_ptr<PostedIoRelease> next;
+  };
+  static void CompleteReleased(std::shared_ptr<PostedIoRelease>);
+  std::shared_ptr<PostedIoRelease> RunPostedIo(bool admission_shutdown = false);
   // Unstarted runner only. Queued shutdown drops legacy closures silently;
   // admission shutdown preserves their inline serial execution. Both settle
   // explicit owned drop handlers as cancelled, outside queue locks.
-  void DropPostedIo(GuestScheduler::HostCallDropReason);
+  std::shared_ptr<PostedIoRelease> DropPostedIo(
+      GuestScheduler::HostCallDropReason);
   void FailPostedIoAdmission();
 
   // Books this read on the medium and returns when it would be delivered, or
@@ -296,8 +317,19 @@ class XFile : public XObject {
   X_STATUS WriteInternal(uint32_t buffer_guest_address, uint32_t buffer_length,
                          uint64_t byte_offset, uint32_t* out_bytes_written,
                          uint32_t apc_context, bool notify_completion,
-                        util::IoTransferReceipt* receipt);
+                        util::IoTransferReceipt* receipt,
+                        vfs::FileWriteCheckpointUse* write_checkpoint = nullptr);
 
+  friend class XFileIoCheckpoint;
+  X_STATUS FlushQueuedInternal(std::function<void(X_STATUS)>,
+                               bool release_join);
+  void PostIoInternal(XThread*, std::function<void(bool)>,
+                      std::function<void()>, std::function<void()>,
+                      std::function<X_STATUS()>, bool track_checkpoint,
+                      std::shared_ptr<PostedIoRelease> release = {});
+  std::shared_ptr<XFileIoOperation> BeginCheckpointIo();
+  void RegisterCheckpointIo();
+  std::shared_ptr<XFileIoState> checkpoint_io_;
   vfs::File* file_ = nullptr;
   // The handle's wait state. Manual reset like NT's file object event, so every
   // wait after a completion returns until the next request clears it.
@@ -312,6 +344,9 @@ class XFile : public XObject {
     std::function<void(bool)> complete;
     std::function<void()> on_drop;
     std::function<void()> on_resource_failure;
+    std::function<X_STATUS()> observed_result;
+    std::shared_ptr<XFileIoOperation> checkpoint;
+    std::shared_ptr<PostedIoRelease> release;
   };
   std::deque<PostedIo> posted_;
   bool posted_running_ = false;
@@ -335,6 +370,37 @@ class XFile : public XObject {
   bool is_buffered_ = false;
 };
 
+// Complete owned member/IO cut. Retains actual files (including a final-handle
+// closed file still owned by PostIo) until their genuine FIFO flush returns.
+// This is not a member-byte/STFS descriptor snapshot or a native control2 ACK.
+class XFileIoCheckpoint final
+    : public std::enable_shared_from_this<XFileIoCheckpoint> {
+ public:
+  X_STATUS Drain(std::function<void(X_STATUS)> completion);
+  X_STATUS Status() const;
+  // Called only after the caller's real FlushTree/Header durability barrier.
+  // Failing or still-pending cuts are never acknowledged; later IO survives.
+  bool AcknowledgeSuccessful();
+  size_t member_count() const { return rows_.size(); }
+  size_t live_file_count() const { return captured_live_files_; }
+
+ private:
+  friend class XFile;
+  struct Row {
+    std::shared_ptr<XFileIoState> state;
+    uint64_t generation;
+    bool close_required = false;
+  };
+  explicit XFileIoCheckpoint(KernelState& kernel) : kernel_(kernel) {}
+  KernelState& kernel_;
+  std::shared_ptr<const filesystem::HostStorageRoot> source_;
+  std::vector<Row> rows_;
+  std::vector<object_ref<XFile>> files_;
+  size_t captured_live_files_ = 0;
+  std::atomic<bool> drain_started_{false};
+  std::atomic<bool> drain_completed_{false};
+  std::atomic<X_STATUS> drain_result_{X_STATUS_PENDING};
+};
 }  // namespace kernel
 }  // namespace xe
 

@@ -862,6 +862,25 @@ ContentMutationOwner::ProfileHeaderPublication::CaptureMemberLayout(std::error_c
   if (!members) { error = Error(std::errc::operation_canceled); return {}; }
   return members->CaptureContentLayoutForCM(*data_->owner->content_, data_->package, error);
 }
+std::unique_ptr<HostStorageContentSnapshot>
+ContentMutationOwner::ProfileHeaderPublication::CaptureMemberSnapshot(
+    std::error_code &error) const {
+  if (global_critical_region::is_held_by_current_thread()) {
+    error = Error(std::errc::operation_would_block);
+    return {};
+  }
+  error = data_->Available();
+  if (error) {
+    return {};
+  }
+  const auto members = data_->members.lock();
+  if (!members) {
+    error = Error(std::errc::operation_canceled);
+    return {};
+  }
+  return members->CaptureContentSnapshotForCM(*data_->owner->content_,
+                                              data_->package, error);
+}
 std::shared_ptr<const std::vector<uint8_t>>
 ContentMutationOwner::ProfileHeaderPublication::Seal(std::error_code& error) {
   if (global_critical_region::is_held_by_current_thread()) { error = Error(std::errc::operation_would_block); return {}; }
@@ -969,6 +988,35 @@ ContentMutationOwner::ProfileHeaderPublication::CommitCanonical(
     data_->prepared->stage_.reset();
   }
   return receipt;
+}
+std::shared_ptr<const HostStorageSnapshotToken>
+ContentMutationOwner::ProfileHeaderPublication::RetainedPublishedCacheToken(std::error_code& error) const {
+  error.clear();
+  if(global_critical_region::is_held_by_current_thread()) {
+    error=Error(std::errc::operation_would_block);return {};
+  }
+  std::unique_lock held(data_->mutex,std::try_to_lock);
+  if(!held.owns_lock()){error=Error(std::errc::device_or_resource_busy);return {};}
+  if(data_->initialization_error || data_->seal_error || !data_->sealed) {
+    error=data_->initialization_error?data_->initialization_error:data_->seal_error?
+        data_->seal_error:Error(std::errc::operation_in_progress);return {};
+  }
+  if(data_->prepared) {
+    const auto& receipt=data_->prepared->receipt();
+    if(!receipt.published || !receipt.current) {
+      error=receipt.error?receipt.error:Error(std::errc::operation_in_progress);return {};
+    }
+    // A later genuine PIS retry can establish durability after this first CAS
+    // receipt reported a failed barrier. Keep the actual token without turning
+    // this scalar accessor into a durability/Done/cache-ready certificate.
+    return receipt.current;
+  }
+  // The exact Observe branch performed no Header CAS. Its SAME retained
+  // before token may serve only when the actual seal is byte-for-byte equal;
+  // a changed uncommitted stage is never projected as a canonical cache token.
+  if(data_->before && data_->sealed->size()==data_->before->bytes().size() &&
+      std::equal(data_->sealed->begin(),data_->sealed->end(),data_->before->bytes().begin()))return data_->before;
+  error=Error(std::errc::operation_in_progress);return {};
 }
 std::shared_ptr<ContentMutationOwner::ProfileHeaderPublication>
 ContentMutationOwner::PrepareProfileHeader(const std::filesystem::path& package,

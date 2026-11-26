@@ -1,0 +1,423 @@
+{
+  "status": "UNFINISHED_UNCOMPILED_INACTIVE_SOURCE_BACKUP_NOT_A_CHECKPOINT",
+  "parent_tested_source_commit": "e77fef4040785cdb9908e4f0527ae0d831d42c33",
+  "parent_tested_source_map": "cfabb5f1ec91e30f5d0e8c677b0f101c72f3c8c970bacb3893dc58bf6082bfdb",
+  "work_state_version": 10,
+  "work_state_sha256": "c528641220f5793f23fb045a71b40999d102abeed08093bc4188d1617fbc90bc",
+  "cumulative_patch_sha256": "30244d981d924fa950efe74b84cfa645948eb2dc22c8bce21dd5059db786353b",
+  "path_count": 79,
+  "compiled": false,
+  "tests_run_on_this_draft": false,
+  "native_controls_activated": false,
+  "known_incomplete_contracts": [
+    "Native Header declared content_size and opaque kernel Control2 map/allocation producer; member-byte sum is not an established native rule.",
+    "Genuine GPD write-time and flushed-revision authority.",
+    "Whole intermediate durable Header/map/PIS/cache/File successor transition before actual native Flush return.",
+    "Separate PEC zero-context/raw1000 package and signature/current-map contract.",
+    "Cold creation, stock assets, complete native profile/avatar lifecycle and full gate acceptance."
+  ],
+  "files": [
+    {
+      "path": "src/xenia/base/content_mutation_owner.cc",
+      "before_sha256": "f0ce1a80887f21b6ef8fcf8d70ba561de4a01a31ede1cb094705973dc749b053",
+      "candidate_sha256": "f4f145aeb47be8c80a577bd41a29d4dab60ea78ad577d2fbd9e1005613e8a755"
+    },
+    {
+      "path": "src/xenia/base/content_mutation_owner.h",
+      "before_sha256": "06a2842a59b83c202af43557eb025a60c1f81b2d69e450638d49b0990568106c",
+      "candidate_sha256": "493c2c9d31280f4157aa2a96f8b4f5972e8121fb9d525aa8af6bd67e6fb6e146"
+    },
+    {
+      "path": "src/xenia/base/content_package_tree.h",
+      "before_sha256": "fda448b064038baf0f5f5e03247420541407b9062b090be642db803b341557a0",
+      "candidate_sha256": "748eeba14469a7bc53574b4d2da51324788e3b8e39288abd90322b974916a11f"
+    },
+    {
+      "path": "src/xenia/base/host_storage.cc",
+      "before_sha256": "8587c9546de2131b1d44207c4a0fe7a92a612f20787635948c1c6868f36ff197",
+      "candidate_sha256": "1bcdb36e7b2957308ce87a88cb204383f329e81191bd348897af62dfd08447a2"
+    },
+    {
+      "path": "src/xenia/base/host_storage.h",
+      "before_sha256": "c7e3ba04f83df1d7d7c3303bc23cb5a8e5b1c8a3fc30249bbb7dbd15bdf06c5a",
+      "candidate_sha256": "c11dbb56f8e06bad717f6ac3cc71f78671850adcee233817ee591109e0f0e234"
+    },
+    {
+      "path": "src/xenia/base/profile_publication_intent.cc",
+      "before_sha256": "2509c87b14dc0a5cdbb0af3d7ea268b2b5faafe3eb671f23d44d086f72b37165",
+      "candidate_sha256": "8ea080eadb75f3aae608e480b0c3900716d2fafe9f54c78809df39172941436f"
+    },
+    {
+      "path": "src/xenia/base/profile_publication_intent.h",
+      "before_sha256": "49354dd76940c01458e6aa14c47cdafc44b7f4fc85f478f0acda630dfd356bc7",
+      "candidate_sha256": "deed4cd1e982093a427713125bcf74c30824aefec7dcb55553b95a881d16a68f"
+    },
+    {
+      "path": "src/xenia/base/snapshot_publication_set.h",
+      "before_sha256": "e2fe052ed7c34297c5fc094145111e2953a85bfabaafdfd48db919b8c121da0f",
+      "candidate_sha256": "2cb67a6147359fe1226ef4ad73a848e65dc209e71ca38292a62b1c6fd037f13e"
+    },
+    {
+      "path": "src/xenia/base/snapshot_publisher.cc",
+      "before_sha256": "51932544613864c9bbb5822d7b9522f2df72e5eb404eebbff771ca9b5ab35ebb",
+      "candidate_sha256": "de390f5d7b74c58ebbe759e7c115f2093f3491d50e7823df051730b5bd3254ed"
+    },
+    {
+      "path": "src/xenia/base/snapshot_publisher.h",
+      "before_sha256": "f79864da943d773531f5cd196a8af4e45029329fc6eeddb9a0d5757c923b115d",
+      "candidate_sha256": "44b484a38abb1d47beb95f708db7bcbcbbff497a5e3a6316a8410d733e774316"
+    },
+    {
+      "path": "src/xenia/base/testing/managed_volume_authority_test.cc",
+      "before_sha256": "e9e3f9e5f138aeea04f1ff6c0ac8234c85502d7824fbdb19ef98115ee873716f",
+      "candidate_sha256": "25807ee55fbcda714e4cc78daf4d732472a8d192af15345671b248fe3e93f6cf"
+    },
+    {
+      "path": "src/xenia/kernel/kernel_state.h",
+      "before_sha256": "3b09f35636ef24e892e6d29c403e9224f8a3d562294ad9325c0666a7ca1ad033",
+      "candidate_sha256": "5c8135b994d1fc79dc355e2dc3bd4535a192a4806c82fd3ca8d6fda35e43ba0f"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_gpd_read_view.cc",
+      "before_sha256": null,
+      "candidate_sha256": "5035bda8a7631faa13168b008a42903c469b7b5d99eaf4da3cf9da07ffe46117"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_gpd_read_view.h",
+      "before_sha256": null,
+      "candidate_sha256": "b7eabecff5f1f6716d03cbdae0e494a1fb55a290d1e9f9043b5903d49b035539"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_gpd_stage.cc",
+      "before_sha256": null,
+      "candidate_sha256": "23ac759ddcdc42004bc09e1f68617b361b597429118b5c466feef82b3f3616f0"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_gpd_stage.h",
+      "before_sha256": null,
+      "candidate_sha256": "e4f8663c52cee0e0c9d92d272e0750298f0412c4710d1e39c89ec2800a307d74"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_managed_gpd.cc",
+      "before_sha256": null,
+      "candidate_sha256": "912be7b94615d15345e8af8a56611c9aaa36a03bc9013c55f28cdb1ace2cad30"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_managed_gpd.h",
+      "before_sha256": null,
+      "candidate_sha256": "49521f806ef52ed1c5fb1f5ee59e7799396a2b73531dca25a243c32629aca30e"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_managed_picture.cc",
+      "before_sha256": null,
+      "candidate_sha256": "4f61a7201a453f62080271212ec9490be6b015cae4aecc327a22524a004f20fb"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_managed_picture.h",
+      "before_sha256": null,
+      "candidate_sha256": "fede3b508c8f4cfe3909704180e213b3117765001b002de491112f8a406a5954"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_owner.cc",
+      "before_sha256": null,
+      "candidate_sha256": "42567ff26944fdea22348da2ccdbf1e23bbd49443f76c3e8afe47e7c4fbb58fa"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_owner.h",
+      "before_sha256": null,
+      "candidate_sha256": "ff7e88205a0b83983249a70561b2953d405fbe0ea048cfb4d63d97f7a3e137b0"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_picture_stage.cc",
+      "before_sha256": null,
+      "candidate_sha256": "b543045fa21e5c6cf08c51eeb2110bd2e8ab9f8deb27497593c23083f8b267b0"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_picture_stage.h",
+      "before_sha256": null,
+      "candidate_sha256": "f67603eb41c79afcdb0783018860e7c11e3d29b72d372d6a99bc8e03979e4779"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_publication.cc",
+      "before_sha256": null,
+      "candidate_sha256": "80a8e372fe78316ac809896d0dba5d62138fabf1c283f9c125bfef8cfdb758a8"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_publication.h",
+      "before_sha256": null,
+      "candidate_sha256": "b9e9a8997f5c9358af642f9c5464b5256edfdda2b7dc54ff220d12315e82cb94"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_request.cc",
+      "before_sha256": null,
+      "candidate_sha256": "5a40962789bf7f948ee4a128dfc991f7f7ad82b959e386e884d5b13f3fe3d419"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_request.h",
+      "before_sha256": null,
+      "candidate_sha256": "4e5d8240d924ba695593ffe82e626f2c857c758a6ae5c3d493386116415b90d4"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_semantic_uses.h",
+      "before_sha256": null,
+      "candidate_sha256": "514000a049f97cfbe2e6092a34f358f8f59bba8edb749fa06d0c6e766f0d2a9e"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_serialization.cc",
+      "before_sha256": null,
+      "candidate_sha256": "4c204276b7779b134a768fd516c0034989f18e7c6d0d2eeea4c9c4a9104de764"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_serialization.h",
+      "before_sha256": null,
+      "candidate_sha256": "9a08f9b8d46a432e740653c8106cc17afdde84766068e861da00f66528b59e5e"
+    },
+    {
+      "path": "src/xenia/kernel/native_profile_save_source.h",
+      "before_sha256": null,
+      "candidate_sha256": "6271b219256fdac39ed92ca897e38501ee2a30a68b77e9aec4b69491b4dd40c2"
+    },
+    {
+      "path": "src/xenia/kernel/testing/console_data_owner_test.cc",
+      "before_sha256": "19c4ce00b98d09840e3049c7b9f294f5f9ccfd57a6a1b37611800b0c54ffda63",
+      "candidate_sha256": "26fb4fd9bf792c941ddd9e55fbbe468e0c796cba11e627fde1652011fa0e1577"
+    },
+    {
+      "path": "src/xenia/kernel/testing/file_control_exports_test.cc",
+      "before_sha256": "1651cb5b6a53ce7758d0b806af8b765a226439eb801a5ba009a13225c68686a0",
+      "candidate_sha256": "7bc1aaf49d0b63c327a01435b9f3949bce4ba3dfa55645dbe0e2f7cec31d76be"
+    },
+    {
+      "path": "src/xenia/kernel/testing/gpd_durable_intent_test.cc",
+      "before_sha256": "8be4578f58b1b01a1b2c080393c378982baa5ae92a8b651d1f2c44bebffc87ef",
+      "candidate_sha256": "ecc3c6bd3e499fd10ebbcc86c740e6e4ea3cc99d218a35b7b9560d4838c375fa"
+    },
+    {
+      "path": "src/xenia/kernel/testing/native_profile_identity_request_test.cc",
+      "before_sha256": "144ff1d6bf7dc99bde5089241e7cf0b20aa25e232ef2b13d932d7582f3e2ac96",
+      "candidate_sha256": "23e25a7fdb0f78869f4b9d0bb043f375f0b2cdb1d60755dc62d7c14adf43fc03"
+    },
+    {
+      "path": "src/xenia/kernel/testing/native_stfs_device_test.cc",
+      "before_sha256": "6c00f3c5b740188858c9661f413abbaeb1e3a2a39da084d57d928277270d3014",
+      "candidate_sha256": "95a00f65646ac4bd0a2f91c9dfdec8caf753849c28d38737ab0317299f8ec3bc"
+    },
+    {
+      "path": "src/xenia/kernel/testing/profile_initial_creation_test.cc",
+      "before_sha256": "50ab6849c5f39e6332504e226e5fabd12ad82f0799b714e2d9cec2fcf3586367",
+      "candidate_sha256": "aa2f5b6b4f74c75b06c12c0ab023124c879ff47f521135b34c7d1881338d8ecd"
+    },
+    {
+      "path": "src/xenia/kernel/util/io_request_completion.h",
+      "before_sha256": "e15f4cfb6bbbaba7854a364711e02aeb05423d901953957fd88c6a0bd00abfc7",
+      "candidate_sha256": "f41d6821b01e441025a48bf6fadd5cde67b5ec82eafa4837b29a69c1580060dc"
+    },
+    {
+      "path": "src/xenia/kernel/xam/content_manager.cc",
+      "before_sha256": "ba238da1237030923b824e5e7659f1c0f8ddb720a8cc8142ceb38e7ddc06f04c",
+      "candidate_sha256": "d16d91d1faf55a22ebe3dce501fb8650e00cf81bcee5572cd298cfd52c120d9e"
+    },
+    {
+      "path": "src/xenia/kernel/xam/fresh_profile_con_epoch.cc",
+      "before_sha256": null,
+      "candidate_sha256": "5ad22d9892cde88f5686fa7473c9d9b793195099eb1b64cf9b555c1f908c3251"
+    },
+    {
+      "path": "src/xenia/kernel/xam/fresh_profile_con_epoch.h",
+      "before_sha256": null,
+      "candidate_sha256": "d497c4beaf00e3cac6deb8e6d08418f3d9565e138ad593d5debd8a960a96d3c7"
+    },
+    {
+      "path": "src/xenia/kernel/xam/native_folder_content.h",
+      "before_sha256": "ac4e7f0ff6fa59afba1ac5e24a911a4f9d8a1293b5327b35bf1736fb1bfea69f",
+      "candidate_sha256": "956652cc11da66ef3dbc8533a58a27bc4111c2c1f1e1154b5ad9614b346f37b2"
+    },
+    {
+      "path": "src/xenia/kernel/xam/profile_gpd_model.cc",
+      "before_sha256": "a43358cb95d53bf23edd51e2d0e7346fa7d691eb81fff3df63f385df4598244c",
+      "candidate_sha256": "365e3e547f4385c3aa3c0af7ec644114ec6905d86497bb048531d9ee786e6664"
+    },
+    {
+      "path": "src/xenia/kernel/xam/profile_gpd_model.h",
+      "before_sha256": "cf330b6b710bd8dae62a4bf3c1034fa3ec42e32d49ce660bbd17f2b50bf619d7",
+      "candidate_sha256": "80b268bfc660b4885ba026e15d5607a1c764c478718ec42561f20a8feaae61fd"
+    },
+    {
+      "path": "src/xenia/kernel/xam/profile_gpd_transaction.cc",
+      "before_sha256": "ed91e9bf6624623272b56aa0282baa01ac8d498e27eed51fc7998ee430409978",
+      "candidate_sha256": "ae8526b54f0297a3a70edd68e8df2ac47144531546692c79b7ad826deeba24c3"
+    },
+    {
+      "path": "src/xenia/kernel/xam/profile_gpd_transaction.h",
+      "before_sha256": "a2775014a3e42f06ebf0798275c761a038673588191ce4aab28aa6ea50455920",
+      "candidate_sha256": "c50884bedc69c00723e9a893e1c580a0242ba1ee3fb63d30b7eb0789a3b344ee"
+    },
+    {
+      "path": "src/xenia/kernel/xam/profile_image_key.h",
+      "before_sha256": null,
+      "candidate_sha256": "742c7ab7e4cf0df6a698341e9de3d944d78119ad365e57c1d4d598faf9c83642"
+    },
+    {
+      "path": "src/xenia/kernel/xam/profile_manager.h",
+      "before_sha256": "4d2db27386b08c88f1f1a02236b5041d741e40e35ce99532855f4936b89b41be",
+      "candidate_sha256": "a8456576d32c23cbd45c578f50c10355cdd29a50a5723cf8f38c0dab84b2400f"
+    },
+    {
+      "path": "src/xenia/kernel/xam/profile_roster.cc",
+      "before_sha256": "4e1c0889b2ebc4207d1a886fdf8cec316aeeee49ed48683d70ecd1caad8fe282",
+      "candidate_sha256": "982424a48467422c5c810afffb70fff4b4ce60ef3e477dba0cd36b74b5bcf6fe"
+    },
+    {
+      "path": "src/xenia/kernel/xam/profile_roster.h",
+      "before_sha256": "772bf249eb67e95f6c9f08907557fb1f9a2b5453eb08b6305d44ad1ce2dfc3d5",
+      "candidate_sha256": "4ad6cce81094bf9a78734d243c060a7d4c1504a84af7cd66280fca80a3bc8521"
+    },
+    {
+      "path": "src/xenia/kernel/xam/tile_service.cc",
+      "before_sha256": "8ddc374b7da9b31bf100ec8507f255b9184ed8e8e3b8efd3e464ff1bd25d6dbf",
+      "candidate_sha256": "18ff45ab964d462a3826f6b47a4c5768b78c9e4290213901edbef4b387fb9b6e"
+    },
+    {
+      "path": "src/xenia/kernel/xam/user_profile.cc",
+      "before_sha256": "7e061d97b7466a4d05019d98a63a77bd5c9225a931fe8762bc4dcbc068cd96e7",
+      "candidate_sha256": "32fc203912994da159bfd1a0cf011449aa1f2069f8fe0300e6c3854e3060e847"
+    },
+    {
+      "path": "src/xenia/kernel/xam/user_profile.h",
+      "before_sha256": "ba796a3434ec0fca474753b30d3efb076329717848a4d983fe11421489c0a712",
+      "candidate_sha256": "1daaf89124b4881684915b8b8d020b9a1e6ac98f9445c1d50fc1503b46c19568"
+    },
+    {
+      "path": "src/xenia/kernel/xam/user_tracker.cc",
+      "before_sha256": "5faccccfe26ff76d925eef3702e2c7c981dca778aebcf25107192955d5bb2422",
+      "candidate_sha256": "d00a61ebe2a54e18cbae41ffe6dcd94142b89a9082825f6d75e1f124633eeb79"
+    },
+    {
+      "path": "src/xenia/kernel/xboxkrnl/xboxkrnl_io.cc",
+      "before_sha256": "ea6f03fe3e7d8ca82cff1d6f5b68211cee83a8657ab67215fae7f359f7b2875e",
+      "candidate_sha256": "811aa2a6180139ca97a4a69852d44a29c66b0d1587907c6fb4cfae0a6ca5397f"
+    },
+    {
+      "path": "src/xenia/kernel/xboxkrnl/xboxkrnl_io_info.cc",
+      "before_sha256": "b5ef89e2b57f63f3161c40c8056ba1c6e13ced845014a3b9b634afd004885766",
+      "candidate_sha256": "545fdd9b47b4a7fec312173a9adbf7fa5e3c7b01004587f06ea24cdea9768210"
+    },
+    {
+      "path": "src/xenia/kernel/xfile.cc",
+      "before_sha256": "7db448d19dbe658666cc6f6aada80fb9fea1f4ed9c129ddf7d25193df6cdcb15",
+      "candidate_sha256": "be7a70010615f7e20601063a75b51b8c3ce2f9ab50530320fb15c393252a8b89"
+    },
+    {
+      "path": "src/xenia/kernel/xfile.h",
+      "before_sha256": "58b0cc83df55d9f7c9ac1f07074d4888b5ac1c3ec0c3ce1625a76d448795d0ce",
+      "candidate_sha256": "465928368c698d02abc40d73a7ab0c35c9e3cc5c45688cca6d0d0eef2b8c51ca"
+    },
+    {
+      "path": "src/xenia/kernel/xstfs_device.cc",
+      "before_sha256": "705c62bc5406e2c994de296e2547ac723ef228567dba37117ac3599f376831ee",
+      "candidate_sha256": "023ce4b0e314de68d5a5a97267d32b7bcf1723af69f926be1cbc5d203634afd0"
+    },
+    {
+      "path": "src/xenia/kernel/xstfs_device.h",
+      "before_sha256": "53d7aa3f6fa32b5ce9bd4f45fc2dc441a69cdf78cd2875e0d74bbc4d9b2eea85",
+      "candidate_sha256": "baca2863b23ee8594274c9a82430950cbfa2eaf203e3379268e8b3cbdd0a5fc7"
+    },
+    {
+      "path": "src/xenia/vfs/devices/host_path_entry.cc",
+      "before_sha256": "c2ac31350b0e6c42ef34c257f3d09dc561dc65ce04d809a96616259c040d1faf",
+      "candidate_sha256": "9d5e71b617d4be5e15bd36ac0111bdd0640c195a05af49836fe34ba63f6e91e3"
+    },
+    {
+      "path": "src/xenia/vfs/devices/host_path_entry.h",
+      "before_sha256": "95449c6542b30cef82d5cf7b0e383f1f97247c459ecba6778cb462d26fc04f3b",
+      "candidate_sha256": "c050d9ebe7c80e711e512c5c58f2b93b9b815e9d06aa5d81517ce06024f87893"
+    },
+    {
+      "path": "src/xenia/vfs/devices/host_path_file.cc",
+      "before_sha256": "4452efea08698071bd23fc3be9d81925882f8dfbd78b91abe46aac95f2e403bc",
+      "candidate_sha256": "acb62da742e514899c40fc52456b936e5570378f0aa0d8323e68d51106a610a9"
+    },
+    {
+      "path": "src/xenia/vfs/devices/host_path_file.h",
+      "before_sha256": "61a55ce5cf1ec31be9330c4200d7282d73762aedde549af0eefd434bfc9068b9",
+      "candidate_sha256": "9b0b8ae49234ed0656e7e8b573ca2c6e7428caa83e663725b60f16b1c45795c8"
+    },
+    {
+      "path": "src/xenia/vfs/devices/media_reference_device.cc",
+      "before_sha256": "a5eb181539989715b9f47ffbf88ce4b8a2d1e170fe350047780c39686515322a",
+      "candidate_sha256": "e9794b8e2af49a5383e3fd40bc14dc2c47e17b0ddcc9b0dc6db93228c6d68abe"
+    },
+    {
+      "path": "src/xenia/vfs/entry.cc",
+      "before_sha256": "ee9cf48424baba7c6d5970130f62ea4edef273acacb8d578e57d79553ca69244",
+      "candidate_sha256": "bc5def9539a84dde6529d77488ba6cfa35fca095b2d9d9d3da2794c85dbc8f17"
+    },
+    {
+      "path": "src/xenia/vfs/entry.h",
+      "before_sha256": "668f7b17dbe776823eeccbbdb4c7eac8608645f678687256c809581aab246721",
+      "candidate_sha256": "657a4ab604657e405d8ac65e8990ad53eca48b5a961b1b181bb977c9faad5433"
+    },
+    {
+      "path": "src/xenia/vfs/file.cc",
+      "before_sha256": "e183962928e8bc3908b2fef0338b6ad7031a5fb93f4f272513b8c27207283742",
+      "candidate_sha256": "6ca8291cea85b8a6b61c8056fb9a5f2a1df5fb6ca5abe7c13841857900bf27a9"
+    },
+    {
+      "path": "src/xenia/vfs/file.h",
+      "before_sha256": "63b04553472d20876dc9bd7db9cbbc7630d34c191a54086d8f0797ee906d52e2",
+      "candidate_sha256": "affcde4a6c48a4454323a06a141c4988f84a7a844d99ad05d306837bfe68c950"
+    },
+    {
+      "path": "src/xenia/vfs/file_write_checkpoint.h",
+      "before_sha256": null,
+      "candidate_sha256": "36176613862f3c77f0438d97135952307c8f3b62188e9954681f5c851650d3e3"
+    },
+    {
+      "path": "src/xenia/vfs/folder_content_package.h",
+      "before_sha256": "3e74c9725803a3879c162ac8570ae3f227d0c973801380ec1744976436f4ccde",
+      "candidate_sha256": "5442b524d79f69eeafb9a71ab677606f38a15d014b72f6766139e00d0b0f1a62"
+    },
+    {
+      "path": "src/xenia/vfs/managed_file_service.h",
+      "before_sha256": "3bc2901eb16bd14a539cbbd60e9be91649eeebd059db274faced6e2082d50f57",
+      "candidate_sha256": "3bc2901eb16bd14a539cbbd60e9be91649eeebd059db274faced6e2082d50f57"
+    },
+    {
+      "path": "src/xenia/vfs/stfs_metadata.cc",
+      "before_sha256": "2801e8d9998f8c6438c2591b6b53b9ce29a08ff42e8d0a4f598cf10a245733d3",
+      "candidate_sha256": "7ba9e0cec89780037f1339afc0089781a30e01f2fa495e2c853048912a1695ac"
+    },
+    {
+      "path": "src/xenia/vfs/stfs_metadata.h",
+      "before_sha256": "343678eb814998df595e92406d903c4b586d2e76232955543f944b9f1f93f6c5",
+      "candidate_sha256": "ba717cce0f518dfc7d21f61201581882c115f96578544c64b00966b50be8a81c"
+    },
+    {
+      "path": "src/xenia/vfs/testing/file_control_test.cc",
+      "before_sha256": "2b6277935e1e6bb044eaa8f8289644c774cd1b7f2508cdce72f3b7b814e549c4",
+      "candidate_sha256": "951c9be39174b00cb3e1fb898c2eed25a730c4a5ca7a50a9f346bcf48e141aab"
+    },
+    {
+      "path": "src/xenia/vfs/testing/stfs_container_bounds_test.cc",
+      "before_sha256": "e851586696dea6b5f526d4eda0547d706f7fc1f929713dd2496361bf73956d40",
+      "candidate_sha256": "90c716dd1919df391da9625d604a4dafc7ae0a903d43439179763044e72b3a43"
+    },
+    {
+      "path": "src/xenia/vfs/virtual_file_system.cc",
+      "before_sha256": "f8d3cf20e4034d62a161077b5c97830e37dbbfc271315083fb36d144728e7fca",
+      "candidate_sha256": "c437583209ac1932626f27d393d5569da30f4470ffe7e4b93398f717552ffe0a"
+    },
+    {
+      "path": "src/xenia/vfs/virtual_file_system.h",
+      "before_sha256": "744cf8fe819701fbeced3f952ac42f19f4cea2d0e5dd49dde07e55a979de16bc",
+      "candidate_sha256": "9bdc871caf41787a4725024aa645a7dc141b5cefc2926ba19a2fcc86323b36e9"
+    }
+  ],
+  "excludes": [
+    "Supplied executables and assets",
+    "Original profiles, Account payloads, saves and console keys",
+    "Runtime logs and private state",
+    "Unreviewed new PNG creation-time packet"
+  ],
+  "qualification": "All current tested-source results on the parent apply only to that parent, not these 79 draft paths."
+}

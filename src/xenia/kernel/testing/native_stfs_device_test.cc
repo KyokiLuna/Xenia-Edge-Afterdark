@@ -21,6 +21,8 @@
 #include "xenia/base/byte_stream.h"
 #include "xenia/base/cvar.h"
 #include "xenia/base/math.h"
+#include "xenia/base/threading.h"
+#include "xenia/kernel/xthread.h"
 #include "xenia/emulator.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/xam/app_manager.h"
@@ -61,6 +63,9 @@ class NativeFolderContentTestAccess final {
       const std::shared_ptr<filesystem::SnapshotPublicationSet>& members,
       std::error_code& error) { return cm.PrepareProfileHeader(package, std::move(header), members, error); }
   static auto Seal(Session& session, std::error_code& error) { return session.Seal(error); }
+  static auto RetainedCacheToken(const Session& session,std::error_code& error) {
+    return session.RetainedPublishedCacheToken(error);
+  }
   static auto PrepareCommit(Session& session,
       const filesystem::SnapshotPublicationSet& members, std::error_code& error) {
     return session.PrepareCanonical(members, error);
@@ -80,12 +85,24 @@ class NativeFolderContentTestAccess final {
       std::shared_ptr<const filesystem::HostStorageSnapshotToken> current) {
     return file.PromoteCommittedHeader(session, std::move(current));
   }
+  static auto PreparePromotion(vfs::FolderContentPackage& file,const std::shared_ptr<Session>& session,
+      std::shared_ptr<const filesystem::HostStorageSnapshotToken> current,X_STATUS& status) {
+    return file.PrepareCommittedHeader(session,std::move(current),status);
+  }
+  static bool StillAdopted(vfs::FolderContentPackage& file,const std::shared_ptr<Session>& exact) {
+    auto* state=dynamic_cast<NativeFolderContent::State*>(&file);if(!state)return false;
+    std::lock_guard held(state->mutex);return state->publication==exact && state->mutation_adopted;
+  }
 };
 }
 
 namespace xe::kernel {
 class NativeStfsDeviceTestAccess final {
  public:
+  static bool MatchesBacking(const XStfsDevice& device,const XFile& file,
+      const vfs::FolderContentPackage& package) {
+    return device.MatchesFolderBacking(file,package);
+  }
   static X_STATUS WithdrawBeforeCommit(KernelState& kernel, uint32_t packet,
       std::unique_ptr<vfs::Device>* replacement = nullptr) {
     return XStfsDevice::CreateInternal(kernel, packet, 0x58, true, replacement);
@@ -545,6 +562,64 @@ TEST_CASE("Native PIRS refuses unknown controls and state serialization",
   CHECK(stream.offset() == 0);
   REQUIRE_FALSE(f.kernel().Restore(&stream));
   CHECK(stream.offset() == 0);
+}
+
+TEST_CASE("Native STFS callback uses real current-thread refusal and execution transport failure",
+          "[kernel][stfs][native][abi][lifetime]") {
+  Fixture f;
+  REQUIRE(f.Create() == X_STATUS_SUCCESS);
+  const auto body = f.Load32(0x48);
+  const uint32_t input = f.packet() + 0x300;
+  const uint32_t callback = f.packet() + 0x400;
+  const uint32_t callback_context = f.packet() + 0x500;
+  f.Store32(0x300, callback);
+  f.Store32(0x304, callback_context);
+  f.Store32(0x400, 0x4E800020); // No CPU Module owns this mapped data page.
+  std::array<uint8_t, 0x40> before{};
+  std::memcpy(before.data(), f.memory().TranslateVirtual(callback_context), before.size());
+  CHECK(f.Call(0x4B, {0x92000, body, input, 8, 0, 0, 0}) ==
+        X_STATUS_INVALID_DEVICE_REQUEST); // Host caller has no guest context.
+  std::array<uint32_t, 5> observed{};
+  const auto* entry = f.emulator->export_resolver()->GetExportByOrdinal("xboxkrnl.exe", 0x4B);
+  REQUIRE(entry); REQUIRE(entry->function_data.trampoline);
+  auto run = [&](bool retired) {
+    auto thread = object_ref<XHostThread>(new XHostThread(&f.kernel(), 128 * 1024, 0, [&] {
+      auto* context = XThread::GetCurrentThread()->thread_state()->context();
+      const auto invoke = [&](uint32_t code, uint32_t bytes, uint32_t output) {
+        context->r[3] = code; context->r[4] = body;
+        context->r[5] = input; context->r[6] = bytes;
+        context->r[7] = output; context->r[8] = 0; context->r[9] = 0;
+        entry->function_data.trampoline(context);
+        return uint32_t(context->r[3]);
+      };
+      if (retired) { observed[4] = invoke(0x92000, 8, 0); return 0; }
+      observed[0] = invoke(0x92001, 8, 0);
+      observed[1] = invoke(0x92000, 4, 0);
+      observed[2] = invoke(0x92000, 8, callback_context);
+      // Real Processor::Execute cannot resolve this data page. Its false
+      // transport receipt must not become callback-context r3 or guest success.
+      observed[3] = invoke(0x92000, 8, 0);
+      return 0;
+    }, f.kernel().GetTitleProcess()));
+    REQUIRE(thread->Create() == X_STATUS_SUCCESS);
+    const auto waited = xe::threading::Wait(thread->thread(), false, std::chrono::seconds(10));
+    if (waited != xe::threading::WaitResult::kSuccess) {
+      // Never unwind the referenced fixture beneath an unjoined real thread.
+      std::terminate();
+    }
+  };
+  run(false);
+  CHECK(observed[0] == X_STATUS_INVALID_DEVICE_REQUEST);
+  CHECK(observed[1] == X_STATUS_INVALID_PARAMETER);
+  CHECK(observed[2] == X_STATUS_NOT_SUPPORTED);
+  CHECK(observed[3] == X_STATUS_UNSUCCESSFUL);
+  CHECK(std::memcmp(before.data(), f.memory().TranslateVirtual(callback_context), before.size()) == 0);
+  REQUIRE(f.Call(0x3B, {body}) == X_STATUS_SUCCESS);
+  run(true);
+  CHECK(observed[4] == XStfsDevice::kDisconnected);
+  CHECK(std::memcmp(before.data(), f.memory().TranslateVirtual(callback_context), before.size()) == 0);
+  // This is actual device/export/current-thread/failed-transport coverage.
+  // Successful PPC callback/inner flush/control-map acceptance is unverified.
 }
 
 TEST_CASE("Native PIRS rejects RW backing and malformed packets atomically",
@@ -1431,6 +1506,17 @@ TEST_CASE("CM folder Header projection reaches the real Stfs kernel mount and ex
   REQUIRE(f.f.Create() == X_STATUS_SUCCESS); CHECK(f.raw->position() == 37);
   const auto body_address = f.f.Load32(0x48); auto body = XStfsDevice::Lookup(f.f.kernel(), body_address);
   REQUIRE(body); REQUIRE_FALSE(body->retired());
+  const auto exact_package=original_file->folder_content_package();REQUIRE(exact_package);
+  CHECK(NativeStfsDeviceTestAccess::MatchesBacking(*body,*f.raw,*exact_package));
+  // A second real open of the SAME CM pathname/backend policy has distinct
+  // XFile and source-use identity. It cannot impersonate the Create backing.
+  vfs::File* other_raw=nullptr;vfs::FileAction other_action{};
+  REQUIRE(f.f.fs().OpenFile(nullptr,f.guest_package,vfs::FileDisposition::kOpen,
+      filesystem::FileAccess::kFileReadData,false,true,&other_raw,&other_action)==X_STATUS_SUCCESS);
+  REQUIRE(other_raw);
+  auto other=object_ref<XFile>(new XFile(&f.f.kernel(),other_raw,true,false,true));
+  CHECK_FALSE(NativeStfsDeviceTestAccess::MatchesBacking(*body,*other,*exact_package));
+  other->ReleaseHandle();other.reset();
   CHECK(xe::load_and_swap<uint32_t>(f.f.memory().TranslateVirtual(body->context_address())) == 0);
   // Kernel only allocates its genuine context; original native code must still
   // populate its own 971A header/context, which this low-level case does not run.
@@ -1449,6 +1535,7 @@ TEST_CASE("CM folder Header projection reaches the real Stfs kernel mount and ex
   member.reset();
   REQUIRE(f.f.Call(0x3B, {body_address}) == X_STATUS_SUCCESS);
   REQUIRE(body->retired());
+  CHECK_FALSE(NativeStfsDeviceTestAccess::MatchesBacking(*body,*f.raw,*exact_package));
   CHECK(f.f.Call(0x25A, {body_address, 3, output}) == XStfsDevice::kDisconnected);
   f.CloseRawHandle();
   REQUIRE(f.f.kernel().content_manager()->RefreshManagedContentView("native-wire") == X_STATUS_SUCCESS);
@@ -1553,15 +1640,31 @@ TEST_CASE("Native raw Header uses one issued stage and a stable File through gen
   REQUIRE(std::equal(f.header.begin(), f.header.end(), session->expected()->bytes().begin()));
   const auto sealed = xam::NativeFolderContentTestAccess::Seal(*session, error);
   REQUIRE(sealed); REQUIRE_FALSE(error); REQUIRE(*sealed == changed);
+  // Matching sealed bytes do not stand in for a committed Header receipt.
+  CHECK_FALSE(xam::NativeFolderContentTestAccess::RetainedCacheToken(*session,error));
+  CHECK(error==std::errc::operation_in_progress);
   const auto prepared = xam::NativeFolderContentTestAccess::PrepareCommit(*session, *members, error);
   REQUIRE(prepared); REQUIRE_FALSE(error);
   const auto stage_inode = prepared->stage_info().file_id;
   const auto committed = xam::NativeFolderContentTestAccess::Commit(*session, *members);
   REQUIRE_FALSE(committed.error); REQUIRE(committed.published); REQUIRE(committed.durable);
   REQUIRE(committed.current); CHECK(committed.current->info().file_id == stage_inode);
-  // TestAccess exercises this boundary BELOW the genuine native cache issuer;
-  // the real NativeProfileSave owner must supply its actual checkpoint first.
-  REQUIRE(xam::NativeFolderContentTestAccess::Promote(*source, session, committed.current) == X_STATUS_SUCCESS);
+  const auto retained=xam::NativeFolderContentTestAccess::RetainedCacheToken(*session,error);
+  REQUIRE(retained);REQUIRE_FALSE(error);CHECK(retained==committed.current);
+  // TestAccess exercises the actual preparation BELOW the genuine native
+  // cache issuer. Releasing a prepared participant (for example after a real
+  // sibling GPD/model admission failure) must NOT switch this stable raw File.
+  X_STATUS promotion_status=X_STATUS_UNSUCCESSFUL;
+  auto abandoned=xam::NativeFolderContentTestAccess::PreparePromotion(*source,session,committed.current,promotion_status);
+  REQUIRE(abandoned);REQUIRE(promotion_status==X_STATUS_SUCCESS);
+  abandoned.reset();
+  REQUIRE(xam::NativeFolderContentTestAccess::StillAdopted(*source,session));
+  // The same already committed source remains eligible; no fresh writer/CAS.
+  auto promotion=xam::NativeFolderContentTestAccess::PreparePromotion(*source,session,committed.current,promotion_status);
+  REQUIRE(promotion);REQUIRE(promotion_status==X_STATUS_SUCCESS);
+  promotion->Apply();promotion->Apply(); // Actual prepared operation is idempotent.
+  promotion.reset();
+  CHECK_FALSE(xam::NativeFolderContentTestAccess::StillAdopted(*source,session));
   CHECK(file == f.raw->file()); CHECK(entry == f.raw->file()->entry());
   session.reset(); members.reset();
   auto ordinary = f.source.storage->OpenFile(f.package / "FFFE07D1.gpd",

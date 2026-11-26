@@ -14,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -80,6 +81,11 @@ enum class XTileType {
 
 // Selects existing HOST fixed-picture/fallback semantics from one already
 // owned immutable GPD/picture tuple; no file/provider/slot lookup occurs.
+// One already-owned immutable model tuple; no selector, file/provider read or
+// fresh model lookup. nullopt means non-GPD family; empty means a missing row.
+// Caller supplies its resolved title; native background type6 fixesDashboard.
+std::optional<std::vector<uint8_t>> CaptureProfileGpdImage(
+    const ProfileGpdReadModels&,XTileType,uint32_t resolved_title,uint64_t item);
 std::vector<uint8_t> CaptureProfilePicture(const ProfileGpdReadCapture&, XTileType);
 std::vector<uint8_t> CaptureSelfProfilePicture(const ProfileGpdReadCapture&);
 

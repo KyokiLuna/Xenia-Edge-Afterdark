@@ -59,6 +59,8 @@ class NativeIdentityTilePublication;
 class NativeIdentityTileObserverSlot;
 class NativeNotificationPreferenceCoordinator;
 class XStfsDevice;
+class XFileIoCheckpoint;
+struct XFileIoState;
 class ConsoleSigningIdentity;
 struct NativeSystemPhysicalAllocationDecision;
 namespace xam {
@@ -637,6 +639,15 @@ class KernelState {
 
   // Must be guarded by the global critical region.
   util::ObjectTable object_table_;
+  // Actual File lifetime, independent of guest/host handle publication. The
+  // records own only native-member identity and IO facts, never an XFile.
+  friend class XFile;
+  friend class XFileIoCheckpoint;
+  friend struct XFileIoOperation;
+  std::mutex file_io_mutex_;
+  std::vector<std::shared_ptr<XFileIoState>> file_io_records_;
+  bool file_io_overflow_ = false;
+  size_t file_io_operations_ = 0;
   std::unordered_map<uint32_t, XThread*> threads_by_id_;
   std::vector<object_ref<XNotifyListener>> notify_listeners_;
   bool has_notified_startup_ = false;

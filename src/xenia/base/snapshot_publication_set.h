@@ -6,6 +6,7 @@
 #include <span>
 #include <vector>
 #include "xenia/base/snapshot_publisher.h"
+namespace xe::kernel::xam { class FreshProfileConEpoch; }
 namespace xe::filesystem {
 // One actual bounded set of flat snapshot reservations. It adds only the
 // observed members to an already-owned view, preserving the existing parent
@@ -15,12 +16,40 @@ namespace xe::filesystem {
 // The complete profile publication owner must retain this set through native
 // IO drain and logical model/cache commit or retired-source recovery. This
 // class alone is neither a multi-file journal nor a native completion/barrier.
-class SnapshotPublicationSet final {
- public:
+class SnapshotPublicationSet final
+    : public std::enable_shared_from_this<SnapshotPublicationSet> {
+public:
   static std::shared_ptr<SnapshotPublicationSet> Reserve(
       std::shared_ptr<const HostStorageRoot> base,
       std::vector<std::shared_ptr<const HostStorageSnapshotToken>> before,
       std::error_code&);
+  // A genuine completed member checkpoint can continue with the SAME reserved
+  // namespace, without resetting this immutable operation or reacquiring an
+  // unrelated writer. Preparation joins complete membership and exact durable
+  // own receipts. It performs no publication or native completion itself.
+  class PreparedContinuation final {
+   public:
+    ~PreparedContinuation();
+    PreparedContinuation(const PreparedContinuation&) = delete;
+    const std::shared_ptr<SnapshotPublicationSet>& successor() const;
+    const std::vector<std::shared_ptr<const HostStorageSnapshotToken>>& before() const;
+    // No allocation, IO or new admission. Caller first prepares its actual
+    // cache/model/native ownership transition under this same retained batch.
+    // A repeated Apply refuses; abandoning preparation leaves this set active.
+    bool Apply() noexcept;
+    // Drop the original set lock and native guard BEFORE releasing retained
+    // record/byte/admission owners. Destruction also performs this release.
+    void ReleaseLocksAfterApply() noexcept;
+   private:
+    friend class SnapshotPublicationSet;
+    struct Data;
+    explicit PreparedContinuation(std::unique_ptr<Data>);
+    std::unique_ptr<Data> data_;
+  };
+  std::unique_ptr<PreparedContinuation> PrepareContinuation(
+      const HostStorageContentSnapshot& complete_before,
+      std::span<const std::shared_ptr<const HostStorageSnapshotToken>> own_current,
+      std::error_code&) const;
   ~SnapshotPublicationSet();
   SnapshotPublicationSet(const SnapshotPublicationSet&) = delete;
   const std::shared_ptr<const HostStorageRoot>& base() const;
@@ -55,6 +84,19 @@ class SnapshotPublicationSet final {
       std::error_code&) const;
  private:
   friend class ContentMutationOwner;
+  friend class xe::kernel::xam::FreshProfileConEpoch;
+  friend class HostStorageContentSnapshot;
+  std::unique_ptr<HostStorageContentSnapshot>
+  CaptureContentSnapshotForCM(const HostStorageRoot &,
+                              const std::filesystem::path &,
+                              std::error_code &) const;
+  std::unique_ptr<HostStorageSnapshotBatch>
+  ValidateContentSnapshot(const HostStorageContentSnapshot &,
+                          std::error_code &) const;
+  std::unique_ptr<HostStorageSnapshotBatch>
+  ValidateContentSnapshotAfterOwnPublications(const HostStorageContentSnapshot&,
+      std::span<const std::shared_ptr<const HostStorageSnapshotToken>>,
+      std::error_code&) const;
   friend class ProfilePublicationIntentStore;
   static bool RootDescendsFrom(std::shared_ptr<const HostStorageRoot>,
                                const std::shared_ptr<const HostStorageRoot>&);

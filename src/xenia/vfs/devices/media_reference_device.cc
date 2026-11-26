@@ -26,8 +26,13 @@ class MediaEntry final : public Entry {
   }
   X_STATUS Open(uint32_t access,File** output) override;
   bool DeleteEntryInternal(Entry*) override {return false;}
-  X_STATUS RenameEntryInternal(Entry*,std::string_view,
-      std::shared_ptr<const filesystem::HostStorageFileLease>) override {return X_STATUS_ACCESS_DENIED;}
+  X_STATUS
+  RenameEntryInternal(Entry *, std::string_view,
+                      std::shared_ptr<const filesystem::HostStorageFileLease>,
+                      bool *) override {
+    return X_STATUS_ACCESS_DENIED;
+  }
+
  private:
   std::optional<size_t> index_;
   std::atomic<size_t> open_{0};

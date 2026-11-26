@@ -516,7 +516,20 @@ std::shared_ptr<ProfileGpdTransaction> ProfileGpdTransaction::Create(
     std::shared_ptr<const filesystem::ProfileIntentOwner> owner,
     std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery,
     std::error_code& error, std::shared_ptr<filesystem::ContentMutationOwner> metadata) {
+  return CreateImpl(std::move(model), std::move(pending), std::move(owner),
+                    std::move(recovery), error, std::move(metadata), {});
+}
+std::shared_ptr<ProfileGpdTransaction> ProfileGpdTransaction::CreateImpl(
+    std::shared_ptr<ProfileGpdModelAuthority> model,
+    std::shared_ptr<ProfileGpdPendingMutation> pending,
+    std::shared_ptr<const filesystem::ProfileIntentOwner> owner,
+    std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery,
+    std::error_code& error, std::shared_ptr<filesystem::ContentMutationOwner> metadata,
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> native_owner) {
   error.clear();
+  if (pending && pending->native_issued() && !pending->NativeOwnedBy(native_owner)) {
+    error = Error(std::errc::device_or_resource_busy); return {};
+  }
   if (!model || !pending || !owner || !recovery ||
       pending->origin().owner.lock() != model ||
       owner->source() != pending->origin().storage->source() ||
@@ -545,8 +558,24 @@ std::shared_ptr<ProfileGpdTransaction> ProfileGpdTransaction::Create(
   return result;
 }
 ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
+  return AttemptImpl({});
+}
+ProfileGpdTransactionAttempt ProfileGpdTransaction::AttemptNative(
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> owner) {
+  return AttemptImpl(std::move(owner));
+}
+ProfileGpdTransactionAttempt ProfileGpdTransaction::AttemptNativeRecovery(
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> owner) {
+  return AttemptImpl(std::move(owner), true);
+}
+ProfileGpdTransactionAttempt ProfileGpdTransaction::AttemptImpl(
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> native_owner,
+    bool attempted_recovery_only) {
   using State = ProfileGpdTransactionAttempt::State;
   ProfileGpdTransactionAttempt out;
+  if (pending_->native_issued() && !pending_->NativeOwnedBy(native_owner)) {
+    out.error = Error(std::errc::device_or_resource_busy); return out;
+  }
   if (xe::global_critical_region::is_held_by_current_thread()) {
     out.error = Error(std::errc::operation_would_block);
     return out;
@@ -554,6 +583,14 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
   std::unique_lock serial(mutex_, std::try_to_lock);
   if (!serial.owns_lock()) {
     out.error = Error(std::errc::device_or_resource_busy);
+    return out;
+  }
+  // Inspect the ACTUAL store/attempted path/uncertainty under the SAME
+  // transaction serial that owns first preparation and cancellation. Caller
+  // outcome flags or a sealed payload alone cannot authorize recovery writes.
+  if (attempted_recovery_only && !store_ && attempted_journal_.empty() &&
+      !preparation_uncertain_ && !committed_) {
+    out.error = Error(std::errc::operation_not_permitted);
     return out;
   }
   if (committed_) {
@@ -580,12 +617,29 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
   if (!original) {
     return out;
   }
+  auto plan = pending_->BuildPlan(out.error);
+  if (!plan || out.error) {
+    if (!store_ && attempted_journal_.empty() && !native_owner) model->DiscardUnpublished(pending_, this);
+    return out;
+  }
+  if (plan->native_artifacts || plan->package_header) {
+    if (!native_owner || !pending_->NativeOwnedBy(native_owner) || !plan->native_artifacts ||
+        !plan->native_artifacts->Matches(owner_, recovery_, Binding(*lease, *owner_)) ||
+        !plan->native_artifacts->members() || plan->native_artifacts->members()->base() != lease->view() ||
+        bool(plan->native_artifacts->header()) != bool(plan->package_header) ||
+        (artifact_admission_ && artifact_admission_ != plan->native_artifacts)) {
+      out.error = Error(std::errc::permission_denied); return out;
+    }
+    // Transfer the actual early-issued reservation/session. Re-acquiring here
+    // would conflict with our own native stage and lose its original owner.
+    artifact_admission_ = plan->native_artifacts;
+  }
   std::vector<std::shared_ptr<const filesystem::HostStorageSnapshotToken>>
       original_tokens;
   for (const auto &[title, load] : *original) {
     original_tokens.push_back(load.token);
   }
-  if (pending_->command().kind == ProfileGpdMutationKind::kSetPictures && pending_->pictures_before()) {
+  if (!plan->pictures.empty() && pending_->pictures_before()) {
     for (const auto& [name, token] : *pending_->pictures_before()) { original_tokens.push_back(token); }
   }
   if (!store_ && attempted_journal_.empty()) {
@@ -600,16 +654,9 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
       }
     }
     if (!current) {
-      model->DiscardUnpublished(pending_, this);
+      if (!native_owner) { model->DiscardUnpublished(pending_, this); }
       return out;
     }
-  }
-  auto plan = pending_->BuildPlan(out.error);
-  if (!plan || out.error) {
-    if (!store_ && attempted_journal_.empty()) {
-      model->DiscardUnpublished(pending_, this);
-    }
-    return out;
   }
   std::vector<GpdIntentMutation> mutations;
   for (const auto& [title, file] : plan->files) {
@@ -633,10 +680,10 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
     }
     mutations.push_back({action, file.before, file.intended});
   }
-  if (!mutations.empty() || !plan->pictures.empty()) {
+  if (!mutations.empty() || !plan->pictures.empty() || plan->native_artifacts) {
     if (!store_) {
       try {
-        if (!plan->pictures.empty()) {
+        if (!plan->pictures.empty() || plan->native_artifacts) {
           using Kind = filesystem::ProfileArtifactKind;
           using Action = filesystem::ProfileArtifactAction;
           std::vector<filesystem::ProfileArtifactExpected> expected;
@@ -668,7 +715,47 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
             else { expected.push_back({edit.kind, 0, pending_->pictures_before()->at(names[size_t(index)])}); }
             edits.push_back(edit);
           }
-          if (!out.error && !artifact_admission_) {
+          if (!out.error && plan->native_artifacts) {
+            // An early participant may include an unchanged GPD specifically
+            // for this request. Preserve it as an observed dependency; never
+            // drop a changed output simply because it was not admitted.
+            std::vector<filesystem::ProfileArtifactMutation> joined;
+            for (const auto& member : artifact_admission_->expected()) {
+              if (member.kind == Kind::kPackageHeader) {
+                if (!plan->package_header) { out.error = Error(std::errc::invalid_argument); break; }
+                joined.push_back(*plan->package_header); continue;
+              }
+              const auto edit = std::find_if(edits.begin(), edits.end(), [&](const auto& value) {
+                return value.kind == member.kind && value.title_id == member.title_id;
+              });
+              if (member.kind == Kind::kGpd) {
+                const auto file = plan->files.find(member.title_id);
+                if (file == plan->files.end() || file->second.before.token != member.token) {
+                  out.error = Error(std::errc::invalid_argument); break;
+                }
+                if (edit == edits.end()) {
+                  if (file->second.action != ProfileGpdFileAction::kUnchanged) {
+                    out.error = Error(std::errc::invalid_argument); break;
+                  }
+                  joined.push_back({Kind::kGpd, member.title_id, Action::kObserve, {}});
+                } else joined.push_back(*edit);
+              } else {
+                const auto index = uint64_t(member.kind) - uint64_t(Kind::kPublic64);
+                if (index >= names.size() || !pending_->pictures_before() ||
+                    pending_->pictures_before()->at(names[size_t(index)]) != member.token) {
+                  out.error = Error(std::errc::invalid_argument); break;
+                }
+                joined.push_back(edit == edits.end()
+                    ? filesystem::ProfileArtifactMutation{member.kind, 0, Action::kObserve, {}} : *edit);
+              }
+            }
+            for (const auto& edit : edits) {
+              if (std::none_of(joined.begin(), joined.end(), [&](const auto& value) {
+                    return value.kind == edit.kind && value.title_id == edit.title_id;
+                  })) { out.error = Error(std::errc::invalid_argument); break; }
+            }
+            if (!out.error) edits = std::move(joined);
+          } else if (!out.error && !artifact_admission_) {
             artifact_admission_ = GpdDurableIntentStore::AcquireArtifacts(
                 owner_, recovery_, metadata_, Binding(*lease, *owner_), std::move(expected), thumbnail, out.error);
           }
@@ -688,7 +775,7 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
         if (preparation_uncertain_) {
           out.state = State::kPreparationUncertain;
         } else {
-          model->DiscardUnpublished(pending_, this);
+          if (!native_owner) { model->DiscardUnpublished(pending_, this); }
         }
         return out;
       }
@@ -698,7 +785,7 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
         if (preparation_uncertain_) {
           out.state = State::kPreparationUncertain;
         } else {
-          model->DiscardUnpublished(pending_, this);
+          if (!native_owner) { model->DiscardUnpublished(pending_, this); }
         }
         return out;
       }
@@ -733,10 +820,10 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
   auto pictures = CaptureProfilePictures(lease->view(), out.error, members);
   if (!pictures) { return out; }
   auto prepared_model =
-      model->PrepareCommit(pending_, std::move(*current), out.error, std::move(pictures));
+      model->PrepareCommitImpl(pending_, std::move(*current), out.error, std::move(pictures), native_owner);
   if (!prepared_model) {
     if (!store_ && attempted_journal_.empty()) {
-      model->DiscardUnpublished(pending_, this);
+      if (!native_owner) { model->DiscardUnpublished(pending_, this); }
     }
     return out;
   }
@@ -763,6 +850,10 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
     if (!checked) {
       return out;
     }
+    // External Header is outside the profile-only token batch. Keep the SAME
+    // CM participant/receipt under this actual final publication guard, before
+    // acquiring model/GCRC cache guards and their nonfallible Apply boundary.
+    if (store_ && (out.error = store_->CheckPublishedArtifactsWithSnapshotGuard(*checked))) return out;
     std::shared_ptr<const filesystem::HostStorageSnapshotBatch> batch(
         std::move(checked));
     auto model_commit =
@@ -790,6 +881,23 @@ ProfileGpdTransactionAttempt ProfileGpdTransaction::Attempt() {
   // admissions release; exact retries now use the retained committed receipt.
   if (artifact_admission_) { store_.reset(); artifact_admission_.reset(); }
   return out;
+}
+std::error_code ProfileGpdTransaction::CancelNativeUnpublished(
+    const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>& owner) {
+  if (!pending_->NativeOwnedBy(owner)) { return Error(std::errc::operation_canceled); }
+  std::unique_lock serial(mutex_, std::try_to_lock);
+  if (!serial.owns_lock()) { return Error(std::errc::device_or_resource_busy); }
+  if (store_ || !attempted_journal_.empty() || preparation_uncertain_ || committed_) {
+    return Error(std::errc::device_or_resource_busy);
+  }
+  const auto model = model_.lock();
+  auto error = model ? model->CancelUnpublishedNative(pending_,owner,this)
+                     : Error(std::errc::operation_canceled);
+  // PrepareArtifacts may have admitted the real members but failed before any
+  // journal attempt. Release that exact admission only after model cleanup,
+  // outside its lock; never leave a successful cancel blocking other writers.
+  if (!error) { artifact_admission_.reset(); }
+  return error;
 }
 std::error_code ProfileGpdTransaction::ReleaseForRecovery() {
   if (xe::global_critical_region::is_held_by_current_thread()) {

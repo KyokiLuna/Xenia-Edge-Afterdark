@@ -436,6 +436,7 @@ struct OverwriteFlushFaults {
   bool publish_before_resize_failure = false;
   size_t partial_write_bytes = 0;
   unsigned query_failures = 0, query_failures_after_resize_failure = 0;
+  unsigned query_failures_after_resize_success = 0;
   unsigned query_calls = 0, read_calls = 0, write_calls = 0;
   unsigned resize_calls = 0, flush_calls = 0, length_flush_calls = 0;
   std::optional<filesystem::FileLengthFlushResult> last;
@@ -519,7 +520,9 @@ class HostPathFileTestAccess {
         faults_->query_failures += faults_->query_failures_after_resize_failure;
         return std::make_error_code(std::errc::io_error);
       }
-      return real_->ResizeResult(length);
+      const auto error=real_->ResizeResult(length);
+      if(!error)faults_->query_failures+=faults_->query_failures_after_resize_success;
+      return error;
     }
     filesystem::FileLengthFlushResult FlushLengthResult(
         size_t length) override {
@@ -610,6 +613,50 @@ struct OverwriteFlushFixture {
   }
 };
 }  // namespace
+
+TEST_CASE("Ordinary retained allocation shrink refreshes only its Entry from the owned descriptor and reports later metadata failures",
+          "[vfs][allocation][retained][failure]") {
+  TemporaryDirectory directory;
+  {std::ofstream out(directory.path/"file",std::ios::binary);REQUIRE(out);out<<"abcdefgh";REQUIRE(out);}
+  std::error_code error;const auto source=filesystem::HostStorageRoot::Open(directory.path,false,error);
+  REQUIRE(source);REQUIRE_FALSE(error);
+  VirtualFileSystem fs;
+  auto device=std::make_unique<HostPathDevice>("\\Device\\RetainedAllocation",directory.path,false,false,"FATX",source);
+  REQUIRE(device->Initialize());REQUIRE(fs.RegisterDevice(std::move(device)));
+  auto* entry=fs.ResolvePath("\\Device\\RetainedAllocation\\file");REQUIRE(entry);REQUIRE(entry->size()==8);
+  FileOwner file;REQUIRE(entry->Open(FileAccess::kGenericRead|FileAccess::kGenericWrite,&file.file)==X_STATUS_SUCCESS);REQUIRE(file.file);
+  const auto faults=std::make_shared<OverwriteFlushFaults>();HostPathFileTestAccess::Wrap(*file.file,faults);
+  SECTION("normal shrink updates the exact retained Entry") {
+    REQUIRE(file.file->SetAllocationSize(3)==X_STATUS_SUCCESS);
+    REQUIRE(std::filesystem::file_size(directory.path/"file")==3);REQUIRE(entry->size()==3);
+    File::Information actual{};REQUIRE(file.file->QueryInformation(&actual)==X_STATUS_SUCCESS);
+    REQUIRE(actual.end_of_file==3);REQUIRE(entry->allocation_size()==actual.allocation_size);
+  }
+  SECTION("actual changed EOF with reported resize failure preserves the error and reconciles metadata") {
+    faults->resize_failures=1;faults->publish_before_resize_failure=true;
+    REQUIRE(file.file->SetAllocationSize(3)==X_STATUS_UNSUCCESSFUL);
+    REQUIRE(std::filesystem::file_size(directory.path/"file")==3);REQUIRE(entry->size()==3);
+    REQUIRE(faults->resize_calls==1);
+  }
+  SECTION("successful mutation followed by failed real descriptor metadata is not rollback or false success") {
+    faults->query_failures_after_resize_success=1;
+    REQUIRE(file.file->SetAllocationSize(3)==X_STATUS_UNSUCCESSFUL);
+    REQUIRE(std::filesystem::file_size(directory.path/"file")==3);REQUIRE(entry->size()==8);
+    REQUIRE(faults->resize_calls==1);
+    faults->query_failures_after_resize_success=0;
+    REQUIRE(file.file->SetAllocationSize(3)==X_STATUS_SUCCESS); // Real no-op retry reobserves, not a second resize.
+    REQUIRE(faults->resize_calls==1);REQUIRE(entry->size()==3);
+  }
+  SECTION("retained descriptor metadata never follows a foreign replacement pathname") {
+    std::filesystem::rename(directory.path/"file",directory.path/"old",error);REQUIRE_FALSE(error);
+    {std::ofstream out(directory.path/"file",std::ios::binary);REQUIRE(out);out<<"foreign replacement";REQUIRE(out);}
+    REQUIRE(file.file->SetAllocationSize(3)==X_STATUS_SUCCESS);
+    REQUIRE(std::filesystem::file_size(directory.path/"old")==3);
+    REQUIRE(std::filesystem::file_size(directory.path/"file")==19);
+    REQUIRE(entry->size()==3); // Retained view, not the foreign path's19 bytes.
+    File::Information actual{};REQUIRE(file.file->QueryInformation(&actual)==X_STATUS_SUCCESS);REQUIRE(actual.end_of_file==3);
+  }
+}
 
 TEST_CASE("Flush discards the retained tail for every later shrink and growth",
           "[vfs][overwrite_flush]") {

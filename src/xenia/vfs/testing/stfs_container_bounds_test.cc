@@ -1011,4 +1011,359 @@ TEST_CASE("STFS shared backing refusal leaves mutable ownership untouched",
   CHECK(actual == bytes);
 }
 
+
+namespace {
+// Detached synthetic bytes only. Real source/File/PIS authority remains with
+// the production consumer; this fixture executes the actual format producer
+// and the existing full STFS device/reader, not a shadow serializer.
+class LogicalSnapshotSource final
+    : public filesystem::ContentPackageStreamSource {
+ public:
+  void Add(std::filesystem::path path, std::vector<uint8_t> bytes,
+           bool directory = false) {
+    metadata.push_back({path, 0x54CA, 0x9DBD, 0x54CA, 0x9DBD});
+    rows.push_back({std::move(path), bytes.size(), directory});
+    data.push_back(std::move(bytes));
+  }
+  std::span<const filesystem::ContentPackageStreamMember> members()
+      const override {
+    return rows;
+  }
+  filesystem::FileIoResult Read(size_t member, uint64_t offset,
+                                std::span<uint8_t> output) override {
+    ++reads;
+    if (member >= data.size() || offset > data[member].size() ||
+        output.size() > data[member].size() - offset)
+      return {std::make_error_code(std::errc::invalid_argument), 0};
+    size_t count = output.size();
+    if ((short_read || read_error) && count) --count;
+    std::copy_n(data[member].data() + offset, count, output.data());
+    return {read_error ? std::make_error_code(std::errc::io_error)
+                       : std::error_code{},
+            count};
+  }
+  std::error_code CheckCurrent() const override {
+    ++current_checks;
+    return stale_before_read || (change_after_read && reads)
+               ? std::make_error_code(std::errc::state_not_recoverable)
+               : std::error_code{};
+  }
+  std::vector<filesystem::ContentPackageStreamMember> rows;
+  std::vector<std::vector<uint8_t>> data;
+  std::vector<StfsSnapshotMetadata> metadata;
+  size_t reads = 0;
+  mutable size_t current_checks = 0;
+  bool short_read = false, read_error = false, change_after_read = false;
+  bool stale_before_read = false;
+};
+std::unique_ptr<XContentContainerDevice> OpenLogicalSnapshot(
+    const std::filesystem::path& path, const StfsLogicalSnapshot& snapshot) {
+  // Reuse the real package parser; zero signature bytes here make no retail
+  // signing claim and are never used by the native signed-Header producer.
+  StfsFixture header(false);
+  std::memcpy(&header.header->content_metadata.volume_descriptor.stfs,
+              snapshot.descriptor().data(), snapshot.descriptor().size());
+  header.header->content_metadata.content_size = snapshot.payload_bytes();
+  const size_t base =
+      xe::round_up(sizeof(XContentContainerHeader), size_t(4096));
+  std::vector<uint8_t> wire(base + snapshot.block_image().size());
+  std::memcpy(wire.data(), header.header.get(),
+              sizeof(XContentContainerHeader));
+  std::copy(snapshot.block_image().begin(), snapshot.block_image().end(),
+            wire.begin() + base);
+  Write(path, wire);
+  auto device = XContentContainerDevice::CreateContentDevice("", path);
+  REQUIRE(device);
+  REQUIRE(device->Initialize());
+  return device;
+}
+std::vector<uint8_t> ReadLogicalMember(Device& device, const char* path) {
+  auto* entry = device.ResolvePath(path);
+  REQUIRE(entry);
+  File* raw = nullptr;
+  REQUIRE(entry->Open(filesystem::FileAccess::kFileReadData, &raw) ==
+          X_STATUS_SUCCESS);
+  std::unique_ptr<File, void (*)(File*)> file(
+      raw, [](File* owned) { owned->Destroy(); });
+  std::vector<uint8_t> bytes(entry->size());
+  size_t count = 0;
+  if (!bytes.empty()) {
+    REQUIRE(file->ReadSync(bytes, 0, &count) == X_STATUS_SUCCESS);
+    REQUIRE(count == bytes.size());
+  }
+  return bytes;
+}
+}  // namespace
+
+TEST_CASE(
+    "Logical STFS empty format has real directory allocation and a golden "
+    "descriptor",
+    "[stfs][logical_snapshot][empty]") {
+  LogicalSnapshotSource source;
+  std::error_code error;
+  const auto snapshot =
+      StfsLogicalSnapshot::Build(source, source.metadata, error);
+  REQUIRE(snapshot);
+  REQUIRE_FALSE(error);
+  CHECK(snapshot->member_count() == 0);
+  CHECK(snapshot->payload_bytes() == 0);
+  CHECK(source.reads == 0);
+  CHECK(source.current_checks <= 2);
+  const std::array<uint8_t, 36> expected{
+      0x24, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0xDA, 0x4F, 0x6D, 0x76,
+      0x0F, 0x4B, 0x80, 0x34, 0x5A, 0xFA, 0x45, 0xFF, 0xB8, 0x89, 0xC3, 0xD4,
+      0xF3, 0x15, 0xC1, 0xB9, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
+  // Independent SHA1 golden: zero4096 directory, L0 entry SHA1(directory),
+  // allocation2 + nextFFFFFF; remaining table entries/padding zero.
+  CHECK(snapshot->descriptor() == expected);
+  REQUIRE(snapshot->block_image().size() == 3 * 4096);
+  CHECK(std::equal(snapshot->block_image().begin(),
+                   snapshot->block_image().begin() + 4096,
+                   snapshot->block_image().begin() + 4096));
+  CHECK(std::all_of(snapshot->block_image().begin() + 8192,
+                    snapshot->block_image().end(),
+                    [](uint8_t b) { return b == 0; }));
+  StfsScratch scratch;
+  auto device = OpenLogicalSnapshot(scratch.root / "empty", *snapshot);
+  CHECK_FALSE(static_cast<Device&>(*device).ResolvePath("missing"));
+}
+
+TEST_CASE(
+    "Logical STFS complete members preserve bytes metadata and deterministic "
+    "restart layout",
+    "[stfs][logical_snapshot][roundtrip]") {
+  // Synthetic UTC FILETIME fixture with an explicit creation value. This is
+  // not generic batch ctime or evidence of native filesystem acceptance.
+  filesystem::FileInfo actual{};
+  actual.create_timestamp = 132993639580000000ull;
+  actual.write_timestamp = actual.create_timestamp + 10000000ull;  // odd second
+  std::error_code metadata_error;
+  const auto encoded =
+      StfsSnapshotMetadata::FromFileInfo("payload", actual, metadata_error);
+  REQUIRE(encoded);
+  REQUIRE_FALSE(metadata_error);
+  CHECK(encoded->create_date == 0x54CA);
+  CHECK(encoded->create_time == 0x9DBD);
+  CHECK(encoded->modified_date == 0x54CA);
+  CHECK(encoded->modified_time == 0x9DBD);
+  actual.write_timestamp = 0;
+  CHECK_FALSE(
+      StfsSnapshotMetadata::FromFileInfo("payload", actual, metadata_error));
+  CHECK(metadata_error == std::errc::operation_not_supported);
+  LogicalSnapshotSource source;
+  std::vector<uint8_t> wanted(0x1001);
+  for (size_t i = 0; i < wanted.size(); ++i) wanted[i] = uint8_t(i * 17);
+  source.Add("Assets", {}, true);
+  source.Add("Assets/payload", wanted);
+  source.Add("empty", {});
+  source.Add("other", {0x92, 0, 0xFB});
+  std::error_code error;
+  const auto original =
+      StfsLogicalSnapshot::Build(source, source.metadata, error);
+  REQUIRE(original);
+  REQUIRE_FALSE(error);
+  // The real adapter's currentness check validates every physical byte. Its
+  // invocation count stays bounded independently of member count; repeated
+  // row checks would turn this one complete immutable capture quadratic.
+  CHECK(source.current_checks <= 2);
+  StfsScratch scratch;
+  auto device = OpenLogicalSnapshot(scratch.root / "nested", *original);
+  CHECK(ReadLogicalMember(*device, "Assets\\payload") == wanted);
+  CHECK(ReadLogicalMember(*device, "empty").empty());
+  CHECK(ReadLogicalMember(*device, "other") ==
+        (std::vector<uint8_t>{0x92, 0, 0xFB}));
+  auto* entry = static_cast<Device&>(*device).ResolvePath("Assets\\payload");
+  REQUIRE(entry);
+  CHECK(entry->create_timestamp() == decode_fat_timestamp(0x54CA, 0x9DBD));
+  CHECK(entry->write_timestamp() == decode_fat_timestamp(0x54CA, 0x9DBD));
+  // A fresh producer and different enumeration order reconstruct the SAME
+  // virtual map without rewriting or packing any source folder/library.
+  LogicalSnapshotSource restarted;
+  for (size_t i = source.rows.size(); i-- != 0;)
+    restarted.Add(source.rows[i].relative, source.data[i],
+                  source.rows[i].directory);
+  const auto same =
+      StfsLogicalSnapshot::Build(restarted, restarted.metadata, error);
+  REQUIRE(same);
+  REQUIRE_FALSE(error);
+  CHECK(same->descriptor() == original->descriptor());
+  CHECK(std::equal(same->block_image().begin(), same->block_image().end(),
+                   original->block_image().begin(),
+                   original->block_image().end()));
+  const auto saved = original->descriptor();
+  source.data[1][0] ^= 0x80;  // SAME length/name/date; actual bytes changed.
+  const auto changed =
+      StfsLogicalSnapshot::Build(source, source.metadata, error);
+  REQUIRE(changed);
+  REQUIRE_FALSE(error);
+  CHECK(changed->descriptor() != saved);
+  CHECK(original->descriptor() == saved);
+  auto changed_device = OpenLogicalSnapshot(scratch.root / "changed", *changed);
+  wanted[0] ^= 0x80;
+  CHECK(ReadLogicalMember(*changed_device, "Assets\\payload") == wanted);
+  // A real three-block directory chain also preserves parent ordinals across
+  // table boundaries; zero-size entries never gain fabricated payload bytes.
+  LogicalSnapshotSource many;
+  many.Add("Assets", {}, true);
+  for (unsigned i = 0; i < 129; ++i)
+    many.Add("Assets/file_" + std::to_string(i), {});
+  many.Add("Assets/last", {0xD2});
+  const auto tables = StfsLogicalSnapshot::Build(many, many.metadata, error);
+  REQUIRE(tables);
+  REQUIRE_FALSE(error);
+  StfsVolumeDescriptor table_descriptor{};
+  std::memcpy(&table_descriptor, tables->descriptor().data(),
+              sizeof(table_descriptor));
+  CHECK(table_descriptor.file_table_block_count == 3);
+  auto table_device = OpenLogicalSnapshot(scratch.root / "many", *tables);
+  CHECK(ReadLogicalMember(*table_device, "Assets\\file_0").empty());
+  CHECK(ReadLogicalMember(*table_device, "Assets\\file_128").empty());
+  CHECK(ReadLogicalMember(*table_device, "Assets\\last") ==
+        std::vector<uint8_t>{0xD2});
+}
+
+TEST_CASE(
+    "Logical STFS hash trees round trip exact full levels and their successors",
+    "[stfs][logical_snapshot][hash_boundary]") {
+  for (const uint32_t blocks : {170u, 171u, 28900u, 28901u}) {
+    DYNAMIC_SECTION("logical data blocks " << blocks) {
+      LogicalSnapshotSource source;
+      std::vector<uint8_t> wanted(size_t(blocks - 1) * 4096);
+      wanted.back() = 0xC1;
+      source.Add("payload", std::move(wanted));
+      std::error_code error;
+      const auto snapshot =
+          StfsLogicalSnapshot::Build(source, source.metadata, error);
+      REQUIRE(snapshot);
+      REQUIRE_FALSE(error);
+      StfsVolumeDescriptor descriptor{};
+      std::memcpy(&descriptor, snapshot->descriptor().data(),
+                  sizeof(descriptor));
+      REQUIRE(descriptor.total_block_count == blocks);
+      REQUIRE(descriptor.free_block_count == 0);
+      REQUIRE(descriptor.file_table_block_count == 1);
+      const uint64_t top = blocks <= 170 ? 0 : blocks <= 28900 ? 172 : 29242;
+      REQUIRE((top + 2) * 4096 <= snapshot->block_image().size());
+      std::array<uint8_t, 20> digest{};
+      REQUIRE(mbedtls_sha1(snapshot->block_image().data() + top * 4096, 4096,
+                           digest.data()) == 0);
+      CHECK(std::equal(digest.begin(), digest.end(),
+                       descriptor.top_hash_table_hash));
+      // Scalar golden roots were independently derived from the native wire
+      // fields, fixed zero/data hashes, and the exact 170/28900 tree geometry.
+      // The host parser below is structural; this also checks real hash bytes,
+      // rather than merely hashing the producer's own returned root again.
+      const std::map<uint32_t, std::array<uint8_t, 20>> golden{
+          {170, {0x3f, 0xcd, 0x3f, 0xa0, 0x8f, 0xa8, 0xa9, 0x58, 0x0c, 0x57,
+                 0x88, 0xfb, 0xd5, 0x5d, 0x6c, 0x1c, 0xd1, 0x08, 0xfe, 0x59}},
+          {171, {0x60, 0xef, 0x76, 0x06, 0x6f, 0x36, 0x46, 0x36, 0xcf, 0x5a,
+                 0xe9, 0x14, 0x0a, 0x26, 0x0f, 0xb6, 0x14, 0xa9, 0x3e, 0x9f}},
+          {28900, {0x47, 0x09, 0x62, 0x11, 0x2d, 0x74, 0x16, 0xb7, 0x6a, 0xea,
+                   0xb6, 0x1e, 0xf2, 0xad, 0xcf, 0xed, 0xde, 0x06, 0x49, 0xd3}},
+          {28901,
+           {0xd7, 0xf3, 0x36, 0xf0, 0xec, 0x4b, 0x45, 0xcb, 0x2f, 0x83,
+            0x0f, 0x66, 0xc6, 0xf2, 0xc5, 0xe0, 0xe2, 0x0b, 0xec, 0x72}}};
+      CHECK(std::equal(golden.at(blocks).begin(), golden.at(blocks).end(),
+                       descriptor.top_hash_table_hash));
+      // Independent first data-block hash proves directory bytes participate,
+      // and both physical resiliency copies contain the same real table.
+      REQUIRE(mbedtls_sha1(snapshot->block_image().data() + 8192, 4096,
+                           digest.data()) == 0);
+      CHECK(std::equal(digest.begin(), digest.end(),
+                       snapshot->block_image().begin()));
+      CHECK(std::equal(snapshot->block_image().begin(),
+                       snapshot->block_image().begin() + 4096,
+                       snapshot->block_image().begin() + 4096));
+      StfsScratch scratch;
+      auto device = OpenLogicalSnapshot(scratch.root / "boundary", *snapshot);
+      auto* entry = static_cast<Device&>(*device).ResolvePath("payload");
+      REQUIRE(entry);
+      File* raw = nullptr;
+      REQUIRE(entry->Open(filesystem::FileAccess::kFileReadData, &raw) ==
+              X_STATUS_SUCCESS);
+      std::unique_ptr<File, void (*)(File*)> file(
+          raw, [](File* f) { f->Destroy(); });
+      std::array<uint8_t, 16> last{};
+      size_t count = 0;
+      REQUIRE(file->ReadSync(last, entry->size() - last.size(), &count) ==
+              X_STATUS_SUCCESS);
+      CHECK(count == last.size());
+      CHECK(last.back() == 0xC1);
+      CHECK(std::all_of(last.begin(), last.end() - 1,
+                        [](uint8_t b) { return b == 0; }));
+    }
+  }
+}
+
+TEST_CASE(
+    "Logical STFS refuses incomplete sources and unsupported layouts without "
+    "output",
+    "[stfs][logical_snapshot][refusal]") {
+  LogicalSnapshotSource source;
+  source.Add("payload", {1, 0, 0xFF});
+  std::error_code error;
+  const auto old = StfsLogicalSnapshot::Build(source, source.metadata, error);
+  REQUIRE(old);
+  REQUIRE_FALSE(error);
+  const auto unchanged = old->descriptor();
+  std::errc expected = std::errc::operation_not_supported;
+  SECTION("short real source read") {
+    source.short_read = true;
+    expected = std::errc::io_error;
+  }
+  SECTION("source error after copied prefix") {
+    source.read_error = true;
+    expected = std::errc::io_error;
+  }
+  SECTION("source is already stale before any member read") {
+    source.stale_before_read = true;
+    expected = std::errc::state_not_recoverable;
+  }
+  SECTION("source becomes stale during complete capture") {
+    source.reads = 0;
+    source.change_after_read = true;
+    expected = std::errc::state_not_recoverable;
+  }
+  SECTION("missing parent is not fabricated") {
+    source.rows[0].relative = "missing/child";
+    source.metadata[0].relative = "missing/child";
+    expected = std::errc::invalid_argument;
+  }
+  SECTION("case-colliding members are not collapsed") {
+    source.Add("PAYLOAD", {9});
+    expected = std::errc::file_exists;
+  }
+  SECTION("overlong native leaf is not truncated") {
+    source.rows[0].relative = std::string(41, 'x');
+    source.metadata[0].relative = source.rows[0].relative;
+  }
+  SECTION("POSIX UTF8 is not mislabeled as Win1252") {
+    source.rows[0].relative = "name_\xC3\xA9";
+    source.metadata[0].relative = source.rows[0].relative;
+  }
+  SECTION("directory payload is not silently discarded") {
+    source.rows[0].directory = true;
+  }
+  SECTION("missing metadata is not manufactured") { source.metadata.clear(); }
+  SECTION("member capacity refuses before source reads") {
+    for (size_t i = 0; i < StfsLogicalSnapshot::kMaximumMembers; ++i)
+      source.Add("file_" + std::to_string(i), {});
+  }
+  SECTION("metadata must belong to the actual same member") {
+    source.metadata[0].relative = "other";
+  }
+  SECTION(
+      "bounded host snapshot refuses larger content before allocation or "
+      "reads") {
+    source.rows[0].size = StfsLogicalSnapshot::kMaximumPayloadBytes + 1;
+    expected = std::errc::file_too_large;
+  }
+  const auto reads_before_attempt = source.reads;
+  const auto failed =
+      StfsLogicalSnapshot::Build(source, source.metadata, error);
+  if (source.stale_before_read) CHECK(source.reads == reads_before_attempt);
+  CHECK_FALSE(failed);
+  CHECK(error == expected);
+  CHECK(old->descriptor() == unchanged);
+}
 } // namespace xe::vfs::test

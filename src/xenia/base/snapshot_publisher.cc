@@ -316,6 +316,16 @@ std::unique_ptr<PreparedSnapshotPublication> SnapshotPublisher::PrepareInternal(
 }
 SnapshotPublicationReceipt SnapshotPublisher::Commit(
     PreparedSnapshotPublication& prepared, const std::atomic<bool>* canceled) {
+  return CommitInternal(prepared, canceled, nullptr);
+}
+SnapshotPublicationReceipt SnapshotPublisher::CommitWithSnapshotGuard(
+    PreparedSnapshotPublication& prepared, const HostStorageSnapshotBatch& guard,
+    const std::atomic<bool>* canceled) {
+  return CommitInternal(prepared, canceled, &guard);
+}
+SnapshotPublicationReceipt SnapshotPublisher::CommitInternal(
+    PreparedSnapshotPublication& prepared, const std::atomic<bool>* canceled,
+    const HostStorageSnapshotBatch* guard) {
   auto& receipt = prepared.receipt_;
   if (prepared.consumed_) {
     auto refused = receipt;
@@ -335,7 +345,7 @@ SnapshotPublicationReceipt SnapshotPublisher::Commit(
   receipt.phase = SnapshotPublicationPhase::kCompareAndPublish;
   const auto result = receipt.expected->root()->CompareAndPublishSnapshotInternal(
       *receipt.expected, *prepared.stage_, prepared.intended_, prepared.recovery_,
-      prepared.purpose_);
+      prepared.purpose_, guard);
   receipt.error = result.error;
   receipt.published = result.published;
   receipt.durable = result.durable;

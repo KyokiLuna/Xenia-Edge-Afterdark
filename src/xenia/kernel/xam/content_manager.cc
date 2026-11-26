@@ -4290,12 +4290,19 @@ struct ContentManager::ContentFlush final {
   std::filesystem::path header;
   object_ref<XEvent> event;
   std::atomic<uint64_t> remaining{0};
-  std::vector<std::shared_ptr<util::IoBatchArrival>> file_arrivals;
+  std::shared_ptr<XFileIoCheckpoint> checkpoint;
+  std::shared_ptr<util::IoBatchArrival> drain_arrival;
   std::atomic<X_STATUS> first_error{X_STATUS_SUCCESS};
   std::atomic<X_RESULT> result{X_ERROR_IO_PENDING};
   std::atomic<bool> done{false};
   void Finish(bool dropped, X_STATUS unstarted_failure = X_STATUS_SUCCESS) {
     X_STATUS status = first_error.load(std::memory_order_acquire);
+    if (XSUCCEEDED(status) && checkpoint) {
+      status = checkpoint->Status();
+    }
+    if (status == X_STATUS_PENDING) {
+      status = X_STATUS(0xC00000E8);
+    }
     if (XSUCCEEDED(status) && XFAILED(unstarted_failure)) { status = unstarted_failure; }
     if (dropped && XSUCCEEDED(status)) { status = X_STATUS_CANCELLED; }
     X_RESULT output;
@@ -4318,6 +4325,13 @@ struct ContentManager::ContentFlush final {
     // Release this operation's filesystem pins BEFORE touching guest event
     // metadata. Existing file handles/queue runners retain their own refs and
     // actual format drain still checks those separately.
+    // A successful real fsync may acknowledge only its captured successful IO
+    // generations; earlier failures/newer work remain independently recorded.
+    if (output == X_ERROR_SUCCESS && checkpoint &&
+        !checkpoint->AcknowledgeSuccessful()) {
+      output = X_ERROR_BUSY;
+    }
+    checkpoint.reset();
     reservation.reset(); owner.reset(); mount.reset();
     result.store(output, std::memory_order_relaxed);
     done.store(true, std::memory_order_release);
@@ -4384,7 +4398,7 @@ X_RESULT ContentManager::FlushContent(std::string_view root_name) {
   std::error_code error;
   auto reservation = owner->BeginFlush(relative, error);
   if (!reservation) { return ContentMutationError(error); }
-  std::vector<object_ref<XFile>> files;
+  std::shared_ptr<XFileIoCheckpoint> checkpoint;
   std::shared_ptr<filesystem::HostStorageRoot> mount;
   {
     auto lock = global_critical_region_.Acquire();
@@ -4396,20 +4410,19 @@ X_RESULT ContentManager::FlushContent(std::string_view root_name) {
     const auto* owned = dynamic_cast<vfs::HostPathDevice*>(device.get());
     if (!owned || !owned->storage()) { return X_ERROR_NOT_SUPPORTED; }
     mount = owned->storage();
-    // Close cooperating new opens BEFORE this snapshot. Include existing
-    // retained folder aliases/child mounts rather than only a root-name ID.
-    for (auto& file : kernel_state_->object_table()->GetObjectsByType<XFile>(XObject::Type::File)) {
-      const auto retained = file->file()->retained_device();
-      const auto* host = dynamic_cast<vfs::HostPathDevice*>(retained.get());
-      if (!host || !host->storage() || host->storage()->retiring()) { continue; }
-      const auto* entry = dynamic_cast<vfs::HostPathEntry*>(file->entry());
-      if (!entry) { continue; }
-      const auto suffix = entry->host_path().lexically_relative(package_path);
-      if (!suffix.empty() && !suffix.is_absolute() && *suffix.begin() != "..") {
-        if (files.size() == 4096) { return X_ERROR_BUSY; }
-        files.push_back(file);
-      }
-    }
+  }
+  // Handles are not File lifetime: a PostIo runner can still own the exact
+  // File after the final handle slot was removed. Retain that real owner too.
+  X_STATUS capture_status = X_STATUS_UNSUCCESSFUL;
+  const auto captured_io = InvokeHostCall([&] {
+    checkpoint =
+        XFile::CaptureIoCheckpoint(*kernel_state_, *mount, capture_status);
+  });
+  if (captured_io != HostCallOutcome::kReturned || !checkpoint) {
+    return xboxkrnl::xeRtlNtStatusToDosError(
+        captured_io == HostCallOutcome::kReturned
+            ? capture_status
+            : HostCallFailureStatus(captured_io));
   }
   std::shared_ptr<ContentFlush> state;
   uint64_t serial = 0;
@@ -4418,14 +4431,12 @@ X_RESULT ContentManager::FlushContent(std::string_view root_name) {
     state->owner = std::move(owner); state->reservation = std::move(reservation);
     state->mount = std::move(mount);
     state->header = header->lexically_relative(captured->storage->path());
-    state->file_arrivals.reserve(files.size());
-    for (size_t i = 0; i < files.size(); ++i) {
-      state->file_arrivals.push_back(std::make_shared<util::IoBatchArrival>());
-    }
+    state->checkpoint = checkpoint;
+    state->drain_arrival = std::make_shared<util::IoBatchArrival>();
     state->event = object_ref<XEvent>(new XEvent(kernel_state_, true));
     state->event->Initialize(false, false);
     state->event->set_signal_ring_quiet(true);
-    state->remaining.store(files.size(), std::memory_order_relaxed);
+    state->remaining.store(1, std::memory_order_relaxed);
     std::lock_guard lock(content_flush_mutex_);
     if (content_flushes_.size() < 64 && next_content_flush_) {
       const auto candidate = next_content_flush_++;
@@ -4438,31 +4449,20 @@ X_RESULT ContentManager::FlushContent(std::string_view root_name) {
     return prepared == HostCallOutcome::kReturned ? X_ERROR_BUSY :
         xboxkrnl::xeRtlNtStatusToDosError(X_STATUS_INSUFFICIENT_RESOURCES);
   }
-  if (files.empty()) {
-    bool accepted = false;
-    const auto submitted = InvokeHostCall([&] {
-      accepted = kernel_state_->guest_scheduler()->PostHostCall(
-          [state] { state->Finish(false); }, GuestScheduler::BlockingCallClass::kConcurrent,
-          [state](GuestScheduler::HostCallDropReason) { state->Finish(true); });
-    });
-    if (submitted != HostCallOutcome::kReturned || !accepted) {
-      state->Finish(false, X_STATUS_INSUFFICIENT_RESOURCES);
-    }
-  } else {
-    for (size_t i = 0; i < files.size(); ++i) {
-      const auto arrival = state->file_arrivals[i];
-      const auto arrive = [state, arrival](X_STATUS result) {
-        arrival->CompleteOnce(result, [state](X_STATUS actual) { state->Arrive(actual); });
-      };
-      // Includes the caller-side callable conversion before FlushQueued entry.
-      // Every outcome shares this exact item's once-only arrival receipt.
-      util::SubmitIoBatchItem([&] { return files[i]->FlushQueued(arrive); }, arrive);
-    }
-  }
+  // The same real per-file FIFO/FD barrier feeds the existing owned host
+  // FlushTree/Header operation. No host worker waits for another worker.
+  const auto arrive = [state, arrival = state->drain_arrival](X_STATUS result) {
+    arrival->CompleteOnce(result,
+                          [state](X_STATUS actual) { state->Arrive(actual); });
+  };
+  util::SubmitIoBatchItem([&] { return checkpoint->Drain(arrive); }, arrive);
   auto* waiting = state.get();
   // Authority-bearing locals must be empty before a guest-fiber wait. Kernel
   // shutdown may reclaim an abandoned fiber without C++ stack unwinding.
-  files.clear(); captured.reset(); current.reset(); device.reset();
+  checkpoint.reset();
+  captured.reset();
+  current.reset();
+  device.reset();
   owner.reset(); reservation.reset(); mount.reset(); state.reset();
   while (!waiting->done.load(std::memory_order_acquire)) {
     // Same noninterruptible request discipline as KernelState::RunBlockingIo.

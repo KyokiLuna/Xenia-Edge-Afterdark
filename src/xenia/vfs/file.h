@@ -10,6 +10,7 @@
 #ifndef XENIA_VFS_FILE_H_
 #define XENIA_VFS_FILE_H_
 
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -37,6 +38,14 @@ X_STATUS RoundFileAllocationSize(uint64_t native_bytes, uint64_t guest_unit,
 
 class File {
  public:
+  struct CheckpointCloseObservation {
+    std::atomic<X_STATUS> data_status{X_STATUS_UNSUCCESSFUL};
+  };
+  // Issued only for this actual File before publication. Backend reports its
+  // factual close DATA outcome; this is neither fsync nor namespace/native
+  // reference/transaction completion. Default unknown stays a failed close.
+  virtual void ObserveCheckpointClose(std::shared_ptr<CheckpointCloseObservation>) {}
+
   struct Information {
     uint64_t create_timestamp = 0, access_timestamp = 0, write_timestamp = 0;
     uint64_t change_timestamp = 0, allocation_size = 0, end_of_file = 0;
@@ -96,6 +105,11 @@ class File {
     return X_STATUS_NOT_SUPPORTED;
   }
   virtual X_STATUS SetLength(size_t length) { return X_STATUS_NOT_IMPLEMENTED; }
+  // Allocation requests must reach the retained backend even when they do not
+  // shrink EOF. A managed immutable view can reject them independently of the
+  // genuine requested RW handle bits. The default preserves the legacy regular
+  // file behavior (shrink EOF, otherwise no reservation/change is performed).
+  virtual X_STATUS SetAllocationSize(uint64_t length);
   // Unsupported backends must never imply that host data reached storage.
   virtual X_STATUS Flush() { return X_STATUS_NOT_SUPPORTED; }
   // A retained file advertises a fixed, bounded control packet before the

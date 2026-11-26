@@ -22,6 +22,12 @@ X_STATUS RoundFileAllocationSize(uint64_t native_bytes, uint64_t guest_unit,
   *output = native_bytes + padding;
   return X_STATUS_SUCCESS;
 }
+X_STATUS File::SetAllocationSize(uint64_t length) {
+  if(length>std::numeric_limits<size_t>::max())return X_STATUS(0xC0000095);
+  Information actual{};const auto status=QueryInformation(&actual);
+  if(XFAILED(status))return status;
+  return length<actual.end_of_file ? SetLength(size_t(length)) : X_STATUS_SUCCESS;
+}
 X_STATUS File::QueryInformation(Information* output) const {
   if (!output) return X_STATUS_INVALID_PARAMETER;
   auto lock = global_critical_region::AcquireDirect();

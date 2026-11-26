@@ -12,9 +12,11 @@ namespace xe::kernel {
 class KernelState;
 class XThread;
 class NativeProfileIdentityOwner;
+class NativeProfileSaveOwner;
+class NativeProfileSavePublication;
 class NativeSystemUiService;
 namespace xam {
-namespace test { class ProfileSettingsReadTestAccess; }
+namespace test { class ProfileSettingsReadTestAccess; class NativeProfileSaveWriterTestAccess; }
 class ProfileManager;
 struct ProfileRosterAuthority;
 class UserProfile;
@@ -24,6 +26,10 @@ class ProfileRosterNativeCompletion;
 class ProfileRosterNativeBinding;
 class ProfileRosterNativeReadTicket;
 class ProfileRosterNativeReadScope;
+class ProfileRosterNativeWriter;
+struct ProfileGpdWriter;
+struct ProfileGpdMutationOrigin;
+struct ProfileGpdReadCapture;
 
 struct ProfileRosterSlot final {
   uint64_t xuid = 0, sign_in_generation = 0;
@@ -172,6 +178,43 @@ class ProfileRosterNativeBinding final {
   struct State;
   explicit ProfileRosterNativeBinding(std::shared_ptr<State>);
   std::shared_ptr<State> state_; // metadata/weak actual-owner target only
+};
+// Distinct bounded native SAVE writer/source admission. It is never obtained
+// from a read ticket or generic Task ancestry. The concrete native owner first
+// authenticates its actual request plus real selected-profile getter/row, then
+// supplies that exact current/following roster and genuine operation here.
+// The token itself performs no write; the existing stamped model Begin remains
+// the one mutation admission. Native owner retains it through original request,
+// managed IO, durable/model publication and real own-return or factual stop.
+class ProfileRosterNativeWriter final {
+ public:
+  ~ProfileRosterNativeWriter();
+  ProfileRosterNativeWriter(const ProfileRosterNativeWriter&) = delete;
+ private:
+  friend class ::xe::kernel::NativeProfileSaveOwner;
+  friend class ::xe::kernel::NativeProfileSavePublication;
+  friend class test::NativeProfileSaveWriterTestAccess;
+  friend class ::xe::kernel::NativeProfileIdentityOwner;
+  // Owner timeline values are candidates only. Read the actual PM selector,
+  // then require its exact retained envelope to belong to those candidates.
+  static std::shared_ptr<ProfileRosterNativeWriter> CaptureFromActualGetter(
+      ProfileManager&, const std::shared_ptr<const HostRoster>& candidate_current,
+      const std::shared_ptr<ProfileRosterIntent>& exact_active_intent,
+      uint8_t user_slot, uint64_t actual_profile_xuid, std::error_code&);
+  static std::shared_ptr<ProfileRosterNativeWriter> CaptureFromActualSelectedRow(
+      ProfileManager&, const std::shared_ptr<const HostRoster>& actual_selected,
+      const std::shared_ptr<ProfileRosterIntent>& actual_job, uint8_t user_slot,
+      uint64_t actual_profile_xuid, std::error_code&);
+  // Metadata/source selection plus original model version, not IO authority.
+  // A token goes stale after its own successful model publication too; retain
+  // it for real cleanup rather than rebinding it to a fresh same-XUID model.
+  bool Current(std::error_code&) const;
+  const ProfileGpdWriter& writer() const;
+  const ProfileGpdMutationOrigin& origin() const;
+  const ProfileGpdReadCapture& before() const;
+  struct State;
+  explicit ProfileRosterNativeWriter(std::shared_ptr<State>);
+  std::shared_ptr<State> state_;
 };
 class ProfileRosterNativeReadTicket final {
  private:

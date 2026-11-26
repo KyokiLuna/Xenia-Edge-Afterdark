@@ -751,10 +751,17 @@ std::shared_ptr<const ProfileGpdTitleData> ProfileGpdTitleData::Capture(
 ProfileGpdPendingMutation::ProfileGpdPendingMutation(
     ProfileGpdMutationOrigin origin, ProfileGpdMutation command,
     std::shared_ptr<const std::map<uint32_t, GpdSnapshotLoad>> baselines,
-    std::shared_ptr<const ProfileGpdPictureSnapshots> pictures)
+    std::shared_ptr<const ProfileGpdPictureSnapshots> pictures,
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> native_owner,
+    std::shared_ptr<const ProfileGpdModelPlan> native_base_plan)
     : origin_(std::move(origin)),
       command_(std::move(command)),
-      baselines_(std::move(baselines)), pictures_before_(std::move(pictures)) {}
+      baselines_(std::move(baselines)), pictures_before_(std::move(pictures)),
+      native_issued_(bool(native_owner)), native_owner_(std::move(native_owner)),plan_(std::move(native_base_plan)) {}
+bool ProfileGpdPendingMutation::NativeOwnedBy(
+    const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>& owner) const {
+  return native_issued_ && owner && native_owner_.lock() == owner;
+}
 bool ProfileGpdPendingMutation::Matches(
     const ProfileGpdMutation &command) const {
   return SameCommand(command_, command);
@@ -791,7 +798,7 @@ std::shared_ptr<const ProfileGpdModelPlan> ProfileGpdPendingMutation::BuildPlan(
     }
     plan_ = std::move(made);
   }
-  return plan_;
+  return native_plan_ ? native_plan_ : plan_;
 }
 ProfileGpdModelAuthority::ProfileGpdModelAuthority(
     uint64_t xuid, uint32_t slot, uint64_t generation,
@@ -972,8 +979,26 @@ std::error_code ProfileGpdModelAuthority::InstallLoaded(
 std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::Begin(
     ProfileGpdMutation command, bool& retry, std::error_code& error,
     std::optional<ProfileGpdModelStamp> required_stamp) {
+  return BeginImpl(std::move(command), retry, error, required_stamp, {});
+}
+std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::BeginNative(
+    ProfileGpdMutation command, bool& retry, std::error_code& error,
+    ProfileGpdModelStamp required_stamp,
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> owner,
+    std::shared_ptr<const ProfileGpdModelPlan> native_base_plan) {
+  if (!owner) { error = Error(std::errc::invalid_argument); retry = false; return {}; }
+  return BeginImpl(std::move(command), retry, error, required_stamp, std::move(owner),std::move(native_base_plan));
+}
+std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::BeginImpl(
+    ProfileGpdMutation command, bool& retry, std::error_code& error,
+    std::optional<ProfileGpdModelStamp> required_stamp,
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> native_owner,
+    std::shared_ptr<const ProfileGpdModelPlan> native_base_plan) {
   error.clear();
   retry = false;
+  if(native_base_plan && (!native_owner || command.kind!=ProfileGpdMutationKind::kFlush)) {
+    error=Error(std::errc::invalid_argument);return {};
+  }
   if (storage_->retiring()) {
     error = Error(std::errc::operation_canceled);
     return {};
@@ -1048,7 +1073,9 @@ std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::Begin(
     return {};
   }
   if (pending_) {
-    if (SameCommand(pending_->command(), command)) {
+    if (pending_->native_issued() == bool(native_owner) &&
+        (!native_owner || pending_->NativeOwnedBy(native_owner)) &&
+        SameCommand(pending_->command(), command)) {
       retry = true;
       return pending_;
     }
@@ -1059,6 +1086,20 @@ std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::Begin(
     error = Error(std::errc::operation_would_block);
     return {};
   }
+  if(native_base_plan) {
+    if(native_base_plan->files.size()!=baselines_->size() || !native_base_plan->pictures.empty() ||
+        native_base_plan->native_artifacts || native_base_plan->package_header) {
+      error=Error(std::errc::invalid_argument);return {};
+    }
+    for(const auto& [title,load]:*baselines_) {
+      const auto found=native_base_plan->files.find(title);
+      if(found==native_base_plan->files.end() || found->second.before.token!=load.token ||
+          found->second.action!=ProfileGpdFileAction::kUnchanged || !found->second.intended.empty()) {
+        error=Error(std::errc::invalid_argument);return {};
+      }
+    }
+  }
+  if(file_read_epoch_==UINT64_MAX){error=Error(std::errc::value_too_large);return {};}
   ProfileGpdMutationOrigin origin{xuid_,
                                   slot_,
                                   {sign_in_generation_, version_},
@@ -1066,7 +1107,9 @@ std::shared_ptr<ProfileGpdPendingMutation> ProfileGpdModelAuthority::Begin(
                                   weak_from_this()};
   pending_ =
       std::shared_ptr<ProfileGpdPendingMutation>(new ProfileGpdPendingMutation(
-          std::move(origin), std::move(command), baselines_, pictures_));
+          std::move(origin), std::move(command), baselines_, pictures_, std::move(native_owner),std::move(native_base_plan)));
+  native_cache_checkpoint_=false;
+  ++file_read_epoch_; // Successful new pending admission, including native-owned commands.
   return pending_;
 }
 std::optional<ProfileGpdMutationOrigin> ProfileGpdModelAuthority::CaptureOrigin(
@@ -1100,7 +1143,16 @@ ProfileGpdModelAuthority::Pending(std::error_code& error) const {
 bool ProfileGpdModelAuthority::IsCurrent(
     const ProfileGpdMutationOrigin& origin) const {
   std::unique_lock lock(mutex_, std::try_to_lock);
-  return lock.owns_lock() && !retired_.load(std::memory_order_acquire) &&
+  return lock.owns_lock() && IsCurrentLocked(origin);
+}
+bool ProfileGpdModelAuthority::IsCommittedFileReadCurrent(
+    const ProfileGpdReadCapture& capture) const {
+  std::unique_lock lock(mutex_,std::try_to_lock);
+  return lock.owns_lock() && !pending_ && capture.file_read_epoch==file_read_epoch_ && IsCurrentLocked(capture.origin);
+}
+bool ProfileGpdModelAuthority::IsCurrentLocked(
+    const ProfileGpdMutationOrigin& origin) const {
+  return !retired_.load(std::memory_order_acquire) &&
          origin.xuid == xuid_ && !storage_->retiring() &&
          origin.owner.lock().get() == this && origin.user_slot == slot_ &&
          origin.storage == storage_ &&
@@ -1187,6 +1239,14 @@ ProfileGpdModelAuthority::CaptureLoads(std::error_code& error) const {
 }
 std::optional<ProfileGpdReadCapture> ProfileGpdModelAuthority::CaptureRead(
     std::error_code& error) const {
+  return CaptureReadImpl(error,false);
+}
+std::optional<ProfileGpdReadCapture> ProfileGpdModelAuthority::CaptureCommittedFileRead(
+    std::error_code& error) const {
+  return CaptureReadImpl(error,true);
+}
+std::optional<ProfileGpdReadCapture> ProfileGpdModelAuthority::CaptureReadImpl(
+    std::error_code& error,bool committed_file) const {
   error.clear();
   std::unique_lock lock(mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
@@ -1197,7 +1257,11 @@ std::optional<ProfileGpdReadCapture> ProfileGpdModelAuthority::CaptureRead(
     error = Error(std::errc::operation_canceled);
     return {};
   }
+  if(committed_file && pending_) {
+    error=Error(std::errc::device_or_resource_busy);return {};
+  }
   ProfileGpdReadCapture out;
+  out.file_read_epoch=file_read_epoch_;
   out.origin = {xuid_,
                 slot_,
                 {sign_in_generation_, version_},
@@ -1237,6 +1301,22 @@ ProfileGpdModelAuthority::AcquireTransaction(
     std::shared_ptr<const filesystem::ProfileIntentOwner> owner,
     std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery,
     std::error_code& error, std::shared_ptr<filesystem::ContentMutationOwner> metadata) {
+  return AcquireTransactionImpl(std::move(owner), std::move(recovery), error,
+                                std::move(metadata), {});
+}
+std::shared_ptr<ProfileGpdTransaction> ProfileGpdModelAuthority::AcquireNativeTransaction(
+    std::shared_ptr<const filesystem::ProfileIntentOwner> owner,
+    std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery,
+    std::error_code& error, std::shared_ptr<filesystem::ContentMutationOwner> metadata,
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> native_owner) {
+  return AcquireTransactionImpl(std::move(owner), std::move(recovery), error,
+                                std::move(metadata), std::move(native_owner));
+}
+std::shared_ptr<ProfileGpdTransaction> ProfileGpdModelAuthority::AcquireTransactionImpl(
+    std::shared_ptr<const filesystem::ProfileIntentOwner> owner,
+    std::shared_ptr<const filesystem::SnapshotRecoveryOwner> recovery,
+    std::error_code& error, std::shared_ptr<filesystem::ContentMutationOwner> metadata,
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> native_owner) {
   error.clear();
   std::unique_lock lock(mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
@@ -1251,13 +1331,98 @@ ProfileGpdModelAuthority::AcquireTransaction(
     error = Error(std::errc::invalid_argument);
     return {};
   }
-  if (pending_transaction_) {
-    return pending_transaction_;
+  if (pending_->native_issued() && (!pending_->NativeOwnedBy(native_owner) || !pending_->native_plan_)) {
+    error = Error(std::errc::device_or_resource_busy); return {};
   }
-  pending_transaction_ = ProfileGpdTransaction::Create(
+  if (native_owner && !pending_->NativeOwnedBy(native_owner)) {
+    error = Error(std::errc::operation_canceled); return {};
+  }
+  if (pending_transaction_) { return pending_transaction_; }
+  pending_transaction_ = ProfileGpdTransaction::CreateImpl(
       shared_from_this(), pending_, std::move(owner), std::move(recovery),
-      error, std::move(metadata));  // Metadata only, before IO.
+      error, std::move(metadata), std::move(native_owner));  // Metadata only, before IO.
   return pending_transaction_;
+}
+std::error_code ProfileGpdModelAuthority::AdoptNativePlan(
+    const std::shared_ptr<ProfileGpdPendingMutation>& pending,
+    const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>& owner,
+    std::shared_ptr<const ProfileGpdModelPlan> plan) {
+  if (!pending || !owner || !plan) { return Error(std::errc::invalid_argument); }
+  std::unique_lock lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) { return Error(std::errc::device_or_resource_busy); }
+  if (pending_ != pending || !pending->NativeOwnedBy(owner) || retired_.load() ||
+      storage_->retiring() || pending->origin().stamp.model_version != version_) {
+    return Error(std::errc::operation_canceled);
+  }
+  if (pending_transaction_ || pending->native_plan_) { return Error(std::errc::device_or_resource_busy); }
+  if (plan->native_artifacts && (!plan->native_artifacts->members() ||
+      plan->native_artifacts->members()->base() != storage_->view()))
+    return Error(std::errc::invalid_argument);
+  if (plan->package_header && (!plan->native_artifacts || !plan->native_artifacts->header() ||
+      plan->package_header->kind != filesystem::ProfileArtifactKind::kPackageHeader ||
+      plan->package_header->title_id ||
+      (plan->package_header->action != filesystem::ProfileArtifactAction::kObserve &&
+       plan->package_header->action != filesystem::ProfileArtifactAction::kReplace)))
+    return Error(std::errc::invalid_argument);
+  if (plan->native_artifacts && bool(plan->native_artifacts->header()) != bool(plan->package_header))
+    return Error(std::errc::invalid_argument);
+  std::unique_lock pending_lock(pending->mutex_, std::try_to_lock);
+  if (!pending_lock.owns_lock()) { return Error(std::errc::device_or_resource_busy); }
+  pending->native_plan_ = std::move(plan);
+  return {};
+}
+std::error_code ProfileGpdModelAuthority::CancelUnpublishedNative(
+    const std::shared_ptr<ProfileGpdPendingMutation>& pending,
+    const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>& owner,
+    const ProfileGpdTransaction* exact_unpublished_transaction) {
+  // Only the concrete native owner calls after genuine request/DB/IO quiescence.
+  // No destructor, expired weak owner or host flush invents cancellation.
+  std::shared_ptr<ProfileGpdPendingMutation> dropped;
+  std::shared_ptr<ProfileGpdTransaction> dropped_transaction;
+  std::unique_lock lock(mutex_, std::try_to_lock);
+  if (!lock.owns_lock()) { return Error(std::errc::device_or_resource_busy); }
+  if (!pending || pending_ != pending || !pending->NativeOwnedBy(owner)) {
+    return Error(std::errc::operation_canceled);
+  }
+  if (pending_transaction_.get() != exact_unpublished_transaction) {
+    return Error(std::errc::device_or_resource_busy);
+  }
+  native_cache_checkpoint_=false;
+  dropped = std::move(pending_);
+  dropped_transaction = std::move(pending_transaction_);
+  lock.unlock();
+  return {};
+}
+std::error_code ProfileGpdModelAuthority::RequireNativeCacheCheckpoint(
+    const std::shared_ptr<ProfileGpdPendingMutation>& pending,
+    const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>& owner) {
+  std::unique_lock lock(mutex_,std::try_to_lock);
+  if(!lock.owns_lock())return Error(std::errc::device_or_resource_busy);
+  if(!pending || pending_!=pending || !pending->NativeOwnedBy(owner) ||
+      !IsCurrentLocked(pending->origin()))return Error(std::errc::operation_canceled);
+  native_cache_checkpoint_=true;return {};
+}
+std::unique_ptr<ProfileGpdModelAuthority::NativeCacheCheckpointGuard>
+ProfileGpdModelAuthority::PrepareNativeCacheCheckpoint(
+    const std::shared_ptr<ProfileGpdPendingMutation>& pending,
+    const std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication>& owner,
+    const ProfileGpdTransaction* transaction,std::error_code& error) {
+  error.clear();std::unique_lock lock(mutex_,std::try_to_lock);
+  if(!lock.owns_lock()){error=Error(std::errc::device_or_resource_busy);return {};}
+  if(!native_cache_checkpoint_ || !pending || pending_!=pending ||
+      !pending->NativeOwnedBy(owner) || !transaction || pending_transaction_.get()!=transaction ||
+      pending->origin().stamp.model_version==UINT64_MAX ||
+      version_!=pending->origin().stamp.model_version+1){error=Error(std::errc::operation_canceled);return {};}
+  // Prepare every fallible admission BEFORE the actual cached File swap.
+  // Exact OLD cleanup grants no permission against a replacement generation.
+  return std::unique_ptr<NativeCacheCheckpointGuard>(new NativeCacheCheckpointGuard(shared_from_this(),std::move(lock)));
+}
+void ProfileGpdModelAuthority::NativeCacheCheckpointGuard::Apply() noexcept {
+  if(applied_)return;
+  owner_->native_cache_checkpoint_=false;
+  dropped_pending_=std::move(owner_->pending_);
+  dropped_transaction_=std::move(owner_->pending_transaction_);
+  applied_=true;
 }
 void ProfileGpdModelAuthority::DiscardUnpublished(
     const std::shared_ptr<ProfileGpdPendingMutation>& pending,
@@ -1266,6 +1431,7 @@ void ProfileGpdModelAuthority::DiscardUnpublished(
   if (lock.owns_lock() && pending_ == pending &&
       pending_transaction_.get() == transaction &&
       pending->origin().stamp.model_version == version_) {
+    native_cache_checkpoint_=false;
     pending_.reset();
     pending_transaction_.reset();
   }
@@ -1292,7 +1458,19 @@ ProfileGpdModelAuthority::PrepareCommit(
     std::shared_ptr<ProfileGpdPendingMutation> pending,
     std::map<uint32_t, GpdSnapshotLoad> current, std::error_code& error,
     std::shared_ptr<const ProfileGpdPictureSnapshots> pictures) {
+  return PrepareCommitImpl(std::move(pending), std::move(current), error,
+                           std::move(pictures), {});
+}
+std::unique_ptr<ProfileGpdModelAuthority::PreparedCommit>
+ProfileGpdModelAuthority::PrepareCommitImpl(
+    std::shared_ptr<ProfileGpdPendingMutation> pending,
+    std::map<uint32_t, GpdSnapshotLoad> current, std::error_code& error,
+    std::shared_ptr<const ProfileGpdPictureSnapshots> pictures,
+    std::shared_ptr<const ::xe::kernel::NativeProfileSavePublication> native_owner) {
   error.clear();
+  if (pending && pending->native_issued() && !pending->NativeOwnedBy(native_owner)) {
+    error = Error(std::errc::device_or_resource_busy); return {};
+  }
   if (!pending || pending->origin().owner.lock().get() != this) {
     error = Error(std::errc::invalid_argument);
     return {};
@@ -1351,7 +1529,7 @@ ProfileGpdModelAuthority::PrepareCommit(
       }
     }
   }
-  if (pending->command().kind == ProfileGpdMutationKind::kSetPictures) {
+  if (!plan->pictures.empty()) {
     if (!pictures || !pending->pictures_before() || pictures->size() != 7) {
       error = Error(std::errc::invalid_argument); return {};
     }
@@ -1432,6 +1610,7 @@ ProfileGpdModelAuthority::PrepareCommit(
   prepared->expected_version = pending->origin().stamp.model_version;
   prepared->baselines = std::move(next);
   prepared->pending = std::move(pending);
+  prepared->native_owner = std::move(native_owner);
   return prepared;
 }
 std::unique_ptr<ProfileGpdModelAuthority::CommitGuard>
@@ -1476,6 +1655,9 @@ ProfileGpdModelAuthority::TryCommitPreserving(
     return {};
   }
   if (pending) {
+    if (pending->native_issued() && !pending->NativeOwnedBy(prepared_state.native_owner.lock())) {
+      error = Error(std::errc::operation_canceled); return {};
+    }
     const auto& origin = pending->origin();
     if (origin.storage != storage_ || origin.owner.lock().get() != this ||
         origin.xuid != xuid_ || origin.user_slot != slot_ ||
@@ -1510,8 +1692,10 @@ bool ProfileGpdModelAuthority::CommitGuard::Apply() noexcept {
   owner_->models_ = std::move(prepared_->models);
   owner_->pictures_ = std::move(prepared_->pictures);
   ++owner_->version_;
-  owner_->pending_.reset();
-  owner_->pending_transaction_.reset();
+  if(!owner_->native_cache_checkpoint_) {
+    owner_->pending_.reset();
+    owner_->pending_transaction_.reset();
+  }
   applied_ = true;
   return true;
 }

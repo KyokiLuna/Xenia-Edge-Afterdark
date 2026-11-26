@@ -13,11 +13,26 @@
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/xdbf/gpd_info.h"
 #include "xenia/kernel/xam/profile_gpd_model.h"
+#include "xenia/kernel/xam/profile_image_key.h"
 #include "xenia/kernel/xam/xam_state.h"
 
 namespace xe {
 namespace kernel {
 namespace xam {
+std::optional<std::vector<uint8_t>> CaptureProfileGpdImage(const ProfileGpdReadModels& models,
+    XTileType type,uint32_t title,uint64_t item) {
+  const auto key=ProfileGpdImageKey(uint32_t(type),item);if(!key)return {};
+  // Original D108 type6 branch D434 forces the dashboard title before FB88.
+  if(type==XTileType::kBkgnd)title=0xFFFE07D1;
+  std::span<const uint8_t> bytes;
+  if(title==0xFFFE07D1)bytes=models.dashboard.GetImage(*key);
+  else {
+    const auto found=models.titles.find(title);
+    if(found==models.titles.end())return std::vector<uint8_t>{};
+    bytes=found->second.GetImage(*key);
+  }
+  return std::vector<uint8_t>(bytes.begin(),bytes.end());
+}
 std::vector<uint8_t> CaptureProfilePicture(const ProfileGpdReadCapture& read,
                                           XTileType type) {
   if (!read.pictures) { return {}; }
@@ -73,6 +88,10 @@ std::vector<uint8_t> UserProfile::GetProfileIcon(XTileType type) const {
   if (const auto model = gpd_model_.lock()) {
     std::error_code error; const auto read = model->CaptureRead(error);
     if (!read || error) { return {}; }
+    if(type==XTileType::kAvatarFullBody && read->models) {
+      auto image=CaptureProfileGpdImage(*read->models,type,0xFFFE07D1,0);
+      return image?std::move(*image):std::vector<uint8_t>{};
+    }
     if (read->pictures) { return CaptureProfilePicture(*read, type); }
   }
   // Compatibility for a legacy GPD-only object with no issued picture tuple.

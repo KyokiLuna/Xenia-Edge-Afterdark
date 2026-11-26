@@ -8,6 +8,7 @@
  */
 
 #include <atomic>
+#include <array>
 #include <charconv>
 #include <cstdlib>
 #include <utility>
@@ -21,6 +22,7 @@
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/native_media_service.h"
 #include "xenia/kernel/native_content_resolve.h"
+#include "xenia/kernel/native_profile_save_owner.h"
 #include "xenia/vfs/file_open_context.h"
 #include "xenia/kernel/util/guest_io_buffer.h"
 #include "xenia/kernel/util/io_request_completion.h"
@@ -123,8 +125,8 @@ template <typename Transfer,
 static X_STATUS SubmitRequest(
     const object_ref<XFile>& file, const object_ref<XEvent>& ev,
     uint32_t apc_routine, uint32_t apc_context, X_IO_STATUS_BLOCK* status_block,
-    uint32_t status_block_address, bool pends, Transfer transfer,
-    Publish publish_status = {},
+    uint32_t status_block_address, bool pends, bool may_mutate,
+    Transfer transfer, Publish publish_status = {},
     util::InlineIoFailurePolicy inline_failure =
         util::InlineIoFailurePolicy::kRejectWithoutCompletion) {
   auto thread = retain_object(XThread::GetCurrentThread());
@@ -186,11 +188,17 @@ static X_STATUS SubmitRequest(
   // Allocate all queued closures before changing guest pending/event state.
   std::function<void(bool)> posted_body;
   std::function<void()> resource_failure;
+  std::function<X_STATUS()> observed_result;
   if (pends && InvokeHostCall([&] {
         posted_body = [complete](bool cancelled) { complete(true, cancelled); };
         resource_failure = [complete] {
           complete(true, false, X_STATUS_INSUFFICIENT_RESOURCES);
         };
+        if (may_mutate) {
+          observed_result = [completion] {
+            return completion->CheckpointEffectStatus(true);
+          };
+        }
       }) != HostCallOutcome::kReturned) {
     return X_STATUS_INSUFFICIENT_RESOURCES;
   }
@@ -231,7 +239,8 @@ static X_STATUS SubmitRequest(
       if (XFAILED(published)) { return published; }
     }
     file->PostIo(thread.get(), std::move(posted_body), {},
-                 std::move(resource_failure));
+                 std::move(resource_failure), std::move(observed_result),
+                 may_mutate);
     return X_STATUS_PENDING;
   }
   X_STATUS status = complete(false, false);
@@ -442,6 +451,13 @@ dword_result_t IoCreateFile_entry(lpdword_t handle_out, dword_t desired_access,
         kernel_state(), target_path, native_open_context);
     if (resolve && XFAILED(*resolve)) { result = *resolve; }
   }
+  if (XSUCCEEDED(result)) {
+    // Exact original SAVE caller/source capsule only, before this EXISTING
+    // IO22 offload/disposition. With no installed full family owner this is
+    // inert; no path/RW intention/generic Task supplies fallback authority.
+    const auto save=NativeProfileSaveOwner::CaptureOpenSource(kernel_state(),target_path,native_open_context);
+    if(save && XFAILED(*save))result=*save;
+  }
 
   // Attempt open (or create). The host open can block on a slow drive.
   vfs::File* vfs_file = nullptr;
@@ -601,6 +617,10 @@ dword_result_t NtReadFile_entry(dword_t file_handle, dword_t event_handle,
                              byte_offset_ptr, false, &byte_offset);
   }
 
+  if(XSUCCEEDED(result)) {
+    const auto captured=NativeProfileSaveOwner::CaptureReadSource(kernel_state(),*file);
+    if(captured)result=*captured;
+  }
   if (XSUCCEEDED(result)) {
     uint32_t buffer_address = buffer.guest_address();
     uint32_t length = buffer_length;
@@ -608,9 +628,9 @@ dword_result_t NtReadFile_entry(dword_t file_handle, dword_t event_handle,
     result = SubmitRequest(
         file, ev, static_cast<uint32_t>(apc_routine_ptr), apc_context_address,
         io_status_block, io_status_block.guest_address(),
-        CompletesAsync(file.get(), length, byte_offset, false),
-        [file, buffer_address, length, byte_offset,
-         apc_context_address](uint32_t* bytes_read, util::IoTransferReceipt* receipt) {
+        CompletesAsync(file.get(), length, byte_offset, false), false,
+        [file, buffer_address, length, byte_offset, apc_context_address](
+            uint32_t* bytes_read, util::IoTransferReceipt* receipt) {
           X_STATUS status = file->Read(buffer_address, length, byte_offset,
                                        bytes_read, apc_context_address, false, receipt);
           if (XSUCCEEDED(status)) {
@@ -659,9 +679,9 @@ dword_result_t NtReadFileScatter_entry(
     result = SubmitRequest(
         file, ev, static_cast<uint32_t>(apc_routine_ptr), apc_context_address,
         io_status_block, io_status_block.guest_address(),
-        CompletesAsync(file.get(), read_length, byte_offset, false),
-        [file, segments_address, read_length, byte_offset,
-         apc_context_address](uint32_t* bytes_read, util::IoTransferReceipt* receipt) {
+        CompletesAsync(file.get(), read_length, byte_offset, false), false,
+        [file, segments_address, read_length, byte_offset, apc_context_address](
+            uint32_t* bytes_read, util::IoTransferReceipt* receipt) {
           return file->ReadScatter(segments_address, read_length, byte_offset,
                                    bytes_read, apc_context_address, false, receipt);
         });
@@ -692,6 +712,12 @@ dword_result_t NtWriteFile_entry(dword_t file_handle, dword_t event_handle,
                              &byte_offset);
   }
 
+  std::shared_ptr<const vfs::FileWriteCheckpointAuthority> write_checkpoint;
+  if(XSUCCEEDED(result)) {
+    const auto captured=NativeProfileSaveOwner::CaptureWriteCheckpoint(
+        kernel_state(),*file,buffer.guest_address(),buffer_length,write_checkpoint);
+    if(captured)result=*captured;
+  }
   if (XSUCCEEDED(result)) {
     uint32_t buffer_address = buffer.guest_address();
     uint32_t length = buffer_length;
@@ -699,12 +725,12 @@ dword_result_t NtWriteFile_entry(dword_t file_handle, dword_t event_handle,
     result = SubmitRequest(
         file, ev, apc_routine, apc_context_address, io_status_block,
         io_status_block.guest_address(),
-        CompletesAsync(file.get(), length, byte_offset, true),
+        CompletesAsync(file.get(), length, byte_offset, true), true,
         [file, buffer_address, length, byte_offset,
-         apc_context_address](uint32_t* bytes_written, util::IoTransferReceipt* receipt) {
+         apc_context_address,checkpoint=std::move(write_checkpoint)](uint32_t* bytes_written, util::IoTransferReceipt* receipt) mutable {
           X_STATUS status =
               file->Write(buffer_address, length, byte_offset, bytes_written,
-                          apc_context_address, false, receipt);
+                          apc_context_address, false, receipt,std::move(checkpoint));
           if (XSUCCEEDED(status)) {
             if (auto patch = kernel_state()->xmp_volume_patch()) {
               auto host_buf = kernel_memory()->TranslateVirtual(buffer_address);
@@ -940,7 +966,10 @@ dword_result_t NtFlushBuffersFile_entry(
   // admitted operation now reports actual backend flush failure.
   return SubmitRequest(
       file, nullptr, 0, 0, nullptr, status_address, !file->is_synchronous(),
-      [file](uint32_t*, util::IoTransferReceipt* receipt) { return file->Flush(receipt); },
+      true,
+      [file](uint32_t*, util::IoTransferReceipt* receipt) {
+        return file->Flush(receipt);
+      },
       [memory, status_address](X_STATUS status, uint32_t count) {
         return util::WriteGuestIoStatus(*memory, status_address, status, count);
       },
@@ -1077,9 +1106,9 @@ dword_result_t NtDeviceIoControlFile_entry(
   }
   return SubmitRequest(
       file, event, apc_routine, apc_context, nullptr, status_address,
-      !file->is_synchronous(),
-      [file, code, input_address, input_length, output_address,
-       output_length](uint32_t* count, util::IoTransferReceipt* receipt) {
+      !file->is_synchronous(), true,
+      [file, code, input_address, input_length, output_address, output_length](
+          uint32_t* count, util::IoTransferReceipt* receipt) {
         return file->DeviceControl(code, input_address, input_length,
                                    output_address, output_length, count, receipt);
       },
@@ -1089,6 +1118,42 @@ dword_result_t NtDeviceIoControlFile_entry(
       util::InlineIoFailurePolicy::kCompleteAdmitted);
 }
 DECLARE_XBOXKRNL_EXPORT1(NtDeviceIoControlFile, kFileSystem, kImplemented);
+
+// Matching17559 BEF8 issues code92000 to its actual STFS device with an
+// eight-byte {native callback, request-owned context}. The driver invokes that
+// callback synchronously on this guest thread; it does not schedule PPC in a
+// RunBlockingIo host closure. BEB8 independently stores the inner flush HRESULT
+// in the original context and returns its own transport status.
+dword_result_t IoSynchronousDeviceIoControlRequest_entry(
+    dword_t io_control_code, lpvoid_t device_object, lpvoid_t input_buffer,
+    dword_t input_buffer_length, lpvoid_t output_buffer,
+    dword_t output_buffer_length, lpdword_t returned_length) {
+  if (global_critical_region::is_held_by_current_thread()) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  auto* kernel = kernel_state();
+  if (!kernel) { return X_STATUS_INVALID_PARAMETER; }
+  auto device = XStfsDevice::Lookup(*kernel, device_object.guest_address());
+  if (!device) { return X_STATUS_INVALID_PARAMETER; }
+  if (uint32_t(io_control_code) != 0x00092000) {
+    return X_STATUS_INVALID_DEVICE_REQUEST;
+  }
+  // The recovered callback protocol has no output or Information pointer.
+  // Unsupported layouts never zero caller bytes or claim a completion.
+  if (output_buffer || uint32_t(output_buffer_length) || returned_length) {
+    return X_STATUS_NOT_SUPPORTED;
+  }
+  if (uint32_t(input_buffer_length) != 8) {
+    return X_STATUS_INVALID_PARAMETER;
+  }
+  std::array<uint8_t, 8> input{};
+  const auto status = util::ReadGuestIoBuffer(*kernel->memory(),
+      input_buffer.guest_address(), input);
+  if (XFAILED(status)) { return status; }
+  return device->SynchronousDeviceControl(io_control_code, input);
+}
+DECLARE_XBOXKRNL_EXPORT1(IoSynchronousDeviceIoControlRequest, kFileSystem,
+                        kImplemented);
 
 // cache: is a host folder mounted for every title, so no STFS volume is made
 // over a cache partition and the caller's device object stays as it was.

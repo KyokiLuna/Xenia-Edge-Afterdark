@@ -1,7 +1,9 @@
 # 17559 checkpoint Guide regression — 2026-11-23
 
-Status: the current V149 Linux source passes all seven direct runs. Its
-isolated Doritos run selects the existing QA profile and renders the native
+Status: the current V151 Linux source adds the tested
+[shared storage-selector fix](17559-selector-source-update-20261126.md) and
+passes all seven direct runs. The latest actual native game test remains V149.
+That isolated Doritos run selects the existing QA profile and renders the native
 sign-in error dialog. Ordinary publication reaches both settlement stages
 7/8; the genuine `0x80151000` error is preserved. A follow-up native profile
 request is refused before entry. An explicit SIGTERM received by the test

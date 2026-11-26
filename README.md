@@ -66,6 +66,8 @@ The [native profile admission update](docs/research/17559-native-profile-admissi
 
 The [current profile lifecycle comparison](docs/research/17559-profile-lifecycle-comparison-20261125.md) records the tested native title-loader, frame-refresh, transport-lifetime, notification-consumer and HUD input corrections. All seven current direct runs pass. The latest Doritos run exercises existing-profile selection and completes ordinary publication/presentation, while preserving a native sign-in error. A follow-up profile request remains unsupported; the supervisor was interrupted before the Guide check. Passing engineering suites does not establish a new release.
 
+The [shared storage-selector update](docs/research/17559-selector-source-update-20261126.md) keeps pending choices bound to their original folder generation and records all seven passing current direct runs. Native sign-in/Guide acceptance remains open; this source update adds no AppImage release.
+
 The [V62 checkpoint notes](docs/research/17559-hdd-profile-checkpoint-v62.md) remain a historical record of its Linux profile-persistence and Call of Duty: Black Ops storage/control-setting tests. V62 is a public prerelease; its results do not establish acceptance of later native profile or avatar work.
 
 ## Upstream integration

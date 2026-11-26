@@ -47,6 +47,9 @@ struct StorageDeviceInfo {
   std::string guest_volume_root;
   bool available = false;
   bool read_only = true;
+  // Metadata identity from this exact Sources observation. Retaining a row
+  // keeps no HostStorageRoot/MVA/File alive and grants no backing access.
+  std::shared_ptr<const filesystem::ConsoleStorageVolume> source_volume;
   // Same actual Registry Sources observation as this row, never ID-relooked-up.
   std::shared_ptr<const ManagedFormatSourceProof> managed_format_proof;
 };

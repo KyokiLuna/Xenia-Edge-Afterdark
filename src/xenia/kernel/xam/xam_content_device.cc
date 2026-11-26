@@ -65,6 +65,7 @@ std::optional<StorageDeviceInfo> GetStorageDeviceInfo(
   if (available) {
     result.available = true;
     result.read_only = available->source.read_only;
+    result.source_volume = available->storage_volume;
     result.managed_format_proof = available->managed_format_proof;
     result.total_bytes = available->capacity_bytes;
     result.free_bytes = result.read_only ? 0 : available->free_bytes;

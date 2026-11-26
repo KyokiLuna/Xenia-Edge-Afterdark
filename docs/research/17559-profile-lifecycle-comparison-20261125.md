@@ -1,6 +1,8 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V149 restores the original native HUD keystroke family and passes all
+Status: V151 adds the tested [shared storage-selector generation change](17559-selector-source-update-20261126.md). Its native profile-request path is unchanged; the latest actual native game run remains V149.
+
+V149 restores the original native HUD keystroke family and passes all
 seven direct runs. Its isolated Doritos test selects the existing QA profile
 and displays the native sign-in error dialog. The genuine ordinary request
 returns `0x80151000`, while Job 4 completes prepared query and both settlement
@@ -64,7 +66,7 @@ rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The current tested V149 source map is
+The V149 source map used by that native run is
 `f21203fd3de45d8af327524c24acc790d5a55951681a79f2f3ff1ca072d51347`
 (2,430 source files). All seven direct runs passed under receipt
 `4768e36d65693af8bcdda21f0256ee284728954395431be4309989da5c121beb`.

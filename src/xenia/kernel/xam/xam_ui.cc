@@ -16,6 +16,7 @@
 #include <charconv>
 #include <cstring>
 #include <string_view>
+#include <system_error>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -38,6 +39,7 @@
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xam/content_manager.h"
+#include "xenia/kernel/xam/content_source.h"
 #include "xenia/kernel/xam/host_ui_fallback.h"
 #include "xenia/kernel/xam/profile_manager.h"
 #include "xenia/kernel/xam/xam_content_device.h"
@@ -743,7 +745,8 @@ dword_result_t XamShowDeviceSelectorUI_entry(
   }
   const uint32_t output = device_id_ptr.guest_address();
   auto publish = [state, output, required, trace, diagnostic_id,
-                  host_route](uint32_t device_id) -> X_RESULT {
+                  host_route](const StorageDeviceInfo& selected) -> X_RESULT {
+    const auto device_id = selected.device_id;
     // Drain must observe publication as one operation of the selected UI
     // cohort, rather than racing a cancelled() snapshot and guest output.
     auto entered = host_route ? host_route->TryEnter() : nullptr;
@@ -760,7 +763,10 @@ dword_result_t XamShowDeviceSelectorUI_entry(
                current ? current->free_bytes : 0, required);
       } catch (...) {}
     }
-    if (!current || !current->available) {
+    if (!current || !current->available || !selected.source_volume ||
+        current->source_volume != selected.source_volume ||
+        current->source_volume.owner_before(selected.source_volume) ||
+        selected.source_volume.owner_before(current->source_volume)) {
       trace("publish_disconnected", device_id, X_ERROR_DEVICE_NOT_CONNECTED);
       return X_ERROR_DEVICE_NOT_CONNECTED;
     }
@@ -772,13 +778,37 @@ dword_result_t XamShowDeviceSelectorUI_entry(
       trace("publish_disk_full", device_id, X_RESULT_FROM_WIN32(0x70));
       return X_RESULT_FROM_WIN32(0x70);  // ERROR_DISK_FULL.
     }
-    auto memory_lock = global_critical_region::AcquireDirect();
-    if (state->memory()->QueryRangeAccess(output, 4) !=
-        memory::PageAccess::kReadWrite) {
-      trace("publish_output_access", device_id, X_ERROR_INVALID_PARAMETER);
-      return X_ERROR_INVALID_PARAMETER;
+    // Capacity is re-observed above without namespace/registry locks. The
+    // selected row must still name its original source generation, not a
+    // replacement with the same public ID. This metadata carries no backing
+    // owner; the existing admission joins registry withdrawal to the store.
+    auto& registry = state->content_manager()->sources();
+    std::error_code source_error;
+    const auto source_refusal = [&] {
+      const auto result = source_error == std::errc::device_or_resource_busy
+          ? X_ERROR_BUSY : source_error == std::errc::no_such_device
+          ? X_ERROR_DEVICE_NOT_CONNECTED : X_ERROR_FUNCTION_FAILED;
+      trace("publish_source_refused", device_id, result);
+      return result;
+    };
+    const auto description = registry.DescribeSourceCached(
+        selected.source_volume, source_error);
+    if (!description || source_error) {
+      return source_refusal();
     }
-    *state->memory()->TranslateVirtual<xe::be<uint32_t>*>(output) = device_id;
+    {
+      auto memory_lock = global_critical_region::AcquireDirect();
+      if (state->memory()->QueryRangeAccess(output, 4) !=
+          memory::PageAccess::kReadWrite) {
+        trace("publish_output_access", device_id, X_ERROR_INVALID_PARAMETER);
+        return X_ERROR_INVALID_PARAMETER;
+      }
+      auto admitted = registry.TryAdmitSourceGeneration(*description, source_error);
+      if (!admitted) {
+        return source_refusal();
+      }
+      *state->memory()->TranslateVirtual<xe::be<uint32_t>*>(output) = device_id;
+    }
     trace("publish_success", device_id, X_ERROR_SUCCESS);
     return X_ERROR_SUCCESS;
   };
@@ -809,8 +839,15 @@ dword_result_t XamShowDeviceSelectorUI_entry(
              now.phase != TitleExecutionState::Phase::kStopping;
     };
     const uint32_t overlap_address = overlapped.guest_address();
+    std::optional<StorageDeviceInfo> selected;
+    if (choice.kind == StorageSelectionKind::kAutomatic) {
+      const auto found = std::find_if(devices.begin(), devices.end(),
+          [&](const auto& row) { return row.device_id == choice.device_id; });
+      if (found != devices.end()) selected = *found;
+    }
     state->CompleteOverlappedDeferredEx(
-        [state, choice, current, publish, trace, overlap_address](
+        [state, choice, current, publish, trace, overlap_address,
+         selected = std::move(selected)](
             uint32_t& extended, uint32_t& length) -> X_RESULT {
           X_RESULT result = X_ERROR_CANCELLED;
           if (current()) {
@@ -821,7 +858,8 @@ dword_result_t XamShowDeviceSelectorUI_entry(
             } else {
               switch (choice.kind) {
                 case StorageSelectionKind::kAutomatic:
-                  result = publish(choice.device_id);
+                  result = selected ? publish(*selected)
+                                    : X_ERROR_DEVICE_NOT_CONNECTED;
                   break;
                 case StorageSelectionKind::kDiskFull:
                   result = X_RESULT_FROM_WIN32(0x70);
@@ -913,7 +951,7 @@ dword_result_t XamShowDeviceSelectorUI_entry(
       if (!host_route->cancelled() &&
           value.result == xe::ui::TextEntryResult::kAccepted &&
           value.button < devices.size()) {
-        result = publish(devices[value.button].device_id);
+        result = publish(devices[value.button]);
       }
       trace("host_prompt_result", value.button, result);
       extended = X_HRESULT_FROM_WIN32(result);
@@ -942,7 +980,7 @@ dword_result_t XamShowDeviceSelectorUI_entry(
       }, SnapshotMessageBox,
       [devices, publish, trace](const HostDialogResult& value) -> X_RESULT {
         const auto result = value.button < devices.size()
-                   ? publish(devices[value.button].device_id)
+                   ? publish(devices[value.button])
                    : X_ERROR_CANCELLED;
         trace("legacy_prompt_result", value.button, result);
         return result;

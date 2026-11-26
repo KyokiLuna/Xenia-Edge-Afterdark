@@ -14,6 +14,7 @@
 #include <condition_variable>
 #include <cstring>
 #include <exception>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <utility>
@@ -161,8 +162,11 @@ TEST_CASE("Selection reobserves disappeared or full writable sources",
   const auto old = GetStorageDeviceInfo(registry, 1);
   REQUIRE(old);
   REQUIRE(CanStoreOnDevice(*old, 50));
+  REQUIRE(old->source_volume);
   available = 79;
-  REQUIRE_FALSE(CanStoreOnDevice(*GetStorageDeviceInfo(registry, 1), 50));
+  const auto smaller = GetStorageDeviceInfo(registry, 1);
+  REQUIRE(smaller);REQUIRE(smaller->source_volume==old->source_volume);
+  REQUIRE_FALSE(CanStoreOnDevice(*smaller, 50));
   std::filesystem::remove(hdd.root);
   REQUIRE_FALSE(GetStorageDeviceInfo(registry, 1)->available);
   REQUIRE_FALSE(CanStoreOnDevice(*GetStorageDeviceInfo(registry, 1), 0));
@@ -293,7 +297,8 @@ struct SelectorBarrier {
 SelectorResult InvokeSelector(SelectorRuntime& f,SelectorPage& page,uint32_t user,
     uint32_t flags,uint64_t requested,uint32_t output,uint32_t overlap,
     bool retire_before_publication=false, bool retire_before_admission=false,
-    bool remove_title_before_publication=false) {
+    bool remove_title_before_publication=false,
+    std::function<void()> before_publication={}) {
   auto* state=f.state();auto& memory=f.memory();SelectorResult observed;
   std::memset(memory.TranslateVirtual(page.output()-4),0xA5,12);
   std::memset(memory.TranslateVirtual(page.overlap()),0,sizeof(XAM_OVERLAPPED));
@@ -301,7 +306,10 @@ SelectorResult InvokeSelector(SelectorRuntime& f,SelectorPage& page,uint32_t use
   auto* ov=memory.TranslateVirtual<XAM_OVERLAPPED*>(page.overlap());ov->event=event->handle();
   auto barrier=std::make_shared<SelectorBarrier>();
   auto source=state->content_manager()->sources().Source("hdd");
-  REQUIRE(source);REQUIRE(source->available);REQUIRE(source->storage);
+  REQUIRE(source);
+  if (retire_before_admission || retire_before_publication) {
+    REQUIRE(source->available);REQUIRE(source->storage);
+  }
   if (retire_before_admission) {source->storage->Retire();}
   auto entry=f.emulator->export_resolver()->GetExportByOrdinal("xam.xex",0x2CB);
   REQUIRE(entry);REQUIRE(entry->function_data.trampoline);
@@ -312,10 +320,11 @@ SelectorResult InvokeSelector(SelectorRuntime& f,SelectorPage& page,uint32_t use
     // each observes the actual join before guest buffer reads/destruction.
     std::lock_guard lock(drain_mutex);state->ShutdownDispatchThread();
   };
+  std::exception_ptr publication_error;
   auto thread=object_ref<XHostThread>(new XHostThread(state,128*1024,0,[&] {
     // The first real dispatch item holds the worker until the actual selector
     // has admitted its source snapshot. This avoids a timing/sleep race.
-    if (retire_before_publication || remove_title_before_publication) {
+    if (retire_before_publication || remove_title_before_publication || before_publication) {
       const auto dummy=page.base+0x400;
       std::memset(memory.TranslateVirtual(dummy),0,sizeof(XAM_OVERLAPPED));
       state->CompleteOverlappedDeferredEx([barrier](uint32_t& extended,uint32_t& length){
@@ -336,7 +345,13 @@ SelectorResult InvokeSelector(SelectorRuntime& f,SelectorPage& page,uint32_t use
     entry->function_data.trampoline(context);observed.returned=uint32_t(context->r[3]);
     if (retire_before_publication) {source->storage->Retire();}
     if (remove_title_before_publication) {state->SetExecutableModule(nullptr);}
-    if (retire_before_publication || remove_title_before_publication) {barrier->Release();}
+    if (before_publication) {
+      try { before_publication(); }
+      catch (...) { publication_error=std::current_exception(); }
+    }
+    if (retire_before_publication || remove_title_before_publication || before_publication) {
+      barrier->Release();
+    }
     if (observed.returned==X_ERROR_IO_PENDING) {
       uint64_t timeout=uint64_t(-5LL*10000000);observed.wait_status=event->Wait(0,0,0,&timeout);
       if (observed.wait_status!=X_STATUS_SUCCESS) {
@@ -366,6 +381,7 @@ SelectorResult InvokeSelector(SelectorRuntime& f,SelectorPage& page,uint32_t use
     }
   }
   REQUIRE(waited==xe::threading::WaitResult::kSuccess);
+  if (publication_error) std::rethrow_exception(publication_error);
   return observed;
 }
 }
@@ -398,6 +414,112 @@ TEST_CASE("Actual selector async publication refuses a withdrawn selected source
   REQUIRE(answer.result==X_ERROR_DEVICE_NOT_CONNECTED);REQUIRE(answer.extended==X_HRESULT_FROM_WIN32(answer.result));
   REQUIRE(answer.device==0xA5A5A5A5);REQUIRE(answer.left==0xA5A5A5A5);REQUIRE(answer.right==0xA5A5A5A5);
 }
+TEST_CASE("Actual selector publication keeps its selected folder generation across replacement",
+          "[kernel][storage][selector][async][selector_generation]") {
+  SelectorRuntime f;SelectorPage page(f.memory());
+  auto& registry=f.state()->content_manager()->sources();
+  const auto hdd=registry.Source("hdd");
+  REQUIRE(hdd);REQUIRE(hdd->storage);REQUIRE(hdd->managed_identity);
+  hdd->storage->Retire();
+  auto folder=f.scratch.Source("selected-folder",false);
+  folder.device_id=3;folder.device_type=DeviceType::USBMASS;
+  folder.guest_root="\\Device\\SelectorFolderA\\Content";folder.guest_volume_root="\\Device\\SelectorFolderA";
+  auto other=f.scratch.Source("other-folder",false);
+  other.device_id=4;other.device_type=DeviceType::USBMASS;
+  other.guest_root="\\Device\\SelectorFolderB\\Content";other.guest_volume_root="\\Device\\SelectorFolderB";
+  REQUIRE(registry.Register(folder));REQUIRE(registry.Register(other));
+  const auto selected=GetStorageDeviceInfo(registry,3);
+  const auto retained_other=GetStorageDeviceInfo(registry,4);
+  REQUIRE(selected);REQUIRE(selected->source_volume);REQUIRE(selected->available);
+  REQUIRE(retained_other);REQUIRE(retained_other->source_volume);
+  const auto preserved=f.scratch.root/"preserved-folder";
+  bool observe_gap=false;
+  SECTION("replacement at the same path without an observed gap") {}
+  SECTION("removed folder is observed before the same folder returns") {observe_gap=true;}
+  std::optional<StorageDeviceInfo> successor;
+  bool missing_observed=false,recreated=false;
+  const auto answer=InvokeSelector(f,page,0,0,0,page.output(),page.overlap(),
+      false,false,false,[&] {
+        std::filesystem::rename(folder.root,preserved);
+        if (observe_gap) {
+          const auto missing=registry.Source(folder.id);
+          missing_observed=missing && !missing->available;
+          std::filesystem::rename(preserved,folder.root);
+        } else {
+          recreated=std::filesystem::create_directory(folder.root);
+        }
+        successor=GetStorageDeviceInfo(registry,3);
+      });
+  REQUIRE(answer.returned==X_ERROR_IO_PENDING);REQUIRE(answer.wait_status==X_STATUS_SUCCESS);
+  CHECK((observe_gap ? missing_observed : recreated));
+  REQUIRE(successor);REQUIRE(successor->available);REQUIRE(successor->source_volume);
+  CHECK(successor->source_volume!=selected->source_volume);
+  CHECK(successor->source_volume->generation()>selected->source_volume->generation());
+  CHECK(answer.result==X_ERROR_DEVICE_NOT_CONNECTED);
+  CHECK(answer.extended==X_HRESULT_FROM_WIN32(answer.result));CHECK(answer.length==0);
+  CHECK(answer.device==0xA5A5A5A5);CHECK(answer.left==0xA5A5A5A5);CHECK(answer.right==0xA5A5A5A5);
+  CHECK_FALSE(selected->source_volume->available_cached());
+  const auto unchanged=GetStorageDeviceInfo(registry,4);
+  REQUIRE(unchanged);CHECK(unchanged->source_volume==retained_other->source_volume);
+  CHECK(unchanged->source_volume->available_cached());
+  // A fresh request may select the genuinely new generation; an old row is
+  // neither retargeted nor a permanent ban on the same canonical device ID.
+  const auto fresh=InvokeSelector(f,page,0,0,0,page.output(),page.overlap());
+  REQUIRE(fresh.returned==X_ERROR_IO_PENDING);REQUIRE(fresh.wait_status==X_STATUS_SUCCESS);
+  CHECK(fresh.result==X_ERROR_SUCCESS);CHECK(fresh.device==3);
+  CHECK(fresh.left==0xA5A5A5A5);CHECK(fresh.right==0xA5A5A5A5);
+  CHECK_FALSE(f.state()->xam_state()->IsUIActive());
+}
+
+TEST_CASE("Actual selector uses writable folder capacity without borrowing another source",
+          "[kernel][storage][selector][async][selector_generation]") {
+  SelectorRuntime f;SelectorPage page(f.memory());
+  auto& registry=f.state()->content_manager()->sources();
+  const auto hdd=registry.Source("hdd");REQUIRE(hdd);REQUIRE(hdd->storage);
+  REQUIRE(hdd->managed_identity);hdd->storage->Retire();
+  bool oversized_request=false;
+  SECTION("read-only folder is never a writable choice") {}
+  SECTION("an oversized request cannot borrow read-only capacity") {oversized_request=true;}
+  auto first=f.scratch.Source("limited-folder",true);
+  first.device_id=3;first.device_type=DeviceType::USBMASS;
+  first.guest_root="\\Device\\SelectorLimitedFolder\\Content";first.guest_volume_root="\\Device\\SelectorLimitedFolder";
+  // The host reserve is shared by the entire physical filesystem, not a
+  // per-folder quota. Keep it intact; an oversized request below exercises
+  // real disk-full completion without poisoning another registered folder.
+  first.reserved_bytes=0;
+  auto second=f.scratch.Source("writable-folder",false);
+  second.device_id=4;second.device_type=DeviceType::USBMASS;
+  second.guest_root="\\Device\\SelectorWritableFolder\\Content";second.guest_volume_root="\\Device\\SelectorWritableFolder";
+  second.reserved_bytes=0;
+  REQUIRE(registry.Register(first));REQUIRE(registry.Register(second));
+  const auto limited=GetStorageDeviceInfo(registry,3);
+  const auto writable=GetStorageDeviceInfo(registry,4);
+  REQUIRE(limited);REQUIRE(limited->available);REQUIRE(limited->source_volume);
+  REQUIRE(writable);REQUIRE(writable->source_volume);REQUIRE(CanStoreOnDevice(*writable,1));
+  CHECK_FALSE(CanStoreOnDevice(*limited,1));CHECK(limited->free_bytes==0);
+  CHECK(limited->source_volume!=writable->source_volume);
+  const auto accepted=InvokeSelector(f,page,0,0,1,page.output(),page.overlap());
+  REQUIRE(accepted.returned==X_ERROR_IO_PENDING);REQUIRE(accepted.wait_status==X_STATUS_SUCCESS);
+  CHECK(accepted.result==X_ERROR_SUCCESS);CHECK(accepted.device==4);
+  CHECK(accepted.left==0xA5A5A5A5);CHECK(accepted.right==0xA5A5A5A5);
+  if(oversized_request){
+    const auto full=InvokeSelector(f,page,0,0,UINT64_MAX-0x1000,page.output(),page.overlap());
+    REQUIRE(full.returned==X_ERROR_IO_PENDING);REQUIRE(full.wait_status==X_STATUS_SUCCESS);
+    CHECK(full.result==X_RESULT_FROM_WIN32(0x70));
+    CHECK(full.extended==X_HRESULT_FROM_WIN32(full.result));CHECK(full.length==0);
+    CHECK(full.device==0xA5A5A5A5);CHECK(full.left==0xA5A5A5A5);CHECK(full.right==0xA5A5A5A5);
+    const auto unchanged=GetStorageDeviceInfo(registry,4);REQUIRE(unchanged);
+    CHECK(unchanged->source_volume==writable->source_volume);CHECK(CanStoreOnDevice(*unchanged,1));
+  }
+  const auto physical=registry.Source(second.id);REQUIRE(physical);REQUIRE(physical->storage);
+  std::filesystem::rename(second.root,f.scratch.root/"removed-writable-folder");
+  const auto refused=InvokeSelector(f,page,0,0,1,page.output(),page.overlap());
+  REQUIRE(refused.returned==X_ERROR_IO_PENDING);REQUIRE(refused.wait_status==X_STATUS_SUCCESS);
+  CHECK(refused.result==X_ERROR_DEVICE_NOT_CONNECTED);
+  CHECK(refused.extended==X_HRESULT_FROM_WIN32(refused.result));CHECK(refused.length==0);
+  CHECK(refused.device==0xA5A5A5A5);CHECK(refused.left==0xA5A5A5A5);CHECK(refused.right==0xA5A5A5A5);
+}
+
 TEST_CASE("Actual selector export validates guest ranges user flags and mandatory overlap before selection",
           "[kernel][storage][selector][abi]") {
   SelectorRuntime f;SelectorPage page(f.memory());

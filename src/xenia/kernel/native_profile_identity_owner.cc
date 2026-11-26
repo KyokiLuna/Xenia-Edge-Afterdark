@@ -898,7 +898,13 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
   bool admitted=false,refused=false;
  };
  struct Job {
+  // Explicit host facade deadlines are retained. Original guest logon and
+  // bootstrap alignment do not expire because JIT/render dispatch is slow;
+  // actual cancellation, stop and source failure still end preparation.
   std::chrono::steady_clock::time_point preparation_deadline{};
+  Tasks::PreparedIngress ingress;
+  std::error_code preentry_error;
+  bool retry_initial_after_cancel=false;
   uint64_t serial=0,source=0;
   std::optional<NativeProfileIdentityRequest> original;
   std::shared_ptr<xam::ProfileRosterIntent> intent;
@@ -1510,7 +1516,8 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  // Pre-native attempts may contend with real old readers/writers. Retain the
  // exact unpublished common intent until cancellation actually finishes.
  std::shared_ptr<xam::ProfileRosterIntent> bootstrap_cleanup;
- std::chrono::steady_clock::time_point bootstrap_deadline{};
+ // Diagnostic history only: bootstrap alignment is not expired by host/JIT
+ // wall time. The actual SYSTEM lifecycle and stop own its pending attempt.
  uint32_t bootstrap_attempts=0;
  bool bootstrap_fatal=false;
  struct BootstrapFailure {
@@ -1539,6 +1546,11 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  std::atomic<bool> auxiliary_host_active{false};
  std::atomic<uint64_t> identity_executor_frames{0},listener_object_frames{0},task_close_frames{0};
  Tasks tasks;
+ // The shared transport holds State::mutex and retains its exact Job. Keep
+ // the private ledger query within its original identity-owner boundary.
+ bool SourceDescendantsClosedForTransport(uint64_t source) const {
+  return tasks.SourceDescendantsClosed(source);
+ }
  std::unique_ptr<Wake> wake;
  std::unique_ptr<Listeners> listeners;
  std::shared_ptr<Job> job;
@@ -4884,8 +4896,7 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
   return fail(__LINE__,5,std::errc::operation_canceled);
  }
  auto job=std::make_shared<State::Job>();job->intent=intent;job->flags=flags;job->overlap=overlap;
- job->preparation_deadline=preparation_deadline==std::chrono::steady_clock::time_point{}?
-     std::chrono::steady_clock::now()+std::chrono::seconds(5):preparation_deadline;
+ job->preparation_deadline=preparation_deadline;
  if(observation)job->original_logon_observation=*observation;
  job->bootstrap_alignment=bootstrap_alignment;
  if(original)job->original=*original;
@@ -4969,6 +4980,8 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
      !s.ReentrantOriginalFrame(caller,original?original->ordinal():0,flags,overlap))
    return fail(__LINE__,11,std::errc::device_or_resource_busy,false,1u<<9,1u<<9);
   job->serial=job->source=s.next_source++;
+  if(!job->ingress.Bind(job->serial,job->source))
+   return fail(__LINE__,11,std::errc::operation_canceled);
  }
  auto lifetime=std::make_shared<State::EventLifetime>();
  lifetime->code=s.root_code;lifetime->domain=s.config.domain->Acquire();
@@ -5055,28 +5068,38 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
   State& s;bool entered=false;
   ~ExecutorFrame(){if(entered)s.identity_executor_frames.fetch_sub(1,std::memory_order_acq_rel);}
  } host_frame{s};
+ std::shared_ptr<State::Job> job;
+ // State-locked, exact original-ingress producer only. This typed refusal
+ // does not claim PPC execution, native completion or successful cancellation.
+ const auto refuse=[&](const std::error_code& error,const char* detail){
+  if(job && s.job==job && !job->entering && !job->native_entered && !job->execution_uncertain &&
+      !s.uncertain.load() && job->ingress.RefuseBeforeEntry(job->serial,job->source))
+   job->preentry_error=error;
+  return GuestRuntime::ExecutionResult{false,kAbort,detail};
+ };
  {
-  std::lock_guard lock(s.mutex);
-  if(s.stopping.load() || s.retired.load() || s.identity_executor_frames.load())
-   return {false,kAbort,"Owned identity executor admission sealed"};
+  std::lock_guard lock(s.mutex);job=s.job;
+  if(s.identity_executor_frames.load())
+   return {false,kAbort,"Owned identity executor already entered"};
+  if(s.stopping.load() || s.retired.load())
+   return refuse(std::make_error_code(std::errc::operation_canceled),"Owned identity executor admission sealed");
   s.identity_executor_frames.fetch_add(1,std::memory_order_acq_rel);host_frame.entered=true;
  }
- std::shared_ptr<State::Job> job;
  std::shared_ptr<State::Expected> expected;
  std::shared_ptr<xam::ProfileRosterPublicationCell> publication;
  for(;;){
-  {std::lock_guard lock(s.mutex);job=s.job;}
-  if(job && std::chrono::steady_clock::now()>=job->preparation_deadline){
-   CancelQueued(job->intent);return {false,kAbort,"Common native preparation deadline expired"};
-  }
   expected=std::make_shared<State::Expected>();
   {
-   std::lock_guard lock(s.mutex);job=s.job;
-   if(!job || !job->initializer_ready || job->canceled || job->entering || job->native_entered ||
+   std::lock_guard lock(s.mutex);
+   if(job && Tasks::PreparationDeadline::Expired(job->preparation_deadline,std::chrono::steady_clock::now()))
+    return refuse(std::make_error_code(std::errc::timed_out),"Common native preparation deadline expired");
+   if(!job || s.job!=job || !job->initializer_ready || job->canceled || job->entering || job->native_entered ||
       job->execution_uncertain || s.stopping.load() || s.retired.load() || s.uncertain.load() ||
       ActualThread()!=&thread || thread.kernel_state()!=s.kernel || s.expected.size()>=64 ||
       (job->original_caller && job->original_caller.get()!=&thread))
-    return {false,kAbort,"Prepared original native ingress is not admitted"};
+    return refuse(std::make_error_code(std::errc::operation_canceled),"Prepared original native ingress is not admitted");
+   if(!job->ingress.BeginEntry(job->serial,job->source)){
+    s.Lose(__LINE__);return {false,kAbort,"Prepared native entry receipt changed"};}
    expected->serial=job->serial;expected->source=job->source;
    expected->thread=retain_object(&thread);expected->count=3;
    expected->function=job->original && job->original->ordinal()==0x20B?0x8199C630:0x8199E3E0;
@@ -5095,19 +5118,30 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
    const auto i=std::find(s.expected.begin(),s.expected.end(),expected);
    if(i==s.expected.end() || expected->entered){s.Lose(__LINE__);return {false,kAbort,"Pre-entry observer ownership changed"};}
    s.retired_expected.push_back(*i);s.expected.erase(i);
-   retryable=s.job==job && !job->canceled && !s.stopping.load() && !s.retired.load() && !s.uncertain.load() &&
-       State::RetryableBootstrapError(error) && std::chrono::steady_clock::now()<job->preparation_deadline;
+   // Bootstrap has no public caller deadline. A Busy attempt returns through
+   // its real Task/Wait/Close, then cancels exactly this intent before a later
+   // existing SYSTEM turn prepares another. No callback polling is added.
+   retryable=!job->bootstrap_alignment && s.job==job && !job->canceled &&
+       !s.stopping.load() && !s.retired.load() && !s.uncertain.load() &&
+       State::RetryableBootstrapError(error) &&
+       (job->preparation_deadline==std::chrono::steady_clock::time_point{} ||
+        std::chrono::steady_clock::now()<job->preparation_deadline) &&
+       !global_critical_region::is_held_by_current_thread();
+   if(!retryable)return refuse(error?error:std::make_error_code(std::errc::operation_canceled),
+                               "Common native entry validation refused");
+   if(!job->ingress.RetryEntry(job->serial,job->source)){
+    s.Lose(__LINE__);return {false,kAbort,"Prepared retry receipt changed"};}
   }
-  // EnterNativeRoster's Busy also covers an inherited caller namespace
-  // lock. That is a self dependency: never Delay while retaining GCRC.
-  if(global_critical_region::is_held_by_current_thread())retryable=false;
-  if(!retryable){CancelQueued(job->intent);return {false,kAbort,"Common native entry validation refused"};}
+  // Explicit host facade preparation retains its finite deadline. An
+  // inherited GCRC is a self dependency and never reaches this Delay.
   s.changed.notify_all();
   thread.Delay(0,0,uint64_t(-160000ll)); // no Expected, PM/model/cache/namespace guard
  }
  {
   std::lock_guard lock(s.mutex);
-  if(s.job!=job || !job->entering || job->canceled){s.Lose(__LINE__);job->execution_uncertain=true;
+  if(s.job!=job || !job->entering || job->canceled ||
+      !job->ingress.NativeEntered(job->serial,job->source)){
+   s.Lose(__LINE__);job->execution_uncertain=true;
    return {false,kAbort,"Common/native entry owner changed"};}
   job->publication=std::move(publication);job->entering=false;job->native_entered=true;
  }
@@ -5123,6 +5157,9 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecutePreparedOn(XThr
    s.Lose(__LINE__);job->execution_uncertain=true;
    return {false,result.return_value,"Original native ingress own-return was not authenticated"};
   }
+  if(!job->ingress.NativeReturned(job->serial,job->source)){
+   s.Lose(__LINE__);job->execution_uncertain=true;
+   return {false,result.return_value,"Original native return receipt changed"};}
   expected->call_returned=true;expected->healthy=true;
   job->native_returned=true;job->value=uint32_t(result.return_value);
   {OriginalLogonDiagnostic d;d.stage=OriginalLogonDiagnostic::kNativeReturn;
@@ -5217,7 +5254,11 @@ NativeProfileIdentityOwner::Result NativeProfileIdentityOwner::TryLogonOnOrigina
   if(diagnostic.Refused(17,!s.EnterPublic(false),__LINE__))return diagnostic.Finish(rejected);
   struct PublicExit{State& s;~PublicExit(){s.LeavePublic(false);}} public_exit{s};
   auto* pm=kernel->xam_state()->profile_manager();std::error_code error;
-  const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+  // 20B/224 has no timeout parameter. Host JIT, durable model/cache
+  // preparation and actual old-source drain may legitimately exceed a fixed
+  // wall interval. Existing cooperative progress checks real stop/retirement/
+  // uncertainty and source errors; inherited GCRC still refuses immediately.
+  const auto deadline=Tasks::PreparationDeadline::Unbounded();
   const auto wait=[&]{
    {
     std::lock_guard lock(s.mutex);
@@ -5305,7 +5346,16 @@ NativeProfileIdentityOwner::Result NativeProfileIdentityOwner::TryLogonOnOrigina
    caller->Delay(0,0,uint64_t(-160000ll));
   }
   const auto native=owner->ExecutePreparedOn(*caller);
-  if(diagnostic.Refused(35,!native.succeeded,__LINE__))return diagnostic.Finish({Disposition::kExecutionUncertain,uint32_t(native.return_value)});
+  if(diagnostic.Refused(35,!native.succeeded,__LINE__)){
+   bool not_entered=false;std::error_code refusal;
+   {std::lock_guard lock(s.mutex);const auto job=s.job;
+    not_entered=job && job->intent==intent && !job->native_entered && !job->entering &&
+        !job->execution_uncertain && job->ingress.KnownNotEntered(job->serial,job->source);
+    if(not_entered)refusal=job->preentry_error;}
+   if(not_entered){owner->CancelQueued(intent);
+    return diagnostic.Error(refusal).Finish({Disposition::kRejectedBeforeEntry,uint32_t(native.return_value)});}
+   return diagnostic.Finish({Disposition::kExecutionUncertain,uint32_t(native.return_value)});
+  }
   // Every actual native DWORD, including negative HRESULTs and async normal
   // returns, goes back unchanged. Later consumer completion remains separate.
   return diagnostic.Finish({Disposition::kActualReturned,uint32_t(native.return_value)});
@@ -5691,6 +5741,7 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::RunScheduledBody(
   auto whole=std::make_shared<NativeProfileIdentityOwner::State::Work>();
   whole->frame=*frame;whole->thread=retain_object(&thread);
   whole->domain=s.config.domain->Acquire();whole->host_body=true;
+  std::shared_ptr<State::Job> job;
   {
    std::lock_guard lock(s.mutex);
    const auto* node=s.tasks.FindLiveTask(*task);
@@ -5699,6 +5750,7 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::RunScheduledBody(
     return GuestRuntime::ExecutionResult{false,kAbort,"Identity callback genealogy mismatch"};}
    const auto birth=s.tasks.EnterWork(*frame,*task,node->argument);
    if(!birth){s.Lose(__LINE__);return GuestRuntime::ExecutionResult{false,kAbort,"Identity callback already entered"};}
+   job=s.job;
    whole->birth=*birth;whole->source=birth->origin;whole->serial=s.next_work++;
    const auto slot=std::find_if(s.job->writer_reads.begin(),s.job->writer_reads.end(),
                                [](const auto& read){return bool(read);});
@@ -5713,8 +5765,15 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::RunScheduledBody(
   const auto result=work(thread); // No owner/PM/GCRC lock crosses actual work.
   {
    std::lock_guard lock(s.mutex);
-   if(!result.succeeded || !s.tasks.ReturnWork(whole->frame,whole->birth) ||
-      !whole->read->Leave()){whole->uncertain=true;s.Lose(__LINE__);return result;}
+   if(s.job!=job || !job->ingress.CanReturnBody(job->serial,job->source,result.succeeded)){
+    whole->uncertain=true;s.Lose(__LINE__);return result;}
+   // A proved pre-entry refusal is an operation failure with an actual host
+   // callback return. Independently perform both genuine restorations; never
+   // let the operation's false bool short-circuit Task/read ownership return.
+   const bool task_returned=s.tasks.ReturnWork(whole->frame,whole->birth);
+   const bool read_left=whole->read->Leave();
+   if(!job->ingress.ReturnBody(job->serial,job->source,result.succeeded,task_returned,read_left)){
+    whole->uncertain=true;s.Lose(__LINE__);return result;}
    if(!s.RecycleRead(whole)){s.Lose(__LINE__);return GuestRuntime::ExecutionResult{false,kAbort,"Callback scope recycling failed"};}
    whole->normal_return=true;
    const auto i=std::find(s.active.begin(),s.active.end(),whole);
@@ -5759,17 +5818,44 @@ GuestRuntime::ExecutionResult NativeSystemTaskContinuation::InvokeOwnedProfileId
  const auto actual_work=[retained,serial,work=std::move(work)](XThread& thread){
   return retained->RunScheduledBody(thread,serial,work);
  };
+ uint32_t completed_native_task=0;
+ TransportReturn transport_return;
  const auto result=InvokeAndWaitImpl(*bootstrap,std::move(actual_work),Admission::Role::kOwnedProfileIdentity,
-     nullptr,[retained,serial]{return retained->OwnsScheduledWork(serial);},before,after,
+     &completed_native_task,[retained,serial]{return retained->OwnsScheduledWork(serial);},before,after,
      [retained]{return retained->RetainedForActualKernelStop();},
-     [retained,bootstrap]{(void)retained->ReapReturnedOnBootstrap(*bootstrap,false);});
+     [retained,bootstrap]{(void)retained->ReapReturnedOnBootstrap(*bootstrap,false);},&transport_return);
  {
   auto& s=*retained->state_;std::lock_guard lock(s.mutex);
-  if(!result.succeeded || !expected->healthy || !expected->call_returned){s.Lose(__LINE__);return result;}
+  const auto job=s.job;
+  if(!job || job->serial!=serial){s.Lose(__LINE__);return result;}
+  if(transport_return.not_scheduled()){
+   // The exact before-Schedule admission refused and the generic invocation
+   // cleaned up without calling native Schedule. No Expected/native frame was
+   // registered, so neither a Schedule return nor Wait/Close is invented.
+   const bool no_schedule=!expected->serial && !expected->entered && !expected->returned &&
+       !expected->call_returned && !expected->actual;
+   if(result.succeeded || !job->ingress.RefuseUnscheduledTransport(job->serial,job->source,true,
+       no_schedule,s.SourceDescendantsClosedForTransport(job->source))){s.Lose(__LINE__);return result;}
+   job->preentry_error=std::make_error_code(std::errc::operation_canceled);return result;
+  }
+  if(!expected->healthy || !expected->call_returned){s.Lose(__LINE__);return result;}
+  bool joined=false;
+  if(transport_return.rejected()){
+   // A real negative Schedule without callback transfer has no completed
+   // handle to Wait/Close. Require all native descendants of this exact source
+   // genuinely closed; an allocated/unfreed or unknown Task remains retained.
+   joined=!completed_native_task && !result.succeeded &&
+       job->ingress.RefuseUnenteredTransport(job->serial,job->source,true,true,
+           s.SourceDescendantsClosedForTransport(job->source));
+   if(joined)job->preentry_error=std::make_error_code(std::errc::operation_canceled);
+  }else joined=job->ingress.JoinTransport(job->serial,job->source,true,completed_native_task);
+  if(!joined){s.Lose(__LINE__);return result;}
   const auto i=std::find(s.expected.begin(),s.expected.end(),expected);
   if(i==s.expected.end()){s.Lose(__LINE__);return {false,kAbort,"Missing actual Schedule owner"};}
   s.retired_expected.push_back(expected);s.expected.erase(i);
  }
+ if(transport_return.rejected())
+  return {false,transport_return.native_result,result.detail}; // actual Schedule refusal, not a logon return
  return result;
 }
 
@@ -6934,20 +7020,27 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
  std::array<std::shared_ptr<TaskReference::Data>,64> references;
  std::array<std::shared_ptr<State::ContextReference>,64> retired_contexts;
  std::shared_ptr<IdentityServiceOrigin> retired_service;
+ bool native_owners_healthy=false;
  {
   std::lock_guard lock(s.mutex);
-  if(s.retired.load() || s.uncertain.load() || s.tasks.lost() ||
-     (s.wake && s.wake->lost()) || (s.listeners && s.listeners->lost()))return false;
+  native_owners_healthy=!s.uncertain.load() && !s.tasks.lost() &&
+      (!s.wake || !s.wake->lost()) && (!s.listeners || !s.listeners->lost());
+  const auto lane=Tasks::CaptureHostReap(s.retired.load(),native_owners_healthy,s.host_retired,retired);
+  if(lane==Tasks::HostReapLane::kRetired)return false;
+  // The terminal queue is captured even after unrelated uncertainty. Keep
+  // active/uncertain work and separate native free/reference/context/service
+  // duties behind the original healthy gate; no ownership result is waived.
+  if(lane==Tasks::HostReapLane::kNativeOwners){
   for(auto i=s.active.begin();i!=s.active.end();){const auto& work=*i;
    if(work->execution_only && work->normal_return && !work->execution_read.pending() &&
        work->execution_lifetime && work->execution_lifetime->native_freed){
-    s.host_retired.push_back(work);i=s.active.erase(i);
+    retired.push_back(work);i=s.active.erase(i);
    }else ++i;
   }
   for(auto i=s.execution_retained.begin();i!=s.execution_retained.end();){const auto& work=*i;
    if(work->normal_return && !work->execution_read.pending() &&
        work->execution_lifetime && work->execution_lifetime->native_freed){
-    s.host_retired.push_back(work);i=s.execution_retained.erase(i);
+    retired.push_back(work);i=s.execution_retained.erase(i);
    }else ++i;
   }
   for(auto i=s.execution_lifetimes.begin();i!=s.execution_lifetimes.end();){const auto& lifetime=*i;
@@ -6961,7 +7054,6 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
    for(size_t n=0;n<s.context_references.size();++n)
     if(s.context_references[n] && s.context_references[n]->receipt.finished())
      retired_contexts[n]=std::move(s.context_references[n]);
-  retired.swap(s.host_retired);
   // Expected receipts have separate native Data/callback ownership. Preserve
   // their original Step boundary; pending maintenance retires Work only.
   if(include_expected)retired_calls.swap(s.retired_expected);
@@ -6979,6 +7071,7 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
      std::any_of(retired_contexts.begin(),retired_contexts.end(),[](const auto& d){return bool(d);})) { 
    s.task_close_frames.fetch_add(1,std::memory_order_acq_rel);reference_reap.active=true;
   }
+  }
  }
  if(retired_service){NativeXmsgProvenance::ReleaseIdentityService(retired_service->data_->link);
   retired_service->data_->ReleaseResourcesOnHost();}
@@ -6989,8 +7082,8 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
  // real OS Bootstrap host phase after dropping State/GCRC, including while
  // its real scheduled identity call is still pending.
  retired.clear();retired_calls.clear();retired_execution.clear();
- if(s.listeners){auto listener_retired=s.listeners->ReapOnHostOutsideGuestLocks();}
- return true;
+ if(native_owners_healthy && s.listeners){auto listener_retired=s.listeners->ReapOnHostOutsideGuestLocks();}
+ return native_owners_healthy;
 }catch(...){return false;} // Maintenance is never a native result/readiness source.
 
 bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept try {
@@ -7017,16 +7110,11 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
  {
   std::lock_guard lock(s.mutex);job=s.job;cleanup=s.bootstrap_cleanup;
  }
- const auto exhausted=[&]{
-  std::lock_guard lock(s.mutex);
-  return s.bootstrap_deadline!=std::chrono::steady_clock::time_point{} &&
-      std::chrono::steady_clock::now()>=s.bootstrap_deadline;
- };
- const auto deadline_failure=[&]{
-  const auto error=std::make_error_code(std::errc::timed_out);
-  s.RecordBootstrapFailure(21,__LINE__,error,false);
-  std::lock_guard lock(s.mutex);s.bootstrap_fatal=true;return false;
- };
+ // Initial host/native reconciliation has no supplied caller timeout. Its
+ // previous five-second wall budget included JIT, old render/paint rundown and
+ // native Task dispatch, none of which proves a guest failure when slow. Keep
+ // eligible work on the existing progress turns; user stop/source refusal
+ // still cancels the exact intent. Explicit host facade deadlines remain.
  // A failed Prepare may already have published a canceling operation even
  // when it returned null. Retain and cancel that EXACT attempt, never infer
  // cleanup from a missing result or prepare over a live pending operation.
@@ -7037,7 +7125,7 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
    const bool retryable=State::RetryableBootstrapError(canceled.error);
    s.RecordBootstrapFailure(20,__LINE__,canceled.error,retryable,0,0,uint32_t(canceled.phase));
    if(!retryable){std::lock_guard lock(s.mutex);s.bootstrap_fatal=true;return false;}
-   return exhausted()?deadline_failure():true;
+   return true;
   }
   bool fatal=false;
   {std::lock_guard lock(s.mutex);
@@ -7054,21 +7142,16 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   }
   if(s.stopping.load())return true;
   if(fatal)return false;
-  return exhausted()?deadline_failure():true; // Fresh Prepare is a later turn.
+  return true; // Fresh Prepare is a later turn.
  }
  bool initial=false;
  {
   std::lock_guard lock(s.mutex);
   if(s.bootstrap_fatal && !s.stopping.load())return false;
   initial=!job && !s.aligned && !s.boot_alignment_claimed && !s.stopping.load();
-  if(initial){
-   s.boot_alignment_claimed=true;++s.bootstrap_attempts;
-   if(s.bootstrap_deadline==std::chrono::steady_clock::time_point{})
-    s.bootstrap_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
-  }
+  if(initial){s.boot_alignment_claimed=true;++s.bootstrap_attempts;}
  }
  if(initial){
-  if(exhausted())return deadline_failure();
   const auto failed=[&](uint32_t line,uint32_t stage,std::error_code error,bool retryable,
                         const std::shared_ptr<xam::ProfileRosterIntent>& attempt){
    if(!error){error=std::make_error_code(std::errc::operation_canceled);retryable=false;}
@@ -7082,7 +7165,7 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
    // Native entry has not happened; common cancellation owns every staged
    // mount/pause until its factual outcome. Busy is retried on the next turn.
    if(attempt){pm->RetryRosterSettlement();pm->CancelRoster(attempt);}
-   return retryable?(exhausted()?deadline_failure():true):false;
+   return retryable;
   };
   std::error_code error;const auto expected=pm->CaptureRosterExpected(error);
   if(error || !expected.roster)return failed(__LINE__,1,error,State::RetryableBootstrapError(error),{});
@@ -7092,7 +7175,6 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   std::shared_ptr<xam::ProfileRosterIntent> attempt;
   const auto intent=pm->PrepareRosterAttempt(desired,expected,error,&attempt);
   if(!intent || error)return failed(__LINE__,2,error,State::RetryableBootstrapError(error),attempt);
-  if(exhausted())return failed(__LINE__,21,std::make_error_code(std::errc::timed_out),false,attempt);
   bool retryable=false;
   if(!EnqueuePrepared(intent,nullptr,nullptr,0,0,0,true,error,&retryable))
    return failed(__LINE__,17,error,retryable,attempt);
@@ -7138,7 +7220,15 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
    s.current_ticket=std::move(ticket);s.boot_reads=std::move(reads);s.pixels=std::move(pixels);
    s.old_ingress_closed=false;s.render_phase=State::RenderPhase::kOpen;
    s.render_query_parked=false;job->done=true;release=std::move(s.job);
-   if(!s.aligned && !s.stopping.load())s.Lose(__LINE__); // No pretend startup alignment.
+   if(!s.aligned && !s.stopping.load()){
+    // The callback and Schedule/Wait/Close have really returned and the exact
+    // canceled intent's old source/paint/read rundown has completed. Retry a
+    // known transient pre-entry refusal on a LATER existing SYSTEM turn;
+    // restoring hidden old pixels is not startup alignment/publication.
+    if(job->bootstrap_alignment && job->retry_initial_after_cancel)
+     s.boot_alignment_claimed=false;
+    else s.bootstrap_fatal=true;
+   }
   }
   s.changed.notify_all();return !s.uncertain.load();
  }
@@ -7249,10 +7339,31 @@ bool NativeProfileIdentityOwner::StepOnBootstrap(XThread& bootstrap) noexcept tr
   const auto result=continuation->InvokeOwnedProfileIdentityAndWait(*this,job->serial,
       [self=shared_from_this()](XThread& actual){return self->ExecutePreparedOn(actual);});
   ObserveBootstrapHandoff(HandoffStage::kContinuationReturned);
-  {std::lock_guard lock(s.mutex);job->transport_running=false;
+  bool cancel_before_entry=false;
+  {
+   std::lock_guard lock(s.mutex);job->transport_running=false;
    const bool failed=observed(PaintStage::kContinuation,8,!result.succeeded);
    observation.Finish(PaintStage::kContinuation,result.succeeded);
-   if(failed){job->execution_uncertain=true;s.Lose(__LINE__);return false;}}
+   if(failed){
+    cancel_before_entry=s.job==job && !job->native_entered && !job->entering &&
+        !job->execution_uncertain && !s.uncertain.load() &&
+        job->ingress.NotEnteredAndJoined(job->serial,job->source);
+    if(!cancel_before_entry){job->execution_uncertain=true;s.Lose(__LINE__);return false;}
+    const bool retryable=State::RetryableBootstrapError(job->preentry_error);
+    job->retry_initial_after_cancel=job->bootstrap_alignment && retryable && !s.stopping.load();
+    if(job->bootstrap_alignment){
+     s.RecordBootstrapFailure(22,__LINE__,job->preentry_error,retryable);
+     // A permanent initial refusal becomes fatal only AFTER the exact
+     // canceled Job finishes old-source rundown below.
+    }
+   }
+  }
+  if(cancel_before_entry){
+   // CancelQueued excludes live transport by design. Invoke/Wait/Close and the
+   // whole callback have now returned; only now can this exact pre-entry
+   // operation release input and begin its ordinary asynchronous rundown.
+   CancelQueued(job->intent);return true;
+  }
  }
  phase=job->intent->result().phase;
  if(phase!=xam::ProfileRosterPhase::kPublished && phase!=xam::ProfileRosterPhase::kFinalizing &&

@@ -284,7 +284,8 @@ GuestRuntime::ExecutionResult NativeSystemTaskContinuation::InvokeAndWaitImpl(
     std::function<bool(XThread&,std::span<const uint32_t>)> before_schedule,
     std::function<void(const cpu::GuestCallResult&)> after_schedule,
     std::function<bool()> stop_retention_current,
-    std::function<void()> identity_host_maintenance) {
+    std::function<void()> identity_host_maintenance,TransportReturn* transport_return) {
+  if(transport_return)*transport_return={};
   // Private synchronous host phase, supplied only by the retained identity
   // owner. Never store it in Invocation or give it result/admission authority.
   if(identity_host_maintenance && role!=Admission::Role::kOwnedProfileIdentity)
@@ -381,7 +382,9 @@ GuestRuntime::ExecutionResult NativeSystemTaskContinuation::InvokeAndWaitImpl(
         invocation->output};
     if(invocation->before_schedule && !invocation->before_schedule(bootstrap,args)) {
       // No native Schedule was attempted; the exact ticket/output remains ours.
-      finish(true);return Failure("Owned service refused exact Schedule genealogy");
+      finish(true);
+      if(transport_return)*transport_return=TransportReturn::NotScheduled(true);
+      return Failure("Owned service refused exact Schedule genealogy");
     }
     NativeProfileIdentityOwner::SharedScheduleObservation transport_observation;
     if(role!=Admission::Role::kOwnedProfileIdentity){
@@ -428,6 +431,13 @@ GuestRuntime::ExecutionResult NativeSystemTaskContinuation::InvokeAndWaitImpl(
     }
     if (!accepted) {
       finish(rejected_without_entry);
+      if(rejected_without_entry && transport_return){
+        // No Wait/Close is called or claimed. The Schedule executed and
+        // rejected without transferring its callback; finish completed the
+        // genuine rejected invocation cleanup before this receipt is issued.
+        *transport_return=TransportReturn::Rejected(scheduled.executed,
+            uint32_t(scheduled.value),false,false,true);
+      }
       return Failure("native continuation Schedule failed or is uncertain");
     }
     for (;;) {

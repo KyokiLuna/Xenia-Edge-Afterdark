@@ -1,5 +1,6 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "third_party/catch/include/catch.hpp"
+#include <vector>
 #include "xenia/kernel/native_profile_identity_tasks.h"
 #include "xenia/kernel/native_identity_image_observation.h"
 #include "xenia/kernel/native_system_task_continuation.h"
@@ -12,6 +13,16 @@ class NativeProfileIdentityTaskTestAccess final {
   using Ledger=identity_detail::NativeProfileIdentityTasks;
   using Frame=Ledger::Frame;
   using Birth=Ledger::Birth;
+  using PreparedIngress=Ledger::PreparedIngress;
+  using HostReapLane=Ledger::HostReapLane;
+  using PreparationDeadline=Ledger::PreparationDeadline;
+  using TransportReturn=NativeSystemTaskContinuation::TransportReturn;
+  static void RejectedScheduleLifecycle();
+  static void PreparedRefusalCallbackLifecycle();
+  template<typename Queue>
+  static HostReapLane CaptureHostReap(bool retired,bool healthy,Queue& terminal,Queue& captured){
+    return Ledger::CaptureHostReap(retired,healthy,terminal,captured);
+  }
   static constexpr Ledger::Root root{71,83,97};
   static Frame F(uint32_t function,uint32_t sp=0x91010000,uint32_t lr=0x8199C68C){
     return {root,3,0x90001000,sp,lr,function};
@@ -3016,5 +3027,246 @@ TEST_CASE("Task instruction participation preserves genuine ledger operand refus
 TEST_CASE("Unknown Task dispatch participation preserves actual ambient and older suspended reads",
           "[identity_task][execution][task_participation][read_scope]"){
  NativeProfileIdentityTaskTestAccess::ExecutionUnknownDispatchReadDuty();
+}
+} // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+// These exercise the exact prepared-operation receipt used by the native
+// owner. Task birth/entry/return below use its real production ledger. Read
+// and completed-transport inputs are metadata fixtures, not PPC/Kernel/Wait
+// or native profile acceptance proofs.
+void NativeProfileIdentityTaskTestAccess::PreparedRefusalCallbackLifecycle(){
+ using Access=NativeProfileIdentityTaskTestAccess;
+ Access::Ledger tasks(Access::root);Access::PreparedIngress ingress;
+ constexpr uint64_t serial=53,source=101;
+ REQUIRE(ingress.Bind(serial,source));
+ const auto schedule_frame=Access::F(0x816BA440);
+ const auto schedule=tasks.BeginIdentityContinuationSchedule(schedule_frame,source,0x10001,0x41000100);
+ REQUIRE(schedule);
+ const auto allocation=Access::F(0x816B9A18,schedule_frame.sp-0x90,0x816BA46C);
+ REQUIRE(tasks.EnterAllocation(schedule,allocation,0,allocation.sp+0x50));
+ const auto allocated=tasks.ReturnAllocation(schedule,allocation,0,0x41081000);REQUIRE(allocated);
+ const auto birth=*allocated;
+ REQUIRE(tasks.BeforePublication(schedule,Access::F(0x816B9BB8,allocation.sp,0x816BA4D8),
+     birth.task,0x81696558,0x10001,birth.task|1u));
+ REQUIRE(tasks.ReturnSchedule(schedule,schedule_frame,0));
+ const auto callback=Access::F(0x81696558,0x71000000,0x816B8B64);
+ REQUIRE(tasks.EnterWork(callback,birth.task,0x10001));
+ REQUIRE(ingress.BeginEntry(serial,source));
+ REQUIRE(ingress.RefuseBeforeEntry(serial,source));
+ CHECK(ingress.KnownNotEntered(serial,source));
+ CHECK_FALSE(ingress.CanReturnBody(serial,source,true));
+ CHECK_FALSE(ingress.NotEnteredAndJoined(serial,source));
+ CHECK_FALSE(ingress.ReturnBody(serial,source,false,false,true));
+ REQUIRE(tasks.ReturnWork(callback,birth));
+ CHECK_FALSE(ingress.ReturnBody(serial,source,false,true,false));
+ REQUIRE(ingress.ReturnBody(serial,source,false,true,true));
+ CHECK_FALSE(ingress.NotEnteredAndJoined(serial,source));
+ CHECK_FALSE(ingress.JoinTransport(serial,source,false,birth.task|1u));
+ CHECK_FALSE(ingress.JoinTransport(serial,source,true,0));
+ CHECK_FALSE(ingress.JoinTransport(serial,source,true,birth.task));
+ REQUIRE(ingress.JoinTransport(serial,source,true,birth.task|1u));
+ CHECK(ingress.NotEnteredAndJoined(serial,source));
+ CHECK_FALSE(ingress.BeginEntry(serial,source));
+ CHECK_FALSE(ingress.JoinTransport(serial,source,true,birth.task|1u));
+ CHECK_FALSE(tasks.lost());
+}
+TEST_CASE("Prepared preentry failure returns its callback without claiming native success",
+          "[identity_task][prepared_ingress][lifecycle]"){
+ NativeProfileIdentityTaskTestAccess::PreparedRefusalCallbackLifecycle();
+}
+TEST_CASE("Entered or unproved native ingress cannot become a preentry cancellation",
+          "[identity_task][prepared_ingress][uncertain]"){
+ using Ingress=NativeProfileIdentityTaskTestAccess::PreparedIngress;
+ Ingress unproved;REQUIRE(unproved.Bind(59,107));
+ // A generic false body result alone cannot authenticate ownership return.
+ CHECK_FALSE(unproved.CanReturnBody(59,107,false));
+ CHECK_FALSE(unproved.ReturnBody(59,107,false,true,true));
+ CHECK_FALSE(unproved.JoinTransport(59,107,true,0x41082001));
+ REQUIRE(unproved.BeginEntry(59,107));
+ REQUIRE(unproved.NativeEntered(59,107));
+ CHECK_FALSE(unproved.RefuseBeforeEntry(59,107));
+ CHECK_FALSE(unproved.KnownNotEntered(59,107));
+ CHECK_FALSE(unproved.ReturnBody(59,107,false,true,true));
+ CHECK_FALSE(unproved.ReturnBody(59,107,true,true,true));
+ REQUIRE(unproved.NativeReturned(59,107));
+ CHECK_FALSE(unproved.ReturnBody(59,107,false,true,true));
+ REQUIRE(unproved.ReturnBody(59,107,true,true,true));
+ REQUIRE(unproved.JoinTransport(59,107,true,0x41082001));
+ CHECK_FALSE(unproved.NotEnteredAndJoined(59,107));
+ CHECK_FALSE(unproved.RefuseBeforeEntry(59,107));
+}
+TEST_CASE("Prepared retry preserves the exact operation and rejects stale callback joins",
+          "[identity_task][prepared_ingress][retry][lifetime]"){
+ using Ingress=NativeProfileIdentityTaskTestAccess::PreparedIngress;
+ Ingress ingress;CHECK_FALSE(ingress.Bind(0,113));REQUIRE(ingress.Bind(61,113));
+ CHECK_FALSE(ingress.Bind(61,113));
+ REQUIRE(ingress.BeginEntry(61,113));
+ CHECK_FALSE(ingress.RetryEntry(62,113));
+ CHECK_FALSE(ingress.RetryEntry(61,114));
+ REQUIRE(ingress.RetryEntry(61,113));
+ CHECK_FALSE(ingress.ReturnBody(61,113,false,true,true));
+ REQUIRE(ingress.BeginEntry(61,113));REQUIRE(ingress.RefuseBeforeEntry(61,113));
+ CHECK_FALSE(ingress.ReturnBody(62,113,false,true,true));
+ CHECK_FALSE(ingress.ReturnBody(61,114,false,true,true));
+ REQUIRE(ingress.ReturnBody(61,113,false,true,true));
+ CHECK_FALSE(ingress.JoinTransport(62,113,true,0x41083001));
+ CHECK_FALSE(ingress.JoinTransport(61,114,true,0x41083001));
+ REQUIRE(ingress.JoinTransport(61,113,true,0x41083001));
+ Ingress next;REQUIRE(next.Bind(62,114));
+ CHECK_FALSE(next.NotEnteredAndJoined(62,114));
+ CHECK_FALSE(next.JoinTransport(61,113,true,0x41083001));
+ CHECK_FALSE(next.ReturnBody(62,114,false,true,true));
+ // A fresh operation requires its own actual producer/refusal/body/transport
+ // sequence; the previous generation's completed receipt is not reusable.
+ REQUIRE(next.BeginEntry(62,114));REQUIRE(next.RefuseBeforeEntry(62,114));
+ REQUIRE(next.ReturnBody(62,114,false,true,true));
+ REQUIRE(next.JoinTransport(62,114,true,0x41084001));
+ CHECK(next.NotEnteredAndJoined(62,114));
+ CHECK(ingress.NotEnteredAndJoined(61,113));
+}
+} // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Terminal host owners reap after unrelated uncertainty without dropping active native owners",
+          "[identity_task][host_retirement][lifetime]"){
+ using Access=NativeProfileIdentityTaskTestAccess;
+ using Lane=Access::HostReapLane;
+ struct Resource {
+  uint32_t& released;bool& locked;bool& released_under_lock;
+  ~Resource(){++released;released_under_lock|=locked;}
+ };
+ uint32_t released=0;bool locked=false,released_under_lock=false;
+ auto active=std::shared_ptr<Resource>(new Resource{released,locked,released_under_lock});
+ std::weak_ptr<Resource> uncertain_native=active;
+ std::vector<std::shared_ptr<Resource>> terminal,captured;
+ for(uint32_t batch=0;batch<16;++batch){
+  for(uint32_t i=0;i<128;++i)
+   terminal.emplace_back(new Resource{released,locked,released_under_lock});
+  const auto before=released;locked=true;
+  CHECK(Access::CaptureHostReap(false,false,terminal,captured)==Lane::kTerminalOnly);
+  CHECK(terminal.empty());CHECK(captured.size()==128);CHECK(released==before);
+  CHECK_FALSE(uncertain_native.expired());
+  locked=false;captured.clear();
+  CHECK(released==before+128);CHECK_FALSE(released_under_lock);
+ }
+ terminal.emplace_back(new Resource{released,locked,released_under_lock});
+ locked=true;
+ CHECK(Access::CaptureHostReap(true,true,terminal,captured)==Lane::kRetired);
+ CHECK(terminal.size()==1);CHECK(captured.empty());
+ CHECK(Access::CaptureHostReap(false,true,terminal,captured)==Lane::kNativeOwners);
+ CHECK(terminal.empty());CHECK(captured.size()==1);CHECK_FALSE(uncertain_native.expired());
+ locked=false;captured.clear();active.reset();
+ CHECK(uncertain_native.expired());CHECK_FALSE(released_under_lock);
+}
+} // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Native preparation does not expire guest bootstrap or logon for elapsed host time",
+          "[identity_task][prepared_ingress][deadline]"){
+ using Deadline=NativeProfileIdentityTaskTestAccess::PreparationDeadline;
+ using Clock=Deadline::Clock;
+ const auto started=Clock::time_point(std::chrono::seconds(100));
+ const auto after_jit=started+std::chrono::hours(8);
+ CHECK_FALSE(Deadline::Expired({},started));
+ CHECK_FALSE(Deadline::Expired({},after_jit));
+ CHECK_FALSE(Deadline::Expired(Deadline::Unbounded(),started));
+ CHECK_FALSE(Deadline::Expired(Deadline::Unbounded(),after_jit));
+ // An explicitly finite host facade request retains its real bound, including
+ // the exact expiry edge. A guest/bootstrap absence is never this bound.
+ const auto finite=started+std::chrono::seconds(15);
+ CHECK_FALSE(Deadline::Expired(finite,finite-Clock::duration(1)));
+ CHECK(Deadline::Expired(finite,finite));
+ CHECK(Deadline::Expired(finite,after_jit));
+}
+} // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+void NativeProfileIdentityTaskTestAccess::RejectedScheduleLifecycle(){
+ using Transport=NativeSystemTaskContinuation::TransportReturn;
+ constexpr uint64_t serial=71,source=127;
+ constexpr uint32_t error=0x8007000E;
+ CHECK_FALSE(Transport::Rejected(false,error,false,false,true).rejected());
+ CHECK_FALSE(Transport::Rejected(true,0,false,false,true).rejected());
+ CHECK_FALSE(Transport::Rejected(true,error,true,false,true).rejected());
+ CHECK_FALSE(Transport::Rejected(true,error,false,true,true).rejected());
+ CHECK_FALSE(Transport::Rejected(true,error,false,false,false).rejected());
+ const auto rejected=Transport::Rejected(true,error,false,false,true);
+ REQUIRE(rejected.rejected());CHECK(rejected.native_result==error);
+ Ledger tasks(root);PreparedIngress ingress;REQUIRE(ingress.Bind(serial,source));
+ const auto outer=F(0x816BA440);
+ const auto schedule=tasks.BeginIdentityContinuationSchedule(outer,source,0x10003,0x41000200);
+ REQUIRE(schedule);
+ const auto allocation=F(0x816B9A18,outer.sp-0x90,0x816BA46C);
+ REQUIRE(tasks.EnterAllocation(schedule,allocation,0,allocation.sp+0x50));
+ // Allocation itself failed. A genuine negative Schedule returns without a
+ // Task birth/publication/callback, so there is nothing to Wait/Close.
+ CHECK_FALSE(tasks.ReturnAllocation(schedule,allocation,error,std::nullopt));
+ REQUIRE(tasks.ReturnSchedule(schedule,outer,error));
+ REQUIRE(tasks.SourceDescendantsClosed(source));
+ CHECK_FALSE(ingress.RefuseUnenteredTransport(serial,source,false,true,true));
+ CHECK_FALSE(ingress.RefuseUnenteredTransport(serial,source,true,false,true));
+ CHECK_FALSE(ingress.RefuseUnenteredTransport(serial,source,true,true,false));
+ REQUIRE(ingress.RefuseUnenteredTransport(serial,source,rejected.rejected(),true,
+                                        tasks.SourceDescendantsClosed(source)));
+ CHECK(ingress.NotEnteredAndJoined(serial,source));
+ CHECK_FALSE(ingress.CanReturnBody(serial,source,false));
+ CHECK_FALSE(ingress.JoinTransport(serial,source,true,0));
+ CHECK_FALSE(ingress.RefuseUnenteredTransport(serial,source,true,true,true));
+ // An allocated but unfreed node is not closed merely because Schedule
+ // returned a negative HRESULT and the body did not enter.
+ Ledger partial(root);PreparedIngress held;REQUIRE(held.Bind(73,131));
+ const auto pending=partial.BeginIdentityContinuationSchedule(outer,131,0x10004,0x41000300);REQUIRE(pending);
+ REQUIRE(partial.EnterAllocation(pending,allocation,0,allocation.sp+0x50));
+ REQUIRE(partial.ReturnAllocation(pending,allocation,0,0x41085000));
+ REQUIRE(partial.ReturnSchedule(pending,outer,error));
+ CHECK_FALSE(partial.SourceDescendantsClosed(131));
+ CHECK_FALSE(held.RefuseUnenteredTransport(73,131,true,true,partial.SourceDescendantsClosed(131)));
+ CHECK_FALSE(held.NotEnteredAndJoined(73,131));
+ const auto close=F(0x816B7490,0x91020000,0x816BA524);
+ REQUIRE(partial.EnterClose(close,0x41085000));
+ const auto deletion=F(0x816B7D98,close.sp-0x60,0x816B74E8);
+ REQUIRE(partial.EnterDeletingDestructor(deletion,0x41085000,1));
+ const auto freeing=F(0x816E6AB0,deletion.sp-0x70,0x816B7DC8);
+ REQUIRE(partial.EnterTaskFree(freeing,0x41085000));
+ CHECK_FALSE(partial.SourceDescendantsClosed(131));
+ REQUIRE(partial.ReturnTaskFree(freeing));
+ REQUIRE(partial.ReturnDeletingDestructor(deletion));
+ REQUIRE(partial.ReturnClose(close,0));
+ REQUIRE(partial.SourceDescendantsClosed(131));
+ // No ReturnWork was fabricated: the native callback never entered.
+ REQUIRE(held.RefuseUnenteredTransport(73,131,true,true,partial.SourceDescendantsClosed(131)));
+ CHECK(held.NotEnteredAndJoined(73,131));CHECK_FALSE(partial.lost());
+ PreparedIngress entered;REQUIRE(entered.Bind(79,137));
+ REQUIRE(entered.BeginEntry(79,137));REQUIRE(entered.NativeEntered(79,137));
+ CHECK_FALSE(entered.RefuseUnenteredTransport(79,137,true,true,true));
+}
+TEST_CASE("Rejected native Schedule cancels only with real no-body and native descendant closure",
+          "[identity_task][prepared_ingress][schedule_rejection][lifetime]"){
+ NativeProfileIdentityTaskTestAccess::RejectedScheduleLifecycle();
+}
+} // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Proved pre-Schedule admission refusal owns no callback or WaitClose completion",
+          "[identity_task][prepared_ingress][preflight][lifetime]"){
+ using Access=NativeProfileIdentityTaskTestAccess;
+ using Transport=Access::TransportReturn;
+ CHECK_FALSE(Transport::NotScheduled(false).not_scheduled());
+ const auto refused=Transport::NotScheduled(true);REQUIRE(refused.not_scheduled());
+ CHECK_FALSE(refused.rejected());
+ Access::PreparedIngress ingress;REQUIRE(ingress.Bind(83,139));
+ CHECK_FALSE(ingress.RefuseUnscheduledTransport(83,139,false,true,true));
+ CHECK_FALSE(ingress.RefuseUnscheduledTransport(83,139,true,false,true));
+ CHECK_FALSE(ingress.RefuseUnscheduledTransport(83,139,true,true,false));
+ CHECK_FALSE(ingress.RefuseUnscheduledTransport(84,139,true,true,true));
+ REQUIRE(ingress.RefuseUnscheduledTransport(83,139,true,true,true));
+ CHECK(ingress.NotEnteredAndJoined(83,139));
+ CHECK_FALSE(ingress.CanReturnBody(83,139,false));
+ CHECK_FALSE(ingress.JoinTransport(83,139,true,0));
+ CHECK_FALSE(ingress.RefuseUnscheduledTransport(83,139,true,true,true));
+ Access::PreparedIngress entered;REQUIRE(entered.Bind(89,149));
+ REQUIRE(entered.BeginEntry(89,149));
+ CHECK_FALSE(entered.RefuseUnscheduledTransport(89,149,true,true,true));
 }
 } // namespace xe::kernel::test

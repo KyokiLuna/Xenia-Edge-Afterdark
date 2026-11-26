@@ -1,11 +1,13 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V133 adds the shared profile package/Header/cache deletion transaction
-and precise frame/stop observations. Its corrected build and all seven direct
-test runs passed. The actual native run still failed: the dashboard booted with
-the disposable local profile already selected, Guide remained invisible, and
-an earlier startup handoff entered uncertainty. Memory growth triggered the
-resource guard. No usable checkpoint or native shutdown pass is claimed.
+Status: V134's prepared-ingress, cancellation and terminal-retirement change
+builds and passes all seven direct test runs. Its actual dashboard/Guide run
+still failed. Memory stayed near 704 MiB through the six-minute test, but the
+Guide remained invisible while initial native reconciliation waited inside its
+continuation. The process exited one after an ordinary window close and a
+Bootstrap thread-join timeout, with clean reaping and no forced signals. No
+usable checkpoint or native shutdown pass is claimed. V133's earlier false
+pre-entry uncertainty and memory-guard failure remain recorded below.
 Historical V130–V132 findings remain labeled below. The combined HDD gate is
 open. This work follows
 the standing [systems approach and
@@ -328,11 +330,17 @@ four-step rebuild relinked the base/kernel tests and verified the other five
 products unchanged. The embedded version retains compilation base `0d28167d`.
 
 The isolated dashboard booted displaying disposable local123 in both dashboard
-and host toolbar. Guide visibility was notified, but no overlay appeared. This
+and host toolbar. The remembered roster selected slot 1; the toolbar name alone
+does not identify a controller slot. Guide visibility was notified, but no overlay appeared. This
 differs from V132's unsigned-start/explicit-sign-in scenario. The actual owner
 was already uncertain at `RunScheduledBody` line 5717, in OldPaused with read
 source 2, job/source 3 and one Expected owner. That line combines body failure,
-Task return and read-scope leave; the trace does not distinguish its conjuncts.
+Task return and read-scope leave. Later observations of the same job have its
+captured flag clear. That flag includes the monotonic `native_entered` state,
+and `ExecutePreparedOn` cannot succeed before setting that state. Together,
+these source and trace facts establish a false operation result before native
+entry: the first condition short-circuits the actual Task return and scope
+leave. They do not distinguish the precise pre-entry refusal or deadline.
 Pre-entry admission repeatedly recorded retryable Busy at line 7094. No original
 logon, publication, final-readiness or post-want Poll record was observed.
 
@@ -351,7 +359,12 @@ paths can still append to them. Offline ELF debug metadata reports a Work object
 size of 22,000 bytes. The recorded next-work serial exceeds 305,000, consistent
 with the order of memory growth; this is not a measured retained-object count.
 Known pre-entry failures, actual uncertain native execution and already terminal
-resource retirement must remain distinct. No guard is relaxed from this finding.
+resource retirement must remain distinct. Cancellation currently refuses while
+the scheduled transport is running, so that operation result must reach genuine
+transport completion before cancellation and old-source cleanup can finish.
+The host's five-second preparation budgets also span unrelated render and
+scheduler delays; their role requires review with the entire startup lifecycle.
+No guard is relaxed from this finding.
 
 | V133 record | SHA256 |
 | --- | --- |
@@ -361,6 +374,60 @@ resource retirement must remain distinct. No guard is relaxed from this finding.
 | ELF | `e6f527a1bee2cf4ba04e545fd9cc266061151f5df633b068dea912984bd361cc` |
 | Actual native result | `ffa51eace54b59e41684394b1c3c19972a13993b2cad8c2cdf9a196534b8d190` |
 | Root native assessment | `b3c625d941e9ed4c3e6c02f5ed85e0882f66b6fb9a5f66691a0aef40f24e01f2` |
+
+## V134 tested lifecycle unit and current native result
+
+The five-file change separates a known refusal before native identity entry
+from uncertain execution. Its exact operation receipt joins the real callback's
+Task/read return and native transport Wait/Close before cancellation can begin.
+A rejected Schedule instead requires its actual no-callback cleanup and native
+descendant closure; it never receives a fabricated completed handle or callback
+return. An allocated, rejected Task closes only after its real native free.
+Other unproved generic preflight failures remain conservative holds.
+
+Guest 20B/224 calls supply no timeout argument. Their preparation and initial
+bootstrap alignment no longer expire after an invented five seconds of host/JIT
+time. Existing cancellation, source/error checks and inherited-lock refusal
+remain; explicitly bounded host facade requests retain their host policy.
+Completed host records can be reclaimed after unrelated uncertainty, while
+active work, pending reads, native frees, references and services keep their
+separate ownership requirements.
+
+Seven added cases cover the consumed receipt, actual Task-ledger failure/free
+ordering, stale joins, terminal resource retention and deadline policy. The
+corrected build and all seven runs passed: base 334/28,711 assertions, network
+125/11,212, kernel 1,470/93,136, VFS 136/9,736, UI 124/4,863, focused CPU 5/130
+and installed-focus 201/23,373. The five full suites contain 2,189 cases and
+147,658 assertions; focused runs overlap this coverage. The first build's two
+private-access errors remain failures; the narrow State forwarding correction
+preserves the same predicate and existing mutex. Compilation base is `1bd39845`.
+
+The actual isolated dashboard again displayed disposable local123. Guide
+visibility was notified, but no overlay appeared; screenshots after B and Right
+did not establish input return. RSS stayed between 700.3 and 706.4 MiB after
+warm-up, rather than repeating V133's rapid growth. The run ended after 368.22
+seconds following an owned window close. Its exit-one Bootstrap join failure is
+not a native shutdown pass, despite full process reaping without forced signals.
+All checked source, configuration, products, index and system inputs remained
+unchanged. Game, Avatar Editor and packaged AppImage checks have not run.
+
+The actual native 224 path reached Schedule at return address `0x8199F01C`
+with callback `0x8199C838`. The owner stayed in OldPaused with two Expected
+records and no first-loss marker or publication evidence. Static review found
+that the service-origin factory requires an optional public request object
+which canonical bootstrap reconciliation does not have. Its ensuing actual
+producer/Task/read/commit/source/code facts do not consume that object. This is
+a verified exclusion in the shared service contract; the trace has not yet
+proved that this run reached the FC producer or its wait. No synthetic service
+completion or weakened ownership check follows from that finding.
+
+| V134 record | SHA256 |
+| --- | --- |
+| Tested source map | `64bb91d0dca474c0f8ecd93b8ea425b17836f36253a5cac6974890d2544b80ea` |
+| Corrected build | `42dfddfcc77163599015d87d39f0f83fda3abae0a518752fbd8a5ffc77549cfa` |
+| All seven direct runs | `f46a5461f90ceaef83beecdc98780ed717b5df5a3286b5da678fa67072812135` |
+| ELF | `374c65794780979cf6fd90e4b9e4922d88d43106e623a656d9922b718792cda2` |
+| Root native assessment | `8034a251f085743b9b9d0009ad7037216617d3fc22b300e272f15cb5b700bc88` |
 
 The separate closed-file IO checkpoint and logical STFS producer remain private
 work. Their candidate reviews do not establish native controls, formatting,

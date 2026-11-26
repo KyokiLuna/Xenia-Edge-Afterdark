@@ -144,13 +144,32 @@ class NativeSystemTaskContinuation {
   // Existing actual Invocation reference/execution only. Does not consult
   // allocation acceptance or grant source/readiness/new native work.
   bool MatchesTaskReleaseCaller(XThread&,uint32_t native_task) const;
+  // A rejected native Schedule has no Wait/Close result. This private receipt
+  // describes only the real no-callback rejection and completed host cleanup;
+  // its owner separately proves actual native Task/source descendants closed.
+  struct TransportReturn {
+    enum class Kind { kUnproved, kNotScheduled, kRejectedBeforeCallback };
+    Kind kind=Kind::kUnproved;
+    uint32_t native_result=0;
+    static TransportReturn Rejected(bool executed,uint32_t result,bool entered,
+        bool uncertain,bool cleaned) noexcept {
+      if(!executed || int32_t(result)>=0 || entered || uncertain || !cleaned)return {};
+      return {Kind::kRejectedBeforeCallback,result};
+    }
+    static TransportReturn NotScheduled(bool cleaned) noexcept {
+      return cleaned?TransportReturn{Kind::kNotScheduled,0}:TransportReturn{};
+    }
+    bool not_scheduled() const noexcept {return kind==Kind::kNotScheduled;}
+    bool rejected() const noexcept {return kind==Kind::kRejectedBeforeCallback;}
+  };
   GuestRuntime::ExecutionResult InvokeAndWaitImpl(
       XThread&, Work, Admission::Role, uint32_t* completed_native_task = nullptr,
       std::function<bool()> owner_current = {},
       std::function<bool(XThread&,std::span<const uint32_t>)> before_schedule = {},
       std::function<void(const cpu::GuestCallResult&)> after_schedule = {},
       std::function<bool()> stop_retention_current = {},
-      std::function<void()> identity_host_maintenance = {});
+      std::function<void()> identity_host_maintenance = {},
+      TransportReturn* transport_return = nullptr);
   struct State;
   explicit NativeSystemTaskContinuation(std::shared_ptr<State>);
   static void Enter(cpu::ppc::PPCContext*, KernelState*);

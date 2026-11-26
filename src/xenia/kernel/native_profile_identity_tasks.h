@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstddef>
+#include <chrono>
 #include <optional>
 #include <atomic>
 #include <memory>
@@ -382,6 +383,109 @@ class NativeProfileIdentityTasks final {
     uint64_t serial=0;
     bool execution_only=false,execution_uncertain=false,normal_return=false;
   };
+  // Only explicitly finite host facade requests expire preparation. Original
+  // guest logon and SYSTEM bootstrap have no host wall-clock timeout.
+  struct PreparationDeadline {
+    using Clock=std::chrono::steady_clock;
+    static Clock::time_point Unbounded() noexcept { return Clock::time_point::max(); }
+    static bool Expired(Clock::time_point deadline,Clock::time_point now) noexcept {
+      return deadline!=Clock::time_point{} && now>=deadline;
+    }
+  };
+  // A terminal queue has already had its original Task/read or pre-body
+  // reservation ended by its producer. Capture only that queue on the real
+  // host cut, even when unrelated native ownership is uncertain. Remaining
+  // native close/free/reference/service owners use the separate healthy lane.
+  enum class HostReapLane { kRetired, kTerminalOnly, kNativeOwners };
+  template <typename Queue>
+  static HostReapLane CaptureHostReap(bool retired, bool native_owners_healthy,
+      Queue& terminal, Queue& captured) noexcept {
+    if (retired) return HostReapLane::kRetired;
+    terminal.swap(captured); // no allocation or resource destructor at this cut
+    return native_owners_healthy ? HostReapLane::kNativeOwners : HostReapLane::kTerminalOnly;
+  }
+  // Exact prepared operation outcome, distinct from its scheduled Task's
+  // return and native Wait/Close. Only the real owner supplies these facts.
+  // A false host Work result is not evidence of lost PPC execution when its
+  // sole original-ingress producer proved that native entry never happened.
+  class PreparedIngress final {
+   public:
+    enum class Phase { kEmpty, kPrepared, kEntering, kNotEntered,
+                       kNativeEntered, kNativeReturned };
+    bool Bind(uint64_t serial, uint64_t source) noexcept {
+      if (phase_ != Phase::kEmpty || !serial || !source) return false;
+      serial_ = serial; source_ = source; phase_ = Phase::kPrepared; return true;
+    }
+    bool BeginEntry(uint64_t serial, uint64_t source) noexcept {
+      if (!Matches(serial, source) || phase_ != Phase::kPrepared) return false;
+      phase_ = Phase::kEntering; return true;
+    }
+    bool RetryEntry(uint64_t serial, uint64_t source) noexcept {
+      if (!Matches(serial, source) || phase_ != Phase::kEntering) return false;
+      phase_ = Phase::kPrepared; return true;
+    }
+    bool RefuseBeforeEntry(uint64_t serial, uint64_t source) noexcept {
+      if (!Matches(serial, source) || body_returned_ ||
+          (phase_ != Phase::kPrepared && phase_ != Phase::kEntering)) return false;
+      phase_ = Phase::kNotEntered; return true;
+    }
+    bool NativeEntered(uint64_t serial, uint64_t source) noexcept {
+      if (!Matches(serial, source) || phase_ != Phase::kEntering) return false;
+      phase_ = Phase::kNativeEntered; return true;
+    }
+    bool NativeReturned(uint64_t serial, uint64_t source) noexcept {
+      if (!Matches(serial, source) || phase_ != Phase::kNativeEntered) return false;
+      phase_ = Phase::kNativeReturned; return true;
+    }
+    bool KnownNotEntered(uint64_t serial, uint64_t source) const noexcept {
+      return Matches(serial, source) && phase_ == Phase::kNotEntered;
+    }
+    bool CanReturnBody(uint64_t serial, uint64_t source, bool succeeded) const noexcept {
+      return Matches(serial, source) && !body_returned_ && !transport_rejected_ &&
+          ((phase_ == Phase::kNotEntered && !succeeded) ||
+           (phase_ == Phase::kNativeReturned && succeeded));
+    }
+    bool ReturnBody(uint64_t serial, uint64_t source, bool succeeded,
+        bool task_returned, bool read_left) noexcept {
+      if (!CanReturnBody(serial, source, succeeded) || !task_returned || !read_left)
+        return false;
+      body_returned_ = true; return true;
+    }
+    bool JoinTransport(uint64_t serial, uint64_t source, bool schedule_returned,
+        uint32_t completed_task) noexcept {
+      if (!Matches(serial, source) || !body_returned_ || transport_joined_ ||
+          !schedule_returned || completed_task < 0x1000 || (completed_task & 3) != 1)
+        return false;
+      transport_joined_ = true; return true;
+    }
+    bool RefuseUnenteredTransport(uint64_t serial,uint64_t source,
+        bool actual_schedule_rejection,bool schedule_returned,bool descendants_closed) noexcept {
+      if(!Matches(serial,source) || phase_!=Phase::kPrepared || body_returned_ ||
+          transport_joined_ || !actual_schedule_rejection || !schedule_returned ||
+          !descendants_closed)return false;
+      // The callback never ran. This is neither Task/read return nor a
+      // fabricated Wait/Close; native descendant closure is proved separately.
+      phase_=Phase::kNotEntered;transport_rejected_=true;transport_joined_=true;return true;
+    }
+    bool RefuseUnscheduledTransport(uint64_t serial,uint64_t source,
+        bool invocation_cleaned,bool no_schedule_reservation,bool descendants_closed) noexcept {
+      if(!Matches(serial,source) || phase_!=Phase::kPrepared || body_returned_ ||
+          transport_joined_ || !invocation_cleaned || !no_schedule_reservation ||
+          !descendants_closed)return false;
+      phase_=Phase::kNotEntered;transport_rejected_=true;transport_joined_=true;return true;
+    }
+    bool NotEnteredAndJoined(uint64_t serial, uint64_t source) const noexcept {
+      return KnownNotEntered(serial, source) && transport_joined_ &&
+          (body_returned_ || transport_rejected_);
+    }
+   private:
+    bool Matches(uint64_t serial, uint64_t source) const noexcept {
+      return serial && source && serial == serial_ && source == source_;
+    }
+    uint64_t serial_ = 0, source_ = 0;
+    Phase phase_ = Phase::kEmpty;
+    bool body_returned_ = false, transport_joined_ = false, transport_rejected_ = false;
+  };
   // A strong exact-Work memento for deciding whether this instruction can
   // have a host metadata effect. It never replaces the original code proof.
   class ExecutionInstructionParticipation final {
@@ -723,6 +827,7 @@ class NativeProfileIdentityTasks final {
     uint32_t callback=0,argument=0;
     Frame work;
     bool published=false,started=false,returned=false,freed=false;
+    bool schedule_rejected=false; // genuine negative Schedule, not a callback return
     bool execution_only=false,execution_publication=false;
     uint32_t execution_flags=0;uint64_t execution_active=0;
     bool delete_entered=false,delete_returned=false,free_entered=false,free_returned=false;
@@ -757,7 +862,8 @@ class NativeProfileIdentityTasks final {
     if(!source){if(observation)observation->kind=2;return false;}
     for(const auto& node:nodes_)if(node && node->birth.origin==source &&
         (!node->freed || node->persistent_active ||
-         (!node->created_persistent && !node->resident_physical && !node->periodic_factory && !node->execution_only && !node->returned))){
+         (!node->created_persistent && !node->resident_physical && !node->periodic_factory && !node->execution_only &&
+          !node->returned && !(node->schedule_rejected && !node->started)))){
       if(observation){
         observation->kind=3;observation->available|=2;observation->task=node->birth.task;
         observation->generation=node->birth.generation;observation->callback=node->callback;
@@ -765,7 +871,8 @@ class NativeProfileIdentityTasks final {
         observation->state=uint32_t(node->published)|(uint32_t(node->started)<<1)|(uint32_t(node->returned)<<2)|
             (uint32_t(node->freed)<<3)|(uint32_t(node->delete_entered)<<4)|(uint32_t(node->free_entered)<<5)|
             (uint32_t(node->created_persistent)<<6)|(uint32_t(node->resident_physical)<<7)|
-            (uint32_t(node->persistent_active)<<8)|(uint32_t(node->transport_only)<<9)|(uint32_t(node->foreign_avatar)<<10);
+            (uint32_t(node->persistent_active)<<8)|(uint32_t(node->transport_only)<<9)|(uint32_t(node->foreign_avatar)<<10)|
+            (uint32_t(node->schedule_rejected)<<11);
         observation->frame=node->persistent_active?node->persistent_work:node->work;
         if(observation->frame.valid())observation->available|=4;
       }
@@ -1708,8 +1815,12 @@ class NativeProfileIdentityTasks final {
     if(const auto* node=FindBirthConst(call->birth);node && node->periodic_factory &&
         int32_t(actual_hresult)>=0 && (!actual_native_state ||
         !MatchesPeriodicAllocation(node->birth,node->periodic_factory,*actual_native_state)))return false;
+    if(int32_t(actual_hresult)<0)if(auto* node=FindBirth(call->birth))
+      node->schedule_rejected=true;
     // A failed Schedule can still have a real allocated/published Task: its
     // native zero-ref Close is independently required; never discard its node.
+    // After actual free, a rejected never-started Task has no callback return
+    // duty. A started/unreturned Task still cannot be treated as closed.
     for (auto& value:schedules_) { if (value && value->serial==schedule) { value.reset();return true; } }
     Lose(__LINE__,26);return false;
   }

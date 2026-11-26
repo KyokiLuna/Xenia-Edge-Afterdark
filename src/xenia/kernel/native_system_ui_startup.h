@@ -193,9 +193,11 @@ class NativeSystemUiStartupCatalog {
   friend class NativeInitialEmptyProfileWitness;
   // Fixed compiled17559 profile, separate from the immutable923 heap plan.
   // Only the service's once-only prepared-Title record can execute this role.
-  GuestRuntime::Plan PreparedTitleHeapPlan(
+  GuestRuntime::Plan PreparedTitlePlan(
       const NativeSystemPreparedTitle&) const;
   GuestRuntime::ExecutionResult InitializePreparedTitleHeap(
+      XThread& actual_bootstrap, const NativeSystemPreparedTitle&) const;
+  GuestRuntime::ExecutionResult InitializePreparedTitleLoader(
       XThread& actual_bootstrap, const NativeSystemPreparedTitle&) const;
   struct State;
   explicit NativeSystemUiStartupCatalog(std::unique_ptr<State>);

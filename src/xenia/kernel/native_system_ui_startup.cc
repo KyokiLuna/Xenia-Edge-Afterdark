@@ -37,6 +37,7 @@
 #include "xenia/kernel/native_system_input_data.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/xthread.h"
+#include "xenia/kernel/xam/xam_module.h"
 #include "xenia/memory.h"
 DECLARE_bool(native_system_ui_trace);
 
@@ -760,10 +761,10 @@ NativeSystemUiStartupCatalog::Load(
   }
   return catalog;
 }
-GuestRuntime::Plan NativeSystemUiStartupCatalog::PreparedTitleHeapPlan(
+GuestRuntime::Plan NativeSystemUiStartupCatalog::PreparedTitlePlan(
     const NativeSystemPreparedTitle& title) const {
   GuestRuntime::Plan plan;
-  plan.identity = "17559-prepared-title-heap-v1";
+  plan.identity = "17559-prepared-title-heap-and-loader-v2";
   GuestRuntime::Function function;
   function.identity = "native-prepared-title-heap-initialize";
   function.address = 0x816E6870;
@@ -780,8 +781,17 @@ GuestRuntime::Plan NativeSystemUiStartupCatalog::PreparedTitleHeapPlan(
       std::to_string(title.load_generation) + ":" +
       std::to_string(title.main_thread_id) + ":" +
       "9d80e24f0dc87f1897b8e99e1aa567ba1a84dad23ffb833b2b9b54e04467d63d";
-  plan.phases.push_back(
-      {"actual-suspended-prepared-title", {std::move(function)}});
+  GuestRuntime::Function loader;
+  loader.identity = "native-prepared-title-loader-metadata";
+  loader.address = 0x8169BDD0;
+  loader.return_kind = GuestRuntime::ReturnKind::kVoid;
+  loader.abi_metadata =
+      "fixed17559:loader-component,resident-XEX-header,version0,launch-bool:"
+      "void:" +
+      function.abi_metadata + ":" +
+      "b30aa72138d85512504a6d78e119642588730b0c6ef5fd96909e958361b912a3";
+  plan.phases.push_back({"actual-suspended-prepared-title",
+                         {std::move(function), std::move(loader)}});
   return plan;
 }
 
@@ -987,6 +997,185 @@ NativeSystemUiStartupCatalog::InitializePreparedTitleHeap(
   return {healthy, called.value,
           healthy ? std::string{}
                   : "Native Title heap execution/postcondition uncertain"};
+}
+
+GuestRuntime::ExecutionResult
+NativeSystemUiStartupCatalog::InitializePreparedTitleLoader(
+    XThread& bootstrap, const NativeSystemPreparedTitle& expected) const {
+  const auto& calls = *state_->calls;
+  auto* kernel = calls.kernel();
+  auto* memory = kernel->memory();
+  auto* emulator = kernel->emulator();
+  const auto actual_caller = bootstrap.native_frame_thread_identity();
+  if (!expected.valid() || !SameRoot(calls, *state_->allocation) ||
+      !XThread::IsInThread(&bootstrap) || actual_caller.kernel != kernel ||
+      actual_caller.process_type != X_PROCTYPE_SYSTEM ||
+      actual_caller.thread_id != state_->allocation->bootstrap_thread_id() ||
+      !emulator || !emulator->OwnsTitleExecution(kernel)) {
+    return Fail("Actual prepared-Title loader/bootstrap/root identity invalid");
+  }
+  auto title = kernel->GetExecutableModule();
+  auto title_code =
+      title ? kernel->AcquireUserModuleExecutionLease(title) : nullptr;
+  auto main = kernel->GetThreadByID(expected.main_thread_id);
+  auto root = calls.module();
+  const auto caller = kernel->ResolveNativeImportCaller(0x8169BDD4);
+  auto operation = caller.domain ? caller.domain->Acquire()
+                                 : NativeImportDomain::Operation{};
+  auto xam = kernel->GetKernelModule<xam::XamModule>("xam.xex");
+  if (!title || !title_code || !main || !xam ||
+      main->kernel_state() != kernel ||
+      main->guest_object<X_KTHREAD>()->process_type != X_PROCTYPE_TITLE ||
+      !main->suspend_count() || title.get() == root.get() ||
+      title->module_format() != UserModule::kModuleFormatXex ||
+      caller.module.get() != root.get() || !operation ||
+      !state_->allocation->MatchesDomain(caller.domain)) {
+    return Fail("Actual suspended Title/loader/native domain unavailable");
+  }
+  const auto same_title = [&] {
+    const auto foreground = emulator->title_execution_state().snapshot();
+    const auto current = kernel->GetExecutableModule();
+    return emulator->OwnsTitleExecution(kernel) &&
+           foreground.phase == TitleExecutionState::Phase::kPreparing &&
+           foreground.hmodule == expected.hmodule && main->suspend_count() &&
+           SameNativeSystemPreparedTitle(
+               expected,
+               {foreground.generation, current ? current->hmodule_ptr() : 0,
+                current ? current->load_generation() : 0,
+                foreground.main_thread_id});
+  };
+  // This is the original loader's metadata role, not its load/licensing state
+  // machine. Original ED78->EF58 takes this SAME resident header through
+  // XexExecutableModuleHandle/LDR+58 and uses version override0. Host loading
+  // has already applied any TU before publishing this retained header.
+  constexpr Anchor profile[] = {
+      {0x8169BDD0, 228,
+       "b30aa72138d85512504a6d78e119642588730b0c6ef5fd96909e958361b912a3"},
+      {0x8169BC18, 100,
+       "c8bed0e71f1a1649042bb7291419abffcba15bf7a0e85b95dbc73daaa5686ef7"},
+      {0x8169BFA0, 216,
+       "6a6a41b197e99e2dce9c74e8fd141c0baff47b326c8185b8271e496812a7c5c2"},
+      {0x8172D590, 1160,
+       "b58acfd13eca317586498bdc5d3631b38fe1004e3507ace34b0dc80cc9d97e67"},
+      {0x81722A30, 416,
+       "f305ee899db1c3e07d57a2fd1f4da1380b0edd086ee995dfcde5aeb8b59d9cf0"},
+      {0x8172D390, 80,
+       "c91d6acdcca047ceaa15c988eab916f741a0dcb81941ab90e45888ef845539e0"},
+      {0x8172D3E0, 84,
+       "f5f9f5c1203f5d2d1a3e554b1a00333f1a7e0fe6245eeea147424b7914efe443"},
+  };
+  uint32_t loader = 0, header = 0, launch = 0;
+  {
+    auto lock = xe::global_critical_region::AcquireDirect();
+    if (!same_title()) {
+      return Fail("Prepared Title changed before native loader metadata");
+    }
+    for (const auto& anchor : profile) {
+      if (!CodeHash(calls, anchor.address, anchor.length, anchor.hash)) {
+        return Fail("Native prepared-Title loader closure changed");
+      }
+      for (uint32_t at = anchor.address; at < anchor.address + anchor.length;
+           at += 4) {
+        if (kernel->GetUserModuleForAddress(at).get() != root.get() ||
+            root->xex_module()->TranslateCode(at) !=
+                memory->TranslateVirtual<const uint8_t*>(at)) {
+          return Fail("Native loader closure has a foreign owner/overlay");
+        }
+      }
+    }
+    const std::tuple<uint32_t, const char*, uint32_t> imports[] = {
+        {0x125, "RtlEnterCriticalSection", 0x81A72384},
+        {0x130, "RtlLeaveCriticalSection", 0x81A72394},
+        {0x12B, "RtlImageXexHeaderField", 0x81A725D4}};
+    for (const auto& [ordinal, name, thunk] : imports) {
+      const auto* binding =
+          kernel->processor()->export_resolver()->GetExportByOrdinal(
+              "xboxkrnl.exe", ordinal);
+      bool exact = false;
+      for (const auto& library : *root->xex_module()->import_libraries()) {
+        if (library.name != "xboxkrnl") continue;
+        for (const auto& imported : library.imports) {
+          exact |=
+              imported.ordinal == ordinal && imported.thunk_address == thunk;
+        }
+      }
+      if (!binding || binding->get_type() != cpu::Export::Type::kFunction ||
+          (binding->tags & cpu::ExportTag::kStub) ||
+          !binding->function_data.trampoline ||
+          std::string_view(binding->name) != name || !exact) {
+        return Fail("Native loader Kernel import contract unavailable");
+      }
+    }
+    const auto object = Word(memory, 0x81A9F850);
+    header = title->guest_xex_header();
+    const auto* raw = title->xex_module()->xex_header();
+    const uint32_t bytes = raw ? uint32_t(raw->header_size) : 0;
+    if (!Data(calls, 0x81A9F850) ||
+        kernel->GetUserModuleForAddress(0x81A9F850).get() != root.get() ||
+        !object || !*object || (*object & 3) ||
+        uint64_t(*object) + 0x1988 > uint64_t(UINT32_MAX) + 1 ||
+        memory->QueryRangeAccess(*object, 0x1988) !=
+            memory::PageAccess::kReadWrite ||
+        !header || !raw || bytes < sizeof(xex2_header) ||
+        uint64_t(header) + bytes > uint64_t(UINT32_MAX) + 1 ||
+        memory->QueryRangeAccess(header, bytes) ==
+            memory::PageAccess::kNoAccess ||
+        Word(memory, title->hmodule_ptr() +
+                         offsetof(X_LDR_DATA_TABLE_ENTRY, xex_header_base)) !=
+            header) {
+      return Fail(
+          "Prepared Title resident header/native loader object invalid");
+    }
+    // Match BDD0's actual short circuit: it never reads security or401FF
+    // when40006 is absent. That valid branch only updates the launch Boolean.
+    uint32_t execution = 0;
+    if (XSUCCEEDED(title->GetOptHeader(XEX_HEADER_EXECUTION_INFO, &execution))) {
+      if (execution < header ||
+          uint64_t(execution) + 0x18 > uint64_t(header) + bytes ||
+          memory->QueryRangeAccess(execution, 0x18) ==
+              memory::PageAccess::kNoAccess) {
+        return Fail("Native loader execution header extent is incomplete");
+      }
+      // This actual-read branch uses XEX2 security offsets. Do not reinterpret
+      // older layouts as XEX2. Missing40006 requires none of these accesses.
+      const auto resident_security = Word(memory, header + 0x10);
+      if (Word(memory, header) != 0x58455832u || !resident_security ||
+          uint64_t(raw->security_offset) + 0x17C > bytes ||
+          *resident_security != header + uint32_t(raw->security_offset)) {
+        return Fail("Native17559 loader security metadata is not resident XEX2");
+      }
+      uint32_t service = 0;
+      if (XSUCCEEDED(title->GetOptHeader(XEX_HEADER_SERVICE_ID_LIST, &service)) &&
+          (service < header ||
+           uint64_t(service) + 0x14 > uint64_t(header) + bytes ||
+           memory->QueryRangeAccess(service, 0x14) ==
+               memory::PageAccess::kNoAccess)) {
+        return Fail("Native loader service header extent is incomplete");
+      }
+    }
+    // No nonzero-title/default/version policy is inferred. Real missing
+    // ExecutionInfo preserves metadata; missing services stay native-zeroed
+    // only inside the present-ExecutionInfo branch.
+    loader = *object;
+    launch = (xam->loader_data().launch_flags & 0x120u) != 0;
+  }
+  // Native BDD0 owns its original critical section and exact field policy.
+  // No host/Global lock crosses PPC; no getter replacement or manual block
+  // write is used. This void function's r3 after LeaveCriticalSection is not
+  // an HRESULT. A non-return/owner change poisons the existing once record.
+  const std::array arguments{cpu::GuestCallArgument::UInt32(loader + 0x18),
+                             cpu::GuestCallArgument::UInt32(header),
+                             cpu::GuestCallArgument::UInt32(0),
+                             cpu::GuestCallArgument::UInt32(launch)};
+  const auto called = cpu::ExecuteGuestCall(
+      kernel->processor(), bootstrap.thread_state(), 0x8169BDD0, arguments);
+  const bool healthy = called.executed && same_title() &&
+                       SameRoot(calls, *state_->allocation) &&
+                       Word(memory, 0x81A9F850) == loader;
+  return {healthy, called.value,
+          healthy
+              ? std::string{}
+              : "Native Title loader metadata execution/ownership uncertain"};
 }
 
 const GuestRuntime::Plan& NativeSystemUiStartupCatalog::plan() const {

@@ -2053,6 +2053,9 @@ int NativeSystemUiService::Bootstrap(const std::shared_ptr<State>& state) {
     // initializer belongs here, after native boot and before original public
     // calls/diagnostic Guide or the prepared Main can execute. Never attach it
     // lazily to2C1, change allocation flags, or fabricate native Task context.
+    // The same once record also calls the real loader metadata setter: host
+    // XEX loading replaces the console loader path that normally invokes it.
+    // Both complete before initial profile alignment or Title Main/public UI.
     const auto expected_title = state->config.prepared_title;
     auto prepared_title = state->config.kernel->GetExecutableModule();
     auto title_lease =
@@ -2080,15 +2083,21 @@ int NativeSystemUiService::Bootstrap(const std::shared_ptr<State>& state) {
     if (!title_claimed) {
       return fail("Native Title heap generation already claimed or stopped");
     }
-    const auto title_heap = title_runtime->Initialize(
-        catalog->PreparedTitleHeapPlan(expected_title),
-        [&](const GuestRuntime::Function&) {
+    const auto title_setup = title_runtime->Initialize(
+        catalog->PreparedTitlePlan(expected_title),
+        [&](const GuestRuntime::Function& function) {
           if (state->IsStopping()) {
-            return Fail("Title heap initialization stopped before entry");
+            return Fail("Prepared Title initialization stopped before entry");
           }
-          return catalog->InitializePreparedTitleHeap(*thread, expected_title);
+          if (function.address == 0x816E6870) {
+            return catalog->InitializePreparedTitleHeap(*thread, expected_title);
+          }
+          if (function.address == 0x8169BDD0) {
+            return catalog->InitializePreparedTitleLoader(*thread, expected_title);
+          }
+          return Fail("Prepared Title role is not in the compiled profile");
         });
-    if (title_heap != GuestRuntime::InitStatus::kReady || state->IsStopping()) {
+    if (title_setup != GuestRuntime::InitStatus::kReady || state->IsStopping()) {
       // Preserve the once record's actual failure. An absent post-call trace
       // is not proof that PPC was never entered. Diagnostic errors must not
       // change the original failure/poison path or retry the native call.
@@ -2096,25 +2105,25 @@ int NativeSystemUiService::Bootstrap(const std::shared_ptr<State>& state) {
         const auto failed = title_runtime->GetSnapshot();
         if (failed.failure) {
           XELOGE(
-              "Native prepared Title heap transaction: init_status={} "
+              "Native prepared Title transaction: init_status={} "
               "state={} functions={}/{} stopping={} phase={} function={} "
               "return={:08X} detail={}",
-              uint32_t(title_heap), uint32_t(failed.state),
+              uint32_t(title_setup), uint32_t(failed.state),
               failed.completed_functions, failed.total_functions,
               state->IsStopping(), failed.failure->position.phase,
               failed.failure->position.function, failed.failure->return_value,
               failed.failure->detail);
         } else {
           XELOGE(
-              "Native prepared Title heap transaction: init_status={} "
+              "Native prepared Title transaction: init_status={} "
               "state={} functions={}/{} stopping={} failure_detail_known=0",
-              uint32_t(title_heap), uint32_t(failed.state),
+              uint32_t(title_setup), uint32_t(failed.state),
               failed.completed_functions, failed.total_functions,
               state->IsStopping());
         }
       } catch (...) {
       }
-      return fail("Native prepared Title heap initialization failed/uncertain");
+      return fail("Native prepared Title initialization failed/uncertain");
     }
     {
       std::lock_guard lock(state->mutex);

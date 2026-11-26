@@ -1,12 +1,17 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V144's shared ownership correction builds and passes all seven direct
-test runs. Its actual Doritos retest reaches the original initializer, PM,
-protocol return and CompleteIO instead of stalling before those operations.
-Sign-in still returns native extended error `0x80150013`; subsequent input
-reaches the dashboard's Available Networks screen, then dashboard Home.
-Game continuation has not passed. The real error producer, loader metadata
-handoff and UI/refresh lifecycle are the next system boundary under review.
+Status: V145's native loader metadata producer builds and passes all seven
+direct test runs. The original setter now executes in the existing prepared
+foreground-title transaction. Doritos reaches real native completion, whose
+extended/protocol error changed from `0x80150013` to `0x80151000`. Game
+continuation still fails and subsequent input reaches the dashboard's
+Available Networks screen. The post-handoff dashboard Guide visibly opens,
+closes, returns input and reopens while displaying the existing local user.
+The timed WM close produces actual exit one: OS cleanup completes without
+forced signals, but the native stop contract fails. Offline/online policy,
+failed-roster refresh/settlement and ordinary transport teardown are now being
+reviewed together. No networking cause is inferred from the error number or
+screen alone.
 V140's historical actual dashboard/Guide regression passed:
 visible first open, B close, dashboard input return, full reopen, Media
 navigation, second close and manual normal shutdown. Ordinary profile
@@ -35,10 +40,10 @@ rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The current tested V144 source map is
-`7e98afb83be13bbb714af605d1bae4bd6f63f63314d2a5dc7356d2a82c06acdb`
+The current tested V145 source map is
+`ad213c527f681c4da2d2e336eb100f5d91d5a886668eb72b5e3b2e6cc24f9133`
 (2,430 source files). All seven direct runs passed under receipt
-`837c79fafd426eb2be7d578530fd52e41569d59a4d834ff0b002d37d026b0bbb`.
+`421457af3b8487efba2b2029d25de3282977ef8a3762a1d4723d6f594fc39b7b`.
 They establish component coverage, not successful ordinary sign-in, avatar
 rendering, save persistence or a packaged AppImage. Historical V131 source and
 test identities remain in its labeled section below.
@@ -64,9 +69,10 @@ profile implementation.
 | Load Account/GPD | Mounted profiles supply the selected Account and settings; successful loading is distinct from sign-in. | The active mount is a folder-backed HostPathDevice with Account service and normal GPD files/cache. This path does not require native CON raw-Header parsing. V130 preparation passed; legacy Header format is not established as its sign-in failure. |
 | Create local profile | Native 230/234 has paired producer/result ownership, then a separate 20B logon request. The genuine cold metadata producer supplies 0x93D6 bytes and has directory effects before its final create call. | The active owned HLE creation recipe writes durable Account/GPD, installed stock pictures and INFO1, but still emits a legacy 0x148 aggregate Header. This is not the native cold-container producer. Preserve the distinction and all existing members during any upgrade. |
 | Initial pictures/appearance | MiniCreator chooses actual appearance and later commits it through the profile services. | Installed stock tiles, preset previews and a 1,000-byte INFO1 default exist. A preview or gamer picture is not evidence of an attached, animated avatar model; native default timing/equivalence still needs acceptance. |
-| Sign-in/out ingress | 20B at 0x8199C630 and 224 at 0x8199E3E0 retain original caller, flags, user slots and sync/async result policy. | PM preparation, exact Account/source comparison, original-call execution and old/new roster ownership exist. Actual V130 failed at native Schedule producer binding, after preparation. Entering or returning from the generic executor does not alone authenticate native completion. |
-| Request to Task | Null-overlap 224 uses stack output bodySP+0x5C; nonnull-overlap 224 uses the genuine native request packet+0x18. E148 has its own stack producer. Tail adapter 0x81671C18 preserves SP/LR. | V131 binds the actual typed producer, retains its scalar birth receipt through native close/free/reuse and avoids later packet dereferences. Its real asynchronous initializer returned zero; later worker/protocol/publication completion remains unobserved. |
-| Native publication and errors | Actual worker, native cache publication, protocol result and caller completion are distinct. Native initializer errors and canceled workers have their own paths. | Requested inputs and proven terminal outcomes remain separate. V132 observed real publication and completion without final settlement. V133 encountered an earlier startup handoff failure. Neither run establishes complete native sign-in, Guide or shutdown acceptance. |
+| Prepared title metadata | Native loader setter 0x8169BDD0 derives its 0x24 logon-title record from the resident executable header under its original critical section. ExecutionInfo is a distinct 0x18 input. | V145 calls the actual setter after native heap initialization in the existing once record, before profile alignment and Main/public ingress. It uses the actual completed resident header and launch flags. No manual block or replacement getter is used. |
+| Sign-in/out ingress | 20B at 0x8199C630 and 224 at 0x8199E3E0 retain original caller, flags, user slots and sync/async result policy. | PM preparation, exact Account/source comparison, original-call execution and old/new roster ownership exist. V145 reaches genuine 224 initializer, protocol and CompleteIO return. An initializer return of zero does not authenticate successful sign-in. |
+| Request to Task | Null-overlap 224 uses stack output bodySP+0x5C; nonnull-overlap 224 uses the genuine native request packet+0x18. E148 has its own stack producer. Tail adapter 0x81671C18 preserves SP/LR. | The actual typed producer retains its scalar birth receipt through native close/free/reuse without later packet dereferences. V144 also distinguishes passive code/queue lifetime from real data access. V145's worker completes with a genuine error. |
+| Native publication and errors | Actual worker, native cache publication, protocol result and caller completion are distinct. Native initializer errors and canceled workers have their own paths. | V145 captures CompleteIO 0x65B/extended 0x80151000 and the same protocol result. Maps and writers become available, but the old DCC job lacks observed hidden refresh and settlement. The new dashboard root's successful bootstrap alignment cannot settle that old job. |
 | Complete and release | CompleteIO 0x816A2588 atomically claims the native context, closes its actual tagged Task and frees the packet at 0x816A26E4 before returning. | The original overlap, callback, Task and source owners must remain distinct. A new host packet pin extending to Schedule/224/CompleteIO return could obstruct native free. No later packet dereference or fabricated Task birth may be justified by an earlier pointer alone. |
 | MiniCreator and foreground Editor | Mapped wizard phases invoke Mini UI 6A4 or Editor launch 7DB. Mini requires an owned request/visibility/cancel/teardown lifecycle; its FE21018 queue-copy proof remains unclosed. Editor is a genuine foreground TITLE. | The paired SYSTEM 7DB handoff and TITLE-aware avatar owner now exist. Mini execution, actual title handoff, return/home and real attachment remain unaccepted; older claims that 7DB and LoadAnimation are absent are superseded. |
 | Persist appearance and tiles | Mini and Editor SetManifest calls are followed by actual ProfileSync 21F; tile workers also use 2F1/2FB with their own buffer semantics. ProfileSync is a user mask. | Shared INFO1/GPD and picture transactions exist, but external 21F/2F1/2FB routing is incomplete. SAVE49/Header/PIS05/real IO-close/cache promotion is inactive. A successful SetManifest helper does not prove native save/restart. |
@@ -1000,6 +1006,82 @@ preserved. No new AppImage was produced.
 | ELF, compiled base `a8201d7f0d` | `2890f67e932b8dd6053bea40518467695e512f39915479d3a7471bcdeff59ee3` |
 | Saved bounded live protocol projection | `29dad313a3c00fb1fe05ad10317a010d993b95bfb798f037b8c81b97b44759fe` |
 | Root controller/visual/shutdown assessment | `da3f2ac1ef4c65568fb41119cdbdd4f2477880ab3b58206819183dbfab3908ba` |
+
+## V145 native title-loader producer and remaining system contracts
+
+Host launch had already applied the selected TU and published a resident XEX
+header, but bypassed the original loader path that initializes its separate
+logon-title record. The normal native provider copies that record through
+export 530 into the accepted sign-in request. The supplied setter at
+`0x8169BDD0` owns the original critical section, optional-header branches,
+version, region, media fallback and service-field policy. Copying the 0x18
+ExecutionInfo directly into the 0x24 record would be incorrect.
+
+The existing prepared-title once transaction now calls the original heap
+initializer and then this actual void setter. It retains the exact current
+foreground TITLE, resident header, execution lease and separate SYSTEM root;
+Main remains suspended until completion. The original setter uses override
+zero and the actual launch-flags Boolean. A void function's residual r3 is
+not interpreted as an HRESULT. No constructor is replayed, metadata block
+written by the host, getter spoofed, Task fabricated or new worker introduced.
+
+Private review corrected two issues before the single repository application:
+unused security/service fields must not be inspected when ExecutionInfo is
+absent, and foreground-module identity must retain the same existing check as
+the heap role. Missing optional metadata follows the actual native branch.
+The present-ExecutionInfo branch still requires the supplied setter's XEX2
+security layout; XEX1/XEX-percent compatibility for that branch is unverified.
+
+All seven direct runs passed: base 334 cases / 28,711 assertions; network
+125 / 11,212; kernel 1,484 / 95,348; VFS 136 / 9,736; UI 124 / 4,863;
+focused CPU 5 / 130; installed-system focus 215 / 25,493. The added test loads
+real generated XEX fixtures and checks the actual resident optional-header
+and registered HLE pointer paths, missing metadata, final-version inputs and
+repeated loader completion. These synthetic final headers do not exercise a
+real TU delta or execute the native setter. The installed focus overlaps the
+full kernel suite; the full CPU corpus was not run.
+
+The actual native-enabled Doritos run rendered, opened/canceled/reopened its
+picker, selected the existing local profile and reached real completion. The
+initializer returned zero, while CompleteIO entered and returned with error
+`0x65B`, extended error `0x80151000`; the protocol returned `0x80151000` too.
+This differs from V144's `0x80150013`. Maps and writers became available, but
+settlement stages 7/8 were not captured. The old DCC job's first false final
+readiness field is still `render_refresh_observed`; later unevaluated checks
+are not assigned outcomes. Numeric error and Networks UI do not identify
+which native error constructor executed or justify forced Live success.
+
+The process genuinely relaunched into a new dashboard Kernel/root. After
+returning from Available Networks, its Guide visibly opened, B closed it,
+Right changed dashboard tile focus, and Guide visibly reopened. These are
+post-handoff dashboard results, not in-game Guide, complete sign-in, OSK or
+Avatar Editor acceptance. The final open Guide remained visible at the
+original 600-second owned WM close. Actual exit was one, with full OS reaping
+and no forced signals. Stop diagnostics identify the native identity
+drained-or-retained refusal, including an outstanding unclaimed transport row;
+the emulator deliberately takes its failure exit. The exact transport and
+correct cancellation/return order remain under review. OS cleanup is not a
+native shutdown pass. A later manual close attempt was refused because the
+session had already retired and performed no action.
+
+The next bounded review joins native offline/online policy and error/cache
+behavior with the shared HLE/provider publication, hidden refresh and ordinary
+transport shutdown lifecycles. A loaded local profile's availability must be
+established by those contracts; neither repaint nor unrelated Task lifetime
+can be assumed to justify additional host ordering. The tested producer fix
+is retained while that review proceeds. No new AppImage or gate pass follows.
+
+| V145 record | SHA256 |
+| --- | --- |
+| Final four-path source freeze | `1f4184dc8580c9e1189544113d0429b21c9b1c5ad7a316d075e45a5fd90a8b33` |
+| Final independent source review | `91e630c9289865df8a1bf8ed95e61d28e4e47aefa3ad3f11c340c6fbff017253` |
+| Build | `2a1870a6eaa56d9612d7022a9b03052e31abce64a5119a03504f7345920009cf` |
+| All seven direct runs | `421457af3b8487efba2b2029d25de3282977ef8a3762a1d4723d6f594fc39b7b` |
+| ELF, compiled base `2418ae0aa3` | `6b223c8e0e7d031f532888557bf1c21f0aff99a013ca1c20206b3da1316d749d` |
+| Actual native process result | `df63e6d5a7c74eb2378b88ef5e031d9d614f8e811d62ade65e13a1eed695fddb` |
+| Final immutable protocol projection | `7346721751d36f8d85b80abd8084b229d7067960811b44dce44f818cb1b16982` |
+| Native error/refresh/root-separation/stop assessment | `092d35878ca11c78aa18448a7c76f80f926e99119abbd0bab9bdc778ba3e72e1` |
+| Root controller/visual/OS assessment | `c56e4a6a6bbd141eb8ee6239bbc44c36288067cb730d20ccbae32811f34d24bf` |
 
 ## Evidence
 

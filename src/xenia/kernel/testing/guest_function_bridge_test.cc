@@ -101,7 +101,8 @@ using ImageCustomization = std::function<void(std::vector<uint8_t>&)>;
 // The unencrypted, no-import image follows tools/xex/xexbuild.py's layout.
 // All bytes, including the PE and chained page/header hashes, are generated
 // here. No console image, filesystem, KernelState, or fake executor is used.
-std::vector<uint8_t> MakeXex(const ImageCustomization& customize) {
+std::vector<uint8_t> MakeXex(const ImageCustomization& customize,
+                           const ImageCustomization& customize_header = {}) {
   std::vector<uint8_t> image(kImageSize);
   image[0] = 'M';
   image[1] = 'Z';
@@ -205,6 +206,11 @@ std::vector<uint8_t> MakeXex(const ImageCustomization& customize) {
                 xex.data() + kDescriptors + (i - 1) * 24 + 4);
   }
   page_digest(0, kDescriptors, xex.data() + kSecurity + 0x114);
+  // Optional fixture metadata is generated before its REAL header digest.
+  // Default callers retain identical bytes; this is not a patch/TU executor.
+  if (customize_header) {
+    customize_header(xex);
+  }
   std::vector<uint8_t> header_digest(xex.begin() + kSecurity + 0x17C,
                                      xex.begin() + kHeaderSize);
   header_digest.insert(header_digest.end(), xex.begin(),
@@ -928,6 +934,126 @@ TEST_CASE("Loaded XEX security uses the real executable LDR address chain",
   REQUIRE(module->LoadContinue() == X_STATUS_SUCCESS);
   CHECK(module->guest_xex_header() == resident);
   CHECK(word(resident + 0x10) == security); // Real producer returns its once-published view.
+}
+
+TEST_CASE("Prepared title metadata uses exact resident execution and optional header inputs",
+          "[kernel][xex][guest_header][native_title_metadata]") {
+  REQUIRE(kernel::KernelState::shared() == nullptr);
+  kernel::test::IsolatedKernelRuntimeSettings settings;
+  const bool has_execution = GENERATE(false, true);
+  const bool has_services = GENERATE(false, true);
+  // A completed TU changes this optional header before LoadContinue. These
+  // two synthetic final headers test its real loading/projection boundary;
+  // no delta-patch package or native logon setter execution is claimed here.
+  const uint32_t final_version = GENERATE(0x00010000u, 0x00020304u);
+  constexpr uint32_t kTitle = 0x58410A71, kMedia = 0x261A2859;
+  constexpr uint32_t kExecution = 0x80, kServices = 0xA0;
+  constexpr uint32_t kRegion = 0x00FF00FF, kMediaFallback = 0x13572468;
+  const std::array<uint32_t, 5> services{20, 0x01020304, 0xA2B3C4D5,
+                                        0x10203040, 0x50607080};
+  struct Scratch {
+    std::filesystem::path root = std::filesystem::temp_directory_path() /
+        ("xenia-title-header-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+    Scratch() {
+      REQUIRE(std::filesystem::create_directory(root));
+      REQUIRE(std::filesystem::create_directory(root / "content"));
+      REQUIRE(std::filesystem::create_directory(root / "cache"));
+    }
+    ~Scratch() { std::error_code ignored; std::filesystem::remove_all(root, ignored); }
+  } scratch;
+  auto emulator = std::make_unique<Emulator>("", scratch.root,
+      scratch.root / "content", scratch.root / "cache");
+  REQUIRE(emulator->Setup(nullptr, nullptr, false, {}, {}, {}) == X_STATUS_SUCCESS);
+  auto* state = emulator->kernel_state();
+  const auto raw = MakeXex({}, [&](std::vector<uint8_t>& bytes) {
+    // Six entries need the old file-format block moved out of their table.
+    // All pointers remain real header offsets, never host addresses.
+    WriteBe(bytes, 0x1C, 0x60);
+    WriteBe(bytes, 0x60, 8); WriteBe(bytes, 0x64, 0);
+    uint32_t count = 4;
+    const auto entry = [&](uint32_t key, uint32_t offset) {
+      WriteBe(bytes, 0x18 + count * 8, key);
+      WriteBe(bytes, 0x1C + count * 8, offset); ++count;
+    };
+    if (has_execution) {
+      entry(XEX_HEADER_EXECUTION_INFO, kExecution);
+      WriteBe(bytes, kExecution, kMedia);
+      WriteBe(bytes, kExecution + 4, final_version);
+      WriteBe(bytes, kExecution + 8, 0x00010000);
+      WriteBe(bytes, kExecution + 12, kTitle);
+      bytes[kExecution + 16] = 2; bytes[kExecution + 17] = 0;
+      bytes[kExecution + 18] = 1; bytes[kExecution + 19] = 2;
+      WriteBe(bytes, kExecution + 20, 0x12345678);
+    }
+    if (has_services) {
+      entry(XEX_HEADER_SERVICE_ID_LIST, kServices);
+      for (size_t i = 0; i < services.size(); ++i) WriteBe(bytes, kServices + i * 4, services[i]);
+    }
+    WriteBe(bytes, 0x14, count);
+    WriteBe(bytes, 0x100 + 0x178, kRegion);
+    WriteBe(bytes, 0x100 + 0x14C, kMediaFallback);
+  });
+  const auto original = raw;
+  auto module = kernel::object_ref<kernel::UserModule>(new kernel::UserModule(state));
+  REQUIRE(module->LoadFromMemoryNamed("title-metadata-fixture", raw.data(), raw.size()) == X_STATUS_PENDING);
+  REQUIRE(module->LoadContinue() == X_STATUS_SUCCESS);
+  state->SetExecutableModule(module);
+  auto* memory = emulator->memory();
+  const uint32_t resident = module->guest_xex_header();
+  REQUIRE(resident); REQUIRE(resident != kImageBase);
+  const auto word = [&](uint32_t address) {
+    return xe::load_and_swap<uint32_t>(memory->TranslateVirtual(address));
+  };
+  const uint32_t security = word(resident + 0x10);
+  REQUIRE(security == resident + 0x100);
+  CHECK(word(security + 0x178) == kRegion);
+  CHECK(word(security + 0x14C) == kMediaFallback); // Raw input, not interpreted native fallback.
+  uint32_t execution = 0xDEADBEEF;
+  const auto status = module->GetOptHeader(XEX_HEADER_EXECUTION_INFO, &execution);
+  xex2_opt_execution_info* host_execution = nullptr;
+  const auto host_status = module->GetOptHeader(XEX_HEADER_EXECUTION_INFO, &host_execution);
+  const uint32_t result = memory->SystemHeapAlloc(4);
+  REQUIRE(result); xe::store_and_swap<uint32_t>(memory->TranslateVirtual(result), 0xA5A5A5A5);
+  const auto* getter = emulator->processor()->export_resolver()->GetExportByOrdinal("xam.xex", 0x280);
+  REQUIRE(getter); REQUIRE(getter->function_data.trampoline); REQUIRE(getter->is_implemented());
+  ppc::PPCContext context{}; context.kernel_state = state;
+  context.virtual_membase = memory->virtual_membase(); context.r[3] = result;
+  getter->function_data.trampoline(&context);
+  CHECK(uint32_t(context.r[3]) == status);
+  if (has_execution) {
+    REQUIRE(status == X_STATUS_SUCCESS); REQUIRE(host_status == X_STATUS_SUCCESS); REQUIRE(host_execution);
+    REQUIRE(execution == resident + kExecution);
+    CHECK(state->title_id() == kTitle); CHECK(module->title_id() == kTitle);
+    CHECK(word(result) == execution); // Actual HLE returns this same resident header, no parallel copy.
+    CHECK(std::memcmp(memory->TranslateVirtual(execution), raw.data() + kExecution, sizeof(xex2_opt_execution_info)) == 0);
+    CHECK(uint32_t(host_execution->version_value) == final_version);
+    CHECK(word(execution + 4) == final_version); CHECK(word(execution + 12) == kTitle);
+    CHECK(uint32_t(host_execution->media_id) == kMedia);
+  } else {
+    CHECK(status == X_STATUS_NOT_FOUND); CHECK(host_status == X_STATUS_NOT_FOUND);
+    CHECK(execution == 0); CHECK(host_execution == nullptr);
+    CHECK(word(result) == 0xA5A5A5A5); // Missing optional metadata never manufactures output/success.
+    CHECK(state->title_id() == 0); CHECK(module->title_id() == 0);
+  }
+  uint32_t service = 0;
+  const auto service_status = module->GetOptHeader(XEX_HEADER_SERVICE_ID_LIST, &service);
+  if (has_services) {
+    REQUIRE(service_status == X_STATUS_SUCCESS); REQUIRE(service == resident + kServices);
+    REQUIRE(uint64_t(kServices) + services.size() * 4 <= kHeaderSize);
+    for (size_t i = 0; i < services.size(); ++i) CHECK(word(service + uint32_t(i * 4)) == services[i]);
+    // Opaque declared20-byte record: no invented field/count semantics and no
+    // claim that a native setter consumed or accepted these synthetic values.
+  } else {
+    CHECK(service_status == X_STATUS_NOT_FOUND); CHECK(service == 0);
+  }
+  std::vector<uint8_t> captured(kHeaderSize);
+  std::memcpy(captured.data(), memory->TranslateVirtual(resident), captured.size());
+  REQUIRE(module->LoadContinue() == X_STATUS_SUCCESS);
+  CHECK(module->guest_xex_header() == resident);
+  CHECK(std::memcmp(captured.data(), memory->TranslateVirtual(resident), captured.size()) == 0);
+  CHECK(raw == original);
+  memory->SystemHeapFree(result);
 }
 
 TEST_CASE("Guest XEX security projection preserves every supported raw layout",

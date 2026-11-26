@@ -334,12 +334,20 @@ dword_result_t XamInputGetKeystroke_entry(
 }
 DECLARE_XAM_EXPORT1(XamInputGetKeystroke, kInput, kImplemented);
 
-// The guide's keystroke read, as on the console: any device, and any user for
-// XUserIndexAny or with 0x10000000. 0x20000000 takes precedence and skips only
-// the big button remap and keyboard translation, which xenia has neither of.
-// As a system read it keeps the guide button.
+// Active HUD reads execute the actual original199/19D family. Its native UI
+// controller globals choose users and its native cache/remaps remain owned by
+// the same module. The legacy flag translation below is inactive HLE fallback,
+// not a substitute for the original function during native operation.
 dword_result_t XamInputGetKeystrokeHudEx_entry(
     dword_t user_index, dword_t flags, pointer_t<X_INPUT_KEYSTROKE> keystroke) {
+  const std::array<uint32_t, 3> arguments{
+      user_index, flags, keystroke.guest_address()};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kInputGetKeystrokeHudEx,
+      arguments);
+  if (native.handled()) {
+    return native.value;
+  }
   uint32_t input_flags =
       X_INPUT_FLAG::X_INPUT_FLAG_ANYDEVICE | kInputFlagSystem;
   if (static_cast<uint32_t>(user_index) == XUserIndexAny ||
@@ -352,6 +360,14 @@ DECLARE_XAM_EXPORT1(XamInputGetKeystrokeHudEx, kInput, kImplemented);
 
 dword_result_t XamInputGetKeystrokeHud_entry(
     dword_t user_index, pointer_t<X_INPUT_KEYSTROKE> keystroke) {
+  const std::array<uint32_t, 2> arguments{
+      user_index, keystroke.guest_address()};
+  const auto native = NativeSystemUiService::TryInvokePublicOnOriginalCaller(
+      kernel_state(), NativeSystemUiPublicCall::kInputGetKeystrokeHud,
+      arguments);
+  if (native.handled()) {
+    return native.value;
+  }
   return XamInputGetKeystrokeHudEx_entry(user_index, 0, keystroke);
 }
 DECLARE_XAM_EXPORT1(XamInputGetKeystrokeHud, kInput, kImplemented);

@@ -24,6 +24,8 @@ enum class NativeSystemUiPublicCall : uint16_t {
   kInputSetState = 0x192,
   kInputGetKeystroke = 0x193,
   kInputGetKeystrokeEx = 0x198,
+  kInputGetKeystrokeHud = 0x199,
+  kInputGetKeystrokeHudEx = 0x19D,
   kEnableSystemAppInput = 0x196,
   kIsUiActive = 0x2EC,
   kShowGuide = 0x304,
@@ -88,6 +90,11 @@ struct NativeSystemUiPublicCallProfile {
   uint8_t uint64_register_mask = 0;
   NativeSystemPublicFamily family = NativeSystemPublicFamily::kUiInput;
   uint32_t prerequisites = 0;
+  // Only these exports return an eight-byte keystroke. Its actual guest
+  // pointer position is part of the original ABI, including HUD199's r4.
+  // Service uses this after a real successful native return for the existing
+  // TITLE/host-modal handoff; it grants no user, audience or native success.
+  std::optional<size_t> keystroke_output_argument = std::nullopt;
 };
 // Exact supplied17559 native entry/prototype. No arbitrary function identity,
 // address, host pointer or caller/process substitution is accepted.

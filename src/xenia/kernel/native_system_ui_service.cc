@@ -4542,12 +4542,12 @@ NativeSystemUiService::TryInvokePublicRegistersOnOriginalCaller(
                                     X_ERROR_FUNCTION_FAILED};
           if (healthy && !result.value && title_caller &&
               (invocation->host_input || invocation->host_input_blocked) &&
-              (call == NativeSystemUiPublicCall::kInputGetKeystroke ||
-               call == NativeSystemUiPublicCall::kInputGetKeystrokeEx)) {
+              profile->keystroke_output_argument) {
             // The real native call has already validated user/flags/device and
             // advanced its own audience cache. Preserve every native error,
             // including DNC. Swallow only a valid successful 8-byte stroke.
-            const uint32_t output = uint32_t(arguments[2]);
+            const uint32_t output =
+                uint32_t(arguments[*profile->keystroke_output_argument]);
             auto memory_lock = global_critical_region::AcquireDirect();
             if (kernel->memory()->QueryRangeAccess(output, 8) ==
                 memory::PageAccess::kReadWrite) {

@@ -2369,6 +2369,18 @@ void NativeProfileIdentityTaskTestAccess::ProfileOutputStackAndPacketAbi(){
   const auto* producer=ledger.ProfileProducerFor(born);REQUIRE(producer);
   CHECK(producer->callback==callback);CHECK(producer->output_proof==*proof);
   CHECK(producer->output==packet+0x18);CHECK(producer->schedule_returned);
+  // Real Schedule return preserves the published-but-unstarted worker duty.
+  // This is not an initializer own-return or an Owner park/unpark test.
+  const auto* node=ledger.FindBirthConst(born.generation);REQUIRE(node);
+  CHECK(node->published);CHECK_FALSE(node->started);CHECK_FALSE(node->returned);
+  CHECK_FALSE(ledger.SourceDescendantsClosed(born.origin));
+  // Exact-source closure does not conflate this NEW request with a distinct
+  // old source. Its genuine Enter/Return/Close/Free receipts are still needed.
+  CHECK(ledger.SourceDescendantsClosed(100));
+  auto callback_frame=F(callback,0x7080F000,0x816B8B64);
+  callback_frame.thread=4;callback_frame.pcr+=0x1000;
+  ProfileCallbackThenFree(ledger,born,callback_frame);
+  CHECK(ledger.SourceDescendantsClosed(born.origin));CHECK_FALSE(ledger.lost());
  }
 }
 void NativeProfileIdentityTaskTestAccess::ProfileOutputRejectsMalformedProvenance(){
@@ -2439,12 +2451,13 @@ void NativeProfileIdentityTaskTestAccess::ProfileAsyncDoesNotGrantStackControls(
  ProfileCallbackThenFree(ledger,born,callback);CHECK_FALSE(ledger.lost());
 }
 void NativeProfileIdentityTaskTestAccess::ProfileOutputPrepublicationLifetime(){
+ for(const auto callback_at:{0x8199C838u,0x8199E148u}){
  Ledger ledger(root);const auto owner=F(0x8199E3E0,0x707DFCF0,0x90103544);
  const auto schedule=F(0x816BA440,owner.sp-0x190,0x8199F01C);
  const uint32_t packet=0x40172000,overlap=0x40173000;
  auto linkage=std::array<uint32_t,3>{0xFE,overlap,packet};
  const auto proof=Ledger::CaptureProfileOutput(owner,schedule,packet+0x18,overlap,packet,linkage);REQUIRE(proof);
- const auto call=ledger.BeginSchedule(schedule,101,0x8199C838,0x40170B40,schedule.sp+0x70,packet+0x18);REQUIRE(call);
+ const auto call=ledger.BeginSchedule(schedule,101,callback_at,0x40170B40,schedule.sp+0x70,packet+0x18);REQUIRE(call);
  REQUIRE(ledger.BindProfileProducer(call,815,owner,std::array<uint32_t,2>{0x10000000,0x401E6982},*proof));
  const auto* pending=ledger.FindSchedule(call);REQUIRE(pending);REQUIRE(pending->producer);
  CHECK_FALSE(pending->birth);CHECK_FALSE(pending->producer->published);CHECK_FALSE(pending->producer->native_bound);
@@ -2455,15 +2468,16 @@ void NativeProfileIdentityTaskTestAccess::ProfileOutputPrepublicationLifetime(){
  const auto born=ledger.ReturnAllocation(call,allocation,0,0x40171770);REQUIRE(born);
  CHECK_FALSE(ledger.BindProfileNativeState(call,born->task,0x14A00004,0x401E6982));
  const auto publication=F(0x816B9BB8,schedule.sp-0x90,0x816BA4D8);
- REQUIRE(ledger.BeforePublication(call,publication,born->task,0x8199C838,0x40170B40,born->task|1u));
+ REQUIRE(ledger.BeforePublication(call,publication,born->task,callback_at,0x40170B40,born->task|1u));
  REQUIRE(ledger.BindProfileNativeState(call,born->task,0x14A00004,0x401E6982));
  const auto* producer=ledger.ProfileProducerFor(*born);REQUIRE(producer);
  CHECK(producer->published);CHECK_FALSE(producer->schedule_returned);
- auto callback=F(0x8199C838,0x7080F000,0x816B8B64);callback.thread=4;callback.pcr+=0x1000;
+ auto callback=F(callback_at,0x7080F000,0x816B8B64);callback.thread=4;callback.pcr+=0x1000;
  REQUIRE(ledger.EnterWork(callback,born->task,producer->argument));REQUIRE(ledger.ReturnWork(callback,*born));
  CHECK_FALSE(ledger.FindSchedule(call)->producer->schedule_returned);
  REQUIRE(ledger.ReturnSchedule(call,schedule,0,std::array<uint32_t,2>{0x14A00004,0x401E6982}));
  CHECK(ledger.ProfileProducerFor(*born)->schedule_returned);CHECK_FALSE(ledger.lost());
+ }
 }
 void NativeProfileIdentityTaskTestAccess::ProfileWorkerFreeBeforeScheduleReturn(){
  for(bool async:{false,true})for(bool same_address:{false,true}){

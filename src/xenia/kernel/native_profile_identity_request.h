@@ -18,6 +18,12 @@ namespace test { class NativeProfileIdentityRequestTestAccess; }
 class NativeProfileIdentityRequest final {
  public:
   static constexpr size_t kSlots=4,kRowBytes=0x188,kAccountBytes=0x17C;
+  // Parsing classifies the native first-return contract only. Actual caller,
+  // Task/source and old-data ownership are proved by the concrete owner.
+  enum class InitializerPhase { kAfterOldDrain, kQueuedAsync };
+  InitializerPhase initializer_phase(bool has_overlap) const noexcept {
+    return ClassifyInitializer(flags_,has_overlap);
+  }
   uint16_t ordinal() const { return ordinal_; }
   uint32_t flags() const { return flags_; }
   std::span<const uint8_t> original() const {
@@ -27,6 +33,14 @@ class NativeProfileIdentityRequest final {
  private:
   friend class NativeProfileIdentityOwner;
   friend class test::NativeProfileIdentityRequestTestAccess;
+  static InitializerPhase ClassifyInitializer(uint32_t flags,bool has_overlap) noexcept {
+    // Whole matching17559 initializer plus mode4 scheduler/table proof. The
+    // native scalar presence/auth operations do not retire old allocations;
+    // both actual worker entries still need the complete dataful barrier.
+    const bool proved=flags==0 || flags==4 || flags==0xC || flags==0x20 ||
+        flags==0x24 || flags==0x2C || flags==0x120420 || flags==0x120424;
+    return has_overlap && proved?InitializerPhase::kQueuedAsync:InitializerPhase::kAfterOldDrain;
+  }
   // `before` must come from the same retained HostRoster Expected. These
   // copied scalar values are parsing inputs only, never an ownership proof.
   static std::optional<NativeProfileIdentityRequest> Capture(

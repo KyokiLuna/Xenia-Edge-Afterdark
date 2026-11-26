@@ -934,6 +934,8 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
   // Original initializer and dataful worker are different native phases.
   // The reentrant async initializer may return under its retained OLD read;
   // no worker reads/publishes until the existing full old-source/paint cut.
+  NativeProfileIdentityRequest::InitializerPhase initializer_phase=
+      NativeProfileIdentityRequest::InitializerPhase::kAfterOldDrain;
   std::atomic<bool> initializer_ready{false},data_worker_ready{false};
   std::atomic<bool> entering{false},canceled{false},transport_running{false};
   std::shared_ptr<Work> original_render_frame;
@@ -1940,7 +1942,8 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
       caller->native_frame_thread_identity().process_type==X_PROCTYPE_TITLE);
  }
  ReentrantWorkConflict NormalOriginalCaller(XThread* caller,std::optional<uint32_t> actual_task,
-     uint32_t* first_function=nullptr) const {
+     uint32_t* first_function=nullptr,std::shared_ptr<Work>* actual_issuer=nullptr) const {
+  if(actual_issuer)actual_issuer->reset();
   const auto refuse=[&](ReentrantWorkConflict why,uint32_t function=0){
    if(first_function)*first_function=function;return why;
   };
@@ -2022,7 +2025,24 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
    for(const auto& row:wake->works_)if(row && (same_frame(row->frame) || same_frame(row->refresh)))
     return refuse(ReentrantWorkConflict::kCallerWake,row->frame.function);
   }
+  if(actual_issuer)*actual_issuer=issuer;
   return ReentrantWorkConflict::kNone;
+ }
+ // The selected readless issuer is compatible only after NormalOriginalCaller
+ // proves its actual execution and complete ancestry. Every OTHER operation
+ // keeps the existing native access/lifetime classification; a dispatcher name
+ // alone never exempts an opaque callback or an old-data writer.
+ bool InitializerOtherWorkCompatible(const std::shared_ptr<Work>& issuer,
+     OriginalLogonDiagnostic* diagnostic=nullptr) const {
+  for(const auto& other:active){
+   if(!other || other==issuer || other->normal_return)continue;
+   const auto conflict=ReentrantOldWorkConflict(*other);
+   if(conflict==ReentrantWorkConflict::kNone)continue;
+   if(diagnostic)diagnostic->latest_kind=(diagnostic->latest_kind&0xFFFFu) |
+       (uint32_t(conflict)<<16) | (OriginalLogonFunctionRole(other->frame.function)<<24);
+   return false;
+  }
+  return true;
  }
  // Positive ownership proof for the primary-proven local async families only.
  // Keeping the exact read/frame is essential: the outer native scene still
@@ -2034,9 +2054,8 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
    return condition;
   };
   if(rejected(0,!caller || caller!=ActualThread() || (ordinal!=0x20B && ordinal!=0x224)))return {};
-  const bool proven_async_flags=flags==0 || flags==4 || flags==0xC || flags==0x20 ||
-      flags==0x24 || flags==0x2C || flags==0x120420 || flags==0x120424;
-  if(rejected(1,!proven_async_flags || !overlap) ||
+  const auto phase=NativeProfileIdentityRequest::ClassifyInitializer(flags,bool(overlap));
+  if(rejected(1,phase!=NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync) ||
      rejected(2,bool(job) || render_phase!=RenderPhase::kOpen || !aligned || !current_ticket ||
          !current_roster || !config.factory_binding || !pixels) ||
      rejected(3,stopping.load() || retired.load() || uncertain.load()) ||
@@ -2063,19 +2082,7 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
   // A retained fixed-old consumer or pure transport is not a destructive
   // publisher. Its full read/source/listener/paint lifetime still joins before
   // data_worker_ready; no scope, native result or callback is shortened here.
-  bool other_owner=false;
-  for(const auto& other:active){
-   if(!other || other==work || other->normal_return)continue;
-   const auto conflict=ReentrantOldWorkConflict(*other);
-   if(conflict==ReentrantWorkConflict::kNone)continue;
-   other_owner=true;
-   // One representative at the actual API cut, never a per-frame census.
-   // Existing kind/role/caller/stack metadata in bits0..15 is unchanged.
-   if(diagnostic)diagnostic->latest_kind=(diagnostic->latest_kind&0xFFFFu) |
-       (uint32_t(conflict)<<16) | (OriginalLogonFunctionRole(other->frame.function)<<24);
-   break;
-  }
-  if(rejected(10,other_owner))return {};
+  if(rejected(10,!InitializerOtherWorkCompatible(work,diagnostic)))return {};
   return work;
  }
  bool AwaitPreparedWorker(cpu::ppc::PPCContext&,uint32_t) noexcept;
@@ -3296,7 +3303,8 @@ bool NativeProfileIdentityOwner::State::AwaitPreparedWorker(
   std::shared_ptr<Job> pending;
   {
    std::lock_guard lock(mutex);pending=job;
-   if(!pending || !pending->original_render_frame || pending->data_worker_ready)return true;
+   if(!pending || pending->initializer_phase!=NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync ||
+      pending->data_worker_ready)return true;
   }
   if(global_critical_region::is_held_by_current_thread()){Lose(__LINE__);return false;}
   auto* thread=ActualThread();
@@ -5152,6 +5160,9 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
   job->input=scratch.address;job->owned_input=true;
  }
  const auto caller_task=s.OriginalCallerTask(caller,original?original->ordinal():0);
+ std::shared_ptr<State::Work> early_normal_issuer;
+ const auto request_phase=original?original->initializer_phase(bool(overlap)):
+     NativeProfileIdentityRequest::InitializerPhase::kAfterOldDrain;
  {
   std::lock_guard lock(s.mutex);
   uint32_t evaluated=0,failed=0;
@@ -5163,8 +5174,12 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
      rejected(7,!s.next_source || s.next_source==UINT64_MAX) || rejected(10,bool(s.bootstrap_cleanup))){
    return fail(__LINE__,11,std::errc::device_or_resource_busy,failed==(1u<<6) || failed==(1u<<10),evaluated,failed);
   }
-  if(caller && s.Latest(caller->thread_id()) &&
-     s.NormalOriginalCaller(caller,caller_task)!=State::ReentrantWorkConflict::kNone &&
+  std::shared_ptr<State::Work> issuer;
+  const bool normal=caller && s.NormalOriginalCaller(caller,caller_task,nullptr,&issuer)==
+      State::ReentrantWorkConflict::kNone;
+  if(normal && request_phase==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync &&
+      s.InitializerOtherWorkCompatible(issuer))early_normal_issuer=issuer;
+  if(caller && s.Latest(caller->thread_id()) && !normal &&
      !s.ReentrantOriginalFrame(caller,original?original->ordinal():0,flags,overlap))
    return fail(__LINE__,11,std::errc::device_or_resource_busy,false,1u<<9,1u<<9);
   job->serial=job->source=s.next_source++;
@@ -5202,12 +5217,19 @@ bool NativeProfileIdentityOwner::EnqueuePrepared(std::shared_ptr<xam::ProfileRos
      rejected(10,bool(s.bootstrap_cleanup))){
    return fail(__LINE__,14,std::errc::device_or_resource_busy,failed==(1u<<6) || failed==(1u<<10),evaluated,failed);
   }
+  std::shared_ptr<State::Work> issuer;
   const bool normal_caller=caller &&
-      s.NormalOriginalCaller(caller,reserved_caller_task)==State::ReentrantWorkConflict::kNone;
+      s.NormalOriginalCaller(caller,reserved_caller_task,nullptr,&issuer)==State::ReentrantWorkConflict::kNone;
   if(!normal_caller)job->original_render_frame=s.ReentrantOriginalFrame(caller,original?original->ordinal():0,flags,overlap);
-  // Readless issuers use the existing full drain BEFORE initializer entry.
-  // They do not manufacture a render read or enable the early worker gate.
-  job->initializer_ready=bool(job->original_render_frame);
+  const bool early_normal=normal_caller && issuer==early_normal_issuer &&
+      request_phase==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync &&
+      s.InitializerOtherWorkCompatible(issuer);
+  if(job->original_render_frame || early_normal)job->initializer_phase=request_phase;
+  // A proved readless issuer keeps its real Boot1 execution/Task lifetime and
+  // waits for native overlap completion after first return. It has no old read,
+  // Expected/listener/wake duty by NormalOriginalCaller. No render frame is
+  // invented; BOTH E148/C838 gates use this same immutable phase.
+  job->initializer_ready=job->initializer_phase==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync;
   if(caller && s.Latest(caller->thread_id()) && !normal_caller && !job->original_render_frame)
    return fail(__LINE__,14,std::errc::device_or_resource_busy,false,1u<<9,1u<<9);
   job->old_pixels=s.pixels;

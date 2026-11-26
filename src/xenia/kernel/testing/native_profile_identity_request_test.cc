@@ -32,10 +32,13 @@ TEST_CASE("Original native logon retains its four-XUID request independently of 
  const auto add=Access::Capture(0x20B,original,4,{kA,kB,0,0},error);
  REQUIRE(add);REQUIRE_FALSE(error);
  CHECK(add->ordinal()==0x20B);CHECK(add->flags()==4);
+ CHECK(add->initializer_phase(true)==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync);
  CHECK((add->desired()==std::array<uint64_t,4>{kA,kC,0,0}));
  CHECK(std::equal(add->original().begin(),add->original().end(),original.begin(),original.end()));
  const auto replacement=Access::Capture(0x20B,original,0,{kA,kB,0,0},error);
  REQUIRE(replacement);CHECK_FALSE(error);
+ CHECK(replacement->initializer_phase(true)==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync);
+ CHECK(replacement->initializer_phase(false)==NativeProfileIdentityRequest::InitializerPhase::kAfterOldDrain);
  CHECK((replacement->desired()==std::array<uint64_t,4>{0,kC,0,0}));
  CHECK(std::equal(replacement->original().begin(),replacement->original().end(),original.begin(),original.end()));
 }
@@ -44,9 +47,12 @@ TEST_CASE("Native logon gives Add precedence and validates removal in the origin
  std::error_code error;const auto one=FourXuids({kC,0,0,0});
  const auto both=Access::Capture(0x20B,one,0xC,{kA,kB,0,0},error);
  REQUIRE(both);CHECK_FALSE(error);CHECK(both->flags()==0xC);
+ CHECK(both->initializer_phase(true)==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync);
+ CHECK(both->initializer_phase(false)==NativeProfileIdentityRequest::InitializerPhase::kAfterOldDrain);
  CHECK((both->desired()==std::array<uint64_t,4>{kC,kB,0,0}));
  const auto remove=Access::Capture(0x20B,FourXuids({0,kB,0,0}),8,{kA,kB,0,0},error);
  REQUIRE(remove);CHECK_FALSE(error);CHECK((remove->desired()==std::array<uint64_t,4>{kA,0,0,0}));
+ CHECK(remove->initializer_phase(true)==NativeProfileIdentityRequest::InitializerPhase::kAfterOldDrain);
  CHECK_FALSE(Access::Capture(0x20B,FourXuids({kB,0,0,0}),8,{kA,kB,0,0},error));
  CHECK(error==std::errc::invalid_argument);
  CHECK_FALSE(Access::Capture(0x20B,FourXuids({kA,kA,0,0}),0,{},error));
@@ -87,18 +93,20 @@ TEST_CASE("Unproved native logon flag families and malformed wire extents are re
 }
 TEST_CASE("Native popup suppression preserves original logon flags and slot semantics",
           "[native-identity][wire][logon_popup]") {
+ using Phase=NativeProfileIdentityRequest::InitializerPhase;
  struct Scenario {
   uint32_t flags;
   std::array<uint64_t,4> input, desired;
   int selected;
+  Phase initializer;
  };
  const std::array<uint64_t,4> before{kA,kB,0,0};
  const Scenario scenarios[]{
-  {0x20,{0,0,0,kC},{0,0,0,kC},3},       // Replacement, including zero removals.
-  {0x24,{0,0,kC,0},{kA,kB,kC,0},2},     // Actual creator Add4|UI-suppression20.
-  {0x25,{0,0,kC,0},{kA,kB,kC,0},2},     // Existing raw bit1 is still preserved.
-  {0x28,{0,kB,0,0},{kA,0,0,0},-1},      // Removal still validates its own slot.
-  {0x2C,{kC,0,0,0},{kC,kB,0,0},0},      // Add wins over Remove unchanged.
+  {0x20,{0,0,0,kC},{0,0,0,kC},3,Phase::kQueuedAsync},
+  {0x24,{0,0,kC,0},{kA,kB,kC,0},2,Phase::kQueuedAsync},
+  {0x25,{0,0,kC,0},{kA,kB,kC,0},2,Phase::kAfterOldDrain},
+  {0x28,{0,kB,0,0},{kA,0,0,0},-1,Phase::kAfterOldDrain},
+  {0x2C,{kC,0,0,0},{kC,kB,0,0},0,Phase::kQueuedAsync},
  };
  for (const uint16_t ordinal : {uint16_t(0x20B),uint16_t(0x224)}) {
   for (const auto& scenario : scenarios) {
@@ -121,6 +129,10 @@ TEST_CASE("Native popup suppression preserves original logon flags and slot sema
                                       scenario.flags,before,error);
    REQUIRE(request);REQUIRE_FALSE(error);
    CHECK(request->ordinal()==ordinal);CHECK(request->flags()==scenario.flags);
+   // This detached request says only which native first-return phase was
+   // proved. The actual caller/old-work and queued worker gates remain owned.
+   CHECK(request->initializer_phase(false)==NativeProfileIdentityRequest::InitializerPhase::kAfterOldDrain);
+   CHECK(request->initializer_phase(true)==scenario.initializer);
    CHECK(request->desired()==scenario.desired);
    CHECK(request->original().size()==extent);
    wire.fill(0xCD); // Real detached input ownership, not a borrowed span.
@@ -180,6 +192,8 @@ TEST_CASE("Native SignIn policy flags retain exact wire rows and original reques
                                       flags,before,error);
    REQUIRE(request);REQUIRE_FALSE(error);
    CHECK(request->flags()==flags);CHECK(request->ordinal()==ordinal);
+   CHECK(request->initializer_phase(true)==NativeProfileIdentityRequest::InitializerPhase::kQueuedAsync);
+   CHECK(request->initializer_phase(false)==NativeProfileIdentityRequest::InitializerPhase::kAfterOldDrain);
    CHECK(request->desired()==desired);CHECK(request->original().size()==extent);
    wire.fill(0xCD);
    CHECK(std::equal(request->original().begin(),request->original().end(),

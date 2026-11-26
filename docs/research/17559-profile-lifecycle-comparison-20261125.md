@@ -1,26 +1,25 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V139 builds and passes all seven direct test runs. Its initial native
-alignment now reaches a visible Doritos Crash Course sign-in picker; cancel,
-reopen and navigation passed. Selecting an existing local profile starts a
-separate ordinary transaction that remains in `DrainingOld` before native
-entry. The game does not continue, and the specific wait responsible for
-that stall is not established. V139's dashboard Guide rendered, but B-close,
-reopen and dashboard input return remain unverified because the final image
-overlapped timed shutdown. The completed dashboard and game runs exited zero
-through the existing 600-second owned WM-close timer, with clean reaping and no
-forced signals. Timed shutdown is separate from successful user completion or
-sign-in. No new AppImage or usable checkpoint is accepted; the combined HDD
-gate remains open. Historical V130–V138 results below keep their own scope.
+Status: V140's shared asynchronous initializer change builds and passes all
+seven direct test runs. Its actual dashboard/Guide regression now passes:
+visible first open, B close, dashboard input return, full reopen, Media
+navigation, second close and manual normal shutdown. Ordinary profile
+selection, game continuation, avatars, Editor and OSK remain unaccepted in
+V140. Its Doritos retest rendered, canceled and reopened the native picker,
+then selected the intended existing profile. The test supervisor received
+SIGTERM before the continuation check and terminated Xenia. The signal's
+sender is unknown; this is not a recorded guest crash or native shutdown pass.
+No new AppImage or usable checkpoint is accepted; the combined HDD gate remains
+open. Historical results below keep their own scope.
 This work follows the standing [systems approach and console fidelity
 rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The current tested V139 source map is
-`e27f0cc5e667833856d165da2d94799045cebfb6d4f958702dbd3d8a2b2eabaa`
+The current tested V140 source map is
+`7f8ab81ca6f2b5b1f99b843ca3c3226e8a68006181d0234e85c4eac2e8cfbab5`
 (2,430 source files). All seven direct runs passed under receipt
-`5cb77aea42113b72e71ee2d2c7a291fd5eb68d2d32be886b268472b6433bd223`.
+`891f26b3fa5f1acca6b22641379428483161c276f70e82bb84691b89905c13c0`.
 They establish component coverage, not successful ordinary sign-in, avatar
 rendering, save persistence or a packaged AppImage. Historical V131 source and
 test identities remain in its labeled section below.
@@ -720,6 +719,97 @@ or manufacturing a native return would not resolve that lifecycle.
 | Ordinary selection witness | `6a283b1d9176b1f30169d606d7979913eca88dbd9a5061ed6858cc0b463d204e` |
 
 No new AppImage was produced. The combined HDD gate remains open.
+
+## V140: shared queued initializer, with dataful retirement kept separate
+
+The matching initializer and scheduler establish separate first-return and
+data-replacement phases. The proved asynchronous initializer performs native
+provisional scalar updates and owns its new request buffers; it does not free
+or replace the old Account, model, auth string or rendering resources. Its
+additional direct `FC/5801C` getter reads service rows and writes request-owned
+outputs. The final mode-four scheduler queues E148/C838 instead of invoking
+them inline; a worker can nevertheless race the initializer's return.
+
+The four-path change gives the request and Job one explicit queued-initializer
+phase. Readless admission requires the actual selected dispatcher execution,
+complete caller/read ancestry and the same retained issuer at the final
+reservation. Only that proven suspended issuer is excluded from the other-work
+census. The retained-render path keeps its exact old frame. Both worker entries
+use the same phase and park before their dataful body; the complete existing
+old-read, Task, source, listener, wake, paint and publication joins still grant
+`data_worker_ready`. No native return, overlap completion or Task release is
+manufactured. Native early-error settlement and conservative late admission
+under incompatible work remain explicit limitations.
+
+All seven direct runs passed: base 334 cases / 28,711 assertions; network
+125 / 11,212; kernel 1,481 / 94,806; VFS 136 / 9,736; UI 124 / 4,863;
+focused CPU 5 / 130; installed-system kernel focus 212 / 25,043. Existing
+request and Task cases were extended; no cases or tags were removed. The
+packet-ledger tests cover both callback variants and genuine
+Enter/Return/Close/Free, including a callback racing Schedule return. They do
+not execute the original PPC initializer or the private Owner's park/unpark
+path. Focused selections overlap full suites.
+
+The build embeds compilation base
+`b6a21d4d013ecc6d19f7fa77b1d3a4639f53b8df` plus the recorded four-path change.
+The first native runtime qualification checks caught
+inherited mandatory-case labels and an incorrect coupling between historical
+V138 references and immediate V139 observations. These are research-tool
+metadata failures, not guest results. The passing build/test receipts remain
+unchanged. Whole launch admission and diagnostic privacy were corrected;
+the complete read-only preflight then passed before a session was created.
+
+In the actual current-ELF dashboard run, all six controller batches finished
+with neutral controls. Guide first open, B close, dashboard focus changing
+after Right, full reopen, Media navigation and second B close were visible.
+The initial reopen snapshot caught a transition; a later snapshot showed the
+complete Guide. An owned manual WM close at about 260 seconds exited zero,
+with clean reaping, no forced signals and checked inputs preserved. This was
+well before the 600-second timer. It establishes the basic Guide regression
+and normal dashboard shutdown, not ordinary profile selection, game/avatar
+continuation, Editor, OSK, Xbox Home from a game or packaged-AppImage acceptance.
+
+The separate DCC run rendered its title and native picker, canceled to the
+title, reopened, navigated to the intended existing profile and accepted once.
+Five controller batches completed neutral. The next snapshot showed the title
+at Press A. Before a follow-up A could be sent, the supervisor received SIGTERM;
+the ownership check refused input to the retired session. The user confirmed
+they had not closed the window.
+
+The recorded return 143 is the supervisor's signal-stop result, with native
+`exit_code` unavailable. Resource limits and the 600/660-second timer were not
+exceeded. The guard then sent TERM/KILL to its owned process. Its `complete`
+field does not prove full historical reaping when `leader_reaped` is false; a
+later scoped `/proc` check confirmed the recorded supervisor, Xenia leader and
+thread IDs absent. No normal native shutdown is claimed for this run.
+
+The safe lifecycle projection observed prepared job 4/source 4 with current
+read 3 and an unmet first old-pause/dataful-ready cut. Actual initializer phase,
+readiness, issuer shape, entry, return, overlap completion and logical picker
+closure are unavailable or unwitnessed. Bootstrap job 3's completion cannot
+supply those facts. The remaining caller/PM-entry/old-query contract needs
+discriminating evidence; no particular retained reader or immutable late
+admission is established. The independent signal-source investigation is kept
+separate from that native acceptance question.
+
+| V140 record | SHA256 |
+| --- | --- |
+| Matching native initializer/scheduler contract | `019a3ba2765d857e2a297bbe982f4fc197ec22d51d92e760e8206e0c5b639cc9` |
+| Independent native conflict audit | `1fd6eae0e19c3762a973f91a24b4ba810d700db6dd14f53d2d5a049d53e5b7af` |
+| Four-path source freeze | `7b54dd4d39109f56c4dfbdb8f13eae8c113a508c0c5f1f6ed60e3a0e90e67bb6` |
+| Independent source review | `7c51484ea74d5914b82fa8a3efa165191c2a94f80abc84efb1bbd16c5b116cb2` |
+| Source application | `be79ebf95e6f1a1c902f43af4f59421dfa920ccbceb199a03124a50f4e660c51` |
+| Tested source map | `7f8ab81ca6f2b5b1f99b843ca3c3226e8a68006181d0234e85c4eac2e8cfbab5` |
+| Build | `da289826fef448d3c11e2a4857dd52f4a4b0a00f9a17b4f6fc061a0f87403fbd` |
+| All seven direct runs | `891f26b3fa5f1acca6b22641379428483161c276f70e82bb84691b89905c13c0` |
+| ELF | `66a414e459e9079a20da383e0da3a012ea9a4a386ec9e8124664680f04e6306a` |
+| Actual dashboard runtime | `9da34206e1054845cb018cb504e83021aa44759c8f110c3d0670d5ea62f65242` |
+| Actual dashboard launch | `303cca39bb695d2749cfff665bfe63e1ec1487cdc689e413131609f2330b5b76` |
+| Root visual/controller/normal-close assessment | `65d807736dcd8ec5ccb18df6f89be9b7f57579266474e3baa93093be8520bf20` |
+| Interrupted DCC runtime | `e4641b1b103184d71a60444ebd6549b10719f4b43e6e1e43e0c919df016f540f` |
+| DCC lifecycle projection | `98b14121c15a27c8e233b3e5056ad5c5277db4e4364b6deb4e074f7567803bdb` |
+| Supervisor termination audit | `e720953917e42706b203b5174fcfb658694a03d0cd2850b113c5caeddf35ba6d` |
+| Root DCC scope assessment | `a1c5ba29d406688a32afa759186402d7b795ec010a3e887c9f62422821b2ee01` |
 
 ## Evidence
 

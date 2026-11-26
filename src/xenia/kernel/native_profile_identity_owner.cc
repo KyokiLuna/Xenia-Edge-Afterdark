@@ -2874,18 +2874,29 @@ void NativeProfileIdentityOwner::ObserveIdentityServiceBoundary(void* raw,uint32
   // No additional native reads, scans, locks or service authority.
   struct ProducerTrace {
    bool enabled;uint32_t stage=1,task_available=0,domain_available=0,public_original=0;
-   uint64_t job=0,source=0;
+   uint32_t evaluated=0,failed=0,actual_task=0,worker_flags=0,worker_task=0;
+   uint32_t worker_thread=0,worker_pcr=0,worker_sp=0,worker_lr=0;
+   uint64_t job=0,source=0,work=0,work_source=0,birth=0,birth_source=0;
+   // Preserve the original guard's one evaluation and short-circuit order.
+   // Ordinals are diagnostic source labels, never an alternate policy.
+   bool Refused(uint32_t ordinal,bool value) noexcept {
+    if(enabled){evaluated|=uint32_t(1)<<ordinal;if(value)failed|=uint32_t(1)<<ordinal;}
+    return value;
+   }
    ~ProducerTrace() noexcept {
     if(!enabled)return;
     static NativeSystemUiTraceLimiter trace;
-    trace.EmitTransition((job<<3)^stage,"identity","service_producer_cut",
+    trace.EmitTransition((job<<3)^stage^(uint64_t(failed)<<8),"identity","service_producer_cut",
       {{"producer",0x81830878},{"stage",stage},{"task_available",task_available},
        {"domain_available",domain_available},{"job_serial",job},{"job_source",source},
-       {"public_original",public_original}});
+       {"public_original",public_original},{"evaluated",evaluated},{"failed",failed},
+       {"actual_task",actual_task},{"worker_flags",worker_flags},{"work",work},{"work_source",work_source}},
+      {{"worker_thread",worker_thread},{"worker_pcr",worker_pcr},{"worker_sp",worker_sp},{"worker_lr",worker_lr},
+       {"birth",birth},{"birth_source",birth_source},{"worker_task",worker_task}});
    }
   } observed{cvars::native_system_ui_trace};
   const auto task=NativeProfileIdentityTaskContext::Read(*s.config.catalog->calls(),*s.config.domain,at,c);
-  if(observed.enabled)observed.task_available=bool(task);
+  if(observed.enabled){observed.task_available=bool(task);if(task)observed.actual_task=*task;}
   auto data=std::make_shared<IdentityServiceOrigin::Data>();data->state=owner->state_;
   data->code=s.root_code;data->domain=s.config.domain->Acquire();
   if(observed.enabled)observed.domain_available=bool(data->domain);
@@ -2893,19 +2904,54 @@ void NativeProfileIdentityOwner::ObserveIdentityServiceBoundary(void* raw,uint32
   std::shared_ptr<IdentityServiceOrigin> origin(new IdentityServiceOrigin(data));
   std::lock_guard lock(s.mutex);const auto worker=s.Latest(frame->thread,0x8199C838);const auto job=s.job;
   if(observed.enabled){observed.stage=2;if(job){observed.job=job->serial;
-   observed.source=job->source;observed.public_original=bool(job->original);}}
+   observed.source=job->source;observed.public_original=bool(job->original);}
+   if(worker){
+    observed.work=worker->serial;observed.work_source=worker->source;
+    observed.worker_thread=worker->frame.thread;observed.worker_pcr=worker->frame.pcr;
+    observed.worker_sp=worker->frame.sp;observed.worker_lr=worker->frame.lr;
+    observed.birth=worker->birth.generation;observed.birth_source=worker->birth.origin;
+    observed.worker_task=worker->birth.task;
+    observed.worker_flags=1u|(uint32_t(worker->execution_only)<<1)|(uint32_t(worker->physical_work)<<2)|
+        (uint32_t(worker->service_progress)<<3)|(uint32_t(worker->normal_return)<<4)|
+        (uint32_t(worker->uncertain)<<5)|(uint32_t(bool(worker->read))<<6)|
+        (uint32_t(bool(worker->commit))<<7)|(uint32_t(worker->profile_producer)<<8)|
+        (uint32_t(worker->registered_executor)<<9)|(uint32_t(worker->host_body)<<10)|
+        (uint32_t(worker->owns_task_work)<<11)|(uint32_t(worker->owns_persistent_work)<<12)|
+        (uint32_t(worker->transport_unclaimed)<<13)|(uint32_t(worker->creation_only)<<14)|
+        (uint32_t(worker->prebody_parked)<<15)|(uint32_t(worker->execution_uncertain)<<16)|
+        (uint32_t(worker->system_thread_frame)<<17)|(uint32_t(worker->execution_read_fallback)<<18);
+   }
+  }
   // Canonical bootstrap and public sync/async logon share this native C838
   // producer. The retained Task/source, writer read and Commit below prove
   // ownership; the optional public input observation is not that authority.
-  if(s.stopping.load() || s.retired.load() || s.uncertain.load() || s.identity_service || !job ||
-     !job->native_entered || !job->data_worker_ready || job->execution_uncertain || !worker ||
-     worker->normal_return || worker->uncertain || worker->source!=job->source || !worker->read || !worker->commit ||
-     worker->read_pool!=&job->writer_reads || worker->commit->intent!=job->intent ||
-     worker->commit->publication!=job->publication || worker->birth.task!=*task || !worker->birth.generation ||
-     worker->birth.origin!=job->source || c.thread_state->native_profile_roster_read_.load(std::memory_order_acquire)!=worker->read.get() ||
-     !job->intent->old_roster() || job->intent->old_roster()!=s.current_roster ||
-     !DwordIs(c.r[3],0) || !DwordIs(c.r[4],worker->frame.sp-0x370) ||
-     !DwordIs(c.r[5],4) || !DwordIs(c.r[6],0))return;
+  if(observed.Refused(0,s.stopping.load()) ||
+     observed.Refused(1,s.retired.load()) ||
+     observed.Refused(2,s.uncertain.load()) ||
+     observed.Refused(3,bool(s.identity_service)) ||
+     observed.Refused(4,!job) ||
+     observed.Refused(5,!job->native_entered) ||
+     observed.Refused(6,!job->data_worker_ready) ||
+     observed.Refused(7,job->execution_uncertain) ||
+     observed.Refused(8,!worker) ||
+     observed.Refused(9,worker->normal_return) ||
+     observed.Refused(10,worker->uncertain) ||
+     observed.Refused(11,worker->source!=job->source) ||
+     observed.Refused(12,!worker->read) ||
+     observed.Refused(13,!worker->commit) ||
+     observed.Refused(14,worker->read_pool!=&job->writer_reads) ||
+     observed.Refused(15,worker->commit->intent!=job->intent) ||
+     observed.Refused(16,worker->commit->publication!=job->publication) ||
+     observed.Refused(17,worker->birth.task!=*task) ||
+     observed.Refused(18,!worker->birth.generation) ||
+     observed.Refused(19,worker->birth.origin!=job->source) ||
+     observed.Refused(20,c.thread_state->native_profile_roster_read_.load(std::memory_order_acquire)!=worker->read.get()) ||
+     observed.Refused(21,!job->intent->old_roster()) ||
+     observed.Refused(22,job->intent->old_roster()!=s.current_roster) ||
+     observed.Refused(23,!DwordIs(c.r[3],0)) ||
+     observed.Refused(24,!DwordIs(c.r[4],worker->frame.sp-0x370)) ||
+     observed.Refused(25,!DwordIs(c.r[5],4)) ||
+     observed.Refused(26,!DwordIs(c.r[6],0)))return;
   if(observed.enabled)observed.stage=3;
   Tasks::IdentityServiceRequest::Origin facts{worker->frame,*frame,worker->birth,job->serial,job->source,
       worker->serial,0x81AEE470,0,uint32_t(c.r[4]),4,0};

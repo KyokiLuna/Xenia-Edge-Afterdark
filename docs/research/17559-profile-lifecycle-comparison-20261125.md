@@ -472,6 +472,62 @@ AppImage has been produced.
 | ELF | `e15655eff5310b53dfc96e50e81517936d46f20e540ad8e2daaaac20ddef73a6` |
 | Root native assessment | `e4c234a1a4cd20658f3b5c496439ae7d7804a6ecfd2b710974779f7a07abc502` |
 
+## V136 complete producer observation
+
+The diagnostic preserves all 27 existing refusal expressions in their original
+short-circuit order. It adds no native read, source authority or completion.
+All seven direct runs passed with the same case counts as V135. Compilation
+base is `f7aa0c28`; runtime source and products remained unchanged.
+
+The first isolated run never presented a first title Swap. Its Guide edge used
+the correctly leased host fallback, B closed that menu, and normal window close
+exited zero with full reaping. The service producer was not reached. No cause
+for that earlier startup failure or controller-timing relationship is proved.
+
+The second run displayed the dashboard before the virtual controller was
+attached. Native Guide visibility was notified but no overlay appeared. Its
+producer observation has evaluated mask `0x00FFFFFF` and refusal mask
+`0x00800000`: original ownership predicates 0 through 22 passed, then predicate
+23 rejected non-null `r3`. The selected callback has its actual matching Task,
+birth/source, entered writer read, Commit, publication and current old roster.
+This run does not support the earlier neutral/physical callback hypotheses.
+Later argument predicates 24 through 26 were short-circuited and their dynamic
+truth remains unobserved. Normal close fully reaped processes without forced
+signals but exited one after the Bootstrap join failure. Native Guide, service
+completion, game and Avatar Editor acceptance remain open.
+
+Matching 17559 code explains why the null-only producer contract is incomplete:
+
+| Native lane | Producer return address | Producer SP relative to C838 entry | Rows | Flags |
+| --- | --- | --- | --- | --- |
+| Nested C310 | `0x8199C488` | `-0xBC0` | null | 4 |
+| Initial direct C838 | `0x8199D52C` | `-0x510` | request `+0xA68` | 4 or 5 |
+| Direct retry | `0x8199D5AC` | `-0x510` | request `+0xA68` | 0 |
+| Direct recovery | `0x8199D6A4` | `-0x510` | null | 2 |
+
+These are static native contracts, not proof that all four lanes ran. The rows
+are four packed `0x64` records inside the retained native request; the original
+wrapper transforms them into four `0x68` copied records. All lanes use the
+native parameter block at C838 entry SP minus `0x370`. The current Origin also
+hardcodes the nested lane's stack/LR, null rows and flags, so removing the first
+refusal alone would leave later mismatches. A coherent correction must cover
+typed producer variants, native copying, acceptance, pumping, sequential calls,
+actual completion/free, cancellation and teardown together. No row payload was
+manually inspected and no functional correction is claimed in this revision.
+
+| V136 record | SHA256 |
+| --- | --- |
+| Tested source map | `ed26dfb32e76ad9ea375991d735133b7e9b89a6102991a9ab67efc0d80ce9636` |
+| Build | `825a6ba9838a01ac76f36007090610fd34fdd7fb86dd0d3c389ca7208cbed59c` |
+| All seven direct runs | `76cbf5b00b12c709c1c2474b51b288dea486d2485c7ddbfc44ae8a24e9ecf902` |
+| ELF | `3e8ee82890347d6288eebd562161cb4e8e6a9a982541b1c99279669c0a915b8a` |
+| Root two-run assessment | `c0d6065e49b81f8bab7c4c02241b9e302aa1bde5bd191fb05d509fe922072777` |
+
+No AppImage was produced. Independent code-authentication review also records
+substantial repeated validation work, but its contribution to lag has not been
+measured. Existing unload leases and code-sweep counters do not establish byte
+immutability; no checks were removed on that basis.
+
 ## Evidence
 
 Detailed local evidence is retained under `evidence/hdd-gate` in the research

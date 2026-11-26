@@ -1,26 +1,29 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V134's prepared-ingress, cancellation and terminal-retirement change
-builds and passes all seven direct test runs. Its actual dashboard/Guide run
-still failed. Memory stayed near 704 MiB through the six-minute test, but the
-Guide remained invisible while initial native reconciliation waited inside its
-continuation. The process exited one after an ordinary window close and a
-Bootstrap thread-join timeout, with clean reaping and no forced signals. No
-usable checkpoint or native shutdown pass is claimed. V133's earlier false
-pre-entry uncertainty and memory-guard failure remain recorded below.
-Historical V130–V132 findings remain labeled below. The combined HDD gate is
-open. This work follows
-the standing [systems approach and
-console fidelity rule](17559-console-fidelity-policy.md).
+Status: V139 builds and passes all seven direct test runs. Its initial native
+alignment now reaches a visible Doritos Crash Course sign-in picker; cancel,
+reopen and navigation passed. Selecting an existing local profile starts a
+separate ordinary transaction that remains in `DrainingOld` before native
+entry. The game does not continue, and the specific wait responsible for
+that stall is not established. V139's dashboard Guide rendered, but B-close,
+reopen and dashboard input return remain unverified because the final image
+overlapped timed shutdown. The completed dashboard and game runs exited zero
+through the existing 600-second owned WM-close timer, with clean reaping and no
+forced signals. Timed shutdown is separate from successful user completion or
+sign-in. No new AppImage or usable checkpoint is accepted; the combined HDD
+gate remains open. Historical V130–V138 results below keep their own scope.
+This work follows the standing [systems approach and console fidelity
+rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The last tested V131 source map is
-`484392c97d89ca8e5a5ec72a7d4a9ce6fa74d654471b08255efae951ed5a70dd`
-(2,430 source files). Its seven direct test runs passed under receipt
-`cbe73dba7fac660411547ee2a44184490d5a138df395886dcf0f85f8d133ef0c`.
-They establish their component coverage; they do not establish native profile
-creation, sign-in, appearance editing or game rendering.
+The current tested V139 source map is
+`e27f0cc5e667833856d165da2d94799045cebfb6d4f958702dbd3d8a2b2eabaa`
+(2,430 source files). All seven direct runs passed under receipt
+`5cb77aea42113b72e71ee2d2c7a291fd5eb68d2d32be886b268472b6433bd223`.
+They establish component coverage, not successful ordinary sign-in, avatar
+rendering, save persistence or a packaged AppImage. Historical V131 source and
+test identities remain in its labeled section below.
 
 The primary runtime reference is the matching 17559 XAM image, SHA256
 `f9e44cd6f4b04875ddc5a3b8fd519785ba2b0488b1c4622f818b740ba4064313`.
@@ -92,8 +95,9 @@ These are dependencies within the existing combined HDD gate, not new gates or
 permission to postpone its mandatory scenarios. Independent units can be
 implemented in parallel after their shared interfaces are established. A
 checkpoint requires an actual usable dashboard/sign-in/game-save/Guide/exit
-path and a test of the packaged AppImage itself; the current V131 run does not
-satisfy that requirement.
+path and a test of the packaged AppImage itself. V139's visible picker and timed
+shutdown do not satisfy that requirement while ordinary selection and game
+continuation remain blocked.
 
 ## V131 integration and actual consumer result
 
@@ -107,8 +111,8 @@ installed selection explicitly included three hidden cases. Focused runs overlap
 full-suite coverage; the CPU instruction corpus was not run in full.
 
 In the actual isolated ELF run, unsigned dashboard and native Guide/profile
-list rendered. Selecting disposable local123 requested slot 1. The actual native
-initializer returned zero without the former producer-binding denial or
+list rendered. Selecting the disposable local test profile requested slot 1.
+The actual native initializer returned zero without the former producer-binding denial or
 execution-uncertain result. A genuine C838 Task/read/commit record was observed;
 protocol, roster publication and owned CompleteIO were not. The dashboard stayed
 unsigned, and later Guide input did not reopen the overlay. This is a failed
@@ -235,7 +239,8 @@ network and VFS products are checked unchanged when absent from the link plan.
 | Seven direct runs | `c8b78f00691c5ad280e9b64317634524f27e7b7dc5322195bc15a25223163b0d` |
 
 In the isolated native run, Guide was visible before selection. Selecting
-local123 reached a dashboard that displayed that profile's name. Repeated Guide
+the disposable local test profile reached a dashboard displaying its name.
+Repeated Guide
 requests then produced no visible Guide; Back followed by Right visibly changed
 dashboard focus. The toolbar's unsigned slot zero is not evidence about selected
 slot one. The real initializer returned zero, and the native worker returned
@@ -329,7 +334,7 @@ The corrective source changes affected only two test files, so the successful
 four-step rebuild relinked the base/kernel tests and verified the other five
 products unchanged. The embedded version retains compilation base `0d28167d`.
 
-The isolated dashboard booted displaying disposable local123 in both dashboard
+The isolated dashboard booted displaying the disposable local test profile in both dashboard
 and host toolbar. The remembered roster selected slot 1; the toolbar name alone
 does not identify a controller slot. Guide visibility was notified, but no overlay appeared. This
 differs from V132's unsigned-start/explicit-sign-in scenario. The actual owner
@@ -402,7 +407,7 @@ and installed-focus 201/23,373. The five full suites contain 2,189 cases and
 private-access errors remain failures; the narrow State forwarding correction
 preserves the same predicate and existing mutex. Compilation base is `1bd39845`.
 
-The actual isolated dashboard again displayed disposable local123. Guide
+The actual isolated dashboard again displayed the disposable local test profile. Guide
 visibility was notified, but no overlay appeared; screenshots after B and Right
 did not establish input return. RSS stayed between 700.3 and 706.4 MiB after
 warm-up, rather than repeating V133's rapid growth. The run ended after 368.22
@@ -669,6 +674,52 @@ the Settings path cannot be relabelled as a native Editor test.
 No new AppImage was produced. The game sign-in/render and shutdown failures,
 actual Editor launch, early-Start error terminal proof, intermittent first-Swap
 startup variation and the remaining combined HDD scenarios stay open.
+
+## V139: visible native picker and ordinary selection frontier
+
+The four-path initial-frame change adds a positive exact-unchanged-owner and
+complete Account snapshot fact for the native bootstrap alignment. It
+acknowledges only an actual completed hidden frame, preserves the separate
+all-empty fact, and retains occupied-profile observer health plus the existing
+provider, source, wake, paint, cancellation and native completion joins. It
+does not grant ordinary profile changes an initial no-op exemption.
+
+All seven direct runs passed: base 334 cases / 28,711 assertions; network
+125 / 11,212; kernel 1,481 / 94,714; VFS 136 / 9,736; UI 124 / 4,863;
+focused CPU 5 / 130; installed-system kernel focus 212 / 24,951. Focused runs
+overlap full suites. The binary's compilation base remains
+`851ce50e9ba41d270b77ea8c5200871426a52005`.
+
+| Current V139 consumer | Recorded result |
+| --- | --- |
+| Dashboard Guide | First open visible. B-close, reopen and input return are unverified: the final dashboard image overlapped the existing timed WM close. |
+| DCC native sign-in picker | Visible; controller navigation, B cancel to title and A reopen passed. |
+| Selecting an existing local profile | Ordinary job 4/source 4 starts, picker pixels disappear, and the game remains at Press A. Further A does not continue. |
+| Ordinary transaction boundary | Still `DrainingOld` before native entry. The first recorded pre-entry false predicate is `render_phase == OldPaused`; later work/source/listener/wake predicates were not evaluated. |
+| Game, avatar, save/restart and native Editor | Not reached or not qualified by this run. |
+| Shutdown | The existing 600-second owned WM-close timer returned zero; both process groups reaped cleanly without forced signals. This is not a manual-completion or successful-logon receipt. |
+
+The one captured ordinary `0x224` entry has flags `0x120424` and a nonnull
+overlap. Repeated reports of that first diagnostic are not repeated requests.
+Selected-slot masks, latest caller details and the actual issuer frame are
+unavailable. All recorded job-4 old-Query predicate rows occur during stop,
+with no old-drain operands evaluated; work/source blocker rows are also
+unavailable. They do not identify a specific pending reader or prove that one
+is absent. The next bounded unit must establish the complete ordinary async
+initializer and old-read/drain contract. Reusing the bootstrap image receipt
+or manufacturing a native return would not resolve that lifecycle.
+
+| V139 record | SHA256 |
+| --- | --- |
+| Tested source map | `e27f0cc5e667833856d165da2d94799045cebfb6d4f958702dbd3d8a2b2eabaa` |
+| Build | `8564f376be6239a91f58ff579e79a224885234809fdc1d6bf40f2bf1a2c406c6` |
+| All seven direct runs | `5cb77aea42113b72e71ee2d2c7a291fd5eb68d2d32be886b268472b6433bd223` |
+| ELF | `7da2b30f28b10ca9ee8d890f8a98d175c91a92210ff6b928e8b563a85639044c` |
+| Corrected dashboard assessment | `3204914ca27ef287810d20c5b73d20660c2e76d3c51547a807f4c2751d3944f1` |
+| DCC r2 runtime result | `f999f05a10769e27b63ade3493cc15a688a6f779c1741f67baed3e02b5a3c69f` |
+| Ordinary selection witness | `6a283b1d9176b1f30169d606d7979913eca88dbd9a5061ed6858cc0b463d204e` |
+
+No new AppImage was produced. The combined HDD gate remains open.
 
 ## Evidence
 

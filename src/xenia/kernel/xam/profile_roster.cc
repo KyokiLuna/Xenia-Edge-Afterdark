@@ -173,6 +173,7 @@ struct ProfileRosterIntent::State {
   // Set once from the actual held PM envelopes before publishing Prepared.
   // Empty slot numbers alone never substitute for absent native row owners.
   bool empty_unchanged_rows = false;
+  bool unchanged_owners = false;
   enum Milestone:uint32_t { kProtocol=1, kRead=2, kMaps=4, kWriters=8, kRetired=16 };
   std::atomic<uint32_t> milestones{0}, native_protocol_value{0};
   uint64_t operation = 0;
@@ -524,13 +525,18 @@ std::shared_ptr<const HostRoster> ProfileRosterIntent::published_roster() const 
       ? state_->new_roster : state_->canceled_empty_roster;
 }
 bool ProfileRosterIntent::HasPublishedEmptyUnchangedRows(uint32_t actual_protocol_value) const {
+  return HasPublishedRequestedRows(actual_protocol_value) && state_->empty_unchanged_rows;
+}
+bool ProfileRosterIntent::HasPublishedUnchangedOwners(uint32_t actual_protocol_value) const {
+  return HasPublishedRequestedRows(actual_protocol_value) && state_->unchanged_owners;
+}
+bool ProfileRosterIntent::HasPublishedRequestedRows(uint32_t actual_protocol_value) const {
   const auto observed = result();
   return observed.phase == ProfileRosterPhase::kPublished && !observed.error &&
       observed.native_protocol_returned && observed.selected_reads_available &&
       observed.maps_committed && observed.writers_available &&
       observed.native_protocol_value == actual_protocol_value &&
-      publication_outcome()==ProfileRosterPublicationOutcome::kRequested &&
-      state_->empty_unchanged_rows;
+      publication_outcome()==ProfileRosterPublicationOutcome::kRequested;
 }
 const std::array<uint8_t, 4 * 0x188>& ProfileRosterIntent::NativeRowsForPrepared() const {
   return state_->native_rows;
@@ -1264,6 +1270,46 @@ std::shared_ptr<ProfileRosterIntent> ProfileManager::PrepareRosterAttempt(
         state->result.before_epoch == state->result.after_epoch &&
         std::none_of(state->result.changed.begin(), state->result.changed.end(), [](bool v) { return v; }) &&
         std::all_of(state->native_rows.begin(), state->native_rows.end(), [](uint8_t v) { return v == 0; });
+    // Compare the actual held owners once, after CURRENT durable Account loads
+    // and existing source/cache validation. An occupied unchanged row is not
+    // an absent row or a freshly decoded image. Its shared GPD authority may
+    // evolve through ordinary writes; this proves no authority replacement,
+    // never a historical GPD version or perpetual byte immutability.
+    const auto same_owner = [](const auto& a, const auto& b) {
+      return a.get()==b.get() && !a.owner_before(b) && !b.owner_before(a);
+    };
+    const auto same_rows = [&] {
+      bool occupied=false;
+      if (operation->before->roster->slots()!=operation->after->roster->slots())return false;
+      for (size_t slot=0;slot!=4;++slot) {
+        const auto& a=operation->before->rows[slot];
+        const auto& b=operation->after->rows[slot];
+        if (!same_owner(a.profile,b.profile) || !same_owner(a.model,b.model) ||
+            !same_owner(a.identity,b.identity) || !same_owner(a.storage,b.storage))return false;
+        if (!a.account || !b.account) {
+          if (a.account || b.account || a.profile || a.model || a.identity || a.storage ||
+              operation->before->roster->slots()[slot]!=ProfileRosterSlot{})return false;
+          continue;
+        }
+        if (!a.profile || !a.model || !a.identity || !a.storage ||
+            !same_owner(a.account->identity(),a.identity) ||
+            !same_owner(b.account->identity(),b.identity))return false;
+        occupied=true;
+        const auto& at=a.account->token();const auto& bt=b.account->token();
+        if (!at || !bt || !at->exists() || !bt->exists() ||
+            !same_owner(a.account->identity(),b.account->identity()) ||
+            a.account->devkit()!=b.account->devkit() ||
+            std::memcmp(&a.account->account(),&b.account->account(),sizeof(X_XAMACCOUNTINFO)) ||
+            !same_owner(at->root(),bt->root()) || at->relative()!=bt->relative() ||
+            at->info().filesystem_id!=bt->info().filesystem_id ||
+            at->info().file_id!=bt->info().file_id || at->info().size!=bt->info().size ||
+            !std::ranges::equal(at->bytes(),bt->bytes()))return false;
+      }
+      return occupied; // All-empty remains solely the older zero-wire proof.
+    };
+    state->unchanged_owners = state->result.before_epoch==state->result.after_epoch &&
+        std::none_of(state->result.changed.begin(),state->result.changed.end(),[](bool v){return v;}) &&
+        same_rows();
     state->phase.store(ProfileRosterPhase::kPrepared, std::memory_order_release);
     a->diagnostic_phase.store(uint32_t(ProfileRosterPhase::kPrepared),std::memory_order_release);
   }

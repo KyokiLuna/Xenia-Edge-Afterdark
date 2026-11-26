@@ -1377,6 +1377,10 @@ class ProfileSettingsReadTestAccess final {
                                  uint32_t native_value = 0) {
     return intent && intent->HasPublishedEmptyUnchangedRows(native_value);
   }
+  static bool PublishedUnchangedOwners(const std::shared_ptr<ProfileRosterIntent>& intent,
+                                        uint32_t native_value = 0) {
+    return intent && intent->HasPublishedUnchangedOwners(native_value);
+  }
   static auto Ticket(ProfileRosterIntent& intent,const ProfileRosterNativeBinding& binding,
       std::error_code& error) { return intent.NativeReadTicket(false,binding,&error); }
   static void RetryCleanup(ProfileManager& pm) { pm.RetryRosterSettlement(); }
@@ -3661,6 +3665,7 @@ TEST_CASE("Empty native alignment requires actual unchanged row owners and proto
   CHECK(committed.maps_committed); CHECK(committed.writers_available); CHECK_FALSE(committed.owners_retired);
   for (const auto changed : committed.changed) { CHECK_FALSE(changed); }
   CHECK(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
   CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent, 1));
   // This metadata fact has no frame/GPU/pixel authority. Genuine finalization
   // still needs the separate existing joined role even for an empty roster.
@@ -3705,6 +3710,113 @@ TEST_CASE("Published nonempty no-op and real signout never become empty initial 
   REQUIRE_FALSE(finished.error); REQUIRE(finished.phase == ProfileRosterPhase::kCommitted);
   CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent)); profile.Unchanged();
 }
+TEST_CASE("An occupied initial alignment retains exact row owners only after real publication and protocol duties",
+          "[kernel][profile][roster][native][unchanged_initial_frame]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime, 0xe000000000000561ull, 81);
+  ReadFixtureProfile b(runtime, 0xe000000000000562ull, 82);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;
+  auto expected=pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  auto desired=RosterDesired({0,a.xuid,0,b.xuid});
+  desired.notify_host_compatibility=false;desired.remember_slots=false;
+  REQUIRE_FALSE(pm.AdoptRoster(desired,expected).error);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  const auto profile=pm.CaptureProfile(uint8_t(1));REQUIRE(profile);
+  const auto model=pm.AcquireProfileGpdModel(uint8_t(1),error);REQUIRE(model);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto canceled=pm.PrepareRoster(desired,expected,error);REQUIRE(canceled);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(canceled));
+  REQUIRE(pm.CancelRoster(canceled).phase==ProfileRosterPhase::kCanceled);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(canceled));
+  auto intent=pm.PrepareRoster(desired,expected,error);REQUIRE(intent);REQUIRE_FALSE(error);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,intent,binding,error);REQUIRE(cell);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
+  auto protocol=ProfileSettingsReadTestAccess::Protocol(intent,binding,0);REQUIRE(protocol);
+  const auto committed=ProfileSettingsReadTestAccess::CommitProtocol(pm,intent,*protocol);
+  REQUIRE_FALSE(committed.error);REQUIRE(committed.phase==ProfileRosterPhase::kPublished);
+  CHECK(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent,1));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent));
+  CHECK(pm.CaptureProfile(uint8_t(1))==profile);
+  CHECK(pm.AcquireProfileGpdModel(uint8_t(1),error)==model);
+  CHECK(ProfileSettingsReadTestAccess::Finalize(pm,intent,*protocol).error);
+  auto joined=ProfileSettingsReadTestAccess::Joined(intent,binding);REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,intent,*joined).error);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(canceled));
+  CheckRoster(pm,desired.xuids);a.Unchanged();b.Unchanged();
+}
+TEST_CASE("Initial unchanged-owner evidence refuses real replacement signout slot movement and canceled publication",
+          "[kernel][profile][roster][native][unchanged_initial_frame][refusal]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime,0xe000000000000563ull,83);
+  ReadFixtureProfile b(runtime,0xe000000000000564ull,84);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({0,a.xuid,0,0}),expected).error);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto desired=RosterDesired({0,a.xuid,0,0});bool cancel=false;
+  SECTION("replacement") {desired=RosterDesired({0,b.xuid,0,0});}
+  SECTION("signout") {desired=RosterDesired({0,0,0,0});}
+  SECTION("same identity moving to another slot") {desired=RosterDesired({a.xuid,0,0,0});}
+  SECTION("canceled-empty publication with unchanged requested rows") {cancel=true;}
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto intent=pm.PrepareRoster(desired,expected,error);REQUIRE(intent);
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,intent,binding,error);REQUIRE(cell);
+  const auto outcome=cancel?ProfileRosterPublicationOutcome::kCanceledEmpty:
+                            ProfileRosterPublicationOutcome::kRequested;
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell,outcome));
+  auto protocol=ProfileSettingsReadTestAccess::Protocol(intent,binding,cancel?0x800704c7u:0);REQUIRE(protocol);
+  const auto committed=ProfileSettingsReadTestAccess::CommitProtocol(pm,intent,*protocol);
+  REQUIRE_FALSE(committed.error);REQUIRE(committed.phase==ProfileRosterPhase::kPublished);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
+  auto joined=ProfileSettingsReadTestAccess::Joined(intent,binding);REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,intent,*joined).error);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));a.Unchanged();b.Unchanged();
+}
+TEST_CASE("Initial unchanged-owner evidence compares the complete current durable Account snapshot",
+          "[kernel][profile][roster][native][unchanged_initial_frame][account_revision]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime,0xe000000000000565ull,85);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  const auto desired=RosterDesired({0,a.xuid,0,0});
+  REQUIRE_FALSE(pm.AdoptRoster(desired,expected).error);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  const auto snapshot=ProfileSettingsReadTestAccess::SelectedAccount(pm,a.xuid);REQUIRE(snapshot);
+  auto wire=a.account;auto account=snapshot->account();
+  SECTION("changed known Account field") {
+    string_util::copy_and_swap_truncating(account.gamertag,u"Revised durable Account",xe::countof(account.gamertag));
+    ProfileManager::EncryptAccountFile(&account,wire.data());
+  }
+  SECTION("changed opaque Account field") {
+    account.passport_password[7]^=char(0x37);
+    ProfileManager::EncryptAccountFile(&account,wire.data());
+  }
+  SECTION("unknown retained Account trailer") {wire.push_back(0x5a);}
+  ProfileAccountWriter writer(snapshot->identity(),runtime.emulator->kernel_state()->content_manager()->Volume("hdd")->recovery());
+  auto prepared=writer.PrepareRaw(snapshot->token(),wire,error);REQUIRE(prepared);
+  const auto written=writer.Commit(*prepared);REQUIRE(written.durable);REQUIRE_FALSE(written.error);
+  prepared.reset();
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto intent=pm.PrepareRoster(desired,expected,error);REQUIRE(intent);REQUIRE_FALSE(error);
+  CHECK(intent->prepared_roster()->epoch()==expected.roster->epoch());
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,intent,binding,error);REQUIRE(cell);
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  auto protocol=ProfileSettingsReadTestAccess::Protocol(intent,binding,0);REQUIRE(protocol);
+  const auto committed=ProfileSettingsReadTestAccess::CommitProtocol(pm,intent,*protocol);
+  REQUIRE_FALSE(committed.error);REQUIRE(committed.phase==ProfileRosterPhase::kPublished);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
+  auto joined=ProfileSettingsReadTestAccess::Joined(intent,binding);REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,intent,*joined).error);
+  CHECK(ReadFixtureDisk(a.path/"Account")==wire);
+  CHECK(ReadFixtureDisk(a.path/"FFFE07D1.gpd")==a.dashboard);
+  CHECK(ReadFixtureDisk(a.path/"1234ABCD.gpd")==a.title);
+}
 TEST_CASE("A genuine pending unchanged model delays host maps without hiding the published read row",
           "[kernel][profile][roster][native][protocol][pending_model]") {
   ProfileAbiRuntime runtime;
@@ -3735,6 +3847,7 @@ TEST_CASE("A genuine pending unchanged model delays host maps without hiding the
   const auto busy = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
   CHECK(busy.error == std::errc::device_or_resource_busy); CHECK(busy.selected_reads_available);
   CHECK_FALSE(busy.maps_committed); CHECK_FALSE(busy.writers_available); CHECK_FALSE(busy.owners_retired);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
   CheckRoster(pm, desired.xuids);
   CHECK(pm.AcquireProfileGpdModel(uint8_t(0), error) == writer.model);
   CHECK_FALSE(pm.CaptureGpdWriter(a.xuid, error).model); REQUIRE(error);
@@ -3745,6 +3858,8 @@ TEST_CASE("A genuine pending unchanged model delays host maps without hiding the
   const auto committed = ProfileSettingsReadTestAccess::CommitProtocol(pm, intent, *protocol);
   REQUIRE_FALSE(committed.error); CHECK(committed.maps_committed); CHECK(committed.writers_available);
   CHECK(committed.phase == ProfileRosterPhase::kPublished); CHECK_FALSE(committed.owners_retired);
+  // Shared ordinary model evolution is not an identity-authority replacement.
+  CHECK(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
   REQUIRE(pm.AcquireProfileGpdModel(uint8_t(0), error) == writer.model);
   const auto read = pm.CaptureGpdRead(uint8_t(0), error); REQUIRE(read);
   const auto value = read->Setting(kDashboardID, kReadScalar, error); REQUIRE(value);

@@ -98,6 +98,11 @@ class ProfileRosterIntent final {
   // Actual PM-issued before/after envelope emptiness plus native protocol/map
   // duties. This is not a frame, provider census, pixel or writer permission.
   bool HasPublishedEmptyUnchangedRows(uint32_t actual_protocol_value) const;
+  // Initial alignment may retain exact row owners and complete Account
+  // snapshots with at least one occupied row. Empty uses its zero-wire proof.
+  // This is no replacement or image-read receipt.
+  bool HasPublishedUnchangedOwners(uint32_t actual_protocol_value) const;
+  bool HasPublishedRequestedRows(uint32_t actual_protocol_value) const;
   const std::array<uint8_t, 4 * 0x188>& NativeRowsForPrepared() const;
   // Fixed old work never follows the publisher selector. Only exact writer
   // descendants may receive the separately preallocated following ticket.

@@ -2,12 +2,20 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <chrono>
+#include <optional>
 #include <memory>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include "xenia/kernel/native_profile_identity_tasks.h"
 namespace xe::kernel {
+class KernelState;
+class XThread;
+class NativeProfileIdentityOwner;
+class NativeSystemUiService;
+namespace test { class NativeIdentityOrdinaryTransportTestAccess; }
 struct ValidatedGuestRuntimePlan;
 struct NativeProfileIdentityBridgeProfile {
   uint16_t ordinal;uint32_t address,bytes;std::string_view sha256;
@@ -25,6 +33,71 @@ enum class NativeProfileIdentityPlanFamily {kAbsent,kComplete,kInvalid};
 NativeProfileIdentityPlanFamily CheckNativeProfileIdentityPlanFamily(
     const ValidatedGuestRuntimePlan&,std::string* error=nullptr);
 namespace identity_detail {
+// The existing Service OS-thread join produces this exact stack witness.
+// A terminated KTHREAD, Cancel/Wait return or is_running=false cannot issue it.
+// Its one retained actual XThread also prevents object-address reuse.
+class NativeIdentityJoinedHostStack final {
+ public:
+  NativeIdentityJoinedHostStack(const NativeIdentityJoinedHostStack&) = default;
+  NativeIdentityJoinedHostStack(NativeIdentityJoinedHostStack&&) = default;
+  NativeIdentityJoinedHostStack& operator=(const NativeIdentityJoinedHostStack&) = default;
+  NativeIdentityJoinedHostStack& operator=(NativeIdentityJoinedHostStack&&) = default;
+ private:
+  friend class ::xe::kernel::NativeSystemUiService;
+  friend class NativeIdentityOrdinaryTransport;
+  friend class ::xe::kernel::test::NativeIdentityOrdinaryTransportTestAccess;
+  static std::optional<NativeIdentityJoinedHostStack> JoinActual(
+      XThread&, std::chrono::milliseconds);
+  NativeIdentityJoinedHostStack(KernelState* kernel, std::shared_ptr<const XThread> thread,
+      const void* cpu, const void* host)
+      :kernel_(kernel),thread_(std::move(thread)),cpu_(cpu),host_(host) {}
+  bool Matches(const XThread&) const noexcept;
+  KernelState* kernel_;
+  std::shared_ptr<const XThread> thread_;
+  const void* cpu_;
+  const void* host_;
+};
+// A routing memento from ONE of the two actual ordinary-shadow constructors.
+// It owns no Task, callback, read, Commit, native code/domain or completion.
+// The existing Work owns the actual XThread; this immutable tuple cannot be
+// retargeted. Only actual whole-Kernel stop may retire an unreturned shadow.
+class NativeIdentityOrdinaryTransport final {
+ public:
+  using Frame = NativeProfileIdentityTasks::Frame;
+  using Root = NativeProfileIdentityTasks::Root;
+  using CompletionRoute = NativeProfileIdentityTasks::CompletionRoute;
+ private:
+  friend class ::xe::kernel::NativeProfileIdentityOwner;
+  friend class ::xe::kernel::test::NativeIdentityOrdinaryTransportTestAccess;
+  enum class Kind {kTaskMetadata,kOrdinaryCompletion};
+  enum class Phase {kEntered,kReturned,kUncertain};
+  static std::optional<NativeIdentityOrdinaryTransport> CaptureTask(Frame,XThread&) noexcept;
+  static std::optional<NativeIdentityOrdinaryTransport> CaptureCompletion(
+      Frame,XThread&,const CompletionRoute&) noexcept;
+  static std::optional<NativeIdentityOrdinaryTransport> Capture(Frame,XThread&,Kind,const CompletionRoute* = nullptr) noexcept;
+  static bool TaskTransportFunction(uint32_t) noexcept;
+  bool Matches(Frame,const XThread&) const noexcept;
+  bool Return(Frame,const XThread&) noexcept;
+  void UnavailableReturn() noexcept {if(phase_!=Phase::kReturned)phase_=Phase::kUncertain;}
+  bool RetainThroughActualStop(KernelState*,Root,Frame,const XThread&,
+      const CompletionRoute*,const NativeIdentityJoinedHostStack*) const noexcept;
+  NativeIdentityOrdinaryTransport(Frame frame,XThread& thread,KernelState* kernel,
+      const void* cpu,const void* fiber,const void* host,bool guest,Kind kind,const CompletionRoute* route)
+      :frame_(frame),thread_(&thread),kernel_(kernel),cpu_(cpu),fiber_(fiber),host_(host),
+       guest_fiber_(guest),kind_(kind),route_(route) {}
+  const Frame frame_;
+  const XThread* const thread_;
+  KernelState* const kernel_;
+  const void* const cpu_;
+  const void* const fiber_;
+  const void* const host_;
+  const bool guest_fiber_;
+  const Kind kind_;
+  // The real Work is heap-stable and owns this exact route until this memento
+  // dies. This pointer is only compared, never dereferenced after ownership.
+  const CompletionRoute* const route_;
+  Phase phase_=Phase::kEntered;
+};
 // Host HLE-stack lifetime only. This grants no native Task/read/completion
 // authority. The service retains backing through the real CPU worker join.
 class NativeIdentityHookRundown final {

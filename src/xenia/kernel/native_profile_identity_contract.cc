@@ -1,6 +1,10 @@
 /** Xenia : Xbox 360 Emulator Research Project; BSD license, see LICENSE. */
 #include "xenia/kernel/native_profile_identity_contract.h"
 #include <vector>
+#include "xenia/base/mutex.h"
+#include "xenia/base/threading.h"
+#include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/xthread.h"
 #include "xenia/kernel/guest_runtime_plan.h"
 #include "xenia/kernel/native_avatar_contract.h"
 namespace xe::kernel {
@@ -58,3 +62,88 @@ NativeProfileIdentityPlanFamily CheckNativeProfileIdentityPlanFamily(
  if(error)error->clear();return NativeProfileIdentityPlanFamily::kComplete;
 }
 } // namespace xe::kernel
+
+namespace xe::kernel::identity_detail {
+std::optional<NativeIdentityJoinedHostStack>
+NativeIdentityJoinedHostStack::JoinActual(XThread& thread,std::chrono::milliseconds timeout) {
+  // This replaces the Service's existing exact Bootstrap OS wait, not an
+  // additional poll or a guest/Task wait. On-fiber host routines have no
+  // enclosing OS-thread join here and remain unproved.
+  if(XThread::IsInThread() || XThread::GetCurrentFiberThread() ||
+      global_critical_region::is_held_by_current_thread() || !thread.is_host_thread() ||
+      !thread.kernel_state() || !thread.thread_state() || !thread.thread())return {};
+  auto* host=thread.thread();
+  if(threading::Wait(host,false,timeout)!=threading::WaitResult::kSuccess)return {};
+  auto owned=std::make_shared<object_ref<XThread>>(retain_object(&thread));
+  std::shared_ptr<const XThread> exact(owned,&thread);
+  return NativeIdentityJoinedHostStack(thread.kernel_state(),std::move(exact),
+      thread.thread_state(),host);
+}
+bool NativeIdentityJoinedHostStack::Matches(const XThread& thread) const noexcept {
+  return thread_.get()==&thread && kernel_==thread.kernel_state() &&
+      cpu_==thread.thread_state();
+}
+bool NativeIdentityOrdinaryTransport::TaskTransportFunction(uint32_t at) noexcept {
+  // Exact shared primitive entry-routing family, not a callback whitelist or
+  // native execution/read permission. ClaimTaskTransport remains its issuer.
+  switch(at){
+    case 0x816A2CF0:case 0x816A2A48:case 0x8190A358:case 0x819068D0:
+    case 0x816BA440:case 0x816BA668:case 0x816B9D68:
+    case 0x816B9A18:case 0x816B9BB8:case 0x816B9AA8:
+    case 0x816B8B08:case 0x816B9F08:case 0x816BA058:case 0x816B7490:
+    case 0x816B7D98:case 0x816B7500:case 0x816E6AB0:
+    case 0x816B7B68:case 0x816B7600:return true;
+    default:return false;
+  }
+}
+std::optional<NativeIdentityOrdinaryTransport>
+NativeIdentityOrdinaryTransport::Capture(Frame frame,XThread& thread,Kind kind,
+    const CompletionRoute* route) noexcept {
+  const auto actual=thread.native_frame_thread_identity();
+  if(!frame.valid() || !thread.kernel_state() || !thread.thread_state() ||
+      frame.thread!=thread.thread_id() || frame.pcr!=thread.pcr_ptr() ||
+      (actual.process_type!=X_PROCTYPE_SYSTEM && actual.process_type!=X_PROCTYPE_TITLE))return {};
+  // is_host_thread=false alone also describes XHostThread(on_fiber=true).
+  // Such host_fn/GuestRuntime facades are not a pure guest stack witness.
+  const bool guest=thread.is_guest_thread() && !thread.is_host_thread() &&
+      thread.fiber() && !thread.thread();
+  return NativeIdentityOrdinaryTransport(frame,thread,thread.kernel_state(),
+      thread.thread_state(),thread.fiber(),thread.thread(),guest,kind,route);
+}
+std::optional<NativeIdentityOrdinaryTransport>
+NativeIdentityOrdinaryTransport::CaptureTask(Frame frame,XThread& thread) noexcept {
+  return TaskTransportFunction(frame.function)?Capture(frame,thread,Kind::kTaskMetadata):std::nullopt;
+}
+std::optional<NativeIdentityOrdinaryTransport>
+NativeIdentityOrdinaryTransport::CaptureCompletion(Frame frame,XThread& thread,
+    const CompletionRoute& route) noexcept {
+  if(route.kind()!=CompletionRoute::Kind::kOrdinary || !route.FrameMatches(frame) ||
+      thread.native_frame_thread_identity().process_type!=X_PROCTYPE_SYSTEM)return {};
+  return Capture(frame,thread,Kind::kOrdinaryCompletion,&route);
+}
+bool NativeIdentityOrdinaryTransport::Matches(Frame frame,const XThread& thread) const noexcept {
+  return frame==frame_ && &thread==thread_ && kernel_==thread.kernel_state() &&
+      cpu_==thread.thread_state() && frame.thread==thread.thread_id() && frame.pcr==thread.pcr_ptr();
+}
+bool NativeIdentityOrdinaryTransport::Return(Frame frame,const XThread& thread) noexcept {
+  if(phase_==Phase::kReturned)return false; // Never erase an actual own-return.
+  if(phase_!=Phase::kEntered || !Matches(frame,thread)){
+    phase_=Phase::kUncertain;return false;
+  }
+  phase_=Phase::kReturned;return true;
+}
+bool NativeIdentityOrdinaryTransport::RetainThroughActualStop(KernelState* kernel,Root root,
+    Frame frame,const XThread& thread,const CompletionRoute* route,
+    const NativeIdentityJoinedHostStack* joined) const noexcept {
+  if(phase_==Phase::kReturned || kernel!=kernel_ || root!=frame_.root || !Matches(frame,thread))return false;
+  if(kind_==Kind::kOrdinaryCompletion ? !route || route!=route_ ||
+                                      route->kind()!=CompletionRoute::Kind::kOrdinary
+                                    : route!=nullptr || route_!=nullptr)return false;
+  // Known missing/malformed native return keeps its uncertainty. This is only
+  // retained resource coverage until the existing all-CPU/IO/GPU stop, never
+  // a normal return or Task/ref/free/completion receipt.
+  if(guest_fiber_)return thread.is_guest_thread() && !thread.is_host_thread() &&
+      thread.fiber()==fiber_ && !host_;
+  return joined && host_ && joined->host_==host_ && joined->Matches(thread);
+}
+} // namespace xe::kernel::identity_detail

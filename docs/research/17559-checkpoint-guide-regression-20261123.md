@@ -1,6 +1,16 @@
 # 17559 checkpoint Guide regression — 2026-11-23
 
-Status: current V131 Linux ELF displays the unsigned dashboard and native
+Status: the current V147 Linux source passes all seven direct runs and the
+actual ordinary native frame-refresh observation. Its isolated Doritos run
+closes normally with exit zero and no forced signals. Native sign-in still
+does not settle; the game stays at its splash and a Guide attempt has no
+visible result in that unresolved state. This does not establish whether that
+Guide request was accepted. No replacement AppImage is accepted. See the
+[current lifecycle comparison](17559-profile-lifecycle-comparison-20261125.md)
+for source identities, exact runtime scope and the remaining prepared-paint
+handoff. The results below retain their historical scope.
+
+Historical V131 Linux ELF displays the unsigned dashboard and native
 Guide/profile picker. All five full direct suites and focused CPU/installed
 selections passed, including twelve new lifecycle cases. The coherent native
 request/outcome change passed the earlier Task producer boundary: the real

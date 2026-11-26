@@ -10,7 +10,10 @@
 #include <memory>
 namespace xe::kernel {
 class NativeProfileIdentityOwner;
-namespace test { class NativeProfileIdentityTaskTestAccess; }
+namespace test {
+class NativeProfileIdentityTaskTestAccess;
+class NativeIdentityOrdinaryTransportTestAccess;
+}
 namespace identity_detail {
 // Factual native Task provenance only. A Task address/return, completed work,
 // empty ledger or later equal XUID never grants profile/provider/pixel readiness.
@@ -375,6 +378,7 @@ class NativeProfileIdentityTasks final {
  private:
   friend class xe::kernel::NativeProfileIdentityOwner;
   friend class xe::kernel::test::NativeProfileIdentityTaskTestAccess;
+  friend class xe::kernel::test::NativeIdentityOrdinaryTransportTestAccess;
   // Existing host observation fields shared with the concrete retained Work.
   // This metadata is not a Task/code/read capability. Only the owner mutates
   // it, under State; a skipped observation cannot issue any native fact.

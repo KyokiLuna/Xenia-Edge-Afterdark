@@ -22,6 +22,7 @@ class GuestRuntimeCallExecutor;
 class NativeSystemAllocationAuthority;
 class NativeSystemTaskContinuation;
 class NativeSystemUiService;
+namespace identity_detail { class NativeIdentityJoinedHostStack; }
 class NativeSystemUiStartupCatalog;
 class NativeInitialEmptyProfileWitness;
 class NativeNotificationPresentationObserver;
@@ -387,6 +388,10 @@ class NativeProfileIdentityOwner final
   bool StopOnBootstrap(XThread&) noexcept;
   // Exact strong-owner coverage only; never normal Drained/native Close proof.
   bool RetainedForActualKernelStop(StopObservation* observation=nullptr) const noexcept;
+  // Service supplies only its exact already-joined Bootstrap stack witness.
+  // Other callers retain the guest-fiber-only stop contract above.
+  bool RetainedWithJoinedHostStack(const identity_detail::NativeIdentityJoinedHostStack*,
+      StopObservation*) const noexcept;
   bool RetireAfterActualKernelStop() noexcept;
   static GuestRuntime::ExecutionResult ExecuteBootstrapInputAuxiliary(
       GuestRuntimeCallExecutor&,XThread&,const GuestRuntime::Function&,

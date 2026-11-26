@@ -556,6 +556,7 @@ struct NativeSystemUiService::State {
   gpu::GpuBackendStopProof backend_stop;
   NativeSystemSharedGraphicsState shared_graphics;
   object_ref<XHostThread> bootstrap;
+  std::optional<identity_detail::NativeIdentityJoinedHostStack> joined_bootstrap_stack;
   object_ref<UserModule> root;
   std::shared_ptr<GuestRuntimeCallExecutor> calls;
   std::shared_ptr<NativeNotificationPreferenceCoordinator> preferences;
@@ -3719,18 +3720,16 @@ bool NativeSystemUiService::JoinBootstrap(
       }
       bootstrap = state_->bootstrap;
     }
+    std::optional<identity_detail::NativeIdentityJoinedHostStack> joined_stack;
     if (bootstrap) {
-      auto* native_thread = bootstrap->thread();
-      if (!native_thread ||
-          xe::threading::Wait(native_thread, false, timeout) !=
-              xe::threading::WaitResult::kSuccess) {
-        return stop_observation.Result(__LINE__, false);
-      }
+      joined_stack=identity_detail::NativeIdentityJoinedHostStack::JoinActual(*bootstrap,timeout);
+      if(!joined_stack)return stop_observation.Result(__LINE__,false);
     }
     // OS wait joins the actual host thread, including Exit/cleanup tails. Its
     // guest KTHREAD signal or merely returning from Bootstrap is insufficient.
     BeginStop();  // Also closes a prepared transport published during the join.
     std::lock_guard lock(state_->mutex);
+    state_->joined_bootstrap_stack=std::move(joined_stack);
     state_->status.bootstrap_joined = true;
     return stop_observation.Result(__LINE__, true);
   } catch (...) {
@@ -3758,6 +3757,7 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
     std::shared_ptr<NativeContentResolve> content_resolve;
     std::shared_ptr<NativeXmsgProvenance> xmsg_provenance;
     std::shared_ptr<NativeNotificationPresentationObserver> observer;
+    std::optional<identity_detail::NativeIdentityJoinedHostStack> joined_stack;
     {
       std::lock_guard lock(state_->mutex);
       if (state_->status.stop_drained || state_->retained_stop) {
@@ -3772,6 +3772,7 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
       content_resolve = state_->content_resolve;
       xmsg_provenance = state_->xmsg_provenance;
       observer = state_->notification_observer;
+      joined_stack = state_->joined_bootstrap_stack;
     }
     {
       std::unique_lock lock(state_->mutex);
@@ -3797,8 +3798,8 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
     const bool observe_identity=bool(identity_stop_diagnostic) && cvars::native_system_ui_trace;
     const bool identity_drained = !identity || identity->Drained(
         observe_identity?&identity_drain_observation:nullptr);
-    if (!identity_drained && !identity->RetainedForActualKernelStop(
-        observe_identity?&identity_retained_observation:nullptr)) {
+    if (!identity_drained && !identity->RetainedWithJoinedHostStack(
+        joined_stack?&*joined_stack:nullptr,observe_identity?&identity_retained_observation:nullptr)) {
       if(identity_stop_diagnostic)identity_stop_diagnostic->Capture(
           1,__LINE__,identity_drain_observation,identity_retained_observation);
       return stop_observation.Result(__LINE__, false);
@@ -3856,8 +3857,8 @@ bool NativeSystemUiService::StopBeforeCpuAndProviders() noexcept {
     // Recheck the exact identity owner after all host callback drains. Strong
     // holders below are a retained-stop fact, never normal native completion.
     NativeProfileIdentityOwner::StopObservation identity_retained_late_observation;
-    if (!identity_drained && !identity->RetainedForActualKernelStop(
-        observe_identity?&identity_retained_late_observation:nullptr)) {
+    if (!identity_drained && !identity->RetainedWithJoinedHostStack(
+        joined_stack?&*joined_stack:nullptr,observe_identity?&identity_retained_late_observation:nullptr)) {
       if(identity_stop_diagnostic)identity_stop_diagnostic->Capture(
           2,__LINE__,identity_drain_observation,identity_retained_late_observation);
       return stop_observation.Result(__LINE__, false);
@@ -4029,6 +4030,7 @@ bool NativeSystemUiService::RetireAfterKernelStop() noexcept {
         storage_installation;
     std::shared_ptr<NativeSystemTaskContinuation> continuation;
     std::optional<State::RetainedStop> retained_stop;
+    std::optional<identity_detail::NativeIdentityJoinedHostStack> retired_joined_stack;
     std::shared_ptr<NativeGraphicsDeviceBinding> graphics;
     std::shared_ptr<NativeGraphicsDeviceBinding> device_publication;
     NativeSystemSharedGraphicsState shared_graphics;
@@ -4043,6 +4045,8 @@ bool NativeSystemUiService::RetireAfterKernelStop() noexcept {
       if(retired_admission)
         retired_admission->image_observer.current_.store({},std::memory_order_release);
       bootstrap = std::move(state_->bootstrap);
+      retired_joined_stack=std::move(state_->joined_bootstrap_stack);
+      state_->joined_bootstrap_stack.reset();
       root = std::move(state_->root);
       prepared_title_module = std::move(state_->prepared_title_module);
       prepared_title_lease = std::move(state_->prepared_title_lease);

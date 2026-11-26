@@ -317,3 +317,162 @@ TEST_CASE("Accepted title handoff stays parked after actual Resume without block
 }
 }  // namespace xe::kernel::xam::test
 #endif  // XE_PLATFORM_LINUX
+
+#if XE_PLATFORM_LINUX
+#include "xenia/kernel/native_profile_identity_contract.h"
+namespace xe::kernel::test {
+// Direct access to the ACTUAL routing/thread/join production helpers. These
+// fixtures do not construct a fake Owner, native Task or Service stop result.
+class NativeIdentityOrdinaryTransportTestAccess final {
+ public:
+  using Shadow=identity_detail::NativeIdentityOrdinaryTransport;
+  using Joined=identity_detail::NativeIdentityJoinedHostStack;
+  using Ledger=identity_detail::NativeProfileIdentityTasks;
+  using Frame=Ledger::Frame;
+  using Route=Ledger::CompletionRoute;
+  static constexpr Ledger::Root root{71,83,97};
+  static Frame F(XThread& thread,uint32_t function) {
+    return {root,thread.thread_id(),thread.pcr_ptr(),thread.stack_base()-0x100,
+        0x8199C68C,function};
+  }
+  static auto Task(Frame frame,XThread& thread) {return Shadow::CaptureTask(frame,thread);}
+  static auto Completion(Frame frame,XThread& thread,const Route& route) {
+    return Shadow::CaptureCompletion(frame,thread,route);
+  }
+  static bool Retain(const Shadow& shadow,KernelState* kernel,Frame frame,const XThread& thread,
+      const Route* route=nullptr,const Joined* joined=nullptr) {
+    return shadow.RetainThroughActualStop(kernel,root,frame,thread,route,joined);
+  }
+  static bool Returned(Shadow& shadow,Frame frame,const XThread& thread) {return shadow.Return(frame,thread);}
+  static void Unavailable(Shadow& shadow) {shadow.UnavailableReturn();}
+  static auto Join(XThread& thread,std::chrono::milliseconds timeout) {return Joined::JoinActual(thread,timeout);}
+  static std::weak_ptr<const XThread> JoinedOwner(const Joined& joined) {return joined.thread_;}
+  static uint64_t Pending(Ledger& ledger,Frame frame,uint32_t output) {
+    return ledger.BeginExecutionCreate(frame,output);
+  }
+  static bool Closed(const Ledger& ledger) {return ledger.ExecutionClosed();}
+};
+} // namespace xe::kernel::test
+namespace xe::kernel::xam::test {
+TEST_CASE("Ordinary routing retains a real guest fiber through shutdown without completing its native Task ledger",
+          "[kernel][identity_task][ordinary_transport][thread_stop]") {
+  using Access=::xe::kernel::test::NativeIdentityOrdinaryTransportTestAccess;
+  HandoffParkPolicy policy;HandoffParkRoot root;
+  auto emulator=std::make_unique<Emulator>("",root.path,root.path/"content",root.path/"cache");
+  REQUIRE(emulator->Setup(nullptr,nullptr,false,{},{},{})==X_STATUS_SUCCESS);
+  auto* kernel=emulator->kernel_state();REQUIRE(kernel);
+  // This is an actual pure guest XThread, created suspended by the real
+  // scheduler. Its original PPC does not execute in this NullBackend fixture.
+  auto thread=object_ref<XThread>(new XThread(kernel,128*1024,0,0x82000000,0,
+      (1u<<24)|1u,true,false,kernel->GetSystemProcess()));
+  REQUIRE(thread->Create()==X_STATUS_SUCCESS);REQUIRE(thread->is_guest_thread());
+  REQUIRE(thread->fiber());REQUIRE_FALSE(thread->thread());
+  struct Stop {
+    KernelState* kernel;object_ref<XThread>& thread;
+    ~Stop(){if(thread)thread->Terminate(0);kernel->ShutdownDispatchThread();kernel->guest_scheduler()->Shutdown();}
+  } stop{kernel,thread};
+  const auto frame=Access::F(*thread,0x816BA058);
+  auto shadow=Access::Task(frame,*thread);REQUIRE(shadow);
+  Access::Ledger ledger(Access::root);
+  auto create=frame;create.function=0x816BA668;
+  REQUIRE(Access::Pending(ledger,create,frame.sp+0x50));
+  REQUIRE_FALSE(Access::Closed(ledger));
+  REQUIRE(Access::Retain(*shadow,kernel,frame,*thread));
+  // Resource retention is not an original return/cancel/free/completion, and
+  // never changes the separate real production ledger's pending operation.
+  CHECK_FALSE(Access::Closed(ledger));
+  auto wrong=frame;++wrong.root.generation;
+  CHECK_FALSE(Access::Retain(*shadow,kernel,wrong,*thread));
+  CHECK_FALSE(Access::Retain(*shadow,nullptr,frame,*thread));
+  auto foreign=Access::F(*thread,0x8199C838);
+  CHECK_FALSE(Access::Task(foreign,*thread)); // Dataful profile worker is no routing primitive.
+  auto malformed=frame;malformed.sp-=0x10;
+  CHECK_FALSE(Access::Returned(*shadow,malformed,*thread));
+  CHECK_FALSE(Access::Returned(*shadow,frame,*thread)); // Cannot relearn the missing own-return.
+  CHECK(Access::Retain(*shadow,kernel,frame,*thread)); // Still only factual-stop coverage.
+  CHECK_FALSE(Access::Closed(ledger));
+  auto held=retain_object(thread.get());
+  kernel->ShutdownDispatchThread();kernel->guest_scheduler()->Shutdown();thread->Terminate(0);
+  CHECK(kernel->guest_scheduler()->shutting_down());
+  CHECK(held->thread_state()); // The real holder survives physical worker/fiber retirement.
+  CHECK_FALSE(held->is_running());
+  thread.reset();CHECK(held->thread_state());held.reset();
+}
+TEST_CASE("Ordinary CompleteIO routing keeps exact returns and identity separation on an actual thread",
+          "[kernel][identity_task][ordinary_transport][completion_route]") {
+  using Access=::xe::kernel::test::NativeIdentityOrdinaryTransportTestAccess;
+  HandoffParkPolicy policy;HandoffParkRoot root;
+  auto emulator=std::make_unique<Emulator>("",root.path,root.path/"content",root.path/"cache");
+  REQUIRE(emulator->Setup(nullptr,nullptr,false,{},{},{})==X_STATUS_SUCCESS);
+  auto* kernel=emulator->kernel_state();REQUIRE(kernel);
+  auto thread=object_ref<XThread>(new XThread(kernel,128*1024,0,0x82000000,0,
+      (1u<<24)|1u,true,false,kernel->GetSystemProcess()));
+  REQUIRE(thread->Create()==X_STATUS_SUCCESS);
+  struct Stop {KernelState* kernel;object_ref<XThread>& thread;
+    ~Stop(){if(thread)thread->Terminate(0);kernel->ShutdownDispatchThread();kernel->guest_scheduler()->Shutdown();}
+  } stop{kernel,thread};
+  const auto frame=Access::F(*thread,0x816A2588);
+  auto ordinary=Access::Route::Capture(frame,nullptr,0,0,0,0x404E0A10);
+  auto shadow=Access::Completion(frame,*thread,ordinary);REQUIRE(shadow);
+  REQUIRE(Access::Retain(*shadow,kernel,frame,*thread,&ordinary));
+  CHECK_FALSE(Access::Retain(*shadow,kernel,frame,*thread));
+  auto equal_ordinary=Access::Route::Capture(frame,nullptr,0,0,0,0x404E0A10);
+  CHECK_FALSE(Access::Retain(*shadow,kernel,frame,*thread,&equal_ordinary));
+  auto job=std::make_shared<int>(1);
+  const auto identity=Access::Route::Capture(frame,job,7,9,0x404E0A10,0x404E0A10);
+  CHECK_FALSE(Access::Completion(frame,*thread,identity));
+  CHECK_FALSE(Access::Retain(*shadow,kernel,frame,*thread,&identity));
+  auto inner=frame;inner.sp-=0xA0;inner.lr+=4;
+  auto nested=Access::Route::Capture(inner,nullptr,0,0,0,0x404E0B10);
+  auto inner_shadow=Access::Completion(inner,*thread,nested);REQUIRE(inner_shadow);
+  REQUIRE(nested.ReturnOrdinary(inner));REQUIRE(Access::Returned(*inner_shadow,inner,*thread));
+  CHECK_FALSE(Access::Retain(*inner_shadow,kernel,inner,*thread,&nested));
+  CHECK(Access::Retain(*shadow,kernel,frame,*thread,&ordinary));
+  REQUIRE(ordinary.ReturnOrdinary(frame));REQUIRE(Access::Returned(*shadow,frame,*thread));
+  CHECK_FALSE(Access::Retain(*shadow,kernel,frame,*thread,&ordinary));
+  CHECK_FALSE(Access::Returned(*shadow,frame,*thread));
+  CHECK_FALSE(Access::Retain(*shadow,kernel,frame,*thread,&ordinary));
+}
+TEST_CASE("A real host stack needs its exact completed OS join and an on-fiber host facade is not a guest witness",
+          "[kernel][identity_task][ordinary_transport][host_join]") {
+  using Access=::xe::kernel::test::NativeIdentityOrdinaryTransportTestAccess;
+  HandoffParkPolicy policy;HandoffParkRoot root;
+  auto emulator=std::make_unique<Emulator>("",root.path,root.path/"content",root.path/"cache");
+  REQUIRE(emulator->Setup(nullptr,nullptr,false,{},{},{})==X_STATUS_SUCCESS);
+  auto* kernel=emulator->kernel_state();REQUIRE(kernel);
+  auto entered=threading::Event::CreateManualResetEvent(false);
+  auto release=threading::Event::CreateManualResetEvent(false);REQUIRE(entered);REQUIRE(release);
+  std::optional<Access::Shadow> shadow;std::optional<Access::Frame> frame;
+  object_ref<XHostThread> host;
+  struct HostJoin {object_ref<XHostThread>& host;threading::Event* release;
+    ~HostJoin(){release->Set();if(host && host->thread())threading::Wait(host->thread(),false);}
+  } cleanup{host,release.get()};
+  host=object_ref<XHostThread>(new XHostThread(kernel,128*1024,0,[&]{
+    auto* self=XThread::GetCurrentThread();frame.emplace(Access::F(*self,0x816BA058));
+    if(auto fact=Access::Task(*frame,*self))shadow.emplace(std::move(*fact));
+    entered->Set();threading::Wait(release.get(),false);return 0;
+  },kernel->GetSystemProcess()));
+  REQUIRE(host->Create()==X_STATUS_SUCCESS);
+  REQUIRE(threading::Wait(entered.get(),false,std::chrono::seconds(5))==threading::WaitResult::kSuccess);
+  REQUIRE(shadow);REQUIRE(frame);REQUIRE(host->is_host_thread());
+  CHECK_FALSE(Access::Retain(*shadow,kernel,*frame,*host));
+  CHECK_FALSE(Access::Join(*host,std::chrono::milliseconds(0))); // Actually still inside its C++ stack.
+  release->Set();auto joined=Access::Join(*host,std::chrono::seconds(5));REQUIRE(joined);
+  CHECK(Access::Retain(*shadow,kernel,*frame,*host,nullptr,&*joined));
+  auto wrong=*frame;wrong.pcr+=0x1000;
+  CHECK_FALSE(Access::Retain(*shadow,kernel,wrong,*host,nullptr,&*joined));
+  const auto retained=Access::JoinedOwner(*joined);CHECK_FALSE(retained.expired());
+  auto facade=object_ref<XHostThread>(new XHostThread(kernel,128*1024,(1u<<24)|1u,
+      []{return 0;},kernel->GetSystemProcess(),true));
+  REQUIRE(facade->Create()==X_STATUS_SUCCESS);REQUIRE(facade->fiber());
+  REQUIRE_FALSE(facade->is_host_thread());REQUIRE_FALSE(facade->is_guest_thread());
+  const auto facade_frame=Access::F(*facade,0x816BA058);
+  auto facade_shadow=Access::Task(facade_frame,*facade);REQUIRE(facade_shadow);
+  CHECK_FALSE(Access::Retain(*facade_shadow,kernel,facade_frame,*facade));
+  CHECK_FALSE(Access::Retain(*facade_shadow,kernel,facade_frame,*facade,nullptr,&*joined));
+  CHECK_FALSE(Access::Join(*facade,std::chrono::milliseconds(0)));
+  facade->Terminate(0);kernel->ShutdownDispatchThread();kernel->guest_scheduler()->Shutdown();
+  joined.reset();CHECK(retained.expired());
+}
+} // namespace xe::kernel::xam::test
+#endif // XE_PLATFORM_LINUX

@@ -3686,6 +3686,106 @@ TEST_CASE("Revoked presentation origin preserves real frame storage and retireme
 }
 
 
+// This exercises the real Source/Memory/immutable-capture/completion owner
+// beneath ordinary refresh observation. It does not construct the native
+// identity Owner, fake its draw history, or assert a refresh/provider/UI result.
+TEST_CASE("Hidden ordinary draw sources require exact immutable capture and completed retirement across failure and successor frames",
+          "[kernel][native_frame_execution][native_input_snapshot][presentation_guard][native_ordinary_refresh]") {
+  Fixture f(false, true);
+  REQUIRE(f.session->AbortUnsubmitted(f.thread, f.source));
+  auto guard = std::make_shared<MetadataPresentationGuard>(false);
+  guard->Revoke(); // Production hidden guards are presentation-revoked too.
+  f.Freeze({}, guard);
+  REQUIRE_FALSE(f.plan->is_overlay_control());
+  REQUIRE_FALSE(f.plan->inventory().draws.empty());
+  const auto first_source = f.source;
+  bool cancel_capture = false, fail_completion = false, successor = false;
+  SECTION("complete immutable hidden draw retains a current owner without presenting") {}
+  SECTION("actual Source revocation rejects in-flight immutable capture") { cancel_capture = true; }
+  SECTION("actual failed host completion cannot retire as complete") { fail_completion = true; }
+  SECTION("a successor Source cannot consume the earlier immutable capture") { successor = true; }
+  auto capture = f.CaptureInputs();
+  REQUIRE(capture);
+  REQUIRE(capture->Capture(f.record));
+  CHECK(f.session->GetSnapshot().operation_active);
+  CHECK_FALSE(f.session->BeginUpdate(f.thread));
+  if (cancel_capture) {
+    f.session->Revoke();
+    CHECK_FALSE(capture->Seal());
+    capture.reset();
+    CHECK_FALSE(f.session->GetSnapshot().operation_active);
+    CHECK_FALSE(f.session->BeginUpdate(f.thread));
+    CHECK(first_source->presentation_guard() == guard);
+    return;
+  }
+  const auto snapshot = capture->Seal();
+  REQUIRE(snapshot);
+  capture.reset();
+  REQUIRE(snapshot->valid());
+  CHECK(snapshot->identity() == gpu::NativeFrameSubmissionIdentity{
+                                    f.session->owner(), first_source->serial()});
+  gpu::GpuCompletionQueue queue;
+  f.graph->epoch = queue.backend_epoch();
+  f.graph->accepts_model_submission = true;
+  const auto record = f.Pm4Record();
+  const auto layout = NativeFrameExecutionTestAccess::Pm4Layout(
+      &f.memory, f.session, f.thread, f.source, f.plan, f.Inputs(), record,
+      f.Descriptor(record), snapshot);
+  REQUIRE(layout);
+  const auto request = NativeFrameExecutionTestAccess::Mint(
+      f.session, f.thread, f.source, f.plan, f.output, f.Inputs(), f.shaders,
+      layout, snapshot);
+  REQUIRE(request);
+  CHECK(request->presentation_guard() == guard);
+  CHECK(request->input_snapshot() == snapshot);
+  CHECK(request->input_provenance() == gpu::NativeFrameInputProvenance::kImmutableSnapshot);
+  f.graph->presentation_allowed = true;
+  CHECK(request->IsPresentationOwnerCurrent());
+  CHECK_FALSE(request->IsPresentationOwnerLive());
+  CHECK(request->IsAdmitted()); // Hidden pixels are not GPU execution denial.
+  REQUIRE(request->MarkSubmissionAttempted());
+  const auto completion = queue.TrackNativeFrameSubmitted(1, request->identity());
+  REQUIRE(f.session->AttachGpu(f.thread, f.source, completion));
+  CHECK(completion.status() == gpu::GpuCompletionStatus::kPending);
+  CHECK_FALSE(f.session->RetireComplete(f.thread, f.source));
+  CHECK_FALSE(f.session->BeginUpdate(f.thread));
+  if (fail_completion) {
+    queue.FailPending();
+    CHECK(completion.status() == gpu::GpuCompletionStatus::kFailed);
+    CHECK_FALSE(f.session->RetireComplete(f.thread, f.source));
+    CHECK_FALSE(f.session->BeginUpdate(f.thread));
+    CHECK(snapshot->valid());
+    return;
+  }
+  queue.CompleteThrough(1);
+  REQUIRE(completion.status() == gpu::GpuCompletionStatus::kComplete);
+  auto wrong_thread = f.thread;
+  ++wrong_thread.thread_id;
+  CHECK_FALSE(f.session->RetireComplete(wrong_thread, f.source));
+  REQUIRE(f.session->RetireComplete(f.thread, f.source));
+  CHECK_FALSE(request->IsAdmitted());
+  CHECK(request->IsPresentationOwnerCurrent());
+  CHECK_FALSE(request->IsPresentationOwnerLive());
+  CHECK(request->presentation_guard() == guard);
+  if (successor) {
+    f.Freeze({}, guard);
+    CHECK(f.source->serial() != first_source->serial());
+    CHECK_FALSE(NativeFrameExecutionTestAccess::Mint(
+        f.session, f.thread, f.source, f.plan, f.output, f.Inputs(), f.shaders,
+        layout, snapshot));
+    auto next_capture = f.CaptureInputs();
+    REQUIRE(next_capture);
+    REQUIRE(next_capture->Capture(f.record));
+    const auto next_snapshot = next_capture->Seal();
+    REQUIRE(next_snapshot);
+    next_capture.reset();
+    CHECK(next_snapshot->identity().source_serial == f.source->serial());
+    CHECK(next_snapshot->identity() != snapshot->identity());
+    REQUIRE(f.session->AbortUnsubmitted(f.thread, f.source));
+    CHECK(snapshot->valid()); // Owned old bytes survive, never a new grant.
+  }
+}
+
 TEST_CASE("Hidden completed control advances physical overlay input for the next draw",
           "[kernel][native_frame_execution][presentation_guard][overlay_lineage]") {
   // Actual Memory allocations, Session Sources, immutable snapshots and the

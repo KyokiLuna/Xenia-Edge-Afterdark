@@ -1,17 +1,25 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V145's native loader metadata producer builds and passes all seven
-direct test runs. The original setter now executes in the existing prepared
-foreground-title transaction. Doritos reaches real native completion, whose
-extended/protocol error changed from `0x80150013` to `0x80151000`. Game
-continuation still fails and subsequent input reaches the dashboard's
-Available Networks screen. The post-handoff dashboard Guide visibly opens,
-closes, returns input and reopens while displaying the existing local user.
-The timed WM close produces actual exit one: OS cleanup completes without
-forced signals, but the native stop contract fails. Offline/online policy,
-failed-roster refresh/settlement and ordinary transport teardown are now being
-reviewed together. No networking cause is inferred from the error number or
-screen alone.
+Status: V147's ordinary native frame-refresh and transport-lifetime changes
+build and pass all seven direct test runs. The isolated Doritos run now
+observes completed refresh and all eleven readiness predicates at two cuts,
+and a manual owned WM close returns zero with full OS reaping and no forced
+signals. Sign-in still does not settle: prepared-query retries reach different
+retirement/producer gates, new-paint drain is not observed, and settlement
+stages 7/8 are absent. The game remains at its splash; no Guide is visible
+after a button attempt in that unresolved state. That attempt alone does not
+establish accepted Guide ownership or a rendering cause. The genuine native
+error remains `0x65B` / extended and protocol `0x80151000`. No Live success,
+requested-versus-canceled outcome or networking cause is inferred from it.
+The next review covers source retirement, prepared query and new-paint
+ownership together, including actual readers versus retained immutable data.
+
+V145's earlier loader correction reached real native completion, changed the
+protocol error from `0x80150013` to `0x80151000`, and handed off to the dashboard
+after confirming the native error action. The post-handoff dashboard Guide
+visibly opened, closed, returned input and reopened. Its timed close exited
+one through a native stop refusal. V147 did not repeat that dashboard handoff;
+its normal exit does not establish every dashboard or Avatar shutdown path.
 V140's historical actual dashboard/Guide regression passed:
 visible first open, B close, dashboard input return, full reopen, Media
 navigation, second close and manual normal shutdown. Ordinary profile
@@ -40,10 +48,10 @@ rule](17559-console-fidelity-policy.md).
 
 The initial comparison used V130 source map
 `3a7c6c7a567210b67bef7b245183cb99a8002242b51cd2c6071e07216fc652a7`.
-The current tested V145 source map is
-`ad213c527f681c4da2d2e336eb100f5d91d5a886668eb72b5e3b2e6cc24f9133`
+The current tested V147 source map is
+`cfabb5f1ec91e30f5d0e8c677b0f101c72f3c8c970bacb3893dc58bf6082bfdb`
 (2,430 source files). All seven direct runs passed under receipt
-`421457af3b8487efba2b2029d25de3282977ef8a3762a1d4723d6f594fc39b7b`.
+`4f33c732c4638664b1395f5503cebae9d9dc0da548287822163a129326bcf029`.
 They establish component coverage, not successful ordinary sign-in, avatar
 rendering, save persistence or a packaged AppImage. Historical V131 source and
 test identities remain in its labeled section below.
@@ -1082,6 +1090,84 @@ is retained while that review proceeds. No new AppImage or gate pass follows.
 | Final immutable protocol projection | `7346721751d36f8d85b80abd8084b229d7067960811b44dce44f818cb1b16982` |
 | Native error/refresh/root-separation/stop assessment | `092d35878ca11c78aa18448a7c76f80f926e99119abbd0bab9bdc778ba3e72e1` |
 | Root controller/visual/OS assessment | `c56e4a6a6bbd141eb8ee6239bbc44c36288067cb730d20ccbae32811f34d24bf` |
+
+## V147 ordinary frame refresh and physical transport retirement
+
+An ordinary native panel can legitimately draw no profile image. Its exact
+hidden frame now carries refresh observation through the existing immutable
+capture, actual GPU completion, session retirement and successful transport
+completion. The current native publication outcome, writer read, render Work,
+source and hidden guard must still match. Lost image observation stays lost.
+This acknowledges physical refresh only; it does not create avatar/image
+freshness, reveal permission, sign-in success or a native completion.
+
+Ordinary shared-Task/CompleteIO routing markers now retain their exact frame,
+route and real thread identity. A missing native own-return remains missing.
+Heap routing metadata can survive the existing physical CPU/IO/GPU stop only
+with its actual pure guest fiber, or the exact Bootstrap host stack already
+joined by the Service's existing OS wait. Other host facades and dataful,
+Task, read, Commit or callback duties remain refused. No extra wait, worker,
+poll or forced native completion was added. Normal own-return and normal
+Drained retain their separate meanings.
+
+The initial engineering build caught private ledger methods called directly
+by a new fixture. V147 corrects only test friendship/access wrappers; the
+production methods remain private. All seven runs then passed: base
+334 cases / 28,711 assertions; network 125 / 11,212; kernel 1,488 / 95,601;
+VFS 136 / 9,736; UI 124 / 4,863; focused CPU 5 / 130; installed-system
+focus 219 / 25,746. Four added cases exercise real immutable frame/capture
+completion, guest fibers, actual host-thread joining, foreign route refusal
+and retained lifetime without completing an independent pending Task ledger.
+Installed focus overlaps kernel; the full CPU corpus was not run.
+
+The actual Doritos run used eight neutral-ended test-controller batches with
+fresh owned PID/start/ELF/window checks. The picker visibly opened, canceled,
+reopened and selected the intended existing local profile. After acceptance,
+B and a later genuine A activation left the game at its splash. No Guide
+appeared after a Guide attempt; accepted Guide ownership is not established
+by the pixels. No Networks/dashboard title handoff occurred.
+
+The original initializer returned zero, but CompleteIO returned `0x65B` with
+extended/protocol `0x80151000`. Maps and writers became available. Job 4's
+eleven readiness predicates passed at records 2521 and 2807, including real
+refresh. A transient provider-freshness loss at 2769 resolved; it is not a
+permanent blocker. Five prepared-query cuts at 2537/2545/2554/2562/2570
+successfully retire the source and pass bits 0 through 8; their first false
+predicate is bit 9, `SourceProducerQuiescent`. The last captured prepared
+query at 2785 instead first fails `source_retired`; its later predicates were
+unevaluated. Source retirement is therefore not a permanent failure, and a
+listener reference count alone does not identify the producer's real duty.
+Alignment at 2845
+remains HiddenRefresh, current read source 3/published source 4, without
+new-paint drain or captured settlement stage 7/8. These different cuts must
+not be combined into an invented settlement or permanent causal diagnosis.
+The remaining review covers that complete prepared/new-paint lifecycle.
+
+Root requested an owned WM close before the test timer. Actual exit was zero
+after 301.99 seconds, with all OS processes reaped and no forced signals.
+Source, configuration, products, index and read-only inputs were preserved.
+This passes normal shutdown for this DCC scenario. Gameplay, post-selection
+Guide, Avatar Editor, OSK, Xbox Home, persistence and AppImage acceptance do
+not follow from it. No replacement checkpoint or gate closure is claimed.
+
+Targeted extraction also recovered DCC's real splash and native script
+bindings. The splash checks the current GUI input-context device's game-user
+cache and accepts local enum 1 or Live enum 2. Its generic picker branch
+returns; a later activation must recheck before advancing. The separate
+Live-only predicate requires 2. The actual runtime GUI top entry and cached
+index/value were not captured, so this does not identify a different slot or
+justify forcing Live state.
+
+| V147 record | SHA256 |
+| --- | --- |
+| Tested source map | `cfabb5f1ec91e30f5d0e8c677b0f101c72f3c8c970bacb3893dc58bf6082bfdb` |
+| Build | `637c1a7de1222934177bc17b6949cfbb6986164b1354ac67e812680643d9bedb` |
+| All seven direct runs | `4f33c732c4638664b1395f5503cebae9d9dc0da548287822163a129326bcf029` |
+| ELF, preserved compilation base `2418ae0aa3` | `ebe3f03a1c4b12a2e8bc0c254ce4a5fd0518858598197dde7efa4f87e4eb614c` |
+| Actual native result | `001f68c267d1b6334cbc5c06ac4376b4f236b0993b6261c126bad5fa370f2f6f` |
+| Root controller/visual/OS assessment | `73f5c0de8424d8f590bdead1d3a24fc4ce396c11e9ffa1da3761eda4f115be98` |
+| Final source-bound protocol assessment | `474fae3421410e43a68a8492af2864a483d1cf59004e4f3d76870998a166880b` |
+| DCC exact script/native bindings | `7e838797f1086c6b9b9ade6b0e9180c3030a6874321366fe0b3bcb12cf22a343` |
 
 ## Evidence
 

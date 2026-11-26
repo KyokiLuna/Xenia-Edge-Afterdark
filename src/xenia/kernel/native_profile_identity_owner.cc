@@ -120,21 +120,23 @@ class IdentityPixelGuard final : public gpu::NativeFramePresentationGuard {
 // Metadata attached to the EXISTING immutable Source/pixel guard. It owns no
 // native object, buffer, module, cache, request or roster. Mutable capture bits
 // below are guarded only by the same actual Owner mutex.
-enum class InitialImageFrameKind : uint8_t { kNone, kEmpty, kUnchangedOccupied };
+enum class IdentityFrameRefreshKind : uint8_t {
+ kNone, kEmpty, kUnchangedOccupied, kOrdinaryNoProfileDraw
+};
 class IdentityImageFrameGuard final : public gpu::NativeFramePresentationGuard {
  public:
   IdentityImageFrameGuard(std::shared_ptr<const gpu::NativeFramePresentationGuard> parent,
       std::weak_ptr<NativeProfileIdentityOwner> owner,Tasks::Root root,uint64_t source,uint64_t render,
-      std::array<std::optional<identity_detail::NativeImageDraw>,64> draws,InitialImageFrameKind initial_kind=InitialImageFrameKind::kNone)
+      std::array<std::optional<identity_detail::NativeImageDraw>,64> draws,IdentityFrameRefreshKind refresh_kind=IdentityFrameRefreshKind::kNone)
       :parent(std::move(parent)),owner(std::move(owner)),root(root),source(source),render(render),
-       draws(std::move(draws)),initial_kind(initial_kind){}
+       draws(std::move(draws)),refresh_kind(refresh_kind){}
   bool IsLive() const noexcept override {return parent && parent->IsLive();}
   bool IsRevoked() const noexcept override {return !parent || parent->IsRevoked();}
   const std::shared_ptr<const gpu::NativeFramePresentationGuard> parent;
   const std::weak_ptr<NativeProfileIdentityOwner> owner;
   const Tasks::Root root;const uint64_t source,render;
   const std::array<std::optional<identity_detail::NativeImageDraw>,64> draws;
-  const InitialImageFrameKind initial_kind;
+  const IdentityFrameRefreshKind refresh_kind;
   mutable bool captured=false,completed=false;
   mutable uintptr_t request=0;mutable uint64_t backend=0;
   mutable gpu::NativeFrameSubmissionIdentity identity;
@@ -862,6 +864,7 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
   bool image_draws_unavailable=false;
   std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard;
   std::optional<Tasks::CompletionRoute> completion_route; // exact shared-IO entry routing only
+  std::optional<identity_detail::NativeIdentityOrdinaryTransport> ordinary_transport;
   bool uncertain=false;
  };
  struct InitialEmptyBaseline {
@@ -1226,7 +1229,7 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  // of the actual PM row owners, including occupied local rows. The PM fact
  // includes complete durable Account snapshots, not a user number, empty
  // provider census, missing notification or an arbitrary Guide draw.
- InitialImageFrameKind InitialFrameKindCurrent(const std::shared_ptr<const gpu::NativeFramePresentationGuard>& guard,
+ IdentityFrameRefreshKind InitialFrameKindCurrent(const std::shared_ptr<const gpu::NativeFramePresentationGuard>& guard,
      uint64_t source) const {
   const bool current=job && job->bootstrap_alignment.load() && current_read_source==kInitialReadSource &&
       job->source==source && job->intent && current_roster==job->intent->old_roster() &&
@@ -1238,10 +1241,41 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
       render_phase==RenderPhase::kHiddenRefresh && job->hidden_pixels && pixels==job->hidden_pixels &&
       guard.get()==job->hidden_pixels.get() && !guard.owner_before(job->hidden_pixels) &&
       !job->hidden_pixels.owner_before(guard) && !stopping.load() && !uncertain.load() && !retired.load();
-  if(!current)return InitialImageFrameKind::kNone;
-  if(job->intent->HasPublishedEmptyUnchangedRows(job->protocol_value))return InitialImageFrameKind::kEmpty;
+  if(!current)return IdentityFrameRefreshKind::kNone;
+  if(job->intent->HasPublishedEmptyUnchangedRows(job->protocol_value))return IdentityFrameRefreshKind::kEmpty;
   return job->intent->HasPublishedUnchangedOwners(job->protocol_value)
-      ?InitialImageFrameKind::kUnchangedOccupied:InitialImageFrameKind::kNone;
+      ?IdentityFrameRefreshKind::kUnchangedOccupied:IdentityFrameRefreshKind::kNone;
+ }
+ // An ordinary native panel may issue no profile-image draw at all. Its
+ // completed frame can acknowledge source refresh without claiming image,
+ // model or asset freshness. Capture separately proves the exact live render
+ // Work/read and complete empty image history; all final provider/source/wake
+ // and old/hidden paint duties remain independent.
+ bool OrdinaryNoProfileFrameCurrent(
+     const std::shared_ptr<const gpu::NativeFramePresentationGuard>& guard,
+     uint64_t source) const {
+  const bool current=job && !job->bootstrap_alignment.load() && aligned &&
+      current_read_source!=kInitialReadSource && job->source==source && job->intent &&
+      current_roster==job->intent->old_roster() &&
+      job->native_entered.load() && job->native_returned.load() && job->publisher_observed.load() &&
+      !job->transport_running.load() && !job->execution_uncertain.load() &&
+      !job->canceled.load() && !job->done.load() && !job->render_refresh_observed.load() &&
+      job->protocol_returned && job->protocol_work && job->protocol_birth.generation &&
+      job->protocol_birth.task && job->protocol_frame.root==root &&
+      job->protocol_frame.function==0x8199C838 &&
+      published_source.load(std::memory_order_acquire)==source &&
+      render_phase==RenderPhase::kHiddenRefresh && job->hidden_pixels && pixels==job->hidden_pixels &&
+      guard.get()==job->hidden_pixels.get() && !guard.owner_before(job->hidden_pixels) &&
+      !job->hidden_pixels.owner_before(guard) && !stopping.load() && !uncertain.load() && !retired.load();
+  if(!current)return false;
+  const auto published=job->intent->result();
+  // Requested and canceled-empty are genuine, distinct native outcomes. The
+  // original protocol value is preserved; an error is not promoted to success.
+  return published.phase==xam::ProfileRosterPhase::kPublished && !published.error &&
+      published.native_protocol_returned && published.selected_reads_available &&
+      published.maps_committed && published.writers_available &&
+      published.native_protocol_value==job->protocol_value &&
+      bool(job->intent->publication_outcome());
  }
  std::optional<Frame> ImageShape(cpu::ppc::PPCContext& c,uint32_t at) const {
   auto* thread=ActualThread();
@@ -7306,16 +7340,21 @@ NativeProfileIdentityOwner::CaptureNativeFrameGuard(XThread& thread) noexcept {
     // native frame. The base visibility guard and execution remain unchanged.
     try{
      const bool image_history_known=!work->image_draws_unavailable && s.image_slot && !s.image_slot->unavailable_.load();
-     auto initial_kind=s.InitialFrameKindCurrent(result.guard,work->source);
+     auto refresh_kind=s.InitialFrameKindCurrent(result.guard,work->source);
      // Occupied rows still depend on complete image-use observation. Only the
      // original all-empty proof has no possible profile image owner to lose.
-     if(initial_kind==InitialImageFrameKind::kUnchangedOccupied && !image_history_known)
-      initial_kind=InitialImageFrameKind::kNone;
+     if(refresh_kind==IdentityFrameRefreshKind::kUnchangedOccupied && !image_history_known)
+      refresh_kind=IdentityFrameRefreshKind::kNone;
      const bool image_observed=image_history_known &&
         std::any_of(work->image_draws.begin(),work->image_draws.end(),[](const auto& d){return bool(d);});
-     if(initial_kind!=InitialImageFrameKind::kNone || image_observed)
+     if(refresh_kind==IdentityFrameRefreshKind::kNone && image_history_known && !image_observed &&
+        s.OrdinaryNoProfileFrameCurrent(result.guard,work->source) && work->read &&
+        work->read_pool==&s.job->writer_reads &&
+        xam::ProfileRosterNativeReadScope::FromActualThread(s.kernel,thread.thread_state())==work->read.get())
+      refresh_kind=IdentityFrameRefreshKind::kOrdinaryNoProfileDraw;
+     if(refresh_kind!=IdentityFrameRefreshKind::kNone || image_observed)
       result.guard=std::make_shared<IdentityImageFrameGuard>(result.guard,owner,s.root,
-          work->source,work->serial,work->image_draws,initial_kind);
+          work->source,work->serial,work->image_draws,refresh_kind);
     }catch(...){}
     return result;
    }
@@ -7364,14 +7403,23 @@ void NativeProfileIdentityOwner::ObserveNativeImageFrameCaptured(XThread& thread
   if(render==s.active.end())return;
   const auto* task=s.tasks.FindLiveTask((*render)->birth.task);
   if(!task || task->birth.generation!=(*render)->birth.generation)return;
-  if(image->initial_kind!=InitialImageFrameKind::kNone){
-   if(s.InitialFrameKindCurrent(image->parent,image->source)!=image->initial_kind)return;
+  if(image->refresh_kind!=IdentityFrameRefreshKind::kNone){
+   if(image->refresh_kind==IdentityFrameRefreshKind::kOrdinaryNoProfileDraw){
+    if(!s.OrdinaryNoProfileFrameCurrent(image->parent,image->source) ||
+       request.plan()->inventory().draws.empty() || s.image_slot->unavailable_.load() ||
+       (*render)->image_draws_unavailable || !(*render)->read ||
+       (*render)->read_pool!=&s.job->writer_reads ||
+       xam::ProfileRosterNativeReadScope::FromActualThread(s.kernel,thread.thread_state())!=(*render)->read.get() ||
+       std::any_of((*render)->image_draws.begin(),(*render)->image_draws.end(),[](const auto& d){return bool(d);}))return;
+   }else{
+    if(s.InitialFrameKindCurrent(image->parent,image->source)!=image->refresh_kind)return;
+    // Unknown occupied-image history stays closed even for exact no-op owners.
+    if(image->refresh_kind==IdentityFrameRefreshKind::kUnchangedOccupied &&
+       (s.image_slot->unavailable_.load() || (*render)->image_draws_unavailable))return;
+   }
    // Recheck this exact still-live render Work at immutable capture. Later
-   // completion retains this record, never a reread of retired Work/native IO.
-   if(image->initial_kind==InitialImageFrameKind::kUnchangedOccupied &&
-      (s.image_slot->unavailable_.load() || (*render)->image_draws_unavailable))return;
-   // The retained completed record/immutable Source proves this exact hidden
-   // frame; no profile image, texture/default readiness or visibility is issued.
+   // completion retains the frozen record, never retired Work/native pointers.
+   // This records no profile image/texture/default readiness or visibility.
    image->request=reinterpret_cast<uintptr_t>(&request);image->identity=request.identity();
    image->backend=request.backend_epoch();image->captured=true;return;
   }
@@ -7429,21 +7477,24 @@ void NativeProfileIdentityOwner::ObserveNativeImageFrameCompleted(
      image->identity!=request.identity() || image->backend!=request.backend_epoch())return;
   const auto current=s.image_slot->current_.load(std::memory_order_acquire);const auto self=owner->weak_from_this();
   if(current.owner_before(self) || self.owner_before(current))return;
-  if(image->initial_kind!=InitialImageFrameKind::kNone){
+  if(image->refresh_kind!=IdentityFrameRefreshKind::kNone){
    if(!request.plan() || request.plan()->is_overlay_control() ||
       !s.config.domain || !s.config.domain->active() ||
       s.config.domain->root()!=NativeImportDomain::Member{s.config.catalog->calls()->module()->hmodule_ptr(),s.root.generation} ||
-      s.config.catalog->calls()->module()->load_generation()!=s.root.generation ||
-      s.InitialFrameKindCurrent(image->parent,image->source)!=image->initial_kind)return;
-   // Unknown image-use observation is sticky. A valid unchanged identity and
-   // earlier capture cannot reopen its lost nonempty observation authority.
-   if(image->initial_kind==InitialImageFrameKind::kUnchangedOccupied &&
+      s.config.catalog->calls()->module()->load_generation()!=s.root.generation)return;
+   if(image->refresh_kind==IdentityFrameRefreshKind::kOrdinaryNoProfileDraw){
+    if(request.plan()->inventory().draws.empty() || s.image_slot->unavailable_.load() ||
+       !s.OrdinaryNoProfileFrameCurrent(image->parent,image->source))return;
+   }else if(s.InitialFrameKindCurrent(image->parent,image->source)!=image->refresh_kind)return;
+   // Unknown image-use observation is sticky. A valid earlier capture cannot
+   // reopen either occupied no-op or ordinary no-profile observation authority.
+   if(image->refresh_kind==IdentityFrameRefreshKind::kUnchangedOccupied &&
       s.image_slot->unavailable_.load())return;
    image->completed=true;
-   // A genuinely completed initial frame acknowledges the refresh only for
-   // PM-proved unchanged row owners/Account data. It issues no fresh image or
-   // model/asset readiness. Prepared Query, descendant/wake/provider/paint/PM
-   // joins still own eventual reveal, including every actually issued read.
+   // A genuine initial no-op OR ordinary frame with complete empty profile-
+   // image history acknowledges only physical refresh. Neither issues image,
+   // model or asset readiness. Prepared Query, descendant/wake/provider/paint/
+   // PM joins still own reveal, including every actually issued native read.
    s.job->render_refresh_observed.store(true,std::memory_order_release);s.changed.notify_all();return;
   }
   if(s.image_slot->unavailable_.load())return;
@@ -8207,6 +8258,11 @@ bool NativeProfileIdentityOwner::StopOnBootstrap(XThread& bootstrap) noexcept {
  return StepOnBootstrap(bootstrap) && Drained();
 }
 bool NativeProfileIdentityOwner::RetainedForActualKernelStop(StopObservation* observation) const noexcept {
+ return RetainedWithJoinedHostStack(nullptr,observation);
+}
+bool NativeProfileIdentityOwner::RetainedWithJoinedHostStack(
+    const identity_detail::NativeIdentityJoinedHostStack* joined_host,
+    StopObservation* observation) const noexcept {
  if(observation)*observation={};
  try{
   const auto& s=*state_;std::lock_guard lock(s.mutex);
@@ -8257,6 +8313,33 @@ bool NativeProfileIdentityOwner::RetainedForActualKernelStop(StopObservation* ob
   failed(17,false);
   for(const auto& work:s.active){
    if(observation)++observation->visited[4];IdentityStopRowObservation r;
+   if(work && work->transport_unclaimed){
+    // Only the two genuine ordinary-routing constructors issue this receipt.
+    // This lane retains heap metadata/actual ThreadState through the EXISTING
+    // worker+IO/GPU stop; it never makes the original function/Task complete.
+    // A shadow that acquired any native/profile/data duty is not this class.
+    const bool foreign_duty=work->source!=kBootUnjoinedSource ||
+        work->read || work->commit || work->domain || work->event_lifetime ||
+        work->birth.generation || work->birth.task || work->owns_task_work || work->owns_persistent_work ||
+        work->execution_only || work->execution_lifetime || work->execution_target ||
+        work->execution_read_owner || work->execution_read.owner() || work->execution_read.scope() ||
+        work->execution_read.pending() || work->execution_read_fallback ||
+        work->creation_only || work->creation || work->execution_options || work->profile_control ||
+        work->periodic_factory || work->task_release || work->reference_release ||
+        work->foreign_task_cleanup || work->foreign_avatar_task || work->avatar_allocation ||
+        work->service_progress || work->service_origin || work->service_cell || work->service_tick ||
+        work->listener_frame || work->listener_work || work->listener_source || work->listener_dependencies ||
+        work->wake || work->wake_work || work->provider_generation || work->tile ||
+        work->render_iteration || work->presentation_guard || work->registered_executor || work->host_body ||
+        work->system_thread_frame || work->transport_only || !work->physical_work || work->normal_return;
+    if(r.Test(0,!work->ordinary_transport) || r.Test(1,!work->thread) || r.Test(2,foreign_duty) ||
+       r.Test(3,!work->ordinary_transport->RetainThroughActualStop(s.kernel,s.root,work->frame,
+           *work->thread,work->completion_route?&*work->completion_route:nullptr,joined_host))){
+     r.Rejected(observation,8);failed(18,true);
+     return FinishIdentityStopObservation(observation,false);
+    }
+    continue;
+   }
    // A neutral hook has already returned to original PPC. Its heap-only
    // metadata/code/thread owners remain retained until the separate real
    // CPU-stop barrier; this is not a native callback/Task completion receipt
@@ -8842,6 +8925,8 @@ uint64_t NativeProfileIdentityOwner::GuardEntryCore(void* raw,uint64_t address) 
    }
    if(completion_route->kind()==Tasks::CompletionRoute::Kind::kOrdinary){
     marker->completion_route=std::move(completion_route);
+    if(auto fact=identity_detail::NativeIdentityOrdinaryTransport::CaptureCompletion(
+        *shape,*marker->thread,*marker->completion_route))marker->ordinary_transport.emplace(std::move(*fact));
     if(s.active.size()>=256 || !s.next_work || s.next_work==UINT64_MAX ||
         std::any_of(s.active.begin(),s.active.end(),[&](const auto& old){return old->frame==*shape;})){
      s.Lose(__LINE__);return s.Deny(c,at,__LINE__);
@@ -8890,6 +8975,8 @@ uint64_t NativeProfileIdentityOwner::GuardEntryCore(void* raw,uint64_t address) 
     auto marker=std::make_shared<State::Work>();marker->frame=*shape;
     marker->thread=retain_object(ActualThread());marker->transport_unclaimed=true;
     marker->physical_work=true; // excluded only from identity readiness work
+    if(auto fact=identity_detail::NativeIdentityOrdinaryTransport::CaptureTask(
+        *shape,*marker->thread))marker->ordinary_transport.emplace(std::move(*fact));
     std::lock_guard lock(s.mutex);
     if(s.ClaimTaskTransport(at,c,actual_thread_id,periodic_handle)!=task_claim || s.active.size()>=256 ||
        std::any_of(s.active.begin(),s.active.end(),[&](const auto& old){return old->frame==*shape;})){
@@ -9840,6 +9927,8 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
      // Poison only this actual neutral memento; retain it and every older owner.
      (void)prior->completion_route->ReturnOrdinary(shape.value_or(Frame{}));
     }
+    if(prior && prior->transport_unclaimed && prior->ordinary_transport)
+     prior->ordinary_transport->UnavailableReturn();
     if(prior && !prior->transport_unclaimed){
      s.RecordReturnFailure(c,at,prior->frame,*prior,prior->birth,prior->birth.generation?1u:0u,false,8,__LINE__,2);
      s.Lose(__LINE__);prior->uncertain=true;
@@ -9857,6 +9946,10 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
     if(work->normal_return){
      s.RecordReturnFailure(c,at,work->frame,*work,work->birth,work->birth.generation?1u:0u,false,9,__LINE__);
      s.Lose(__LINE__);return;
+    }
+    if(!work->ordinary_transport || !work->thread || !shape ||
+       !work->ordinary_transport->Return(*shape,*work->thread)){
+     s.Lose(__LINE__);return; // Retain the actual unreturned shadow; no Task effect.
     }
     work->normal_return=true;
     const auto retiring=std::find(s.active.begin(),s.active.end(),work);

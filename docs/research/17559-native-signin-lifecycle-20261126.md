@@ -59,8 +59,8 @@ were preserved. These tests do not establish native UI or game acceptance.
 | cpu-focused | 5 | 130 |
 | kernel-installed | 236 | 35429 |
 
-The tested source manifest is `c8c2b3e22d9820e95c2bfa0186aff0e83966d5bd33e7145f4ed52a3a3041963a`.
-The Linux ELF is `a67444bbc3ca4d4b7bfee452c673b5f80ed6f7f866755a9ec38efd87db24cd54`.
+The tested source manifest is `416a4bdc570466810d38bf8cb5401d51c1fea4125b3af3d43f2763732f71b26c`.
+The Linux ELF is `905e3f08814838e0e1002f3791fbefa0d20727c72b6f0bd4a5a3379f9e4c0fd4`.
 The generated version header retains the actual build base
 `2418ae0aa308cb718d80bc6713a6ae2b078424d4`; a later source-backup commit
 must not be described as that embedded compilation identity.
@@ -71,6 +71,45 @@ profile-data handoff, current scalar metadata and escaped/diamond/cycle stop
 ownership. Existing case names/order and stronger producer fixtures remain
 preserved. Runtime acceptance must cover offline restore after the real error,
 Guide close/reopen and input return, cancellation, continuation and normal exit.
+
+## Bootstrap caller follow-up and remaining settlement
+
+The first integrated V152 run did not execute the original initializer.
+Candidate selection incorrectly required an original guest caller before the
+existing authenticated SYSTEM continuation fallback could run. V153 restores
+selection of the current bootstrap/host-facade Job without an original caller;
+actual SYSTEM process, host-body Task birth/source, exact arguments, Expected
+and native own-return checks remain required. Copied guest requests still
+require their exact original caller. No input/readiness guard is relaxed.
+
+The V153 build and all seven direct runs passed. Its actual Doritos run reaches
+real initializer entry, native publication, profile-data handoff/current source
+3, all 2,047 final-readiness predicates and all 16,383 prepared-barrier
+predicates. Final producer settlement, Open/aligned state, game input and Guide
+visibility remain unaccepted. The physical-controller check did not advance the
+title, and Guide stayed invisible.
+
+Review identified an exact source-custody omission: startup adopts a separate
+initial-read event producer, but finalization cannot find that producer after
+current-source handoff. That is a source-proved blocker if reached; the trace
+does not distinguish it from earlier hidden-paint/wake joins. The complete
+initial/cancel/retry/supersession/retirement correction is being developed.
+The real mandatory post-publication wake remains required.
+
+Resident memory also continued growing. With about 8.8 GiB initially available,
+the owned process reached about 7.8 GiB RSS and the unchanged 1.5 GiB RAM guard
+stopped the run. There was no external supervisor signal, normal WM close or
+known actual guest exit status. A manual tool-order observation bounds stopped
+query state before a later 290.67-second window capture; the first sampled
+under-floor RAM value is at 331.04 seconds. This is not a per-row timestamp join
+or proof of a stop initiator.
+
+A separate source review finds an unbounded terminal-work queue with a
+Bootstrap-only live-host drain and at least 17 KiB of inline draw bookkeeping
+per Work, including neutral observations. Those are concrete lifetime/storage
+conditions; actual live queue counts and the heap/GPU share of RSS remain
+unmeasured. Further runtime retries are paused while the complete settlement
+and resource-retirement contract is reviewed. No AppImage is accepted.
 
 ## Upstream accounting
 

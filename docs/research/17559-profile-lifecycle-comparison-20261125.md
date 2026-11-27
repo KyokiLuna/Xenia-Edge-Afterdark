@@ -1,8 +1,17 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V152 adds the [native sign-in lifecycle change](17559-native-signin-lifecycle-20261126.md), following the V151 [storage-selector generation fix](17559-selector-source-update-20261126.md). The whole build and all seven direct runs pass. Actual game/Guide recovery and shutdown remain pending; the latest native game run is still V149.
+Status: V153’s [authenticated bootstrap ingress correction](17559-native-signin-lifecycle-20261126.md) builds and passes all seven direct runs. Its native run advances publication/data handoff and both preparation barriers; final settlement, game/Guide input and normal shutdown remain unaccepted. The RAM guard stops continuing resident growth. Current work reviews the complete initial producer and terminal resource lifetime; no checkpoint is accepted.
 
-V149 restores the original native HUD keystroke family and passes all
+V153 executes the real initializer, advances current source 3 and reaches all
+2,047 final-readiness and 16,383 prepared-barrier predicates. User input still
+does not advance Doritos or reveal Guide. Source review identifies omitted
+custody of the separately issued initial-read event producer; its exact runtime
+Finish boundary is not captured. The real mandatory native wake remains strict.
+Terminal-work retention and oversized per-Work draw metadata are being reviewed
+without attributing RSS to an unmeasured live queue. See the linked update for
+the actual RAM-guard stop and manual timing bounds.
+
+Earlier V149 restores the original native HUD keystroke family and passes all
 seven direct runs. Its isolated Doritos test selects the existing QA profile
 and displays the native sign-in error dialog. The genuine ordinary request
 returns `0x80151000`, while Job 4 completes prepared query and both settlement

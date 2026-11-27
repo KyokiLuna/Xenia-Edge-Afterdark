@@ -6803,12 +6803,17 @@ bool NativeProfileIdentityOwner::OwnsIngressCall(GuestRuntimeCallExecutor* calls
     owner->state_->config.catalog->calls().get()!=calls)return false;
  auto& s=*owner->state_;std::lock_guard lock(s.mutex);
  std::shared_ptr<State::Job> job;
- const auto matches=[&](const auto& candidate){return candidate && candidate->original_caller.get()==&thread &&
+ // Only the current common host/bootstrap Job may have no original caller.
+ // It must still prove its actual SYSTEM continuation Work below. A copied
+ // original request always retains the exact guest caller, independently of
+ // that continuation lane; absence is never original-caller authority.
+ const auto matches=[&](const auto& candidate){return candidate &&
+     (!candidate->original_caller || candidate->original_caller.get()==&thread) &&
      candidate->native_entered && !candidate->native_returned && args[0]==candidate->input &&
      args[1]==candidate->flags && args[2]==candidate->overlap &&
      ordinal==(candidate->original?candidate->original->ordinal():0x224);};
  if(matches(s.job))job=s.job;
- for(const auto& candidate:s.copied_originals)if(matches(candidate)){
+ for(const auto& candidate:s.copied_originals)if(candidate && candidate->original_caller && matches(candidate)){
   if(job && job!=candidate)return false;job=candidate;
  }
  if(!job || !job->native_entered || job->execution_uncertain || s.uncertain.load() ||

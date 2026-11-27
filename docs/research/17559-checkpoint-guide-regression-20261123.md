@@ -1,13 +1,15 @@
 # 17559 checkpoint Guide regression — 2026-11-23
 
-Status: V152 adds the tested [native sign-in lifecycle change](17559-native-signin-lifecycle-20261126.md), following the V151
-[shared storage-selector fix](17559-selector-source-update-20261126.md).
-Its full build and all seven direct runs pass, including 1,505 kernel cases
-and 236 selected installed-system cases. The current native game/Guide
-recovery and normal-shutdown retest remains pending. No replacement AppImage
-is accepted.
+Status: V153 restores authenticated SYSTEM bootstrap ingress in the
+[native sign-in lifecycle update](17559-native-signin-lifecycle-20261126.md).
+Its build and all seven direct runs pass. The actual V153 run reaches native
+publication/data handoff and both preparation barriers, but final producer
+settlement, game input, Guide visibility and normal shutdown remain unaccepted.
+The RAM guard ends the growing-resident-memory run; further live retries are
+paused for the complete settlement/resource-retirement review. No replacement
+AppImage is accepted.
 
-The latest actual native game test remains V149. That isolated Doritos run
+The earlier V149 native game test remains a historical observation. That isolated Doritos run
 selects the existing QA profile and renders the native sign-in error dialog.
 Ordinary publication reaches settlement stages 7/8; the genuine
 `0x80151000` error is preserved. A later request (`20B`, flags `0x63`, null

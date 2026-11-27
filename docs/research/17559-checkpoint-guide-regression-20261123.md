@@ -1,19 +1,25 @@
 # 17559 checkpoint Guide regression — 2026-11-23
 
-Status: the current V151 Linux source adds the tested
-[shared storage-selector fix](17559-selector-source-update-20261126.md) and
-passes all seven direct runs. The latest actual native game test remains V149.
-That isolated Doritos run selects the existing QA profile and renders the native
-sign-in error dialog. Ordinary publication reaches both settlement stages
-7/8; the genuine `0x80151000` error is preserved. A follow-up native profile
-request is refused before entry. An explicit SIGTERM received by the test
-supervisor interrupts the run before the Guide check; its sender is unknown.
-This is not a guest exit 143, normal shutdown or Guide acceptance. V148's
-visible Guide and failed close/cancel-reopen checks remain historical results.
-No replacement AppImage is accepted. See the
+Status: V152 adds the tested [native sign-in lifecycle change](17559-native-signin-lifecycle-20261126.md), following the V151
+[shared storage-selector fix](17559-selector-source-update-20261126.md).
+Its full build and all seven direct runs pass, including 1,505 kernel cases
+and 236 selected installed-system cases. The current native game/Guide
+recovery and normal-shutdown retest remains pending. No replacement AppImage
+is accepted.
+
+The latest actual native game test remains V149. That isolated Doritos run
+selects the existing QA profile and renders the native sign-in error dialog.
+Ordinary publication reaches settlement stages 7/8; the genuine
+`0x80151000` error is preserved. A later request (`20B`, flags `0x63`, null
+overlap) is refused before entry. Its producer was not established from the
+shared address in that run; subsequent matching-module analysis recovered
+the contract used by V152. An explicit SIGTERM received by the supervisor
+interrupts the run before the Guide check; its sender is unknown, and the
+user did not close the window. This is not a guest exit 143, normal shutdown
+or Guide acceptance. V148's visible Guide and failed close/cancel-reopen
+checks remain historical results. See the
 [current lifecycle comparison](17559-profile-lifecycle-comparison-20261125.md)
-for source identities, exact runtime scope and the remaining native input and
-inventory boundaries. The results below retain their historical scope.
+for the exact runtime scope. The results below retain their historical scope.
 
 Historical V131 Linux ELF displays the unsigned dashboard and native
 Guide/profile picker. All five full direct suites and focused CPU/installed

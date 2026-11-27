@@ -21,11 +21,12 @@ inline bool DwordIs(uint64_t actual,uint32_t expected) noexcept {
 // metadata under that owner's mutex, never guest calls, waits, filesystem IO,
 // resource destruction or a caller-filled provider-readiness permission.
 //
-// Single-source law: after old F25E0/F2618 ingress closes and genuinely drains,
-// only ONE already retained prepared identity may write the native pending
-// flag. Native F25E0 tail reaches 7B68 only AFTER its real pending store. This
-// prevents an older producer from racing a new generation's sidecar. Without
-// that enforced gate, the later Reschedule entry alone is NOT linearization.
+// An entered wake/settings worker is a real data use. The native pending
+// DWORD alone is a coalesced request to query CURRENT cache, not a frozen old
+// roster. Actual native publication chooses that current cache; exact entered
+// invocations keep their original source/sequence through their own returns.
+// Native F25E0 reaches 7B68 only AFTER its pending store, so that matched tail
+// (not an equal pending bit) is the actual wake-sequence receipt.
 class NativeIdentityWakeOwner final {
  public:
   using Tasks=NativeProfileIdentityTasks;
@@ -60,7 +61,7 @@ class NativeIdentityWakeOwner final {
   struct WorkEntry {
     Work key;Frame frame,refresh;
     uint64_t source=0,sequence=0;
-    bool joined=false,refresh_entered=false,refresh_returned=false;
+    bool joined=false,refresh_entered=false,refresh_returned=false,body_admitted=false;
   };
   NativeIdentityWakeOwner(Root root,Birth actual_persistent_task,uint64_t old_read_source)
       :root_(root),persistent_(actual_persistent_task),old_read_source_(old_read_source) {
@@ -106,9 +107,19 @@ class NativeIdentityWakeOwner final {
   void CloseOldIngress() {
     if (phase_==Phase::kOpenOld) { phase_=Phase::kClosedOld; }
   }
+  // Used only after the concrete Owner's genuine C838 data handoff, before
+  // the next dataful callback. No entered native use is discarded and no old
+  // refresh, callback return or pending exchange is reported as completed.
+  bool SupersedePublished(uint64_t origin) {
+    if(lost_ || phase_!=Phase::kPublished || prepared_!=origin || !Empty())return false;
+    old_read_source_=origin;prepared_=0;latest_sequence_=0;
+    last_complete_sequence_=0;last_refresh_sequence_=0;
+    phase_=Phase::kClosedOld;return true;
+  }
+  bool DataUsesClosed() const { return Empty(); }
   bool ArmPrepared(uint64_t retained_prepared_origin,std::optional<uint32_t> actual_pending) {
     if (lost_ || phase_!=Phase::kClosedOld || !retained_prepared_origin ||
-        !Empty() || !actual_pending || *actual_pending) { return false; }
+        !Empty() || !actual_pending) { return false; }
     prepared_=retained_prepared_origin;phase_=Phase::kPrepared;return true;
   }
   bool MarkNativeCachePublished(uint64_t retained_prepared_origin) noexcept {
@@ -122,8 +133,11 @@ class NativeIdentityWakeOwner final {
   // A denial is an actual pre-body HRESULT; no replay or post-entry fallback.
   std::optional<Wake> EnterWake(Frame frame,uint64_t earlier_source,bool native_r3_nonzero) {
     if (lost_ || !Matches(frame,0x816F25E0) || !earlier_source) { return {}; }
-    const bool joined=phase_==Phase::kPublished && earlier_source==prepared_;
-    if ((phase_!=Phase::kOpenOld || earlier_source!=old_read_source_) && !joined) { return {}; }
+    const auto phase=phase_.load(std::memory_order_acquire);
+    // F25E0 is control only: its real pending store and Reschedule must run
+    // even before0A. It never captures an old roster or enters a data scope.
+    const bool joined=(phase==Phase::kPrepared || phase==Phase::kPublished) && earlier_source==prepared_;
+    if(phase==Phase::kRetired || (earlier_source!=old_read_source_ && !joined))return {};
     for (const auto& value:wakes_) {
       if (value && value->frame==frame) { Lose(__LINE__,3);return {}; }
     }
@@ -143,8 +157,11 @@ class NativeIdentityWakeOwner final {
     auto* value=Find(key);
     if (lost_ || !value || value->reached_reschedule || !Matches(actual,0x816B7B68) ||
         !SameCaller(value->frame,actual) || !ActualPersistent(task)) { Lose(__LINE__,6);return false; }
-    if (value->joined && (phase_!=Phase::kPublished || value->source!=prepared_)) { Lose(__LINE__,6);return false; }
-    if (!value->joined && phase_!=Phase::kOpenOld && phase_!=Phase::kClosedOld) { Lose(__LINE__,6);return false; }
+    if(value->joined && ((phase_!=Phase::kPrepared && phase_!=Phase::kPublished) ||
+        value->source!=prepared_)){Lose(__LINE__,6);return false;}
+    if(phase_==Phase::kRetired){Lose(__LINE__,6);return false;}
+    // An old control invocation retains its actual causal receipt across0A;
+    // that does not retag it as a new-publication wake or frozen data borrow.
     value->reschedule=actual;value->reached_reschedule=true;
     if (value->joined && value->set_pending) {
       if (!next_sequence_ || next_sequence_==UINT64_MAX) { Lose(__LINE__,6);return false; }
@@ -181,9 +198,9 @@ class NativeIdentityWakeOwner final {
   // reads and output cache writes. No incoming r3/profile pointer is consumed
   // by this verified body. The concrete bridge authenticates ALL native input
   // roots and borrows the immutable prepared phase before the body can run.
-  std::optional<Work> EnterWorker(Frame frame,Birth task) {
+  std::optional<Work> ReserveWorker(Frame frame,Birth task) {
     if (lost_ || !Matches(frame,0x816F2618) || !ActualPersistent(task)) { return {}; }
-    const bool joined=phase_==Phase::kPublished && latest_sequence_;
+    const bool joined=phase_==Phase::kPublished;
     if (phase_!=Phase::kOpenOld && !joined) { return {}; }
     for (const auto& value:works_) {
       // One actual persistent Task cannot concurrently run two invocations.
@@ -197,13 +214,28 @@ class NativeIdentityWakeOwner final {
     } }
     return {};
   }
+  bool AdmitWorkerBody(Work key,Frame frame) {
+    auto* value=Find(key);
+    if(lost_ || !value || value->frame!=frame || value->body_admitted)return false;
+    value->body_admitted=true;return true;
+  }
+  std::optional<Work> EnterWorker(Frame frame,Birth task) {
+    const auto key=ReserveWorker(frame,task);
+    return key && AdmitWorkerBody(*key,frame)?key:std::nullopt;
+  }
+  bool CancelReservedWorker(Work key,Frame frame) {
+    const auto* value=Find(key);
+    if(lost_ || !value || value->frame!=frame || value->body_admitted || value->refresh_entered)return false;
+    for(auto& entry:works_)if(entry && entry->key.serial==key.serial){entry.reset();return true;}
+    return false;
+  }
   uint64_t RetainedSource(Work key) {
     const auto* value=Find(key);
     return !lost_ && value ? value->source : 0;
   }
   bool EnterRefreshChild(Work key,Frame frame) {
     auto* value=Find(key);
-    if (lost_ || !value || value->refresh_entered || !Matches(frame,0x816E3A98) ||
+    if (lost_ || !value || !value->body_admitted || value->refresh_entered || !Matches(frame,0x816E3A98) ||
         frame.thread!=value->frame.thread || frame.pcr!=value->frame.pcr ||
         uint64_t(frame.sp)+0xB0!=value->frame.sp || frame.lr!=0x816F2668) { Lose(__LINE__,2);return false; }
     value->refresh=frame;value->refresh_entered=true;return true;
@@ -216,9 +248,12 @@ class NativeIdentityWakeOwner final {
   }
   std::optional<Observation> ReturnWorker(Work key,Frame frame) {
     auto* value=Find(key);
-    if (lost_ || !value || value->frame!=frame ||
+    if (lost_ || !value || !value->body_admitted || value->frame!=frame ||
         (value->refresh_entered && !value->refresh_returned)) { Lose(__LINE__,9);return {}; }
-    const Observation observed{value->joined?value->source:0,value->sequence,true,
+    // A carried pending bit may run before this publication's first actual
+    // wake. It reads current cache truthfully, but sequence0 is no invented
+    // per-publication wake/refresh acknowledgment.
+    const Observation observed{value->joined && value->sequence?value->source:0,value->sequence,true,
                                value->refresh_returned};
     if (value->joined) {
       last_complete_sequence_=std::max(last_complete_sequence_,value->sequence);

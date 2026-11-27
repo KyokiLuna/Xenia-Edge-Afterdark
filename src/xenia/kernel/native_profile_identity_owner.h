@@ -64,6 +64,11 @@ class NativeProfileIdentityOwner final
   // remains unchanged; no process, TLS, currentTask or native cache is made up.
   static uint64_t GuardEntry(void*,uint64_t) noexcept;
   static void ObserveReturn(void*,uint64_t) noexcept;
+  // Actual finite native producer body lifetime and its real metadata outputs.
+  static void ObserveRestoreProducer(void*,uint32_t,bool returned) noexcept;
+  static void ObserveOriginalCurrentUserMetadata(KernelState*,uint32_t slot,
+      uint32_t flags,uint32_t output,uint32_t status,
+      const std::shared_ptr<const xam::HostRoster>&) noexcept;
   // Diagnostic-only HIR barriers: actual loaded registers, no guest reads or
   // authority. Each site includes its fixed original instruction word.
   struct TaskDiagnosticSite {uint32_t function,address,word;};
@@ -359,10 +364,13 @@ class NativeProfileIdentityOwner final
       bool* retryable_bootstrap = nullptr,
       const xam::NativeOriginalLogonObservation* observation=nullptr,
       std::chrono::steady_clock::time_point preparation_deadline={});
-  GuestRuntime::ExecutionResult ExecutePreparedOn(XThread&);
+  Result InvokeCopiedOriginal(XThread&,uint16_t,std::span<const uint64_t>,
+      const xam::NativeOriginalLogonObservation*);
+  GuestRuntime::ExecutionResult ExecutePreparedOn(XThread&,uint64_t copied_source=0);
   GuestRuntime::ExecutionResult RunScheduledBody(XThread&,uint64_t serial,
       const std::function<GuestRuntime::ExecutionResult(XThread&)>&);
   bool CancelQueued(const std::shared_ptr<xam::ProfileRosterIntent>&);
+  bool ReapRetainedJobsOnBootstrap(XThread&);
   struct FrameQueryAdmission {
     bool managed=false,admitted=false;
     // Pure diagnostics from the last original State cut. No admission or

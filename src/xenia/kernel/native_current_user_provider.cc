@@ -27,7 +27,10 @@ struct Profile {
   const char* sha;
   const char* name;
 };
-constexpr std::array<Profile, 3> profiles{{
+constexpr std::array<Profile, 4> profiles{{
+    {0x20A, 0x816D8590, 12,
+     "766cd6615f5d7580131ee3c03e89d7c9e83ea3a78027cf618f78909fa3886151",
+     "XamUserGetXUID"},
     {0x210, 0x816DD118, 212,
      "ee6a07ff6b488735f293f41f4832491809c449bdad5aebcddab8b188b7a007e4",
      "XamUserGetSigninState"},

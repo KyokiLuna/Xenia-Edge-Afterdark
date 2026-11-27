@@ -52,6 +52,26 @@ namespace xe {
 namespace kernel {
 namespace xam {
 
+struct ProfileRosterMountTicket::Data {
+  struct Resources {
+    std::shared_ptr<filesystem::HostStorageRoot> source,view,guest_generation;
+    std::shared_ptr<const filesystem::ManagedDeviceIdentity> managed_identity;
+    std::shared_ptr<vfs::HostPathDevice> device;
+  } resources;
+  // Unique PM lifetime identity, not an entered gate or native source lease.
+  const std::shared_ptr<ProfileAccountCommitGate> manager;
+  std::string key,source_id;
+  uint64_t xuid=0,mount_generation=0,source_generation=0;
+  uint32_t device_id=0;
+  // All mutable fields are protected by the issuing PM mount mutex. A copied
+  // shared_ptr is still this SAME one owed reference, never another acquire.
+  bool owed=false;
+  explicit Data(std::shared_ptr<ProfileAccountCommitGate> owner):manager(std::move(owner)) {}
+};
+ProfileRosterMountTicket::ProfileRosterMountTicket(std::unique_ptr<Data> data)
+    :data_(std::move(data)) {}
+ProfileRosterMountTicket::~ProfileRosterMountTicket()=default;
+
 struct ProfileSettingsReadLifetime {
   std::atomic<bool> open{true};
 };
@@ -798,15 +818,57 @@ bool ProfileManager::MountProfile(const uint64_t xuid, std::string mount_path,
   return MountProfileInternal(xuid, std::move(mount_path), {}, nullptr,
                               mounted_device_id);
 }
+std::shared_ptr<ProfileRosterMountTicket> ProfileManager::AcquireRosterMount(
+    uint64_t xuid,std::error_code& error,const ContentSourceState* source,
+    uint32_t* mounted_device_id) {
+  error.clear();
+  if(global_critical_region::is_held_by_current_thread()) {
+    error=std::make_error_code(std::errc::operation_would_block);return {};
+  }
+  try {
+    const auto entered=account_commit_gate_->Acquire();
+    if(!entered) {error=std::make_error_code(std::errc::operation_canceled);return {};}
+    auto ticket=std::shared_ptr<ProfileRosterMountTicket>(new ProfileRosterMountTicket(
+        std::make_unique<ProfileRosterMountTicket::Data>(account_commit_gate_)));
+    if(!MountProfileInternal(xuid,{}, {},source,mounted_device_id,nullptr,ticket)) {
+      // Preserve the roster producer's existing conservative admission Busy.
+      // This bool API also refuses real short metadata/namespace contention;
+      // it cannot classify that as a permanent IO failure. The original
+      // diagnostic retains the precise cause, without a later source reread.
+      error=std::make_error_code(std::errc::device_or_resource_busy);return {};
+    }
+    return ticket;
+  } catch(const std::bad_alloc&) {
+    error=std::make_error_code(std::errc::not_enough_memory);return {};
+  }
+}
+bool ProfileManager::ReleaseRosterMount(
+    const std::shared_ptr<ProfileRosterMountTicket>& ticket) {
+  if(!ticket || !ticket->data_ || ticket->data_->manager!=account_commit_gate_)return false;
+  return DismountProfileInternal(ticket->data_->key,{},nullptr,ticket);
+}
 bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
     std::shared_ptr<ProfileReadMountNode> read,
     const ContentSourceState* exact_source, uint32_t* mounted_device_id,
-    HostProfileAccountEdit::State* edit) {
+    HostProfileAccountEdit::State* edit,
+    const std::shared_ptr<ProfileRosterMountTicket>& roster) {
   ProfileAdmissionDiagnostic diagnostic(ProfileAdmissionDiagnostic::Operation::kMount);
   using Reason = ProfileAdmissionReason;
   if (xe::global_critical_region::is_held_by_current_thread()) {
     return diagnostic.Fail(Reason::kMountCallerGlobalLock);
   }
+  if(roster && (!roster->data_ || roster->data_->manager!=account_commit_gate_ ||
+      roster->data_->owed || roster->data_->mount_generation || read || edit))return false;
+  const auto bind_roster=[&](const ProfileMount& held) {
+    if(!roster)return;
+    auto& out=*roster->data_;
+    out.resources.source=held.source;out.resources.view=held.view;
+    out.resources.guest_generation=held.guest_generation;
+    out.resources.managed_identity=held.managed_identity;out.resources.device=held.device;
+    out.xuid=held.xuid;out.mount_generation=held.mount_generation;
+    out.source_generation=held.source_generation;out.device_id=held.device_id;
+    out.owed=true; // Only actual normal-reference success invokes this lambda.
+  };
   if (edit && (diagnostic.Refused(Reason::kMountEditReadConflict, bool(read)) ||
       diagnostic.Refused(Reason::kMountEditAlreadyMounted, edit->mounted) ||
       diagnostic.Refused(Reason::kMountEditIdentity, edit->xuid != xuid))) { return false; }
@@ -883,6 +945,12 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
   auto source_authority =
       std::const_pointer_cast<filesystem::HostStorageRoot>(
           source->managed_identity->source());
+  if(roster) {
+    // All potentially allocating stamp fields precede either real reference
+    // increment or namespace publication. Binding below copies only scalars
+    // and retained shared owners while the actual mount lock is held.
+    roster->data_->key=key;roster->data_->source_id=source->source.id;
+  }
   auto* fs = kernel_state_->file_system();
   uint64_t mount_generation = 0;
   {
@@ -922,9 +990,12 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
       ++held.read_references;
     } else {
       if (held.references == SIZE_MAX) { return diagnostic.Fail(Reason::kMountHeldReferencesOverflow); }
+      if(roster && (held.source_id!=roster->data_->source_id ||
+          held.roster_references>held.references))return false;
       ++held.references;
+      if(roster)++held.roster_references;
     }
-    bind_edit(held);
+    bind_edit(held);bind_roster(held);
     if (mounted_device_id) { *mounted_device_id = held.device_id; }
     return true;
   }
@@ -999,6 +1070,7 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
       prepared_registration->device());
   if (!prepared_record.device) { return diagnostic.Fail(Reason::kMountPreparedDeviceType); }
   prepared_record.mount_generation = mount_generation;
+  if(roster)prepared_record.roster_references=1;
   if (read) {
     const auto use = read->use.lock();
     if (diagnostic.Refused(Reason::kMountPreparedReadUseMissing, !use) ||
@@ -1028,7 +1100,7 @@ bool ProfileManager::MountProfileInternal(uint64_t xuid, std::string mount_path,
     return false;
   }
   const auto inserted_mount = profile_mounts_.insert(std::move(mount_node));
-  bind_edit(inserted_mount.position->second);
+  bind_edit(inserted_mount.position->second);bind_roster(inserted_mount.position->second);
   if (mounted_device_id) { *mounted_device_id = source->source.device_id; }
   return true;
 }
@@ -1043,10 +1115,16 @@ bool ProfileManager::DismountProfile(std::string_view mount_path) {
 }
 bool ProfileManager::DismountProfileInternal(std::string_view mount_path,
     std::shared_ptr<ProfileReadMountNode> expected_read,
-    const HostProfileAccountEdit::State* edit) {
+    const HostProfileAccountEdit::State* edit,
+    const std::shared_ptr<ProfileRosterMountTicket>& roster) {
   if (xe::global_critical_region::is_held_by_current_thread()) {
     return false;
   }
+  if(roster && (!roster->data_ || roster->data_->manager!=account_commit_gate_ ||
+      expected_read || edit))return false;
+  // Keep native directory/device/transaction destructors outside both guards.
+  ProfileRosterMountTicket::Data::Resources retired_roster;
+  std::shared_ptr<const ProfileGpdPendingMutation> observed_pending;
   // Keep native directory/device destructors outside metadata/GCRC locks.
   std::shared_ptr<vfs::HostPathDevice> retiring_device;
   std::shared_ptr<vfs::Device> detached;
@@ -1062,6 +1140,40 @@ bool ProfileManager::DismountProfileInternal(std::string_view mount_path,
   }
   const auto key = xe::utf8::lower_ascii(path);
   const auto found = profile_mounts_.find(key);
+  if(roster) {
+    const auto& stamp=*roster->data_;
+    if(!stamp.owed)return stamp.mount_generation!=0;
+    if(!stamp.mount_generation || stamp.key!=key || !stamp.resources.device ||
+        !stamp.resources.view || !stamp.resources.source ||
+        !stamp.resources.guest_generation || !stamp.resources.managed_identity)return false;
+  }
+  const auto same_roster=[&] {
+    if(!roster)return true;
+    if(found==profile_mounts_.end())return false;
+    const auto& stamp=*roster->data_;const auto& resources=stamp.resources;
+    const auto& held=found->second;
+    return held.xuid==stamp.xuid && held.mount_generation==stamp.mount_generation &&
+        held.source_generation==stamp.source_generation && held.source_id==stamp.source_id &&
+        held.device_id==stamp.device_id && held.device==resources.device &&
+        held.view==resources.view && held.source==resources.source &&
+        held.guest_generation==resources.guest_generation &&
+        held.managed_identity==resources.managed_identity;
+  };
+  const auto discharge_roster=[&] {
+    if(!roster)return;
+    roster->data_->owed=false;
+    retired_roster=std::move(roster->data_->resources);
+  };
+  if(roster && !same_roster()) {
+    // A-to-B-to-A/alias reuse is not decrement authority. Only actual old
+    // namespace/view retirement settles the vanished OLD reference; the
+    // replacement record/device/account is never modified or retired here.
+    auto global=xe::global_critical_region::TryAcquire();
+    const auto& old=roster->data_->resources;
+    if(!global.owns_lock() || !old.device->namespace_retiring() || !old.view->retiring() ||
+        kernel_state_->file_system()->AcquireDevice(old.device->mount_path())==old.device)return false;
+    discharge_roster();return true;
+  }
   if (edit && (expected_read || !edit->mounted || !edit->mount_generation ||
       !edit->device || !edit->view)) { return false; }
   const bool same_edit = !edit || (found != profile_mounts_.end() &&
@@ -1095,18 +1207,52 @@ bool ProfileManager::DismountProfileInternal(std::string_view mount_path,
       --held.read_references;
       return true;
     }
+  } else if(roster) {
+    if(!held.references || !held.roster_references || held.roster_references>held.references)return false;
+    auto global=xe::global_critical_region::TryAcquire();
+    if(!global.owns_lock() || !held.device || held.device->storage()!=held.view)return false;
+    const auto registered=kernel_state_->file_system()->AcquireDevice(held.device->mount_path());
+    if(registered!=held.device && !(held.device->namespace_retiring() && held.view->retiring()))return false;
+    if(held.references>1 || held.read_references) {
+      --held.references;--held.roster_references;discharge_roster();return true;
+    }
   } else {
-    if (!held.references) { return false; }
+    // A generic/editor release owns only its own ordinary reference. It may
+    // never consume the last ref reserved for one of the opaque roster tickets.
+    if (!held.references || held.references<=held.roster_references) { return false; }
     if (held.references > 1 || held.read_references) {
       --held.references;
       return true;
     }
   }
+  const auto exact_mount_storage=[&](const auto& storage) {
+    return storage && storage->xuid()==held.xuid && storage->device()==held.device &&
+        storage->view()==held.view && storage->source()==held.source &&
+        storage->guest_generation()==held.guest_generation &&
+        storage->managed_identity()==held.managed_identity &&
+        storage->source_generation()==held.source_generation && storage->device_id()==held.device_id;
+  };
+  if(roster) {
+    const auto account=account_identities_.find(held.xuid);
+    // Logical Account retirement belongs to the exact original operation, not
+    // a late mount ref. A live matching producer is a real remaining conflict.
+    if(account!=account_identities_.end() && exact_mount_storage(account->second->storage()) &&
+        (!account->second->retired() || !account->second->writes_drained()))return false;
+    const auto pending_on_mount=[&](const std::shared_ptr<ProfileGpdModelAuthority>& model) {
+      if(!model || !exact_mount_storage(model->storage()))return false;
+      std::error_code error;observed_pending=model->Pending(error);
+      return bool(error) || bool(observed_pending);
+    };
+    if(const auto model=gpd_models_.find(held.xuid);
+        model!=gpd_models_.end() && pending_on_mount(model->second))return false;
+    for(const auto& model:retired_gpd_models_)if(pending_on_mount(model))return false;
+  }
   for (const auto& retired : retired_account_identities_) {
-    if (retired->storage()->xuid() == found->second.xuid &&
+    if ((roster?exact_mount_storage(retired->storage()):
+            retired->storage()->xuid()==found->second.xuid) &&
         !retired->writes_drained()) { return false; }
   }
-  if (!edit) {
+  if (!edit && !roster) {
     if (auto owner = account_identities_.find(found->second.xuid);
         owner != account_identities_.end() && owner->second->slot() == 0xFF) {
       owner->second->Retire();
@@ -1120,7 +1266,7 @@ bool ProfileManager::DismountProfileInternal(std::string_view mount_path,
   retiring_device = held.device;
   if (!retiring_device || retiring_device->storage() != held.view) { return false; }
   const auto registered = kernel_state_->file_system()->AcquireDevice(retiring_device->mount_path());
-  const bool edit_already_retired = edit && registered != retiring_device &&
+  const bool edit_already_retired = (edit || roster) && registered != retiring_device &&
       retiring_device->namespace_retiring() && held.view->retiring();
   if (registered != retiring_device && !edit_already_retired) { return false; }
   const auto account_owner = account_identities_.find(held.xuid);
@@ -1161,10 +1307,12 @@ bool ProfileManager::DismountProfileInternal(std::string_view mount_path,
     found->second.publication_lease->Retire();
   }
   if (auto owner = account_identities_.find(found->second.xuid);
-      owner != account_identities_.end() && owner->second->slot() == 0xFF &&
-      (!edit || exact_edit_account(owner->second))) {
+      owner != account_identities_.end() &&
+      (roster ? (exact_mount_storage(owner->second->storage()) && owner->second->retired()) :
+          (owner->second->slot()==0xFF && (!edit || exact_edit_account(owner->second))))) {
     retired_account = account_identities_.extract(owner);
   }
+  if(roster) {--held.references;--held.roster_references;discharge_roster();}
   retired_mount = profile_mounts_.extract(found);
   global.unlock();
   lock.unlock();

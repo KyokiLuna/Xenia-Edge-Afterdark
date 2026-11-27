@@ -396,6 +396,25 @@ class NativeProfileIdentityTasks final {
       return deadline!=Clock::time_point{} && now>=deadline;
     }
   };
+  // Actual-stop custody only. A completed parent can have left the normal
+  // tracked queues while an escaped child/Job still owns it. Capture the
+  // finite owning graph BEFORE the owner commits retirement; allocation
+  // failure leaves the original roots/edges unchanged. This helper adds no
+  // native return/free/completion fact and releases no resource under a lock.
+  template<typename Queue,typename Parents>
+  static Queue CaptureRetirementClosure(const Queue& roots,Parents&& parents) {
+    Queue retained;retained.reserve(roots.size());
+    const auto add=[&](const auto& value){
+      if(value && std::none_of(retained.begin(),retained.end(),
+          [&](const auto& held){return held.get()==value.get();}))retained.push_back(value);
+    };
+    for(const auto& root:roots)add(root);
+    for(size_t i=0;i<retained.size();++i){
+      // add() may reallocate retained while enumerating this holder's edges.
+      const auto current=retained[i];parents(current,add);
+    }
+    return retained;
+  }
   // A terminal queue has already had its original Task/read or pre-body
   // reservation ended by its producer. Capture only that queue on the real
   // host cut, even when unrelated native ownership is uncertain. Remaining
@@ -860,11 +879,88 @@ class NativeProfileIdentityTasks final {
     uint32_t available=0,kind=0,task=0,callback=0,argument=0,output=0,state=0;
     uint64_t source=0,generation=0,serial=0;Frame frame;bool closed=false;
   };
+  // Native releases the serial turn after the genuine C838 callback return,
+  // before Task final transition/free and before its outer E148 finishes Wait.
+  // This receipt identifies ONLY those exact copied-request transport nodes.
+  // It neither closes them nor grants any read/Commit/completion authority.
+  struct ProfileDataReturn {
+    Frame body;Birth child{};ProfileProducer producer;
+    std::optional<Birth> outer;
+    std::optional<ProfileProducer> outer_producer;
+    Frame outer_body;
+  };
+  std::optional<ProfileDataReturn> CaptureProfileDataReturn(Frame body,Birth birth) const {
+    const auto* child=FindBirthConst(birth.generation);
+    if(lost_ || !Match(body) || body.function!=0x8199C838 || !child ||
+       !SameBirth(child->birth,birth) || !child->published || !child->started ||
+       !child->returned || child->work!=body || child->callback!=body.function ||
+       !child->producer || !child->producer->published ||
+       !SameBirth(child->producer->birth,birth) || child->producer->callback!=body.function ||
+       child->producer->argument!=child->argument)return {};
+    ProfileDataReturn out{body,birth,*child->producer};
+    if(out.producer.owner.function==0x8199E3E0)return out;
+    if(out.producer.owner.function!=0x8199E148)return {};
+    for(const auto& node:nodes_)if(node && node->birth.origin==birth.origin &&
+        node->callback==0x8199E148 && node->work==out.producer.owner &&
+        node->published && node->started && !node->freed && node->producer &&
+        node->producer->published && node->producer->owner.function==0x8199E3E0 &&
+        SameBirth(node->producer->birth,node->birth) &&
+        node->producer->callback==node->callback && node->producer->argument==node->argument){
+      out.outer=node->birth;out.outer_producer=*node->producer;out.outer_body=node->work;return out;
+    }
+    return {};
+  }
+  bool SourceDataDependenciesClosed(uint64_t source,const ProfileDataReturn& data,
+      SourceBlocker* observation=nullptr) const {
+    // The concrete Owner additionally requires this same C838's authenticated
+    // publisher/read-Leave/protocol and other actual data-use closure before
+    // consuming this role. These are retained scalar genealogy checks only:
+    // a genuine later free/reuse may remove both original Node slots.
+    const auto valid_producer=[&](const ProfileProducer& p){
+      if(!p.owner_serial || !p.published || !p.native_bound ||
+         (p.schedule_returned && !p.schedule_succeeded) ||
+         !Match(p.owner) || !Match(p.schedule) ||
+         p.birth.origin!=source || !p.birth.generation || !Address(p.birth.task) ||
+         (p.callback!=0x8199C838 && p.callback!=0x8199E148) || !p.argument || !p.has_options)return false;
+      const auto& proof=p.output_proof;
+      const auto link=proof.kind==ProfileOutput::Kind::kAsyncPacket?
+          std::array<uint32_t,3>{0xFEu,proof.overlap,proof.packet}:std::array<uint32_t,3>{};
+      const auto output=CaptureProfileOutput(p.owner,p.schedule,p.output,proof.overlap,proof.packet,link);
+      return output && *output==proof;
+    };
+    if(!source || !Match(data.body) || data.body.function!=0x8199C838 ||
+       data.child.origin!=source || !data.child.generation || !Address(data.child.task) ||
+       !SameBirth(data.child,data.producer.birth) || !valid_producer(data.producer) ||
+       data.producer.callback!=0x8199C838 ||
+       (data.outer.has_value()!=data.outer_producer.has_value()))return false;
+    if(data.producer.owner.function==0x8199E3E0){
+      if(data.outer || data.outer_body!=Frame{} || data.producer.options[0]!=0x10000000u ||
+         !data.producer.options[1])return false;
+    }else if(data.producer.owner.function==0x8199E148){
+      if(!data.outer || !data.outer_producer || !Match(data.outer_body) ||
+         data.outer_body!=data.producer.owner || data.outer_body.function!=0x8199E148 ||
+         data.outer->origin!=source || SameBirth(*data.outer,data.child) || data.outer->task==data.child.task ||
+         !SameBirth(*data.outer,data.outer_producer->birth) || !valid_producer(*data.outer_producer) ||
+         data.outer_producer->owner.function!=0x8199E3E0 || data.outer_producer->callback!=0x8199E148 ||
+         data.outer_producer->owner_serial==data.producer.owner_serial ||
+         data.outer_producer->argument!=data.producer.argument ||
+         data.outer_producer->options!=std::array<uint32_t,2>{} ||
+         data.producer.options[0]!=0x14000000u || !data.producer.options[1])return false;
+    }else return false;
+    return SourceClosure(source,&data,observation);
+  }
   bool SourceDescendantsClosed(uint64_t source,SourceBlocker* observation=nullptr) const {
+    return SourceClosure(source,nullptr,observation);
+  }
+  bool SourceClosure(uint64_t source,const ProfileDataReturn* data,SourceBlocker* observation) const {
+
     if(observation){*observation={};observation->available=1;observation->source=source;}
     if(lost_){if(observation)observation->kind=1;return false;}
     if(!source){if(observation)observation->kind=2;return false;}
-    for(const auto& node:nodes_)if(node && node->birth.origin==source &&
+    const auto transport=[&](Birth birth){
+      return data && (SameBirth(birth,data->child) || (data->outer && SameBirth(birth,*data->outer)));
+    };
+    for(const auto& node:nodes_)if(node && node->birth.origin==source && !transport(node->birth) &&
         (!node->freed || node->persistent_active ||
          (!node->created_persistent && !node->resident_physical && !node->periodic_factory && !node->execution_only &&
           !node->returned && !(node->schedule_rejected && !node->started)))){
@@ -883,6 +979,10 @@ class NativeProfileIdentityTasks final {
       return false;
     }
     for(const auto& call:schedules_)if(call && call->origin==source){
+      // A worker may return before its creator's Schedule own-return. Keep
+      // that real Schedule for reclamation, but it owns the same copied input.
+      if(data && call->producer && transport(call->producer->birth) &&
+         call->producer->published && call->birth==call->producer->birth.generation)continue;
       if(observation){
         observation->kind=4;observation->available|=4;observation->generation=call->birth;
         observation->serial=call->serial;observation->frame=call->frame;

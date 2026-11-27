@@ -19,6 +19,10 @@ class NativeProfileIdentityTaskTestAccess final {
   using TransportReturn=NativeSystemTaskContinuation::TransportReturn;
   static void RejectedScheduleLifecycle();
   static void PreparedRefusalCallbackLifecycle();
+  template<typename Queue,typename Parents>
+  static Queue CaptureRetirementClosure(const Queue& roots,Parents&& parents){
+    return Ledger::CaptureRetirementClosure(roots,std::forward<Parents>(parents));
+  }
   template<typename Queue>
   static HostReapLane CaptureHostReap(bool retired,bool healthy,Queue& terminal,Queue& captured){
     return Ledger::CaptureHostReap(retired,healthy,terminal,captured);
@@ -44,6 +48,10 @@ class NativeProfileIdentityTaskTestAccess final {
   struct ExecutionBorn {Birth birth;uint64_t producer;Frame frame,publication;};
   static ExecutionBorn ExecutionAllocate(Ledger&,uint32_t,uint32_t=1,uint32_t=0x901159C8,bool=false,uint32_t=3);
   static void ExecutionFree(Ledger&,Birth,uint32_t=0x7080F000);
+  struct ProfileDataFixture;
+  static void ProfileDataReturnLifecycle(bool);
+  static void ProfileDataReturnOtherWorkAndFailures();
+  static void ProfileDataReturnHistoricalRefusals();
   struct IdentityServiceFixture;
   static void IdentityServiceProducerAndCopyAbi();
   static void IdentityServiceProfileOutputTransport();
@@ -1130,11 +1138,109 @@ class NativeIdentityWakeOwnerTestAccess final {
     REQUIRE(wake.ReturnWorker(*next,body));CHECK(wake.persistent_.origin==1);CHECK_FALSE(wake.lost());
   }
   static void PendingAndReuseNeverBecomeProof(){
-    Wake wake(root,physical,2);wake.CloseOldIngress();CHECK_FALSE(wake.ArmPrepared(3,1));
-    CHECK_FALSE(wake.MarkNativeCachePublished(3));CHECK_FALSE(wake.InvocationsDrained(1));
+    Wake wake(root,physical,2);wake.CloseOldIngress();
+    CHECK_FALSE(wake.ArmPrepared(3,std::nullopt)); // No actual pending-word observation.
+    REQUIRE(wake.ArmPrepared(3,1)); // A carried bit is current-cache demand, not old data.
+    CHECK_FALSE(wake.InvocationsDrained(1));
+    REQUIRE(wake.MarkNativeCachePublished(3));
+    CHECK_FALSE(wake.FinishJoinedOrigin(3,0)); // No actual issued wake/whole refresh receipt.
     Wake fresh(root,physical,2);auto reused=physical;reused.generation++;
     CHECK_FALSE(fresh.EnterWorker(F(0x816F2618),reused));CHECK(fresh.persistent_.generation==physical.generation);
   }
+  static void CarriedPendingControlBeforePublication(bool old_set_pending){
+    Wake wake(root,physical,2);wake.CloseOldIngress();
+    const auto producer=F(0x816F25E0,0x707DF710,0x816DCA20);
+    auto reschedule=producer;reschedule.function=0x816B7B68;
+    auto tail=producer;tail.function=0x816B7600;
+    const std::array<uint64_t,4> args{physical.task,0xFFFFFFFF815F8E38ull,15,0};
+    const auto old=wake.EnterWake(producer,2,old_set_pending);REQUIRE(old);
+    CHECK_FALSE(wake.ArmPrepared(3,1)); // Real control own-return is still outstanding.
+    REQUIRE(wake.ReachNativeReschedule(*old,reschedule,physical));
+    REQUIRE(wake.MatchesNativeRescheduleTail(*old,*old,producer,reschedule,tail,physical.task|1u,args));
+    REQUIRE(wake.ReturnNativeReschedule(*old,reschedule));
+    REQUIRE(wake.ArmPrepared(3,1)); // No invented pending clear or prior worker return.
+    const auto next=wake.EnterWake(producer,3,true);REQUIRE(next);
+    REQUIRE(wake.ReachNativeReschedule(*next,reschedule,physical));
+    REQUIRE(wake.MatchesNativeRescheduleTail(*next,*next,producer,reschedule,tail,physical.task,args));
+    const auto body=F(0x816F2618,0x94010000,0x816B8200);
+    CHECK_FALSE(wake.ReserveWorker(body,physical)); // Before actual0A, only control runs.
+    REQUIRE(wake.MarkNativeCachePublished(3));
+    const auto reserved=wake.ReserveWorker(body,physical);REQUIRE(reserved);
+    CHECK(wake.RetainedSource(*reserved)==3);
+    CHECK_FALSE(wake.DataUsesClosed());
+    CHECK_FALSE(wake.SupersedePublished(3)); // No prebody-to-Core phase race.
+    CHECK_FALSE(wake.ArmPrepared(4,0));
+    CHECK_FALSE(wake.InvocationsDrained(0));
+    REQUIRE(wake.AdmitWorkerBody(*reserved,body));
+    CHECK_FALSE(wake.CancelReservedWorker(*reserved,body)); // Actual entered body must return.
+    const auto refresh=F(0x816E3A98,body.sp-0xB0,0x816F2668);
+    REQUIRE(wake.EnterRefreshChild(*reserved,refresh));
+    REQUIRE(wake.ReturnRefreshChild(*reserved,refresh));
+    const auto observed=wake.ReturnWorker(*reserved,body);REQUIRE(observed);
+    CHECK(observed->prepared_origin==3);CHECK(observed->wake_sequence>0);
+    CHECK(observed->whole_worker_returned);CHECK(observed->refresh_child_returned);
+    CHECK_FALSE(wake.FinishJoinedOrigin(3,0)); // The native Reschedule tail still owns control.
+    REQUIRE(wake.ReturnNativeReschedule(*next,reschedule));
+    CHECK_FALSE(wake.FinishJoinedOrigin(3,1)); // Actual pending demand is not swallowed.
+    REQUIRE(wake.FinishJoinedOrigin(3,0));
+    CHECK(wake.persistent_.generation==physical.generation);CHECK_FALSE(wake.lost());
+  }
+  static void SequenceZeroNeverAcknowledgesPublication(){
+    Wake wake(root,physical,2);wake.CloseOldIngress();REQUIRE(wake.ArmPrepared(3,1));
+    REQUIRE(wake.MarkNativeCachePublished(3));
+    const auto body=F(0x816F2618,0x94010000,0x816B8200);
+    const auto reserved=wake.ReserveWorker(body,physical);REQUIRE(reserved);
+    REQUIRE(wake.AdmitWorkerBody(*reserved,body));
+    const auto refresh=F(0x816E3A98,body.sp-0xB0,0x816F2668);
+    REQUIRE(wake.EnterRefreshChild(*reserved,refresh));REQUIRE(wake.ReturnRefreshChild(*reserved,refresh));
+    const auto observed=wake.ReturnWorker(*reserved,body);REQUIRE(observed);
+    CHECK(observed->whole_worker_returned);CHECK(observed->refresh_child_returned);
+    CHECK(observed->prepared_origin==0);CHECK(observed->wake_sequence==0);
+    CHECK(wake.InvocationsDrained(0));CHECK_FALSE(wake.FinishJoinedOrigin(3,0));
+    // A superseded current-cache demand is not retroactively assigned a fake
+    // per-publication refresh. The real next native source must publish itself.
+    REQUIRE(wake.SupersedePublished(3));REQUIRE(wake.ArmPrepared(4,0));
+    CHECK_FALSE(wake.FinishJoinedOrigin(3,0));REQUIRE(wake.MarkNativeCachePublished(4));
+    const auto producer=F(0x816F25E0);auto reschedule=producer;reschedule.function=0x816B7B68;
+    const auto key=wake.EnterWake(producer,4,true);REQUIRE(key);
+    REQUIRE(wake.ReachNativeReschedule(*key,reschedule,physical));
+    const auto work=wake.EnterWorker(body,physical);REQUIRE(work);
+    REQUIRE(wake.EnterRefreshChild(*work,refresh));REQUIRE(wake.ReturnRefreshChild(*work,refresh));
+    REQUIRE(wake.ReturnWorker(*work,body));REQUIRE(wake.ReturnNativeReschedule(*key,reschedule));
+    REQUIRE(wake.FinishJoinedOrigin(4,0));CHECK_FALSE(wake.lost());
+  }
+  static void ReservedCancellationAndRestartRetainActualBoundaries(){
+    Wake wake(root,physical,2);
+    const auto body=F(0x816F2618,0x94010000,0x816B8200);
+    const auto reserved=wake.ReserveWorker(body,physical);REQUIRE(reserved);
+    auto wrong=body;wrong.sp-=0x10;
+    CHECK_FALSE(wake.AdmitWorkerBody(*reserved,wrong));
+    CHECK_FALSE(wake.CancelReservedWorker(*reserved,wrong));
+    CHECK_FALSE(wake.CancelReservedWorker(Wake::Work{reserved->serial+1},body));
+    CHECK_FALSE(wake.DataUsesClosed());
+    wake.CloseOldIngress();CHECK_FALSE(wake.ArmPrepared(3,0));
+    REQUIRE(wake.CancelReservedWorker(*reserved,body));
+    CHECK(wake.DataUsesClosed());CHECK(wake.RetainedSource(*reserved)==0);
+    CHECK_FALSE(wake.FinishJoinedOrigin(2,0)); // Cancel is not a callback/refresh return.
+    REQUIRE(wake.ArmPrepared(3,0));REQUIRE(wake.MarkNativeCachePublished(3));
+    const auto entered=wake.ReserveWorker(body,physical);REQUIRE(entered);
+    REQUIRE(wake.AdmitWorkerBody(*entered,body));
+    CHECK_FALSE(wake.AdmitWorkerBody(*entered,body));
+    CHECK_FALSE(wake.CancelReservedWorker(*entered,body));
+    CHECK_FALSE(wake.FinishJoinedOrigin(3,0));
+    // This helper is the existing actual-stop metadata boundary; the fixture
+    // does not manufacture a native return, pending exchange or Task free.
+    wake.RetireAtActualKernelStop();CHECK_FALSE(wake.FinishJoinedOrigin(3,0));
+    CHECK_FALSE(wake.ReserveWorker(body,physical));CHECK_FALSE(wake.EnterWake(F(0x816F25E0),3,true));
+    auto next_root=root;++next_root.generation;
+    auto next_birth=physical;++next_birth.generation;
+    Wake restarted(next_root,next_birth,9);auto next_body=body;next_body.root=next_root;
+    const auto next=restarted.ReserveWorker(next_body,next_birth);REQUIRE(next);
+    CHECK_FALSE(restarted.CancelReservedWorker(*reserved,body)); // Old frame/root cannot consume restart ownership.
+    REQUIRE(restarted.CancelReservedWorker(*next,next_body));CHECK(restarted.DataUsesClosed());
+    CHECK_FALSE(restarted.lost());
+  }
+
 };
 TEST_CASE("Native reschedule tails accept canonical DWORDs without releasing whole ownership", "[identity_wake][abi][lifetime]"){
  NativeIdentityWakeOwnerTestAccess::CanonicalRescheduleTailRetainsWholeCaller();
@@ -1153,6 +1259,17 @@ TEST_CASE("First wake invariant failure survives later worker errors", "[native_
 }
 TEST_CASE("Pending bits and reused Task addresses cannot supply wake readiness", "[identity_wake][source]"){
  NativeIdentityWakeOwnerTestAccess::PendingAndReuseNeverBecomeProof();
+}
+TEST_CASE("Prepared wake control retains carried pending through exact native tails before publication", "[identity_wake][wake_current][abi][lifetime]"){
+ NativeIdentityWakeOwnerTestAccess::CarriedPendingControlBeforePublication(GENERATE(false,true));
+}
+TEST_CASE("Wake prebody reservations preserve current reads without inventing publication refresh", "[identity_wake][wake_current][source][lifetime]"){
+ SECTION("Sequence zero is current-cache work without a per-publication acknowledgment"){
+  NativeIdentityWakeOwnerTestAccess::SequenceZeroNeverAcknowledgesPublication();
+ }
+ SECTION("Only an unentered reservation cancels and old frame keys cannot consume restart custody"){
+  NativeIdentityWakeOwnerTestAccess::ReservedCancellationAndRestartRetainActualBoundaries();
+ }
 }
 TEST_CASE("Foreign Avatar Task generations remain execution-only across caller and worker release", "[native_profile_identity][task_close]"){
  NativeProfileIdentityTaskTestAccess::ForeignAvatarGenerationAcrossCallerAndWorker();
@@ -2386,8 +2503,9 @@ void NativeProfileIdentityTaskTestAccess::ProfileCallbackThenFree(
  REQUIRE(ledger.ReturnDeletingDestructor(deleting));REQUIRE(ledger.ReturnClose(close,0));
 }
 void NativeProfileIdentityTaskTestAccess::ProfileOutputStackAndPacketAbi(){
- for(const auto function:{0x8199E3E0u,0x8199E148u}){
-  const auto owner=F(function,0x707DFCF0,0x90103544);
+ for(const auto function:{0x8199E3E0u,0x8199E148u})for(const auto callback:{0x8199C838u,0x8199E148u}){
+  if(function==0x8199E148 && callback==0x8199E148)continue; // Real inner worker only queues C838.
+  const auto owner=F(function,0x707DFCF0,function==0x8199E3E0?0x8199C6A4:0x816B8B64);
   const auto body=owner.sp-Ledger::ProfileProducerFrameBytes(function);
   const auto schedule=F(0x816BA440,body,function==0x8199E3E0?0x8199F01C:0x8199E248);
   const auto output=body+(function==0x8199E3E0?0x5C:0x50);
@@ -2396,10 +2514,23 @@ void NativeProfileIdentityTaskTestAccess::ProfileOutputStackAndPacketAbi(){
   CHECK_FALSE(Ledger::CaptureProfileOutput(owner,schedule,output+4,0,0,{}));
   CHECK_FALSE(Ledger::CaptureProfileOutput(owner,schedule,output,0,0x40172000,{}));
   CHECK_FALSE(Ledger::CaptureProfileOutput(owner,schedule,output,0,0,{0xFE,0,0}));
-  Ledger ledger(root);const auto born=ProfileAllocate(ledger,owner,811,0x8199C838,0x40171770);
+  Ledger ledger(root);const auto born=ProfileAllocateWithOutput(ledger,owner,811,callback,0x40171770,*proof,true,nullptr);
   const auto* producer=ledger.ProfileProducerFor(born);REQUIRE(producer);
   CHECK(producer->output_proof.kind==Ledger::ProfileOutput::Kind::kStack);
   CHECK(producer->output==output);CHECK(producer->schedule_returned);
+  const auto* node=ledger.FindBirthConst(born.generation);REQUIRE(node);
+  CHECK(node->published);CHECK_FALSE(node->started);CHECK_FALSE(node->returned);
+  CHECK_FALSE(ledger.SourceDescendantsClosed(born.origin));
+  // The null-overlap/no-wait producer can close its real returned output
+  // reference while the queued callback remains pending. Observation of that
+  // close never supplies callback completion or a native free receipt.
+  ledger.ObserveProfileOwnerClose(F(0x816B7490,schedule.sp,function==0x8199E3E0?0x8199F0D0:0x8199E398),born);
+  REQUIRE(ledger.ProfileProducerFor(born));CHECK(ledger.ProfileProducerFor(born)->owner_close_entered);
+  CHECK_FALSE(ledger.SourceDescendantsClosed(born.origin));
+  auto callback_frame=F(callback,0x7080F000,0x816B8B64);
+  callback_frame.thread=4;callback_frame.pcr+=0x1000;
+  ProfileCallbackThenFree(ledger,born,callback_frame);
+  CHECK(ledger.SourceDescendantsClosed(born.origin));CHECK_FALSE(ledger.lost());
  }
  const auto owner=F(0x8199E3E0,0x707DFCF0,0x90103544);
  const auto schedule=F(0x816BA440,owner.sp-0x190,0x8199F01C);
@@ -2495,18 +2626,19 @@ void NativeProfileIdentityTaskTestAccess::ProfileAsyncDoesNotGrantStackControls(
  ProfileCallbackThenFree(ledger,born,callback);CHECK_FALSE(ledger.lost());
 }
 void NativeProfileIdentityTaskTestAccess::ProfileOutputPrepublicationLifetime(){
- for(const auto callback_at:{0x8199C838u,0x8199E148u}){
- Ledger ledger(root);const auto owner=F(0x8199E3E0,0x707DFCF0,0x90103544);
+ for(bool async:{false,true})for(const auto callback_at:{0x8199C838u,0x8199E148u}){
+ Ledger ledger(root);const auto owner=F(0x8199E3E0,0x707DFCF0,0x8199C6A4);
  const auto schedule=F(0x816BA440,owner.sp-0x190,0x8199F01C);
- const uint32_t packet=0x40172000,overlap=0x40173000;
- auto linkage=std::array<uint32_t,3>{0xFE,overlap,packet};
- const auto proof=Ledger::CaptureProfileOutput(owner,schedule,packet+0x18,overlap,packet,linkage);REQUIRE(proof);
- const auto call=ledger.BeginSchedule(schedule,101,callback_at,0x40170B40,schedule.sp+0x70,packet+0x18);REQUIRE(call);
+ const uint32_t packet=async?0x40172000:0,overlap=async?0x40173000:0;
+ const uint32_t output=async?packet+0x18:schedule.sp+0x5C;
+ auto linkage=async?std::array<uint32_t,3>{0xFE,overlap,packet}:std::array<uint32_t,3>{};
+ const auto proof=Ledger::CaptureProfileOutput(owner,schedule,output,overlap,packet,linkage);REQUIRE(proof);
+ const auto call=ledger.BeginSchedule(schedule,101,callback_at,0x40170B40,schedule.sp+0x70,output);REQUIRE(call);
  REQUIRE(ledger.BindProfileProducer(call,815,owner,std::array<uint32_t,2>{0x10000000,0x401E6982},*proof));
  const auto* pending=ledger.FindSchedule(call);REQUIRE(pending);REQUIRE(pending->producer);
  CHECK_FALSE(pending->birth);CHECK_FALSE(pending->producer->published);CHECK_FALSE(pending->producer->native_bound);
  linkage={}; // Caller-local observation storage is not borrowed by the receipt.
- CHECK(pending->producer->output_proof==*proof);CHECK(pending->output==packet+0x18);
+ CHECK(pending->producer->output_proof==*proof);CHECK(pending->output==output);
  const auto allocation=F(0x816B9A18,schedule.sp-0x90,0x816BA46C);
  REQUIRE(ledger.EnterAllocation(call,allocation,schedule.sp+0x70,allocation.sp+0x50));
  const auto born=ledger.ReturnAllocation(call,allocation,0,0x40171770);REQUIRE(born);
@@ -2649,6 +2781,7 @@ void NativeProfileIdentityTaskTestAccess::ProfileInitializerErrorCompletionAbi()
  auto other_owner=owner;other_owner.function=0x8199E148;
  CHECK_FALSE(Ledger::MatchesInitializerErrorCompletion(other_owner,completion,overlap,overlap,0x65B,0x80004004,0));
  CHECK_FALSE(Ledger::MatchesInitializerErrorCompletion(owner,completion,0,overlap,0x65B,0x80004004,0));
+ CHECK_FALSE(Ledger::MatchesInitializerErrorCompletion(owner,completion,0,0,0x65B,0x80004004,0));
  CHECK_FALSE(Ledger::MatchesInitializerErrorCompletion(owner,completion,overlap,overlap+4,0x65B,0x80004004,0));
  CHECK_FALSE(Ledger::MatchesInitializerErrorCompletion(owner,completion,overlap+2,overlap+2,0x65B,0x80004004,0));
  CHECK_FALSE(Ledger::MatchesInitializerErrorCompletion(owner,completion,overlap,overlap,0x65A,0x80004004,0));
@@ -3547,5 +3680,253 @@ TEST_CASE("Proved pre-Schedule admission refusal owns no callback or WaitClose c
  Access::PreparedIngress entered;REQUIRE(entered.Bind(89,149));
  REQUIRE(entered.BeginEntry(89,149));
  CHECK_FALSE(entered.RefuseUnscheduledTransport(89,149,true,true,true));
+}
+} // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+// Uses the real Schedule/allocation/publication/work/free ledger, with the
+// actual native zero-options E148 outer and separate serial C838 child. No
+// fixture creates a native Task, executes PPC, or issues a PM/read completion.
+struct NativeProfileIdentityTaskTestAccess::ProfileDataFixture {
+  struct Queued {
+    Frame owner,schedule;Birth birth;uint64_t call=0;
+    std::array<uint32_t,2> native{};
+  } child;
+  Ledger ledger{root};std::optional<Queued> outer;
+  const uint64_t source=101;
+  const uint32_t argument=0x40170B40;
+  Frame body=F(0x8199C838,0x707CD000,0x816B8B64);
+  Queued Queue(Frame owner,uint64_t serial,uint32_t callback,uint32_t task,
+               std::array<uint32_t,2> options,bool finish) {
+    auto schedule=owner;schedule.function=0x816BA440;
+    schedule.sp-=Ledger::ProfileProducerFrameBytes(owner.function);
+    schedule.lr=owner.function==0x8199E148?0x8199E248:0x8199F01C;
+    const auto parameters=schedule.sp+(owner.function==0x8199E148?0x58:0x70);
+    const auto output=schedule.sp+(owner.function==0x8199E148?0x50:0x5C);
+    const auto call=ledger.BeginSchedule(schedule,source,callback,argument,parameters,output);REQUIRE(call);
+    REQUIRE(ledger.BindProfileProducer(call,serial,owner,options,Ledger::ProfileOutput{}));
+    auto allocation=schedule;allocation.function=0x816B9A18;allocation.sp-=0x90;allocation.lr=0x816BA46C;
+    REQUIRE(ledger.EnterAllocation(call,allocation,parameters,allocation.sp+0x50));
+    const auto born=ledger.ReturnAllocation(call,allocation,0,task);REQUIRE(born);
+    auto publication=allocation;publication.function=0x816B9BB8;publication.lr=0x816BA4D8;
+    REQUIRE(ledger.BeforePublication(call,publication,task,callback,argument,task|1u));
+    const std::array<uint32_t,2> native{options[0]|0x04A00004u,options[1]};
+    REQUIRE(ledger.BindProfileNativeState(call,task,native[0],native[1]));
+    if(finish)REQUIRE(ledger.ReturnSchedule(call,schedule,0,native));
+    return {owner,schedule,*born,call,native};
+  }
+  explicit ProfileDataFixture(bool nested,bool finish=false) {
+    auto issuer=F(0x8199E3E0,0x707DFCF0,0x8199C6A4);
+    if(nested){
+      outer=Queue(issuer,801,0x8199E148,0x40171000,{},finish);
+      auto worker=F(0x8199E148,0x707D0000,0x816B8B64);worker.thread=4;worker.pcr+=0x1000;
+      REQUIRE(ledger.EnterWork(worker,outer->birth.task,argument));
+      child=Queue(worker,802,0x8199C838,0x40171100,{0x14000000,0x401E6982},finish);
+    }else child=Queue(issuer,801,0x8199C838,0x40171100,{0x10000000,0x401E6982},finish);
+    body.thread=5;body.pcr+=0x2000;
+  }
+  Ledger::ProfileDataReturn ReturnChild() {
+    CHECK_FALSE(ledger.CaptureProfileDataReturn(body,child.birth));
+    REQUIRE(ledger.EnterWork(body,child.birth.task,argument));
+    CHECK_FALSE(ledger.CaptureProfileDataReturn(body,child.birth));
+    REQUIRE(ledger.ReturnWork(body,child.birth));
+    const auto returned=ledger.CaptureProfileDataReturn(body,child.birth);REQUIRE(returned);
+    return *returned;
+  }
+  void Free(Birth birth,uint32_t sp=0x707BF000) {
+    const auto close=F(0x816B7490,sp,0x816B8D94);REQUIRE(ledger.EnterClose(close,birth.task));
+    auto deleting=close;deleting.function=0x816B7D98;deleting.sp-=0x60;deleting.lr=0x816B74E8;
+    REQUIRE(ledger.EnterDeletingDestructor(deleting,birth.task,1));
+    auto freeing=deleting;freeing.function=0x816E6AB0;freeing.sp-=0x70;freeing.lr=0x816B7DC8;
+    REQUIRE(ledger.EnterTaskFree(freeing,birth.task));REQUIRE(ledger.ReturnTaskFree(freeing));
+    REQUIRE(ledger.ReturnDeletingDestructor(deleting));REQUIRE(ledger.ReturnClose(close,0));
+  }
+};
+void NativeProfileIdentityTaskTestAccess::ProfileDataReturnLifecycle(bool nested) {
+  ProfileDataFixture f(nested);
+  const auto returned=f.ReturnChild();
+  CHECK(returned.outer.has_value()==nested);
+  CHECK_FALSE(f.ledger.SourceDescendantsClosed(f.source));
+  REQUIRE(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  REQUIRE(f.ledger.FindSchedule(f.child.call));
+  CHECK_FALSE(f.ledger.FindSchedule(f.child.call)->producer->schedule_returned);
+  CHECK_FALSE(f.ledger.FindBirthConst(f.child.birth.generation)->freed);
+  if(nested){
+    REQUIRE(f.outer);REQUIRE(returned.outer);REQUIRE(returned.outer_producer);
+    CHECK(Ledger::SameBirth(*returned.outer,f.outer->birth));
+    CHECK_FALSE(Ledger::SameBirth(f.outer->birth,f.child.birth));
+    CHECK((returned.outer_producer->options==std::array<uint32_t,2>{}));
+    CHECK(returned.producer.owner==returned.outer_body);
+    CHECK_FALSE(f.ledger.FindBirthConst(f.outer->birth.generation)->returned);
+  }
+  // Real free can retire/reuse the ledger slot before Schedule returns. The
+  // immutable historical return remains usable without later live lookup.
+  f.Free(f.child.birth);
+  REQUIRE(f.ledger.ReturnSchedule(f.child.call,f.child.schedule,0));
+  if(f.outer){
+    REQUIRE(f.ledger.ReturnWork(returned.outer_body,f.outer->birth));
+    f.Free(f.outer->birth,0x707BE000);
+    REQUIRE(f.ledger.ReturnSchedule(f.outer->call,f.outer->schedule,0));
+  }
+  REQUIRE(f.ledger.SourceDescendantsClosed(f.source));
+  REQUIRE(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  if(f.outer){
+    // Occupy the first freed slot (the original outer) so the next genuine
+    // allocation also replaces the child's old ledger slot, not just its
+    // numeric Task address. Different source work grants no exemption here.
+    const auto other=Allocate(f.ledger,202,0x40171400);(void)other;
+    CHECK_FALSE(f.ledger.FindBirthConst(f.outer->birth.generation));
+  }
+  const auto replacement=Allocate(f.ledger,f.source,f.child.birth.task);
+  REQUIRE(replacement.generation!=f.child.birth.generation);REQUIRE(replacement.task==f.child.birth.task);
+  CHECK_FALSE(f.ledger.FindBirthConst(f.child.birth.generation));
+  CHECK_FALSE(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  auto worker=F(0x8199C838,0x707CC000,0x816B8B64);worker.thread=6;worker.pcr+=0x3000;
+  ProfileCallbackThenFree(f.ledger,replacement,worker);
+  CHECK(f.ledger.SourceDataDependenciesClosed(f.source,returned));CHECK_FALSE(f.ledger.lost());
+}
+void NativeProfileIdentityTaskTestAccess::ProfileDataReturnOtherWorkAndFailures() {
+  ProfileDataFixture f(true);const auto returned=f.ReturnChild();
+  // An unrelated same-source allocation/Schedule is not either copied
+  // transport. Genuine queue/allocation failure ends only that actual call.
+  auto schedule=F(0x816BA440,0x707A0000,0x8199C68C);
+  const auto pending=f.ledger.BeginSchedule(schedule,f.source,0x8199C838,0x40175000,0,schedule.sp+0x50);REQUIRE(pending);
+  CHECK_FALSE(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  auto allocation=schedule;allocation.function=0x816B9A18;allocation.sp-=0x90;allocation.lr=0x816BA46C;
+  REQUIRE(f.ledger.EnterAllocation(pending,allocation,0,allocation.sp+0x50));
+  CHECK_FALSE(f.ledger.ReturnAllocation(pending,allocation,0x8007000E,{}));
+  CHECK_FALSE(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  REQUIRE(f.ledger.ReturnSchedule(pending,schedule,0x8007000E));
+  REQUIRE(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  const auto data=Allocate(f.ledger,f.source,0x40171200);
+  CHECK_FALSE(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  auto body=F(0x8199C838,0x7079E000,0x816B8B64);body.thread=6;body.pcr+=0x3000;
+  REQUIRE(f.ledger.EnterWork(body,data.task,0x92002000));
+  REQUIRE(f.ledger.ReturnWork(body,data));
+  // Another returned callback is not this issued C838/outer genealogy.
+  CHECK_FALSE(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  f.Free(data,0x7079C000);REQUIRE(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  const auto other=Allocate(f.ledger,202,0x40171300);(void)other;
+  CHECK(f.ledger.SourceDataDependenciesClosed(f.source,returned));
+  CHECK_FALSE(f.ledger.SourceDataDependenciesClosed(202,returned));
+  {
+    ProfileDataFixture canceled(false,true);
+    const auto parent=ProfileParent(canceled.ledger);
+    const auto* producer=canceled.ledger.ProfileProducerFor(canceled.child.birth);REQUIRE(producer);
+    Ledger::ProfileControl cancel;
+    auto at=producer->schedule;at.function=0x816B9F08;at.lr=0x8199F0C0;
+    REQUIRE(cancel.Enter(*producer,801,canceled.child.owner,at,canceled.child.birth,parent,canceled.child.birth.task|1u));
+    cancel.body_admitted=true;REQUIRE(cancel.Return(at,canceled.child.birth,parent));
+    REQUIRE(canceled.ledger.ObserveProfileCancelState(canceled.child.birth,producer->native_flags&~0x10000000u,producer->native_data));
+    CHECK_FALSE(canceled.ledger.CaptureProfileDataReturn(canceled.body,canceled.child.birth));
+    CHECK_FALSE(canceled.ledger.SourceDescendantsClosed(canceled.source));
+    canceled.Free(canceled.child.birth);
+    // Cancel+free without the independently observed skipped-callback cut
+    // cannot invent a profile callback own-return or whole source closure.
+    CHECK_FALSE(canceled.ledger.SourceDescendantsClosed(canceled.source));
+    CHECK_FALSE(canceled.ledger.CaptureProfileDataReturn(canceled.body,canceled.child.birth));
+  }
+  {
+    ProfileDataFixture failed(false);
+    REQUIRE(failed.ledger.ReturnSchedule(failed.child.call,failed.child.schedule,0x8007000E));
+    CHECK_FALSE(failed.ledger.CaptureProfileDataReturn(failed.body,failed.child.birth));
+    CHECK_FALSE(failed.ledger.SourceDescendantsClosed(failed.source));
+    failed.Free(failed.child.birth);
+    CHECK(failed.ledger.SourceDescendantsClosed(failed.source));
+    CHECK_FALSE(failed.ledger.CaptureProfileDataReturn(failed.body,failed.child.birth));
+  }
+}
+void NativeProfileIdentityTaskTestAccess::ProfileDataReturnHistoricalRefusals() {
+  ProfileDataFixture nested(true,true);const auto issued=nested.ReturnChild();
+  REQUIRE(nested.ledger.SourceDataDependenciesClosed(nested.source,issued));
+  auto foreign=root;++foreign.generation;Ledger another(foreign);
+  CHECK_FALSE(another.SourceDataDependenciesClosed(nested.source,issued));
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source+1,issued));
+  auto bad=issued;bad.body.root=foreign;
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source,bad));
+  bad=issued;bad.outer->origin++;
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source,bad));
+  bad=issued;bad.outer->generation++;
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source,bad));
+  bad=issued;bad.outer_producer->argument+=8;
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source,bad));
+  bad=issued;bad.outer_body.root=foreign;
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source,bad));
+  bad=issued;bad.outer_producer->options={0x10000000,0x401E6982};
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source,bad));
+  bad=issued;bad.outer_producer->owner_serial=bad.producer.owner_serial;
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source,bad));
+  bad=issued;bad.producer.native_bound=false;
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source,bad));
+  bad=issued;bad.producer.schedule_succeeded=false;
+  CHECK_FALSE(nested.ledger.SourceDataDependenciesClosed(nested.source,bad));
+  ProfileDataFixture direct(false,true);const auto direct_return=direct.ReturnChild();
+  REQUIRE(direct.ledger.SourceDataDependenciesClosed(direct.source,direct_return));
+  auto unexpected=direct_return;unexpected.outer_body.root=root; // Nonempty but invalid Frame is not an absent outer.
+  CHECK_FALSE(direct.ledger.SourceDataDependenciesClosed(direct.source,unexpected));
+  unexpected=direct_return;unexpected.outer=issued.outer;unexpected.outer_producer=issued.outer_producer;unexpected.outer_body=issued.outer_body;
+  CHECK_FALSE(direct.ledger.SourceDataDependenciesClosed(direct.source,unexpected));
+  CHECK_FALSE(nested.ledger.lost());CHECK_FALSE(direct.ledger.lost());
+}
+TEST_CASE("Profile data return separates the actual serial callback from Schedule and native free",
+          "[identity_task][profile_data_return][lifetime]") {
+  NativeProfileIdentityTaskTestAccess::ProfileDataReturnLifecycle(GENERATE(false,true));
+}
+TEST_CASE("Profile data return preserves unrelated data queue failure and cancellation duties",
+          "[identity_task][profile_data_return][cancel][queue]") {
+  NativeProfileIdentityTaskTestAccess::ProfileDataReturnOtherWorkAndFailures();
+}
+TEST_CASE("Historical profile data return refuses foreign roots sources and reused producer genealogy",
+          "[identity_task][profile_data_return][genealogy]") {
+  NativeProfileIdentityTaskTestAccess::ProfileDataReturnHistoricalRefusals();
+}
+} // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Actual-stop ownership capture retains escaped parents diamonds and cycles before releasing resources",
+          "[identity_task][host_retirement][retirement_graph][lifetime]") {
+ using Access=NativeProfileIdentityTaskTestAccess;
+ struct Resource {
+  uint32_t& released;bool& locked;bool& under_lock;
+  ~Resource(){++released;under_lock|=locked;}
+ };
+ struct Holder {
+  uint64_t serial=0;std::shared_ptr<Resource> resource;
+  std::vector<std::shared_ptr<Holder>> parents;
+  bool native_returned=false,native_freed=false;
+ };
+ uint32_t released=0;bool locked=false,under_lock=false;
+ const auto make=[&](uint64_t serial){auto out=std::make_shared<Holder>();out->serial=serial;
+  out->resource=std::shared_ptr<Resource>(new Resource{released,locked,under_lock});return out;};
+ auto old=make(10),parent=make(20),child=make(30),other=make(40);
+ // Old/parent already left the normal tracked vectors. Both children retain
+ // the same parent; an escaped client and a cycle keep heap holders alive.
+ child->parents={parent};other->parents={parent};parent->parents={old};old->parents={child};
+ auto escaped_parent=parent;
+ // Cleanup is armed before any assertion, including allocation/capture
+ // failures. Weak custody avoids substituting another strong graph owner.
+ struct Cleanup {
+  bool& locked;std::array<std::weak_ptr<Holder>,4> holders;
+  ~Cleanup(){locked=false;for(const auto& weak:holders)if(auto held=weak.lock()){
+   held->resource.reset();held->parents.clear();}}
+ } cleanup{locked,{old,parent,child,other}};
+ std::vector<std::shared_ptr<Holder>> roots{child,other};
+ locked=true;
+ auto graph=Access::CaptureRetirementClosure(roots,[](const auto& holder,const auto& add){
+  for(const auto& parent:holder->parents)add(parent);
+ });
+ REQUIRE(graph.size()==4);CHECK(released==0);CHECK_FALSE(under_lock);
+ std::vector<std::shared_ptr<Holder>> duplicates{child,other,child,nullptr};
+ CHECK(Access::CaptureRetirementClosure(duplicates,[](const auto& holder,const auto& add){
+  for(const auto& parent:holder->parents)add(parent);
+ }).size()==4);
+ std::sort(graph.begin(),graph.end(),[](const auto& a,const auto& b){return a->serial>b->serial;});
+ CHECK(graph[0]->serial==40);CHECK(graph[1]->serial==30);CHECK(graph[2]->serial==20);CHECK(graph[3]->serial==10);
+ locked=false;roots.clear();duplicates.clear();old.reset();parent.reset();child.reset();other.reset();
+ for(const auto& holder:graph){holder->resource.reset();holder->parents.clear();
+  CHECK_FALSE(holder->native_returned);CHECK_FALSE(holder->native_freed);}
+ CHECK(released==4);CHECK_FALSE(under_lock);
+ REQUIRE(escaped_parent);CHECK_FALSE(escaped_parent->resource);CHECK(escaped_parent->parents.empty());
+ graph.clear();CHECK(released==4);escaped_parent.reset();CHECK_FALSE(under_lock);
 }
 } // namespace xe::kernel::test

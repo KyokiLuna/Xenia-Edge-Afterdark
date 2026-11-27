@@ -45,10 +45,20 @@ namespace xam {
 
 X_HRESULT_result_t XamUserGetXUID_entry(dword_t user_index, dword_t type_mask,
                                         lpqword_t xuid_ptr) {
-  uint64_t diagnostic_xuid=0;
-  const auto observed=[&](uint32_t status){
-    kernel_state()->xam_state()->profile_manager()->RecordNativeProfileQuery(
-        0x20A,user_index,status,diagnostic_xuid,type_mask);
+  auto* profiles = kernel_state()->xam_state()->profile_manager();
+  std::shared_ptr<const HostRoster> metadata;
+  uint64_t diagnostic_xuid = 0;
+  const auto observed = [&](uint32_t status) {
+    profiles->RecordNativeProfileQuery(0x20A, user_index, status,
+                                       diagnostic_xuid, type_mask);
+    if (xuid_ptr) {
+      // The actual output store has already happened. Retain this exact
+      // immutable metadata selection for provenance, without reading guest
+      // output or acquiring an Account/model/data scope.
+      NativeProfileIdentityOwner::ObserveOriginalCurrentUserMetadata(
+          kernel_state(), user_index, type_mask, xuid_ptr.guest_address(),
+          status, metadata);
+    }
     return status;
   };
   assert_true(type_mask == 1 || type_mask == 2 || type_mask == 3 ||
@@ -56,37 +66,22 @@ X_HRESULT_result_t XamUserGetXUID_entry(dword_t user_index, dword_t type_mask,
   if (!xuid_ptr) {
     return observed(X_E_INVALIDARG);
   }
-
   *xuid_ptr = 0;
-
   if (user_index >= XUserMaxUserCount) {
     return observed(X_E_INVALIDARG);
   }
-
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
+  metadata = profiles->CaptureCurrentUserMetadata();
+  if (!metadata || !metadata->slots()[user_index].xuid) {
     return observed(X_E_NO_SUCH_USER);
   }
-
-  const auto& user_profile =
-      kernel_state()->xam_state()->GetUserProfile(user_index);
-
-  // Only a user signed in to Live has an online XUID to give.
-  uint32_t types = X_USER_XUID_OFFLINE;
-  if (user_profile->signin_state() ==
-      static_cast<uint32_t>(SignInState::SignedInToLive)) {
-    types |= X_USER_XUID_ONLINE;
-  }
-  types &= type_mask;
-
-  if (types & X_USER_XUID_ONLINE) {
-    diagnostic_xuid=user_profile->GetOnlineXUID();
-    *xuid_ptr = diagnostic_xuid;
-  } else if (types & X_USER_XUID_OFFLINE) {
-    diagnostic_xuid=user_profile->xuid();
-    *xuid_ptr = diagnostic_xuid;
-  } else {
+  // Assigned users currently have local state only (the same policy as
+  // UserProfile::signin_state). Account Live eligibility is not an active
+  // connection, and an online-only mask must not expose an offline XUID.
+  if (!(type_mask & X_USER_XUID_OFFLINE)) {
     return observed(X_E_NO_SUCH_USER);
   }
+  diagnostic_xuid = metadata->slots()[user_index].xuid;
+  *xuid_ptr = diagnostic_xuid;
   return observed(X_E_SUCCESS);
 }
 DECLARE_XAM_EXPORT1(XamUserGetXUID, kUserProfiles, kImplemented);
@@ -97,10 +92,22 @@ dword_result_t XamUserGetIndexFromXUID_entry(qword_t xuid, dword_t flags,
     return X_E_INVALIDARG;
   }
 
-  const uint8_t user_index = kernel_state()
-                                 ->xam_state()
-                                 ->profile_manager()
-                                 ->GetUserIndexAssignedToProfile(xuid);
+  auto* profiles = kernel_state()->xam_state()->profile_manager();
+  uint8_t user_index = XUserIndexAny;
+  if (flags == 1) {
+    // The native offline-index lookup consumes the same current scalar cache;
+    // it does not borrow an old fixed/following profile or grant data access.
+    const auto metadata = profiles->CaptureCurrentUserMetadata();
+    if (xuid && metadata) {
+      for (uint8_t slot = 0; slot != XUserMaxUserCount; ++slot) {
+        if (metadata->slots()[slot].xuid == xuid) { user_index = slot; break; }
+      }
+    }
+  } else {
+    // Preserve the existing compatibility behavior for other flag families;
+    // this change does not add native online-index support.
+    user_index = profiles->GetUserIndexAssignedToProfile(xuid);
+  }
 
   if (user_index == XUserIndexAny) {
     return X_E_NO_SUCH_USER;
@@ -123,10 +130,10 @@ dword_result_t XamUserGetSigninState_entry(dword_t user_index) {
     return observed();
   }
 
-  if (kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
-    const auto& user_profile =
-        kernel_state()->xam_state()->GetUserProfile(user_index);
-    signin_state = user_profile->signin_state();
+  const auto metadata = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserMetadata();
+  if (metadata && metadata->slots()[user_index].xuid) {
+    signin_state = static_cast<uint32_t>(SignInState::SignedInLocally);
   }
   return observed();
 }

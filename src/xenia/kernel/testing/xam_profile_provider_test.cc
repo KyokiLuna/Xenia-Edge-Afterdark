@@ -1328,6 +1328,15 @@ TEST_CASE("An equal PUBLIC namespace remains an exclusion rather than an ancesto
 #if XE_PLATFORM_LINUX
 class ProfileSettingsReadTestAccess final {
  public:
+  static auto AcquireExactRosterMount(ProfileManager& pm,uint64_t xuid,
+      std::error_code& error,const ContentSourceState* source=nullptr,
+      uint32_t* device_id=nullptr) {
+    return pm.AcquireRosterMount(xuid,error,source,device_id);
+  }
+  static bool ReleaseExactRosterMount(ProfileManager& pm,
+      const std::shared_ptr<ProfileRosterMountTicket>& ticket) {
+    return pm.ReleaseRosterMount(ticket);
+  }
   static auto PrepareDeletion(ProfileManager& pm, uint64_t xuid) {
     return pm.PrepareHostProfileDeletion(xuid);
   }
@@ -1366,6 +1375,10 @@ class ProfileSettingsReadTestAccess final {
   static auto CurrentTicket(ProfileManager& pm,
       const std::shared_ptr<const ProfileRosterNativeBinding>& binding,std::error_code& error) {
     return pm.CaptureCurrentNativeReadTicket(binding,error);
+  }
+  static auto PublishedTicket(ProfileManager& pm,const std::shared_ptr<ProfileRosterIntent>& intent,
+      const std::shared_ptr<const ProfileRosterNativeBinding>& binding,std::error_code& error) {
+    return pm.CapturePublishedNativeReadTicket(intent,binding,error);
   }
   static auto InitialEmptySequence(ProfileManager& pm,
       const std::shared_ptr<const ProfileRosterNativeBinding>& binding,
@@ -1412,6 +1425,14 @@ class ProfileSettingsReadTestAccess final {
       uint32_t value = 0, bool wrong_nonce = false) {
     return ProfileRosterNativeCompletion::ForProtocol(intent, binding,
         binding->nonce() + uint64_t(wrong_nonce), value);
+  }
+  static auto DataHandoff(const std::shared_ptr<ProfileRosterIntent>& intent,
+      const std::shared_ptr<const ProfileRosterNativeBinding>& binding) {
+    return ProfileRosterNativeCompletion::ForDataHandoff(intent,binding,binding->nonce());
+  }
+  static auto Handoff(ProfileManager& pm,const std::shared_ptr<ProfileRosterIntent>& intent,
+      const ProfileRosterNativeCompletion& completion) {
+    return pm.HandoffNativeRoster(intent,completion);
   }
   static auto Joined(const std::shared_ptr<ProfileRosterIntent>& intent,
       const std::shared_ptr<const ProfileRosterNativeBinding>& binding) {
@@ -3180,6 +3201,143 @@ void RestartHostAccountRuntime(ProfileAbiRuntime& runtime) {
   REQUIRE(runtime.emulator->Setup(nullptr, nullptr, false, {}, {}, {}) == X_STATUS_SUCCESS);
 }
 }
+TEST_CASE("Roster mount tickets release only their actual acquired reference and preserve busy or replacement mounts",
+          "[kernel][profile][roster][mount_reference][generation][lifetime]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime,0xe00000000000019aull,90);
+  auto* pm=runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  auto* fs=runtime.emulator->file_system();
+  const auto alias=HostAccountMount(a.xuid);
+  const std::array<uint8_t,4> extra{0x91,0x00,0xff,0x23};
+  ReadFixtureWrite(a.path/"mount-ticket-reader.bin",extra);
+  std::error_code error;
+  const auto source=runtime.emulator->kernel_state()->content_manager()->sources().Source("hdd");
+  REQUIRE(source);
+  uint32_t actual_device=0;
+  auto first=ProfileSettingsReadTestAccess::AcquireExactRosterMount(
+      *pm,a.xuid,error,&*source,&actual_device);
+  REQUIRE(first);REQUIRE_FALSE(error);CHECK(actual_device==source->source.device_id);
+  const auto device=fs->AcquireDevice(alias);REQUIRE(device);
+  REQUIRE(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+  CHECK_FALSE(pm->DismountProfile(a.xuid));
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+  CHECK(fs->AcquireDevice(alias)==device);
+
+  SECTION("same row copies share one owed ref; real additional acquisitions own separate refs") {
+    auto shared_first=first;
+    auto second=ProfileSettingsReadTestAccess::AcquireExactRosterMount(*pm,a.xuid,error,&*source);
+    REQUIRE(second);REQUIRE_FALSE(error);REQUIRE(second!=first);
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==2);
+    auto wrong=*source;++wrong.generation;
+    CHECK_FALSE(ProfileSettingsReadTestAccess::AcquireExactRosterMount(*pm,a.xuid,error,&wrong));
+    REQUIRE(error);CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==2);
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,second));
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,second));
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    REQUIRE(pm->MountProfile(a.xuid));
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==2);
+    REQUIRE(pm->DismountProfile(a.xuid));
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    CHECK_FALSE(pm->DismountProfile(a.xuid));
+    first.reset(); // The actual Operation still owns shared_first's SAME ref.
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,shared_first));
+    CHECK_FALSE(fs->AcquireDevice(alias));
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,shared_first));
+  }
+  SECTION("real PM contention remains retryable and cannot consume an existing ticket") {
+    {
+      HeldRosterMetadata held(*pm);
+      REQUIRE(held.ready.wait_for(std::chrono::seconds(5))==std::future_status::ready);
+      CHECK_FALSE(ProfileSettingsReadTestAccess::AcquireExactRosterMount(*pm,a.xuid,error,&*source));
+      CHECK(error==std::errc::device_or_resource_busy);
+      CHECK_FALSE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+    }
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    auto retry=ProfileSettingsReadTestAccess::AcquireExactRosterMount(*pm,a.xuid,error,&*source);
+    REQUIRE(retry);REQUIRE_FALSE(error);
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,retry));
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+  }
+  SECTION("an inherited native critical region cannot acquire or release a ticket") {
+    {
+      auto global=global_critical_region::AcquireDirect();
+      CHECK_FALSE(ProfileSettingsReadTestAccess::AcquireExactRosterMount(*pm,a.xuid,error,&*source));
+      CHECK(error==std::errc::operation_would_block);
+      CHECK_FALSE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+    }
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+  }
+  SECTION("a live exact Account and its entered writer keep the final ticket owed") {
+    auto identity=ProfileSettingsReadTestAccess::CaptureIdentityForRebindProbe(*pm,a.xuid,error);
+    REQUIRE(identity);REQUIRE_FALSE(error);REQUIRE_FALSE(identity->retired());
+    CHECK_FALSE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+    CHECK_FALSE(identity->retired());
+    auto write=identity->EnterWrite(error);REQUIRE(write);REQUIRE_FALSE(error);
+    identity->Retire(); // Real owning producer retirement, never a mount-ticket action.
+    REQUIRE_FALSE(identity->writes_drained());
+    CHECK_FALSE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    CHECK(fs->AcquireDevice(alias)==device);
+    write.reset();REQUIRE(identity->writes_drained());
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+    CHECK_FALSE(fs->AcquireDevice(alias));
+  }
+  SECTION("an actual open File refuses final detach without consuming the reference") {
+    vfs::File* file=nullptr;vfs::FileAction action{};
+    REQUIRE(fs->OpenFile(nullptr,alias+"\\mount-ticket-reader.bin",vfs::FileDisposition::kOpen,
+        vfs::FileAccess::kGenericRead,false,false,&file,&action)==X_STATUS_SUCCESS);
+    REQUIRE(file);
+    std::unique_ptr<vfs::File,void(*)(vfs::File*)> held(file,[](vfs::File* value){value->Destroy();});
+    CHECK_FALSE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    CHECK(fs->AcquireDevice(alias)==device);CHECK_FALSE(device->namespace_retiring());
+    held.reset();
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+    CHECK_FALSE(fs->AcquireDevice(alias));
+  }
+  SECTION("actual old namespace closure and repeated cleanup cannot decrement a replacement") {
+    REQUIRE(fs->UnregisterDevice(alias));REQUIRE(device->namespace_retiring());
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+    REQUIRE(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==0);
+    auto next=ProfileSettingsReadTestAccess::AcquireExactRosterMount(*pm,a.xuid,error,&*source);
+    REQUIRE(next);REQUIRE_FALSE(error);
+    const auto replacement=fs->AcquireDevice(alias);REQUIRE(replacement);REQUIRE(replacement!=device);
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,first));
+    CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,a.xuid)==1);
+    CHECK(fs->AcquireDevice(alias)==replacement);CHECK_FALSE(replacement->namespace_retiring());
+    REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,next));
+    CHECK_FALSE(fs->AcquireDevice(alias));
+  }
+  a.Unchanged();
+  CHECK(ReadFixtureDisk(a.path/"mount-ticket-reader.bin")==std::vector<uint8_t>(extra.begin(),extra.end()));
+}
+TEST_CASE("Consumed roster mount metadata cannot consume a new manager reference after restart",
+          "[kernel][profile][roster][mount_reference][restart]") {
+  ProfileAbiRuntime runtime;
+  constexpr uint64_t uid=0xe00000000000019bull;
+  X_XAMACCOUNTINFO account{};const auto before=SeedOwnedAccount(runtime,uid,account);
+  auto* pm=runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  REQUIRE(pm->LoadAccount(uid));std::error_code error;
+  auto old=ProfileSettingsReadTestAccess::AcquireExactRosterMount(*pm,uid,error);
+  REQUIRE(old);REQUIRE_FALSE(error);
+  REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,old));
+  CHECK_FALSE(runtime.emulator->file_system()->AcquireDevice(HostAccountMount(uid)));
+  RestartHostAccountRuntime(runtime);
+  pm=runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  REQUIRE(pm->LoadAccount(uid));
+  auto current=ProfileSettingsReadTestAccess::AcquireExactRosterMount(*pm,uid,error);
+  REQUIRE(current);REQUIRE_FALSE(error);
+  const auto actual=runtime.emulator->file_system()->AcquireDevice(HostAccountMount(uid));REQUIRE(actual);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,old));
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(*pm,uid)==1);
+  CHECK(runtime.emulator->file_system()->AcquireDevice(HostAccountMount(uid))==actual);
+  REQUIRE(ProfileSettingsReadTestAccess::ReleaseExactRosterMount(*pm,current));
+  CHECK(OwnedAccountDisk(runtime,uid)==before);
+}
 TEST_CASE("Host Account edits publish one durable local field transaction and survive restart without Live provisioning",
           "[kernel][profile_account][host_edit][persistence][restart]") {
   ProfileAbiRuntime runtime;
@@ -3702,6 +3860,10 @@ TEST_CASE("Empty native alignment requires actual unchanged row owners and proto
   // This metadata fact has no frame/GPU/pixel authority. Genuine finalization
   // still needs the separate existing joined role even for an empty roster.
   CHECK(ProfileSettingsReadTestAccess::Finalize(pm, intent, *protocol).error);
+  auto data=ProfileSettingsReadTestAccess::DataHandoff(intent,binding);REQUIRE(data);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Handoff(pm,intent,*data).error);
+  CHECK(intent->result().phase==ProfileRosterPhase::kFinalizing);
+  CHECK(ProfileSettingsReadTestAccess::PublishedEmptyRows(intent));
   auto joined = ProfileSettingsReadTestAccess::Joined(intent, binding); REQUIRE(joined);
   const auto finished = ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined);
   REQUIRE_FALSE(finished.error); REQUIRE(finished.phase == ProfileRosterPhase::kCommitted);
@@ -3776,6 +3938,10 @@ TEST_CASE("An occupied initial alignment retains exact row owners only after rea
   CHECK(pm.CaptureProfile(uint8_t(1))==profile);
   CHECK(pm.AcquireProfileGpdModel(uint8_t(1),error)==model);
   CHECK(ProfileSettingsReadTestAccess::Finalize(pm,intent,*protocol).error);
+  auto data=ProfileSettingsReadTestAccess::DataHandoff(intent,binding);REQUIRE(data);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Handoff(pm,intent,*data).error);
+  CHECK(intent->result().phase==ProfileRosterPhase::kFinalizing);
+  CHECK(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
   auto joined=ProfileSettingsReadTestAccess::Joined(intent,binding);REQUIRE(joined);
   REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,intent,*joined).error);
   CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedUnchangedOwners(intent));
@@ -4061,6 +4227,13 @@ TEST_CASE("Native joined retirement keeps a busy old File and reuses its exact m
   CHECK(busy.error == std::errc::device_or_resource_busy); CHECK(busy.phase == ProfileRosterPhase::kFinalizing);
   CHECK(busy.maps_committed); CHECK(busy.writers_available); CHECK_FALSE(busy.owners_retired);
   CHECK(pm.CaptureProfile(uint8_t(0)) == selected); CHECK_FALSE(old_model->IsCurrent(*old_origin));
+  CHECK(intent->data_handoff_complete());
+  // The real old File still owns physical detach Busy. It does not own the
+  // new selected row's data admission or force a repaint before next Prepare.
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);REQUIRE_FALSE(error);
+  auto next=pm.PrepareRoster(RosterDesired({b.xuid,0,0,0}),expected,error);REQUIRE(next);REQUIRE_FALSE(error);
+  CHECK(intent->result().phase==ProfileRosterPhase::kFinalizing);
+  REQUIRE_FALSE(pm.CancelRoster(next).error);
   held.reset();
   const auto done = ProfileSettingsReadTestAccess::Finalize(pm, intent, *joined);
   REQUIRE_FALSE(done.error); CHECK(done.phase == ProfileRosterPhase::kCommitted); CHECK(done.owners_retired);
@@ -4681,6 +4854,324 @@ TEST_CASE("Initial empty baseline refuses occupied roster and expired foreign fa
 }
 
 #if XE_PLATFORM_LINUX
+TEST_CASE("Native data handoff permits an A to B to A successor while exact old cleanup remains retained",
+          "[kernel][profile][roster][native][data_handoff]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime,0xe000000000000b31ull,101);
+  ReadFixtureProfile b(runtime,0xe000000000000b32ull,102);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid,0,0,0}),expected).error);
+  auto old_model=pm.AcquireProfileGpdModel(uint8_t(0),error);REQUIRE(old_model);
+  const auto old_origin=old_model->CaptureOrigin(error);REQUIRE(old_origin);
+  const auto old_account=ProfileSettingsReadTestAccess::SelectedAccount(pm,a.xuid);REQUIRE(old_account);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto first=pm.PrepareRoster(RosterDesired({b.xuid,0,0,0}),expected,error);REQUIRE(first);
+  auto old_ticket=ProfileSettingsReadTestAccess::Ticket(*first,*binding,error);REQUIRE(old_ticket);
+  auto following=ProfileSettingsReadTestAccess::FollowingTicket(*first,*binding,error);REQUIRE(following);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::DataHandoff(first,binding));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedTicket(pm,first,binding,error));REQUIRE(error);
+  auto first_cell=ProfileSettingsReadTestAccess::EnterNative(pm,first,binding,error);REQUIRE(first_cell);
+  ProfileRosterPublicationOutcome outcome=ProfileRosterPublicationOutcome::kRequested;
+  SECTION("Requested local publication retains the first selected row") {}
+  SECTION("Canceled-empty publication keeps unused requested rows in the old cleanup") {
+    outcome=ProfileRosterPublicationOutcome::kCanceledEmpty;
+  }
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(first_cell,outcome));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedTicket(pm,first,binding,error));
+  CHECK(error==std::errc::device_or_resource_busy); // Publication alone grants no read pool.
+  CHECK_FALSE(ProfileSettingsReadTestAccess::DataHandoff(first,binding));
+  auto first_protocol=ProfileSettingsReadTestAccess::Protocol(first,binding,0x80000001u);REQUIRE(first_protocol);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::CommitProtocol(pm,first,*first_protocol).error);
+  CHECK(ProfileSettingsReadTestAccess::Handoff(pm,first,*first_protocol).error);
+  CHECK_FALSE(pm.CaptureRosterExpected(error).roster);REQUIRE(error);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::CurrentTicket(pm,binding,error));REQUIRE(error); // Existing !pending contract.
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedTicket(pm,first,{},error));REQUIRE(error);
+  auto published_ticket=ProfileSettingsReadTestAccess::PublishedTicket(pm,first,binding,error);
+  REQUIRE(published_ticket);REQUIRE_FALSE(error);
+  auto selected_read=ProfileSettingsReadTestAccess::Scope(published_ticket,binding);REQUIRE(selected_read);
+  auto entered=xe::threading::Event::CreateManualResetEvent(false);
+  auto release=xe::threading::Event::CreateManualResetEvent(false);REQUIRE(entered);REQUIRE(release);
+  std::array<bool,4> fixed_facts{};object_ref<XHostThread> fixed_reader;
+  SystemReadThreadJoin fixed_join{fixed_reader,release.get()};
+  fixed_reader=object_ref<XHostThread>(new XHostThread(runtime.emulator->kernel_state(),128*1024,0,[&]{
+    auto* self=XThread::GetCurrentThread();auto* cpu=self->thread_state();auto* context=cpu->context();
+    const auto sp=context->r[1],lr=context->lr;context->r[1]=self->stack_base()-0x100;context->lr=0x81001000;
+    fixed_facts[0]=ProfileSettingsReadTestAccess::EnterSystemFrame(*selected_read,
+        runtime.emulator->kernel_state(),self,cpu,uint32_t(context->r[1]),uint32_t(context->lr),0x81A3F848);
+    entered->Set();
+    if(fixed_facts[0]){
+      fixed_facts[1]=xe::threading::Wait(release.get(),false,std::chrono::seconds(5))==xe::threading::WaitResult::kSuccess;
+      const auto profile=pm.CaptureProfile(uint8_t(0));
+      fixed_facts[2]=outcome==ProfileRosterPublicationOutcome::kRequested?profile && profile->xuid()==b.xuid:!profile;
+      fixed_facts[3]=ProfileSettingsReadTestAccess::Leave(*selected_read);
+    }
+    context->r[1]=sp;context->lr=lr;return 0;
+  },runtime.emulator->kernel_state()->GetSystemProcess()));
+  fixed_join.created=fixed_reader->Create()==X_STATUS_SUCCESS;REQUIRE(fixed_join.created);
+  REQUIRE(xe::threading::Wait(entered.get(),false,std::chrono::seconds(5))==xe::threading::WaitResult::kSuccess);
+  auto handoff=ProfileSettingsReadTestAccess::DataHandoff(first,binding);REQUIRE(handoff);
+  const auto handed=ProfileSettingsReadTestAccess::Handoff(pm,first,*handoff);
+  REQUIRE_FALSE(handed.error);CHECK(handed.phase==ProfileRosterPhase::kFinalizing);
+  CHECK(first->data_handoff_complete());CHECK_FALSE(handed.owners_retired);
+  REQUIRE(ProfileSettingsReadTestAccess::Scope(published_ticket,binding)); // Same fixed selected reader remains valid.
+  release->Set();
+  REQUIRE(xe::threading::Wait(fixed_reader->thread(),false,std::chrono::seconds(10))==xe::threading::WaitResult::kSuccess);
+  for(const auto fact:fixed_facts)CHECK(fact);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::PublishedTicket(pm,first,binding,error));REQUIRE(error);
+  CHECK(handed.native_protocol_value==0x80000001u);
+  CHECK_FALSE(old_model->IsCurrent(*old_origin));CHECK(old_account->identity()->retired());
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(old_ticket,binding));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(following,binding));
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Handoff(pm,first,*handoff).error); // Exact idempotent handoff.
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);REQUIRE_FALSE(error);
+  std::array<uint64_t,4> unchanged{};
+  for(size_t slot=0;slot<unchanged.size();++slot)unchanged[slot]=expected.roster->slots()[slot].xuid;
+  auto canceled=pm.PrepareRoster(RosterDesired(unchanged),expected,error);
+  REQUIRE(canceled);REQUIRE_FALSE(error);
+  REQUIRE(ProfileSettingsReadTestAccess::Scope(published_ticket,binding));
+  REQUIRE_FALSE(pm.CancelRoster(canceled).error);
+  REQUIRE(ProfileSettingsReadTestAccess::Scope(published_ticket,binding));
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);REQUIRE_FALSE(error);
+  auto current_ticket=ProfileSettingsReadTestAccess::CurrentTicket(pm,binding,error);REQUIRE(current_ticket);
+  REQUIRE(ProfileSettingsReadTestAccess::Scope(current_ticket,binding));
+  auto first_joined=ProfileSettingsReadTestAccess::Joined(first,binding);REQUIRE(first_joined);
+  std::shared_ptr<const ProfileAccountSnapshot> selected_b_account;
+  std::shared_ptr<ProfileGpdModelAuthority> selected_b_model;
+  if (outcome==ProfileRosterPublicationOutcome::kRequested) {
+    selected_b_account=ProfileSettingsReadTestAccess::SelectedAccount(pm,b.xuid);REQUIRE(selected_b_account);
+    selected_b_model=pm.AcquireProfileGpdModel(uint8_t(0),error);REQUIRE(selected_b_model);
+  }
+  const auto check_b_still_paused=[&] {
+    if (!selected_b_account) { return; } // Canceled-empty never selected B.
+    CHECK_FALSE(selected_b_account->identity()->retired());
+    CHECK_FALSE(selected_b_account->identity()->EnterWrite(error));
+    CHECK(error==std::errc::device_or_resource_busy);
+    CHECK_FALSE(selected_b_model->AllocateRequestId(error));
+    CHECK(error==std::errc::device_or_resource_busy);
+  };
+  // No full native join has run yet. Reacquire A as a genuine next operation;
+  // its model/identity/pause and owed mount reference are distinct from first.
+  auto second=pm.PrepareRoster(RosterDesired({a.xuid,0,0,0}),expected,error);REQUIRE(second);REQUIRE_FALSE(error);
+  auto second_cell=ProfileSettingsReadTestAccess::EnterNative(pm,second,binding,error);REQUIRE(second_cell);
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(second_cell));
+  auto second_protocol=ProfileSettingsReadTestAccess::Protocol(second,binding);REQUIRE(second_protocol);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::CommitProtocol(pm,second,*second_protocol).error);
+  auto new_model=pm.AcquireProfileGpdModel(uint8_t(0),error);REQUIRE(new_model);REQUIRE(new_model!=old_model);
+  const auto new_origin=new_model->CaptureOrigin(error);REQUIRE(new_origin);
+  const auto new_account=ProfileSettingsReadTestAccess::SelectedAccount(pm,a.xuid);REQUIRE(new_account);
+  REQUIRE(new_account->identity()!=old_account->identity());
+  const auto references=ProfileSettingsReadTestAccess::MountReferences(pm,a.xuid);REQUIRE(references>=2);
+  check_b_still_paused(); // First selected B is second's exact paused-before owner.
+  const auto old_done=ProfileSettingsReadTestAccess::Finalize(pm,first,*first_joined);
+  REQUIRE_FALSE(old_done.error);CHECK(old_done.phase==ProfileRosterPhase::kCommitted);
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(pm,a.xuid)==references-1);
+  check_b_still_paused(); // Delayed first cleanup cannot clear the newer B pause.
+  CHECK(new_model->IsCurrent(*new_origin));CHECK_FALSE(new_account->identity()->retired());
+  auto write=new_account->identity()->EnterWrite(error);REQUIRE(write);REQUIRE_FALSE(error);write.reset();
+  CHECK(pm.CaptureGpdWriter(a.xuid,error).model==new_model);REQUIRE_FALSE(error);
+  // The OLD join may not clear the successor's pending/reservation or replay
+  // old maps, retirement, pauses, title effects, or a generic XUID dismount.
+  CHECK_FALSE(second->data_handoff_complete());
+  CHECK_FALSE(pm.CaptureRosterExpected(error).roster);REQUIRE(error);
+  CHECK(pm.CancelRoster(second).error==std::errc::device_or_resource_busy);
+  const auto selected_profile=pm.CaptureProfile(uint8_t(0));REQUIRE(selected_profile);
+  CHECK(selected_profile->xuid()==a.xuid);
+  CHECK(ProfileSettingsReadTestAccess::Handoff(pm,second,*handoff).error); // Foreign exact operation.
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,first,*first_joined).error);
+  CHECK(ProfileSettingsReadTestAccess::MountReferences(pm,a.xuid)==references-1);
+  auto second_handoff=ProfileSettingsReadTestAccess::DataHandoff(second,binding);REQUIRE(second_handoff);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Handoff(pm,second,*second_handoff).error);
+  CHECK(second->data_handoff_complete());
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(published_ticket,binding)); // Next exact before-envelope revoked it.
+  auto second_joined=ProfileSettingsReadTestAccess::Joined(second,binding);REQUIRE(second_joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,second,*second_joined).error);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);REQUIRE_FALSE(error);
+  CHECK(expected.roster->slots()[0].xuid==a.xuid);
+  a.Unchanged();b.Unchanged();
+}
+TEST_CASE("Legacy local logon keeps real cleanup Busy distinct from its selected data and current metadata",
+          "[kernel][profile][roster][public_export][data_handoff][busy_file]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime,0xe000000000000b35ull,105);
+  ReadFixtureProfile b(runtime,0xe000000000000b36ull,106);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid,0,0,0}),expected).error);
+  const auto alias=fmt::format(kDefaultMountFormat,a.xuid)+':';
+  vfs::File* file=nullptr;vfs::FileAction action{};
+  REQUIRE(runtime.emulator->file_system()->OpenFile(nullptr,alias+"\\Account",
+      vfs::FileDisposition::kOpen,vfs::FileAccess::kGenericRead,false,false,
+      &file,&action)==X_STATUS_SUCCESS);
+  REQUIRE(file);
+  std::unique_ptr<vfs::File,void(*)(vfs::File*)> held(file,[](vfs::File* value){value->Destroy();});
+  ReadExAbiFixture abi(*runtime.emulator);
+  const auto request=abi.allocation+0x400;
+  for(uint32_t slot=0;slot!=4;++slot) {
+    xe::store_and_swap<uint64_t>(abi.memory.TranslateVirtual(request+slot*8),slot?0:b.xuid);
+  }
+  const auto* entry=runtime.emulator->export_resolver()->GetExportByOrdinal("xam.xex",0x20B);
+  REQUIRE(entry);REQUIRE(entry->function_data.trampoline);
+  abi.context.r[3]=request;abi.context.r[4]=0;abi.context.r[5]=0;
+  entry->function_data.trampoline(&abi.context); // No native family has been claimed.
+  CHECK(uint32_t(abi.context.r[3])==X_ERROR_BUSY);
+  // The fallback still requires the exact request's full physical cleanup;
+  // current maps/writers are not substituted for a successful export result.
+  const auto selected=pm.CaptureProfile(uint8_t(0));REQUIRE(selected);CHECK(selected->xuid()==b.xuid);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);REQUIRE_FALSE(error);
+  CHECK(expected.roster->slots()[0].xuid==b.xuid);
+  CHECK(runtime.emulator->file_system()->ResolvePath(alias+"\\Account"));
+  held.reset();ProfileSettingsReadTestAccess::RetryCleanup(pm);
+  CHECK_FALSE(runtime.emulator->file_system()->ResolvePath(alias+"\\Account"));
+  CHECK(pm.CaptureProfile(uint8_t(0))==selected);
+  a.Unchanged();b.Unchanged();
+}
+TEST_CASE("Roster Close owns handed-off cleanup and an independently canceled successor without publishing a join",
+          "[kernel][profile][roster][native][data_handoff][close]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime,0xe000000000000b33ull,103);
+  ReadFixtureProfile b(runtime,0xe000000000000b34ull,104);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid,0,0,0}),expected).error);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto old=pm.PrepareRoster(RosterDesired({b.xuid,0,0,0}),expected,error);REQUIRE(old);
+  auto ticket=ProfileSettingsReadTestAccess::FollowingTicket(*old,*binding,error);REQUIRE(ticket);
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,old,binding,error);REQUIRE(cell);
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell));
+  auto protocol=ProfileSettingsReadTestAccess::Protocol(old,binding);REQUIRE(protocol);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::CommitProtocol(pm,old,*protocol).error);
+  auto fixed=ProfileSettingsReadTestAccess::PublishedTicket(pm,old,binding,error);REQUIRE(fixed);REQUIRE_FALSE(error);
+  auto handoff=ProfileSettingsReadTestAccess::DataHandoff(old,binding);REQUIRE(handoff);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Handoff(pm,old,*handoff).error);
+  REQUIRE(ProfileSettingsReadTestAccess::Scope(fixed,binding));
+  const auto retained=pm.CaptureCurrentUserMetadata();REQUIRE(retained);CHECK(retained->slots()[0].xuid==b.xuid);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto next=pm.PrepareRoster(RosterDesired({a.xuid,0,0,0}),expected,error);REQUIRE(next);
+  REQUIRE_FALSE(pm.CancelRoster(next).error);CHECK(next->result().phase==ProfileRosterPhase::kCanceled);
+  REQUIRE(ProfileSettingsReadTestAccess::Scope(fixed,binding));
+  CHECK(old->result().phase==ProfileRosterPhase::kFinalizing);CHECK_FALSE(old->result().owners_retired);
+  ProfileSettingsReadTestAccess::Close(pm);
+  CHECK_FALSE(pm.CaptureCurrentUserMetadata());CHECK(retained->slots()[0].xuid==b.xuid);
+  CHECK(old->data_handoff_complete());CHECK_FALSE(old->result().owners_retired);
+  CHECK(old->result().phase==ProfileRosterPhase::kUncertain); // Stop is not native full join.
+  CHECK(next->result().phase==ProfileRosterPhase::kCanceled);
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(ticket,binding));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Scope(fixed,binding));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Joined(old,binding));
+  CHECK_FALSE(ProfileSettingsReadTestAccess::Publish(cell));
+  a.Unchanged();b.Unchanged();
+}
+TEST_CASE("Current scalar exports retain the selected four-slot metadata across native publication and PM contention",
+          "[kernel][profile][roster][native][current_user_metadata]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime,0xe000000000000b21ull,91);
+  ReadFixtureProfile b(runtime,0xe000000000000b22ull,92);
+  ReadFixtureProfile c(runtime,0xe000000000000b23ull,93);
+  ReadFixtureProfile d(runtime,0xe000000000000b24ull,94);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  ReadExAbiFixture abi(*runtime.emulator);
+  const auto call=[&](uint16_t ordinal,uint64_t r3,uint64_t r4=0,uint64_t r5=0){
+    const auto* entry=runtime.emulator->export_resolver()->GetExportByOrdinal("xam.xex",ordinal);
+    REQUIRE(entry);REQUIRE(entry->is_implemented());REQUIRE(entry->function_data.trampoline);
+    abi.context.r[3]=r3;abi.context.r[4]=r4;abi.context.r[5]=r5;
+    entry->function_data.trampoline(&abi.context);
+    return uint32_t(abi.context.r[3]);
+  };
+  const auto word=[&]{return xe::load_and_swap<uint32_t>(abi.memory.TranslateVirtual(abi.Output()));};
+  const auto check=[&](std::array<uint64_t,4> expected){
+    const auto metadata=pm.CaptureCurrentUserMetadata();REQUIRE(metadata);
+    for(uint32_t slot=0;slot!=4;++slot){
+      CHECK(metadata->slots()[slot].xuid==expected[slot]);
+      CHECK(call(0x210,slot)==(expected[slot]?1u:0u));
+      for(uint32_t mask:{1u,2u,3u,4u,7u}){
+        std::memset(abi.memory.TranslateVirtual(abi.Output()),0xA5,12);
+        const bool local=expected[slot] && (mask&X_USER_XUID_OFFLINE);
+        CHECK(call(0x20A,slot,mask,abi.Output())==(local?X_E_SUCCESS:X_E_NO_SUCH_USER));
+        CHECK(xe::load_and_swap<uint64_t>(abi.memory.TranslateVirtual(abi.Output()))==(local?expected[slot]:0));
+        CHECK(abi.memory.TranslateVirtual(abi.Output())[8]==0xA5);
+      }
+      xe::store_and_swap<uint32_t>(abi.memory.TranslateVirtual(abi.Output()),0xA5A5A5A5);
+      CHECK(call(0x211,expected[slot],1,abi.Output())==(expected[slot]?X_ERROR_SUCCESS:X_E_NO_SUCH_USER));
+      CHECK(word()==(expected[slot]?slot:0xA5A5A5A5));
+    }
+  };
+  const std::array<uint64_t,4> old{a.xuid,b.xuid,c.xuid,d.xuid};
+  const std::array<uint64_t,4> desired{d.xuid,c.xuid,b.xuid,a.xuid};
+  std::error_code error;auto expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired(old),expected).error);
+  check(old);
+  auto retained_old=pm.CaptureCurrentUserMetadata();REQUIRE(retained_old);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto binding=ProfileSettingsReadTestAccess::ClaimRoster(pm);REQUIRE(binding);
+  auto intent=pm.PrepareRoster(RosterDesired(desired),expected,error);REQUIRE(intent);REQUIRE_FALSE(error);
+  auto cell=ProfileSettingsReadTestAccess::EnterNative(pm,intent,binding,error);REQUIRE(cell);
+  for(uint8_t slot=0;slot!=4;++slot)CHECK_FALSE(pm.CaptureProfile(slot));
+  check(old); // NativeEntered does not erase the current scalar cache.
+  {
+    HeldRosterMetadata held(pm);held.ready.get();
+    CHECK_FALSE(pm.CaptureProfile(uint8_t(0))); // Actual data capture still refuses.
+    check(old); // Real competing PM metadata ownership cannot synthesize sign-out.
+  }
+  ProfileRosterPublicationOutcome outcome=ProfileRosterPublicationOutcome::kRequested;
+  SECTION("Requested publication selects all four actual metadata rows") {}
+  SECTION("Canceled-empty publication selects no requested row") {
+    outcome=ProfileRosterPublicationOutcome::kCanceledEmpty;
+  }
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell,outcome));
+  const auto selected=outcome==ProfileRosterPublicationOutcome::kRequested?desired:std::array<uint64_t,4>{};
+  check(selected); // Actual 0A selection, before later protocol/data-read admission.
+  for(uint8_t slot=0;slot!=4;++slot){
+    CHECK_FALSE(pm.CaptureProfile(slot));
+    CHECK(retained_old->slots()[slot].xuid==old[slot]);
+  }
+  auto protocol=ProfileSettingsReadTestAccess::Protocol(intent,binding,0x80000001u);REQUIRE(protocol);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::CommitProtocol(pm,intent,*protocol).error);
+  check(selected);
+  auto joined=ProfileSettingsReadTestAccess::Joined(intent,binding);REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,intent,*joined).error);
+  check(selected);
+  expected=pm.CaptureRosterExpected(error);REQUIRE(expected.roster);
+  auto retry=pm.PrepareRoster(RosterDesired(selected),expected,error);REQUIRE(retry);REQUIRE_FALSE(error);
+  REQUIRE_FALSE(pm.CancelRoster(retry).error);
+  check(selected); // A real next preparation/cancel does not retarget old metadata.
+  // Genuine invalid ABI paths preserve the existing output-zero/no-write rules.
+  std::memset(abi.memory.TranslateVirtual(abi.Output()),0xA5,12);
+  CHECK(call(0x20A,4,1,abi.Output())==X_E_INVALIDARG);
+  CHECK(xe::load_and_swap<uint64_t>(abi.memory.TranslateVirtual(abi.Output()))==0);
+  CHECK(abi.memory.TranslateVirtual(abi.Output())[8]==0xA5);
+  CHECK(call(0x20A,0,1,0)==X_E_INVALIDARG);
+  CHECK(call(0x210,4)==0);
+  CHECK(call(0x211,a.xuid,1,0)==X_E_INVALIDARG);
+  auto retained_selected=pm.CaptureCurrentUserMetadata();REQUIRE(retained_selected);
+  // A real Close must wait for the scalar-copy region before detaching its
+  // selected envelope. Always release/join before asserting so failed checks
+  // cannot strand the real Kernel fixture or the test's host worker.
+  auto global=global_critical_region::AcquireDirect();
+  std::promise<void> closing;auto close_started=closing.get_future();
+  auto close=std::async(std::launch::async,[&]{
+    closing.set_value();ProfileSettingsReadTestAccess::Close(pm);
+  });
+  close_started.get();
+  const auto close_blocked=close.wait_for(std::chrono::milliseconds(50));
+  global.unlock();close.get();
+  CHECK(close_blocked==std::future_status::timeout);
+  CHECK_FALSE(pm.CaptureCurrentUserMetadata());
+  for(uint32_t slot=0;slot!=4;++slot){
+    CHECK(retained_selected->slots()[slot].xuid==selected[slot]);
+    CHECK(retained_old->slots()[slot].xuid==old[slot]);
+    CHECK(call(0x210,slot)==0);
+    CHECK(call(0x20A,slot,1,abi.Output())==X_E_NO_SUCH_USER);
+    CHECK(xe::load_and_swap<uint64_t>(abi.memory.TranslateVirtual(abi.Output()))==0);
+    CHECK_FALSE(pm.CaptureProfile(uint8_t(slot)));
+  }
+  xe::store_and_swap<uint32_t>(abi.memory.TranslateVirtual(abi.Output()),0xA5A5A5A5);
+  CHECK(call(0x211,a.xuid,1,abi.Output())==X_E_NO_SUCH_USER);
+  CHECK(word()==0xA5A5A5A5);
+  a.Unchanged();b.Unchanged();c.Unchanged();d.Unchanged();
+}
 TEST_CASE("Native canceled-empty publication removes unchanged old rows without changing the requested roster",
           "[kernel][profile][roster][native][native_terminal]") {
   ProfileAbiRuntime runtime;
@@ -4771,7 +5262,7 @@ TEST_CASE("Actual fixed and following SYSTEM read scopes keep old and canceled-e
   auto following=ProfileSettingsReadTestAccess::Scope(following_ticket,binding);REQUIRE(following);
   auto entered=xe::threading::Event::CreateManualResetEvent(false);
   auto published=xe::threading::Event::CreateManualResetEvent(false);REQUIRE(entered);REQUIRE(published);
-  std::array<bool,7> facts{};object_ref<XHostThread> thread;SystemReadThreadJoin join{thread,published.get()};
+  std::array<bool,8> facts{};object_ref<XHostThread> thread;SystemReadThreadJoin join{thread,published.get()};
   thread=object_ref<XHostThread>(new XHostThread(kernel,128*1024,0,[&]{
     auto* self=XThread::GetCurrentThread();auto* cpu=self->thread_state();auto* c=cpu->context();
     const auto saved_sp=c->r[1],saved_lr=c->lr;
@@ -4781,6 +5272,8 @@ TEST_CASE("Actual fixed and following SYSTEM read scopes keep old and canceled-e
     if(facts[0]){
       facts[1]=xe::threading::Wait(published.get(),false,std::chrono::seconds(5))==xe::threading::WaitResult::kSuccess;
       facts[2]=pm.CaptureProfile(uint8_t(0))==old;
+      const auto metadata=pm.CaptureCurrentUserMetadata();
+      facts[7]=metadata && !metadata->slots()[0].xuid; // Current scalar cache, not fixed old data.
       c->r[1]-=0x40;c->lr=0x81A3F890;
       facts[3]=ProfileSettingsReadTestAccess::EnterSystemFrame(*following,kernel,self,cpu,uint32_t(c->r[1]),uint32_t(c->lr),0x816A8C00,2);
       if(facts[3]){facts[4]=!pm.CaptureProfile(uint8_t(0));facts[5]=ProfileSettingsReadTestAccess::Leave(*following);}

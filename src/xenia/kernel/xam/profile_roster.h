@@ -94,6 +94,7 @@ class ProfileRosterIntent final {
   std::shared_ptr<const HostRoster> published_roster() const;
   std::optional<ProfileRosterPublicationOutcome> publication_outcome() const;
   ProfileRosterResult result() const; // value-only, no readiness claim
+  bool data_handoff_complete() const noexcept;
  private:
   // Actual PM-issued before/after envelope emptiness plus native protocol/map
   // duties. This is not a frame, provider census, pixel or writer permission.
@@ -149,6 +150,12 @@ class ProfileRosterNativeCompletion final {
       const std::shared_ptr<ProfileRosterIntent>&,
       const std::shared_ptr<const ProfileRosterNativeBinding>&,
       uint64_t claimed_nonce, uint32_t actual_native_value);
+  // Owner issues only after the actual returned producer has left every
+  // data-use scope. Presentation/Task/envelope reclamation is a later join.
+  static std::shared_ptr<const ProfileRosterNativeCompletion> ForDataHandoff(
+      const std::shared_ptr<ProfileRosterIntent>&,
+      const std::shared_ptr<const ProfileRosterNativeBinding>&,
+      uint64_t claimed_nonce);
   static std::shared_ptr<const ProfileRosterNativeCompletion> ForJoined(
       const std::shared_ptr<ProfileRosterIntent>&,
       const std::shared_ptr<const ProfileRosterNativeBinding>&,

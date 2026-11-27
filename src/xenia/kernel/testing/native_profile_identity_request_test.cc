@@ -81,7 +81,7 @@ TEST_CASE("Unproved native logon flag families and malformed wire extents are re
           "[native-identity][wire]"){
  const auto bytes=FourXuids({kA,0,0,0});std::error_code error;
  CHECK_FALSE(Access::Capture(0x20B,bytes,0x4000,{},error));CHECK(error==std::errc::invalid_argument);
- for (const uint32_t flags : {0x10u,0x40u,0x80u,0x100u,0x200000u,
+ for (const uint32_t flags : {0x10u,0x40u,0x61u,0x62u,0x64u,0x67u,0x80u,0x100u,0x200000u,
                               0x200024u,0x80000024u,0x84u,0x400u,0x20000u,0x100000u,
                               0x120400u,0x120421u,0x12042Cu,0x1204A0u,0x1204A4u,0x1204A5u,0x120430u}) {
   CHECK_FALSE(Access::Capture(0x20B,bytes,flags,{},error));
@@ -224,5 +224,42 @@ TEST_CASE("Native SignIn policy flags retain exact wire rows and original reques
   CHECK_FALSE(Access::Capture(0x20B,FourXuids({kC,kC,0,0}),flags,before,error));
   CHECK(error==std::errc::invalid_argument);
  }
+}
+TEST_CASE("Original no-wait offline restore retains copied replacement input without an overlap",
+          "[native-identity][wire][native_no_wait]") {
+ using Phase=NativeProfileIdentityRequest::InitializerPhase;
+ const std::array<uint64_t,4> before{kA,kB,0,0};
+ for(const auto input:{std::array<uint64_t,4>{0,kB,0,kC},std::array<uint64_t,4>{}}){
+  auto wire=FourXuids(input);const auto original=wire;std::error_code error;
+  const auto request=Access::Capture(0x20B,wire,0x63,before,error);
+  REQUIRE(request);REQUIRE_FALSE(error);
+  CHECK(request->no_wait_restore());CHECK(request->ordinal()==0x20B);CHECK(request->flags()==0x63);
+  CHECK(request->desired()==input); // Full replacement, never implicit Add.
+  CHECK(request->initializer_phase(false)==Phase::kQueuedAsync);
+  CHECK(request->initializer_phase(true)==Phase::kAfterOldDrain);
+  wire.fill(0xCD);
+  CHECK(std::equal(request->original().begin(),request->original().end(),original.begin(),original.end()));
+  std::array<uint8_t,0x620> prepared{};
+  for(size_t slot=0;slot<4;++slot)xe::store_and_swap<uint64_t>(prepared.data()+slot*0x188,input[slot]);
+  CHECK(Access::Matches(*request,prepared));
+  auto wrong=prepared;xe::store_and_swap<uint64_t>(wrong.data(),kA);
+  CHECK_FALSE(Access::Matches(*request,wrong));
+  CHECK_FALSE(Access::Matches(*request,std::span(prepared).first(0x61F)));
+  CHECK_FALSE(Access::Capture(0x20B,std::span(original).first(31),0x63,before,error));
+  CHECK(error==std::errc::invalid_argument);
+ }
+ std::error_code error;
+ CHECK_FALSE(Access::Capture(0x20B,FourXuids({kC,kC,0,0}),0x63,before,error));
+ CHECK(error==std::errc::invalid_argument);
+ std::array<uint8_t,0x620> rows{};
+ CHECK_FALSE(Access::Capture(0x224,rows,0x63,before,error));
+ CHECK(error==std::errc::operation_not_supported);
+ const auto regular=Access::Capture(0x20B,FourXuids({0,kB,0,0}),0,before,error);
+ REQUIRE(regular);CHECK_FALSE(regular->no_wait_restore());
+ CHECK(regular->initializer_phase(false)==Phase::kAfterOldDrain);
+ CHECK(regular->initializer_phase(true)==Phase::kQueuedAsync);
+ // This real wire/phase fixture does not authorize a caller or execute PPC.
+ // Owner separately proves the exact original SYSTEM producer and both
+ // dataful workers still require their actual native/source joins.
 }
 } // namespace xe::kernel::test

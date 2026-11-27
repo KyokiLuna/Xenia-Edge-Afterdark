@@ -1,6 +1,6 @@
 # 17559 profile lifecycle compared with current Afterdark
 
-Status: V151 adds the tested [shared storage-selector generation change](17559-selector-source-update-20261126.md). Its native profile-request path is unchanged; the latest actual native game run remains V149.
+Status: V152 adds the [native sign-in lifecycle change](17559-native-signin-lifecycle-20261126.md), following the V151 [storage-selector generation fix](17559-selector-source-update-20261126.md). The whole build and all seven direct runs pass. Actual game/Guide recovery and shutdown remain pending; the latest native game run is still V149.
 
 V149 restores the original native HUD keystroke family and passes all
 seven direct runs. Its isolated Doritos test selects the existing QA profile
@@ -8,9 +8,9 @@ and displays the native sign-in error dialog. The genuine ordinary request
 returns `0x80151000`, while Job 4 completes prepared query and both settlement
 stages 7/8, reaching Committed with maps/writers available. This is completed
 error presentation, not successful local or Live sign-in. A later native
-profile request (`20B`, flags `0x63`, null overlap) is refused by the current
-request capture before native entry. Its complete producer/consumer contract
-is the next implementation boundary.
+profile request (`20B`, flags `0x63`, null overlap) is refused by the then-current
+request capture before native entry. V152 implements the subsequently recovered
+producer/consumer contract; its actual recovery path still requires testing.
 
 The test supervisor receives an explicit SIGTERM after 218.78 seconds, before
 the Guide check. Root requested no window close or termination. The sender is

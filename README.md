@@ -48,7 +48,7 @@ The project is developed in tested milestones. The [implementation roadmap](docs
 
 | Subsystem | Current state |
 | --- | --- |
-| Guide / shared XUI & XAM foundation | The current source completes ordinary profile publication/presentation and renders a native sign-in error dialog in Doritos. A supervisor termination interrupted the follow-up and Guide check. Guide close/input return remains unaccepted; earlier runs retain their own scope. The published checkpoint is not replaced. |
+| Guide / shared XUI & XAM foundation | The current source adds the tested native sign-in request/data-handoff/retained-cleanup lifecycle. All seven direct runs pass. The latest actual native game run remains V149 and ends during error recovery; current Guide close/input return and normal native shutdown still require retesting. The published checkpoint is not replaced. |
 | HDD, local profiles & saves | In progress. Managed storage, persistence and recovery have engineering test coverage; the combined HDD gate remains incomplete. V62 separately recorded local profile creation/reopening and BO1 settings persistence. |
 | Native account/profile UI | Integration and runtime validation remain in progress. Native sign-in and profile/avatar initialization are not established as working across the requested scenarios. |
 | Avatar system | Stock appearance/preview data is present in local profile work; full 3D rendering, editing, persistence and game consumption remain unfinished. |
@@ -64,7 +64,7 @@ Current source progress and the remaining native sign-in/UI lifecycle failures a
 
 The [native profile admission update](docs/research/17559-native-profile-admission-20261125.md) records the subsequently applied source changes, passing full and focused tests, restored unsigned Guide behavior, and the remaining profile-load/shutdown failures. This is a source backup, not a replacement AppImage or finished gate.
 
-The [current profile lifecycle comparison](docs/research/17559-profile-lifecycle-comparison-20261125.md) records the tested native title-loader, frame-refresh, transport-lifetime, notification-consumer and HUD input corrections. All seven current direct runs pass. The latest Doritos run exercises existing-profile selection and completes ordinary publication/presentation, while preserving a native sign-in error. A follow-up profile request remains unsupported; the supervisor was interrupted before the Guide check. Passing engineering suites does not establish a new release.
+The [current profile lifecycle comparison](docs/research/17559-profile-lifecycle-comparison-20261125.md) preserves the actual title-loader, frame-refresh, transport-lifetime, notification-consumer and HUD input results. The [native sign-in lifecycle update](docs/research/17559-native-signin-lifecycle-20261126.md) adds producer-bound copied ingress, data handoff and retained cleanup, with all seven direct runs passing. Native game/Guide recovery and shutdown remain pending; passing engineering suites does not establish a new release.
 
 The [shared storage-selector update](docs/research/17559-selector-source-update-20261126.md) keeps pending choices bound to their original folder generation and records all seven passing current direct runs. Native sign-in/Guide acceptance remains open; this source update adds no AppImage release.
 

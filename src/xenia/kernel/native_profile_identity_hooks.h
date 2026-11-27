@@ -75,6 +75,8 @@ constexpr bool HooksNativeProfileIdentity(uint32_t at) noexcept {
  if(FindNativeFiniteSystemConsumer(at))return true;
  if(ObservesNativeIdentityImage(at))return true;
  switch(at){
+  case 0x90117190:case 0x90103178:case 0x901183E0:
+  case 0x90105740:case 0x9010576C:return true;
   case 0x8190A358:case 0x819068D0:case 0x816B8B08:case 0x816B7DE8:
   case 0x816B9F08:case 0x816BA058:return true;
   case 0x8199C630:case 0x8199E3E0:case 0x8199C838:case 0x8199E148:

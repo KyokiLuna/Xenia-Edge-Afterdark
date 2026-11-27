@@ -90,6 +90,18 @@ const static inline uint64_t GenerateOnlineXuid() {
 class NativeOriginalLogonObservation;
 namespace test { class ProfileSettingsReadTestAccess; }
 class ProfileManager;
+// Exactly ONE normal mount reference acquired by the actual roster producer.
+// Opaque identity/custody only: destruction does not release, detach, retire a
+// profile, or settle native work. The roster owns explicit truthful cleanup.
+class ProfileRosterMountTicket final {
+ public:
+  ~ProfileRosterMountTicket();
+ private:
+  friend class ProfileManager;
+  struct Data;
+  explicit ProfileRosterMountTicket(std::unique_ptr<Data>);
+  std::unique_ptr<Data> data_;
+};
 struct NativeProfileProjection; // synchronous POD diagnostic only
 struct ProfileSettingsReadLifetime;
 struct ProfileSettingsReadUse;
@@ -305,6 +317,10 @@ class ProfileManager {
   std::shared_ptr<ProfileGpdModelAuthority> AcquireProfileGpdModel(
       uint8_t slot, std::error_code& error);
 
+  // Immutable selected slot metadata only. The existing global critical region
+  // protects the selected envelope while its roster shared pointer is cloned;
+  // this grants no Account/model/storage access or fixed/following read scope.
+  std::shared_ptr<const HostRoster> CaptureCurrentUserMetadata() const;
   ProfileRosterExpected CaptureRosterExpected(std::error_code&) const;
   std::shared_ptr<ProfileRosterIntent> PrepareRoster(
       const ProfileRosterDesired&, const ProfileRosterExpected&,
@@ -470,7 +486,7 @@ class ProfileManager {
   std::shared_ptr<const HostRoster> CaptureSelectedRoster(
       NativeProfileProjection* diagnostic = nullptr) const;
   void ReportNativeProfileDiagnostics(const char* boundary) const noexcept;
-  enum class RosterSettlementStage:uint8_t {kHostComplete,kNativeMaps,kNativeRetirement};
+  enum class RosterSettlementStage:uint8_t {kHostComplete,kNativeMaps,kNativeDataHandoff};
   ProfileRosterResult SettleRoster(const std::shared_ptr<ProfileRosterIntent>&,
                                   RosterSettlementStage);
   bool OrdinaryRosterWriterAvailable(
@@ -483,6 +499,12 @@ class ProfileManager {
       const std::shared_ptr<const ProfileRosterNativeBinding>&,
       std::weak_ptr<::xe::kernel::NativeProfileIdentityOwner>);
   std::shared_ptr<ProfileRosterNativeReadTicket> CaptureCurrentNativeReadTicket(
+      const std::shared_ptr<const ProfileRosterNativeBinding>&,
+      std::error_code&);
+  // Fixed read custody for this already published/current pending operation.
+  // Preissued before data handoff; grants no writer, image or successor role.
+  std::shared_ptr<ProfileRosterNativeReadTicket> CapturePublishedNativeReadTicket(
+      const std::shared_ptr<ProfileRosterIntent>&,
       const std::shared_ptr<const ProfileRosterNativeBinding>&,
       std::error_code&);
   // Read-only constructor-baseline comparison. Caller may retain the existing
@@ -498,6 +520,11 @@ class ProfileManager {
   ProfileRosterResult PublishNativeRosterProtocol(
       const std::shared_ptr<ProfileRosterIntent>&,
       const ProfileRosterNativeCompletion&);
+  ProfileRosterResult HandoffNativeRoster(
+      const std::shared_ptr<ProfileRosterIntent>&,
+      const ProfileRosterNativeCompletion&);
+  ProfileRosterResult RetireRosterOperation(
+      const std::shared_ptr<ProfileRosterIntent>&);
   ProfileRosterResult FinalizeNativeRoster(
       const std::shared_ptr<ProfileRosterIntent>&,
       const ProfileRosterNativeCompletion&);
@@ -525,14 +552,20 @@ class ProfileManager {
   // Keep the exact selected source through that shared discovery path.
   bool LoadAccountInternal(uint64_t, const ContentSourceState* exact_source,
                            std::optional<uint64_t> discovery_revision = {});
+  std::shared_ptr<ProfileRosterMountTicket> AcquireRosterMount(uint64_t,
+      std::error_code&,const ContentSourceState* exact_source=nullptr,
+      uint32_t* mounted_device_id=nullptr);
+  bool ReleaseRosterMount(const std::shared_ptr<ProfileRosterMountTicket>&);
   bool MountProfileInternal(uint64_t, std::string,
                             std::shared_ptr<ProfileReadMountNode> = {},
                             const ContentSourceState* exact_source = nullptr,
                             uint32_t* mounted_device_id = nullptr,
-                            HostProfileAccountEdit::State* edit = nullptr);
+                            HostProfileAccountEdit::State* edit = nullptr,
+                            const std::shared_ptr<ProfileRosterMountTicket>& roster={});
   bool DismountProfileInternal(std::string_view,
                               std::shared_ptr<ProfileReadMountNode> = {},
-                              const HostProfileAccountEdit::State* edit = nullptr);
+                              const HostProfileAccountEdit::State* edit = nullptr,
+                              const std::shared_ptr<ProfileRosterMountTicket>& roster={});
   std::shared_ptr<ProfileSettingsReadLifetime> settings_read_lifetime_;
   std::shared_ptr<const ProfileSettingsReadProvider> settings_read_provider_;
   uint64_t next_profile_mount_generation_ = 1;
@@ -600,6 +633,9 @@ class ProfileManager {
     // Exact unpublished producer captured before common registration. Map keys
     // are case-folded metadata; they are never a registered-device identity.
     std::shared_ptr<vfs::HostPathDevice> device;
+    // Subset of references, not an extra mount/use count. Generic dismount
+    // cannot consume the exact owed references held by roster tickets.
+    size_t roster_references = 0;
   };
   mutable std::recursive_mutex profile_mount_mutex_;
   std::mutex profile_config_mutex_;

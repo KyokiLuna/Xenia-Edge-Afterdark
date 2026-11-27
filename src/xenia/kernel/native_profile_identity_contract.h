@@ -45,6 +45,7 @@ class NativeIdentityJoinedHostStack final {
  private:
   friend class ::xe::kernel::NativeSystemUiService;
   friend class NativeIdentityOrdinaryTransport;
+  friend class ::xe::kernel::NativeProfileIdentityOwner;
   friend class ::xe::kernel::test::NativeIdentityOrdinaryTransportTestAccess;
   static std::optional<NativeIdentityJoinedHostStack> JoinActual(
       XThread&, std::chrono::milliseconds);

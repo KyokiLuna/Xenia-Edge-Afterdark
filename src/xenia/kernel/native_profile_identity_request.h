@@ -24,6 +24,7 @@ class NativeProfileIdentityRequest final {
   InitializerPhase initializer_phase(bool has_overlap) const noexcept {
     return ClassifyInitializer(flags_,has_overlap);
   }
+  bool no_wait_restore() const noexcept { return ordinal_==0x20B && flags_==0x63; }
   uint16_t ordinal() const { return ordinal_; }
   uint32_t flags() const { return flags_; }
   std::span<const uint8_t> original() const {
@@ -37,6 +38,11 @@ class NativeProfileIdentityRequest final {
     // Whole matching17559 initializer plus mode4 scheduler/table proof. The
     // native scalar presence/auth operations do not retire old allocations;
     // both actual worker entries still need the complete dataful barrier.
+    // The exact original SYSTEM restore producer uses OfflineOnly1 |
+    // ForceLiveLogOff2 | NoPopup20 | DontWait40, with no caller overlap.
+    // Native40 skips overlap initialization AND the F038 wait after copying
+    // its new request. Actual module/body/import admission belongs to Owner.
+    if(flags==0x63)return has_overlap?InitializerPhase::kAfterOldDrain:InitializerPhase::kQueuedAsync;
     const bool proved=flags==0 || flags==4 || flags==0xC || flags==0x20 ||
         flags==0x24 || flags==0x2C || flags==0x120420 || flags==0x120424;
     return has_overlap && proved?InitializerPhase::kQueuedAsync:InitializerPhase::kAfterOldDrain;
@@ -56,7 +62,8 @@ class NativeProfileIdentityRequest final {
     // do not provision a Live Account or suppress identity publication.
     if(flags&0x4000u){error=std::make_error_code(std::errc::invalid_argument);return {};}
     const bool native_signin=flags==0x00120420u || flags==0x00120424u;
-    if((flags&~0x2Fu) && !native_signin){
+    const bool native_restore=ordinal==0x20B && flags==0x63;
+    if((flags&~0x2Fu) && !native_signin && !native_restore){
       error=std::make_error_code(std::errc::operation_not_supported);return {};
     }
     NativeProfileIdentityRequest out;out.ordinal_=ordinal;out.flags_=flags;

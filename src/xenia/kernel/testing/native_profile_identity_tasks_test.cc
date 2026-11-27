@@ -23,6 +23,14 @@ class NativeProfileIdentityTaskTestAccess final {
   static Queue CaptureRetirementClosure(const Queue& roots,Parents&& parents){
     return Ledger::CaptureRetirementClosure(roots,std::forward<Parents>(parents));
   }
+  template<typename Queue,typename Ready>
+  static HostReapLane CaptureReadyHostReap(bool retired,bool healthy,Queue& terminal,Queue& captured,Ready&& ready){
+    return Ledger::CaptureReadyHostReap(retired,healthy,terminal,captured,std::forward<Ready>(ready));
+  }
+  template<typename Value,typename Queue,typename Terminal>
+  static void RetainReturnedExecution(const Value& value,bool duty,Queue& retained,Queue& terminal,Terminal&& handoff){
+    Ledger::RetainReturnedExecution(value,duty,retained,terminal,std::forward<Terminal>(handoff));
+  }
   template<typename Queue>
   static HostReapLane CaptureHostReap(bool retired,bool healthy,Queue& terminal,Queue& captured){
     return Ledger::CaptureHostReap(retired,healthy,terminal,captured);
@@ -3928,5 +3936,88 @@ TEST_CASE("Actual-stop ownership capture retains escaped parents diamonds and cy
  CHECK(released==4);CHECK_FALSE(under_lock);
  REQUIRE(escaped_parent);CHECK_FALSE(escaped_parent->resource);CHECK(escaped_parent->parents.empty());
  graph.clear();CHECK(released==4);escaped_parent.reset();CHECK_FALSE(under_lock);
+ // A sizeable shared graph exercises exact-pointer dedup once per holder,
+ // first-seen order and nonmutation on a genuine capture exception. No timing
+ // threshold, native status or resource release is inferred from traversal.
+ std::vector<std::shared_ptr<Holder>> many;many.reserve(2048);
+ for(size_t i=0;i<2048;++i){auto node=make(100+i);
+  if(i)node->parents={many.back(),many[i/2]};many.push_back(std::move(node));}
+ std::vector<std::shared_ptr<Holder>> shared_roots{many.back(),many[1024],many.back()};
+ const auto original_roots=shared_roots;size_t visited=0;
+ CHECK_THROWS_AS(Access::CaptureRetirementClosure(shared_roots,[&](const auto& holder,const auto& add){
+  if(++visited==32)throw std::bad_alloc();for(const auto& parent:holder->parents)add(parent);
+ }),std::bad_alloc);
+ CHECK(shared_roots==original_roots);CHECK(released==4);
+ visited=0;
+ auto shared_graph=Access::CaptureRetirementClosure(shared_roots,[&](const auto& holder,const auto& add){
+  ++visited;for(const auto& parent:holder->parents)add(parent);
+ });
+ REQUIRE(shared_graph.size()==2048);CHECK(visited==2048);CHECK(shared_graph[0]==many.back());CHECK(shared_graph[1]==many[1024]);
+ std::unordered_set<const void*> unique;
+ for(const auto& holder:shared_graph){CHECK(unique.insert(holder.get()).second);CHECK(holder->resource);
+  CHECK_FALSE(holder->native_returned);CHECK_FALSE(holder->native_freed);}
+ CHECK(shared_roots==original_roots);
+ for(const auto& holder:many){holder->resource.reset();holder->parents.clear();}
+ CHECK(released==2052);CHECK_FALSE(under_lock);
+}
+} // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+namespace {
+struct HostCaptureAllocation {bool fail=false;size_t attempts=0;};
+template<typename T> struct HostCaptureAllocator {
+ using value_type=T;HostCaptureAllocation* state=nullptr;
+ HostCaptureAllocator()=default;
+ explicit HostCaptureAllocator(HostCaptureAllocation* value):state(value){}
+ template<typename U> HostCaptureAllocator(const HostCaptureAllocator<U>& other):state(other.state){}
+ T* allocate(size_t count){if(state){++state->attempts;if(state->fail)throw std::bad_alloc();}
+  return std::allocator<T>{}.allocate(count);}
+ void deallocate(T* pointer,size_t count){std::allocator<T>{}.deallocate(pointer,count);}
+ template<typename U> bool operator==(const HostCaptureAllocator<U>& other)const{return state==other.state;}
+};
+}
+TEST_CASE("Returned execution custody preserves retained owners and unfinished producer handoffs",
+          "[identity_task][host_retirement][terminal_host_reap][lifetime]") {
+ using Access=NativeProfileIdentityTaskTestAccess;using Lane=Access::HostReapLane;
+ struct Resource {uint32_t& released;bool& locked;bool& under_lock;
+  ~Resource(){++released;under_lock|=locked;}};
+ struct Returned {std::shared_ptr<Resource> resource;bool ready=false;
+  bool native_returned=false,native_freed=false;};
+ uint32_t released=0;bool locked=false,under_lock=false;
+ const auto make=[&]{return std::make_shared<Returned>(Returned{
+   std::shared_ptr<Resource>(new Resource{released,locked,under_lock})});};
+ auto retained_owner=make(),unrelated=make(),returned=make();
+ std::vector<std::shared_ptr<Returned>> retained,terminal{unrelated},captured;
+ uint32_t real_handoffs=0;
+ locked=true;
+ // SAME production disposition as a true retained target/pending read. There
+ // is no terminal insertion, so no back()/handoff of the unrelated queue row.
+ Access::RetainReturnedExecution(retained_owner,true,retained,terminal,[&]{++real_handoffs;});
+ CHECK(retained.size()==1);CHECK(terminal.size()==1);CHECK(terminal.front()==unrelated);CHECK(real_handoffs==0);
+ Access::RetainReturnedExecution(returned,false,retained,terminal,[&]{++real_handoffs;});
+ CHECK(real_handoffs==1);CHECK(terminal.size()==2);
+ CHECK(Access::CaptureReadyHostReap(false,true,terminal,captured,[](const auto& row){return row->ready;})==Lane::kNativeOwners);
+ CHECK(captured.empty());CHECK(terminal.size()==2);CHECK(released==0);
+ locked=false;
+ auto* exact=returned.get();returned.reset(); // Actual producer-local drop BEFORE readiness.
+ locked=true;exact->ready=true;
+ CHECK(Access::CaptureReadyHostReap(false,false,terminal,captured,[](const auto& row){return row->ready;})==Lane::kTerminalOnly);
+ CHECK(terminal.size()==1);CHECK(terminal.front()==unrelated);REQUIRE(captured.size()==1);
+ CHECK_FALSE(captured.front()->native_returned);CHECK_FALSE(captured.front()->native_freed);
+ CHECK(released==0);locked=false;captured.clear();CHECK(released==1);CHECK_FALSE(under_lock);
+ // Actual mixed-path allocator failure: reserve is called by the production
+ // helper, not a mirrored failure Boolean or a fabricated backend error.
+ using Pointer=std::shared_ptr<Returned>;using Queue=std::vector<Pointer,HostCaptureAllocator<Pointer>>;
+ HostCaptureAllocation allocation;
+ Queue pending{HostCaptureAllocator<Pointer>(&allocation)},taken{HostCaptureAllocator<Pointer>(&allocation)};
+ auto other=make();other->ready=true;pending.push_back(unrelated);pending.push_back(other);
+ const auto original=pending;const auto before=released;allocation.fail=true;const auto attempts=allocation.attempts;
+ locked=true;
+ CHECK(Access::CaptureReadyHostReap(false,true,pending,taken,[](const auto& row){return row->ready;})==Lane::kNativeOwners);
+ CHECK(allocation.attempts==attempts+1);CHECK(pending==original);CHECK(taken.empty());CHECK(released==before);
+ allocation.fail=false;
+ CHECK(Access::CaptureReadyHostReap(false,true,pending,taken,[](const auto& row){return row->ready;})==Lane::kNativeOwners);
+ CHECK(pending.size()==1);CHECK(pending.front()==unrelated);CHECK(taken.size()==1);CHECK(taken.front()==other);
+ locked=false;CHECK_FALSE(under_lock);
 }
 } // namespace xe::kernel::test

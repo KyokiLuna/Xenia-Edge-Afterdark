@@ -23,6 +23,7 @@
 #include "xenia/kernel/native_system_graphics_transport.h"
 #include "xenia/kernel/guest_runtime_call_executor.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/guest_scheduler.h"
 #include "xenia/kernel/native_import_domain.h"
 #include "xenia/kernel/native_avatar_service.h"
 #include "xenia/kernel/native_identity_listener_bridge.h"
@@ -123,13 +124,14 @@ class IdentityPixelGuard final : public gpu::NativeFramePresentationGuard {
 enum class IdentityFrameRefreshKind : uint8_t {
  kNone, kEmpty, kUnchangedOccupied, kOrdinaryNoProfileDraw
 };
+static const std::array<std::optional<identity_detail::NativeImageDraw>,64> kEmptyImageDrawHistory{};
 class IdentityImageFrameGuard final : public gpu::NativeFramePresentationGuard {
  public:
   IdentityImageFrameGuard(std::shared_ptr<const gpu::NativeFramePresentationGuard> parent,
       std::weak_ptr<NativeProfileIdentityOwner> owner,Tasks::Root root,uint64_t source,uint64_t render,
-      std::array<std::optional<identity_detail::NativeImageDraw>,64> draws,IdentityFrameRefreshKind refresh_kind=IdentityFrameRefreshKind::kNone)
+      const std::array<std::optional<identity_detail::NativeImageDraw>,64>& draws,IdentityFrameRefreshKind refresh_kind=IdentityFrameRefreshKind::kNone)
       :parent(std::move(parent)),owner(std::move(owner)),root(root),source(source),render(render),
-       draws(std::move(draws)),refresh_kind(refresh_kind){}
+       draws(draws),refresh_kind(refresh_kind){}
   bool IsLive() const noexcept override {return parent && parent->IsLive();}
   bool IsRevoked() const noexcept override {return !parent || parent->IsRevoked();}
   const std::shared_ptr<const gpu::NativeFramePresentationGuard> parent;
@@ -797,7 +799,21 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  struct CountedAllocation;
  struct ServiceCell;
  struct PrebodyIdentityWorker;
+ struct Work;
+ struct TerminalHostReapKick {
+  // Exact maximum: ObserveReturn retires reschedule, wake and whole; neutral
+  // execution-return retires at most two. Every other producer inserts one.
+  std::array<Work*,3> completed{};
+  size_t count=0;
+  std::weak_ptr<State> state;
+  void Arm(State&) noexcept;
+  ~TerminalHostReapKick();
+ };
+ void PublishTerminalHostHandoff(const TerminalHostReapKick&) noexcept;
+ void PostTerminalHostReap() noexcept;
+ void ReapTerminalHostMetadata(bool dispatched_request) noexcept;
  struct Work : Tasks::ExecutionObservation {
+  bool terminal_host_ready=false; // producer-local release, NOT native free
   // Operation source is lifetime-only. Generic authority selectors omit this row.
   bool service_progress=false,service_pump_candidate=false;
   uint32_t service_pump_object=0;
@@ -877,7 +893,9 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
 
   std::shared_ptr<NativeIdentityTileWork::Data> tile;
   bool render_iteration=false;
-  std::array<std::optional<identity_detail::NativeImageDraw>,64> image_draws;
+  // Only real render admission allocates these rows. A missing history is
+  // unknown observation, never evidence of a completed empty draw history.
+  std::unique_ptr<identity_detail::NativeImageDrawHistory> image_draws;
   bool image_draws_unavailable=false;
   std::shared_ptr<const gpu::NativeFramePresentationGuard> presentation_guard;
   std::optional<Tasks::CompletionRoute> completion_route; // exact shared-IO entry routing only
@@ -1797,6 +1815,10 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
   if(const auto done=finish(current_read_owner))return *done;
   for(const auto* list:{&copied_originals,&retiring_jobs})for(const auto& candidate:*list)
    if(const auto done=finish(candidate))return *done;
+  if(initial_event_producer && initial_event_producer->origin()==origin){
+   if(!listeners->FinishRetainedProducer(*initial_event_producer,origin))return false;
+   mark_old();return true;
+  }
   if(boot_origin && *boot_origin==origin){
    if(boot_producer_finished){mark_old();return true;}
    if(!listeners->FinishSourceAfterDescendants(origin))return false;
@@ -1840,6 +1862,9 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  }
 
  std::vector<std::shared_ptr<Work>> active,host_retired;
+ // Tracks the actual dispatch callback, not whether Bootstrap saw a queue.
+ // Bootstrap/stop captures must not clear it while that callback is queued.
+ bool terminal_host_reap_queued=false;
  // Every genuine C838 operation retains its own provider/free/tick tails.
  // The separate selector names only the actual accepted native pending pair;
  // it never replaces the lifetime owner of an older operation.
@@ -1911,6 +1936,9 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
  std::vector<CodeOwner> apc_code_until_actual_stop;
  std::shared_ptr<const NativeIdentityEventSource> boot_source;
  std::optional<Events::Origin> boot_origin;
+ // Separate issued initial-read producer, never replaced by the current
+ // Job projection. Its real finish can be deferred into superseded-Job reap.
+ std::optional<Listeners::ProducerCustody> initial_event_producer;
  std::shared_ptr<const NativeIdentityEventSource> current_event_source;
  std::optional<Events::Origin> current_event_origin;
  uint32_t* native_pending=nullptr;
@@ -3161,6 +3189,65 @@ struct NativeProfileIdentityOwner::State : std::enable_shared_from_this<State> {
 };
 // Acyclic ownership: State owns the operation collection; the capsule owns Job/Work/resources,
 // but only weakly names State. Native XMsg Record weakly names the capsule.
+void NativeProfileIdentityOwner::State::TerminalHostReapKick::Arm(State& owner) noexcept {
+ // After genuine terminal insertion, under State. Queue custody keeps these
+ // exact raw rows alive until BOTH reapers observe their later ready handoff.
+ if(count==completed.size())return; // cannot occur in the proved producer family
+ completed[count++]=owner.host_retired.back().get();state=owner.weak_from_this();
+}
+NativeProfileIdentityOwner::State::TerminalHostReapKick::~TerminalHostReapKick(){
+ if(auto owner=state.lock())owner->PublishTerminalHostHandoff(*this);
+}
+void NativeProfileIdentityOwner::State::PublishTerminalHostHandoff(
+    const TerminalHostReapKick& handoff) noexcept {
+ bool post=false;
+ {std::lock_guard lock(mutex);
+  if(retired.load(std::memory_order_acquire))return;
+  // The kick precedes every producer-local Work owner; they have now gone.
+  // Publish without creating another shared Work temporary on this guest tail.
+  for(size_t i=0;i<handoff.count;++i)handoff.completed[i]->terminal_host_ready=true;
+  if(!terminal_host_reap_queued && !host_retired.empty()){
+   terminal_host_reap_queued=true;post=true;
+  }
+ }
+ if(post)PostTerminalHostReap();
+}
+void NativeProfileIdentityOwner::State::PostTerminalHostReap() noexcept {
+ KernelState* exact=nullptr;
+ {std::lock_guard lock(mutex);
+  if(retired.load(std::memory_order_acquire) || !kernel){terminal_host_reap_queued=false;return;}
+  exact=kernel;
+ }
+ // Necessary host lifetime bookkeeping. State is unlocked, although an
+ // ORIGINAL outer GCRC may remain. dispatch_mutex owns finite list push/pop
+ // only and never invokes callbacks, so no dispatch->GCRC wait is introduced.
+ // The actual producer HookUse/whole host frame and resident Kernel own this
+ // call. WEAK capture alone means failed/refused/canceled enqueue cannot drop
+ // Work or native resources on this guest hook; its queue still owns them.
+ bool queued=false;
+ try{const auto weak=weak_from_this();
+  queued=exact->QueueHostUiWork([weak]{if(auto owner=weak.lock())owner->ReapTerminalHostMetadata(true);});
+ }catch(...){/* Actual queue admission failed, preserving terminal custody. */}
+ if(!queued){std::lock_guard lock(mutex);terminal_host_reap_queued=false;}
+}
+void NativeProfileIdentityOwner::State::ReapTerminalHostMetadata(bool dispatched_request) noexcept try {
+ // Existing Kernel Dispatch or external shutdown host phase only. No PPC,
+ // listener/native-free/reference/service cleanup or read Leave runs here.
+ // This actual request is no longer queued even if rundown admission fails.
+ // A later real producer or stop cut can retry the still-owned queue.
+ {std::lock_guard lock(mutex);if(dispatched_request)terminal_host_reap_queued=false;}
+ HookUse use;
+ if(!use.Acquire(hook_rundown,shared_from_this(),false))return;
+ std::vector<std::shared_ptr<Work>> captured;
+ {std::lock_guard lock(mutex);
+  (void)Tasks::CaptureReadyHostReap(retired.load(std::memory_order_acquire),false,
+      host_retired,captured,[](const auto& work){return !work || work->terminal_host_ready;});
+ }
+ // Drop roots only outside State/dispatch/GCRC. Escaped parents/Jobs keep
+ // their genuine resources; no inner revoke or native free is implied.
+ captured.clear();
+}catch(...){/* Every uncaptured owner remains, without guest-result changes. */}
+
 struct NativeProfileIdentityOwner::IdentityServiceOrigin::Data {
  std::weak_ptr<State> state;
  std::shared_ptr<State::Job> job;
@@ -3696,6 +3783,7 @@ std::optional<uint64_t> NativeProfileIdentityOwner::TryEnterIdentityServiceTick(
 bool NativeProfileIdentityOwner::ReturnIdentityServiceTick(void* raw,uint32_t at) noexcept try {
  if(!raw || at!=0x818CEE08)return false;auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);auto& s=*state_;
  State::HookUse use;if(!use.Acquire(s.hook_rundown,state_,false))return false;
+ State::TerminalHostReapKick terminal_reap;
  auto* thread=ActualThread();if(!thread)return false;
  std::shared_ptr<State::Work> work;
  {std::lock_guard lock(s.mutex);
@@ -3744,7 +3832,7 @@ bool NativeProfileIdentityOwner::ReturnIdentityServiceTick(void* raw,uint32_t at
    parent->execution_read_fallback=true;
   }
  }
- work->normal_return=true;s.host_retired.push_back(work);s.active.erase(current);s.changed.notify_all();return true;
+ work->normal_return=true;s.host_retired.push_back(work);terminal_reap.Arm(s);s.active.erase(current);s.changed.notify_all();return true;
 }catch(...){return true;}
 
 // Both native224 queue variants may reach their worker before the original
@@ -4629,6 +4717,10 @@ std::shared_ptr<NativeProfileIdentityOwner> NativeProfileIdentityOwner::CreateBe
      new NativeIdentityEventSource(event_root,kInitialReadSource,0,boot_lifetime));
  state->current_event_origin=state->listeners->AdoptSource(state->current_event_source);
  if(!state->current_event_origin)return fail("Initial unjoined common read source registration failed");
+ // Preserve the exact existing adoption; do not issue a second producer or
+ // identify it later from source serial2/current Job metadata.
+ state->initial_event_producer=Listeners::ProducerCustody(*state->listeners,
+     state->current_event_source,*state->current_event_origin);
  {auto lock=global_critical_region::AcquireDirect();
   if(kernel->memory()->QueryRangeAccess(0x81AAC26C,4)==memory::PageAccess::kNoAccess)
    return fail("Actual native pending mapping unavailable");
@@ -5196,8 +5288,8 @@ void NativeProfileIdentityOwner::ObserveImageReturn(void* raw,uint32_t at) noexc
     // This genuine decoder creates a new native texture. A reused native
     // object address cannot preserve an older future adoption/draw birth.
     state.images.RevokeNativeTexture(*texture);
-    for(const auto& work:state.active)for(auto& draw:work->image_draws)
-     if(draw && draw->draw.copied.texture==*texture)draw.reset();
+    for(const auto& work:state.active)if(work->image_draws)
+     work->image_draws->RevokeTexture(*texture);
     parent->copied=State::ImageTransfer{*call->input,call->serial,*texture};
    }
    // A failed nonlocal PNG return abandons nested observer metadata only.
@@ -5269,8 +5361,10 @@ void NativeProfileIdentityOwner::ObserveImageReturn(void* raw,uint32_t at) noexc
       observed->copied==*call->copied && observed->copied.texture==call->native_texture)for(const auto& work:state.active)if(work->serial==call->render &&
        work->render_iteration && !work->normal_return && !work->uncertain &&
        work->source==observed->copied.input.source()){
-    const auto empty=std::find_if(work->image_draws.begin(),work->image_draws.end(),[](const auto& v){return !v;});
-    if(empty==work->image_draws.end())work->image_draws_unavailable=true;
+    if(!work->image_draws){work->image_draws_unavailable=true;break;}
+    auto& draws=work->image_draws->draws;
+    const auto empty=std::find_if(draws.begin(),draws.end(),[](const auto& v){return !v;});
+    if(empty==draws.end())work->image_draws_unavailable=true;
     else if(call->packet_returned)*empty=identity_detail::NativeImageDraw{*observed,call->packet_address,
         call->packet_header,call->packet_viz,call->packet_initiator,call->texture_fetch};
     break;
@@ -5585,8 +5679,8 @@ void NativeProfileIdentityOwner::ObserveImageAllocationFree(void* raw) noexcept 
   // Entry revokes future observation before ORIGINAL free. It is neither a
   // successful deallocation receipt nor a native reference/cancellation call.
   state.RevokeImageString(pointer);state.images.RevokeNativeTexture(pointer);
-  for(const auto& work:state.active)for(auto& draw:work->image_draws)
-   if(draw && draw->draw.copied.texture==pointer)draw.reset();
+  for(const auto& work:state.active)if(work->image_draws)
+   work->image_draws->RevokeTexture(pointer);
   for(const auto& provider:state.providers)if(provider &&
       (provider->buffer==pointer || provider->object==pointer)){
    provider->image_epoch.Revoke();provider->image_output.reset();provider->image_key.reset();
@@ -6828,7 +6922,8 @@ bool NativeProfileIdentityOwner::OwnsIngressCall(GuestRuntimeCallExecutor* calls
 GuestRuntime::ExecutionResult NativeProfileIdentityOwner::RunScheduledBody(
     XThread& thread,uint64_t serial,
     const std::function<GuestRuntime::ExecutionResult(XThread&)>& work) {
-  auto& s=*state_;auto* context=thread.thread_state()->context();
+  State::TerminalHostReapKick terminal_reap;
+ auto& s=*state_;auto* context=thread.thread_state()->context();
   const auto frame=s.ReadFrame(*context,0x81696558);
   const auto task=NativeProfileIdentityTaskContext::Read(
       *s.config.catalog->calls(),*s.config.domain,0x81696558,*context);
@@ -6876,7 +6971,7 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::RunScheduledBody(
    if(i==s.active.end()){s.Lose(__LINE__);return GuestRuntime::ExecutionResult{false,kAbort,"Missing callback owner"};}
    // Transfer the final retiring local before State unlock; a concurrent
    // host reap must never make this guest epilogue the last owner.
-   s.host_retired.push_back(std::move(whole));s.active.erase(i);
+   s.host_retired.push_back(std::move(whole));terminal_reap.Arm(s);s.active.erase(i);
   }
   return result;
 }
@@ -7234,6 +7329,7 @@ bool NativeProfileIdentityOwner::ObserveExecutionEntry(void* raw,uint32_t at) no
 
 bool NativeProfileIdentityOwner::ObserveExecutionReturn(void* raw,uint32_t at) noexcept {
  State::HookUse hook_use;
+ State::TerminalHostReapKick terminal_reap;
  if(!raw || (!CommonTaskFunction(at) && !ProfileCallback(at)))return false;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
  std::shared_ptr<NativeProfileIdentityOwner> owner;
@@ -7311,7 +7407,7 @@ bool NativeProfileIdentityOwner::ObserveExecutionReturn(void* raw,uint32_t at) n
     if(exact){
      tail->normal_return=true;
      const auto old=std::find(s.active.begin(),s.active.end(),tail);
-     if(old!=s.active.end()){s.host_retired.push_back(tail);s.active.erase(old);}else exact=false;
+     if(old!=s.active.end()){s.host_retired.push_back(tail);terminal_reap.Arm(s);s.active.erase(old);}else exact=false;
     }
    }
   }else if(exact && at==0x816B7490){
@@ -7374,8 +7470,8 @@ bool NativeProfileIdentityOwner::ObserveExecutionReturn(void* raw,uint32_t at) n
   if(found!=s.active.end()){
    // Returned immutable resource holders are NOT active caller/source frames.
    // In particular a later Task may reuse this worker's identical SP/LR.
-   if(hold_target || work->execution_read.pending())s.execution_retained.push_back(work);
-   else s.host_retired.push_back(work);
+   Tasks::RetainReturnedExecution(work,hold_target || work->execution_read.pending(),
+       s.execution_retained,s.host_retired,[&]{terminal_reap.Arm(s);});
    s.active.erase(found);
   }
   s.changed.notify_all();return true;
@@ -7883,6 +7979,10 @@ NativeProfileIdentityOwner::AdmitNativeFrameIteration(XThread& thread,uint32_t l
      work=std::make_shared<State::Work>();work->frame=*frame;work->serial=s.next_work++;
      work->source=s.pixels->source();work->presentation_guard=s.pixels;
      work->render_iteration=true;work->thread=retain_object(&thread);
+     // Optional RENDER-only history. Failure preserves base native frame
+     // admission but cannot mint known-empty image observation.
+     try{work->image_draws=std::make_unique<identity_detail::NativeImageDrawHistory>();}
+     catch(...){work->image_draws_unavailable=true;}
      work->domain=s.config.domain->Acquire();
      const auto birth=s.tasks.BeginExternalWork(*frame,*task);
      if(observation.Failed(15,!birth) || observation.Failed(16,!work->domain)){s.Lose(__LINE__);return result;}
@@ -7951,14 +8051,14 @@ NativeProfileIdentityOwner::CaptureNativeFrameGuard(XThread& thread) noexcept {
     // Optional observation allocation cannot reject an otherwise admitted
     // native frame. The base visibility guard and execution remain unchanged.
     try{
-     const bool image_history_known=!work->image_draws_unavailable && s.image_slot && !s.image_slot->unavailable_.load();
+     const bool image_history_known=work->image_draws && !work->image_draws_unavailable && s.image_slot && !s.image_slot->unavailable_.load();
      auto refresh_kind=s.InitialFrameKindCurrent(result.guard,work->source);
      // Occupied rows still depend on complete image-use observation. Only the
      // original all-empty proof has no possible profile image owner to lose.
      if(refresh_kind==IdentityFrameRefreshKind::kUnchangedOccupied && !image_history_known)
       refresh_kind=IdentityFrameRefreshKind::kNone;
      const bool image_observed=image_history_known &&
-        std::any_of(work->image_draws.begin(),work->image_draws.end(),[](const auto& d){return bool(d);});
+        std::any_of(work->image_draws->draws.begin(),work->image_draws->draws.end(),[](const auto& d){return bool(d);});
      if(refresh_kind==IdentityFrameRefreshKind::kNone && image_history_known && !image_observed &&
         s.OrdinaryNoProfileFrameCurrent(result.guard,work->source) && work->read &&
         s.PresentationRead(*work) &&
@@ -7966,7 +8066,8 @@ NativeProfileIdentityOwner::CaptureNativeFrameGuard(XThread& thread) noexcept {
       refresh_kind=IdentityFrameRefreshKind::kOrdinaryNoProfileDraw;
      if(refresh_kind!=IdentityFrameRefreshKind::kNone || image_observed)
       result.guard=std::make_shared<IdentityImageFrameGuard>(result.guard,owner,s.root,
-          work->source,work->serial,work->image_draws,refresh_kind);
+          work->source,work->serial,
+          work->image_draws?work->image_draws->draws:kEmptyImageDrawHistory,refresh_kind);
     }catch(...){}
     return result;
    }
@@ -8019,10 +8120,10 @@ void NativeProfileIdentityOwner::ObserveNativeImageFrameCaptured(XThread& thread
    if(image->refresh_kind==IdentityFrameRefreshKind::kOrdinaryNoProfileDraw){
     if(!s.OrdinaryNoProfileFrameCurrent(image->parent,image->source) ||
        request.plan()->inventory().draws.empty() || s.image_slot->unavailable_.load() ||
-       (*render)->image_draws_unavailable || !(*render)->read ||
+       !(*render)->image_draws || (*render)->image_draws_unavailable || !(*render)->read ||
        !s.PresentationRead(**render) ||
        xam::ProfileRosterNativeReadScope::FromActualThread(s.kernel,thread.thread_state())!=(*render)->read.get() ||
-       std::any_of((*render)->image_draws.begin(),(*render)->image_draws.end(),[](const auto& d){return bool(d);}))return;
+       std::any_of((*render)->image_draws->draws.begin(),(*render)->image_draws->draws.end(),[](const auto& d){return bool(d);}))return;
    }else{
     if(s.InitialFrameKindCurrent(image->parent,image->source)!=image->refresh_kind)return;
     // Unknown occupied-image history stays closed even for exact no-op owners.
@@ -8119,6 +8220,7 @@ void NativeProfileIdentityOwner::ObserveNativeImageFrameCompleted(
 }
 
 void NativeProfileIdentityOwner::ObserveRenderIterationEnd(void* raw) noexcept {
+ State::TerminalHostReapKick terminal_reap;
  if(!raw)return;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);
  const auto owner=Lookup(c.kernel_state);if(!owner)return;auto& s=*owner->state_;
@@ -8163,9 +8265,19 @@ void NativeProfileIdentityOwner::ObserveRenderIterationEnd(void* raw) noexcept {
   work->normal_return=true;
   const auto retiring=std::find(s.active.begin(),s.active.end(),work);
   if(retiring==s.active.end()){s.Lose(__LINE__);return;}
-  s.host_retired.push_back(std::move(work));s.active.erase(retiring);s.changed.notify_all();
+  s.host_retired.push_back(std::move(work));terminal_reap.Arm(s);s.active.erase(retiring);s.changed.notify_all();
  }catch(...){s.Lose(__LINE__);}
 }
+
+void NativeProfileIdentityOwner::ReapTerminalMetadataDuringCpuStop(KernelState* kernel) noexcept try {
+ if(!kernel || XThread::IsInThread() || XThread::GetCurrentFiberThread() ||
+    global_critical_region::is_held_by_current_thread() ||
+    !kernel->guest_scheduler()->shutting_down())return;
+ // Registry retains this exact task owner through CPU/IO join; stopping is
+ // deliberately not a public BootAdmitted or source-readiness prerequisite.
+ const auto owner=NativeSystemUiService::CaptureTaskExecutionOwner(kernel);
+ if(owner)owner->state_->ReapTerminalHostMetadata(false);
+}catch(...){/* Original returned/native owners remain retained. */}
 
 bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool include_expected) noexcept try {
  auto& s=*state_;
@@ -8187,7 +8299,8 @@ bool NativeProfileIdentityOwner::ReapReturnedOnBootstrap(XThread& bootstrap,bool
   std::lock_guard lock(s.mutex);
   native_owners_healthy=!s.uncertain.load() && !s.tasks.lost() &&
       (!s.wake || !s.wake->lost()) && (!s.listeners || !s.listeners->lost());
-  const auto lane=Tasks::CaptureHostReap(s.retired.load(),native_owners_healthy,s.host_retired,retired);
+  const auto lane=Tasks::CaptureReadyHostReap(s.retired.load(),native_owners_healthy,s.host_retired,retired,
+      [](const auto& work){return !work || work->terminal_host_ready;});
   if(lane==Tasks::HostReapLane::kRetired)return false;
   // The terminal queue is captured even after unrelated uncertainty. Keep
   // active/uncertain work and separate native free/reference/context/service
@@ -9306,6 +9419,7 @@ bool NativeProfileIdentityOwner::RetireAfterActualKernelStop() noexcept {
   execution_lifetimes.clear();
   listeners.reset();job.reset();bootstrap_cleanup.reset();
   state_->boot_source.reset();state_->boot_origin.reset();
+  state_->initial_event_producer.reset(); // actual stopped host cut, outside State/GCRC
   counted={};retired_counted.clear();state_->providers={};
   // Actual all-CPU/GPU-stop retires only these value observations. It does
   // not fabricate missing native calls, reference releases or healthy drain.
@@ -9375,6 +9489,7 @@ GuestRuntime::ExecutionResult NativeProfileIdentityOwner::ExecuteBootstrapInputA
 
 uint64_t NativeProfileIdentityOwner::EnterFiniteInputBoundary(void* raw,uint32_t at) noexcept {
  State::HookUse hook_use;
+ State::TerminalHostReapKick terminal_reap;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);auto& s=*state_;
  try{
   if(!hook_use.Acquire(s.hook_rundown,state_,true)){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
@@ -9425,7 +9540,7 @@ uint64_t NativeProfileIdentityOwner::EnterFiniteInputBoundary(void* raw,uint32_t
      if(!canceled){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
      const auto retiring=std::find(s.active.begin(),s.active.end(),work);
      if(retiring==s.active.end()){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
-     s.host_retired.push_back(std::move(work));s.active.erase(retiring);return s.Deny(c,at,__LINE__);
+     s.host_retired.push_back(std::move(work));terminal_reap.Arm(s);s.active.erase(retiring);return s.Deny(c,at,__LINE__);
     }
     const bool open=s.render_phase==State::RenderPhase::kOpen ||
         s.render_phase==State::RenderPhase::kHiddenRefresh;
@@ -9475,6 +9590,7 @@ uint64_t NativeProfileIdentityOwner::EnterFiniteInputBoundary(void* raw,uint32_t
 // reuses the same roster scope stack, read pools and whole-consumer ledger.
 uint64_t NativeProfileIdentityOwner::EnterFiniteSystemThreadBoundary(void* raw,uint32_t at) noexcept {
  State::HookUse hook_use;
+ State::TerminalHostReapKick terminal_reap;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);auto& s=*state_;
  try{
   if(!hook_use.Acquire(s.hook_rundown,state_,true)){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
@@ -9539,7 +9655,7 @@ uint64_t NativeProfileIdentityOwner::EnterFiniteSystemThreadBoundary(void* raw,u
      // No Task, native callback return or event consumption is fabricated.
      const auto retiring=std::find(s.active.begin(),s.active.end(),work);
      if(retiring==s.active.end()){s.Lose(__LINE__);return s.Deny(c,at,__LINE__);}
-     s.host_retired.push_back(std::move(work));s.active.erase(retiring);return s.Deny(c,at,__LINE__);
+     s.host_retired.push_back(std::move(work));terminal_reap.Arm(s);s.active.erase(retiring);return s.Deny(c,at,__LINE__);
     }
     // Match the real render iteration's current-ticket policy: draining
     // still admits bounded OLD reads until the actual ClosingOld cut seals.
@@ -10794,6 +10910,7 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
  if(address==0x90117190 || address==0x90103178 || address==0x901183E0){ObserveRestoreProducer(raw,uint32_t(address),true);return;}
  if(address<=UINT32_MAX && CoversIdentityServiceBoundary(raw,uint32_t(address),true)){ClearTaskAllocationCut();return;}
  State::HookUse hook_use;
+ State::TerminalHostReapKick terminal_reap;
  ClearTaskAllocationCut();
  if(!raw || address>UINT32_MAX)return;
  auto& c=*static_cast<cpu::ppc::PPCContext*>(raw);const auto at=uint32_t(address);
@@ -10871,7 +10988,7 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
     work->normal_return=true;
     const auto retiring=std::find(s.active.begin(),s.active.end(),work);
     if(retiring==s.active.end()){s.Lose(__LINE__);return;}
-    s.host_retired.push_back(std::move(work));s.active.erase(retiring);s.changed.notify_all();return;
+    s.host_retired.push_back(std::move(work));terminal_reap.Arm(s);s.active.erase(retiring);s.changed.notify_all();return;
    }
    if(s.uncertain.load(std::memory_order_acquire) && !work->task_release && !work->periodic_factory)return;
    if(work->periodic_factory && !work->periodic_body_admitted)return;
@@ -11315,7 +11432,7 @@ void NativeProfileIdentityOwner::ObserveReturn(void* raw,uint64_t address) noexc
    // Allocation failure leaves active owning the exact Work. On success,
    // shared_ptr's noexcept move empties this local/tail before the active
    // reference is removed, with no post-move dereference or destructor here.
-   s.host_retired.push_back(std::move(item));s.active.erase(i);return true;
+   s.host_retired.push_back(std::move(item));terminal_reap.Arm(s);s.active.erase(i);return true;
   };
   if(work->tail_reschedule){work->tail_reschedule->normal_return=true;if(!retire(work->tail_reschedule))return;}
   if(work->tail_wake){work->tail_wake->normal_return=true;if(!retire(work->tail_wake))return;}

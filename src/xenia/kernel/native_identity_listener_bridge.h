@@ -68,6 +68,30 @@ class NativeIdentityListenerBridge final {
   using Listener = Ledger::Listener;
   using Work = Ledger::Work;
   using WorkKey = Ledger::WorkKey;
+  // Custody of an ALREADY issued producer, not an Adopt/read/publication
+  // authority. The actual owner supplies its genuine Source/Origin pair once.
+  // It survives replacement of a mutable current projection; no destructor
+  // finishes the producer. Caller serializes this record with its Owner lock.
+  class ProducerCustody final {
+   public:
+    ProducerCustody(ProducerCustody&&) noexcept = default;
+    ProducerCustody& operator=(ProducerCustody&&) noexcept = default;
+    ProducerCustody(const ProducerCustody&) = delete;
+    ProducerCustody& operator=(const ProducerCustody&) = delete;
+    const auto& source() const { return source_; }
+    const Origin& origin() const { return origin_; }
+   private:
+    friend class NativeProfileIdentityOwner;
+    friend class NativeIdentityListenerBridge;
+    friend class NativeIdentityListenerBridgeTestAccess;
+    ProducerCustody(NativeIdentityListenerBridge& issuer,
+        std::shared_ptr<const NativeIdentityEventSource> source,Origin origin)
+        :issuer_(&issuer),source_(std::move(source)),origin_(origin) {}
+    NativeIdentityListenerBridge* issuer_;
+    std::shared_ptr<const NativeIdentityEventSource> source_;
+    Origin origin_;
+    bool finished_=false;
+  };
   static constexpr size_t kAreas = 16, kCells = 64;
   struct Registers {
     uintptr_t context = 0, thread_state = 0, kernel = 0;
@@ -441,9 +465,22 @@ class NativeIdentityListenerBridge final {
   // operation. Finish only its producer pin; passive queues and any separately
   // entered consumers keep exact origin resources until real transfer/reap.
   // Do not require intent destruction or discard queued events here.
-  bool FinishSourceAfterDescendants(Origin origin) {
+  bool FinishRetainedProducer(ProducerCustody& producer,Origin exact) {
+    // The real bridge call below discharges the one producer reference. A
+    // repeated exact cleanup may outlive slot reaping/reuse; it must neither
+    // touch the replacement nor reinterpret a stale numeric Origin as current.
+    if(producer.issuer_!=this || !producer.source_ || producer.origin_.root!=root_ ||
+        producer.origin_!=exact)return false;
+    if(producer.finished_)return true;
+    if(!FinishSourceAfterDescendants(exact,producer.source_.get()))return false;
+    producer.finished_=true;return true;
+  }
+  bool FinishSourceAfterDescendants(Origin origin,
+      const NativeIdentityEventSource* exact_source=nullptr) {
     std::lock_guard lock(mutex_);
-    if (!SourceFor(origin)) { Lose(__LINE__,2);return false; }
+    const auto source=SourceFor(origin);
+    if (!source) { Lose(__LINE__,2);return false; }
+    if(exact_source && source.get()!=exact_source)return false;
     for (const auto& cell:cells_) if (cell.active_.load() && cell.origin_==origin) { Lose(__LINE__,2);return false; }
     return ledger_.FinishProducerNormally(origin);
   }

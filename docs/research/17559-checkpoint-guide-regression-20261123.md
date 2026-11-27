@@ -733,3 +733,16 @@ GitHub source update follow verified behavior. This does not close the HDD gate.
 Existing source, index, releases, original profiles/saves/system content and the
 20 GiB project-filesystem reserve remain preserved. Raw runtime logs, screenshots
 and generated console signing material remain outside the public repository.
+
+## V156 source update (2026-11-26 local time)
+
+The initial producer-custody and returned-host resource lifecycle corrections
+now pass the complete Release build and all seven direct runs (kernel
+1,509/113,602; installed subset 240/43,766). Native initial alignment settles;
+the Guide is captured visibly, two isolated runs exit normally without forced
+cleanup, and Doritos RSS stays near 1 GiB. See the [current lifecycle record](17559-native-signin-lifecycle-20261126.md).
+
+Profile-selection transitions, primary-controller close/reopen, Xbox Home and
+gameplay remain unaccepted. Slot-1 virtual B did not visibly close Guide. A
+replacement checkpoint is being prepared; no finished AppImage or gate pass is
+claimed by this source update. The broader unintegrated HDD draft stays inactive.

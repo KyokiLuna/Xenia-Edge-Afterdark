@@ -305,6 +305,8 @@ class NativeProfileIdentityOwner final
   friend class GuestRuntimeCallExecutor;
   friend class NativeSystemTaskContinuation;
   friend class NativeSystemUiService;
+  // Existing OS shutdown join cuts may reclaim terminal host metadata.
+  friend class GuestScheduler;
   // Optional fresh constructor provenance, never a native Logon completion.
   void ObserveInitialEmptyProfileBaseline(XThread&, NativeInitialEmptyProfileWitness&&) noexcept;
   friend class NativeSystemGraphicsTransport;
@@ -390,6 +392,9 @@ class NativeProfileIdentityOwner final
   // Same existing normal-return retirement on the actual OS Bootstrap,
   // outside all native/owner locks. No admission or completion authority.
   bool ReapReturnedOnBootstrap(XThread&,bool include_expected = true) noexcept;
+  // Existing external OS shutdown join cuts only. Terminal host metadata,
+  // never native-free/active/read/PM/service completion or actual-stop proof.
+  static void ReapTerminalMetadataDuringCpuStop(KernelState*) noexcept;
   bool StepOnBootstrap(XThread&) noexcept;
   // Runs the genuine retained periodic service stop before host/native drain.
   bool StopPeriodicOnBootstrap(XThread&) noexcept;

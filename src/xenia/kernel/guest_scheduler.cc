@@ -26,6 +26,7 @@
 #include "xenia/cpu/stack_walker.h"
 #include "xenia/kernel/kernel_flags.h"
 #include "xenia/kernel/kernel_state.h"
+#include "xenia/kernel/native_profile_identity_owner.h"
 #include "xenia/kernel/xobject.h"
 #include "xenia/kernel/xthread.h"
 #include "xenia/kernel/util/host_call_outcome.h"
@@ -293,6 +294,10 @@ void GuestScheduler::Shutdown() {
     return;
   }
   shutting_down_.store(true);
+  // Kernel Dispatch was joined before this existing CPU-stop phase. Native
+  // cleanup hooks may still return until each actual CPU joins below; drain
+  // only their completed host custody on these same OS host cuts, no new poll.
+  NativeProfileIdentityOwner::ReapTerminalMetadataDuringCpuStop(kernel_state_);
   for (Cpu& cpu : cpus_) {
     if (cpu.ready_event) {
       cpu.ready_event->Set();
@@ -335,6 +340,7 @@ void GuestScheduler::Shutdown() {
         }
       }
       waited_ms += 50;
+      NativeProfileIdentityOwner::ReapTerminalMetadataDuringCpuStop(kernel_state_);
       if (waited_ms % 2000 == 0) {
         XELOGW(
             "GuestScheduler: shutdown has waited {} ms for a dispatch thread, "
@@ -362,6 +368,7 @@ void GuestScheduler::Shutdown() {
     xe::threading::Wait(thread.get(), false);
   }
   io_pool_threads_.clear();
+  NativeProfileIdentityOwner::ReapTerminalMetadataDuringCpuStop(kernel_state_);
   // Settle explicitly owned unstarted work before parked fibers are
   // abandoned/reclaimed. Legacy calls with no on_drop are still only freed.
   // Callbacks and capture destruction must not run under either queue lock.

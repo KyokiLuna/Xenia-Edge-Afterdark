@@ -347,6 +347,69 @@ class NativeIdentityListenerBridgeTestAccess final {
     CHECK(retired.count>0);CHECK_FALSE(bridge.lost());
     retired={};CHECK(lifetime.expired());
   }
+  static void InitialProducerCustodySurvivesProjectionAndReap(){
+    using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
+    const L::Root root{11,13,17};B bridge(root);
+    auto life=std::make_shared<int>(23);std::weak_ptr<int> initial_lifetime=life;
+    auto boot=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,1,0,life));
+    auto initial=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,2,0,life));
+    const auto boot_origin=bridge.AdoptSource(boot),initial_origin=bridge.AdoptSource(initial);
+    REQUIRE(boot_origin);REQUIRE(initial_origin);REQUIRE(*boot_origin!=*initial_origin);
+    std::optional<B::ProducerCustody> producer(B::ProducerCustody(bridge,initial,*initial_origin));
+    auto current=initial;auto current_origin=*initial_origin;
+    // A real pre-entry cancellation ends only the NEW producer. The existing
+    // initial read source remains admitted for a later real publication.
+    auto canceled=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,3,37,std::make_shared<int>(29)));
+    const auto canceled_origin=bridge.AdoptSource(canceled);REQUIRE(canceled_origin);
+    REQUIRE(bridge.FinishSourceAfterDescendants(*canceled_origin));
+    canceled.reset();{auto retired=bridge.ReapOnHostOutsideGuestLocks();CHECK(retired.count>0);}
+    CHECK(bridge.SourceOnlyProducer(*initial_origin));
+    auto selected_life=std::make_shared<int>(31);
+    auto selected=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,4,41,selected_life));
+    const auto selected_origin=bridge.AdoptSource(selected);REQUIRE(selected_origin);
+    current=selected;current_origin=*selected_origin; // genuine current projection advances
+    CHECK(current!=producer->source());CHECK(current_origin!=producer->origin());
+    CHECK_FALSE(bridge.FinishRetainedProducer(*producer,*selected_origin));
+    CHECK_FALSE(bridge.FinishRetainedProducer(*producer,*boot_origin));
+    B::ProducerCustody wrong_pair(bridge,selected,*initial_origin);
+    CHECK_FALSE(bridge.FinishRetainedProducer(wrong_pair,*initial_origin));
+    CHECK(bridge.SourceOnlyProducer(*initial_origin));CHECK(bridge.SourceOnlyProducer(*selected_origin));
+    const auto listener=bridge.ledger_.RegisterListener(0x90004000);REQUIRE(listener);
+    REQUIRE(bridge.ledger_.ReplaceQueued(*listener,0x90005000,0xA,2,*initial_origin,true));
+    REQUIRE(bridge.OldSourceDataQuiescent(*initial_origin));
+    REQUIRE(bridge.FinishRetainedProducer(*producer,*initial_origin));
+    CHECK_FALSE(bridge.SourceProducerQuiescent(*initial_origin));
+    CHECK(bridge.SourceOnlyProducer(*selected_origin)); // old finish cannot finish current
+    CHECK(bridge.ReapOnHostOutsideGuestLocks().count==0); // queue still owns its causal pin
+    const L::WorkKey key{root,43,47,53,0x90001000,0x90002000,0x91000000,0x816CD70C,0x816CD6E8};
+    auto whole=std::shared_ptr<const NativeIdentityEventWorkSource>(new NativeIdentityEventWorkSource(key,current,selected_life));
+    const auto work=bridge.AdoptWholeWork(whole);REQUIRE(work);
+    const auto delivered=bridge.ledger_.TransferSuccessfulDequeue(*listener,0x90005000,0xA,2,*work);
+    REQUIRE(delivered.retained_by_work);CHECK(delivered.origin==*initial_origin);
+    auto facts=bridge.CaptureDependencies(*work);REQUIRE(facts);
+    CHECK(facts->entry==selected);REQUIRE(facts->count==1);CHECK(facts->dequeued[0]==initial);
+    REQUIRE(bridge.FinishWholeWorkNormally(*work,key,whole));facts.reset();whole.reset();
+    initial.reset();life.reset();
+    {auto retired=bridge.ReapOnHostOutsideGuestLocks();REQUIRE(retired.count>0);CHECK_FALSE(initial_lifetime.expired());}
+    // Repeated cleanup after real slot reuse is the SAME spent capability,
+    // never another Finish of the replacement's producer reference.
+    auto replacement=std::shared_ptr<const NativeIdentityEventSource>(new NativeIdentityEventSource(root,5,59,selected_life));
+    const auto replacement_origin=bridge.AdoptSource(replacement);REQUIRE(replacement_origin);
+    CHECK(replacement_origin->slot==initial_origin->slot);CHECK(replacement_origin->serial!=initial_origin->serial);
+    REQUIRE(bridge.FinishRetainedProducer(*producer,*initial_origin));
+    CHECK(bridge.SourceOnlyProducer(*replacement_origin));
+    B other(root),restarted({root.kernel+1,root.domain+1,root.generation+1});
+    CHECK_FALSE(other.FinishRetainedProducer(*producer,*initial_origin));
+    CHECK_FALSE(restarted.FinishRetainedProducer(*producer,*initial_origin));
+    CHECK_FALSE(other.lost());CHECK_FALSE(restarted.lost());
+    producer.reset();CHECK_FALSE(initial_lifetime.expired()); // boot shares the real lifetime
+    REQUIRE(bridge.FinishSourceAfterDescendants(*boot_origin));boot.reset();
+    {auto retired=bridge.ReapOnHostOutsideGuestLocks();CHECK_FALSE(initial_lifetime.expired());}
+    CHECK(initial_lifetime.expired());
+    REQUIRE(bridge.FinishSourceAfterDescendants(*selected_origin));
+    REQUIRE(bridge.FinishSourceAfterDescendants(*replacement_origin));
+    REQUIRE(bridge.ledger_.RetireListenerAfterNativeDestruction(*listener));CHECK_FALSE(bridge.lost());
+  }
   static void OldQueuedHintsKeepLifetimeAfterProducer(){
     using B=NativeIdentityListenerBridge;using L=NativeIdentityEventLedger;
     const L::Root root{11,13,17};B bridge(root);
@@ -1238,5 +1301,8 @@ TEST_CASE("Nested listener admission rejects unrelated and recycled parent owner
 }
 TEST_CASE("Nested listener return retains abandoned mismatched and over-capacity work", "[identity_listener][nested_consumption]"){
  NativeIdentityListenerBridgeTestAccess::NestedReturnRefusals(GENERATE(0u,1u,2u));
+}
+TEST_CASE("Issued initial event producer survives current replacement cancellation queue delivery and restart", "[identity_listener][initial_event_producer][lifetime][restart]"){
+ NativeIdentityListenerBridgeTestAccess::InitialProducerCustodySurvivesProjectionAndReap();
 }
 } // namespace xe::kernel

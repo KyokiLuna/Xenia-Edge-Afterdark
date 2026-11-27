@@ -48,7 +48,7 @@ The project is developed in tested milestones. The [implementation roadmap](docs
 
 | Subsystem | Current state |
 | --- | --- |
-| Guide / shared XUI & XAM foundation | V153 restores authenticated SYSTEM bootstrap ingress and passes all seven direct runs. The actual native run advances publication/data handoff and both preparation barriers, but game input and Guide remain unaccepted. Final producer settlement and resource retention are under review; the published checkpoint is not replaced. |
+| Guide / shared XUI & XAM foundation | V156 passes all seven direct runs. Native startup now settles, Guide renders, and two isolated runs exit normally. Doritos memory holds near 1 GiB. Sign-in transitions, Guide close/reopen, Xbox Home and gameplay still need acceptance; a replacement checkpoint is being prepared. |
 | HDD, local profiles & saves | In progress. Managed storage, persistence and recovery have engineering test coverage; the combined HDD gate remains incomplete. V62 separately recorded local profile creation/reopening and BO1 settings persistence. |
 | Native account/profile UI | Integration and runtime validation remain in progress. Native sign-in and profile/avatar initialization are not established as working across the requested scenarios. |
 | Avatar system | Stock appearance/preview data is present in local profile work; full 3D rendering, editing, persistence and game consumption remain unfinished. |
@@ -64,7 +64,7 @@ Current source progress and the remaining native sign-in/UI lifecycle failures a
 
 The [native profile admission update](docs/research/17559-native-profile-admission-20261125.md) records the subsequently applied source changes, passing full and focused tests, restored unsigned Guide behavior, and the remaining profile-load/shutdown failures. This is a source backup, not a replacement AppImage or finished gate.
 
-The [current profile lifecycle comparison](docs/research/17559-profile-lifecycle-comparison-20261125.md) preserves the actual results. The [native sign-in lifecycle update](docs/research/17559-native-signin-lifecycle-20261126.md) records V153’s authenticated bootstrap caller correction, all seven passing direct runs, genuine native publication/data-handoff progress, and the remaining final settlement/input and memory-growth failures. No replacement checkpoint or normal native shutdown is accepted.
+The [current profile lifecycle comparison](docs/research/17559-profile-lifecycle-comparison-20261125.md) preserves earlier results. The [native sign-in lifecycle update](docs/research/17559-native-signin-lifecycle-20261126.md) records V156’s producer custody and host lifetime corrections, all seven passing direct runs, completed initial alignment, visible native Guide, stable memory and two clean native exits. Profile-selection transitions and primary-controller continuation remain unaccepted. Packaging preparation does not establish a usable release or finish the gate.
 
 The [shared storage-selector update](docs/research/17559-selector-source-update-20261126.md) keeps pending choices bound to their original folder generation and records all seven passing current direct runs. Native sign-in/Guide acceptance remains open; this source update adds no AppImage release.
 

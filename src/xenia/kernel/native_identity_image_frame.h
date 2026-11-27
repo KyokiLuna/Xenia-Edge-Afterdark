@@ -2,6 +2,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <optional>
 #include "xenia/gpu/native_frame_command_plan.h"
 #include "xenia/kernel/native_identity_image_journal.h"
 #include "xenia/kernel/util/native_wait_snapshot.h"
@@ -34,6 +35,15 @@ struct NativeImageDraw {
  NativeImageJournal::Draw draw;
  uint32_t packet_address=0,packet_header=0,viz=0,initiator=0;
  std::array<uint32_t,6> fetch{};
+};
+// Value history for one ACTUAL render iteration only. Neutral Task/control
+// Work has no image-history role and must not reserve these 64 inline rows.
+// A missing history is unavailable, never proof of a completed empty draw.
+struct NativeImageDrawHistory {
+ std::array<std::optional<NativeImageDraw>,64> draws;
+ void RevokeTexture(uint32_t texture) noexcept {
+  for(auto& draw:draws)if(draw && draw->draw.copied.texture==texture)draw.reset();
+ }
 };
 inline bool ImageDrawMatchesPlan(const NativeImageDraw& actual,uint32_t primary,
     const gpu::NativeFrameCommandPlan& plan) noexcept {

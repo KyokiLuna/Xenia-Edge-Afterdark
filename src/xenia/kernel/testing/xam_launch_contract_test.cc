@@ -9,6 +9,7 @@
 #include <array>
 #include "xenia/base/platform.h"
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 #include "xenia/emulator_lifecycle.h"
@@ -351,6 +352,10 @@ class NativeIdentityOrdinaryTransportTestAccess final {
     return ledger.BeginExecutionCreate(frame,output);
   }
   static bool Closed(const Ledger& ledger) {return ledger.ExecutionClosed();}
+  template<typename Queue,typename Ready>
+  static void CaptureReadyHostReap(Queue& terminal,Queue& captured,Ready&& ready){
+    (void)Ledger::CaptureReadyHostReap(false,false,terminal,captured,std::forward<Ready>(ready));
+  }
 };
 } // namespace xe::kernel::test
 namespace xe::kernel::xam::test {
@@ -476,3 +481,74 @@ TEST_CASE("A real host stack needs its exact completed OS join and an on-fiber h
 }
 } // namespace xe::kernel::xam::test
 #endif // XE_PLATFORM_LINUX
+
+#if XE_PLATFORM_LINUX
+namespace xe::kernel::xam::test {
+TEST_CASE("Terminal metadata uses actual Kernel Dispatch without stealing unfinished host handoffs",
+          "[kernel][identity_task][terminal_host_reap][lifetime][shutdown]") {
+ using Access=::xe::kernel::test::NativeIdentityOrdinaryTransportTestAccess;
+ HandoffParkPolicy policy;HandoffParkRoot root;
+ auto emulator=std::make_unique<Emulator>("",root.path,root.path/"content",root.path/"cache");
+ REQUIRE(emulator->Setup(nullptr,nullptr,false,{},{},{})==X_STATUS_SUCCESS);
+ auto* kernel=emulator->kernel_state();REQUIRE(kernel);
+ struct Resource {
+  std::atomic<uint32_t>& destroyed;std::atomic<bool>& locked;
+  std::atomic<bool>& wrong_lock;std::atomic<bool>& wrong_carrier;bool on_dispatch;
+  ~Resource(){if(locked.load())wrong_lock.store(true);
+   if(on_dispatch){auto* thread=XThread::GetCurrentThread();
+    if(!thread || !thread->is_host_thread() || XThread::GetCurrentFiberThread())wrong_carrier.store(true);}
+   destroyed.fetch_add(1);}
+ };
+ struct Row {bool ready=false;std::shared_ptr<Resource> resource,parent;};
+ struct Queue {std::mutex mutex;std::vector<std::shared_ptr<Row>> terminal;};
+ std::atomic<uint32_t> destroyed{0};std::atomic<bool> locked{false},wrong_lock{false},wrong_carrier{false};
+ auto owner=std::make_shared<Queue>();std::weak_ptr<Queue> weak=owner;
+ auto done=threading::Event::CreateManualResetEvent(false);REQUIRE(done);
+ // Always join actual callbacks while their event and diagnostic atoms still
+ // exist, including an assertion unwinding this fixture before a Wait succeeds.
+ struct Stop {KernelState* kernel;
+  ~Stop(){kernel->ShutdownDispatchThread();kernel->guest_scheduler()->Shutdown();}
+ } stop{kernel};
+ auto escaped_parent=std::shared_ptr<Resource>(new Resource{destroyed,locked,wrong_lock,wrong_carrier,false});
+ auto pending=std::make_shared<Row>();
+ pending->resource=std::shared_ptr<Resource>(new Resource{destroyed,locked,wrong_lock,wrong_carrier,true});
+ pending->parent=escaped_parent;owner->terminal.push_back(pending);
+ // The SAME production capture helper runs on the real constructor-created
+ // OS Kernel Dispatch, while the original producer still owns its local row.
+ const auto dispatch=[weak,signal=done.get(),&locked]{if(auto held=weak.lock()){
+   std::vector<std::shared_ptr<Row>> captured;
+   {std::lock_guard guard(held->mutex);locked.store(true);
+    Access::CaptureReadyHostReap(held->terminal,captured,[](const auto& row){return row->ready;});
+    locked.store(false);}
+   captured.clear(); // actual resource destruction is outside metadata locks
+  }signal->Set();};
+ REQUIRE(kernel->QueueHostUiWork(dispatch));
+ REQUIRE(threading::Wait(done.get(),false,std::chrono::seconds(5))==threading::WaitResult::kSuccess);
+ CHECK(destroyed.load()==0);CHECK(owner->terminal.size()==1);
+ auto* actual=pending.get();pending.reset(); // local drops BEFORE ready publication
+ {std::lock_guard guard(owner->mutex);actual->ready=true;}
+ done->Reset();REQUIRE(kernel->QueueHostUiWork(dispatch));
+ REQUIRE(threading::Wait(done.get(),false,std::chrono::seconds(5))==threading::WaitResult::kSuccess);
+ CHECK(owner->terminal.empty());CHECK(destroyed.load()==1);
+ CHECK_FALSE(wrong_lock.load());CHECK_FALSE(wrong_carrier.load());
+ CHECK(escaped_parent); // terminal root drop cannot revoke an escaped dependency
+ escaped_parent.reset();CHECK(destroyed.load()==2);
+ // Real shutdown rejects new queue admission. Weak-only rejected closure
+ // cannot consume/drop a returned resource; the existing OS stop phase keeps
+ // the Kernel alive and uses the same terminal-only production capture.
+ kernel->ShutdownDispatchThread();
+ auto late=std::make_shared<Row>();late->ready=true;
+ late->resource=std::shared_ptr<Resource>(new Resource{destroyed,locked,wrong_lock,wrong_carrier,false});
+ owner->terminal.push_back(late);late.reset();
+ CHECK_FALSE(kernel->QueueHostUiWork([weak]{(void)weak;}));
+ CHECK(destroyed.load()==2);CHECK(owner->terminal.size()==1);
+ std::vector<std::shared_ptr<Row>> captured;
+ {std::lock_guard guard(owner->mutex);locked.store(true);
+  Access::CaptureReadyHostReap(owner->terminal,captured,[](const auto& row){return row->ready;});
+  locked.store(false);}
+ CHECK(destroyed.load()==2);captured.clear();CHECK(destroyed.load()==3);
+ CHECK_FALSE(wrong_lock.load());CHECK_FALSE(wrong_carrier.load());
+ kernel->guest_scheduler()->Shutdown();
+}
+} // namespace xe::kernel::xam::test
+#endif

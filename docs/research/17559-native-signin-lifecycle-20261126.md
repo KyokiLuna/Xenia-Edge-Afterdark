@@ -53,14 +53,14 @@ were preserved. These tests do not establish native UI or game acceptance.
 | --- | ---: | ---: |
 | base | 334 | 28711 |
 | net | 125 | 11212 |
-| kernel | 1505 | 105265 |
+| kernel | 1509 | 113602 |
 | vfs | 136 | 9736 |
 | ui | 124 | 4863 |
 | cpu-focused | 5 | 130 |
-| kernel-installed | 236 | 35429 |
+| kernel-installed | 240 | 43766 |
 
-The tested source manifest is `416a4bdc570466810d38bf8cb5401d51c1fea4125b3af3d43f2763732f71b26c`.
-The Linux ELF is `905e3f08814838e0e1002f3791fbefa0d20727c72b6f0bd4a5a3379f9e4c0fd4`.
+The tested source manifest is `5d402bf3f9042c09e246b6d753b9f3c5c2ca52f772bb60dbb5e000762efb0675`.
+The Linux ELF is `f71c18991cda7bfdddc071436dc0a51b6ffb5b37d1639d722e710cdb75824b8c`.
 The generated version header retains the actual build base
 `2418ae0aa308cb718d80bc6713a6ae2b078424d4`; a later source-backup commit
 must not be described as that embedded compilation identity.
@@ -110,6 +110,51 @@ per Work, including neutral observations. Those are concrete lifetime/storage
 conditions; actual live queue counts and the heap/GPU share of RSS remain
 unmeasured. Further runtime retries are paused while the complete settlement
 and resource-retirement contract is reviewed. No AppImage is accepted.
+
+## V156 producer custody and host lifetime validation
+
+The exact initial-read producer now survives current-source replacement and
+finishes its real ledger obligation once. Cancellation, passive queues,
+descendants, slot reuse and actual-stop resource release keep their own duties.
+
+Returned Work records hand off host custody only after producer-local copies
+are released. Existing Bootstrap and Kernel Dispatch reapers respect that cut;
+only terminal roots are dropped outside locks. Active/native-free/read/service
+cleanup is unchanged. Existing CPU-stop join turns cover dispatch shutdown.
+Optional capture allocation failure preserves the queue and native result.
+Render history is allocated only for real render Work and copied once into the
+immutable frame guard. Actual-stop graph capture uses exact-pointer dedup.
+These are host ABI/resource-lifetime requirements, not substitute console APIs.
+
+V155's compile-only missing scheduler friendship is preserved as a failed
+build. V156 adds that private access declaration; its complete build and all
+seven direct runs pass. Four further cases cover initial producer custody,
+real disposition/allocation failure, actual Kernel Dispatch, and real image
+journal/history lifetime; the existing retirement graph case now covers a
+2,048-node shared graph and capture failure. All inherited cases remain.
+Queued callback cancellation is source-proved but not independently observed
+in the deterministic queue fixture; finished-program shutdown remains required.
+
+In the first actual V156 Doritos run, source 3 reaches Open/aligned with the
+initial Job cleared. RSS holds near 1.05 GB through more than eight minutes,
+instead of the earlier continuing growth. Normal owned window close exits 0,
+with the leader reaped, no remaining process and no forced signal. A later
+profile-selection attempt leaves queued-original Job 4 at OldPaused; its
+initializer has entered and returned, but C838 publication is unobserved.
+The user's report does not establish which late picker path was used. The
+cached first-title sign-in diagnostic must not be assigned to that late action.
+
+A second run captures the native Guide before opening the picker and also
+exits 0 normally. The default virtual pad is slot 1; B does not visibly close
+the Guide in that bounded run. Escape opens the existing host menu. Primary
+physical-controller close/reopen, Xbox Home, dashboard/game continuation and
+full profile/avatar consumption remain unaccepted. Guide visibility, memory
+and clean exit are observed improvements, not a complete input/gameplay pass.
+
+The replacement AppImage is being prepared with native UI as default and a
+fallback launcher. It is not yet packaged or accepted. The user requested
+release priority with 15% weekly usage remaining; broader 86-file HDD draft
+work is preserved locally and inactive. No new checkpoint is claimed here.
 
 ## Upstream accounting
 

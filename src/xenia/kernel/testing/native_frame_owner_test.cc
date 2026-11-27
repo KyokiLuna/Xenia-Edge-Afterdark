@@ -20,6 +20,7 @@
 #include "third_party/catch/include/catch.hpp"
 #include "xenia/kernel/native_frame_owner.h"
 #include "xenia/kernel/native_identity_image_journal.h"
+#include "xenia/kernel/native_identity_image_frame.h"
 #include "xenia/kernel/native_identity_default_image.h"
 #include "xenia/memory.h"
 
@@ -1119,6 +1120,50 @@ TEST_CASE("Retained native draw refuses a later same-source DC selection",
  // A latest serial must not substitute the different actual image transfer.
  CHECK_FALSE(journal.ObserveRetainedDrawCall(dc,later->serial,*retained,101,102,0x45000000,0x46000000,true));
  CHECK(journal.ObserveRetainedDrawCall(dc,later->serial,*now,103,104,0x45000000,0x46000000,true));
+}
+
+TEST_CASE("Render-role history preserves immutable actual draws through revoke and restart",
+          "[kernel][native_frame_owner][native_image_journal][render_history]") {
+ using History=identity_detail::NativeImageDrawHistory;
+ const ImageRoot root{91,92,93};ImageJournal journal(root);
+ // A non-render role owns no history. Allocating the value at real render
+ // admission gives genuinely known empty storage; pointer absence is distinct.
+ std::unique_ptr<History> history;
+ CHECK_FALSE(history);
+ history=std::make_unique<History>();
+ CHECK(std::none_of(history->draws.begin(),history->draws.end(),[](const auto& row){return row.has_value();}));
+ const auto wrapper=JournalWrapper(journal,JournalInput(root,5,19));
+ const auto dc=JournalObject(journal,ImageJournal::Kind::kDc,0x44000000);
+ const auto selection=journal.BeginDcSelection(dc);REQUIRE(selection);
+ REQUIRE(journal.SelectDcTexture(*selection,wrapper,0x45000000,0x43000000,true,false));
+ const auto copied=journal.Copied(dc);REQUIRE(copied);
+ CHECK_FALSE(journal.ObserveRetainedDrawCall(dc,selection->serial,*copied,201,202,0x45000000,0x46000000,false));
+ const auto draw=journal.ObserveRetainedDrawCall(dc,selection->serial,*copied,201,202,0x45000000,0x46000000,true);REQUIRE(draw);
+ history->draws[0].emplace();history->draws[0]->draw=*draw;
+ history->draws[0]->packet_address=0x47000000;
+ history->draws[0]->packet_header=0xC0012200;
+ const auto captured=history->draws; // SAME immutable value copy retained by frame guard.
+ history->RevokeTexture(0x43000100);REQUIRE(history->draws[0]);
+ history->RevokeTexture(copied->texture);CHECK_FALSE(history->draws[0]);
+ REQUIRE(captured[0]);CHECK(captured[0]->draw==*draw);
+ CHECK(captured[0]->packet_address==0x47000000);
+ // CPU metadata retention never keeps a freed native texture valid. Mutable
+ // journal ownership and a copied frame value are separate duties.
+ journal.RevokeNativeTexture(copied->texture);
+ CHECK_FALSE(journal.NativeTextureOwned(captured[0]->draw.copied));
+ CHECK_FALSE(journal.ObserveRetainedDrawCall(dc,selection->serial,*copied,201,202,0x45000000,0x46000000,true));
+ journal.RetireMetadataAfterActualStop();
+ ImageRoot next=root;++next.generation;ImageJournal restarted(next);
+ const auto next_wrapper=JournalWrapper(restarted,JournalInput(next,5,19));
+ const auto next_dc=JournalObject(restarted,ImageJournal::Kind::kDc,dc.address);
+ const auto next_selection=restarted.BeginDcSelection(next_dc);REQUIRE(next_selection);
+ REQUIRE(restarted.SelectDcTexture(*next_selection,next_wrapper,0x45000000,0x43000000,true,false));
+ CHECK_FALSE(restarted.ObserveRetainedDrawCall(dc,selection->serial,*copied,201,202,0x45000000,0x46000000,true));
+ const auto next_copy=restarted.Copied(next_dc);REQUIRE(next_copy);
+ CHECK(restarted.ObserveRetainedDrawCall(next_dc,next_selection->serial,*next_copy,203,204,0x45000000,0x46000000,true));
+ history.reset();REQUIRE(captured[0]);CHECK(captured[0]->draw==*draw);
+ // This fixture exercises real Journal/History value production and revoke,
+ // not Owner role selection, GPU fences, native PPC or a frame acknowledgement.
 }
 
 }  // namespace xe::kernel::test

@@ -8,6 +8,9 @@
 #include <optional>
 #include <atomic>
 #include <memory>
+#include <new>
+#include <stdexcept>
+#include <unordered_set>
 namespace xe::kernel {
 class NativeProfileIdentityOwner;
 namespace test {
@@ -404,9 +407,10 @@ class NativeProfileIdentityTasks final {
   template<typename Queue,typename Parents>
   static Queue CaptureRetirementClosure(const Queue& roots,Parents&& parents) {
     Queue retained;retained.reserve(roots.size());
+    std::unordered_set<const void*> visited;
+    visited.reserve(roots.size());
     const auto add=[&](const auto& value){
-      if(value && std::none_of(retained.begin(),retained.end(),
-          [&](const auto& held){return held.get()==value.get();}))retained.push_back(value);
+      if(value && visited.insert(value.get()).second)retained.push_back(value);
     };
     for(const auto& root:roots)add(root);
     for(size_t i=0;i<retained.size();++i){
@@ -420,12 +424,43 @@ class NativeProfileIdentityTasks final {
   // host cut, even when unrelated native ownership is uncertain. Remaining
   // native close/free/reference/service owners use the separate healthy lane.
   enum class HostReapLane { kRetired, kTerminalOnly, kNativeOwners };
+  // Same actual own-return disposition. A retained target/read owner never
+  // arms a terminal handoff or consumes an unrelated terminal queue row.
+  template<typename Value,typename Queue,typename Terminal>
+  static void RetainReturnedExecution(const Value& work,bool retained_duty,
+      Queue& retained,Queue& terminal,Terminal&& terminal_handoff) {
+    if(retained_duty)retained.push_back(work);
+    else {terminal.push_back(work);terminal_handoff();}
+  }
   template <typename Queue>
   static HostReapLane CaptureHostReap(bool retired, bool native_owners_healthy,
       Queue& terminal, Queue& captured) noexcept {
     if (retired) return HostReapLane::kRetired;
     terminal.swap(captured); // no allocation or resource destructor at this cut
     return native_owners_healthy ? HostReapLane::kNativeOwners : HostReapLane::kTerminalOnly;
+  }
+  // A true native return may still have a C++ producer-local shared owner.
+  // Only its outer host handoff publishes ready; never make that guest local
+  // the last resource owner by capturing an unfinished handoff here.
+  template <typename Queue,typename Ready>
+  static HostReapLane CaptureReadyHostReap(bool retired,bool healthy,
+      Queue& terminal,Queue& captured,Ready&& ready) {
+    if(retired)return HostReapLane::kRetired;
+    if(std::all_of(terminal.begin(),terminal.end(),ready))terminal.swap(captured);
+    else {
+      // Allocate BEFORE any mutation. Failure leaves every original queue
+      // root untouched. This executes on a real host reclamation phase only.
+      try{captured.reserve(captured.size()+terminal.size());}
+      catch(const std::bad_alloc&){return healthy?HostReapLane::kNativeOwners:HostReapLane::kTerminalOnly;}
+      catch(const std::length_error&){return healthy?HostReapLane::kNativeOwners:HostReapLane::kTerminalOnly;}
+      auto keep=terminal.begin();
+      for(auto at=terminal.begin();at!=terminal.end();++at){
+        if(ready(*at))captured.push_back(std::move(*at));
+        else {if(keep!=at)*keep=std::move(*at);++keep;}
+      }
+      terminal.erase(keep,terminal.end());
+    }
+    return healthy?HostReapLane::kNativeOwners:HostReapLane::kTerminalOnly;
   }
   // Exact prepared operation outcome, distinct from its scheduled Task's
   // return and native Wait/Close. Only the real owner supplies these facts.

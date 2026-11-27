@@ -6569,8 +6569,10 @@ xam::ProfileRosterResult NativeProfileIdentityOwner::SubmitPrepared(
 }
 xam::ProfileRosterResult NativeProfileIdentityOwner::SubmitPreparedUntil(
     std::shared_ptr<xam::ProfileRosterIntent> intent,
-    std::chrono::steady_clock::time_point deadline) noexcept {
+    std::chrono::steady_clock::time_point deadline,
+    const std::function<bool()>& cancelled) noexcept {
  try{
+  const auto stopped=[&]{return cancelled && cancelled();};
   const bool external=ActualThread()==nullptr;
   if(!state_->EnterPublic(external)){
    auto result=intent?intent->result():xam::ProfileRosterResult{};
@@ -6579,6 +6581,10 @@ xam::ProfileRosterResult NativeProfileIdentityOwner::SubmitPreparedUntil(
   struct PublicExit{State& s;bool external;~PublicExit(){s.LeavePublic(external);}} public_exit{*state_,external};
   std::error_code error;auto* actual=ActualThread();
   for(;;){
+   if(stopped()){
+    auto result=state_->kernel->xam_state()->profile_manager()->CancelRosterPreparation(intent);
+    result.error=std::make_error_code(std::errc::operation_canceled);return result;
+   }
    bool retryable=false;
    if(EnqueuePrepared(intent,nullptr,nullptr,0,0,0,false,error,&retryable,nullptr,deadline))break;
    if(!retryable || state_->stopping.load() || state_->retired.load() || state_->uncertain.load() ||
@@ -6594,11 +6600,22 @@ xam::ProfileRosterResult NativeProfileIdentityOwner::SubmitPreparedUntil(
    if((result.maps_committed && result.writers_available) ||
       result.phase==xam::ProfileRosterPhase::kCommitted || result.phase==xam::ProfileRosterPhase::kCanceled ||
       result.phase==xam::ProfileRosterPhase::kUncertain)return result;
-   if(state_->stopping.load(std::memory_order_acquire)){
-    auto pending=result;pending.error=std::make_error_code(std::errc::operation_canceled);return pending;
+   if(stopped() || state_->stopping.load(std::memory_order_acquire)){
+    // CancelQueued can cancel only not-yet-entered native work. Once entered,
+    // the exact native job retains its real cleanup/outcome through stop.
+    CancelQueued(intent);
+    auto pending=intent->result();
+    // CancelQueued refuses entered native work. Its actual map/writer commit
+    // may have won since the first snapshot; preserve that fresh outcome.
+    if((pending.maps_committed && pending.writers_available) ||
+       pending.phase==xam::ProfileRosterPhase::kCommitted)return pending;
+    pending.error=std::make_error_code(std::errc::operation_canceled);return pending;
    }
    if(std::chrono::steady_clock::now()>=deadline || state_->retired.load() || state_->uncertain.load()){
     CancelQueued(intent);auto pending=intent->result();
+    // The same own-return/commit race exists at a host deadline boundary.
+    if((pending.maps_committed && pending.writers_available) ||
+       pending.phase==xam::ProfileRosterPhase::kCommitted)return pending;
     pending.error=std::make_error_code(std::errc::device_or_resource_busy);return pending;
    }
    if(actual){actual->Delay(0,0,uint64_t(-160000ll));}

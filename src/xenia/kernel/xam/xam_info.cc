@@ -1675,8 +1675,8 @@ DECLARE_XAM_EXPORT1(XamIsXbox1TitleId, kNone, kImplemented);
 
 dword_result_t XamIsChildAccountSignedIn_entry() {
   for (uint32_t i = 0; i < XUserMaxUserCount; i++) {
-    const auto& profile = kernel_state()->xam_state()->GetUserProfile(i);
-    if (profile && profile->IsParentalControlled()) {
+    const auto& profile = kernel_state()->xam_state()->profile_manager()->CaptureCurrentUserIdentity(i);
+    if (profile && profile->parental_controlled) {
       return true;
     }
   }

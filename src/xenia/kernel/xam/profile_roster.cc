@@ -875,6 +875,59 @@ std::shared_ptr<const HostRoster> ProfileManager::CaptureCurrentUserMetadata() c
   // is needed to copy the metadata shared pointer.
   return selected ? selected->roster : nullptr;
 }
+std::optional<ProfileManager::CurrentUserIdentity>
+ProfileManager::CaptureCurrentUserIdentity(uint32_t slot) const {
+  if (slot >= 4) return {};
+  return CaptureCurrentUserIdentityInternal(slot, 0);
+}
+std::optional<ProfileManager::CurrentUserIdentity>
+ProfileManager::CaptureCurrentUserIdentityByXuid(uint64_t xuid) const {
+  if (!xuid) return {};
+  return CaptureCurrentUserIdentityInternal({}, xuid);
+}
+std::optional<ProfileManager::CurrentUserIdentity>
+ProfileManager::CaptureCurrentUserIdentityInternal(
+    std::optional<uint32_t> slot, uint64_t xuid) const {
+  CurrentUserIdentity out;
+  std::shared_ptr<const X_XAMACCOUNTINFO> account;
+  {
+    // Same selector/lifetime region as 20A/210. This never takes PM/model/IO
+    // locks or follows fixed-old data scopes. A pending native writer may
+    // correctly deny data access while these current scalar values exist.
+    auto global = xe::global_critical_region::AcquireDirect();
+    const auto a = roster_authority_;
+    if (!a || !a->open.load(std::memory_order_acquire)) return {};
+    const auto* selected = a->selected.load(std::memory_order_acquire);
+    if (!selected) return {};
+    for (uint32_t i = 0; i != 4; ++i) {
+      if (slot && i != *slot) continue;
+      const auto& identity = selected->roster->slots()[i];
+      const auto& profile = selected->rows[i].profile;
+      if (!identity.xuid || !profile || profile->xuid() != identity.xuid) continue;
+      auto value = profile->account_info_.load(std::memory_order_acquire);
+      if (!value) continue;
+      const auto online = value->IsLiveEnabled() ? value->GetOnlineXUID() : 0;
+      if (!slot && identity.xuid != xuid && online != xuid) continue;
+      out.slot = i; out.xuid = identity.xuid; out.online_xuid = online;
+      out.roster_epoch = selected->roster->epoch();
+      out.sign_in_generation = identity.sign_in_generation;
+      out.signin_state = profile->signin_state();
+      account = std::move(value);
+      break;
+    }
+  }
+  if (!account) return {};
+  // One immutable Account projection supplies every field of this call,
+  // including a racing durable rename. Only plain public values escape.
+  out.name = account->GetGamertagString();
+  out.live_enabled = account->IsLiveEnabled();
+  out.parental_controlled = account->IsParentalControlled();
+  out.cached_flags = account->GetCachedFlags();
+  out.subscription_tier = uint32_t(account->GetSubscriptionTier());
+  out.language = uint32_t(account->GetLanguage());
+  out.country = uint32_t(account->GetCountry());
+  return out;
+}
 std::shared_ptr<const HostRoster> ProfileManager::CaptureSelectedRoster(
     NativeProfileProjection* diagnostic) const {
   const auto a = roster_authority_;
@@ -1614,21 +1667,26 @@ ProfileRosterResult ProfileManager::AdoptRoster(const ProfileRosterDesired& desi
   return AdoptRosterInternal(desired, expected, nullptr);
 }
 ProfileRosterResult ProfileManager::AdoptRosterInternal(const ProfileRosterDesired& desired,
-    const ProfileRosterExpected& expected, const ProfileDeletionReservation* deletion) {
+    const ProfileRosterExpected& expected, const ProfileDeletionReservation* deletion,
+    const std::function<bool()>& cancelled) {
+  const auto stopped = [&] { return cancelled && cancelled(); };
+  if(stopped()){ProfileRosterResult r;r.error=Stale();return r;}
   std::error_code error;
   auto use=account_commit_gate_->Acquire();
   if(!use){ProfileRosterResult result;result.error=Stale();return result;}
   const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
-  const auto wait=[] {
+  const auto wait=[&] {
+    if(stopped())return false;
     // Legacy guest UserLogon can reach this facade before any Owner public
     // frame is counted, including an unbound fallback. Preserve its real
     // one-shot Busy; never strand a PM Use on an uncounted guest fiber.
     // Original native 20B/224 use TryLogon's already-counted caller adapter.
     if(ActualRosterThread())return false;
-    threading::Sleep(std::chrono::milliseconds(16));return true;
+    threading::Sleep(std::chrono::milliseconds(16));return !stopped();
   };
   auto intent=PrepareRosterWithProgress(desired,expected,error,deadline,wait,deletion);
-  if (!intent) { ProfileRosterResult r; r.error = error; return r; }
+  if (!intent) { ProfileRosterResult r; r.error = stopped() ? Stale() : error; return r; }
+  if(stopped()){auto r=CancelRosterPreparation(intent);r.error=Stale();return r;}
   std::shared_ptr<::xe::kernel::NativeProfileIdentityOwner> owner;
   bool claimed = false;
   {
@@ -1646,11 +1704,15 @@ ProfileRosterResult ProfileManager::AdoptRosterInternal(const ProfileRosterDesir
           !roster_authority_->open.load(std::memory_order_acquire)){
         CancelRosterPreparation(intent);return result;
       }
-      if(!wait()){CancelRosterPreparation(intent);return result;} // all commit guards unwound
+      if(!wait()){
+        CancelRosterPreparation(intent);
+        if(stopped())result.error=Stale();
+        return result;
+      } // all commit guards unwound
     }
   }
   if (!owner) { auto result = CancelRosterPreparation(intent); result.error = Busy(); return result; }
-  auto result=owner->SubmitPreparedUntil(intent,deadline); // no PM/native/FS lock across dispatch
+  auto result=owner->SubmitPreparedUntil(intent,deadline,cancelled); // no PM/native/FS lock across dispatch
   if(result.error && (result.phase==ProfileRosterPhase::kPreparing ||
       result.phase==ProfileRosterPhase::kPrepared || result.phase==ProfileRosterPhase::kCanceling))
     CancelRosterPreparation(intent);

@@ -153,30 +153,30 @@ X_HRESULT_result_t XamUserGetSigninInfo_entry(
     return X_E_INVALIDARG;
   }
 
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
+  const auto user_profile = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserIdentity(user_index);
+  if (!user_profile) {
     return X_E_NO_SUCH_USER;
   }
 
-  const auto& user_profile =
-      kernel_state()->xam_state()->GetUserProfile(user_index);
 
-  xe::string_util::copy_truncating(info->name, user_profile->name(),
+  xe::string_util::copy_truncating(info->name, user_profile->name,
                                    xe::countof(info->name));
 
-  if (user_profile->IsLiveEnabled()) {
+  if (user_profile->live_enabled) {
     info->flags = X_USER_INFO_FLAG_LIVE_ENABLED;
   }
 
   // ONLINE_XUID_ONLY wins when both are set.
   if (flags & X_USER_GET_SIGNIN_INFO_ONLINE_XUID_ONLY) {
-    info->xuid = user_profile->GetOnlineXUID();
+    info->xuid = user_profile->online_xuid;
   } else if (flags & X_USER_GET_SIGNIN_INFO_OFFLINE_XUID_ONLY) {
-    info->xuid = user_profile->xuid();
+    info->xuid = user_profile->xuid;
   } else {
-    info->xuid = user_profile->GetLogonXUID();
+    info->xuid = user_profile->logon_xuid();
   }
 
-  info->signin_state = user_profile->signin_state();
+  info->signin_state = user_profile->signin_state;
   return X_E_SUCCESS;
 }
 DECLARE_XAM_EXPORT1(XamUserGetSigninInfo, kUserProfiles, kImplemented);
@@ -189,17 +189,17 @@ dword_result_t XamUserGetName_entry(dword_t user_index, dword_t buffer,
     return X_ERROR_INVALID_PARAMETER;
   }
 
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
+  const auto user_profile = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserIdentity(user_index);
+  if (!user_profile) {
     kernel_memory()->Zero(buffer, 1);
     return X_ERROR_NO_SUCH_USER;
   }
 
-  const auto& user_profile =
-      kernel_state()->xam_state()->GetUserProfile(user_index);
 
   // Because name is always limited to 15 characters we can assume length will
   // never exceed that limit.
-  const auto& user_name = user_profile->name();
+  const auto& user_name = user_profile->name;
 
   // buffer_len counts the null terminator that user_name lacks.
   // A buffer_len of 0 takes the whole name.
@@ -223,13 +223,13 @@ dword_result_t XamUserGetGamerTag_entry(dword_t user_index, dword_t buffer,
     return X_E_INVALIDARG;
   }
 
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
+  const auto user_profile = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserIdentity(user_index);
+  if (!user_profile) {
     return X_E_NO_SUCH_USER;
   }
 
-  const auto& user_profile =
-      kernel_state()->xam_state()->GetUserProfile(user_index);
-  auto user_name = xe::to_utf16(user_profile->name());
+  auto user_name = xe::to_utf16(user_profile->name);
 
   char16_t* str_buffer = kernel_memory()->TranslateVirtual<char16_t*>(buffer);
 
@@ -664,33 +664,27 @@ X_RESULT CheckUserPrivilege(uint32_t user_index, uint32_t mask,
   // With no Live service, a user signed in to Live holds every Live privilege.
   const bool granted = mask >= 0xD1 && mask <= 0xFF;
 
-  // Every Live user holds the same privileges so the first one answers.
   if (user_index == XUserIndexAny) {
-    X_RESULT result = X_ERROR_NO_SUCH_USER;
-    for (uint32_t i = 0; i < XUserMaxUserCount; ++i) {
-      const auto user_profile = kernel_state()->xam_state()->GetUserProfile(i);
-      if (!user_profile) {
-        continue;
-      }
-      if (user_profile->signin_state() ==
-          static_cast<uint32_t>(SignInState::SignedInToLive)) {
-        *out_value = granted;
-        return X_ERROR_SUCCESS;
-      }
-      result = X_ERROR_NOT_LOGGED_ON;
-    }
-    return result;
+    // Current service policy has only local sign-ins. Inspect one selected
+    // roster, rather than four fallible profile/data captures.
+    const auto metadata = kernel_state()->xam_state()->profile_manager()->
+        CaptureCurrentUserMetadata();
+    if (metadata) for (const auto& slot : metadata->slots())
+      if (slot.xuid) return X_ERROR_NOT_LOGGED_ON;
+    return X_ERROR_NO_SUCH_USER;
   }
 
   if (user_index >= XUserMaxUserCount) {
     return X_ERROR_INVALID_PARAMETER;
   }
 
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
+  const auto user = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserIdentity(user_index);
+  if (!user) {
     return X_ERROR_NO_SUCH_USER;
   }
 
-  if (kernel_state()->xam_state()->GetUserProfile(user_index)->signin_state() !=
+  if (user->signin_state !=
       static_cast<uint32_t>(SignInState::SignedInToLive)) {
     return X_ERROR_NOT_LOGGED_ON;
   }
@@ -839,44 +833,28 @@ dword_result_t XamUserContentRestrictionCheckAccess_entry(
 DECLARE_XAM_EXPORT1(XamUserContentRestrictionCheckAccess, kUserProfiles, kStub);
 
 dword_result_t XamUserIsOnlineEnabled_entry(dword_t user_index) {
-  if (user_index >= XUserMaxUserCount) {
-    return 0;
-  }
-
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
-    return 0;
-  }
-
-  return kernel_state()
-      ->xam_state()
-      ->GetUserProfile(user_index)
-      ->IsLiveEnabled();
+  const auto user = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserIdentity(user_index);
+  if (!user) { return 0; }
+  return user->live_enabled;
 }
 DECLARE_XAM_EXPORT1(XamUserIsOnlineEnabled, kUserProfiles, kImplemented);
 
 dword_result_t XamUserGetMembershipTier_entry(dword_t user_index) {
-  if (user_index >= XUserMaxUserCount) {
-    return X_XAMACCOUNTINFO::AccountSubscriptionTier::kSubscriptionTierNone;
-  }
-
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
-    return X_XAMACCOUNTINFO::AccountSubscriptionTier::kSubscriptionTierNone;
-  }
-
-  return kernel_state()
-      ->xam_state()
-      ->GetUserProfile(user_index)
-      ->GetSubscriptionTier();
+  const auto user = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserIdentity(user_index);
+  if (!user) { return X_XAMACCOUNTINFO::AccountSubscriptionTier::kSubscriptionTierNone; }
+  return user->subscription_tier;
 }
 DECLARE_XAM_EXPORT1(XamUserGetMembershipTier, kUserProfiles, kImplemented);
 
 dword_result_t XamUserGetMembershipTierFromXUID_entry(qword_t xuid) {
-  const auto profile = kernel_state()->xam_state()->GetUserProfile(xuid);
+  const auto profile = kernel_state()->xam_state()->profile_manager()->CaptureCurrentUserIdentityByXuid(xuid);
   if (!profile) {
     return X_XAMACCOUNTINFO::AccountSubscriptionTier::kSubscriptionTierNone;
   }
 
-  return profile->GetSubscriptionTier();
+  return profile->subscription_tier;
 }
 DECLARE_XAM_EXPORT1(XamUserGetMembershipTierFromXUID, kUserProfiles,
                     kImplemented);
@@ -897,12 +875,12 @@ dword_result_t XamUserAreUsersFriends_entry(
   if (user_index >= XUserMaxUserCount) {
     result = X_ERROR_INVALID_PARAMETER;
   } else {
-    if (kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
-      const auto& user_profile =
-          kernel_state()->xam_state()->GetUserProfile(user_index);
+    const auto user_profile = kernel_state()->xam_state()->profile_manager()->
+        CaptureCurrentUserIdentity(user_index);
+    if (user_profile) {
 
       // Check if we are signed into live
-      if (user_profile->signin_state() != 2) {
+      if (user_profile->signin_state != 2) {
         result = X_ERROR_NOT_LOGGED_ON;
       } else {
         // No friends!
@@ -1371,59 +1349,51 @@ dword_result_t XamUserGetSubscriptionType_entry(
 DECLARE_XAM_EXPORT1(XamUserGetSubscriptionType, kUserProfiles, kImplemented);
 
 dword_result_t XamUserGetCachedUserFlags_entry(dword_t user_index) {
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
-    return 0;
-  }
-
-  const auto& user_profile =
-      kernel_state()->xam_state()->GetUserProfile(user_index);
-
-  return user_profile->GetCachedFlags();
+  const auto user = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserIdentity(user_index);
+  if (!user) { return 0; }
+  return user->cached_flags;
 }
 DECLARE_XAM_EXPORT1(XamUserGetCachedUserFlags, kUserProfiles, kImplemented);
 
 dword_result_t XamUserGetUserFlags_entry(dword_t user_index) {
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
-    return 0;
-  }
-
-  const auto& user_profile =
-      kernel_state()->xam_state()->GetUserProfile(user_index);
-
-  return user_profile->GetCachedFlags();
+  const auto user = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserIdentity(user_index);
+  if (!user) { return 0; }
+  return user->cached_flags;
 }
 DECLARE_XAM_EXPORT1(XamUserGetUserFlags, kUserProfiles, kImplemented);
 
 dword_result_t XamUserGetUserFlagsFromXUID_entry(qword_t xuid) {
-  const auto& user_profile = kernel_state()->xam_state()->GetUserProfile(xuid);
+  const auto& user_profile = kernel_state()->xam_state()->profile_manager()->CaptureCurrentUserIdentityByXuid(xuid);
   if (!user_profile) {
     return 0;
   }
 
-  return user_profile->GetCachedFlags();
+  return user_profile->cached_flags;
 }
 DECLARE_XAM_EXPORT1(XamUserGetUserFlagsFromXUID, kUserProfiles, kImplemented);
 
 // A profile without a language or country, like an offline one, gets the
 // console's setting.
 dword_result_t XamUserGetOnlineLanguageFromXUID_entry(qword_t xuid) {
-  const auto& user = kernel_state()->xam_state()->GetUserProfile(xuid);
-  if (!user || !user->GetLanguage()) {
+  const auto& user = kernel_state()->xam_state()->profile_manager()->CaptureCurrentUserIdentityByXuid(xuid);
+  if (!user || !user->language) {
     return kernel_state()->xconfig()->ReadSetting<uint32_t>(
         XCONFIG_USER_CATEGORY, XCONFIG_USER_LANGUAGE);
   }
-  return user->GetLanguage();
+  return user->language;
 }
 DECLARE_XAM_EXPORT1(XamUserGetOnlineLanguageFromXUID, kUserProfiles,
                     kImplemented);
 
 dword_result_t XamUserGetOnlineCountryFromXUID_entry(qword_t xuid) {
-  const auto& user = kernel_state()->xam_state()->GetUserProfile(xuid);
-  if (!user || !user->GetCountry()) {
+  const auto& user = kernel_state()->xam_state()->profile_manager()->CaptureCurrentUserIdentityByXuid(xuid);
+  if (!user || !user->country) {
     return kernel_state()->xconfig()->ReadSetting<uint8_t>(
         XCONFIG_USER_CATEGORY, XCONFIG_USER_COUNTRY);
   }
-  return user->GetCountry();
+  return user->country;
 }
 DECLARE_XAM_EXPORT1(XamUserGetOnlineCountryFromXUID, kUserProfiles,
                     kImplemented);
@@ -1434,8 +1404,8 @@ dword_result_t XamUserIsParentalControlled_entry(dword_t user_index) {
      kDashboardID || user_type != offline) (type mask used in XamUserGetXUID) go
      forward else return false
   */
-  const auto& user = kernel_state()->xam_state()->GetUserProfile(user_index);
-  if (!user || !user->IsParentalControlled()) {
+  const auto& user = kernel_state()->xam_state()->profile_manager()->CaptureCurrentUserIdentity(user_index);
+  if (!user || !user->parental_controlled) {
     return false;
   }
   return true;
@@ -1484,23 +1454,23 @@ dword_result_t XamUserGetUserTenure_entry(
     return X_E_INVALIDARG;
   }
 
-  if (!kernel_state()->xam_state()->IsUserSignedIn(user_index)) {
+  const auto user_profile = kernel_state()->xam_state()->profile_manager()->
+      CaptureProfile(static_cast<uint8_t>(user_index));
+  if (!user_profile) {
     return X_E_NO_SUCH_USER;
   }
 
-  const auto& user_profile =
-      kernel_state()->xam_state()->GetUserProfile(user_index);
 
   if (const auto setting =
           kernel_state()->xam_state()->user_tracker()->GetSetting(
-              user_profile, kDashboardID,
+              user_profile.get(), kDashboardID,
               static_cast<uint32_t>(UserSettingId::XPROFILE_TENURE_LEVEL))) {
     *tenure_level_ptr = std::get<int32_t>(setting->get_host_data());
   }
 
   if (const auto setting =
           kernel_state()->xam_state()->user_tracker()->GetSetting(
-              user_profile, kDashboardID,
+              user_profile.get(), kDashboardID,
               static_cast<uint32_t>(
                   UserSettingId::XPROFILE_TENURE_MILESTONE))) {
     *milestone_ptr = std::get<int32_t>(setting->get_host_data());
@@ -1508,7 +1478,7 @@ dword_result_t XamUserGetUserTenure_entry(
 
   if (const auto setting =
           kernel_state()->xam_state()->user_tracker()->GetSetting(
-              user_profile, kDashboardID,
+              user_profile.get(), kDashboardID,
               static_cast<uint32_t>(
                   UserSettingId::XPROFILE_TENURE_NEXT_MILESTONE_DATE))) {
     *milestone_date_ptr = std::get<int64_t>(setting->get_host_data());

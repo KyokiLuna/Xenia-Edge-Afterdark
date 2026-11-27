@@ -321,6 +321,22 @@ class ProfileManager {
   // protects the selected envelope while its roster shared pointer is cloned;
   // this grants no Account/model/storage access or fixed/following read scope.
   std::shared_ptr<const HostRoster> CaptureCurrentUserMetadata() const;
+  // The console's current scalar identity cache is independent of profile data
+  // admission. Values own no Account blob, GPD/model, mount or native scope.
+  struct CurrentUserIdentity {
+    uint64_t xuid = 0, online_xuid = 0, roster_epoch = 0,
+             sign_in_generation = 0;
+    uint32_t slot = 0, signin_state = 0, cached_flags = 0,
+             subscription_tier = 0, language = 0, country = 0;
+    bool live_enabled = false, parental_controlled = false;
+    std::string name;
+    uint64_t logon_xuid() const {
+      return signin_state == uint32_t(SignInState::SignedInToLive)
+                 ? online_xuid : xuid;
+    }
+  };
+  std::optional<CurrentUserIdentity> CaptureCurrentUserIdentity(uint32_t slot) const;
+  std::optional<CurrentUserIdentity> CaptureCurrentUserIdentityByXuid(uint64_t) const;
   ProfileRosterExpected CaptureRosterExpected(std::error_code&) const;
   std::shared_ptr<ProfileRosterIntent> PrepareRoster(
       const ProfileRosterDesired&, const ProfileRosterExpected&,
@@ -335,6 +351,11 @@ class ProfileManager {
   void Logout(const uint8_t user_index, bool notify = true,
               bool cancel_preparing = true);
   void LoginMultiple(const std::map<uint8_t, uint64_t>& profiles);
+  // Exact batch command; returned outcome includes genuine publication duties.
+  // Cancellation is borrowed only for this synchronous host operation.
+  ProfileRosterResult LoginMultipleResult(
+      const std::map<uint8_t, uint64_t>& profiles,
+      const std::function<bool()>& cancelled = {});
 
   bool LoadAccount(const uint64_t xuid);
   // Exact mounted storage/identity plus authenticated durable bytes, never a
@@ -458,7 +479,8 @@ class ProfileManager {
   void RetryProfileDeletions();
   void CloseProfileDeletions();
   ProfileRosterResult AdoptRosterInternal(const ProfileRosterDesired&,
-      const ProfileRosterExpected&, const ProfileDeletionReservation*);
+      const ProfileRosterExpected&, const ProfileDeletionReservation*,
+      const std::function<bool()>& cancelled = {});
   // Retain the exact unpublished attempt across real busy cancellation.
   // Public PrepareRoster keeps its existing interface.
   std::shared_ptr<ProfileRosterIntent> PrepareRosterAttempt(
@@ -479,6 +501,8 @@ class ProfileManager {
       const std::shared_ptr<ProfileRosterIntent>&);
   std::shared_ptr<const ProfileAccountSnapshot> RefreshRosterAccount(
       const std::shared_ptr<const ProfileAccountSnapshot>&);
+  std::optional<CurrentUserIdentity> CaptureCurrentUserIdentityInternal(
+      std::optional<uint32_t> slot, uint64_t xuid) const;
   std::shared_ptr<UserProfile> CaptureRosterProfile(uint8_t) const;
   std::shared_ptr<ProfileGpdModelAuthority> CaptureRosterModel(uint64_t) const;
   std::shared_ptr<ProfileAccountIdentity> CaptureRosterIdentity(uint64_t) const;

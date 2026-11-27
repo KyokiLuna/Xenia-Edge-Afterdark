@@ -27,6 +27,8 @@ namespace xe {
 namespace kernel {
 namespace xam {
 
+class HostUiFallbackCompletion;
+
 // A dialog's lease is a callback rundown, not Kernel ownership. Every draw and
 // result snapshot enters it anew. Canceled/stale dialogs may remain in the UI
 // queue, but never touch profile/Kernel services and hold only CPU input tokens.
@@ -39,6 +41,10 @@ class XamDialog : public xe::ui::ImGuiDialog {
     host_lease_ = std::move(lease);
   }
   const auto& host_lease() const { return host_lease_; }
+  void SetHostCompletion(std::shared_ptr<HostUiFallbackCompletion> completion) {
+    host_completion_=std::move(completion);
+  }
+  const auto& host_completion() const { return host_completion_; }
 
  protected:
   explicit XamDialog(xe::ui::ImGuiDrawer* drawer)
@@ -57,6 +63,7 @@ class XamDialog : public xe::ui::ImGuiDialog {
 
  private:
   std::shared_ptr<NativeUiBackendRoute::HostLease> host_lease_;
+  std::shared_ptr<HostUiFallbackCompletion> host_completion_;
   std::function<void()> close_callback_;
 };
 

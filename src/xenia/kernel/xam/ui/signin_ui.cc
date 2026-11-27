@@ -26,6 +26,18 @@ SigninUI::SigninUI(xe::ui::ImGuiDrawer* imgui_drawer,
       title_("Sign In") {}
 
 void SigninUI::OnDrawDialog(ImGuiIO& io) {
+  const auto completed=host_completion();
+  const auto attempt=completed ? completed->signin_attempt()
+      : HostUiFallbackCompletion::SigninAttempt{};
+  const bool pending=attempt.phase==HostUiFallbackCompletion::SigninPhase::kQueued ||
+                     attempt.phase==HostUiFallbackCompletion::SigninPhase::kExecuting;
+  bool succeeded=false;
+  if(attempt.phase==HostUiFallbackCompletion::SigninPhase::kReturned &&
+     attempt.id!=observed_attempt_){
+    observed_attempt_=attempt.id;
+    signin_failed_=!attempt.executed || attempt.status!=X_ERROR_SUCCESS;
+    if(!signin_failed_){selection_=attempt.selection;accepted_=true;succeeded=true;}
+  }
   bool first_draw = false;
   if (!has_opened_) {
     ImGui::OpenPopup(title_.c_str());
@@ -70,6 +82,11 @@ void SigninUI::OnDrawDialog(ImGuiIO& io) {
       ImGui::PopStyleColor(14);
       return;
     }
+    if(succeeded){
+      ImGui::CloseCurrentPopup();Close();ImGui::EndPopup();
+      ImGui::PopStyleVar(2);ImGui::PopStyleColor(14);return;
+    }
+    ImGui::BeginDisabled(pending);
     for (uint32_t i = 0; i < users_needed_; i++) {
       ImGui::BeginGroup();
 
@@ -260,30 +277,26 @@ void SigninUI::OnDrawDialog(ImGuiIO& io) {
       }
     }
 
+    ImGui::EndDisabled();
+    if(pending)ImGui::TextUnformatted("Signing in...");
     if (signin_failed_) {
       ImGui::TextWrapped("Sign-in could not complete. Check storage and try again.");
     }
+    ImGui::BeginDisabled(pending);
     if (ImGui::Button("OK")) {
-      std::map<uint8_t, uint64_t> profile_map;
-      for (uint32_t i = 0; i < users_needed_; i++) {
-        uint8_t slot = chosen_slots_[i];
-        uint64_t xuid = chosen_xuids_[i];
-        if (slot != XUserIndexAny && xuid != 0) {
-          profile_map[slot] = xuid;
+      HostUiProfileSelection selection;
+      for (uint32_t i = 0; i < users_needed_; ++i) {
+        const auto slot = chosen_slots_[i];
+        if (slot < XUserMaxUserCount && chosen_xuids_[i]) {
+          selection.mask |= 1u << slot;
+          selection.xuids[slot] = chosen_xuids_[i];
         }
       }
-      if (!profile_map.empty()) { profile_manager_->LoginMultiple(profile_map); }
-      signin_failed_ = profile_map.empty();
-      for (const auto& [slot, xuid] : profile_map) {
-        const auto actual = profile_manager_->CaptureProfile(slot);
-        if (!actual || actual->xuid() != xuid) { signin_failed_ = true; }
-      }
-      if (!signin_failed_) {
-        accepted_ = true;
-        ImGui::CloseCurrentPopup();
-        Close();
-      }
+      signin_failed_ = !selection.valid() || !completed ||
+                       !completed->StartSigninAttempt(selection);
+      if (!signin_failed_) selection_ = selection;
     }
+    ImGui::EndDisabled();
     ImGui::SameLine();
 
     if (ImGui::Button("Cancel")) {

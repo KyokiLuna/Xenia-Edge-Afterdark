@@ -10,6 +10,7 @@
 #ifndef XENIA_KERNEL_XAM_UI_GAMERCARD_UI_H_
 #define XENIA_KERNEL_XAM_UI_GAMERCARD_UI_H_
 
+#include <span>
 #include "xenia/kernel/xam/user_settings.h"
 #include "xenia/kernel/xam/profile_account_snapshot.h"
 #include "xenia/kernel/xam/xam_ui.h"
@@ -17,6 +18,7 @@
 namespace xe {
 namespace kernel {
 namespace xam {
+class UserProfile;
 namespace ui {
 
 struct GamercardSettings {
@@ -57,8 +59,8 @@ class GamercardUI final : public XamDialog {
   void DrawGpdSettings(ImGuiIO& io);
 
   void LoadGamercardInfo();
-  void LoadSetting(UserSettingId setting_id);
-  void LoadStringSetting(UserSettingId setting_id, char* buffer);
+  void LoadSetting(UserProfile& profile, UserSettingId setting_id);
+  void LoadStringSetting(UserSettingId setting_id, std::span<char> buffer);
   void SaveSettings();
   bool SaveAccountData();
   bool SaveProfileIcon();
@@ -74,7 +76,7 @@ class GamercardUI final : public XamDialog {
   void SelectNewIcon();
 
   const uint64_t xuid_ = 0;
-  const bool is_signed_in_ = false;
+  bool profile_data_available_ = false;
   const bool is_valid_gamertag_ = true;
 
   bool has_opened_ = false;

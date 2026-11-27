@@ -459,6 +459,12 @@ class KernelState {
     return host_ui_access_;
   }
   bool QueueHostUiWork(std::function<void()>);
+  // Whole asynchronous host UI operation on existing concurrent host workers.
+  // Captures original overlap requester before posting, never redispatches its
+  // completion behind a waiting Kernel Dispatch callback.
+  X_RESULT QueueHostUiCompletion(std::function<X_RESULT()> work,
+      std::function<void()> cancel, uint32_t overlapped = 0,
+      std::function<void()> post = {});
   void BeginStopLegacyHostUi() noexcept;
   bool SealLegacyHostUi() noexcept;
   std::shared_ptr<NativeUiBackendRoute::NativeCreationLease>

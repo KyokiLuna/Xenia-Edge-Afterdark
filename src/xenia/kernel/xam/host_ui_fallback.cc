@@ -10,8 +10,44 @@
 #include <utility>
 #include "xenia/hid/input_system.h"
 #include "xenia/kernel/xam/xam_state.h"
+#include "xenia/kernel/util/host_call_outcome.h"
+#include "xenia/kernel/guest_scheduler.h"
 #include "xenia/ui/windowed_app_context.h"
 namespace xe::kernel::xam {
+bool HostUiProfileSelection::valid() const {
+  if (!mask || (mask & ~15u)) return false;
+  for (uint32_t slot = 0; slot != 4; ++slot) {
+    if (bool(mask & (1u << slot)) != bool(xuids[slot])) return false;
+    if (!xuids[slot]) continue;
+    for (uint32_t prior = 0; prior != slot; ++prior)
+      if (xuids[prior] == xuids[slot]) return false;
+  }
+  return true;
+}
+void HostUiFallbackWork::Finish(X_RESULT result) {
+  // Captured reservation and selected completion epilogues die before the
+  // actual event/APC callback. Retained frontend closures contain CPU values.
+  work_ = {};
+  cancel_ = {};
+  if (complete_) (void)InvokeHostCall([&] { complete_(result); });
+  complete_ = {};
+  if (post_) (void)InvokeHostCall(post_);
+  post_ = {};
+}
+void HostUiFallbackWork::Run() {
+  if (claimed_.exchange(true)) return;
+  X_RESULT result = X_ERROR_FUNCTION_FAILED;
+  const auto invoked = InvokeHostCall([&] { if (work_) result = work_(); });
+  if (invoked != HostCallOutcome::kReturned && cancel_)
+    (void)InvokeHostCall(cancel_);
+  Finish(invoked == HostCallOutcome::kReturned ? result : X_ERROR_FUNCTION_FAILED);
+}
+void HostUiFallbackWork::Reject(X_RESULT result) {
+  if (claimed_.exchange(true)) return;
+  if (cancel_) (void)InvokeHostCall(cancel_);
+  Finish(result);
+}
+
 HostUiFallbackReservation::HostUiFallbackReservation(XamState* xam,
                                                      hid::InputSystem* input,
                                                      bool host_only)
@@ -45,20 +81,104 @@ void HostUiFallbackReservation::Release() {
     }
   }
 }
+uint64_t HostUiFallbackCompletion::StartSigninAttempt(HostUiProfileSelection selection) {
+  if (!selection.valid()) return 0;
+  uint64_t id = 0;
+  {
+    std::lock_guard lock(mutex_);
+    if (done_ || !next_signin_attempt_ || next_signin_attempt_==UINT64_MAX ||
+        signin_attempt_.phase==SigninPhase::kQueued ||
+        signin_attempt_.phase==SigninPhase::kExecuting ||
+        (signin_attempt_.phase==SigninPhase::kReturned &&
+         signin_attempt_.status==X_ERROR_SUCCESS)) return 0;
+    id=next_signin_attempt_++;
+    signin_attempt_={id,SigninPhase::kQueued,selection,X_ERROR_IO_PENDING,false};
+  }
+  progress.Signal();
+  return id;
+}
+HostUiFallbackCompletion::SigninAttempt HostUiFallbackCompletion::signin_attempt() const {
+  std::lock_guard lock(mutex_);return signin_attempt_;
+}
+std::optional<HostUiFallbackCompletion::SigninAttempt>
+HostUiFallbackCompletion::TakeSigninAttempt() {
+  std::lock_guard lock(mutex_);
+  if(done_ || signin_attempt_.phase!=SigninPhase::kQueued)return {};
+  signin_attempt_.phase=SigninPhase::kExecuting;
+  return signin_attempt_;
+}
+bool HostUiFallbackCompletion::CompleteSigninAttempt(uint64_t id,X_RESULT status,bool executed) {
+  std::lock_guard lock(mutex_);
+  if(!id || signin_attempt_.id!=id || signin_attempt_.phase!=SigninPhase::kExecuting)return false;
+  if(status==X_ERROR_SUCCESS && !executed)status=X_ERROR_FUNCTION_FAILED;
+  signin_attempt_.status=status;signin_attempt_.executed=executed;
+  signin_attempt_.phase=SigninPhase::kReturned;
+  if(done_ && executed && status==X_ERROR_SUCCESS){
+    // The actual producer committed before/racing UI cancel. Preserve that
+    // factual outcome; cancellation cannot fabricate a rollback of sign-in.
+    result_.result=xe::ui::TextEntryResult::kAccepted;
+    result_.status=status;result_.signin=signin_attempt_.selection;
+  }
+  return true;
+}
+bool HostUiFallbackCompletion::closed_requested() const {
+  std::lock_guard lock(mutex_);return done_;
+}
 void HostUiFallbackCompletion::Finish(Result value) {
   {
     std::lock_guard lock(mutex_);
     if (done_) {
       return;
     }
+    if(signin_attempt_.phase==SigninPhase::kReturned &&
+       signin_attempt_.executed && signin_attempt_.status==X_ERROR_SUCCESS){
+      value.result=xe::ui::TextEntryResult::kAccepted;
+      value.status=X_ERROR_SUCCESS;value.signin=signin_attempt_.selection;
+    }else if(signin_attempt_.phase==SigninPhase::kQueued){
+      signin_attempt_.phase=SigninPhase::kReturned;
+      signin_attempt_.status=X_ERROR_CANCELLED; // never dispatched
+    }
     result_ = std::move(value);
     done_ = true;
   }
   closed.Signal();
+  progress.Signal();
 }
 HostUiFallbackCompletion::Result HostUiFallbackCompletion::result() const {
   std::lock_guard lock(mutex_);
   return result_;
+}
+X_RESULT RunHostSigninAttempts(
+    const std::shared_ptr<NativeUiBackendRoute::HostLease>& lease,
+    const std::shared_ptr<HostUiFallbackCompletion>& completion,
+    const std::function<X_RESULT(const HostUiProfileSelection&,
+                                const std::function<bool()>&)>& publish) {
+  for (;;) {
+    if(const auto attempt=completion->TakeSigninAttempt()){
+      X_RESULT status=X_ERROR_CANCELLED;bool executed=false;
+      const auto invoked=InvokeHostCall([&] {
+        auto entered=lease->TryEnter();
+        if(entered && !completion->closed_requested()){
+          const std::function<bool()> canceled=[lease,completion] {
+            return lease->cancelled() || completion->closed_requested();
+          };
+          executed=true;
+          status=publish ? publish(attempt->selection,canceled) : X_ERROR_FUNCTION_FAILED;
+        }
+      });
+      if(invoked!=HostCallOutcome::kReturned)status=X_ERROR_FUNCTION_FAILED;
+      // Result is published after the actual adoption frame and Entry unwind.
+      // Only the exact current attempt can change its CPU outcome.
+      if(!completion->CompleteSigninAttempt(attempt->id,status,executed))return X_ERROR_FUNCTION_FAILED;
+      continue;
+    }
+    if(completion->closed_requested()){
+      const auto result=completion->result();
+      return result.result==xe::ui::TextEntryResult::kAccepted
+          ? result.status : X_ERROR_CANCELLED;
+    }
+    GuestScheduler::WaitOnFence(completion->progress);
+  }
 }
 HostUiFallbackOperationCompletion::~HostUiFallbackOperationCompletion() {
   if (lease_) {

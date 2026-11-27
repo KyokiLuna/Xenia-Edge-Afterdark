@@ -1814,18 +1814,44 @@ void ProfileManager::Logout(uint8_t slot, bool notify, bool cancel_preparing) {
   if (result.error) { XELOGW("Local roster sign-out refused ({})", result.error.message()); }
 }
 void ProfileManager::LoginMultiple(const std::map<uint8_t, uint64_t>& profiles) {
+  const auto result = LoginMultipleResult(profiles);
+  if (result.error) XELOGW("Local batch roster refused ({})", result.error.message());
+}
+ProfileRosterResult ProfileManager::LoginMultipleResult(
+    const std::map<uint8_t, uint64_t>& profiles,
+    const std::function<bool()>& cancelled) {
+  const auto fail = [](std::error_code error) { ProfileRosterResult r; r.error=error; return r; };
+  if (profiles.empty()) return fail(std::make_error_code(std::errc::invalid_argument));
+  if (cancelled && cancelled()) return fail(std::make_error_code(std::errc::operation_canceled));
   RetryRosterSettlement();
   std::error_code error; const auto expected = CaptureRosterExpected(error);
-  if (error || !expected.roster) { return; }
+  if (error || !expected.roster) return fail(error ? error : std::make_error_code(std::errc::operation_canceled));
   ProfileRosterDesired desired;
-  for (uint8_t i = 0; i != 4; ++i) { desired.xuids[i] = expected.roster->slots()[i].xuid; }
-  for (const auto& [slot, xuid] : profiles) {
-    if (slot >= 4) { return; }
-    if (xuid) { for (uint8_t i = 0; i != 4; ++i) { if (desired.xuids[i] == xuid) { desired.xuids[i] = 0; } } }
-    desired.xuids[slot] = xuid;
+  for (uint8_t i=0;i!=4;++i) desired.xuids[i]=expected.roster->slots()[i].xuid;
+  for (const auto& [slot,xuid] : profiles) {
+    if (slot>=4) return fail(std::make_error_code(std::errc::invalid_argument));
+    if (xuid) for (const auto& [other,other_xuid] : profiles)
+      if (other!=slot && other_xuid==xuid) return fail(std::make_error_code(std::errc::invalid_argument));
+    if (xuid) for(uint8_t i=0;i!=4;++i) if(desired.xuids[i]==xuid) desired.xuids[i]=0;
+    desired.xuids[slot]=xuid;
   }
-  const auto result = AdoptRoster(desired, expected);
-  if (result.error) { XELOGW("Local batch roster refused ({})", result.error.message()); }
+  auto result=AdoptRosterInternal(desired,expected,nullptr,cancelled);
+  if (result.error) return result;
+  if (!result.maps_committed || !result.writers_available ||
+      result.phase==ProfileRosterPhase::kCanceled || result.phase==ProfileRosterPhase::kUncertain ||
+      (result.native_protocol_returned && int32_t(result.native_protocol_value)<0)) {
+    result.error=std::make_error_code(
+        result.phase==ProfileRosterPhase::kUncertain ? std::errc::io_error :
+        result.native_protocol_returned && int32_t(result.native_protocol_value)<0 &&
+            result.native_protocol_value!=0x80004004u ? std::errc::io_error :
+        std::errc::operation_canceled);
+    return result;
+  }
+  const auto current=CaptureCurrentUserMetadata();
+  for(uint8_t slot=0;slot!=4;++slot) if(!current || current->slots()[slot].xuid!=desired.xuids[slot]) {
+    result.error=std::make_error_code(std::errc::operation_canceled);break;
+  }
+  return result;
 }
 
 ProfileManager::ProfileDiscovery ProfileManager::FindProfiles() const {

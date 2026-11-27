@@ -212,20 +212,32 @@ GamercardUI::GamercardUI(xe::ui::Window* window,
     : XamDialog(imgui_drawer),
       window_(window),
       kernel_state_(kernel_state),
-      xuid_(xuid),
-      is_signed_in_(kernel_state->xam_state()->GetUserProfile(xuid) !=
-                    nullptr) {
+      xuid_(xuid) {
   LoadGamercardInfo();
 }
 
-void GamercardUI::LoadStringSetting(UserSettingId setting_id, char* buffer) {
-  const auto entry = xe::to_utf8(std::get<std::u16string>(
-      gamercardOriginalValues_.gpd_settings[setting_id]));
-
-  std::memcpy(buffer, entry.c_str(), entry.size());
+void GamercardUI::LoadStringSetting(UserSettingId setting_id,
+                                    std::span<char> buffer) {
+  if (buffer.empty()) return;
+  buffer.front() = 0;
+  const auto found = gamercardOriginalValues_.gpd_settings.find(setting_id);
+  if (found == gamercardOriginalValues_.gpd_settings.end()) return;
+  const auto* value = std::get_if<std::u16string>(&found->second);
+  if (!value) return;
+  const auto entry = xe::to_utf8(*value);
+  xe::string_util::copy_truncating(buffer.data(), entry, buffer.size());
 }
 
 void GamercardUI::LoadGamercardInfo() {
+  // One admitted data projection owns this entire load. A current scalar
+  // sign-in flag is never proof that a later profile/data lookup will succeed.
+  const auto profile = kernel_state_->xam_state()->profile_manager()->
+      CaptureProfile(xuid_);
+  profile_data_available_ = bool(profile);
+  if (!profile && kernel_state_->xam_state()->profile_manager()->
+                      CaptureCurrentUserIdentityByXuid(xuid_)) {
+    account_save_error_ = "Profile data is temporarily unavailable.";
+  }
   std::error_code account_error;
   const auto account_metadata = kernel_state_->xam_state()->profile_manager()
       ->CaptureCachedAccount(xuid_, account_error);
@@ -257,14 +269,13 @@ void GamercardUI::LoadGamercardInfo() {
   gamercardOriginalValues_.account_subscription_tier =
       account_data->GetSubscriptionTier();
 
-  if (is_signed_in_) {
+  if (profile) {
     // GPD settings to load
     for (const auto setting_id : UserSettingsToLoad) {
-      LoadSetting(setting_id);
+      LoadSetting(*profile, setting_id);
     }
 
-    const auto gamer_icon =
-        kernel_state_->xam_state()->GetUserProfile(xuid_)->GetSelfProfileIcon();
+    const auto gamer_icon = profile->GetSelfProfileIcon();
 
     gamercardOriginalValues_.profile_icon.assign(gamer_icon.begin(),
                                                  gamer_icon.end());
@@ -285,9 +296,9 @@ void GamercardUI::LoadGamercardInfo() {
   gamercardValues_ = gamercardOriginalValues_;
 }
 
-void GamercardUI::LoadSetting(UserSettingId setting_id) {
+void GamercardUI::LoadSetting(UserProfile& profile, UserSettingId setting_id) {
   const auto setting = kernel_state_->xam_state()->user_tracker()->GetSetting(
-      kernel_state_->xam_state()->GetUserProfile(xuid_), kDashboardID,
+      &profile, kDashboardID,
       static_cast<uint32_t>(setting_id));
 
   if (!setting) {
@@ -385,7 +396,7 @@ void GamercardUI::DrawBaseSettings(ImGuiIO& io) {
             ProfileManager::IsGamertagValid(desired);
       });
 
-  ImGui::BeginDisabled(!is_signed_in_);
+  ImGui::BeginDisabled(!profile_data_available_);
   ImGui::BeginDisabled(kernel_state_->title_id());
   if (ImGui::ImageButton(
           "###ProfileIcon",

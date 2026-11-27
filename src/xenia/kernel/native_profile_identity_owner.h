@@ -313,7 +313,8 @@ class NativeProfileIdentityOwner final
   friend class xam::ProfileManager;
   void RetainPreparationCleanup(const std::shared_ptr<xam::ProfileRosterIntent>&) noexcept;
   xam::ProfileRosterResult SubmitPreparedUntil(
-      std::shared_ptr<xam::ProfileRosterIntent>,std::chrono::steady_clock::time_point) noexcept;
+      std::shared_ptr<xam::ProfileRosterIntent>,std::chrono::steady_clock::time_point,
+      const std::function<bool()>& cancelled = {}) noexcept;
   struct Config {
     std::shared_ptr<const NativeSystemUiStartupCatalog> catalog;
     std::shared_ptr<NativeImportDomain> domain;

@@ -5273,7 +5273,8 @@ TEST_CASE("Actual fixed and following SYSTEM read scopes keep old and canceled-e
       facts[1]=xe::threading::Wait(published.get(),false,std::chrono::seconds(5))==xe::threading::WaitResult::kSuccess;
       facts[2]=pm.CaptureProfile(uint8_t(0))==old;
       const auto metadata=pm.CaptureCurrentUserMetadata();
-      facts[7]=metadata && !metadata->slots()[0].xuid; // Current scalar cache, not fixed old data.
+      facts[7]=metadata && !metadata->slots()[0].xuid &&
+          !pm.CaptureCurrentUserIdentity(0); // Current scalars never follow fixed-old data.
       c->r[1]-=0x40;c->lr=0x81A3F890;
       facts[3]=ProfileSettingsReadTestAccess::EnterSystemFrame(*following,kernel,self,cpu,uint32_t(c->r[1]),uint32_t(c->lr),0x816A8C00,2);
       if(facts[3]){facts[4]=!pm.CaptureProfile(uint8_t(0));facts[5]=ProfileSettingsReadTestAccess::Leave(*following);}
@@ -5699,3 +5700,206 @@ TEST_CASE("Registered profile-only content deletion joins exact storage and cach
 #endif
 
 } // namespace xe::kernel::xam::test
+
+#if XE_PLATFORM_LINUX
+namespace xe::kernel::xam::test {
+TEST_CASE("Host batch result preserves unchanged selections on cancel or failed same-XUID adoption",
+          "[kernel][profile][roster][batch][host_ui_fallback]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime,0xe0000000000000f1ull,41);
+  ReadFixtureProfile b(runtime,0xe0000000000000f2ull,42);
+  auto& pm=*runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  auto result=pm.LoginMultipleResult({{0,a.xuid},{2,b.xuid}});
+  REQUIRE_FALSE(result.error);CHECK(result.maps_committed);CHECK(result.writers_available);
+  CheckRoster(pm,{a.xuid,0,b.xuid,0});
+  result=pm.LoginMultipleResult({{1,a.xuid}},[]{return true;});
+  CHECK(result.error==std::errc::operation_canceled);
+  CheckRoster(pm,{a.xuid,0,b.xuid,0});
+  {
+    HeldRosterMetadata held(pm);
+    REQUIRE(held.ready.wait_for(std::chrono::seconds(2))==std::future_status::ready);
+    result=pm.LoginMultipleResult({{0,a.xuid}});
+    CHECK(bool(result.error)); // old matching XUID is not completion proof
+  }
+  CheckRoster(pm,{a.xuid,0,b.xuid,0});
+  result=pm.LoginMultipleResult({{0,a.xuid}}); // fresh Expected after failed attempt
+  REQUIRE_FALSE(result.error);CHECK(result.maps_committed);CHECK(result.writers_available);
+  CheckRoster(pm,{a.xuid,0,b.xuid,0});
+  result=pm.LoginMultipleResult({{0,a.xuid},{1,a.xuid}});
+  CHECK(result.error==std::errc::invalid_argument);
+  CheckRoster(pm,{a.xuid,0,b.xuid,0});
+}
+}  // namespace xe::kernel::xam::test
+#endif
+
+
+#if XE_PLATFORM_LINUX
+namespace xe::kernel::xam::test {
+namespace {
+struct ScalarIdentityAbi {
+  ReadExAbiFixture abi;
+  explicit ScalarIdentityAbi(Emulator& emulator) : abi(emulator) {}
+  uint32_t Call(uint16_t ordinal, uint64_t r3, uint64_t r4 = 0,
+                uint64_t r5 = 0) {
+    const auto* entry = abi.emulator.export_resolver()->GetExportByOrdinal("xam.xex", ordinal);
+    REQUIRE(entry); // A real trampoline may retain its existing kSketchy tag.
+    REQUIRE(entry->function_data.trampoline);
+    abi.context.r[3] = r3; abi.context.r[4] = r4; abi.context.r[5] = r5;
+    entry->function_data.trampoline(&abi.context);
+    return uint32_t(abi.context.r[3]);
+  }
+  void Fill() { std::memset(abi.memory.TranslateVirtual(abi.Output()), 0xA5, 128); }
+  X_USER_SIGNIN_INFO Info() const {
+    X_USER_SIGNIN_INFO info;
+    std::memcpy(&info, abi.memory.TranslateVirtual(abi.Output()), sizeof(info));
+    return info;
+  }
+  void CheckIdentity(uint32_t slot, const ProfileManager::CurrentUserIdentity& value) {
+    for (uint32_t flags : {0u, 1u, 2u, 3u}) {
+      Fill(); REQUIRE(Call(0x227, slot, flags, abi.Output()) == X_E_SUCCESS);
+      const auto info = Info();
+      CHECK(uint64_t(info.xuid) == ((flags & 1) ? value.online_xuid : value.xuid));
+      CHECK(uint32_t(info.signin_state) == 1);
+      CHECK(uint32_t(info.flags) == (value.live_enabled ? X_USER_INFO_FLAG_LIVE_ENABLED : 0));
+      CHECK(uint32_t(info.sponsor_user_index) == XUserIndexNone);
+      CHECK(std::string(info.name) == value.name);
+      CHECK(abi.memory.TranslateVirtual(abi.Output())[sizeof(info)] == 0xA5);
+    }
+    Fill(); CHECK(Call(0x20E, slot, abi.Output(), 16) == X_ERROR_SUCCESS);
+    CHECK(std::string(abi.memory.TranslateVirtual<char*>(abi.Output())) == value.name);
+    CHECK(abi.memory.TranslateVirtual(abi.Output())[16] == 0xA5);
+    Fill(); CHECK(Call(0x20C, slot, abi.Output(), 16) == X_E_SUCCESS);
+    CHECK(xe::load_and_swap<std::u16string>(abi.memory.TranslateVirtual(abi.Output())) == xe::to_utf16(value.name));
+    CHECK(abi.memory.TranslateVirtual(abi.Output())[32] == 0xA5);
+    CHECK(Call(0x221, slot) == uint32_t(value.live_enabled));
+    CHECK(Call(0x222, slot) == value.cached_flags);
+    CHECK(Call(0x21C, slot) == value.cached_flags); // Existing HLE user-flags policy.
+    CHECK(Call(0x21B, slot) == value.subscription_tier);
+    CHECK(Call(0x216, value.xuid) == value.cached_flags);
+    CHECK(Call(0x217, value.xuid) == value.subscription_tier);
+    CHECK(Call(0x256, slot) == uint32_t(value.parental_controlled));
+    Fill(); CHECK(Call(0x212, slot, 0xD1, abi.Output()) == X_ERROR_NOT_LOGGED_ON);
+    CHECK(xe::load_and_swap<uint32_t>(abi.memory.TranslateVirtual(abi.Output())) == 0);
+  }
+};
+}
+TEST_CASE("Current scalar identity survives data denial and drives actual account ABI getters",
+          "[kernel][profile][current_user_metadata][abi][roster]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime, 0xe000000000000b01ull, 91);
+  auto* state = runtime.emulator->kernel_state()->xam_state();
+  auto& pm = *state->profile_manager(); std::error_code error;
+  auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({profile.xuid,0,0,0}), expected).error);
+  auto edit = pm.PrepareAccountEdit(profile.xuid, HostRename("Scalar Identity"), error);
+  REQUIRE(edit); REQUIRE(edit->Commit().committed());
+  const auto original = pm.CaptureCurrentUserIdentity(0); REQUIRE(original);
+  ScalarIdentityAbi call(*runtime.emulator);
+  {
+    HeldRosterMetadata held(pm); held.ready.get();
+    CHECK_FALSE(pm.CaptureProfile(uint8_t(0))); // Real data admission still refuses.
+    REQUIRE(state->IsUserSignedIn(uint32_t(0)));
+    REQUIRE(state->IsUserSignedIn(profile.xuid));
+    CHECK(state->IsUserSignedIn(uint32_t(XUserIndexAny)));
+    call.CheckIdentity(0, *original);
+    CHECK(pm.CaptureCurrentUserIdentityByXuid(profile.xuid)->name == original->name);
+    call.Fill(); CHECK(call.Call(0x212, XUserIndexAny, 0xD1, call.abi.Output()) == X_ERROR_NOT_LOGGED_ON);
+  }
+  CHECK_FALSE(pm.CaptureCurrentUserIdentity(4));
+  CHECK_FALSE(pm.CaptureCurrentUserIdentity(256));
+  CHECK_FALSE(pm.CaptureCurrentUserIdentityByXuid(0));
+  CHECK_FALSE(state->IsUserSignedIn(uint32_t(256))); // No truncation into slot0.
+}
+TEST_CASE("Current scalar identity follows real native publication before profile data handoff",
+          "[kernel][profile][current_user_metadata][native_terminal][system_thread_read][abi]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile a(runtime, 0xe000000000000b02ull, 92);
+  ReadFixtureProfile b(runtime, 0xe000000000000b03ull, 93);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error; auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({a.xuid,0,0,0}), expected).error);
+  const auto old = pm.CaptureCurrentUserIdentity(0); REQUIRE(old);
+  expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  auto binding = ProfileSettingsReadTestAccess::ClaimRoster(pm); REQUIRE(binding);
+  auto intent = pm.PrepareRoster(RosterDesired({b.xuid,0,0,0}), expected, error); REQUIRE(intent);
+  auto cell = ProfileSettingsReadTestAccess::EnterNative(pm, intent, binding, error); REQUIRE(cell);
+  ScalarIdentityAbi call(*runtime.emulator);
+  CHECK_FALSE(pm.CaptureProfile(uint8_t(0)));
+  call.CheckIdentity(0, *old);
+  ProfileRosterPublicationOutcome outcome = ProfileRosterPublicationOutcome::kRequested;
+  SECTION("the real requested selector changes all scalar fields before data handoff") {}
+  SECTION("the real canceled-empty selector exposes no requested or old identity") {
+    outcome = ProfileRosterPublicationOutcome::kCanceledEmpty;
+  }
+  REQUIRE(ProfileSettingsReadTestAccess::Publish(cell, outcome));
+  CHECK_FALSE(pm.CaptureProfile(uint8_t(0)));
+  const auto selected = pm.CaptureCurrentUserIdentity(0);
+  if (outcome == ProfileRosterPublicationOutcome::kRequested) {
+    REQUIRE(selected); CHECK(selected->xuid == b.xuid); call.CheckIdentity(0, *selected);
+  } else {
+    CHECK_FALSE(selected); call.Fill();
+    CHECK(call.Call(0x227, 0, 0, call.abi.Output()) == X_E_NO_SUCH_USER);
+    CHECK(uint64_t(call.Info().xuid) == 0);
+    CHECK(uint32_t(call.Info().sponsor_user_index) == XUserIndexNone);
+  }
+  CHECK(old->xuid == a.xuid); // Returned metadata is detached and immutable.
+  auto protocol = ProfileSettingsReadTestAccess::Protocol(intent, binding,
+      outcome == ProfileRosterPublicationOutcome::kRequested ? 0x80000001u : 0x800704c7u);
+  REQUIRE(protocol); REQUIRE_FALSE(ProfileSettingsReadTestAccess::CommitProtocol(pm,intent,*protocol).error);
+  auto joined = ProfileSettingsReadTestAccess::Joined(intent,binding); REQUIRE(joined);
+  REQUIRE_FALSE(ProfileSettingsReadTestAccess::Finalize(pm,intent,*joined).error);
+  CHECK(bool(pm.CaptureCurrentUserIdentity(0)) == bool(selected));
+}
+TEST_CASE("Current scalar identity rename is immutable and retains epoch and local state",
+          "[kernel][profile][current_user_metadata][host_edit][persistence][abi]") {
+  ProfileAbiRuntime runtime;
+  ReadFixtureProfile profile(runtime,0xe000000000000b04ull,94);
+  auto& pm = *runtime.emulator->kernel_state()->xam_state()->profile_manager();
+  std::error_code error; auto expected = pm.CaptureRosterExpected(error); REQUIRE(expected.roster);
+  REQUIRE_FALSE(pm.AdoptRoster(RosterDesired({profile.xuid,0,0,0}),expected).error);
+  const auto before = pm.CaptureCurrentUserIdentity(0); REQUIRE(before);
+  auto changes = HostRename("New Identity"); changes.country = XOnlineCountry(7); changes.language = XLanguage(1);
+  auto pending = pm.PrepareAccountEdit(profile.xuid,changes,error); REQUIRE(pending);
+  REQUIRE(pending->Commit().committed());
+  const auto after = pm.CaptureCurrentUserIdentityByXuid(profile.xuid); REQUIRE(after);
+  CHECK(after->name == "New Identity"); CHECK(after->country == 7); CHECK(after->language == 1);
+  CHECK(after->xuid == before->xuid); CHECK(after->roster_epoch == before->roster_epoch);
+  CHECK(after->sign_in_generation == before->sign_in_generation); CHECK(after->signin_state == 1);
+  CHECK(before->name != after->name); CHECK(before->country != after->country);
+  ScalarIdentityAbi call(*runtime.emulator); call.CheckIdentity(0,*after);
+  CHECK(call.Call(0x218,profile.xuid) == 7); CHECK(call.Call(0x229,profile.xuid) == 1);
+  // Live eligibility is an Account property, never evidence of a connected service.
+  const auto* cached = pm.GetAccount(profile.xuid); REQUIRE(cached);
+  auto account = *cached;
+  account.reserved_flags = uint32_t(account.reserved_flags) | X_XAMACCOUNTINFO::kLiveEnabled;
+  account.xuid_online = 0x0009000000000b04ull;
+  REQUIRE(pm.UpdateAccount(profile.xuid,&account));
+  const auto eligible = pm.CaptureCurrentUserIdentity(0); REQUIRE(eligible);
+  CHECK(eligible->live_enabled); CHECK(eligible->online_xuid == uint64_t(account.xuid_online));
+  CHECK(eligible->signin_state == 1); CHECK(eligible->logon_xuid() == profile.xuid);
+  REQUIRE(pm.CaptureCurrentUserIdentityByXuid(eligible->online_xuid));
+  call.CheckIdentity(0,*eligible);
+  CHECK_FALSE(after->live_enabled); CHECK(after->online_xuid == 0);
+}
+TEST_CASE("Current scalar identity ABI failures preserve native output rules",
+          "[kernel][profile][current_user_metadata][abi][cancel]") {
+  ProfileAbiRuntime runtime; ScalarIdentityAbi call(*runtime.emulator);
+  for (uint32_t slot : {0u,4u,256u}) {
+    call.Fill(); CHECK(call.Call(0x227,slot,0,call.abi.Output()) == (slot<4?X_E_NO_SUCH_USER:X_E_INVALIDARG));
+    const auto info = call.Info(); CHECK(uint64_t(info.xuid) == 0); CHECK(uint32_t(info.signin_state) == 0);
+    CHECK(uint32_t(info.sponsor_user_index) == XUserIndexNone);
+    CHECK(call.abi.memory.TranslateVirtual(call.abi.Output())[40] == 0xA5);
+    call.Fill(); CHECK(call.Call(0x20E,slot,call.abi.Output(),16) == (slot<4?X_ERROR_NO_SUCH_USER:X_ERROR_INVALID_PARAMETER));
+    CHECK(call.abi.memory.TranslateVirtual(call.abi.Output())[0] == 0);
+    CHECK(call.abi.memory.TranslateVirtual(call.abi.Output())[1] == 0xA5);
+    call.Fill(); CHECK(call.Call(0x20C,slot,call.abi.Output(),16) == (slot<4?X_E_NO_SUCH_USER:X_E_INVALIDARG));
+    CHECK(call.abi.memory.TranslateVirtual(call.abi.Output())[0] == 0xA5);
+  }
+  CHECK(call.Call(0x227,0,0,0) == X_E_INVALIDARG);
+  CHECK(call.Call(0x20C,0,0,16) == X_E_INVALIDARG);
+  CHECK(call.Call(0x20C,0,call.abi.Output(),15) == X_E_INVALIDARG);
+  call.Fill(); CHECK(call.Call(0x212,XUserIndexAny,0xD1,call.abi.Output()) == X_ERROR_NO_SUCH_USER);
+  CHECK(xe::load_and_swap<uint32_t>(call.abi.memory.TranslateVirtual(call.abi.Output())) == 0);
+}
+}  // namespace xe::kernel::xam::test
+#endif

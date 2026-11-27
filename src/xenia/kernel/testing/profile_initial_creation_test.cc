@@ -18,6 +18,8 @@
 #include <vector>
 #include <thread>
 #include "xenia/kernel/xthread.h"
+#include "xenia/cpu/thread_state.h"
+#include "xenia/kernel/xevent.h"
 #include "xenia/kernel/xam/host_ui_fallback.h"
 #include "xenia/ui/windowed_app_context.h"
 #include "third_party/catch/include/catch.hpp"
@@ -1228,5 +1230,148 @@ TEST_CASE("Actual host profile ingress pins Kernel before a concurrent shutdown 
     replacement->FinishHostOnly();
     return X_ERROR_SUCCESS;
   }) == X_ERROR_SUCCESS);
+}
+}  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+TEST_CASE("Whole host UI work leaves Kernel Dispatch runnable and uses existing external backend",
+          "[kernel][profile][host_ui_fallback][lifetime]") {
+  CreationRuntime runtime;auto* state=runtime.emulator->kernel_state();
+  REQUIRE(state);
+  struct Shared { threading::Fence entered,release,finished,fifo;
+    std::atomic<bool> external{false}; };
+  const auto shared=std::make_shared<Shared>();
+  struct ReleaseOnExit { std::shared_ptr<Shared> value;~ReleaseOnExit(){value->release.Signal();} } release{shared};
+  REQUIRE(state->QueueHostUiCompletion([shared] {
+    shared->external.store(GuestScheduler::CurrentThreadIsBlockingCallWorker() &&
+        !XThread::IsInThread() && !XThread::GetCurrentFiberThread());
+    shared->entered.Signal();GuestScheduler::WaitOnFence(shared->release);
+    return X_ERROR_BUSY;
+  }, [shared]{shared->release.Signal();},0,[shared]{shared->finished.Signal();})==X_ERROR_SUCCESS);
+  const auto wait = [](threading::Fence& fence) {
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+    do { if(fence.TryWait())return true;std::this_thread::yield(); }
+    while(std::chrono::steady_clock::now()<deadline);
+    return false;
+  };
+  REQUIRE(wait(shared->entered));
+  REQUIRE(state->QueueHostUiWork([shared]{shared->fifo.Signal();}));
+  // Kernel Dispatch must progress while the WHOLE host UI wait remains held.
+  REQUIRE(wait(shared->fifo));
+  CHECK(shared->external.load());shared->release.Signal();REQUIRE(wait(shared->finished));
+}
+}  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+TEST_CASE("Owned host UI adapter settles unstarted scheduler-shutdown admission without running body",
+          "[kernel][profile][host_ui_fallback][lifetime]") {
+  CreationRuntime runtime;auto* state=runtime.emulator->kernel_state();
+  // Start/join the existing host backend first; no additional executor.
+  threading::Fence done;
+  REQUIRE(state->QueueHostUiCompletion([]{return X_ERROR_SUCCESS;}, {},0,[&]{done.Signal();})==X_ERROR_SUCCESS);
+  done.Wait();state->guest_scheduler()->Shutdown();
+  uint32_t runs=0,cancels=0,posts=0;
+  CHECK(state->QueueHostUiCompletion([&]{++runs;return X_ERROR_SUCCESS;},
+      [&]{++cancels;},0,[&]{++posts;})==X_ERROR_SUCCESS);
+  // Queue admission is distinct from body success. Explicit on_drop settled it
+  // on the still-live original Kernel; no inline fake body execution.
+  CHECK(runs==0);CHECK(cancels==1);CHECK(posts==1);
+}
+}  // namespace xe::kernel::xam::test
+
+namespace xe::kernel::xam::test {
+TEST_CASE("Owned UI overlap signals original event and APC objects across close exit and handle reuse",
+          "[kernel][profile][host_ui_fallback][overlap][apc][lifetime]") {
+  //0:event-only,1:live original APC target,2:target really exits before return.
+  const uint32_t mode=GENERATE(0u,1u,2u);
+  CreationRuntime runtime;auto* kernel=runtime.emulator->kernel_state();
+  auto& memory=*runtime.emulator->memory();CreationPage page(memory);
+  memory.Zero(page.address,sizeof(XAM_OVERLAPPED));
+  auto* overlap=memory.TranslateVirtual<XAM_OVERLAPPED*>(page.address);
+  // Keep the initial expansion slot occupied. Normal allocation then starts
+  // at the next cursor, so closing the tested event genuinely reuses its slot.
+  const auto initial_event=object_ref<XEvent>(new XEvent(kernel));
+  initial_event->Initialize(true,false);
+  const auto event=object_ref<XEvent>(new XEvent(kernel));event->Initialize(true,true);
+  const auto event_handle=event->handle();overlap->event=event_handle;
+  constexpr uint32_t routine=0x82001234;
+  overlap->completion_routine=mode?routine:0;
+  threading::Fence caller_queued,worker_entered,work_release,caller_release,finished,replacement_release;
+  std::atomic<X_RESULT> admitted{X_ERROR_FUNCTION_FAILED};
+  object_ref<XHostThread> caller,replacement;
+  struct Joined {
+    KernelState& kernel;
+    threading::Fence& work;threading::Fence& caller_release;threading::Fence& replacement_release;
+    object_ref<XHostThread>& caller;object_ref<XHostThread>& replacement;
+    ~Joined(){
+      work.Signal();caller_release.Signal();replacement_release.Signal();
+      for(auto* thread:{caller.get(),replacement.get()})
+        if(thread && thread->thread() && threading::Wait(thread->thread(),false,
+            std::chrono::seconds(10))!=threading::WaitResult::kSuccess)std::terminate();
+      // Stack fences/page and Kernel outlive the whole queued backend request,
+      // including assertion unwind and unstarted on_drop. A post signal alone
+      // cannot prove that its callback frame and captures have returned.
+      kernel.guest_scheduler()->Shutdown();
+    }
+  } joined{*kernel,work_release,caller_release,replacement_release,caller,replacement};
+  // Setup has initialized SYSTEM, but no executable has initialized TITLE.
+  // The original overlap/APC identity contract applies to this real SYSTEM caller.
+  caller=object_ref<XHostThread>(new XHostThread(kernel,128*1024,0,[&]{
+    admitted.store(kernel->QueueHostUiCompletion([&]{
+      worker_entered.Signal();work_release.Wait();return X_ERROR_BUSY;
+    },[]{},page.address,[&]{finished.Signal();}));
+    caller_queued.Signal();
+    if(mode!=2)caller_release.Wait();
+    return 0;
+  },kernel->GetSystemProcess()));
+  const auto requester_handle=caller->handle();
+  REQUIRE(caller->Create()==X_STATUS_SUCCESS);
+  const auto wait=[](threading::Fence& fence){
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    do{if(fence.TryWait())return true;std::this_thread::yield();}
+    while(std::chrono::steady_clock::now()<deadline);return false;
+  };
+  REQUIRE(wait(caller_queued));REQUIRE(admitted.load()==X_ERROR_IO_PENDING);
+  REQUIRE(wait(worker_entered));
+  uint32_t type=0,signaled=0;event->Query(&type,&signaled);CHECK(signaled==0);
+  // Closing/reusing the numeric event handle must not retarget completion.
+  REQUIRE(event->ReleaseHandle());CHECK(event->handles().empty());
+  const auto other_event=object_ref<XEvent>(new XEvent(kernel));other_event->Initialize(true,false);
+  REQUIRE(other_event->handle()==event_handle);
+  if(mode==2){
+    REQUIRE(threading::Wait(caller->thread(),false,std::chrono::seconds(5))==threading::WaitResult::kSuccess);
+    // Actual exit drops Create's self-reference, leaving our creator handle.
+    // Close that real reference before testing natural numeric slot reuse.
+    REQUIRE(caller->ReleaseHandle());
+    CHECK(caller->handles().empty());CHECK(caller->guest_object<X_KTHREAD>()->may_queue_apcs==0);
+    replacement=object_ref<XHostThread>(new XHostThread(kernel,128*1024,0,[&]{
+      replacement_release.Wait();return 0;
+    },kernel->GetSystemProcess()));
+    REQUIRE(replacement->handle()==requester_handle);
+    REQUIRE(replacement->Create()==X_STATUS_SUCCESS);
+  }
+  const auto irql=memory.TranslateVirtual<X_KPCR*>(caller->pcr_ptr())->current_irql;
+  work_release.Signal();REQUIRE(wait(finished));
+  CHECK(XOverlappedGetResult(overlap)==X_ERROR_BUSY);
+  CHECK(uint32_t(overlap->extended_error)==X_ERROR_BUSY);
+  CHECK(XOverlappedGetLength(overlap)==0);CHECK(uint32_t(overlap->context)==0);
+  event->Query(&type,&signaled);CHECK(signaled==(mode==0?1u:0u));
+  other_event->Query(&type,&signaled);CHECK(signaled==0);
+  if(mode==1){
+    REQUIRE(caller->HasPendingUserApc());
+    const auto* apc=caller->guest_object<X_KTHREAD>()->apc_lists[1].HeadObject(
+        caller->thread_state()->context());
+    REQUIRE(apc);CHECK(uint32_t(apc->thread_ptr)==caller->guest_object());
+    CHECK(uint32_t(apc->normal_routine)==routine);
+    CHECK(uint32_t(apc->normal_context)==X_ERROR_BUSY);
+    CHECK(uint32_t(apc->arg1)==0);CHECK(uint32_t(apc->arg2)==page.address);
+    CHECK(apc->apc_mode==1);CHECK(uint32_t(apc->kernel_routine)==XAPC::kDummyKernelRoutine);
+  }else{
+    CHECK_FALSE(caller->HasPendingUserApc());
+    if(replacement)CHECK_FALSE(replacement->HasPendingUserApc());
+  }
+  // External host completion must leave the target's IRQL unchanged.
+  CHECK(memory.TranslateVirtual<X_KPCR*>(caller->pcr_ptr())->current_irql==irql);
+  caller_release.Signal();replacement_release.Signal();
 }
 }  // namespace xe::kernel::xam::test

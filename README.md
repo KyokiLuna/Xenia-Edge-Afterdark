@@ -48,7 +48,7 @@ The project is developed in tested milestones. The [implementation roadmap](docs
 
 | Subsystem | Current state |
 | --- | --- |
-| Guide / shared XUI & XAM foundation | V156 passes all seven direct runs. Native startup now settles, Guide renders, and two isolated runs exit normally. Doritos memory holds near 1 GiB. Sign-in transitions, Guide close/reopen, Xbox Home and gameplay still need acceptance; a replacement checkpoint is being prepared. |
+| Guide / shared XUI & XAM foundation | V157 corrects shared current-profile reads and host sign-in/completion ownership; all seven direct runs pass. V156 reproduces a Ghosts Raven freeze. Packaged Raven playback, Guide close/reopen, sign-in transitions and Xbox Home still need acceptance. |
 | HDD, local profiles & saves | In progress. Managed storage, persistence and recovery have engineering test coverage; the combined HDD gate remains incomplete. V62 separately recorded local profile creation/reopening and BO1 settings persistence. |
 | Native account/profile UI | Integration and runtime validation remain in progress. Native sign-in and profile/avatar initialization are not established as working across the requested scenarios. |
 | Avatar system | Stock appearance/preview data is present in local profile work; full 3D rendering, editing, persistence and game consumption remain unfinished. |
@@ -144,3 +144,5 @@ The distinctive Afterdark icon adapts the existing Xenia/Edge artwork and is doc
 No Xbox 360 game, dashboard, firmware, user account, or Microsoft service is included or provided by this repository.
 
 <p align="center"><strong>Xenia Edge Afterdark</strong><br />Console behavior first. Everything else follows.</p>
+
+The [Raven regression report](docs/research/17559-raven-profile-read-regression-20261127.md) records the exact V156 fault, shared V157 correction and current engineering results. A passing test suite does not establish a usable AppImage or complete the HDD gate.

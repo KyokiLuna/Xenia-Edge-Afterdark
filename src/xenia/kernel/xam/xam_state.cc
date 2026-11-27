@@ -8,8 +8,10 @@
  */
 
 #include "xenia/kernel/xam/xam_state.h"
+#include <algorithm>
 #include "xenia/base/logging.h"
 #include "xenia/emulator.h"
+#include "xenia/hid/input_system.h"
 #include "xenia/vfs/installed_system_source.h"
 #include "xenia/vfs/virtual_file_system.h"
 #include "third_party/fmt/include/fmt/format.h"
@@ -219,12 +221,20 @@ UserProfile* XamState::GetUserProfileLive(uint64_t xuid) const {
 }
 
 bool XamState::IsUserSignedIn(uint32_t user_index) const {
-  return profile_manager_->GetProfile(static_cast<uint8_t>(user_index)) !=
-         nullptr;
+  if (user_index == XUserIndexLatest) {
+    user_index = kernel_state_->emulator()->input_system()->GetLastUsedSlot();
+  }
+  const auto metadata = profile_manager_->CaptureCurrentUserMetadata();
+  if (!metadata) return false;
+  if (user_index == XUserIndexAny) {
+    return std::any_of(metadata->slots().begin(), metadata->slots().end(),
+                       [](const auto& slot) { return slot.xuid != 0; });
+  }
+  return user_index < XUserMaxUserCount && metadata->slots()[user_index].xuid;
 }
 
 bool XamState::IsUserSignedIn(uint64_t xuid) const {
-  return GetUserProfile(xuid) != nullptr;
+  return profile_manager_->CaptureCurrentUserIdentityByXuid(xuid).has_value();
 }
 
 void XamState::LoadSpaInfo(const SpaInfo* info) {

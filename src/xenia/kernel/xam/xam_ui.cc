@@ -38,6 +38,8 @@
 #include "xenia/kernel/title_id_utils.h"
 #include "xenia/kernel/user_module.h"
 #include "xenia/kernel/util/shim_utils.h"
+#include "xenia/kernel/util/host_call_outcome.h"
+#include <type_traits>
 #include "xenia/kernel/xam/content_manager.h"
 #include "xenia/kernel/xam/content_source.h"
 #include "xenia/kernel/xam/host_ui_fallback.h"
@@ -102,7 +104,7 @@ struct NativeSigninHostFlagGuard {
 };
 
 // Called on the original export caller. Reserve input BEFORE queuing UI and
-// retain XamState only in Kernel-dispatch work, never in a frontend closure.
+// retain XamState only in joined Kernel host work, never in a frontend closure.
 template <typename T>
 X_RESULT xeXamDispatchDialog(
     std::function<T*(HostUiFallbackAccess&)> factory,
@@ -112,7 +114,9 @@ X_RESULT xeXamDispatchDialog(
     KernelState* original = nullptr,
     std::shared_ptr<NativeUiBackendRoute::HostLease> admitted = {},
     NativeSigninUiDiagnostic* diagnostic = nullptr,
-    bool selected_native_host = false, NativeSigninHostFlagGuard* host_flag = nullptr) {
+    bool selected_native_host = false, NativeSigninHostFlagGuard* host_flag = nullptr,
+    std::function<X_RESULT(const HostUiProfileSelection&,
+                          const std::function<bool()>&)> signin_publish = {}) {
   auto* state = original ? original : kernel_state();
   auto* emulator = state->emulator();
   auto* window = emulator->display_window();
@@ -129,7 +133,7 @@ X_RESULT xeXamDispatchDialog(
   auto lease = admitted ? std::move(admitted) : state->AcquireLegacyHostUi();
   if (!lease) { if(diagnostic)diagnostic->stage=6; return X_ERROR_ACCESS_DENIED; }
   // The opaque selected lease owns the Kernel ingress. Its one completion
-  // guard transfers to dispatch, never to a queued frontend factory.
+  // guard transfers to joined host work, never to a queued frontend factory.
   auto selected_completion=selected_native_host
       ?std::make_shared<HostUiFallbackOperationCompletion>(lease):nullptr;
   if(host_flag)host_flag->Release();
@@ -139,7 +143,7 @@ X_RESULT xeXamDispatchDialog(
   if(diagnostic)diagnostic->stage=8;
   auto completion = std::make_shared<HostUiFallbackCompletion>();
   const auto access = state->host_ui_access();
-  // The pure CPU input gap remains owned by dispatch through publication.
+  // The pure CPU input gap remains owned by joined host work through publication.
   QueueHostUiFallback(
       window->app_context(), lease, completion,
       [lease, access, factory = std::move(factory), snapshot = std::move(snapshot)](
@@ -149,6 +153,7 @@ X_RESULT xeXamDispatchDialog(
         T* dialog = factory(*owner);  // QueueHostUiFallback already entered.
         if (!dialog) { completed->Finish({}); return; }
         dialog->SetHostLease(lease);
+        dialog->SetHostCompletion(completed);
         dialog->set_close_callback([dialog, completed, snapshot = std::move(snapshot)] {
           completed->Finish(snapshot(dialog));
         });
@@ -157,45 +162,51 @@ X_RESULT xeXamDispatchDialog(
   state->BroadcastNotification(kXNotificationSystemUI, true);
   auto run = [lease, reservation, completion, selected_native_host,
               selected_completion=std::move(selected_completion),
-              publish = std::move(publish)]() mutable {
+              publish = std::move(publish),
+              signin_publish = std::move(signin_publish)]() mutable {
     // Destroy after Entry/result scopes and reservation release but BEFORE
-    // dispatch publishes a guest completion; old post/factory refs are inert.
+    // the worker publishes a guest completion; old post/factory refs are inert.
     auto finished=std::move(selected_completion);
-    GuestScheduler::WaitOnFence(completion->closed);
     X_RESULT result = X_ERROR_CANCELLED;
-    {
+    if constexpr(std::is_same_v<T,ui::SigninUI>){
+      result=RunHostSigninAttempts(lease,completion,signin_publish);
+    }else{
+      GuestScheduler::WaitOnFence(completion->closed);
       auto entered = lease->TryEnter();
       const auto value = completion->result();
-      if (entered && value.result == xe::ui::TextEntryResult::kAccepted) {
+      if (entered && value.result == xe::ui::TextEntryResult::kAccepted)
         result = publish ? publish(value) : value.status;
-      }
     }
     if(!selected_native_host)lease->FinishHostOnly();
     reservation->Release();
     return result;
   };
   auto post = [state] {
-    // Kernel dispatch owns this delay and raw state. No detached thread can
-    // outlive the Kernel or post a stale notification into its replacement.
+    // The existing host worker/drop join owns this delay and raw state.
+    // No detached thread outlives Kernel or reaches a replacement.
     xe::threading::Sleep(kUIDelayMillis);
     if (!state->xam_state()->IsUIActive()) {
       state->BroadcastNotification(kXNotificationSystemUI, false);
     }
   };
-  if (overlapped) {
-    state->CompleteOverlappedDeferred(std::move(run), overlapped, nullptr,
-                                       std::move(post));
-    return X_ERROR_IO_PENDING;
-  }
-  if (asynchronous) {
-    if (!state->QueueHostUiWork([run = std::move(run), post = std::move(post)]() mutable {
-          run(); post();
-        })) {
-      lease->Cancel();
-      if(diagnostic)diagnostic->stage=9;
-      return X_ERROR_NOT_READY;
+  if (overlapped || asynchronous) {
+    X_RESULT queued=X_ERROR_NOT_ENOUGH_MEMORY;
+    const auto submitted=InvokeHostCall([&] {
+      queued=state->QueueHostUiCompletion(std::move(run),
+          [lease, reservation, selected_native_host] {
+            lease->Cancel();reservation->Release();
+            if(selected_native_host)lease->FinishHostOperation();else lease->FinishHostOnly();
+          }, overlapped, std::move(post));
+    });
+    if(submitted!=HostCallOutcome::kReturned){
+      // Includes std::function conversion BEFORE adapter entry. No pending
+      // overlap was admitted there; cancel this exact inert frontend request.
+      lease->Cancel();reservation->Release();
+      if(selected_native_host)lease->FinishHostOperation();else lease->FinishHostOnly();
+      if(!state->xam_state()->IsUIActive())state->BroadcastNotification(kXNotificationSystemUI,false);
+      return X_ERROR_NOT_ENOUGH_MEMORY;
     }
-    return X_ERROR_SUCCESS;
+    return queued;
   }
   const auto result = run();
   post();
@@ -1504,16 +1515,21 @@ X_RESULT xeXamShowSigninUI(uint32_t user_index, uint32_t users_needed,
       }
       return result;
     };
-    if (overlapped) {
-      state->CompleteOverlappedDeferred(std::move(run), overlapped);
-      return X_ERROR_IO_PENDING;
+    X_RESULT queued=X_ERROR_NOT_ENOUGH_MEMORY;
+    const auto submitted=InvokeHostCall([&] {
+      queued=state->QueueHostUiCompletion(std::move(run),
+          [lease, reservation, selected_native_host] {
+            lease->Cancel();reservation->Release();
+            if(selected_native_host)lease->FinishHostOperation();else lease->FinishHostOnly();
+          }, overlapped);
+    });
+    if(submitted!=HostCallOutcome::kReturned){
+      lease->Cancel();reservation->Release();
+      if(selected_native_host)lease->FinishHostOperation();else lease->FinishHostOnly();
+      if(!state->xam_state()->IsUIActive())state->BroadcastNotification(kXNotificationSystemUI,false);
+      return X_ERROR_NOT_ENOUGH_MEMORY;
     }
-    if (!state->QueueHostUiWork([run = std::move(run)]() mutable { run(); })) {
-      lease->Cancel();
-      if(diagnostic)diagnostic->stage=9;
-      return X_ERROR_NOT_READY;
-    }
-    return X_ERROR_SUCCESS;
+    return queued;
   }
   if(diagnostic)diagnostic->route=2;
   auto* drawer = state->emulator()->imgui_drawer();
@@ -1526,9 +1542,28 @@ X_RESULT xeXamShowSigninUI(uint32_t user_index, uint32_t users_needed,
         HostDialogResult value;
         if (dialog->accepted()) {
           value.result = xe::ui::TextEntryResult::kAccepted;
+          value.signin = dialog->selection();
         }
         return value;
-      }, {}, overlapped, true, nullptr, std::move(admitted), diagnostic, selected_native_host, &host_flag);
+      }, {}, overlapped, true, nullptr, std::move(admitted), diagnostic,
+      selected_native_host, &host_flag,
+      [state](const HostUiProfileSelection& selection,
+              const std::function<bool()>& cancelled) -> X_RESULT {
+        if (!selection.valid()) return X_ERROR_INVALID_PARAMETER;
+        std::map<uint8_t, uint64_t> profiles;
+        for (uint8_t slot = 0; slot != 4; ++slot)
+          if (selection.mask & (1u << slot)) profiles.emplace(slot, selection.xuids[slot]);
+        const auto outcome = state->xam_state()->profile_manager()->LoginMultipleResult(
+            profiles, cancelled);
+        if (outcome.error) {
+          if (outcome.error == std::errc::operation_canceled) return X_ERROR_CANCELLED;
+          if (outcome.error == std::errc::device_or_resource_busy ||
+              outcome.error == std::errc::resource_unavailable_try_again) return X_ERROR_BUSY;
+          return X_ERROR_FUNCTION_FAILED;
+        }
+        return outcome.maps_committed && outcome.writers_available
+            ? X_ERROR_SUCCESS : X_ERROR_FUNCTION_FAILED;
+      });
 }
 
 static X_RESULT ShowCreateProfileOnOriginalKernel(

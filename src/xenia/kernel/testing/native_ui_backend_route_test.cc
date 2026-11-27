@@ -19,6 +19,7 @@
 #include <condition_variable>
 #include <cstring>
 #include <memory>
+#include <new>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -619,3 +620,191 @@ TEST_CASE("Unclaimed native loader calls keep their original body and registers"
   }
 }
 } // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Host signin selection freezes exact values and rejects duplicate or partial choices",
+          "[kernel][native_ui_route][host_ui_fallback][selection]") {
+  xam::HostUiProfileSelection selection;
+  CHECK_FALSE(selection.valid());
+  selection.mask=5;selection.xuids={11,0,33,0};REQUIRE(selection.valid());
+  xam::HostUiFallbackCompletion completion;
+  xam::HostUiFallbackCompletion::Result result;
+  result.result=ui::TextEntryResult::kAccepted;result.signin=selection;
+  completion.Finish(result);
+  selection.xuids[0]=99;result.signin.xuids[2]=99;
+  const auto frozen=completion.result();
+  CHECK(frozen.signin.xuids[0]==11);CHECK(frozen.signin.xuids[2]==33);
+  selection=frozen.signin;selection.xuids[2]=11;CHECK_FALSE(selection.valid());
+  selection=frozen.signin;selection.mask|=16;CHECK_FALSE(selection.valid());
+  selection=frozen.signin;selection.xuids[1]=22;CHECK_FALSE(selection.valid());
+  selection=frozen.signin;selection.xuids[2]=0;CHECK_FALSE(selection.valid());
+}
+TEST_CASE("Owned host UI ticket releases input holders before real result completion exactly once",
+          "[kernel][native_ui_route][host_ui_fallback][completion]") {
+  xam::HostUiFallbackWork ticket;
+  uint32_t runs=0,cancels=0,completes=0,posts=0;
+  X_RESULT actual=X_ERROR_SUCCESS;
+  auto held=std::make_shared<uint32_t>(7);std::weak_ptr<uint32_t> weak=held;
+  std::function<X_RESULT()> run=[held,&runs]{++runs;return X_ERROR_BUSY;};
+  held.reset();
+  std::function<void()> cancel=[&]{++cancels;};
+  std::function<void(X_RESULT)> complete=[&](X_RESULT result){
+    CHECK(weak.expired());++completes;actual=result;CHECK(posts==0);
+  };
+  std::function<void()> post=[&]{CHECK(completes==1);++posts;};
+  ticket.Initialize(std::move(run),std::move(cancel),std::move(complete),std::move(post));
+  ticket.Run();ticket.Run();ticket.Reject(X_ERROR_CANCELLED);
+  CHECK(runs==1);CHECK(cancels==0);CHECK(completes==1);CHECK(posts==1);CHECK(actual==X_ERROR_BUSY);
+}
+TEST_CASE("Owned host UI rejection and body failure retain truthful distinct outcomes",
+          "[kernel][native_ui_route][host_ui_fallback][completion]") {
+  const auto reason=GENERATE(X_ERROR_CANCELLED,X_ERROR_NOT_ENOUGH_MEMORY,X_ERROR_FUNCTION_FAILED);
+  xam::HostUiFallbackWork ticket;uint32_t runs=0,cancels=0,completes=0;
+  X_RESULT actual=X_ERROR_SUCCESS;
+  std::function<X_RESULT()> run=[&]() -> X_RESULT {++runs;throw std::bad_alloc();};
+  std::function<void()> cancel=[&]{++cancels;};
+  std::function<void(X_RESULT)> complete=[&](X_RESULT result){++completes;actual=result;};
+  std::function<void()> post;
+  ticket.Initialize(std::move(run),std::move(cancel),std::move(complete),std::move(post));
+  if(reason==X_ERROR_FUNCTION_FAILED)ticket.Run();else ticket.Reject(reason);
+  ticket.Reject(X_ERROR_SUCCESS);ticket.Run();
+  CHECK(actual==reason);CHECK(completes==1);CHECK(cancels==1);
+  CHECK(runs==(reason==X_ERROR_FUNCTION_FAILED?1:0));
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Owned host UI drop releases explicit cleanup before completion even with retained body references",
+          "[kernel][native_ui_route][host_ui_fallback][completion]") {
+  xam::HostUiFallbackWork ticket;
+  auto held=std::make_shared<uint32_t>(1);bool released=false,completed=false;
+  std::function<X_RESULT()> work=[held]{return X_ERROR_SUCCESS;};
+  std::function<void()> cancel=[&]{released=true;};
+  std::function<void(X_RESULT)> complete=[&](X_RESULT result){
+    CHECK(released);CHECK(result==X_ERROR_CANCELLED);CHECK(held.use_count()==1);completed=true;
+  };
+  std::function<void()> post;
+  ticket.Initialize(std::move(work),std::move(cancel),std::move(complete),std::move(post));
+  ticket.Reject(X_ERROR_CANCELLED);CHECK(completed);CHECK(released);
+}
+}  // namespace xe::kernel::test
+
+namespace xe::kernel::test {
+TEST_CASE("Signin actual failure keeps the modal operation open and retry rejects stale attempt outcomes",
+          "[kernel][native_ui_route][host_ui_fallback][signin_attempt]") {
+  xam::HostUiFallbackCompletion completed;
+  xam::HostUiProfileSelection first;first.mask=1;first.xuids[0]=11;
+  const auto id=completed.StartSigninAttempt(first);REQUIRE(id);
+  first.xuids[0]=99;
+  const auto active=completed.TakeSigninAttempt();REQUIRE(active);
+  CHECK(active->selection.xuids[0]==11);
+  CHECK_FALSE(completed.StartSigninAttempt(first));
+  REQUIRE(completed.CompleteSigninAttempt(id,X_ERROR_BUSY,true));
+  CHECK_FALSE(completed.closed_requested());
+  CHECK(completed.signin_attempt().status==X_ERROR_BUSY);
+  const auto retry=completed.StartSigninAttempt(first);REQUIRE(retry>id);
+  CHECK_FALSE(completed.CompleteSigninAttempt(id,X_ERROR_SUCCESS,true));
+  CHECK(completed.signin_attempt().id==retry);
+  CHECK(completed.signin_attempt().phase==xam::HostUiFallbackCompletion::SigninPhase::kQueued);
+  const auto second=completed.TakeSigninAttempt();REQUIRE(second);
+  CHECK(second->selection.xuids[0]==99);
+  REQUIRE(completed.CompleteSigninAttempt(retry,X_ERROR_SUCCESS,true));
+  CHECK_FALSE(completed.closed_requested()); // existing UI must observe success then close
+  xam::HostUiFallbackCompletion::Result closed;
+  closed.result=ui::TextEntryResult::kAccepted;completed.Finish(closed);
+  CHECK(completed.closed_requested());CHECK(completed.result().status==X_ERROR_SUCCESS);
+}
+TEST_CASE("Signin close before adoption rejects late work and wakes only the request progress waiter",
+          "[kernel][native_ui_route][host_ui_fallback][signin_attempt][cancel]") {
+  const bool queued=GENERATE(false,true);
+  xam::HostUiFallbackCompletion completed;
+  xam::HostUiProfileSelection selection;selection.mask=8;selection.xuids[3]=44;
+  const auto id=queued?completed.StartSigninAttempt(selection):0;
+  xam::HostUiFallbackCompletion::Result cancel;cancel.result=ui::TextEntryResult::kCanceled;
+  completed.Finish(cancel);
+  CHECK(completed.closed.TryWait());CHECK(completed.progress.TryWait());
+  CHECK_FALSE(completed.TakeSigninAttempt());CHECK_FALSE(completed.StartSigninAttempt(selection));
+  CHECK_FALSE(completed.CompleteSigninAttempt(id,X_ERROR_SUCCESS,true));
+  CHECK(completed.result().result==ui::TextEntryResult::kCanceled);
+}
+TEST_CASE("Signin cancel retains a real executing outcome and never fabricates rollback or unexecuted success",
+          "[kernel][native_ui_route][host_ui_fallback][signin_attempt][cancel]") {
+  const auto actual=GENERATE(X_ERROR_SUCCESS,X_ERROR_CANCELLED,X_ERROR_FUNCTION_FAILED);
+  const bool close_before_return=GENERATE(false,true);
+  xam::HostUiFallbackCompletion completed;
+  xam::HostUiProfileSelection selection;selection.mask=2;selection.xuids[1]=22;
+  const auto id=completed.StartSigninAttempt(selection);REQUIRE(completed.TakeSigninAttempt());
+  xam::HostUiFallbackCompletion::Result cancel;cancel.result=ui::TextEntryResult::kCanceled;
+  if(close_before_return)completed.Finish(cancel);
+  REQUIRE(completed.CompleteSigninAttempt(id,actual,true));
+  if(!close_before_return)completed.Finish(cancel);
+  const auto result=completed.result();
+  CHECK(completed.signin_attempt().executed);
+  CHECK(completed.signin_attempt().status==actual);
+  CHECK((result.result==ui::TextEntryResult::kAccepted)==(actual==X_ERROR_SUCCESS));
+  if(actual==X_ERROR_SUCCESS){CHECK(result.status==X_ERROR_SUCCESS);CHECK(result.signin.xuids[1]==22);}
+  completed.Finish(cancel);CHECK(completed.result().result==result.result);
+  xam::HostUiFallbackCompletion unexecuted;
+  const auto unused=unexecuted.StartSigninAttempt(selection);REQUIRE(unexecuted.TakeSigninAttempt());
+  REQUIRE(unexecuted.CompleteSigninAttempt(unused,X_ERROR_SUCCESS,false));
+  CHECK(unexecuted.signin_attempt().status==X_ERROR_FUNCTION_FAILED);
+}
+TEST_CASE("Existing signin worker consumes a failed attempt then a fresh retry without completing guest operation early",
+          "[kernel][native_ui_route][host_ui_fallback][signin_attempt][worker]") {
+  Route route;const auto epoch=std::make_shared<const Route::HostOnlyEpoch>();
+  const auto lease=route.AdmitHostOnly(epoch,1).host;REQUIRE(lease);
+  const auto completed=std::make_shared<xam::HostUiFallbackCompletion>();
+  lease->SetCancellation([weak=std::weak_ptr<xam::HostUiFallbackCompletion>(completed)]{if(auto value=weak.lock())value->Finish({});});
+  uint32_t calls=0;X_RESULT result=X_ERROR_FUNCTION_FAILED;
+  struct Joined {
+    std::shared_ptr<xam::HostUiFallbackCompletion> completed;
+    std::thread worker;
+    ~Joined(){completed->Finish({});if(worker.joinable())worker.join();}
+  } joined{completed,std::thread([&]{
+    result=xam::RunHostSigninAttempts(lease,completed,
+        [&](const xam::HostUiProfileSelection& selected,const std::function<bool()>& canceled){
+          CHECK_FALSE(canceled());++calls;
+          CHECK(selected.xuids[0]==(calls==1?11:22));
+          return calls==1?X_ERROR_BUSY:X_ERROR_SUCCESS;
+        });
+  })};
+  const auto returned=[&](uint64_t id){
+    const auto deadline=Now()+std::chrono::seconds(2);
+    do{const auto value=completed->signin_attempt();
+      if(value.id==id && value.phase==xam::HostUiFallbackCompletion::SigninPhase::kReturned)return true;
+      std::this_thread::yield();}while(Now()<deadline);return false;
+  };
+  xam::HostUiProfileSelection selection;selection.mask=1;selection.xuids[0]=11;
+  const auto first=completed->StartSigninAttempt(selection);REQUIRE(returned(first));
+  CHECK_FALSE(completed->closed_requested());CHECK(completed->signin_attempt().status==X_ERROR_BUSY);
+  selection.xuids[0]=22;const auto next=completed->StartSigninAttempt(selection);REQUIRE(next>first);
+  REQUIRE(returned(next));CHECK_FALSE(completed->closed_requested());
+  xam::HostUiFallbackCompletion::Result accepted;accepted.result=ui::TextEntryResult::kAccepted;
+  completed->Finish(accepted);joined.worker.join();
+  CHECK(calls==2);CHECK(result==X_ERROR_SUCCESS);
+}
+TEST_CASE("Signin worker observes UI cancel during an actual pending publish and leaves exact cleanup owned",
+          "[kernel][native_ui_route][host_ui_fallback][signin_attempt][worker][cancel]") {
+  Route route;const auto epoch=std::make_shared<const Route::HostOnlyEpoch>();
+  const auto lease=route.AdmitHostOnly(epoch,1).host;REQUIRE(lease);
+  const auto completed=std::make_shared<xam::HostUiFallbackCompletion>();
+  threading::Fence entered,release;std::atomic<bool> canceled{false};X_RESULT result=X_ERROR_SUCCESS;
+  struct Joined {
+    std::shared_ptr<xam::HostUiFallbackCompletion> completed;threading::Fence& release;
+    std::thread worker;
+    ~Joined(){completed->Finish({});release.Signal();if(worker.joinable())worker.join();}
+  } joined{completed,release,std::thread([&]{
+    result=xam::RunHostSigninAttempts(lease,completed,
+        [&](const xam::HostUiProfileSelection&,const std::function<bool()>& stop){
+          entered.Signal();release.Wait();canceled.store(stop());return X_ERROR_CANCELLED;
+        });
+  })};
+  xam::HostUiProfileSelection selection;selection.mask=1;selection.xuids[0]=11;
+  REQUIRE(completed->StartSigninAttempt(selection));
+  const auto deadline=Now()+std::chrono::seconds(2);bool seen=false;
+  do{seen=entered.TryWait();if(!seen)std::this_thread::yield();}while(!seen && Now()<deadline);
+  REQUIRE(seen);completed->Finish({});release.Signal();joined.worker.join();
+  CHECK(canceled.load());CHECK(result==X_ERROR_CANCELLED);
+  CHECK(completed->signin_attempt().phase==xam::HostUiFallbackCompletion::SigninPhase::kReturned);
+}
+}  // namespace xe::kernel::test

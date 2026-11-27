@@ -11,6 +11,7 @@
 #define XENIA_KERNEL_XAM_UI_SIGNIN_UI_H_
 
 #include "xenia/kernel/xam/profile_manager.h"
+#include "xenia/kernel/xam/host_ui_fallback.h"
 #include "xenia/kernel/xam/xam_ui.h"
 
 namespace xe {
@@ -25,6 +26,7 @@ class SigninUI final : public XamDialog {
 
   ~SigninUI() = default;
   bool accepted() const { return accepted_; }
+  const HostUiProfileSelection& selection() const { return selection_; }
 
  private:
   void OnDrawDialog(ImGuiIO& io) override;
@@ -37,6 +39,8 @@ class SigninUI final : public XamDialog {
   ProfileManager* profile_manager_ = nullptr;
 
   bool accepted_ = false;
+  HostUiProfileSelection selection_;
+  uint64_t observed_attempt_ = 0;
   bool has_opened_ = false;
   std::string title_;
   uint32_t users_needed_ = 1;

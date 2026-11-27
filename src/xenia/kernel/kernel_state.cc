@@ -281,6 +281,43 @@ namespace {
 // What the I/O manager waits with for a title's synchronous request.
 constexpr uint32_t kWaitReasonExecutive = 0;
 constexpr uint32_t kUserMode = 1;
+void PublishOverlappedResult(Memory& memory, uint32_t address, X_RESULT result,
+                             uint32_t extended_error, uint32_t length) {
+  auto* ptr=memory.TranslateVirtual(address);
+  // Result last: a polling guest sees the associated fields before completion.
+  XOverlappedSetExtendedError(ptr,extended_error);
+  XOverlappedSetLength(ptr,length);
+  XOverlappedSetContext(ptr,0);
+  std::atomic_thread_fence(std::memory_order_release);
+  XOverlappedSetResult(ptr,result);
+}
+struct HostUiOverlappedOrigin final {
+  object_ref<XThread> requester;
+  object_ref<XEvent> event;
+  uint32_t routine=0;
+};
+void CompleteHostUiOverlapped(KernelState& kernel,uint32_t address,
+    X_RESULT result,const HostUiOverlappedOrigin& origin) {
+  PublishOverlappedResult(*kernel.memory(),address,result,result,0);
+  if(!origin.routine){
+    if(origin.event)origin.event->Set(0,false);
+    return;
+  }
+  // Pending console IO retains the actual objects, not reusable table slots.
+  // InsertOwnedApc uses the existing pointer-based kernel APC core and its
+  // may_queue_apcs test; EnqueueApc would resolve handle()[0] again after exit.
+  if(!origin.requester)return;
+  const auto allocated=kernel.memory()->SystemHeapAlloc(XAPC::kSize);
+  if(!allocated){XELOGE("Host UI completion APC allocation failed");return;}
+  auto* apc=kernel.memory()->TranslateVirtual<XAPC*>(allocated);
+  xboxkrnl::xeKeInitializeApc(apc,origin.requester->guest_object(),
+      XAPC::kDummyKernelRoutine,0,origin.routine,1,result);
+  if(!origin.requester->InsertOwnedApc(allocated,0,address)){
+    kernel.memory()->SystemHeapFree(allocated);
+    // A stopped original requester is never replaced by a reused handle.
+    XELOGW("Host UI completion APC refused by original requester");
+  }
+}
 }  // namespace
 
 HostCallOutcome KernelState::RunBlockingIoImpl(std::function<void()> fn,
@@ -434,6 +471,57 @@ bool KernelState::QueueHostUiWork(std::function<void()> work) {
   dispatch_queue_.push_back(std::move(work));
   dispatch_cond_.notify_all();
   return true;
+}
+X_RESULT KernelState::QueueHostUiCompletion(std::function<X_RESULT()> work,
+    std::function<void()> cancel, uint32_t overlapped,
+    std::function<void()> post) {
+  std::shared_ptr<xam::HostUiFallbackWork> ticket;
+  std::shared_ptr<HostUiOverlappedOrigin> origin;
+  const auto prepared = InvokeHostCall([&] {
+    if(overlapped){
+      origin=std::make_shared<HostUiOverlappedOrigin>();
+      origin->requester=retain_object(XThread::GetCurrentThread());
+      auto* ptr=memory()->TranslateVirtual(overlapped);
+      origin->routine=XOverlappedGetCompletionRoutine(ptr);
+      if(const auto handle=XOverlappedGetEvent(ptr))
+        origin->event=object_table()->LookupObject<XEvent>(handle);
+    }
+    std::function<void(X_RESULT)> complete =
+        [this, overlapped, origin](X_RESULT result) {
+          if(overlapped)CompleteHostUiOverlapped(*this,overlapped,result,*origin);
+        };
+    ticket = std::make_shared<xam::HostUiFallbackWork>();
+    ticket->Initialize(std::move(work), std::move(cancel),
+                       std::move(complete), std::move(post));
+  });
+  if (prepared != HostCallOutcome::kReturned || !ticket) {
+    // No pending overlap or queue commit: the original caller still owns
+    // cleanup. Object/callback allocations precede the no-throw transfer.
+    if (cancel) (void)InvokeHostCall(cancel);
+    work = {}; cancel = {};
+    if (post) (void)InvokeHostCall(post);
+    return X_ERROR_NOT_ENOUGH_MEMORY;
+  }
+  if(overlapped){
+    XOverlappedSetResult(memory()->TranslateVirtual(overlapped),X_ERROR_IO_PENDING);
+    if(origin->event)origin->event->Reset();
+  }
+  bool accepted = false;
+  const auto queued = InvokeHostCall([&] {
+    accepted = guest_scheduler_->PostHostCall(
+        [ticket, overlapped] {
+          if (overlapped) xe::threading::Sleep(kDeferredOverlappedDelayMillis);
+          ticket->Run();
+        }, GuestScheduler::BlockingCallClass::kConcurrent,
+        [ticket](GuestScheduler::HostCallDropReason) {
+          ticket->Reject(X_ERROR_CANCELLED);
+        });
+  });
+  if (queued != HostCallOutcome::kReturned || !accepted) {
+    ticket->Reject(X_ERROR_NOT_ENOUGH_MEMORY);
+    return X_ERROR_NOT_ENOUGH_MEMORY;
+  }
+  return overlapped ? X_ERROR_IO_PENDING : X_ERROR_SUCCESS;
 }
 void KernelState::BeginStopLegacyHostUi() noexcept { host_ui_route_.BeginStop(); }
 bool KernelState::SealLegacyHostUi() noexcept {
@@ -2229,13 +2317,9 @@ void KernelState::CompleteOverlappedEx(uint32_t overlapped_ptr, X_RESULT result,
                                        uint32_t extended_error, uint32_t length,
                                        X_HANDLE thread_handle) {
   auto ptr = memory()->TranslateVirtual(overlapped_ptr);
-  // Result last, so a caller polling it for completion reads a valid length.
-  // A completed request leaves no context behind.
-  XOverlappedSetExtendedError(ptr, extended_error);
-  XOverlappedSetLength(ptr, length);
-  XOverlappedSetContext(ptr, 0);
-  std::atomic_thread_fence(std::memory_order_release);
-  XOverlappedSetResult(ptr, result);
+  // The owned UI adapter uses this same wire ordering with captured objects;
+  // legacy callers retain their existing handle-resolving notification path.
+  PublishOverlappedResult(*memory(),overlapped_ptr,result,extended_error,length);
   // Observe only the values the real completion just published. No guest
   // polling, extra pointer reads, replay or event/APC order changes.
   static std::atomic<uint64_t> completion_observations{0};

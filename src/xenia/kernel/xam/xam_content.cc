@@ -310,13 +310,12 @@ dword_result_t XamContentCreateEnumerator_entry(
     lpdword_t buffer_size_ptr, lpdword_t handle_out) {
   uint64_t xuid = 0;
   if (user_index < XUserMaxUserCount) {
-    const auto& user = kernel_state()->xam_state()->GetUserProfile(user_index);
-
-    if (!user) {
+    const auto metadata = kernel_state()->xam_state()->profile_manager()->
+        CaptureCurrentUserMetadata();
+    if (!metadata || !metadata->slots()[user_index].xuid) {
       return X_ERROR_NO_SUCH_USER;
     }
-
-    xuid = user->xuid();
+    xuid = metadata->slots()[user_index].xuid;
   }
 
   return XamContentCreateEnumeratorInternal_entry(
@@ -397,11 +396,12 @@ static X_RESULT ContentXuid(uint32_t user_index, uint64_t& xuid) {
   if (user_index >= XUserMaxUserCount) {
     return X_ERROR_SUCCESS;
   }
-  const auto& user = kernel_state()->xam_state()->GetUserProfile(user_index);
-  if (!user) {
+  const auto metadata = kernel_state()->xam_state()->profile_manager()->
+      CaptureCurrentUserMetadata();
+  if (!metadata || !metadata->slots()[user_index].xuid) {
     return X_ERROR_NO_SUCH_USER;
   }
-  xuid = user->xuid();
+  xuid = metadata->slots()[user_index].xuid;
   return X_ERROR_SUCCESS;
 }
 
